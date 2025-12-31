@@ -1,0 +1,65 @@
+# ========== Gradle 构建文件 ==========
+.gradle/
+/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ========== IDEA 插件构建输出 ==========
+/build/idea-sandbox/
+/build/plugin-*/
+/distributions/
+/libs/
+/packages/
+
+# ========== IDEA 配置 ==========
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ========== Kotlin ==========
+*.kotlin_module
+*.kotlin_metadata
+
+# ========== Gradle 构建缓存 ==========
+.gradle-build-cache/
+.gradle-kotlin-dsl/
+.gradle/shared/
+
+# ========== 插件测试沙盒 ==========
+.idea-sandbox/
+idea-sandbox/
+/test-sandbox/
+
+# ========== 日志文件 ==========
+*.log
+logs/
+
+# ========== 临时文件 ==========
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# ========== 个人配置 ==========
+*.local
+.env
+
+# ========== 构建产物 ==========
+/*.zip
+/*.jar
+
+# ========== OS 文件 ==========
+.DS_Store
+Thumbs.db
+
+# ========== 编辑器 ==========
+.vscode/
+.eclipse/
+.settings/
+*.iml
+
+# ========== 测试输出 ==========
+test-output/
+test-results/
