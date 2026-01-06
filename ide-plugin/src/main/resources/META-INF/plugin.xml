@@ -1,0 +1,55 @@
+<idea-plugin>
+    <id>ai.smancode.sman.ide-plugin</id>
+    <name>SiliconMan</name>
+    <version>2.0.0</version>
+    <vendor email="contact@smancode.ai" url="https://github.com/smancode-ai">SiliconMan Team</vendor>
+
+    <description><![CDATA[
+    SiliconMan 智能代码分析助手，基于 Claude Code 的 AI 编码助手。
+
+    核心功能：
+    - 🤖 AI 驱动的代码分析和需求理解
+    - 💬 多轮对话支持（基于 --resume 参数）
+    - 🔧 12+ 本地工具集成（read_class, text_search, call_chain等）
+    - 📊 代码结构分析和调用链可视化
+    - 🎯 三阶段工作流（Analyze → Plan → Execute）
+    - 🛡️ 降级模式支持（Claude Code 不可用时自动降级）
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <h3>2.0.0</h3>
+    <ul>
+        <li>🚀 重构：全新架构，支持 Claude Code CLI 原生集成</li>
+        <li>💬 多轮对话：基于 --resume 参数的会话管理</li>
+        <li>🔧 工具增强：12个前端工具，支持更多代码分析场景</li>
+        <li>🛡️ 降级模式：Claude CLI 不可用时自动降级</li>
+        <li>📦 包名更新：ai.smancode.sman.*</li>
+    </ul>
+    ]]></change-notes>
+
+    <idea-version since-build="241" until-build="253.*"/>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- 工具窗口 -->
+        <toolWindow id="SiliconMan" anchor="right" factoryClass="ai.smancode.sman.ide.ui.SiliconManToolWindowFactory"/>
+
+        <!-- 应用服务 -->
+        <applicationService serviceImplementation="ai.smancode.sman.ide.service.StorageService"/>
+
+        <!-- 项目服务 -->
+        <projectService serviceImplementation="ai.smancode.sman.ide.service.ProjectStorageService"/>
+        <projectService serviceImplementation="ai.smancode.sman.ide.service.WebSocketService"/>
+        <projectService serviceImplementation="ai.smancode.sman.ide.service.CodeEditService"/>
+
+        <!-- 项目活动监听器 -->
+        <projectActivity id="SiliconMan.ProjectActivity" class="ai.smancode.sman.ide.SiliconManPlugin"/>
+    </extensions>
+
+    <applicationListeners>
+        <listener class="ai.smancode.sman.ide.SiliconManProjectManagerListener"
+                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </applicationListeners>
+</idea-plugin>

@@ -1,0 +1,2131 @@
+package ai.smancode.sman.ide.service
+
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.*
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.searches.ReferencesSearch
+import org.json.JSONObject
+import java.io.File
+import java.nio.charset.Charset
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+
+/**
+ * 本地工具执行器
+ * 
+ * 接收 Agent 的工具调用请求，在本地执行并返回结果
+ * 
+ * 支持的工具：
+ * - read_class: 读取类源码
+ * - read_method: 读取方法源码
+ * - text_search: 文本搜索
+ * - list_dir: 列出目录
+ */
+class LocalToolExecutor(private val project: Project) {
+    
+    private val logger = Logger.getInstance(LocalToolExecutor::class.java)
+    
+    data class ToolResult(
+        val success: Boolean,
+        val result: String,
+        val executionTime: Long = 0
+    )
+    
+    /**
+     * 执行工具
+     */
+    fun execute(toolName: String, parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val startTime = System.currentTimeMillis()
+        
+        logger.info("执行本地工具: $toolName, params=$parameters, projectPath=$projectPath")
+        
+        return try {
+            val result = when (toolName) {
+                "read_file" -> executeReadFile(parameters, projectPath, null)
+                "grep_file" -> executeGrepFile(parameters, projectPath)
+                "call_chain" -> executeCallChain(parameters)
+                "apply_change" -> executeApplyChange(parameters, projectPath)
+                else -> ToolResult(false, "不支持的工具: $toolName")
+            }
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            ToolResult(result.success, result.result, elapsed)
+            
+        } catch (e: Exception) {
+            logger.error("工具执行失败: $toolName", e)
+            val elapsed = System.currentTimeMillis() - startTime
+            ToolResult(false, "工具执行异常: ${e.message}", elapsed)
+        }
+    }
+    
+    /**
+     * 读取类源码
+     *
+     * 参考 Agent 端 ReadClassTool.java 实现
+     * 支持：relativePath/class_name、mode(structure/full/imports_fields)、
+     *      search_keyword、start_line/end_line、context_lines
+     */
+    private fun executeReadClass(parameters: Map<String, Any?>): ToolResult {
+        val className = parameters["class_name"]?.toString()
+            ?: parameters["className"]?.toString()
+
+        val relativePath = parameters["relativePath"]?.toString()
+
+        if (className.isNullOrEmpty() && relativePath.isNullOrEmpty()) {
+            return ToolResult(false, "缺少 class_name 或 relativePath 参数")
+        }
+        
+        val mode = parameters["mode"]?.toString() ?: "structure"
+        val searchKeyword = parameters["search_keyword"]?.toString()
+        val startLine = (parameters["start_line"] as? Number)?.toInt()
+        val endLine = (parameters["end_line"] as? Number)?.toInt()
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 10
+        val basePath = project.basePath ?: ""
+        
+        return ReadAction.compute<ToolResult, Exception> {
+            // 如果有文件路径，直接读取
+            if (!relativePath.isNullOrEmpty()) {
+                val file = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
+                if (file.exists()) {
+                    val content = readFileWithEncoding(file)  // 🔥 支持多种编码
+                    val computedRelativePath = toRelativePath(file.absolutePath, basePath)
+                    return@compute formatClassContent(
+                        file.nameWithoutExtension, computedRelativePath, content,
+                        mode, searchKeyword, startLine, endLine, contextLines
+                    )
+                }
+                return@compute ToolResult(false, "文件不存在: $relativePath")
+            }
+            
+            // 通过类名查找
+            val psiClass = findClass(className!!)
+            if (psiClass != null) {
+                val vFile = psiClass.containingFile?.virtualFile
+                val absolutePath = vFile?.path ?: "未知路径"
+                val relativePath = toRelativePath(absolutePath, basePath)
+                val content = psiClass.containingFile?.text ?: ""
+                return@compute formatClassContent(
+                    className, relativePath, content,
+                    mode, searchKeyword, startLine, endLine, contextLines
+                )
+            }
+            
+            ToolResult(false, "未找到类: $className")
+        }
+    }
+    
+    /**
+     * 将绝对路径转换为相对路径
+     */
+    private fun toRelativePath(absolutePath: String, basePath: String): String {
+        if (basePath.isEmpty()) return absolutePath
+        
+        // 统一路径分隔符
+        val normalizedAbsolute = absolutePath.replace("\\", "/")
+        val normalizedBase = basePath.replace("\\", "/").removeSuffix("/")
+        
+        return if (normalizedAbsolute.startsWith(normalizedBase)) {
+            normalizedAbsolute.removePrefix(normalizedBase).removePrefix("/")
+        } else {
+            absolutePath
+        }
+    }
+    
+    /**
+     * 格式化类内容输出
+     *
+     * 参考 Agent 端 ReadClassTool.java 的实现逻辑
+     */
+    private fun formatClassContent(
+        className: String,
+        relativePath: String,
+        content: String,
+        mode: String,
+        searchKeyword: String?,
+        startLine: Int?,
+        endLine: Int?,
+        contextLines: Int
+    ): ToolResult {
+        val lines = content.lines()
+        val sb = StringBuilder()
+
+        // 🔥 1. 如果有搜索关键词，优先处理类内搜索
+        if (!searchKeyword.isNullOrEmpty()) {
+            sb.append("## 类内搜索: $className\n\n")
+            sb.append("**relativePath**: `$relativePath`\n")
+            sb.append("**关键词**: `$searchKeyword`\n\n")
+            
+            val matchedIndices = lines.mapIndexedNotNull { index, line ->
+                if (line.contains(searchKeyword)) index else null
+            }
+            
+            if (matchedIndices.isEmpty()) {
+                return ToolResult(false, "在类 $className 中未找到关键词: \"$searchKeyword\"")
+            }
+            
+            sb.append("**匹配**: ${matchedIndices.size} 处\n\n")
+            
+            for (idx in matchedIndices) {
+                val start = maxOf(0, idx - contextLines)
+                val end = minOf(lines.size - 1, idx + contextLines)
+                
+                sb.append("### 第 ${start + 1} - ${end + 1} 行\n\n")
+                sb.append("```java\n")
+                for (i in start..end) {
+                    val lineNum = String.format("%4d", i + 1)
+                    val marker = if (lines[i].contains(searchKeyword)) " >>> " else " |   "
+                    sb.append("$lineNum$marker${lines[i]}\n")
+                }
+                sb.append("```\n\n")
+            }
+            
+            return ToolResult(true, sb.toString())
+        }
+        
+        // 🔥 2. 如果指定了行号范围，分段读取
+        if (startLine != null && endLine != null) {
+            val actualStart = maxOf(1, startLine) - 1  // 转为 0-based
+            val actualEnd = minOf(lines.size, endLine)
+
+            sb.append("**类名**: `$className`\n")
+            sb.append("**relativePath**: `$relativePath`\n")
+            sb.append("**总行数**: ${lines.size}\n\n")
+            sb.append("```java\n")
+            for (i in actualStart until actualEnd) {
+                sb.append("${String.format("%4d", i + 1)} |   ${lines[i]}\n")
+            }
+            sb.append("```\n")
+            
+            if (actualEnd < lines.size) {
+                sb.append("\n> 💡 还有 ${lines.size - actualEnd} 行未显示，使用 start_line=${actualEnd + 1} 继续读取\n")
+            }
+            
+            return ToolResult(true, sb.toString())
+        }
+        
+        // 🔥 3. 根据 mode 返回不同格式
+        sb.append("**类名**: `$className`\n")
+        sb.append("**relativePath**: `$relativePath`\n")
+        sb.append("**mode**: `$mode`\n")
+        sb.append("**总行数**: ${lines.size}\n\n")
+        
+        when (mode) {
+            "full" -> {
+                // 完整源码（⚠️ 大类慎用）
+                sb.append("```java\n")
+                lines.forEachIndexed { idx, line ->
+                    sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                }
+                sb.append("```\n")
+            }
+            "imports_fields" -> {
+                // 🔥 只读取 import 和 field 区域（高效，参考 Agent 端）
+                sb.append("### Import 和 Field 区域\n\n")
+                sb.append("```java\n")
+                var inClass = false
+                var fieldRegionEnd = false
+                
+                lines.forEachIndexed { idx, line ->
+                    val trimmed = line.trim()
+                    
+                    // import 区域
+                    if (trimmed.startsWith("package ") || trimmed.startsWith("import ")) {
+                        sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                        return@forEachIndexed
+                    }
+                    
+                    // 类声明
+                    if (trimmed.matches(Regex("^(public |private |protected )?(abstract )?(class |interface |enum ).*"))) {
+                        sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                        inClass = true
+                        return@forEachIndexed
+                    }
+                    
+                    // 进入类后，检测字段区域
+                    if (inClass && !fieldRegionEnd) {
+                        // 字段或注解
+                        if (trimmed.startsWith("@") || 
+                            trimmed.matches(Regex("^(public |private |protected )?(static )?(final )?[A-Z].*[;=].*")) ||
+                            trimmed.isEmpty()) {
+                            sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                        }
+                        // 遇到方法定义，字段区域结束
+                        else if (trimmed.matches(Regex("^(public |private |protected )?(static )?(synchronized )?[a-zA-Z<>\\[\\]]+\\s+[a-zA-Z]+\\s*\\(.*"))) {
+                            fieldRegionEnd = true
+                            sb.append("${String.format("%4d", idx + 1)} |   // ... 方法区域省略 ...\n")
+                        }
+                    }
+                }
+                sb.append("```\n")
+            }
+            else -> {
+                // structure 模式：显示字段和方法签名
+                sb.append("### 类结构（字段 + 方法签名）\n\n")
+                sb.append("```java\n")
+                
+                var braceDepth = 0
+                lines.forEachIndexed { idx, line ->
+                    val trimmed = line.trim()
+                    
+                    // 跟踪大括号深度
+                    braceDepth += line.count { it == '{' } - line.count { it == '}' }
+                    
+                    // package/import
+                    if (trimmed.startsWith("package ") || trimmed.startsWith("import ")) {
+                        sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                        return@forEachIndexed
+                    }
+                    
+                    // 类声明、注解、字段、方法签名（深度 <= 1 的行）
+                    if (braceDepth <= 1) {
+                        if (trimmed.isNotEmpty() && !trimmed.startsWith("//") && !trimmed.startsWith("*")) {
+                            sb.append("${String.format("%4d", idx + 1)} |   $line\n")
+                        }
+                    }
+                }
+                sb.append("```\n")
+            }
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 读取方法源码
+     */
+    private fun executeReadMethod(parameters: Map<String, Any?>): ToolResult {
+        val className = parameters["class_name"]?.toString()
+        val methodName = parameters["method_name"]?.toString()
+            ?: return ToolResult(false, "缺少 method_name 参数")
+        
+        // 如果方法名包含类名（如 ClassName.methodName），拆分
+        val parts = methodName.split(".", "#")
+        val actualClassName = if (parts.size > 1) parts.dropLast(1).joinToString(".") else className
+        val actualMethodName = parts.last().substringBefore("(")
+        
+        if (actualClassName.isNullOrEmpty()) {
+            return ToolResult(false, "缺少 class_name 参数")
+        }
+        
+        val basePath = project.basePath ?: ""
+        
+        return ReadAction.compute<ToolResult, Exception> {
+            val psiClass = findClass(actualClassName)
+            if (psiClass == null) {
+                return@compute ToolResult(false, "未找到类: $actualClassName")
+            }
+            
+            val methods = psiClass.findMethodsByName(actualMethodName, false)
+            if (methods.isEmpty()) {
+                return@compute ToolResult(false, "在类 $actualClassName 中未找到方法: $actualMethodName")
+            }
+            
+            val absolutePath = psiClass.containingFile?.virtualFile?.path ?: "未知路径"
+            val relativePath = toRelativePath(absolutePath, basePath)
+            
+            val sb = StringBuilder()
+            sb.append("## $actualClassName.$actualMethodName\n\n")
+            sb.append("**relativePath**: `$relativePath`\n\n")
+            
+            methods.forEachIndexed { idx, method ->
+                if (methods.size > 1) {
+                    sb.append("### 重载版本 ${idx + 1}\n\n")
+                }
+                sb.append("```java\n")
+                sb.append(method.text)
+                sb.append("\n```\n\n")
+            }
+            
+            ToolResult(true, sb.toString())
+        }
+    }
+    
+    /**
+     * 文本搜索
+     *
+     * 支持多模块项目：自动扫描所有包含 src 目录的模块
+     * 支持：普通搜索、正则表达式搜索
+     * 参考 Agent 端 TextSearchTool.java 实现
+     */
+    private fun executeTextSearch(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val keyword = parameters["keyword"]?.toString()
+            ?: parameters["query"]?.toString()
+            ?: parameters["text"]?.toString()
+            ?: parameters["search"]?.toString()
+            ?: return ToolResult(false, "缺少 keyword 参数")
+
+        val limit = (parameters["limit"] as? Number)?.toInt() ?: 20
+        val fileType = parameters["file_type"]?.toString() ?: "all"
+        val includeContext = parameters["include_context"] as? Boolean ?: true
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 10
+        val useRegex = parameters["regex"] as? Boolean ?: false  // 🔥 新增：正则模式
+        
+        val basePath = projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+        val baseDir = File(basePath)
+        
+        val extensions = when (fileType) {
+            "java" -> listOf(".java")
+            "config" -> listOf(".properties", ".yml", ".yaml", ".xml")
+            else -> listOf(".java", ".properties", ".yml", ".yaml", ".xml")
+        }
+
+        // 🔥 编译正则表达式（如果启用）
+        val regexPattern = if (useRegex) {
+            try {
+                Regex(keyword, setOf(RegexOption.IGNORE_CASE))
+            } catch (e: Exception) {
+                return ToolResult(false, "无效的正则表达式: $keyword\n错误: ${e.message}")
+            }
+        } else null
+
+        // 存储搜索结果
+        data class SearchMatch(
+            val relativePath: String,
+            val lineNumber: Int,
+            val matchedLine: String,
+            val context: String?
+        )
+        val results = mutableListOf<SearchMatch>()
+
+        try {
+            // 🔥 递归扫描所有 src/main 目录（支持任意深度的多模块项目）
+            val excludedDirNames = setOf(
+                "target", "build", ".git", ".gradle", "node_modules",
+                ".idea", ".vscode", "bin", "out", "test", "tests"
+            )
+            
+            val srcMainDirs = mutableListOf<File>()
+            
+            // 递归查找所有 src/main 目录（限制深度避免过深扫描）
+            baseDir.walkTopDown()
+                .maxDepth(5)  // 支持 parent/child/grandchild/src/main 这样的结构
+                .onEnter { dir -> 
+                    // 跳过排除目录，提高效率
+                    !excludedDirNames.contains(dir.name) && !dir.name.startsWith(".")
+                }
+                .filter { it.isDirectory }
+                .forEach { dir ->
+                    // 匹配 src/main 目录结构
+                    if (dir.name == "main" && dir.parentFile?.name == "src") {
+                        srcMainDirs.add(dir)
+                    }
+                    // 兼容没有 main 子目录的老项目：直接使用 src/java 或 src/resources
+                    else if (dir.name == "src" && !File(dir, "main").exists()) {
+                        val srcJava = File(dir, "java")
+                        val srcResources = File(dir, "resources")
+                        if (srcJava.exists()) srcMainDirs.add(srcJava)
+                        if (srcResources.exists()) srcMainDirs.add(srcResources)
+                    }
+                }
+            
+            if (srcMainDirs.isEmpty()) {
+                return ToolResult(false, "未找到 src/main 目录（已递归扫描项目，深度限制 5 层）")
+            }
+            
+            logger.info("text_search: 搜索 '$keyword' in ${srcMainDirs.size} 个源码目录: ${srcMainDirs.map { "${it.parentFile?.parentFile?.name ?: "?"}/${it.parentFile?.name}/${it.name}" }}")
+            
+            // 遍历所有源码目录
+            for (srcMainDir in srcMainDirs) {
+                if (results.size >= limit) break
+                
+                srcMainDir.walkTopDown()
+                    .filter { it.isFile }
+                    .filter { file -> extensions.any { file.name.endsWith(it) } }
+                    .filter { file -> 
+                        // 排除编译输出和测试目录（双重保险）
+                        val pathLower = file.path.replace("\\", "/").lowercase()
+                        !excludedDirNames.any { excluded -> 
+                            pathLower.contains("/$excluded/") 
+                        }
+                    }
+                    .take(3000)  // 提高限制，大项目可能有更多文件
+                    .forEach { file ->
+                        if (results.size >= limit) return@forEach
+                        
+                        try {
+                            val content = readFileWithEncoding(file)  // 🔥 支持多种编码
+                            val lines = content.lines()
+                            lines.forEachIndexed { idx, line ->
+                                if (results.size < limit) {
+                                    // 🔥 根据模式选择匹配方式
+                                    val isMatch = if (useRegex) {
+                                        regexPattern?.containsMatchIn(line) ?: false
+                                    } else {
+                                        line.contains(keyword)
+                                    }
+
+                                    if (isMatch) {
+                                        val relativePath = toRelativePath(file.absolutePath, basePath)
+
+                                        // 🔥 提取上下文（参考 Agent 端 extractContext）
+                                        val context = if (includeContext) {
+                                            extractContext(lines, idx, contextLines, keyword, useRegex)
+                                        } else null
+
+                                        results.add(SearchMatch(relativePath, idx + 1, line.trim(), context))
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // 忽略读取失败的文件
+                        }
+                    }
+            }
+        } catch (e: Exception) {
+            return ToolResult(false, "搜索失败: ${e.message}")
+        }
+        
+        if (results.isEmpty()) {
+            return ToolResult(true, "未找到匹配关键词 '$keyword' 的结果")
+        }
+        
+        // 🔥 格式化输出（参考 Agent 端格式）
+        val sb = StringBuilder()
+        sb.append("## 文本搜索结果: $keyword\n\n")
+        if (useRegex) {
+            sb.append("**模式**: 正则表达式 (忽略大小写)\n\n")
+        }
+        sb.append("找到 ${results.size} 个匹配:\n\n")
+        
+        for (result in results) {
+            val fileName = result.relativePath.substringAfterLast("/")
+            val ext = fileName.substringAfterLast(".", "")
+            
+            sb.append("### $fileName\n")
+            sb.append("- **relativePath**: `${result.relativePath}`\n")
+            sb.append("- 行号: ${result.lineNumber}\n")
+            
+            if (includeContext && result.context != null) {
+                sb.append("```$ext\n${result.context}```\n")
+            } else {
+                sb.append("- 匹配行: `${result.matchedLine.take(120)}`\n")
+            }
+            sb.append("\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 提取上下文（参考 Agent 端 TextSearchTool.extractContext）
+     */
+    private fun extractContext(lines: List<String>, matchIndex: Int, contextLines: Int, keyword: String, useRegex: Boolean = false): String {
+        val start = maxOf(0, matchIndex - contextLines)
+        val end = minOf(lines.size, matchIndex + contextLines + 1)
+
+        val sb = StringBuilder()
+        for (i in start until end) {
+            val lineNum = String.format("%4d", i + 1)
+            if (i == matchIndex) {
+                sb.append("$lineNum >>> ${lines[i]}  // <-- 匹配行\n")
+            } else {
+                sb.append("$lineNum |   ${lines[i]}\n")
+            }
+        }
+        return sb.toString()
+    }
+    
+    /**
+     * 列出目录
+     * 
+     * 参考 Agent 端 ListDirTool.java
+     * 支持 absolute_path 或 path 参数
+     */
+    private fun executeListDir(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        // 🔥 支持 absolute_path（Agent 端标准）和 path（兼容）
+        val absolutePath = parameters["absolute_path"]?.toString()
+        val path = parameters["path"]?.toString()
+        val basePath = projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+        
+        val targetPath = when {
+            !absolutePath.isNullOrEmpty() -> absolutePath
+            !path.isNullOrEmpty() -> if (File(path).isAbsolute) path else File(basePath, path).absolutePath
+            else -> basePath
+        }
+        
+        val dir = File(targetPath)
+        
+        if (!dir.exists()) {
+            return ToolResult(false, "目录不存在或路径错误: $targetPath")
+        }
+        if (!dir.isDirectory) {
+            return ToolResult(false, "不是目录: $targetPath")
+        }
+        
+        val files = dir.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+        val relativePath = toRelativePath(targetPath, basePath)
+        
+        val sb = StringBuilder()
+        sb.append("## 目录: $relativePath\n\n")
+        sb.append("**绝对路径**: `$targetPath`\n")
+        sb.append("**内容数量**: ${files.size} 个\n\n")
+        
+        files.forEach { file ->
+            val suffix = if (file.isDirectory) "/" else ""
+            sb.append("- ${file.name}$suffix\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 读取 XML 文件
+     *
+     * 参考 Agent 端 ReadXmlTool.java 实现
+     * 支持：
+     * - relativePath: 直接指定文件路径
+     * - namespace: 通过 Mapper 类名查找
+     * - line + context_lines: 大文件分段读取
+     * - method: 只提取指定方法的 SQL
+     */
+    private fun executeReadXml(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val inputRelativePath = parameters["relativePath"]?.toString()
+        val namespace = parameters["namespace"]?.toString()
+        val method = parameters["method"]?.toString()?.substringBefore("(")
+        val line = (parameters["line"] as? Number)?.toInt()
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 20
+
+        if (inputRelativePath.isNullOrEmpty() && namespace.isNullOrEmpty()) {
+            return ToolResult(false, "需要 relativePath 或 namespace 参数")
+        }
+
+        val basePath = projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+
+        // 确定 XML 文件路径
+        val xmlFile: File = if (!inputRelativePath.isNullOrEmpty()) {
+            if (File(inputRelativePath).isAbsolute) File(inputRelativePath) else File(basePath, inputRelativePath)
+        } else {
+            // 通过 namespace 查找
+            findXmlByNamespace(namespace!!, basePath) ?: return ToolResult(false, "未找到匹配的 XML: $namespace")
+        }
+
+        if (!xmlFile.exists()) {
+            return ToolResult(false, "XML 文件不存在: ${xmlFile.absolutePath}")
+        }
+
+        // 🔥 智能编码读取（支持 UTF-8, GBK, GB2312）
+        val content = readFileWithEncoding(xmlFile)
+        val relativePath = toRelativePath(xmlFile.absolutePath, basePath)
+        
+        // 🔥 智能识别 XML 类型
+        return if (isMapperXml(content)) {
+            // MyBatis Mapper XML：提取 SQL
+            extractMapperSql(content, relativePath, namespace, method)
+        } else {
+            // 其他 XML：按行读取
+            readXmlByLine(content, relativePath, line, contextLines)
+        }
+    }
+    
+    /**
+     * 判断是否是 MyBatis Mapper XML
+     */
+    private fun isMapperXml(content: String): Boolean {
+        return content.contains("</mapper>", ignoreCase = true)
+    }
+    
+    /**
+     * 按行读取 XML（支持大文件分段）
+     */
+    private fun readXmlByLine(content: String, relativePath: String, centerLine: Int?, contextLines: Int): ToolResult {
+        val lines = content.lines()
+        val totalLines = lines.size
+        
+        // 确定读取范围
+        val (start, end) = if (centerLine != null && centerLine > 0) {
+            maxOf(1, centerLine - contextLines) to minOf(totalLines, centerLine + contextLines)
+        } else {
+            // 🔥 大文件默认只读前 100 行
+            1 to if (totalLines <= 100) totalLines else 100
+        }
+        
+        val sb = StringBuilder()
+        val fileName = relativePath.substringAfterLast("/")
+        
+        sb.append("## 文件: $fileName\n\n")
+        sb.append("- **relativePath**: `$relativePath`\n")
+        sb.append("- **类型**: XML（非 Mapper）\n")
+        sb.append("- **总行数**: $totalLines\n")
+        sb.append("- **读取范围**: 第 $start - $end 行（共 ${end - start + 1} 行）\n\n")
+        
+        sb.append("```xml\n")
+        for (i in start..end) {
+            val lineContent = lines[i - 1]
+            val lineNum = String.format("%4d", i)
+            
+            if (centerLine != null && i == centerLine) {
+                sb.append("$lineNum >>> $lineContent  // <-- 匹配行\n")
+            } else {
+                sb.append("$lineNum |   $lineContent\n")
+            }
+        }
+        sb.append("```\n")
+        
+        if (end < totalLines) {
+            sb.append("\n> 💡 文件还有 ${totalLines - end} 行未显示。")
+            sb.append("如需查看更多，请设置 `line` 参数或增大 `context_lines`。\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 提取 Mapper XML 的 SQL 语句
+     */
+    private fun extractMapperSql(content: String, relativePath: String, namespace: String?, method: String?): ToolResult {
+        val sb = StringBuilder()
+        sb.append("## XML 文件\n\n")
+        sb.append("- **relativePath**: `$relativePath`\n")
+        if (namespace != null) {
+            sb.append("- **Namespace**: `$namespace`\n")
+        }
+        sb.append("\n")
+        
+        // 提取 SQL 语句
+        val sqlPattern = Regex(
+            "<(select|insert|update|delete)\\s+([^>]+)>(.*?)</\\1>",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        )
+        
+        val sqlList = sqlPattern.findAll(content).mapNotNull { match ->
+            val type = match.groupValues[1].lowercase()
+            val attributes = match.groupValues[2]
+            val sqlContent = match.groupValues[3].trim()
+            
+            val id = extractAttribute(attributes, "id") ?: return@mapNotNull null
+            val parameterType = extractAttribute(attributes, "parameterType")
+            val resultType = extractAttribute(attributes, "resultType")
+            val resultMap = extractAttribute(attributes, "resultMap")
+            
+            SqlInfo(type, id, parameterType, resultType, resultMap, cleanSqlContent(sqlContent))
+        }.toList()
+        
+        if (sqlList.isEmpty()) {
+            sb.append("未找到 SQL 语句\n")
+            return ToolResult(true, sb.toString())
+        }
+        
+        // 按方法名过滤
+        val filteredList = if (!method.isNullOrEmpty()) {
+            sqlList.filter { it.id == method }
+        } else sqlList
+        
+        if (filteredList.isEmpty()) {
+            sb.append("未找到方法 `$method` 对应的 SQL\n")
+            return ToolResult(true, sb.toString())
+        }
+        
+        sb.append("## SQL 语句 (${filteredList.size} 个)\n\n")
+        
+        for (sql in filteredList) {
+            sb.append("### ${sql.type.uppercase()}: ${sql.id}\n\n")
+            sql.parameterType?.let { sb.append("- **parameterType**: `$it`\n") }
+            sql.resultType?.let { sb.append("- **resultType**: `$it`\n") }
+            sql.resultMap?.let { sb.append("- **resultMap**: `$it`\n") }
+            sb.append("\n```sql\n${sql.content}\n```\n\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 通过 namespace 查找 XML 文件
+     * 
+     * 🔥 修复：只搜索 src/main 目录，统一路径处理，支持多种编码
+     */
+    private fun findXmlByNamespace(namespace: String, basePath: String): File? {
+        val excludedDirNames = setOf(
+            "target", "build", ".git", ".gradle", "node_modules", 
+            ".idea", ".vscode", "bin", "out", "test", "tests"
+        )
+        val namespacePattern = Regex(
+            "<mapper\\s+[^>]*namespace\\s*=\\s*[\"']([^\"']+)[\"']",
+            RegexOption.IGNORE_CASE
+        )
+        
+        val baseDir = File(basePath)
+        
+        // 🔥 递归查找所有 src/main 目录（与 text_search 保持一致）
+        val srcMainDirs = mutableListOf<File>()
+        baseDir.walkTopDown()
+            .maxDepth(5)
+            .onEnter { dir -> 
+                !excludedDirNames.contains(dir.name) && !dir.name.startsWith(".")
+            }
+            .filter { it.isDirectory }
+            .forEach { dir ->
+                if (dir.name == "main" && dir.parentFile?.name == "src") {
+                    srcMainDirs.add(dir)
+                }
+            }
+        
+        if (srcMainDirs.isEmpty()) {
+            logger.warn("findXmlByNamespace: 未找到 src/main 目录")
+            return null
+        }
+        
+        // 🔥 在 src/main 目录中搜索 XML 文件
+        for (srcMainDir in srcMainDirs) {
+            val xmlFiles = srcMainDir.walkTopDown()
+                .filter { it.isFile && it.name.endsWith(".xml") }
+                .filter { file -> 
+                    val pathLower = file.path.replace("\\", "/").lowercase()
+                    !excludedDirNames.any { excluded -> pathLower.contains("/$excluded/") }
+                }
+                .take(500)
+                .toList()
+            
+            for (xmlFile in xmlFiles) {
+                try {
+                    val content = readFileWithEncoding(xmlFile)  // 🔥 支持多种编码
+                    val match = namespacePattern.find(content)
+                    if (match != null) {
+                        val foundNamespace = match.groupValues[1]
+                        if (matchesNamespace(foundNamespace, namespace)) {
+                            logger.info("找到匹配 XML: ${xmlFile.absolutePath} (namespace=$foundNamespace)")
+                            return xmlFile
+                        }
+                    }
+                } catch (e: Exception) {
+                    // 忽略读取失败
+                }
+            }
+        }
+        
+        return null
+    }
+    
+    /**
+     * 检查 namespace 是否匹配（支持简单类名）
+     */
+    private fun matchesNamespace(foundNamespace: String, targetNamespace: String): Boolean {
+        if (foundNamespace == targetNamespace) return true
+        // 支持简单类名匹配
+        if (!targetNamespace.contains(".")) {
+            return foundNamespace.endsWith(".$targetNamespace")
+        }
+        return false
+    }
+    
+    /**
+     * 提取 XML 属性值
+     */
+    private fun extractAttribute(attributes: String, attrName: String): String? {
+        val pattern = Regex("$attrName\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+        return pattern.find(attributes)?.groupValues?.get(1)
+    }
+    
+    /**
+     * 清理 SQL 内容
+     */
+    private fun cleanSqlContent(content: String): String {
+        return content
+            .replace(Regex("(?m)^\\s*$[\n\r]+"), "\n")
+            .replace(Regex("\n{3,}"), "\n\n")
+            .trim()
+    }
+    
+    /**
+     * SQL 信息数据类
+     */
+    private data class SqlInfo(
+        val type: String,
+        val id: String,
+        val parameterType: String?,
+        val resultType: String?,
+        val resultMap: String?,
+        val content: String
+    )
+    
+    /**
+     * ✅ 读取文件（使用 PSI）
+     *
+     * 参数：
+     * - relativePath: 文件路径（必需）
+     * - start_line: 起始行号（可选，1-based）
+     * - end_line: 结束行号（可选，1-based）
+     * - line: 中心行号（可选，返回前后各 context_lines 行）
+     * - context_lines: 上下文行数（默认 20，仅在指定 line 时生效）
+     */
+    private fun executeReadFile(parameters: Map<String, Any?>, projectPath: String?, allowedExtensions: List<String>?): ToolResult {
+        val inputRelativePath = parameters["relativePath"]?.toString()
+            ?: parameters["path"]?.toString()
+            ?: return ToolResult(false, "缺少 relativePath 参数")
+
+        val basePath = projectPath ?: project.basePath ?: ""
+        val file = if (File(inputRelativePath).isAbsolute) File(inputRelativePath) else File(basePath, inputRelativePath)
+
+        if (!file.exists()) {
+            return ToolResult(false, "文件不存在: ${file.absolutePath}")
+        }
+
+        if (allowedExtensions != null && !allowedExtensions.any { file.name.endsWith(it) }) {
+            return ToolResult(false, "不支持的文件类型: ${file.name}")
+        }
+
+        // ✅ 使用 PSI 读取文件（支持 IDE 内存中的未保存文件）
+        return ReadAction.compute<ToolResult, Exception> {
+            val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
+                ?: return@compute ToolResult(false, "无法找到文件: ${file.absolutePath}")
+
+            val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                ?: return@compute ToolResult(false, "无法读取 PSI: ${file.absolutePath}")
+
+            // 获取文件内容（支持编码）
+            val content = psiFile.text
+            val lines = content.lines()
+            val ext = file.extension.ifEmpty { "text" }
+
+            // 计算相对路径
+            val relativePath = toRelativePath(file.absolutePath, basePath)
+
+            // 支持按行号范围读取
+            val startLine = (parameters["start_line"] as? Number)?.toInt()
+            val endLine = (parameters["end_line"] as? Number)?.toInt()
+            val centerLine = (parameters["line"] as? Number)?.toInt()
+            val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 20
+
+            val sb = StringBuilder()
+            sb.append("## 文件: ${file.name}\n\n")
+            sb.append("**relativePath**: `$relativePath`\n")
+            sb.append("**absolutePath**: `${file.absolutePath}`\n")
+            sb.append("**类型**: $ext\n")
+            sb.append("**总行数**: ${lines.size}\n")
+            sb.append("**文件大小**: ${content.length} 字符\n\n")
+
+            // 确定读取范围
+            val (readStart, readEnd) = when {
+                startLine != null && endLine != null -> startLine to endLine
+                centerLine != null -> maxOf(1, centerLine - contextLines) to minOf(lines.size, centerLine + contextLines)
+                else -> 1 to lines.size  // 默认读取全部
+            }
+
+            // ✅ 边界处理：自动截断到文件行数
+            val actualStart = maxOf(1, readStart)
+            val actualEnd = minOf(lines.size, readEnd)
+
+            sb.append("**请求范围**: 第 $readStart - $readEnd 行\n")
+            sb.append("**实际范围**: 第 $actualStart - $actualEnd 行\n")
+
+            if (actualEnd < readEnd) {
+                sb.append("**⚠️ 已自动截断**: endLine 超出文件行数，已截断到第 $actualEnd 行\n")
+            }
+
+            sb.append("**读取行数**: ${actualEnd - actualStart + 1} 行\n\n")
+
+            sb.append("```$ext\n")
+            for (i in (actualStart - 1) until actualEnd) {
+                val lineNum = String.format("%4d", i + 1)
+                val marker = if (centerLine != null && i + 1 == centerLine) " >>> " else " |   "
+                sb.append("$lineNum$marker${lines[i]}\n")
+            }
+            sb.append("```\n")
+
+            if (actualEnd < lines.size) {
+                sb.append("\n> 💡 文件还有 ${lines.size - actualEnd} 行未显示。")
+                if (centerLine != null) {
+                    sb.append("使用 start_line=${actualEnd + 1} 继续读取。\n")
+                } else {
+                    sb.append("使用 start_line/end_line 参数指定读取范围。\n")
+                }
+            }
+
+            ToolResult(true, sb.toString())
+        }
+    }
+
+    /**
+     * 🔥 文件内容搜索（支持正则表达式）
+     *
+     * ✅ 使用 IDE PSI 能力：
+     * - 单文件搜索：使用 PSI + 正则表达式
+     * - 全项目搜索：使用 PsiSearchHelper（IDE 索引加速）
+     *
+     * 参数：
+     * - relativePath: 文件路径（可选，不指定则为全项目搜索）
+     * - pattern: 搜索关键词或正则表达式（必需）
+     * - regex: 是否启用正则表达式（默认 false）
+     * - case_sensitive: 是否大小写敏感（默认 false）
+     * - context_lines: 上下文行数（默认 0）
+     * - limit: 最大结果数（全项目搜索时有效，默认 20）
+     * - file_type: 文件类型过滤（全项目搜索时有效，默认 "all"）
+     */
+    private fun executeGrepFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val inputRelativePath = parameters["relativePath"]?.toString()
+            ?: parameters["path"]?.toString()
+
+        val pattern = parameters["pattern"]?.toString()
+            ?: return ToolResult(false, "缺少 pattern 参数（搜索关键词或正则表达式）")
+
+        val useRegex = parameters["regex"] as? Boolean ?: false
+        val caseSensitive = parameters["case_sensitive"] as? Boolean ?: false
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 0
+        val limit = (parameters["limit"] as? Number)?.toInt() ?: 20
+        val fileType = parameters["file_type"]?.toString() ?: "all"
+
+        // 🔥 判断是单文件搜索还是全项目搜索
+        return if (inputRelativePath != null && inputRelativePath.isNotEmpty()) {
+            // 单文件搜索（使用 PSI）
+            grepSingleFile(inputRelativePath, pattern, useRegex, caseSensitive, contextLines, projectPath)
+        } else {
+            // 全项目搜索（使用 PsiSearchHelper）
+            grepProjectWide(pattern, useRegex, caseSensitive, contextLines, limit, fileType)
+        }
+    }
+
+    /**
+     * 单文件搜索（使用 PSI）
+     */
+    private fun grepSingleFile(
+        relativePath: String,
+        pattern: String,
+        useRegex: Boolean,
+        caseSensitive: Boolean,
+        contextLines: Int,
+        projectPath: String?
+    ): ToolResult {
+        val basePath = projectPath ?: project.basePath ?: ""
+        val file = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
+
+        if (!file.exists()) {
+            return ToolResult(false, "文件不存在: ${file.absolutePath}")
+        }
+
+        return ReadAction.compute<ToolResult, Exception> {
+            val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
+                ?: return@compute ToolResult(false, "无法找到文件: ${file.absolutePath}")
+
+            val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                ?: return@compute ToolResult(false, "无法读取 PSI: ${file.absolutePath}")
+
+            val content = psiFile.text
+            val lines = content.lines()
+            val ext = file.extension.ifEmpty { "text" }
+
+            // 编译正则表达式或准备关键词
+            val regexPattern = if (useRegex) {
+                try {
+                    val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
+                    Regex(pattern, options)
+                } catch (e: Exception) {
+                    return@compute ToolResult(false, "无效的正则表达式: $pattern\n错误: ${e.message}")
+                }
+            } else null
+
+            // 搜索匹配行
+            val matches = mutableListOf<GrepMatch>()
+            lines.forEachIndexed { index, line ->
+                val isMatch = if (useRegex) {
+                    regexPattern?.containsMatchIn(line) ?: false
+                } else {
+                    if (caseSensitive) line.contains(pattern)
+                    else line.contains(pattern, ignoreCase = true)
+                }
+
+                if (isMatch) {
+                    val matchedText = if (useRegex) {
+                        regexPattern?.find(line)?.value ?: pattern
+                    } else pattern
+                    matches.add(GrepMatch(index + 1, line.trim(), matchedText))
+                }
+            }
+
+            if (matches.isEmpty()) {
+                return@compute ToolResult(true, "未找到匹配 `$pattern` 的内容\n\n文件: `${toRelativePath(file.absolutePath, basePath)}`")
+            }
+
+            // 格式化输出
+            val sb = StringBuilder()
+            val displayPath = toRelativePath(file.absolutePath, basePath)
+            sb.append("## 文件内容搜索: ${file.name}\n\n")
+            sb.append("**relativePath**: `$displayPath`\n")
+            sb.append("**搜索内容**: `$pattern`\n")
+            sb.append("**正则模式**: ${if (useRegex) "是" else "否"}\n")
+            sb.append("**大小写敏感**: ${if (caseSensitive) "是" else "否"}\n")
+            sb.append("**匹配数量**: ${matches.size}\n\n")
+
+            for (match in matches) {
+                if (contextLines > 0) {
+                    val start = maxOf(0, match.lineNumber - contextLines - 1)
+                    val end = minOf(lines.size, match.lineNumber + contextLines)
+
+                    sb.append("### 第 ${match.lineNumber} 行\n\n")
+                    sb.append("```$ext\n")
+                    for (i in start until end) {
+                        val lineNum = String.format("%4d", i + 1)
+                        if (i + 1 == match.lineNumber) {
+                            sb.append("$lineNum >>> ${lines[i]}  // <-- 匹配: ${match.matchedText}\n")
+                        } else {
+                            sb.append("$lineNum |   ${lines[i]}\n")
+                        }
+                    }
+                    sb.append("```\n\n")
+                } else {
+                    sb.append("- **第 ${match.lineNumber} 行**: `${match.lineContent}`\n")
+                }
+            }
+
+            ToolResult(true, sb.toString())
+        }
+    }
+
+    /**
+     * 全项目搜索（使用 PsiSearchHelper）
+     */
+    private fun grepProjectWide(
+        pattern: String,
+        useRegex: Boolean,
+        caseSensitive: Boolean,
+        contextLines: Int,
+        limit: Int,
+        fileType: String
+    ): ToolResult {
+        logger.info("全项目搜索: pattern=$pattern, fileType=$fileType, limit=$limit")
+
+        return ReadAction.compute<ToolResult, Exception> {
+            val searchHelper = PsiSearchHelper.getInstance(project)
+            val scope = GlobalSearchScope.projectScope(project)
+
+            // 文件类型过滤
+            val allowedExtensions = when (fileType) {
+                "java" -> listOf("java")
+                "config" -> listOf("properties", "yml", "yaml", "xml")
+                else -> null  // all
+            }
+
+            val matches = mutableListOf<ProjectGrepMatch>()
+            val usageInfo = ProcessedItemsInfo()
+
+            // 使用 PsiSearchHelper 执行搜索
+            val consumer = { element: PsiElement ->
+                if (matches.size >= limit) return@ReadAction false
+
+                val containingFile = element.containingFile
+                val virtualFile = containingFile?.virtualFile ?: return@ReadAction true
+
+                // 文件类型过滤
+                if (allowedExtensions != null) {
+                    val ext = virtualFile.extension
+                    if (ext != null && ext !in allowedExtensions) {
+                        return@ReadAction true
+                    }
+                }
+
+                // 获取行号和内容
+                val document = PsiDocumentManager.getInstance(project).getDocument(containingFile)
+                    ?: return@ReadAction true
+
+                val lineNumber = document.getLineNumber(element.textOffset) + 1
+                val lineStart = document.getLineStartOffset(lineNumber - 1)
+                val lineEnd = document.getLineEndOffset(lineNumber - 1)
+                val lineText = document.getText(TextRange(lineStart, lineEnd)).trim()
+
+                val relativePath = toRelativePath(virtualFile.path, project.basePath ?: "")
+
+                matches.add(ProjectGrepMatch(
+                    relativePath = relativePath,
+                    lineNumber = lineNumber,
+                    content = lineText,
+                    matchedText = element.text
+                ))
+
+                true
+            }
+
+            // 执行搜索
+            if (useRegex) {
+                // 正则表达式模式：使用自定义搜索处理器
+                // 注意：PsiSearchHelper 不直接支持正则，这里简化为文本搜索
+                searchHelper.processAllFilesWithWordInLiterals(
+                    pattern.split(Regex("[\\s\\p{Punct}]")).firstOrNull { it.isNotEmpty() } ?: pattern,
+                    scope,
+                    consumer,
+                    !caseSensitive
+                )
+            } else {
+                // 简单文本搜索
+                searchHelper.processAllFilesWithWordInLiterals(
+                    pattern,
+                    scope,
+                    consumer,
+                    !caseSensitive
+                )
+            }
+
+            if (matches.isEmpty()) {
+                return@compute ToolResult(true, "未找到匹配 `$pattern` 的内容\n\n搜索范围: 全项目\n文件类型: $fileType")
+            }
+
+            // 格式化输出
+            val sb = StringBuilder()
+            sb.append("## 🔍 全项目搜索结果\n\n")
+            sb.append("**搜索内容**: `$pattern`\n")
+            sb.append("**正则模式**: ${if (useRegex) "是" else "否"}\n")
+            sb.append("**大小写敏感**: ${if (caseSensitive) "是" else "否"}\n")
+            sb.append("**文件类型**: $fileType\n")
+            sb.append("**匹配数量**: ${matches.size}\n\n")
+
+            for (match in matches) {
+                sb.append("### `${match.relativePath}`\n\n")
+                sb.append("- **行号**: ${match.lineNumber}\n")
+                sb.append("- **内容**: `${match.content}`\n")
+                sb.append("- **匹配**: `${match.matchedText}`\n\n")
+            }
+
+            ToolResult(true, sb.toString())
+        }
+    }
+
+    /**
+     * 单文件 Grep 匹配结果
+     */
+    private data class GrepMatch(
+        val lineNumber: Int,
+        val lineContent: String,
+        val matchedText: String
+    )
+
+    /**
+     * 全项目 Grep 匹配结果
+     */
+    private data class ProjectGrepMatch(
+        val relativePath: String,
+        val lineNumber: Int,
+        val content: String,
+        val matchedText: String
+    )
+
+    /**
+     * 通过类名查找 PsiClass
+     */
+    private fun findClass(className: String): PsiClass? {
+        val javaPsiFacade = JavaPsiFacade.getInstance(project)
+        val scope = GlobalSearchScope.projectScope(project)
+        
+        // 尝试全限定名
+        var psiClass = javaPsiFacade.findClass(className, scope)
+        if (psiClass != null) return psiClass
+        
+        // 尝试简单名查找
+        val classes = javaPsiFacade.findClasses(className, scope)
+        if (classes.isNotEmpty()) return classes[0]
+        
+        // 遍历项目查找
+        val shortName = className.substringAfterLast(".")
+        ProjectRootManager.getInstance(project).contentSourceRoots.forEach { root ->
+            psiClass = findClassInDirectory(root, shortName)
+            if (psiClass != null) return psiClass
+        }
+        
+        return null
+    }
+    
+    private fun findClassInDirectory(dir: VirtualFile, className: String): PsiClass? {
+        if (!dir.isDirectory) return null
+        
+        for (child in dir.children) {
+            if (child.isDirectory) {
+                val found = findClassInDirectory(child, className)
+                if (found != null) return found
+            } else if (child.name == "$className.java") {
+                val psiFile = PsiManager.getInstance(project).findFile(child)
+                if (psiFile is PsiJavaFile) {
+                    return psiFile.classes.firstOrNull { it.name == className }
+                }
+            }
+        }
+        return null
+    }
+    
+    // ==================== 新增工具实现 ====================
+    
+    /**
+     * 调用链分析工具
+     * 
+     * 使用 IntelliJ API 分析方法的调用关系
+     * 参考 Agent 端 CallChainTool.java
+     */
+    private fun executeCallChain(parameters: Map<String, Any?>): ToolResult {
+        val method = parameters["method"]?.toString()
+            ?: return ToolResult(false, "缺少 method 参数（格式：ClassName.methodName）")
+
+        val direction = parameters["direction"]?.toString() ?: "both"
+        val depth = (parameters["depth"] as? Number)?.toInt() ?: 1  // 默认1层，避免发散
+        // 兼容两种命名：includeSource (驼峰) 和 include_source (下划线)
+        val includeSource = (parameters["includeSource"] as? Boolean)
+            ?: (parameters["include_source"] as? Boolean)
+            ?: false
+        
+        // 解析类名和方法名
+        if (!method.contains(".")) {
+            return ToolResult(false, "方法签名格式错误，应为: ClassName.methodName")
+        }
+        
+        val lastDot = method.lastIndexOf(".")
+        val className = method.substring(0, lastDot)
+        val methodName = method.substring(lastDot + 1).substringBefore("(")
+        
+        logger.info("分析调用链: class=$className, method=$methodName, direction=$direction, depth=$depth")
+        
+        return ReadAction.compute<ToolResult, Exception> {
+            val psiClass = findClass(className)
+            if (psiClass == null) {
+                return@compute ToolResult(false, "未找到类: $className")
+            }
+            
+            val methods = psiClass.findMethodsByName(methodName, false)
+            if (methods.isEmpty()) {
+                return@compute ToolResult(false, "在类 $className 中未找到方法: $methodName")
+            }
+            
+            val targetMethod = methods[0]
+            val basePath = project.basePath ?: ""
+            val sb = StringBuilder()
+            sb.append("## 调用链分析: $method\n\n")
+            sb.append("**分析方向**: $direction\n")
+            sb.append("**分析深度**: $depth\n\n")
+            
+            // 分析调用者（谁调用了这个方法）
+            if (direction == "callers" || direction == "both") {
+                sb.append("### 🔼 调用者（谁调用了这个方法）\n\n")
+                val callers = ReferencesSearch.search(targetMethod).findAll()
+                if (callers.isEmpty()) {
+                    sb.append("未找到调用者\n\n")
+                } else {
+                    callers.take(20).forEach { ref ->
+                        val element = ref.element
+                        val containingMethod = element.parentOfType<com.intellij.psi.PsiMethod>()
+                        val containingClass = element.parentOfType<com.intellij.psi.PsiClass>()
+                        
+                        if (containingMethod != null && containingClass != null) {
+                            val absolutePath = containingClass.containingFile?.virtualFile?.path ?: ""
+                            val relativePath = toRelativePath(absolutePath, basePath)
+                            sb.append("- `${containingClass.name}.${containingMethod.name}()`")
+                            sb.append(" → `$relativePath`\n")
+                            
+                            if (includeSource) {
+                                sb.append("  ```java\n")
+                                sb.append("  ${containingMethod.text.take(500)}")
+                                if (containingMethod.text.length > 500) sb.append("...")
+                                sb.append("\n  ```\n")
+                            }
+                        }
+                    }
+                    sb.append("\n")
+                }
+            }
+            
+            // 分析被调用者（这个方法调用了谁）
+            if (direction == "callees" || direction == "both") {
+                sb.append("### 🔽 被调用者（这个方法调用了谁）\n\n")
+                val callees = mutableListOf<String>()
+                
+                targetMethod.body?.accept(object : com.intellij.psi.JavaRecursiveElementVisitor() {
+                    override fun visitMethodCallExpression(expression: com.intellij.psi.PsiMethodCallExpression) {
+                        super.visitMethodCallExpression(expression)
+                        val calledMethod = expression.resolveMethod()
+                        if (calledMethod != null) {
+                            val calledClass = calledMethod.containingClass
+                            if (calledClass != null) {
+                                callees.add("${calledClass.name}.${calledMethod.name}()")
+                            }
+                        }
+                    }
+                })
+                
+                if (callees.isEmpty()) {
+                    sb.append("未找到被调用的方法\n\n")
+                } else {
+                    callees.distinct().take(30).forEach { callee ->
+                        sb.append("- `$callee`\n")
+                    }
+                    sb.append("\n")
+                }
+            }
+            
+            ToolResult(true, sb.toString())
+        }
+    }
+    
+    /**
+     * 写入文件工具
+     *
+     * 参考 Agent 端 WriteFileTool.java
+     */
+    private fun executeWriteFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val inputRelativePath = parameters["relativePath"]?.toString()
+        val content = parameters["content"]?.toString()
+            ?: return ToolResult(false, "缺少 content 参数")
+        val packageName = parameters["package_name"]?.toString()
+        val className = parameters["class_name"]?.toString()
+        val overwrite = parameters["overwrite"] as? Boolean ?: false
+
+        val basePath = projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+
+        // 确定目标文件路径
+        val targetFile: File = when {
+            !inputRelativePath.isNullOrEmpty() -> {
+                if (File(inputRelativePath).isAbsolute) File(inputRelativePath) else File(basePath, inputRelativePath)
+            }
+            !packageName.isNullOrEmpty() && !className.isNullOrEmpty() -> {
+                val packagePath = packageName.replace(".", "/")
+                val fileName = if (className.endsWith(".java")) className else "$className.java"
+                File(basePath, "src/main/java/$packagePath/$fileName")
+            }
+            else -> return ToolResult(false, "需要 relativePath 或 (package_name + class_name)")
+        }
+
+        // 检查文件是否存在
+        if (targetFile.exists() && !overwrite) {
+            return ToolResult(false, "文件已存在: ${targetFile.absolutePath}，设置 overwrite=true 可覆盖")
+        }
+
+        return try {
+            // 创建目录
+            targetFile.parentFile?.mkdirs()
+
+            // 写入文件
+            targetFile.writeText(content)
+
+            val relativePath = toRelativePath(targetFile.absolutePath, basePath)
+            
+            val sb = StringBuilder()
+            sb.append("## 文件创建成功\n\n")
+            sb.append("- **relativePath**: `$relativePath`\n")
+            sb.append("- **文件大小**: ${content.length} 字符\n")
+            
+            logger.info("✅ 创建文件成功: ${targetFile.absolutePath}")
+            ToolResult(true, sb.toString())
+            
+        } catch (e: Exception) {
+            logger.error("创建文件失败", e)
+            ToolResult(false, "创建文件失败: ${e.message}")
+        }
+    }
+    
+    /**
+     * 修改文件工具
+     *
+     * 参考 Agent 端 ModifyFileTool.java
+     * 支持 4 种操作模式：replace/insert/delete/add_import
+     */
+    private fun executeModifyFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val inputRelativePath = parameters["relativePath"]?.toString()
+            ?: return ToolResult(false, "缺少 relativePath 参数")
+        val operation = parameters["operation"]?.toString()?.lowercase() ?: "replace"
+
+        val basePath = projectPath ?: project.basePath ?: ""
+        val file = if (File(inputRelativePath).isAbsolute) File(inputRelativePath) else File(basePath, inputRelativePath)
+
+        if (!file.exists()) {
+            return ToolResult(false, "文件不存在: ${file.absolutePath}")
+        }
+
+        val relativePath = toRelativePath(file.absolutePath, basePath)
+        
+        return try {
+            when (operation) {
+                "replace" -> executeReplace(file, relativePath, parameters)
+                "insert" -> executeInsert(file, relativePath, parameters)
+                "delete" -> executeDelete(file, relativePath, parameters)
+                "add_import" -> executeAddImport(file, relativePath, parameters)
+                else -> {
+                    // 🔥 兼容模式：没有 operation 时按 old_string/new_string 处理
+                    executeReplace(file, relativePath, parameters)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("修改文件失败", e)
+            ToolResult(false, "修改文件失败: ${e.message}")
+        }
+    }
+    
+    /**
+     * 执行替换操作
+     */
+    private fun executeReplace(file: File, relativePath: String, parameters: Map<String, Any?>): ToolResult {
+        val oldContent = parameters["old_content"]?.toString()
+            ?: parameters["old_string"]?.toString()
+            ?: parameters["search"]?.toString()
+            ?: return ToolResult(false, "replace 操作需要 old_content 参数")
+        val newContent = parameters["new_content"]?.toString()
+            ?: parameters["new_string"]?.toString()
+            ?: parameters["replace"]?.toString()
+            ?: ""
+        val replaceAll = parameters["replace_all"] as? Boolean ?: false
+        
+        val content = readFileWithEncoding(file)  // 🔥 支持多种编码
+        
+        if (!content.contains(oldContent)) {
+            return ToolResult(false, "未找到要替换的内容:\n```\n${oldContent.take(200)}...\n```")
+        }
+        
+        // 检查唯一性
+        if (!replaceAll) {
+            val count = content.split(oldContent).size - 1
+            if (count > 1) {
+                return ToolResult(false, "找到 $count 处匹配，请使用 replace_all=true 或提供更精确的 old_content")
+            }
+        }
+        
+        val result = if (replaceAll) content.replace(oldContent, newContent) else content.replaceFirst(oldContent, newContent)
+        file.writeText(result)
+        
+        logger.info("✅ 替换成功: $relativePath")
+        return ToolResult(true, "## 替换成功\n\n- **relativePath**: `$relativePath`\n")
+    }
+    
+    /**
+     * 执行插入操作
+     */
+    private fun executeInsert(file: File, relativePath: String, parameters: Map<String, Any?>): ToolResult {
+        val newContent = parameters["new_content"]?.toString()
+            ?: return ToolResult(false, "insert 操作需要 new_content 参数")
+        val insertAfterLine = (parameters["insert_after_line"] as? Number)?.toInt() ?: -1
+        val insertPosition = parameters["insert_position"]?.toString()
+        
+        val lines = readFileWithEncoding(file).lines().toMutableList()  // 🔥 支持多种编码
+        
+        // 确定插入位置
+        var insertLine = insertAfterLine
+        if (insertLine <= 0 && insertPosition != null) {
+            insertLine = findInsertPosition(lines, insertPosition)
+        }
+        if (insertLine <= 0) {
+            // 默认插入到类末尾
+            insertLine = findClassEnd(lines) - 1
+        }
+        insertLine = insertLine.coerceIn(0, lines.size)
+        
+        // 插入
+        val insertLines = newContent.split("\n")
+        lines.addAll(insertLine, insertLines)
+        
+        file.writeText(lines.joinToString("\n"))
+        
+        logger.info("✅ 插入成功: $relativePath (第 ${insertLine} 行后)")
+        return ToolResult(true, "## 插入成功\n\n- **relativePath**: `$relativePath`\n- **位置**: 第 ${insertLine} 行后\n")
+    }
+    
+    /**
+     * 执行删除操作
+     */
+    private fun executeDelete(file: File, relativePath: String, parameters: Map<String, Any?>): ToolResult {
+        val oldContent = parameters["old_content"]?.toString()
+            ?: return ToolResult(false, "delete 操作需要 old_content 参数")
+        
+        val content = readFileWithEncoding(file)  // 🔥 支持多种编码
+        if (!content.contains(oldContent)) {
+            return ToolResult(false, "未找到要删除的内容")
+        }
+        
+        file.writeText(content.replace(oldContent, ""))
+        
+        logger.info("✅ 删除成功: $relativePath")
+        return ToolResult(true, "## 删除成功\n\n- **relativePath**: `$relativePath`\n")
+    }
+    
+    /**
+     * 执行添加 import 操作
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun executeAddImport(file: File, relativePath: String, parameters: Map<String, Any?>): ToolResult {
+        val importsObj = parameters["imports"]
+        val imports: List<String> = when (importsObj) {
+            is List<*> -> importsObj.filterIsInstance<String>()
+            is String -> listOf(importsObj)
+            else -> return ToolResult(false, "add_import 操作需要 imports 参数")
+        }
+        
+        if (imports.isEmpty()) {
+            return ToolResult(false, "imports 列表为空")
+        }
+        
+        val fileContent = readFileWithEncoding(file)  // 🔥 支持多种编码
+        val lines = fileContent.lines().toMutableList()
+        
+        // 找到最后一个 import 行
+        var lastImportLine = -1
+        var packageLine = -1
+        lines.forEachIndexed { i, line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("package ")) packageLine = i
+            if (trimmed.startsWith("import ")) lastImportLine = i
+        }
+        
+        val insertPos = if (lastImportLine >= 0) lastImportLine + 1 else if (packageLine >= 0) packageLine + 2 else 0
+        
+        var addedCount = 0
+        for (imp in imports.reversed()) {
+            var importLine = imp.trim()
+            if (!importLine.startsWith("import ")) importLine = "import $importLine"
+            if (!importLine.endsWith(";")) importLine = "$importLine;"
+            
+            // 检查是否已存在
+            val className = importLine.removePrefix("import ").removeSuffix(";").trim()
+            if (!fileContent.contains(className)) {
+                lines.add(insertPos, importLine)
+                addedCount++
+            }
+        }
+        
+        if (addedCount > 0) {
+            file.writeText(lines.joinToString("\n"))
+            logger.info("✅ 添加 import 成功: $relativePath ($addedCount 个)")
+            return ToolResult(true, "## 添加 import 成功\n\n- **relativePath**: `$relativePath`\n- **新增**: $addedCount 个\n")
+        }
+        
+        return ToolResult(true, "所有 import 已存在，无需添加")
+    }
+    
+    /**
+     * 查找插入位置
+     */
+    private fun findInsertPosition(lines: List<String>, insertPosition: String): Int {
+        val lower = insertPosition.lowercase()
+        
+        if ("类末尾" in lower || "class end" in lower) {
+            return findClassEnd(lines) - 1
+        }
+        
+        if ("方法" in lower && "后" in lower) {
+            val methodPattern = Regex("方法\\s*(\\w+)\\s*后")
+            methodPattern.find(insertPosition)?.let { match ->
+                val methodName = match.groupValues[1]
+                return findMethodEnd(lines, methodName)
+            }
+        }
+        
+        return -1
+    }
+    
+    /**
+     * 查找类结束位置
+     */
+    private fun findClassEnd(lines: List<String>): Int {
+        var braceCount = 0
+        var inClass = false
+        
+        for ((i, line) in lines.withIndex()) {
+            if ("class " in line && "{" in line) inClass = true
+            if (inClass) {
+                braceCount += line.count { it == '{' } - line.count { it == '}' }
+                if (braceCount == 0) return i
+            }
+        }
+        return lines.size - 1
+    }
+    
+    /**
+     * 查找方法结束位置
+     */
+    private fun findMethodEnd(lines: List<String>, methodName: String): Int {
+        var braceCount = 0
+        var inMethod = false
+        
+        for ((i, line) in lines.withIndex()) {
+            if (methodName in line && "(" in line) inMethod = true
+            if (inMethod) {
+                braceCount += line.count { it == '{' } - line.count { it == '}' }
+                if (braceCount == 0 && "}" in line) return i + 1
+            }
+        }
+        return -1
+    }
+    
+    // 辅助方法：获取父元素
+    private inline fun <reified T : PsiElement> PsiElement.parentOfType(): T? {
+        var parent = this.parent
+        while (parent != null) {
+            if (parent is T) return parent
+            parent = parent.parent
+        }
+        return null
+    }
+    
+    /**
+     * 🔥 智能读取文件，自动检测编码（支持 UTF-8、GBK、GB2312）
+     * 
+     * 参考 Agent 端 XmlDocumentExtractor.readFileWithEncoding 实现
+     */
+    private fun readFileWithEncoding(file: File): String {
+        val bytes = file.readBytes()
+        
+        // 1. 检查 XML 声明中的 encoding
+        val declaredEncoding = detectEncodingFromXmlDeclaration(bytes)
+        if (declaredEncoding != null) {
+            try {
+                val charset = Charset.forName(declaredEncoding)
+                return String(bytes, charset)
+            } catch (e: Exception) {
+                logger.debug("声明的编码 $declaredEncoding 不可用，尝试其他编码")
+            }
+        }
+        
+        // 2. 尝试 UTF-8（无 BOM）
+        try {
+            val content = String(bytes, Charsets.UTF_8)
+            // 检查是否有乱码（简单检测：是否有替换字符）
+            if (!content.contains("\uFFFD")) {
+                return content
+            }
+        } catch (e: Exception) {
+            // 忽略
+        }
+        
+        // 3. 尝试 GBK（中文 Windows 默认编码）
+        try {
+            val gbk = Charset.forName("GBK")
+            return String(bytes, gbk)
+        } catch (e: Exception) {
+            logger.debug("GBK 编码读取失败: ${file.path}")
+        }
+        
+        // 4. 尝试 GB2312
+        try {
+            val gb2312 = Charset.forName("GB2312")
+            return String(bytes, gb2312)
+        } catch (e: Exception) {
+            logger.debug("GB2312 编码读取失败: ${file.path}")
+        }
+        
+        // 5. 最后降级到 ISO-8859-1（不会失败，但可能乱码）
+        return String(bytes, Charsets.ISO_8859_1)
+    }
+    
+    /**
+     * 从 XML 声明中检测编码
+     * 例如: <?xml version="1.0" encoding="GBK"?>
+     */
+    private fun detectEncodingFromXmlDeclaration(bytes: ByteArray): String? {
+        try {
+            // 读取前 200 字节（足够包含 XML 声明）
+            val len = minOf(bytes.size, 200)
+            val header = String(bytes, 0, len, Charsets.ISO_8859_1)
+            
+            // 查找 encoding="xxx" 或 encoding='xxx'
+            val pattern = Regex("encoding\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+            val match = pattern.find(header)
+            
+            if (match != null) {
+                return match.groupValues[1].uppercase()
+            }
+        } catch (e: Exception) {
+            // 忽略
+        }
+        return null
+    }
+    
+    // ==================== 新增工具：read_config 和 find_usages ====================
+    
+    /**
+     * 读取配置文件
+     * 
+     * 支持 yml, yaml, properties, xml 等配置文件
+     * 参考 Agent 端 ReadConfigTool.java
+     */
+    private fun executeReadConfig(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val relativePath = parameters["relativePath"]?.toString()
+            ?: return ToolResult(false, "缺少 relativePath 参数")
+        
+        val line = (parameters["line"] as? Number)?.toInt()
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 20
+        val startLine = (parameters["start_line"] as? Number)?.toInt()
+        val endLine = (parameters["end_line"] as? Number)?.toInt()
+
+        val basePath = projectPath ?: project.basePath ?: ""
+        val absoluteFile = File(basePath, relativePath)  // 🔥 relativePath + basePath = absolutePath
+
+        if (!absoluteFile.exists()) {
+            return ToolResult(false, "配置文件不存在: ${absoluteFile.absolutePath}")
+        }
+
+        val content = readFileWithEncoding(absoluteFile)
+        val lines = content.lines()
+        // 注意：relativePath 已经是参数传入的，不需要再转换
+        val ext = absoluteFile.extension.lowercase()
+
+        val sb = StringBuilder()
+        sb.append("## 配置文件: ${absoluteFile.name}\n\n")
+        sb.append("- **relativePath**: `$relativePath`\n")
+        sb.append("- **类型**: $ext\n")
+        sb.append("- **总行数**: ${lines.size}\n\n")
+        
+        // 确定读取范围
+        val (readStart, readEnd) = when {
+            startLine != null && endLine != null -> startLine to endLine
+            line != null -> maxOf(1, line - contextLines) to minOf(lines.size, line + contextLines)
+            else -> 1 to minOf(lines.size, 100)  // 默认前 100 行
+        }
+        
+        sb.append("```$ext\n")
+        for (i in (readStart - 1) until minOf(readEnd, lines.size)) {
+            val lineNum = String.format("%4d", i + 1)
+            val marker = if (line != null && i + 1 == line) " >>> " else " |   "
+            sb.append("$lineNum$marker${lines[i]}\n")
+        }
+        sb.append("```\n")
+        
+        if (readEnd < lines.size) {
+            sb.append("\n> 💡 还有 ${lines.size - readEnd} 行未显示，使用 start_line=${readEnd + 1} 继续读取\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 查找引用（find_usages）
+     * 
+     * 组合 call_chain + text_search 实现完整的引用查找
+     * 参考 Agent 端 FindUsagesTool.java
+     */
+    private fun executeFindUsages(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val target = parameters["target"]?.toString()
+            ?: run {
+                val className = parameters["class_name"]?.toString() ?: parameters["className"]?.toString()
+                val methodName = parameters["method_name"]?.toString() ?: parameters["methodName"]?.toString()
+                if (className != null) {
+                    if (methodName != null) "$className.$methodName" else className
+                } else null
+            }
+            ?: return ToolResult(false, "缺少 target 或 class_name 参数")
+        
+        val includeContext = parameters["include_context"] as? Boolean ?: true
+        val contextLines = (parameters["context_lines"] as? Number)?.toInt() ?: 5
+        val maxResults = (parameters["max_results"] as? Number)?.toInt() ?: 30
+        
+        val basePath = projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+        
+        logger.info("find_usages: 搜索 '$target' in $basePath")
+        
+        val sb = StringBuilder()
+        sb.append("## 🔍 找到 `$target` 的引用\n\n")
+        
+        // 解析目标
+        val parts = target.replace("#", ".").split(".")
+        val className = if (parts.size > 1) parts.dropLast(1).joinToString(".") else null
+        val memberName = parts.last()
+        
+        var callChainCount = 0
+        var textSearchCount = 0
+        val results = mutableListOf<UsageResult>()
+        val seenLocations = mutableSetOf<String>()
+        
+        // 1. 使用 IntelliJ PSI 查找引用（类似 call_chain）
+        if (className != null) {
+            ReadAction.run<Exception> {
+                val psiClass = findClass(className)
+                if (psiClass != null) {
+                    val methods = psiClass.findMethodsByName(memberName, false)
+                    if (methods.isNotEmpty()) {
+                        val refs = ReferencesSearch.search(methods[0]).findAll()
+                        refs.take(maxResults).forEach { ref ->
+                            val element = ref.element
+                            val containingFile = element.containingFile?.virtualFile?.path ?: return@forEach
+                            val lineNum = com.intellij.openapi.editor.Document::class.java.let {
+                                val doc = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance()
+                                    .getDocument(element.containingFile?.virtualFile ?: return@forEach)
+                                doc?.getLineNumber(element.textOffset)?.plus(1) ?: 0
+                            }
+                            
+                            val location = "$containingFile:$lineNum"
+                            if (!seenLocations.contains(location)) {
+                                seenLocations.add(location)
+                                results.add(UsageResult(
+                                    absolutePath = containingFile,
+                                    lineNumber = lineNum,
+                                    source = "call_chain",
+                                    usageType = "直接调用"
+                                ))
+                                callChainCount++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 2. 使用 text_search 补充（搜索配置文件、反射调用等）
+        val textSearchParams = mapOf(
+            "keyword" to memberName,
+            "limit" to (maxResults - results.size).coerceAtLeast(10),
+            "include_context" to false
+        )
+        val textSearchResult = executeTextSearch(textSearchParams, projectPath)
+        if (textSearchResult.success) {
+            // 解析 text_search 结果
+            val textMatches = parseTextSearchResult(textSearchResult.result)
+            textMatches.forEach { match ->
+                val location = "${match.absolutePath}:${match.lineNumber}"
+                if (!seenLocations.contains(location) && results.size < maxResults) {
+                    seenLocations.add(location)
+                    results.add(UsageResult(
+                        absolutePath = match.absolutePath,
+                        lineNumber = match.lineNumber,
+                        matchedLine = match.matchedLine,
+                        source = "text_search",
+                        usageType = if (match.absolutePath.endsWith(".xml") || match.absolutePath.endsWith(".yml") || match.absolutePath.endsWith(".properties"))
+                            "配置文件引用" else "文本匹配"
+                    ))
+                    textSearchCount++
+                }
+            }
+        }
+        
+        sb.append("### 📊 统计\n")
+        sb.append("- call_chain 找到: $callChainCount 处\n")
+        sb.append("- text_search 补充: $textSearchCount 处\n")
+        sb.append("- 总计（去重后）: ${results.size} 处\n\n")
+        
+        if (results.isEmpty()) {
+            sb.append("**未找到引用。**\n")
+            return ToolResult(true, sb.toString())
+        }
+        
+        sb.append("---\n\n")
+        
+        // 格式化结果
+        results.forEachIndexed { idx, r ->
+            val fileName = r.absolutePath.substringAfterLast("/")
+            val relativePath = toRelativePath(r.absolutePath, basePath)
+
+            sb.append("### ${idx + 1}. $fileName\n")
+            sb.append("- **relativePath**: `$relativePath`\n")
+            sb.append("- **行号**: ${r.lineNumber}\n")
+            sb.append("- **来源**: ${r.source}\n")
+            sb.append("- **类型**: ${r.usageType}\n")
+
+            if (includeContext && r.absolutePath.isNotEmpty()) {
+                try {
+                    val file = File(r.absolutePath)
+                    if (file.exists()) {
+                        val lines = readFileWithEncoding(file).lines()
+                        val start = maxOf(0, r.lineNumber - contextLines - 1)
+                        val end = minOf(lines.size, r.lineNumber + contextLines)
+                        val ext = file.extension.ifEmpty { "text" }
+
+                        sb.append("```$ext\n")
+                        for (i in start until end) {
+                            val lineNum = String.format("%4d", i + 1)
+                            val marker = if (i + 1 == r.lineNumber) " >>> " else " |   "
+                            sb.append("$lineNum$marker${lines[i]}\n")
+                        }
+                        sb.append("```\n")
+                    }
+                } catch (e: Exception) {
+                    // 忽略读取失败
+                }
+            }
+            sb.append("\n")
+        }
+        
+        return ToolResult(true, sb.toString())
+    }
+    
+    /**
+     * 解析 text_search 结果
+     */
+    private fun parseTextSearchResult(result: String): List<TextSearchMatch> {
+        val matches = mutableListOf<TextSearchMatch>()
+        
+        // 解析格式：relativePath: xxx, 行号: N
+        val pathPattern = Regex("\\*\\*relativePath\\*\\*:\\s*`([^`]+)`")
+        val linePattern = Regex("行号:\\s*(\\d+)")
+        
+        val lines = result.lines()
+        var currentPath: String? = null
+        
+        for (line in lines) {
+            val pathMatch = pathPattern.find(line)
+            if (pathMatch != null) {
+                currentPath = pathMatch.groupValues[1]
+            }
+            
+            val lineMatch = linePattern.find(line)
+            if (lineMatch != null && currentPath != null) {
+                val lineNum = lineMatch.groupValues[1].toIntOrNull() ?: continue
+                val basePath = project.basePath ?: ""
+                val fullPath = if (File(currentPath).isAbsolute) currentPath else File(basePath, currentPath).absolutePath
+                matches.add(TextSearchMatch(fullPath, lineNum, line))
+                currentPath = null  // 重置，准备下一个
+            }
+        }
+        
+        return matches
+    }
+    
+    /**
+     * 引用结果数据类
+     */
+    private data class UsageResult(
+        val absolutePath: String,
+        val lineNumber: Int,
+        val matchedLine: String? = null,
+        val source: String,
+        val usageType: String
+    )
+
+    /**
+     * 文本搜索匹配数据类
+     */
+    private data class TextSearchMatch(
+        val absolutePath: String,
+        val lineNumber: Int,
+        val matchedLine: String
+    )
+
+    // ==================== 新增工具：apply_change ====================
+
+    /**
+     * 🔥 应用代码变更工具（SEARCH/REPLACE + 自动格式化）
+     *
+     * 功能：
+     * 1. 读取文件
+     * 2. 执行 SEARCH/REPLACE
+     * 3. 自动格式化修改的部分
+     * 4. 记录 TODO/done（防止重复执行）
+     *
+     * 参数：
+     * - projectRoot (必需): 项目根路径
+     * - relativePath (必需): 文件相对路径（从项目根目录）
+     * - searchContent (必需): 要搜索的内容（SEARCH块）
+     * - replaceContent (必需): 要替换的内容（REPLACE块）
+     * - description (可选): 修改描述
+     *
+     * 参考 Agent 端 ApplyCodeChangeTool.java
+     */
+    private fun executeApplyChange(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val projectRoot = parameters["projectRoot"]?.toString()
+            ?: parameters["project_root"]?.toString()
+        val relativePath = parameters["relativePath"]?.toString()
+        val searchContent = parameters["searchContent"]?.toString()
+            ?: parameters["search_content"]?.toString()
+        val replaceContent = parameters["replaceContent"]?.toString()
+            ?: parameters["replace_content"]?.toString()
+        val description = parameters["description"]?.toString() ?: "代码修改"
+
+        // 1. 参数校验
+        if (relativePath.isNullOrEmpty()) {
+            return ToolResult(false, "缺少必需参数: relativePath")
+        }
+        // 🔥 searchContent 可以为空（新增文件操作）
+        if (replaceContent == null) {
+            return ToolResult(false, "缺少必需参数: replaceContent")
+        }
+
+        val basePath = projectRoot ?: projectPath ?: project.basePath ?: return ToolResult(false, "无法确定项目路径")
+        val targetFile = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
+
+        // 🔥 判断是否是新增文件操作
+        val isAddOperation = searchContent.isNullOrEmpty()
+
+        logger.info("🔧 应用代码变更: relativePath=$relativePath, isAdd=$isAddOperation, desc=$description")
+
+        return try {
+            val codeEditService = project.getService(ai.smancode.sman.ide.service.CodeEditService::class.java)
+                ?: return ToolResult(false, "无法获取 CodeEditService")
+
+            // 🔥 新增文件 vs 修改文件
+            if (isAddOperation) {
+                // 新增文件操作
+                val editJson = org.json.JSONObject().apply {
+                    put("projectPath", basePath)
+                    put("summary", description)
+                    put("edits", org.json.JSONArray().apply {
+                        put(org.json.JSONObject().apply {
+                            put("relativePath", relativePath)  // 🔥 统一使用 relativePath
+                            put("action", "ADD")  // 🔥 新增
+                            put("content", replaceContent)
+                            put("description", description)
+                        })
+                    })
+                }
+
+                logger.info("🔧 执行新增文件操作: $relativePath")
+                val batchResult = codeEditService.executeEdits(editJson)
+
+                if (batchResult.allSuccess) {
+                    logger.info("✅ apply_change (ADD) 成功: $relativePath")
+                    val sb = StringBuilder()
+                    sb.append("## 文件创建成功\n\n")
+                    sb.append("- **relativePath**: `$relativePath`\n")
+                    sb.append("- **修改**: $description\n")
+                    sb.append("- **大小**: ${replaceContent.length} 字符\n")
+                    return ToolResult(true, sb.toString())
+                } else {
+                    // 🔥 详细记录失败原因
+                    val failedResults = batchResult.results.filter { !it.success }
+                    val sb = StringBuilder()
+                    sb.append("❌ 文件创建失败: ${batchResult.failedCount}/${batchResult.totalEdits}\n\n")
+                    sb.append("**文件**: `$relativePath`\n")
+                    sb.append("**描述**: $description\n\n")
+
+                    failedResults.forEach { editResult ->
+                        sb.append("- **失败原因**: ${editResult.message}\n")
+                    }
+
+                    logger.error("❌ apply_change (ADD) 失败:\n{}", sb.toString())
+                    return ToolResult(false, sb.toString())
+                }
+            } else {
+                // 修改文件操作（原有逻辑）
+                logger.info("🔧 执行修改文件操作: $relativePath")
+                logger.info("🔧 searchContent.len=${searchContent!!.length}, replaceContent.len=${replaceContent!!.length}")
+                logger.debug("🔧 searchContent (前150字符): ${searchContent.take(150)}")
+                logger.debug("🔧 replaceContent (前150字符): ${replaceContent.take(150)}")
+
+                val editJson = org.json.JSONObject().apply {
+                    put("projectPath", basePath)
+                    put("summary", description)
+                    put("edits", org.json.JSONArray().apply {
+                        put(org.json.JSONObject().apply {
+                            put("relativePath", relativePath)  // 🔥 统一使用 relativePath
+                            put("action", "MODIFY")
+                            put("content", replaceContent)
+                            put("oldContent", searchContent)
+                            put("description", description)
+                        })
+                    })
+                }
+
+                val batchResult = codeEditService.executeEdits(editJson)
+
+                if (batchResult.allSuccess) {
+                    logger.info("✅ apply_change (MODIFY) 成功: $relativePath")
+                    val sb = StringBuilder()
+                    sb.append("## 代码变更应用成功\n\n")
+                    sb.append("- **relativePath**: `$relativePath`\n")
+                    sb.append("- **修改**: $description\n")
+                    sb.append("- **状态**: ✅ 已自动格式化\n")
+                    return ToolResult(true, sb.toString())
+                } else {
+                    // 🔥 详细记录失败原因
+                    val failedResults = batchResult.results.filter { !it.success }
+                    val sb = StringBuilder()
+                    sb.append("❌ 代码变更失败: ${batchResult.failedCount}/${batchResult.totalEdits}\n\n")
+                    sb.append("**文件**: `$relativePath`\n")
+                    sb.append("**描述**: $description\n\n")
+
+                    failedResults.forEach { editResult ->
+                        sb.append("- **失败原因**: ${editResult.message}\n")
+                    }
+
+                    logger.error("❌ apply_change (MODIFY) 失败:\n{}", sb.toString())
+                    return ToolResult(false, sb.toString())
+                }
+            }
+
+        } catch (e: Exception) {
+            logger.error("❌ apply_change 异常: ${e.message}", e)
+            return ToolResult(false, "代码变更异常: ${e.message}")
+        }
+    }
+}
+

@@ -37,9 +37,8 @@ sman/
 
 **Agent 后端：**
 - Java 21+
-- MySQL 8.0+
-- Neo4j 4.0+
 - Gradle 8.0+
+- Claude Code CLI (通过 npm 安装)
 
 **IDE 插件：**
 - IntelliJ IDEA 2024.1+
@@ -70,11 +69,12 @@ cd ide-plugin
 ## 核心功能
 
 ### Agent 后端
-- 🔍 **深度代码分析**: 基于 Spoon AST 和 Neo4j 的代码结构分析
-- 🧠 **AI 驱动**: 集成 DeepSeek 大模型，提供智能分析能力
+- 🔍 **深度代码分析**: 基于 Spoon AST 的代码结构分析
+- 🔗 **调用链分析**: 基于正则匹配的方法调用关系分析
+- 🧠 **AI 驱动**: 集成 Claude Code CLI,提供智能分析能力
+- 💬 **多轮对话**: 支持 `--resume` 参数,自动记忆对话历史
 - 🗺️ **业务映射**: 建立业务需求与代码实现的精确映射
-- 📊 **知识图谱**: 代码关系图谱可视化
-- 🔗 **MCP 协议**: 支持 Model Context Protocol
+- 🔍 **向量搜索**: 基于 JVector 的语义代码搜索
 
 ### IDE 插件
 - 💬 **AI 对话**: 自然语言交互界面
@@ -86,7 +86,7 @@ cd ide-plugin
 
 | 模块 | 技术栈 |
 |------|--------|
-| Agent | Java 21, Spring Boot 3.2.5, MyBatis, Neo4j, Spoon 11.0.0 |
+| Agent | Java 21, Spring Boot 3.2.5, Spoon 11.0.0, JVector 3.0.6, Claude Code CLI |
 | IDE Plugin | Kotlin 1.9.20, IntelliJ Platform SDK, OkHttp |
 
 ## 文档导航
@@ -94,6 +94,7 @@ cd ide-plugin
 - [后端详细文档](agent/README.md) - API 接口、架构设计
 - [插件使用指南](ide-plugin/README.md) - 安装配置、功能说明
 - [全局文档](docs/README.md) - 设计文档、开发指南
+- [多轮对话实现](docs/md/multi_turn.md) - 多轮对话技术方案
 
 ## 开发路线
 

@@ -1,0 +1,292 @@
+# SiliconMan Agent 配置文件
+# 版本: 1.0.0
+# 说明: 基于 Claude Code 的代码分析 Agent 后端
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: siliconman-agent
+
+  # 完全禁用 DevTools
+  devtools:
+    restart:
+      enabled: false
+    add-properties: false
+
+  # Jackson 配置
+  jackson:
+    serialization:
+      indent-output: true
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
+    time-zone: GMT
+
+# ==================== Claude Code 配置 ====================
+claude-code:
+  # Claude Code CLI 路径（真实版本）
+  # 使用原生 claude 命令
+  # 通过--print模式支持stdio通信
+  path: ${CLAUDE_CODE_PATH:claude}
+
+  # 工作目录基础路径
+  work-dir-base: ${user.dir}/data/claude-code-workspaces
+
+  # 进程池配置
+  pool:
+    size: 3                        # 进程池大小（本地开发使用3个，生产环境建议10-15）
+    max-lifetime: 1800000          # 进程最大生命周期（30分钟，毫秒）
+    health-check-interval: 60000   # 健康检查间隔（1分钟，毫秒）
+    warmup: true                   # 启动时预热（创建所有进程）
+
+  # HTTP 工具 API 配置
+  http-api:
+    enabled: true
+    port: 8080
+    endpoint: /api/claude-code/tools/execute
+
+# ==================== HTTP Tool API 配置 ====================
+http-tool-api:
+  # 支持的工具列表
+  tools:
+    - name: vector_search
+      description: 向量语义搜索代码
+      enabled: true
+    - name: read_class
+      description: 读取 Java 类的结构
+      enabled: true
+    - name: call_chain
+      description: 调用链分析
+      enabled: true
+    - name: find_usages
+      description: 查找引用
+      enabled: true
+    - name: apply_change
+      description: 应用代码修改
+      enabled: true
+
+# ==================== 向量搜索配置 ====================
+vector:
+  # BGE-M3 配置
+  bge-m3:
+    # BGE-M3 模型服务地址（需要单独部署）
+    endpoint: ${BGE_M3_ENDPOINT:http://localhost:8000}
+    model-name: BAAI/bge-m3
+    dimension: 1024
+    batch-size: 32
+    timeout: 30000  # 毫秒
+
+  # BGE-Reranker 配置
+  bge-reranker:
+    # BGE-Reranker 模型服务地址（需要单独部署）
+    endpoint: ${BGE_RERANKER_ENDPOINT:http://localhost:8001}
+    model-name: BAAI/bge-reranker-v2-m3
+    top-k: 10
+    timeout: 10000  # 毫秒
+
+  # 索引配置
+  index:
+    path: data/vector-index  # 索引存储路径
+    auto-build: true        # 自动构建索引
+    refresh-interval: 3600000  # 刷新间隔（1小时，毫秒）
+
+  # 搜索配置
+  search:
+    top-k: 10               # 默认返回结果数
+    threshold: 0.0          # 相似度阈值(临时设为0用于测试)
+    use-reranker: true      # 是否使用重排序
+
+# ==================== Spoon AST 配置 ====================
+spoon:
+  # 类路径映射
+  classpath:
+    auto-build: true        # 自动构建类路径
+    refresh-interval: 3600000  # 刷新间隔（1小时，毫秒）
+
+  # 项目分析
+  analysis:
+    enable-lombok: true     # 启用 Lombok 注解分析
+    enable-reflection: true # 启用反射调用分析
+    enable-dataflow: false  # 启用数据流分析（性能消耗大）
+
+  # 缓存配置
+  cache:
+    enabled: true                        # 是否启用缓存
+    snapshot-dir: "./data/spoon-snapshots"  # 缓存快照目录
+
+  # 刷新配置
+  refresh:
+    enabled: true                        # 是否启用定时刷新
+    interval-minutes: 15                 # 刷新间隔（分钟）
+    initial-delay-minutes: 15            # 启动后首次刷新延迟（分钟）
+
+# ==================== 项目配置 ====================
+project:
+  # 默认项目路径（开发环境）
+  default-path: /Users/liuchao/projects/autoloop
+
+  # 多项目配置
+  projects:
+    autoloop:
+      path: /Users/liuchao/projects/autoloop
+      enabled: true
+    # bank-core:
+    #   path: /path/to/bank-core
+    #   enabled: false
+
+# ==================== 降级模式配置 ====================
+agent:
+  fallback:
+    enabled: true              # 是否启用降级模式
+    auto-detect: true          # 是否自动检测并降级
+    duration-minutes: 5        # 临时降级持续时间（分钟）
+
+  # projectKey → projectPath 映射（降级模式和 WebSocket v2 协议需要）
+  projects:
+    autoloop:
+      project-path: /Users/liuchao/projects/autoloop
+      description: "AutoLoop 项目"
+      language: "java"
+      version: "1.0.0"
+    # 示例：银行核心系统
+    # bank-core:
+    #   project-path: /Users/user/projects/bank-core
+    #   description: "银行核心系统"
+    #   language: "java"
+    #   version: "1.0.0"
+    # 示例：支付系统
+    # payment-system:
+    #   project-path: /Users/user/projects/payment-system
+    #   description: "支付系统"
+    #   language: "java"
+    #   version: "2.1.0"
+
+# ==================== 数据存储配置 ====================
+data:
+  # 基础路径
+  base-path: data
+
+  # 会话存储
+  sessions:
+    path: ${data.base-path}/sessions
+    max-size: 1000  # 最大会话数
+    ttl: 86400000   # 会话过期时间（24小时，毫秒）
+
+  # 缓存存储
+  cache:
+    path: ${data.base-path}/cache
+    refresh-interval: 3600000  # 缓存刷新间隔（1小时，毫秒）
+
+  # MD5 缓存（文件变化检测）
+  md5-cache-dir: "./data/file-md5-cache"
+
+# ==================== WebSocket 配置 ====================
+websocket:
+  # 路径
+  path: /ws/analyze
+
+  # 心跳配置
+  heartbeat:
+    interval: 30000      # 心跳间隔（30秒，毫秒）
+    timeout: 60000      # 连接超时（60秒，毫秒）
+
+  # 消息大小限制
+  max-message-size: 10485760  # 10MB
+
+# ==================== 线程池配置 ====================
+thread-pool:
+  # 核心线程数
+  core-size: 10
+
+  # 最大线程数
+  max-size: 50
+
+  # 线程空闲时间（秒）
+  keep-alive-time: 60
+
+  # 队列容量
+  queue-capacity: 1000
+
+  # 线程名称前缀
+  thread-name-prefix: sman-task-
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    com.siliconman: DEBUG
+    org.springframework: INFO
+    org.apache: WARN
+
+  # 日志文件
+  file:
+    name: logs/app.log
+    max-size: 100MB
+    max-history: 30
+
+  # 日志格式
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+  # 修复 JUL 桥接问题
+  # 禁用 Tomcat 的 JUL → SLF4J 桥接，避免 ClassNotFoundException
+  jul-to-slf4j: false
+
+# ==================== 健康检查配置 ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+  endpoint:
+    health:
+      show-details: always
+
+# ==================== 外部服务配置 ====================
+external:
+  # Neo4j 图数据库（调用链分析）
+  neo4j:
+    enabled: false  # 暂不启用
+    uri: bolt://localhost:7687
+    username: neo4j
+    password: neo4j
+
+  # MySQL 数据库（持久化）
+  mysql:
+    enabled: false  # 暂不启用，使用文件存储
+    url: jdbc:mysql://localhost:3306/siliconman
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# ==================== 开发环境配置 ====================
+# 开发环境专用配置（生产环境请使用外部配置文件覆盖）
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # 开发环境热部署（禁用，避免自动重启）
+  devtools:
+    restart:
+      enabled: false
+
+logging:
+  level:
+    com.siliconman: DEBUG
+
+# ==================== 生产环境配置 ====================
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    root: WARN
+    com.siliconman: INFO

@@ -1,96 +1,51 @@
-# ========== Java 编译文件 ==========
-*.class
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Data
+data/sessions/
+data/knowledge-index/
+data/vector-index/
+data/method-call-index/
+data/spoon-snapshots/
+data/*.db
+data/*.trace.db
+
+# Test
+test-output/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.swp
+*~
+
+# Package files
 *.jar
 *.war
 *.ear
-*.nar
-hs_err_pid*
-replay_pid*
+*.zip
 
-# ========== Gradle 构建文件 ==========
-.gradle/
-/build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+# OS
+.DS_Store
+Thumbs.db
 
-# ========== Gradle 构建缓存 ==========
-.gradle-build-cache/
-.gradle-kotlin-dsl/
-
-# ========== IDEA 构建输出 ==========
-/out/
-/idea-build/
-
-# ========== Maven（如果使用） ==========
-/target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
-.mvn/wrapper/maven-wrapper.jar
-
-# ========== Spring Boot ==========
-spring-boot-*.jar
-*.jar.original
-
-# ========== 日志文件 ==========
-/logs/
-*.log
-*.log.*
-*.gz
-*.pid
-app.log
-app.pid
-server.log
-nohup.out
-
-# ========== 运行时文件 ==========
-*.pid
-*.lock
+# data
 /data/
-/cache/
 
-# ========== 数据库文件（运行时） ==========
-*.db
-*.sqlite
-*.sqlite3
-
-# ========== 测试相关 ==========
-.test-result/
-.test-output/
-/allure/
-allure-results/
-test-output/
-
-# ========== APT 注解处理器 ==========
-.apt_generated
-.apt_generated_tests
-.apt_cache/
-
-# ========== 个人配置 ==========
-application-local.yml
-application-local.properties
-.env
-*.local
-
-# ========== 临时文件 ==========
-/tmp/
-/temp/
-*.tmp
-*.temp
-*.bak
-*.backup
-analysis-sessions
-analysis_results
-
-# ========== 其他 ==========
-.metadata
-/bin/
-/gen/
-*.orig
-*.rej
+# pid
+*.pid

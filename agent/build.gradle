@@ -1,0 +1,98 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'ai.smancode.sman'
+version = '1.0.0'
+sourceCompatibility = '21'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot 核心
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // Spoon 代码分析
+    implementation 'fr.inria.gforge.spoon:spoon-core:11.0.0'
+
+    // Jackson JSON 处理
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.0'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.18.0'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.18.0'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.0'
+
+    // SnakeYAML
+    implementation 'org.yaml:snakeyaml:2.0'
+
+    // HTTP 客户端
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // 工具类
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+    implementation 'commons-io:commons-io:2.15.1'
+
+    // H2 数据库
+    implementation 'com.h2database:h2:2.2.224'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Java Parser
+    implementation 'com.github.javaparser:javaparser-core:3.25.8'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 向量检索
+    implementation 'io.github.jbellis:jvector:3.0.6'
+
+    // 开发工具
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试依赖
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    enabled = true
+}
+
+// 编译配置 - 启用 Java 21 特性
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-parameters']
+    options.release = 21
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+// JAR 配置
+jar {
+    archiveBaseName = 'sman-agent'
+    archiveVersion = project.version
+    enabled = false
+}
+
+bootJar {
+    archiveBaseName = 'sman-agent'
+    archiveVersion = project.version
+    mainClass = 'ai.smancode.sman.agent.SiliconManAgentApplication'
+}
+
+// Spring Boot 插件配置
+springBoot {
+    buildInfo()
+}

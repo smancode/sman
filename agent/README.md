@@ -5,20 +5,20 @@ SiliconMan Agent 是基于 Spring Boot 的代码分析后端服务。
 ## 模块简介
 
 本模块提供以下核心能力：
-- 深度代码分析（基于 Spoon AST 和 Neo4j）
+- 深度代码分析（基于 Spoon AST）
+- 调用链分析（基于正则匹配）
+- 向量语义搜索（基于 JVector）
 - AI 驱动的智能任务处理
 - 业务映射和知识图谱构建
-- MCP 协议支持
 
 ## 技术栈
 
 - Java 21
 - Spring Boot 3.2.5
-- MySQL 9.1.0
-- Neo4j 4.0.10
-- MyBatis 3.0.3
 - Spoon 11.0.0
-- DeepSeek API
+- JVector 3.0.6
+- H2 Database 2.2.224
+- Claude Code CLI
 
 ## 快速开始
 

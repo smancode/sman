@@ -1,75 +1,26 @@
-# ========== AI 工具配置 ==========
-.claude/
-.aider*
-.codebuddy/
-.cursor/
-.qoder/
-.trae/
-
-# ========== 个人配置文件 ==========
-CLAUDE.md
-.env
-.env.local
-*.local
-.secret
-
-# ========== 操作系统文件 ==========
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-
-# ========== 通用编辑器配置 ==========
+# IDE
 .idea/
-.vscode/
-.vscode-test/
-.eclipse/
-.settings/
-.classpath
-.project
 *.iml
-*.iws
-*.ipr
-*.swp
-*.swo
-*~
-*.bak
-*.tmp
-*.orig
-*.rej
+.vscode/
+.DS_Store
+.VSCodeCounter/
 
-# ========== 日志文件 ==========
-*.log
-*.log.*
-logs/
-
-# ========== 临时文件 ==========
-/tmp/
-/temp/
-*.tmp
-*.temp
-*.bak
-*.backup
-*.cache
-
-# ========== 构建产物（通用） ==========
+# Build
 build/
-out/
-target/
 dist/
 
-# ========== 压缩文件 ==========
-*.zip
-*.tar
-*.tar.gz
-*.rar
-*.7z
+# Logs
+*.log
 
-# ========== 测试结果 ==========
-test-output/
-coverage/
-.nyc_output/
+# OS
+.DS_Store
+Thumbs.db
+
+
+.gradle/
+
+__pycache__/
+.claude/
+temp/
+http/
+logs/
