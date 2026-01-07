@@ -44,44 +44,52 @@ public class LightWeightJavaParser {
     }
 
     /**
-     * 提取类名
+     * 提取类名、接口名、枚举名或注解名
      */
     private static String extractClassName(String content) {
-        // 匹配 public class Xxx 或 class Xxx
-        Pattern pattern = Pattern.compile("(?:public\\s+)?(?:abstract\\s+)?(?:final\\s+)?class\\s+(\\w+)");
+        // 匹配 class Xxx、interface Xxx、enum Xxx、@interface Xxx
+        Pattern pattern = Pattern.compile(
+            "(?:public\\s+)?(?:abstract\\s+)?(?:final\\s+)?" +
+            "(class|interface|enum|@interface)\\s+(\\w+)"
+        );
         Matcher matcher = pattern.matcher(content);
         if (matcher.find()) {
-            return matcher.group(1);
+            return matcher.group(2);  // 返回名称（不是类型关键字）
         }
         return null;
     }
 
     /**
-     * 提取父类
+     * 提取父类或父接口
      */
     private static String extractSuperClass(String content) {
-        // 匹配 extends Xxx
-        Pattern pattern = Pattern.compile("class\\s+\\w+\\s+extends\\s+(\\w+)");
+        // 匹配 class Xxx extends Yyy 或 interface Xxx extends Yyy
+        Pattern pattern = Pattern.compile("(class|interface|enum)\\s+\\w+\\s+extends\\s+(\\w+)");
         Matcher matcher = pattern.matcher(content);
         if (matcher.find()) {
-            return matcher.group(1);
+            return matcher.group(2);  // 返回父类/父接口名称
         }
         return null;
     }
 
     /**
-     * 提取接口
+     * 提取实现的接口
      */
     private static List<String> extractInterfaces(String content) {
         List<String> interfaces = new ArrayList<>();
         // 匹配 implements Xxx, Yyy
-        Pattern pattern = Pattern.compile("implements\\s+([\\w,\\s]+)");
+        Pattern pattern = Pattern.compile("implements\\s+([\\w,\\s<>.]+)");
         Matcher matcher = pattern.matcher(content);
         if (matcher.find()) {
             String implementsStr = matcher.group(1);
+            // 处理泛型接口，如 List<String>, Map<K, V>
             String[] parts = implementsStr.split(",");
             for (String part : parts) {
                 String iface = part.trim();
+                // 简化处理：只取接口名，忽略泛型参数
+                if (iface.contains("<")) {
+                    iface = iface.substring(0, iface.indexOf("<"));
+                }
                 if (!iface.isEmpty()) {
                     interfaces.add(iface);
                 }

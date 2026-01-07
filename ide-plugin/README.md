@@ -9,10 +9,9 @@ SiliconMan v2.0 IntelliJ IDEA 插件，基于 Claude Code CLI 的智能代码分
 ### v2.0 新特性
 
 - ✅ **多轮对话支持**: 基于 Claude Code CLI 的 `--resume` 参数实现会话上下文保持
-- ✅ **v2 WebSocket 协议**: AGENT_CHAT/AGENT_RESPONSE 双协议支持
+- ✅ **WebSocket 协议**: AGENT_CHAT/AGENT_RESPONSE 双协议支持
 - ✅ **12 个前端工具**: 完整的本地代码分析工具（read_class、call_chain、text_search 等）
 - ✅ **自动降级模式**: Claude Code CLI 不可用时自动降级为规则引擎
-- ✅ **智能协议检测**: 根据 URL 路径自动选择 v1 或 v2 协议
 
 ### 基础功能
 
@@ -185,8 +184,6 @@ IDE Plugin → 后端: TOOL_RESULT
 
 ## 🔌 WebSocket 协议
 
-### v2 协议（推荐）
-
 **连接 URL**: `ws://localhost:8080/ws/agent/chat`
 
 **发送消息**:
@@ -226,12 +223,6 @@ IDE Plugin → 后端: TOOL_RESULT
   }
 }
 ```
-
-### v1 协议（向后兼容）
-
-**连接 URL**: `ws://localhost:8080/ws/analyze`
-
-**自动检测**: WebSocketService 根据 URL 路径自动选择协议
 
 ---
 
@@ -393,7 +384,7 @@ dependencies {
 
 # 测试覆盖目标
 - LocalToolExecutorTest: 12 个工具
-- WebSocketServiceTest: v2 协议
+- WebSocketServiceTest: WebSocket 协议
 - CodeEditServiceTest: 代码编辑
 ```
 
@@ -402,7 +393,7 @@ dependencies {
 ## 📚 相关文档
 
 - [架构设计](../docs/md/01-architecture.md) - 总体架构和设计决策
-- [WebSocket API](../docs/md/02-websocket-api.md) - v1/v2 协议规范
+- [WebSocket API](../docs/md/02-websocket-api.md) - WebSocket 协议规范
 - [前端工具](../docs/md/06-frontend-tools.md) - 12 个工具详细说明
 - [降级策略](../docs/md/07-fallback-strategy.md) - 降级模式完整说明
 - [Agent 后端文档](../agent/README.md) - 后端服务说明

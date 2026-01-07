@@ -63,9 +63,9 @@ class ProjectStorageService(private val project: Project) : PersistentStateCompo
         // 历史会话列表
         var history: MutableList<Conversation> = mutableListOf(),
         var connectTimeoutSeconds: Int = 30,
-        var readTimeoutSeconds: Int = 1800,
-        var writeTimeoutSeconds: Int = 1800,
-        var callTimeoutSeconds: Int = 1800
+        var readTimeoutSeconds: Int = 1860,
+        var writeTimeoutSeconds: Int = 1860,
+        var callTimeoutSeconds: Int = 1860
     )
 
     private var state = ProjectState()
@@ -103,7 +103,7 @@ class ProjectStorageService(private val project: Project) : PersistentStateCompo
         }
     }
 
-    fun getServerUrl(): String = state.serverUrl.ifEmpty { "ws://agent-ip:8080/ws/lite/analyze" }
+    fun getServerUrl(): String = state.serverUrl.ifEmpty { "ws://10.58.32.15:8080/ws/agent/chat" }
     fun setServerUrl(url: String) {
         state.serverUrl = url
     }

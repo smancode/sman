@@ -25,8 +25,9 @@ spring:
 
 # ==================== Claude Code 配置 ====================
 claude-code:
-  # Claude Code CLI 路径（真实版本）
-  # 使用原生 claude 命令
+  # Claude Code CLI 路径
+  # Windows 环境：使用 Windows 原生路径（C:\nvm4w\nodejs\claude.cmd）
+  # macOS/Linux 环境：使用绝对路径或环境变量
   # 通过--print模式支持stdio通信
   path: ${CLAUDE_CODE_PATH:claude}
 
@@ -39,32 +40,6 @@ claude-code:
     max-lifetime: 1800000          # 进程最大生命周期（30分钟，毫秒）
     health-check-interval: 60000   # 健康检查间隔（1分钟，毫秒）
     warmup: true                   # 启动时预热（创建所有进程）
-
-  # HTTP 工具 API 配置
-  http-api:
-    enabled: true
-    port: 8080
-    endpoint: /api/claude-code/tools/execute
-
-# ==================== HTTP Tool API 配置 ====================
-http-tool-api:
-  # 支持的工具列表
-  tools:
-    - name: vector_search
-      description: 向量语义搜索代码
-      enabled: true
-    - name: read_class
-      description: 读取 Java 类的结构
-      enabled: true
-    - name: call_chain
-      description: 调用链分析
-      enabled: true
-    - name: find_usages
-      description: 查找引用
-      enabled: true
-    - name: apply_change
-      description: 应用代码修改
-      enabled: true
 
 # ==================== 向量搜索配置 ====================
 vector:
@@ -97,44 +72,6 @@ vector:
     threshold: 0.0          # 相似度阈值(临时设为0用于测试)
     use-reranker: true      # 是否使用重排序
 
-# ==================== Spoon AST 配置 ====================
-spoon:
-  # 类路径映射
-  classpath:
-    auto-build: true        # 自动构建类路径
-    refresh-interval: 3600000  # 刷新间隔（1小时，毫秒）
-
-  # 项目分析
-  analysis:
-    enable-lombok: true     # 启用 Lombok 注解分析
-    enable-reflection: true # 启用反射调用分析
-    enable-dataflow: false  # 启用数据流分析（性能消耗大）
-
-  # 缓存配置
-  cache:
-    enabled: true                        # 是否启用缓存
-    snapshot-dir: "./data/spoon-snapshots"  # 缓存快照目录
-
-  # 刷新配置
-  refresh:
-    enabled: true                        # 是否启用定时刷新
-    interval-minutes: 15                 # 刷新间隔（分钟）
-    initial-delay-minutes: 15            # 启动后首次刷新延迟（分钟）
-
-# ==================== 项目配置 ====================
-project:
-  # 默认项目路径（开发环境）
-  default-path: /Users/liuchao/projects/autoloop
-
-  # 多项目配置
-  projects:
-    autoloop:
-      path: /Users/liuchao/projects/autoloop
-      enabled: true
-    # bank-core:
-    #   path: /path/to/bank-core
-    #   enabled: false
-
 # ==================== 降级模式配置 ====================
 agent:
   fallback:
@@ -149,6 +86,14 @@ agent:
       description: "AutoLoop 项目"
       language: "java"
       version: "1.0.0"
+
+    # mcfcm-core 项目（Windows 环境）
+    mcfcm-core:
+      project-path: C:\\dev\\cfpd\\mcfcm-core
+      description: "MFCM 核心系统"
+      language: "java"
+      version: "1.0.0"
+
     # 示例：银行核心系统
     # bank-core:
     #   project-path: /Users/user/projects/bank-core
@@ -167,17 +112,6 @@ data:
   # 基础路径
   base-path: data
 
-  # 会话存储
-  sessions:
-    path: ${data.base-path}/sessions
-    max-size: 1000  # 最大会话数
-    ttl: 86400000   # 会话过期时间（24小时，毫秒）
-
-  # 缓存存储
-  cache:
-    path: ${data.base-path}/cache
-    refresh-interval: 3600000  # 缓存刷新间隔（1小时，毫秒）
-
   # MD5 缓存（文件变化检测）
   md5-cache-dir: "./data/file-md5-cache"
 
@@ -186,30 +120,29 @@ websocket:
   # 路径
   path: /ws/analyze
 
-  # 心跳配置
-  heartbeat:
-    interval: 30000      # 心跳间隔（30秒，毫秒）
-    timeout: 60000      # 连接超时（60秒，毫秒）
+# ==================== 异步线程池配置 ====================
+async:
+  executor:
+    # 通用异步线程池（@Async、CompletableFuture 默认）
+    core-size: 10               # 核心线程数
+    max-size: 50                # 最大线程数
+    queue-capacity: 1000        # 队列容量
+    thread-name-prefix: sman-async-  # 线程名前缀
 
-  # 消息大小限制
-  max-message-size: 10485760  # 10MB
+    # 向量索引刷新线程池（单线程顺序执行）
+    vector-refresh:
+      core-size: 1
+      max-size: 1
+      queue-capacity: 10
+      thread-name-prefix: vector-refresh-
 
-# ==================== 线程池配置 ====================
-thread-pool:
-  # 核心线程数
-  core-size: 10
+    # WebSocket 消息处理线程池（独立线程池，避免阻塞主业务）
+    websocket:
+      core-size: 5
+      max-size: 20
+      queue-capacity: 500
+      thread-name-prefix: websocket-async-
 
-  # 最大线程数
-  max-size: 50
-
-  # 线程空闲时间（秒）
-  keep-alive-time: 60
-
-  # 队列容量
-  queue-capacity: 1000
-
-  # 线程名称前缀
-  thread-name-prefix: sman-task-
 
 # ==================== 日志配置 ====================
 logging:
@@ -244,23 +177,6 @@ management:
   endpoint:
     health:
       show-details: always
-
-# ==================== 外部服务配置 ====================
-external:
-  # Neo4j 图数据库（调用链分析）
-  neo4j:
-    enabled: false  # 暂不启用
-    uri: bolt://localhost:7687
-    username: neo4j
-    password: neo4j
-
-  # MySQL 数据库（持久化）
-  mysql:
-    enabled: false  # 暂不启用，使用文件存储
-    url: jdbc:mysql://localhost:3306/siliconman
-    username: root
-    password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
 
 # ==================== 开发环境配置 ====================
 # 开发环境专用配置（生产环境请使用外部配置文件覆盖）

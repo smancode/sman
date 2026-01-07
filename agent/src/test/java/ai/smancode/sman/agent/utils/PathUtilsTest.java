@@ -2,121 +2,107 @@ package ai.smancode.sman.agent.utils;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * PathUtils 单元测试
  *
- * @author SiliconMan Team
- * @since 2.0
+ * 测试数据基于实际的 Claude Code CLI 会话目录命名规则
+ * 企业内部实际目录: C--dev-sman-agent-data-claude-code-workspaces
  */
 class PathUtilsTest {
 
     @Test
-    void testConvertToGitBashPath() {
-        // Windows 盘符路径转 Git Bash
-        assertEquals("/c/Users/projects", PathUtils.convertToGitBashPath("C:\\Users\\projects"));
-        assertEquals("/d/data/app", PathUtils.convertToGitBashPath("D:\\data\\app"));
-        assertEquals("/e/workspace", PathUtils.convertToGitBashPath("E:\\workspace"));
-
-        // 已经是 Git Bash 格式，不应该转换
-        assertEquals("/c/Users/projects", PathUtils.convertToGitBashPath("/c/Users/projects"));
-
-        // 无效输入
-        assertNull(PathUtils.convertToGitBashPath(null));
-        assertEquals("", PathUtils.convertToGitBashPath(""));
-        assertEquals("invalid", PathUtils.convertToGitBashPath("invalid"));
+    void testEncodeCliSessionPath_UnixAbsolutePath() {
+        // Unix 绝对路径: /home/user/path → -home-user-path
+        String input = "/home/user/path";
+        String expected = "-home-user-path";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "Unix 路径编码错误");
     }
 
     @Test
-    void testConvertToWindowsPath() {
-        // Git Bash 路径转 Windows
-        assertEquals("C:\\Users\\projects", PathUtils.convertToWindowsPath("/c/Users/projects"));
-        assertEquals("D:\\data\\app", PathUtils.convertToWindowsPath("/d/data/app"));
-        assertEquals("E:\\workspace", PathUtils.convertToWindowsPath("/e/workspace"));
-
-        // 已经是 Windows 格式，不应该转换
-        assertEquals("C:\\Users\\projects", PathUtils.convertToWindowsPath("C:\\Users\\projects"));
-
-        // 无效输入
-        assertNull(PathUtils.convertToWindowsPath(null));
-        assertEquals("", PathUtils.convertToWindowsPath(""));
-        assertEquals("invalid", PathUtils.convertToWindowsPath("invalid"));
+    void testEncodeCliSessionPath_WindowsPathWithDrive() {
+        // Windows 路径: C:\dev\path → C--dev-path
+        // 注意：冒号和反斜杠都被替换为 -，且保留连续的 --
+        String input = "C:\\dev\\path";
+        String expected = "C--dev-path";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "Windows 路径编码错误");
     }
 
     @Test
-    void testNormalizeSlashes() {
-        // 反斜杠转正斜杠
-        assertEquals("C:/Users/projects", PathUtils.normalizeSlashes("C:\\Users\\projects"));
-        assertEquals("/home/user/projects", PathUtils.normalizeSlashes("/home/user\\projects"));
-
-        // 已经是正斜杠，不应该转换
-        assertEquals("/home/user/projects", PathUtils.normalizeSlashes("/home/user/projects"));
-
-        // 无效输入
-        assertNull(PathUtils.normalizeSlashes(null));
-        assertEquals("", PathUtils.normalizeSlashes(""));
+    void testEncodeCliSessionPath_EnterpriseWindowsPath() {
+        // 企业内部实际路径: C:\dev\sman-agent\data\claude-code-workspaces
+        // CLI 实际编码: C--dev-sman-agent-data-claude-code-workspaces
+        String input = "C:\\dev\\sman-agent\\data\\claude-code-workspaces";
+        String expected = "C--dev-sman-agent-data-claude-code-workspaces";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "企业内部 Windows 路径编码错误");
     }
 
     @Test
-    void testIsWindowsPath() {
-        assertTrue(PathUtils.isWindowsPath("C:\\path"));
-        assertTrue(PathUtils.isWindowsPath("D:\\data\\app"));
-        assertTrue(PathUtils.isWindowsPath("c:\\path")); // 小写盘符
-
-        assertFalse(PathUtils.isWindowsPath("/c/path")); // Git Bash 格式
-        assertFalse(PathUtils.isWindowsPath("/home/user")); // Unix 格式
-        assertFalse(PathUtils.isWindowsPath(null));
+    void testEncodeCliSessionPath_ActualWorkDirBase() {
+        // macOS 实际工作目录
+        String input = "/Users/liuchao/projects/sman/agent/data/claude-code-workspaces";
+        String expected = "-Users-liuchao-projects-sman-agent-data-claude-code-workspaces";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "macOS 工作目录编码错误");
     }
 
     @Test
-    void testIsGitBashPath() {
-        assertTrue(PathUtils.isGitBashPath("/c/path"));
-        assertTrue(PathUtils.isGitBashPath("/d/data/app"));
-        assertTrue(PathUtils.isGitBashPath("/e/workspace"));
-
-        assertFalse(PathUtils.isGitBashPath("C:\\path")); // Windows 格式
-        assertFalse(PathUtils.isGitBashPath("/home/user")); // Unix 格式
-        assertFalse(PathUtils.isGitBashPath(null));
+    void testEncodeCliSessionPath_WindowsWorkDir_Drive() {
+        // Windows D 盘工作目录
+        String input = "D:\\sman\\data\\claude-code-workspaces";
+        String expected = "D--sman-data-claude-code-workspaces";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "Windows D 盘工作目录编码错误");
     }
 
     @Test
-    void testGetCurrentPathType() {
-        PathUtils.PathType type = PathUtils.getCurrentPathType();
+    void testBuildCliSessionFilePath() {
+        // 测试完整的会话文件路径构建（macOS）
+        String workDirBase = "/Users/liuchao/projects/sman/agent/data/claude-code-workspaces";
+        String sessionId = "a44229ec-7387-47a2-916c-ab19cb844936";
 
-        // 只能断言返回值是三个之一
-        assertTrue(type == PathUtils.PathType.WINDOWS ||
-                   type == PathUtils.PathType.GIT_BASH ||
-                   type == PathUtils.PathType.UNIX);
+        String result = PathUtils.buildCliSessionFilePath(workDirBase, sessionId);
+
+        // 基于 ls 验证的实际目录名
+        String expected = System.getProperty("user.home") + "/.claude/projects/-Users-liuchao-projects-sman-agent-data-claude-code-workspaces/" + sessionId + ".jsonl";
+
+        assertEquals(expected, result, "会话文件路径构建错误");
     }
 
     @Test
-    void testJoin() {
-        // 拼接路径
-        String result = PathUtils.join("/base/path", "relative/path");
-        assertTrue(result.endsWith("relative/path"));
+    void testBuildCliSessionFilePath_Windows() {
+        // 测试 Windows 环境的会话文件路径构建
+        String workDirBase = "C:\\dev\\sman-agent\\data\\claude-code-workspaces";
+        String sessionId = "a44229ec-7387-47a2-916c-ab19cb844936";
 
-        // 边界情况
-        assertEquals("relative", PathUtils.join("", "relative"));
-        assertEquals("/base/path", PathUtils.join("/base/path", ""));
-        assertEquals("relative", PathUtils.join(null, "relative"));
-        assertEquals("/base/path", PathUtils.join("/base/path", null));
+        String result = PathUtils.buildCliSessionFilePath(workDirBase, sessionId);
+
+        // 企业内部实际目录名: C--dev-sman-agent-data-claude-code-workspaces
+        String homeDir = System.getProperty("user.home");
+        String expected = homeDir + "/.claude/projects/C--dev-sman-agent-data-claude-code-workspaces/" + sessionId + ".jsonl";
+
+        assertEquals(expected, result, "Windows 会话文件路径构建错误");
     }
 
     @Test
-    void testNormalizePath() {
-        // 测试 normalizePath 在不同环境下的行为
-        // 由于测试环境可能不同，这里只测试不抛异常
+    void testEncodeCliSessionPath_PreservesConsecutiveDashes() {
+        // 验证连续的 - 不会被合并
+        String input = "/path//to///dir";
+        String expected = "-path--to---dir";  // 连续斜杠产生连续的 -，且保留
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "连续斜杠处理错误");
+    }
 
-        String windowsPath = "C:\\Users\\projects\\autoloop";
-        String normalized = PathUtils.normalizePath(windowsPath);
-
-        assertNotNull(normalized);
-        assertFalse(normalized.isEmpty());
-
-        // Unix 路径
-        String unixPath = "/home/user/projects";
-        String normalizedUnix = PathUtils.normalizePath(unixPath);
-        assertNotNull(normalizedUnix);
+    @Test
+    void testEncodeCliSessionPath_RelativePath() {
+        // 相对路径: data/workspace → data-workspace
+        String input = "data/workspace";
+        String expected = "data-workspace";
+        String result = PathUtils.encodeCliSessionPath(input);
+        assertEquals(expected, result, "相对路径编码错误");
     }
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "ai.smancode.sman"
-version = "1.0.0"
+version = "3.3.0"
 
 repositories {
     mavenCentral()
@@ -50,7 +50,7 @@ tasks {
     // 补丁插件 XML
     patchPluginXml {
         sinceBuild.set("241")
-        untilBuild.set("241.*")
+        untilBuild.set("253.*")
     }
 
     // 签名插件（可选）

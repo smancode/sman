@@ -6,6 +6,28 @@
 
 set -e
 
+# ========================================
+# Java 环境配置
+# ========================================
+# 自动检测 JAVA_HOME（支持 macOS 和 Linux）
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS: 使用 /usr/libexec/java_home 自动查找 JDK 21
+    export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null)
+    # 如果找不到 JDK 21，尝试查找任何可用的 JDK
+    if [ -z "$JAVA_HOME" ]; then
+        export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null)
+    fi
+else
+    # Linux: 常见路径
+    if [ -d "/usr/lib/jvm/java-21-openjdk" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
+    elif [ -d "/usr/lib/jvm/java-21" ]; then
+        export JAVA_HOME="/usr/lib/jvm/java-21"
+    else
+        export JAVA_HOME="/usr/lib/jvm/default-java"
+    fi
+fi
+
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -53,13 +75,15 @@ echo ""
 echo "🔍 环境检查..."
 
 # 检查Java版本
-if ! command -v java &> /dev/null; then
-    echo "❌ Java未安装或不在PATH中"
+if [ ! -x "$JAVA_HOME/bin/java" ]; then
+    echo "❌ Java 未安装或 JAVA_HOME 配置错误: $JAVA_HOME"
+    echo "请检查 JAVA_HOME 配置并确保该路径存在"
     exit 1
 fi
 
-JAVA_VERSION=$(java -version 2>&1 | head -1)
+JAVA_VERSION=$("$JAVA_HOME/bin/java" -version 2>&1 | head -1)
 echo "☕ $JAVA_VERSION"
+echo "📍 JAVA_HOME: $JAVA_HOME"
 
 # 检查内存
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -84,12 +108,12 @@ mkdir -p data/vector-index  # 向量索引
 
 # 3. 编译项目
 echo "📦 编译项目..."
-cd "$PROJECT_ROOT"
+# start.sh 已在 agent 目录，无需切换目录
 
 if [ "$BUILD_MODE" = "clean" ]; then
     # 全量编译
     echo "🧹 执行全量编译..."
-    if ./gradlew :agent:clean :agent:build -x test; then
+    if ./gradlew clean build -x test; then
         echo "✅ 编译成功"
     else
         echo "❌ 编译失败，退出启动"
@@ -98,12 +122,12 @@ if [ "$BUILD_MODE" = "clean" ]; then
 else
     # 增量编译
     echo "⚡ 执行增量编译..."
-    if ./gradlew :agent:build -x test; then
+    if ./gradlew build -x test; then
         echo "✅ 编译成功"
     else
         echo "❌ 编译失败，尝试全量编译..."
         # 增量编译失败时，自动回退到全量编译
-        if ./gradlew :agent:clean :agent:build -x test; then
+        if ./gradlew clean build -x test; then
             echo "✅ 全量编译成功"
         else
             echo "❌ 编译失败，退出启动"
@@ -111,9 +135,6 @@ else
         fi
     fi
 fi
-
-# 返回到脚本目录
-cd "$SCRIPT_DIR"
 
 # 4. 端口检查和清理
 echo "🔍 检查端口 $APP_PORT..."
@@ -160,8 +181,32 @@ echo "📍 PID文件: $PID_FILE"
 GC_OPTS="-Xlog:gc:logs/gc/gc.log:time,tags -Xlog:gc+heap=info -XX:+UseG1GC"
 JAVA_OPTS="$JAVA_OPTS $GC_OPTS"
 
+# 检测 Claude Code CLI 路径
+echo "🔍 检测 Claude Code CLI..."
+CLAUDE_CODE_PATH=$(which claude 2>/dev/null || echo "")
+
+if [ -z "$CLAUDE_CODE_PATH" ]; then
+    echo "⚠️  警告: 未找到 claude 命令，请确保 Claude Code CLI 已安装"
+    echo "   安装方法: npm install -g @anthropic-ai/claude-code"
+else
+    echo "✅ 找到 Claude Code (Git Bash 路径): $CLAUDE_CODE_PATH"
+
+    # 🔥 关键：在 Windows 上，需要将 Git Bash 路径转换为 Windows 路径
+    # /c/nvm4w/nodejs/claude -> C:\nvm4w\nodejs\claude.cmd
+    if [[ "$CLAUDE_CODE_PATH" == /c/* ]]; then
+        # Git Bash 路径转换：/c/path -> C:\path
+        CLAUDE_CODE_PATH="C:\\$(echo $CLAUDE_CODE_PATH | sed 's|^/c/||' | sed 's|/|\\|g')"
+        # 添加 .cmd 扩展名（Windows 需要）
+        CLAUDE_CODE_PATH="${CLAUDE_CODE_PATH}.cmd"
+        echo "🔄 转换为 Windows 路径: $CLAUDE_CODE_PATH"
+    fi
+
+    # 将路径传递给 Spring Boot（通过环境变量）
+    export CLAUDE_CODE_PATH="$CLAUDE_CODE_PATH"
+fi
+
 # 启动应用
-nohup java $JAVA_OPTS -jar $JAR_FILE > $LOG_FILE 2>&1 &
+nohup "$JAVA_HOME/bin/java" $JAVA_OPTS -jar $JAR_FILE > $LOG_FILE 2>&1 &
 APP_PID=$!
 
 # 保存PID

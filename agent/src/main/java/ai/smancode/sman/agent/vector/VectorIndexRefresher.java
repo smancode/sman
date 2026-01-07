@@ -90,8 +90,8 @@ public class VectorIndexRefresher {
             // 1. 获取项目路径
             String projectPath = projectConfigService.getProjectPath(projectKey);
 
-            // 2. 读取 MD5 缓存
-            Map<String, String> cachedMd5Map = loadMd5Cache(projectPath);
+            // 2. 读取 MD5 缓存 (使用 projectKey 隔离)
+            Map<String, String> cachedMd5Map = loadMd5Cache(projectKey);
 
             // 3. 扫描当前 Java 文件
             Map<String, String> currentMd5Map = scanJavaFiles(projectPath);
@@ -136,11 +136,13 @@ public class VectorIndexRefresher {
 
     /**
      * 加载 MD5 缓存
+     *
+     * @param projectKey 项目键 (用于隔离不同项目的缓存)
      */
-    private Map<String, String> loadMd5Cache(String projectPath) {
+    private Map<String, String> loadMd5Cache(String projectKey) {
         try {
-            // 生成缓存文件名 (将路径中的 / 替换为 _)
-            String cacheFileName = projectPath.replace('/', '_').replace('.', '_') + "_md5_cache.json";
+            // 🔥 修复：使用 projectKey 而不是 projectPath 作为缓存文件名
+            String cacheFileName = projectKey + "_md5_cache.json";
             Path cacheFile = Path.of(md5CacheDir, cacheFileName);
 
             if (!Files.exists(cacheFile)) {
@@ -165,6 +167,10 @@ public class VectorIndexRefresher {
 
     /**
      * 扫描 Java 文件并计算 MD5
+     * 支持多模块项目：
+     * 1. 扫描根目录的 src/main/java 目录下的所有 Java 文件
+     * 2. 扫描所有子模块的 src/main/java 目录下的所有 Java 文件
+     * 自动过滤 test 目录
      */
     public Map<String, String> scanJavaFiles(String projectPath) {
         Map<String, String> md5Map = new HashMap<>();
@@ -172,46 +178,138 @@ public class VectorIndexRefresher {
         try {
             File projectDir = new File(projectPath);
 
+            // 🔥 增强的路径检测
             if (!projectDir.exists()) {
-                log.warn("项目目录不存在: {}", projectPath);
+                log.error("❌ 项目目录不存在: {}", projectPath);
+                log.error("   绝对路径: {}", projectDir.getAbsolutePath());
+                log.error("   当前系统: os.name=\"{}\"", System.getProperty("os.name"));
+                log.error("   用户目录: user.dir=\"{}\"", System.getProperty("user.dir"));
+                log.error("   File.separator: {}", File.separator);
+                log.error("   路径长度: {}", projectPath.length());
+
+                // 尝试检测路径编码问题
+                try {
+                    byte[] bytes = projectPath.getBytes("UTF-8");
+                    String decoded = new String(bytes, "UTF-8");
+                    log.error("   UTF-8 重编码: {}", decoded);
+                } catch (Exception e) {
+                    log.error("   UTF-8 编码检测失败: {}", e.getMessage());
+                }
+
+                // Windows 特定检测
+                if (System.getProperty("os.name", "").toLowerCase().contains("windows")) {
+                    log.error("   Windows 检测:");
+                    log.error("   - 是否为盘符路径: {}", projectPath.matches("[A-Za-z]:.*"));
+                    log.error("   - 是否为 Git Bash 格式: {}", projectPath.matches("/[a-z]/.*"));
+                    log.error("   - 尝试列出根目录: {}", new File("C:\\").exists());
+                }
+
+                log.error("   💡 可能的原因:");
+                log.error("   1. 路径拼写错误");
+                log.error("   2. 路径权限不足（需要管理员权限）");
+                log.error("   3. 网络驱动器未连接（如果是映射驱动器）");
+                log.error("   4. 路径编码问题（包含特殊字符）");
+
                 return md5Map;
             }
 
-            // 递归扫描 Java 文件
-            Queue<File> queue = new LinkedList<>();
-            queue.add(projectDir);
-
-            while (!queue.isEmpty()) {
-                File dir = queue.poll();
-                File[] files = dir.listFiles();
-
-                if (files == null) {
-                    continue;
-                }
-
-                for (File file : files) {
-                    if (file.isDirectory()) {
-                        // 跳过隐藏目录和构建目录
-                        String name = file.getName();
-                        if (!name.startsWith(".") && !name.equals("target") && !name.equals("build")) {
-                            queue.add(file);
-                        }
-                    } else if (file.getName().endsWith(".java")) {
-                        // 计算相对路径
-                        String relativePath = projectDir.toPath().relativize(file.toPath()).toString();
-                        String md5 = calculateMd5(file);
-                        md5Map.put(relativePath, md5);
-                    }
-                }
+            // 🔥 策略1: 扫描根目录的 src/main/java（如果存在）
+            File rootSrcMainJava = new File(projectDir, "src/main/java");
+            if (rootSrcMainJava.exists()) {
+                log.info("🔍 扫描根目录 src/main/java: {}", rootSrcMainJava.getPath());
+                scanDirectory(rootSrcMainJava, projectDir, md5Map);
             }
 
-            log.debug("扫描 Java 文件: projectPath={}, count={}", projectPath, md5Map.size());
+            // 🔥 策略2: 扫描所有子模块的 */src/main/java
+            scanMultiModuleSources(projectDir, projectDir, md5Map);
+
+            log.info("✅ 扫描完成: projectPath={}, 文件数={}", projectPath, md5Map.size());
 
         } catch (Exception e) {
             log.error("扫描 Java 文件失败: {}", e.getMessage(), e);
         }
 
         return md5Map;
+    }
+
+    /**
+     * 扫描所有子模块的 src/main/java
+     * 支持嵌套模块结构（如 module/submodule/src/main/java）
+     */
+    private void scanMultiModuleSources(File currentDir, File baseDir, Map<String, String> md5Map) {
+        File[] items = currentDir.listFiles();
+
+        if (items == null) {
+            return;
+        }
+
+        for (File item : items) {
+            if (!item.isDirectory()) {
+                continue;
+            }
+
+            String dirName = item.getName();
+
+            // 跳过隐藏目录和构建目录
+            if (dirName.startsWith(".") || dirName.equals("target") || dirName.equals("build")) {
+                continue;
+            }
+
+            // 🔥 检查是否为标准模块目录（包含 src/main/java）
+            File moduleSrcMainJava = new File(item, "src/main/java");
+            if (moduleSrcMainJava.exists()) {
+                log.info("🔍 扫描子模块 src/main/java: {}", moduleSrcMainJava.getPath());
+                scanDirectory(moduleSrcMainJava, baseDir, md5Map);
+            } else {
+                // 递归检查子目录（处理嵌套模块）
+                scanMultiModuleSources(item, baseDir, md5Map);
+            }
+        }
+    }
+
+    /**
+     * 递归扫描目录
+     * @param dir 当前扫描目录
+     * @param baseDir 基准目录（用于计算相对路径）
+     * @param md5Map MD5 映射表
+     */
+    private void scanDirectory(File dir, File baseDir, Map<String, String> md5Map) {
+        File[] files = dir.listFiles();
+
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                String dirName = file.getName();
+
+                // 跳过隐藏目录和构建目录
+                if (dirName.startsWith(".")) {
+                    continue;
+                }
+                if (dirName.equals("target") || dirName.equals("build")) {
+                    continue;
+                }
+
+                // 🔥 过滤 test 目录
+                if (dirName.equals("test")) {
+                    log.debug("⏭️  跳过 test 目录: {}", file.getPath());
+                    continue;
+                }
+
+                // 递归扫描子目录
+                scanDirectory(file, baseDir, md5Map);
+
+            } else if (file.getName().endsWith(".java")) {
+                // 计算相对路径
+                String relativePath = baseDir.toPath().relativize(file.toPath()).toString();
+                String md5 = calculateMd5(file);
+                md5Map.put(relativePath, md5);
+
+                log.debug("📄 扫描文件: {} (MD5: {})", relativePath, md5.substring(0, 7));
+            }
+        }
     }
 
     /**
@@ -242,14 +340,13 @@ public class VectorIndexRefresher {
      */
     public void updateMd5Cache(String projectKey, Map<String, String> newMd5Map) {
         try {
-            String projectPath = projectConfigService.getProjectPath(projectKey);
-
-            // 合并现有缓存
-            Map<String, String> existingCache = loadMd5Cache(projectPath);
+            // 🔥 修复：使用 projectKey 隔离缓存
+            // 合并现有缓存（使用新 HashMap 避免不可变 Map 的 UnsupportedOperationException）
+            Map<String, String> existingCache = new HashMap<>(loadMd5Cache(projectKey));
             existingCache.putAll(newMd5Map);
 
             // 保存到文件
-            String cacheFileName = projectPath.replace('/', '_').replace('.', '_') + "_md5_cache.json";
+            String cacheFileName = projectKey + "_md5_cache.json";
             Path cacheFile = Path.of(md5CacheDir, cacheFileName);
 
             // 确保目录存在

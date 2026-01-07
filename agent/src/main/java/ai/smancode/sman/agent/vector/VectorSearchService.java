@@ -73,6 +73,13 @@ public class VectorSearchService {
         return jVectorIndices.keySet();
     }
 
+    /**
+     * 检查项目索引是否存在
+     */
+    public boolean hasIndex(String projectKey) {
+        return jVectorIndices.containsKey(projectKey);
+    }
+
     /** BGE-M3 embedding 客户端 */
     @Autowired
     private BgeM3EmbeddingClient embeddingClient;

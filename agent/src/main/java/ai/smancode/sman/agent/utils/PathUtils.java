@@ -36,17 +36,44 @@ public class PathUtils {
             return path;
         }
 
-        // 检测操作系统
+        // 🔥 调试日志
+        log.debug("🔍 [PathUtils] 输入路径: \"{}\"", path);
+
+        // 检测操作系统（更宽松的检测）
         String osName = System.getProperty("os.name", "").toLowerCase();
         boolean isWindows = osName.contains("windows");
 
+        log.debug("🔍 [PathUtils] os.name=\"{}\", isWindows={}", System.getProperty("os.name"), isWindows);
+        log.debug("🔍 [PathUtils] isGitBashPath={}", isGitBashPath(path));
+
+        // 🔥 特殊处理：如果是 Git Bash 路径格式，无论什么系统都尝试转换
+        if (isGitBashPath(path)) {
+            if (isWindows) {
+                // Windows 系统：/c/dev -> C:\dev
+                String converted = convertToWindowsPath(path);
+                log.info("✅ [PathUtils] Git Bash 路径已转换: {} -> {}", path, converted);
+                return converted;
+            } else {
+                // 非 Windows 系统（macOS/Linux）：保持 Git Bash 格式
+                // 这种情况下，可能需要用户手动配置正确的路径
+                log.warn("⚠️ [PathUtils] 检测到 Git Bash 路径格式，但当前系统不是 Windows: {}", path);
+                log.warn("   当前系统: {}", System.getProperty("os.name"));
+                log.warn("   路径可能无效，请检查 application.yml 配置");
+                return path;
+            }
+        }
+
         if (!isWindows) {
             // 非 Windows 系统，只处理斜杠统一
-            return normalizeSlashes(path);
+            String normalized = normalizeSlashes(path);
+            log.debug("🔍 [PathUtils] 非 Windows 系统，统一斜杠: {} -> {}", path, normalized);
+            return normalized;
         }
 
         // Windows 系统下的路径处理
-        return normalizeWindowsPath(path);
+        String normalized = normalizeWindowsPath(path);
+        log.debug("🔍 [PathUtils] Windows 系统路径规范化: {} -> {}", path, normalized);
+        return normalized;
     }
 
     /**
@@ -81,6 +108,7 @@ public class PathUtils {
      * 示例：
      * - C:\Users\projects -> /c/Users/projects
      * - D:\data\app -> /d/data/app
+     * - C:\\Users\\projects -> /c/Users/projects (处理双反斜杠)
      *
      * @param windowsPath Windows 风格路径
      * @return Git Bash 风格路径
@@ -98,6 +126,9 @@ public class PathUtils {
 
         // 转换反斜杠为正斜杠
         pathWithoutDrive = pathWithoutDrive.replace('\\', '/');
+
+        // 🔥 修复双斜杠问题：将连续的斜杠合并为单个斜杠
+        pathWithoutDrive = pathWithoutDrive.replaceAll("/+", "/");
 
         // 拼接成 Git Bash 格式: /c/Users/projects/autoloop
         String gitBashPath = "/" + driveLetter + pathWithoutDrive;
@@ -265,5 +296,52 @@ public class PathUtils {
         WINDOWS,   // Windows 原生路径 (C:\path)
         GIT_BASH,  // Git Bash 路径 (/c/path)
         UNIX       // Unix/Linux/Mac 路径 (/home/user/path)
+    }
+
+    /**
+     * 将路径编码为 Claude Code CLI 的会话目录名
+     *
+     * CLI 的编码规则（通过实际测试验证）：
+     * - Unix: /home/user/path → -home-user-path
+     * - Windows: C:\dev\path → C--dev-path （注意：冒号和反斜杠都被替换为 -，且不合并连续的 -）
+     * - 所有斜杠（/ 和 \）替换为 -
+     * - 所有冒号（:）替换为 -
+     * - 🔥 不合并连续的 - （与 CLI 行为一致）
+     *
+     * @param path 原始路径
+     * @return CLI 会话目录名
+     */
+    public static String encodeCliSessionPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+
+        log.debug("🔍 [PathUtils] 编码 CLI 会话路径: \"{}\"", path);
+
+        // 1. 统一斜杠（全部替换为 -）
+        String encoded = path.replace("/", "-").replace("\\", "-");
+
+        // 2. 替换冒号（Windows 盘符）
+        encoded = encoded.replace(":", "-");
+
+        // 🔥 3. 不需要合并连续的 -（CLI 实际行为就是保留连续的 -）
+        // 删除了: encoded.replaceAll("-+", "-")
+
+        log.debug("✅ [PathUtils] 编码结果: \"{}\" -> \"{}\"", path, encoded);
+
+        return encoded;
+    }
+
+    /**
+     * 构建 Claude Code CLI 会话文件的完整路径
+     *
+     * @param workDirBase CLI 工作目录
+     * @param sessionId 会话 ID
+     * @return 会话文件的完整路径
+     */
+    public static String buildCliSessionFilePath(String workDirBase, String sessionId) {
+        String encodedPath = encodeCliSessionPath(workDirBase);
+        String homeDir = System.getProperty("user.home");
+        return homeDir + "/.claude/projects/" + encodedPath + "/" + sessionId + ".jsonl";
     }
 }

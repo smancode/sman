@@ -20,8 +20,10 @@ import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.code.CtJavaDoc;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -57,9 +59,16 @@ public class SpoonAstService {
             // 获取项目路径
             String projectPath = projectConfigService.getProjectPath(projectKey);
 
-            // 使用 Spoon 分析项目
+            // 查找目标 Java 文件
+            String javaFile = findJavaFile(projectPath, className);
+            if (javaFile == null) {
+                logger.warn("未找到 Java 文件: className={}", className);
+                return null;
+            }
+
+            // 使用 Spoon 分析单个文件
             Launcher launcher = new Launcher();
-            launcher.addInputResource(projectPath);
+            launcher.addInputResource(javaFile);
             launcher.getEnvironment().setNoClasspath(true);
             launcher.getEnvironment().setComplianceLevel(21);
 
@@ -213,6 +222,68 @@ public class SpoonAstService {
             return null;
         } catch (Exception e) {
             // 忽略注释提取失败
+            return null;
+        }
+    }
+
+    /**
+     * 查找 Java 文件（支持多模块项目）
+     */
+    private String findJavaFile(String projectPath, String className) {
+        try {
+            // 策略1: 扫描根目录的 src/main/java
+            File rootSrcMainJava = new File(projectPath, "src/main/java");
+            if (rootSrcMainJava.exists()) {
+                String found = searchFileInDirectory(rootSrcMainJava, className + ".java");
+                if (found != null) {
+                    return found;
+                }
+            }
+
+            // 策略2: 扫描所有子模块的 */src/main/java
+            File projectDir = new File(projectPath);
+            File[] subDirs = projectDir.listFiles(File::isDirectory);
+            if (subDirs != null) {
+                for (File subDir : subDirs) {
+                    File moduleSrc = new File(subDir, "src/main/java");
+                    if (moduleSrc.exists()) {
+                        String found = searchFileInDirectory(moduleSrc, className + ".java");
+                        if (found != null) {
+                            return found;
+                        }
+                    }
+                }
+            }
+
+            logger.warn("未找到 Java 文件: className={}, projectPath={}", className, projectPath);
+            return null;
+
+        } catch (Exception e) {
+            logger.error("查找 Java 文件失败: className={}, error={}", className, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * 在目录中递归搜索文件
+     */
+    private String searchFileInDirectory(File directory, String fileName) {
+        try {
+            // 使用 Files.walk 提高效率
+            Path dirPath = directory.toPath();
+            try (var stream = java.nio.file.Files.walk(dirPath)) {
+                Optional<Path> found = stream
+                    .filter(p -> p.toFile().isFile())
+                    .filter(p -> p.getFileName().toString().equals(fileName))
+                    .findFirst();
+
+                if (found.isPresent()) {
+                    return found.get().toString();
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            logger.error("搜索目录失败: directory={}, fileName={}, error={}", directory, fileName, e.getMessage());
             return null;
         }
     }

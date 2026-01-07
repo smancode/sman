@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 /**
  * WebSocket Agent 协议处理器
@@ -52,6 +54,13 @@ public class AgentWebSocketHandler extends TextWebSocketHandler
 
     @Autowired
     private ToolForwardingService toolForwardingService;
+
+    /**
+     * WebSocket 消息处理专用线程池
+     */
+    @Autowired
+    @Qualifier("webSocketExecutor")
+    private Executor webSocketExecutor;
 
     @Value("${claude-code.http-api.endpoint:/api/claude-code/tools/execute}")
     private String httpApiEndpoint;
@@ -356,16 +365,15 @@ public class AgentWebSocketHandler extends TextWebSocketHandler
                                        String projectKey, String sessionId,
                                        SessionMetadata metadata) {
         try {
-            // 获取 projectPath
-            String projectPath = metadata.getProjectPath();
-            if (projectPath == null || projectPath.isEmpty()) {
-                if (projectConfigService.hasProject(projectKey)) {
-                    projectPath = projectConfigService.getProjectPath(projectKey);
-                } else {
-                    sendError(session, "PROJECT_NOT_FOUND",
-                        "未找到 projectKey 映射: " + projectKey);
-                    return;
-                }
+            // 🔥 获取 projectPath：始终使用配置文件中的路径（不使用前端传来的路径）
+            String projectPath;
+            if (projectConfigService.hasProject(projectKey)) {
+                projectPath = projectConfigService.getProjectPath(projectKey);
+                log.info("✅ 从配置文件获取 projectPath: projectKey={}, projectPath={}", projectKey, projectPath);
+            } else {
+                sendError(session, "PROJECT_NOT_FOUND",
+                    "未找到 projectKey 映射: " + projectKey + "，请检查 application.yml 配置");
+                return;
             }
 
             // 构建发送给 Claude Code 的消息
@@ -511,7 +519,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler
                 log.info("✅ Worker {} 完成 (sessionId={})",
                     worker.getWorkerId(), metadata.getUserSessionId());
             }
-        });
+        }, webSocketExecutor);
     }
 
     /**

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,10 +45,23 @@ public class ProjectConfigService {
         }
 
         String originalPath = config.getProjectPath();
+
+        // 🔥 调试：检查原始路径
+        log.info("📋 [ProjectConfigService] 查询 projectPath");
+        log.info("   projectKey: \"{}\"", projectKey);
+        log.info("   originalPath: \"{}\"", originalPath);
+        log.info("   originalPath.length: {}", originalPath != null ? originalPath.length() : "null");
+        log.info("   originalPath.bytes: {}", originalPath != null ? java.util.Arrays.toString(originalPath.getBytes(java.nio.charset.StandardCharsets.UTF_8)) : "null");
+
         String normalizedPath = PathUtils.normalizePath(originalPath);
 
-        log.debug("📋 查询 projectPath: projectKey={}, originalPath={}, normalizedPath={}",
-                  projectKey, originalPath, normalizedPath);
+        log.info("   normalizedPath: \"{}\"", normalizedPath);
+        log.info("   当前系统: os.name=\"{}\"", System.getProperty("os.name"));
+
+        // 🔥 尝试直接检测
+        File testFile = new File(normalizedPath);
+        log.info("   File.exists(): {}", testFile.exists());
+        log.info("   File.getAbsolutePath(): {}", testFile.getAbsolutePath());
 
         return normalizedPath;
     }

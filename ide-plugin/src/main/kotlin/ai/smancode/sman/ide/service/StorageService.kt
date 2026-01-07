@@ -23,9 +23,9 @@ class StorageService : PersistentStateComponent<StorageService.State> {
         var saveHistory: Boolean = true,
         var messages: MutableList<ChatMessage> = mutableListOf(),
         var connectTimeoutSeconds: Int = 30,
-        var readTimeoutSeconds: Int = 1800,
-        var writeTimeoutSeconds: Int = 1800,
-        var callTimeoutSeconds: Int = 1800,
+        var readTimeoutSeconds: Int = 1860,
+        var writeTimeoutSeconds: Int = 1860,
+        var callTimeoutSeconds: Int = 1860,
         var agentIpMapping: MutableMap<String, String> = mutableMapOf(
             "mcfcm-core" to "10.59.36.15",
             "mcfcm-adm" to "10.59.36.15",

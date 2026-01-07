@@ -19,6 +19,11 @@ repositories {
 }
 
 dependencies {
+    // 🔧 显式声明 Logback 日志框架（放在最前面，确保优先加载）
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    implementation 'ch.qos.logback:logback-core:1.4.14'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
     // Spring Boot 核心
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'

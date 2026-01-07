@@ -54,6 +54,9 @@ public class VectorCacheManager {
     private ProjectConfigService projectConfigService;
 
     @Autowired
+    private VectorIndexPersistence indexPersistence;
+
+    @Autowired
     private VectorIndexLockManager lockManager;
 
     @Value("${vector.index.path:data/vector-index}")
@@ -101,9 +104,10 @@ public class VectorCacheManager {
      * 定时刷新向量索引（根据 MD5 变动）
      *
      * 刷新策略：
-     * 1. 检测 MD5 变化
-     * 2. 在当前索引基础上增量更新
-     * 3. 更新 MD5 缓存
+     * 1. 基于 agent.projects 配置获取所有项目
+     * 2. 检测 MD5 变化
+     * 3. 在当前索引基础上增量更新
+     * 4. 更新 MD5 缓存
      */
     @Scheduled(fixedDelayString = "${vector.refresh.interval:300000}", initialDelay = 60000)
     public void refreshVectorIndex() {
@@ -121,33 +125,69 @@ public class VectorCacheManager {
         try {
             log.info("🔄 开始定时刷新向量索引...");
 
-            // 获取所有已加载的项目
-            Set<String> projectKeys = vectorSearchService.getIndexedProjects();
+            // 🔥 修改：基于 agent.projects 配置获取所有项目
+            List<String> projectKeys = projectConfigService.getAllProjectKeys();
 
             if (projectKeys.isEmpty()) {
-                log.info("没有需要刷新的项目索引");
+                log.info("⚠️ agent.projects 配置为空，无法刷新索引");
+                log.info("💡 提示: 请在 application.yml 中配置 agent.projects");
                 return;
             }
 
+            log.info("📋 从配置中发现 {} 个项目: {}", projectKeys.size(), projectKeys);
+
             int totalChanged = 0;
+            int successCount = 0;
+            int failCount = 0;
 
             for (String projectKey : projectKeys) {
                 try {
+                    log.info("🔍 检查项目索引: projectKey={}", projectKey);
+
+                    // 确保索引已初始化
+                    if (!vectorSearchService.hasIndex(projectKey)) {
+                        log.info("🆕 项目索引不存在，创建新索引: projectKey={}", projectKey);
+                        try {
+                            vectorSearchService.initializeIndex(projectKey);
+                            successCount++;
+
+                            // 🔥 检查是否为空索引（首次启动无缓存），触发全量扫描
+                            var indexData = vectorSearchService.getJVectorIndex(projectKey);
+                            if (indexData != null && indexData.getDocuments().isEmpty()) {
+                                log.info("🆕 空索引，触发全量扫描: projectKey={}", projectKey);
+                                int scannedFiles = performFullScan(projectKey);
+                                log.info("✅ 全量扫描完成: projectKey={}, 文件数={}", projectKey, scannedFiles);
+                            }
+
+                        } catch (Exception e) {
+                            failCount++;
+                            log.error("❌ 创建索引失败: projectKey={}, error={}", projectKey, e.getMessage(), e);
+                        }
+                        continue;
+                    }
+
+                    // 刷新现有索引
                     int changedFiles = refreshProjectIndex(projectKey);
                     totalChanged += changedFiles;
+                    successCount++;
+
+                    if (changedFiles > 0) {
+                        log.info("✅ 索引已刷新: projectKey={}, 变化文件数={}", projectKey, changedFiles);
+                    }
 
                 } catch (Exception e) {
-                    log.error("刷新项目索引失败: projectKey={}, error={}", projectKey, e.getMessage(), e);
+                    failCount++;
+                    log.error("❌ 刷新项目索引失败: projectKey={}, error={}", projectKey, e.getMessage(), e);
                 }
             }
 
             if (totalChanged > 0) {
-                log.info("✅ 向量索引刷新完成: 变化文件数={}", totalChanged);
+                log.info("✅ 向量索引刷新完成: 成功={}, 失败={}, 变化文件数={}", successCount, failCount, totalChanged);
 
                 // 持久化到本地文件
                 persistCacheToFile();
             } else {
-                log.info("向量索引无变化，无需刷新");
+                log.info("✅ 向量索引检查完成: 成功={}, 失败={}, 无变化", successCount, failCount);
             }
 
         } catch (Exception e) {
@@ -176,6 +216,74 @@ public class VectorCacheManager {
     private void finishBuilding() {
         synchronized (buildLock) {
             isBuilding = false;
+        }
+    }
+
+    /**
+     * 全量扫描项目（首次启动或索引丢失时使用）
+     *
+     * @param projectKey 项目键
+     * @return 扫描的文件数量
+     */
+    private int performFullScan(String projectKey) {
+        log.info("🔄 开始全量扫描: projectKey={}", projectKey);
+
+        try {
+            // 1. 获取项目路径
+            String projectPath = projectConfigService.getProjectPath(projectKey);
+
+            // 2. 扫描所有 Java 文件
+            List<String> allFiles = refresher.scanAllJavaFiles(projectKey);
+
+            if (allFiles.isEmpty()) {
+                log.warn("⚠️ 未扫描到任何 Java 文件: projectKey={}, projectPath={}", projectKey, projectPath);
+                return 0;
+            }
+
+            log.info("🔍 扫描到 {} 个 Java 文件，开始生成向量...", allFiles.size());
+
+            // 3. 创建新的索引数据
+            var indexData = new VectorSearchService.JVectorIndexData(projectKey, 1024);
+            int successCount = 0;
+            int errorCount = 0;
+
+            // 4. 为每个文件生成向量
+            for (String filePath : allFiles) {
+                try {
+                    String className = extractClassName(filePath);
+
+                    // 使用类级写锁
+                    Integer result = lockManager.writeClass(projectKey, className, () -> {
+                        return updateClassVectors(projectKey, filePath, indexData);
+                    });
+
+                    if (result != null && result > 0) {
+                        successCount++;
+                    }
+
+                } catch (Exception e) {
+                    errorCount++;
+                    log.error("❌ 处理文件失败: file={}, error={}", filePath, e.getMessage());
+                }
+            }
+
+            // 5. 更新到 VectorSearchService
+            if (successCount > 0) {
+                vectorSearchService.setJVectorIndex(projectKey, indexData);
+
+                // 6. 更新 MD5 缓存
+                String fullPath = projectConfigService.getProjectPath(projectKey);
+                Map<String, String> currentMd5Map = refresher.scanJavaFiles(fullPath);
+                refresher.updateMd5Cache(projectKey, currentMd5Map);
+
+                log.info("✅ 全量扫描完成: projectKey={}, 成功={}, 失败={}", projectKey, successCount, errorCount);
+            }
+
+            return successCount;
+
+        } catch (Exception e) {
+            log.error("❌ 全量扫描失败: projectKey={}, error={}", projectKey, e.getMessage(), e);
+            return 0;
         }
     }
 

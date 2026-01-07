@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>ai.smancode.sman.ide-plugin</id>
     <name>SiliconMan</name>
-    <version>2.0.0</version>
+    <version>3.3.0</version>
     <vendor email="contact@smancode.ai" url="https://github.com/smancode-ai">SiliconMan Team</vendor>
 
     <description><![CDATA[
@@ -17,6 +17,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>3.3.0</h3>
+    <ul>
+        <li>✨ 版本升级：升级至 3.3.0</li>
+        <li>🔧 持续优化 Claude Code 集成体验</li>
+    </ul>
     <h3>2.0.0</h3>
     <ul>
         <li>🚀 重构：全新架构，支持 Claude Code CLI 原生集成</li>

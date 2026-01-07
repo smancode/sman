@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -59,13 +60,17 @@ public class QuickAnalysisController {
         ClaudeCodeWorker worker = null;
 
         try {
-            // 🔥 查询 projectPath
-            String projectPath = null;
+            // 🔥 查询 projectPath：始终使用配置文件中的路径
+            String projectPath;
             if (projectConfigService.hasProject(projectKey)) {
                 projectPath = projectConfigService.getProjectPath(projectKey);
-                log.info("📋 查询到 projectPath: {}", projectPath);
+                log.info("✅ 从配置文件获取 projectPath: projectKey={}, projectPath={}", projectKey, projectPath);
             } else {
-                log.warn("⚠️  未找到 projectKey 映射: {} (将使用空 projectPath)", projectKey);
+                log.error("❌ 未找到 projectKey 映射: {}，请检查 application.yml 配置", projectKey);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "PROJECT_NOT_FOUND");
+                errorResponse.put("message", "未找到 projectKey 映射: " + projectKey + "，请检查 application.yml 配置");
+                return errorResponse;
             }
 
             // 构建发送给 Claude Code 的消息
@@ -95,8 +100,8 @@ public class QuickAnalysisController {
                         worker.getWorkerId(), sessionId, execMode);
 
                 // ⭐ 发送给 Claude Code 并获取响应
-                log.info("📤 发送消息给 Claude Code (sessionId={}, timeout=300s)...", sessionId);
-                String claudeResponse = worker.sendAndReceive(claudeMessage, 300);
+                log.info("📤 发送消息给 Claude Code (sessionId={}, timeout=1800s)...", sessionId);
+                String claudeResponse = worker.sendAndReceive(claudeMessage, 1800);
                 log.info("📥 收到 Claude Code 响应");
 
                 // 解析响应

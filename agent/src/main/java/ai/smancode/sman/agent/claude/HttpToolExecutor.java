@@ -80,8 +80,9 @@ public class HttpToolExecutor {
      * @return 执行结果
      */
     public ClaudeCodeToolModels.ToolExecutionResponse execute(String toolName, Map<String, Object> params, String projectKey, String sessionId, String webSocketSessionId) {
-        log.info("🔧 执行工具: tool={}, projectKey={}, sessionId={}, webSocketSessionId={}, params={}",
-                toolName, projectKey, sessionId, webSocketSessionId, params);
+        log.info("🔧 执行工具: tool={}, projectKey={}, sessionId={}, webSocketSessionId={}",
+                toolName, projectKey, sessionId, webSocketSessionId);
+        log.info("📦 params 类型: {}, 内容: {}", params != null ? params.getClass().getName() : "null", params);
 
         // 将 projectKey、sessionId 和 webSocketSessionId 添加到 params 中（供具体方法使用）
         if (params == null) {
@@ -169,6 +170,17 @@ public class HttpToolExecutor {
      * 执行语义搜索
      */
     private ClaudeCodeToolModels.ToolExecutionResponse executeVectorSearch(Map<String, Object> params) {
+        log.info("🔍 executeVectorSearch 开始解析参数");
+        log.info("📦 params 类型: {}", params != null ? params.getClass().getName() : "null");
+        log.info("📦 params 内容: {}", params);
+
+        // 检查 params 是否为 List (错误格式)
+        if (params instanceof java.util.List) {
+            log.error("❌ params 是 List 格式，应该为 Map 格式！params={}", params);
+            return ClaudeCodeToolModels.ToolExecutionResponse.failure(
+                    "参数格式错误: params 应为对象而非数组。正确格式: {\"params\": {\"recallQuery\": \"...\", ...}}");
+        }
+
         // 提取参数（全部必须）
         String projectKey = (String) params.get("projectKey");
         String recallQuery = (String) params.get("recallQuery");

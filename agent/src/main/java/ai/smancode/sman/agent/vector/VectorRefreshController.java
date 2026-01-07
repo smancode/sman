@@ -7,6 +7,7 @@ import ai.smancode.sman.agent.models.VectorModels.DocumentVector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,8 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 
 /**
  * 向量索引刷新控制器
@@ -54,11 +54,12 @@ public class VectorRefreshController {
     @Autowired
     private VectorIndexLockManager lockManager;
 
-    private final ExecutorService refreshExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "vector-refresh-thread");
-        t.setDaemon(true);
-        return t;
-    });
+    /**
+     * 向量索引刷新专用线程池（Spring 管理的单线程池）
+     */
+    @Autowired
+    @Qualifier("vectorRefreshExecutor")
+    private Executor vectorRefreshExecutor;
 
     /**
      * 手动触发向量索引刷新
@@ -78,7 +79,7 @@ public class VectorRefreshController {
             ));
         }
 
-        // 异步执行刷新
+        // 异步执行刷新（使用专用线程池）
         CompletableFuture.supplyAsync(() -> {
             try {
                 return doRefresh(request.getProjectKey(), request.isForce());
@@ -90,7 +91,7 @@ public class VectorRefreshController {
                         "error", e.getMessage()
                 );
             }
-        }, refreshExecutor).thenAccept(result -> {
+        }, vectorRefreshExecutor).thenAccept(result -> {
             log.info("✅ 向量索引刷新完成: projectKey={}, success={}",
                     result.get("projectKey"), result.get("success"));
         });
