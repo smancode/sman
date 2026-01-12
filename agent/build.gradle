@@ -1,0 +1,86 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'ai.smancode.smanagent'
+version = '1.0.0'
+sourceCompatibility = '21'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 日志框架
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
+    implementation 'ch.qos.logback:logback-core:1.4.14'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    // Spring Boot 核心
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // Jackson JSON 处理
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.0'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.18.0'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.18.0'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.0'
+
+    // HTTP 客户端
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // 工具类
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+    implementation 'commons-io:commons-io:2.15.1'
+
+    // 开发工具
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试依赖
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    enabled = true
+}
+
+// 编译配置
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-parameters']
+    options.release = 21
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+// JAR 配置
+jar {
+    archiveBaseName = 'smanagent-agent'
+    archiveVersion = project.version
+    enabled = false
+}
+
+bootJar {
+    archiveBaseName = 'smanagent-agent'
+    archiveVersion = project.version
+    mainClass = 'ai.smancode.smanagent.BankCoreAgentApplication'
+}
+
+// Spring Boot 插件配置
+springBoot {
+    buildInfo()
+}

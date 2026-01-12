@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: smanagent
+  jackson:
+    serialization:
+      indent-output: true
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+
+# ==================== SmanCode 配置 ====================
+smancode:
+  enabled: true
+  orchestrator:
+    max-iterations: 20
+    enable-iterative-analysis: true
+  prompt:
+    max-system-prompt-length: 5000
+    max-iteration-prompt-length: 3000
+
+# ==================== LLM 配置 ====================
+llm:
+  pool:
+    endpoints:
+      # GLM-4.7（主模型）
+      - base-url: https://open.bigmodel.cn/api/coding/paas/v4
+        api-key: ${GLM_API_KEY}
+        model: glm-4.7
+        max-tokens: 8192
+        timeout: 60000
+        enabled: true
+      # DeepSeek V3.2（备选模型）
+      - base-url: https://api.siliconflow.cn/v1
+        api-key: ${DEEPSEEK_API_KEY}
+        model: Pro/deepseek-ai/DeepSeek-V3.2
+        max-tokens: 8192
+        timeout: 60000
+        enabled: false
+  retry:
+    max-retries: 3
+    base-delay: 1000
+    max-delay: 10000
+
+# ==================== 向量搜索配置 ====================
+bank:
+  analysis:
+    vector:
+      enabled: ${VECTOR_ENABLED:true}
+      embedding:
+        base-url: ${BGE_M3_EMBED_BASE_URL:http://localhost:8000/v1}
+        model: ${BGE_M3_MODEL:BAAI/bge-m3}
+        api-key: ${BGE_M3_API_KEY:ok}
+      reranker:
+        enabled: ${BGE_RERANKER_ENABLED:true}
+        base-url: ${BGE_RERANKER_BASE_URL:http://localhost:8001/v1}
+        model: ${BGE_RERANKER_MODEL:BAAI/bge-reranker-v2-m3}
+
+# ==================== 项目配置 ====================
+bank:
+  analysis:
+    static:
+      project-root-path: ${ANALYSIS_PROJECT_PATH:/Users/liuchao/projects/autoloop}
+
+# ==================== WebSocket 配置 ====================
+websocket:
+  path: /ws/analyze
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    com.smancode.smanagent: DEBUG
+    ai.smancode.smanagent: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
