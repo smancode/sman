@@ -1,11 +1,134 @@
-.DS_Store
-*.iml
+# AI工具
+.aider*
+
+# Java编译文件
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# Gradle构建文件
+.gradle/
+/build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IDE配置文件
 .idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.VS*
+.eclipse/
+.settings/
+.classpath
+.project
+*.swp
+*.swo
+*~
+
+.apt*
+.codebuddy/
+.cursor/
+.qoder/
+.trae/
+.vscode/
+.VSCodeCounter/
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日志文件
+/logs/
 *.log
+*.log.*
+*.gz
 *.pid
-*.seed
-*.pid.lock
-bin/
-tmp/
-temp/
-dist/
+
+# 运行时文件
+app.log
+app.pid
+server.log
+nohup.out
+
+# 临时文件
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# 数据库文件（运行时文件，不应加入版本控制）
+# 同义词数据通过SQL文件共享，见 src/main/resources/db/migration/V2__business_term_synonym.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# data目录（H2数据库运行时文件目录）
+# 应用关闭时会自动同步到SQL文件，团队成员通过git pull获取最新数据
+/data/
+
+# 配置文件备份
+*.backup
+application.yml.backup
+logback-spring.xml.backup
+
+# Maven (如果需要)
+/target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Spring Boot
+spring-boot-*.jar
+
+# 测试相关
+.allure/
+allure-results/
+test-output/
+
+# 其他
+*.orig
+*.rej
+.metadata
+/bin/
+/gen/
+/out/
+2025*.md
+
+# temp
+analysis-sessions
+analysis_results
+
+*.zip
+http/rest.http
+
+/expert/
+docs/tempfortest.md
+docs/test.json
+http/rest.http
+/todo/
+docs/test.json
+analysis-agent/
+analysis-results/
+/cache/
+
+/assets/

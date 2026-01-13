@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.intellij") version "1.17.2"
 }
 
-group = "ai.smancode.smanagent"
+group = "com.smancode.smanagent"
 version = "1.0.0"
 
 repositories {
@@ -11,11 +11,19 @@ repositories {
 }
 
 dependencies {
-    // HTTP 客户端
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Java-WebSocket 客户端（纯 Java 实现，无依赖冲突）
+    implementation("org.java-websocket:Java-WebSocket:1.5.4")
 
-    // JSON 处理
-    implementation("com.google.code.gson:gson:2.10.1")
+    // Jackson JSON 处理（与后端一致）
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.16.0")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.16.0")
+
+    // Markdown 渲染（flexmark-java）
+    implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
+
+    // 日志
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    implementation("ch.qos.logback:logback-classic:1.4.11")
 }
 
 // IntelliJ Platform 配置

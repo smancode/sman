@@ -15,3 +15,5 @@ tmp/
 temp/
 logs/
 app.pid
+
+/data/

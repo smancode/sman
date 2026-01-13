@@ -2,6 +2,7 @@ package com.smancode.smanagent.websocket;
 
 import com.smancode.smanagent.controller.AgentController;
 import com.smancode.smanagent.model.session.Session;
+import com.smancode.smanagent.smancode.core.SessionManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -64,22 +65,35 @@ class WebSocketApiTest {
     @Test
     void testSessionManager() {
         // 测试会话管理
-        assertEquals(0, sessionManager.getSessionCount());
+        SessionManager.SessionStats stats = sessionManager.getStats();
+        assertEquals(0, stats.total());
 
-        String sessionId = "test-session-1";
-        Session session = sessionManager.getOrCreateSession(sessionId, "test-project");
+        // 创建根会话
+        Session session = sessionManager.createRootSession("test-project");
 
         assertNotNull(session);
-        assertEquals(sessionId, session.getId());
-        assertEquals(1, sessionManager.getSessionCount());
+        assertEquals("test-project", session.getProjectInfo().getProjectKey());
 
-        // 再次获取应该返回同一个会话
-        Session session2 = sessionManager.getOrCreateSession(sessionId, "test-project");
-        assertSame(session, session2);
+        stats = sessionManager.getStats();
+        assertEquals(1, stats.total());
 
-        // 删除会话
-        sessionManager.removeSession(sessionId);
-        assertEquals(0, sessionManager.getSessionCount());
+        // 创建子会话
+        Session childSession = sessionManager.createChildSession(session.getId());
+        assertNotNull(childSession);
+        assertEquals(session.getId(), sessionManager.getParentSessionId(childSession.getId()));
+
+        stats = sessionManager.getStats();
+        assertEquals(2, stats.total());
+
+        // 清理子会话
+        sessionManager.cleanupChildSession(childSession.getId());
+        stats = sessionManager.getStats();
+        assertEquals(1, stats.total());
+
+        // 清理根会话
+        sessionManager.cleanupSession(session.getId());
+        stats = sessionManager.getStats();
+        assertEquals(0, stats.total());
     }
 
     @Test

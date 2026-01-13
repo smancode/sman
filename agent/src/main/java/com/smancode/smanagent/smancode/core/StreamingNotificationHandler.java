@@ -1,0 +1,334 @@
+package com.smancode.smanagent.smancode.core;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smancode.smanagent.model.message.Message;
+import com.smancode.smanagent.model.part.Part;
+import com.smancode.smanagent.model.part.TextPart;
+import com.smancode.smanagent.model.part.ToolPart;
+import com.smancode.smanagent.model.session.Session;
+import com.smancode.smanagent.smancode.llm.LlmService;
+import com.smancode.smanagent.tools.ToolResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.function.Consumer;
+
+/**
+ * 流式通知处理器
+ * <p>
+ * 负责生成和推送渐进式流式输出的各种通知消息
+ */
+@Component
+public class StreamingNotificationHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(StreamingNotificationHandler.class);
+
+    @Autowired
+    private LlmService llmService;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 立即推送确认消息
+     */
+    public void pushImmediateAcknowledgment(Session session, Consumer<Part> partPusher) {
+        Message latestUser = session.getLatestUserMessage();
+        if (latestUser == null || latestUser.getParts().isEmpty()) {
+            return;
+        }
+
+        Part firstPart = latestUser.getParts().get(0);
+        if (!(firstPart instanceof TextPart)) {
+            return;
+        }
+
+        String userQuestion = ((TextPart) firstPart).getText();
+
+        // 调用 LLM 生成简短确认
+        String ackPrompt = buildAcknowledgmentPrompt(userQuestion);
+        try {
+            JsonNode json = llmService.jsonRequest(ackPrompt);
+            String ackText = json.path("acknowledgment").asText("");
+
+            TextPart ackPart = new TextPart();
+            ackPart.setSessionId(session.getId());
+            ackPart.setText("🤔 思考中...\n" + (ackText.isEmpty() ? "" : ackText + "\n"));
+            ackPart.touch();
+            partPusher.accept(ackPart);
+
+        } catch (Exception e) {
+            logger.warn("生成确认消息失败", e);
+            // 失败时使用默认确认
+            TextPart ackPart = new TextPart();
+            ackPart.setSessionId(session.getId());
+            ackPart.setText("🤔 思考中...\n");
+            ackPart.touch();
+            partPusher.accept(ackPart);
+        }
+    }
+
+    /**
+     * 构建确认消息提示词
+     */
+    private String buildAcknowledgmentPrompt(String userQuestion) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("用户提出了以下问题，请生成一句简短的确认语（1句话，不超过30字），");
+        prompt.append("表明你理解了问题并将进行分析。\n\n");
+        prompt.append("用户问题: ").append(userQuestion).append("\n\n");
+        prompt.append("请以 JSON 格式返回：\n");
+        prompt.append("{\n");
+        prompt.append("  \"acknowledgment\": \"你的确认语\"\n");
+        prompt.append("}");
+        return prompt.toString();
+    }
+
+    /**
+     * 推送最终总结
+     */
+    public void pushFinalSummary(Message assistantMessage, Session session, Consumer<Part> partPusher) {
+        try {
+            // 构建最终总结提示词
+            String summaryPrompt = buildFinalSummaryPrompt(assistantMessage, session);
+
+            // 调用 LLM 生成总结
+            JsonNode json = llmService.jsonRequest(summaryPrompt);
+            String summaryText = json.path("summary").asText("");
+
+            if (!summaryText.isEmpty()) {
+                TextPart summaryPart = new TextPart();
+                summaryPart.setMessageId(assistantMessage.getId());
+                summaryPart.setSessionId(session.getId());
+                summaryPart.setText("📋 完整结论\n\n" + summaryText + "\n");
+                summaryPart.touch();
+                partPusher.accept(summaryPart);
+            }
+
+        } catch (Exception e) {
+            logger.warn("生成最终总结失败", e);
+            // 失败不影响主流程
+        }
+    }
+
+    /**
+     * 构建最终总结提示词
+     */
+    private String buildFinalSummaryPrompt(Message assistantMessage, Session session) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("你是代码分析助手。刚刚执行了一系列分析工具，请生成最终总结。\n\n");
+
+        // 添加用户问题
+        prompt.append("## 用户问题\n");
+        Message latestUser = session.getLatestUserMessage();
+        if (latestUser != null && !latestUser.getParts().isEmpty()) {
+            Part firstPart = latestUser.getParts().get(0);
+            if (firstPart instanceof TextPart) {
+                prompt.append(((TextPart) firstPart).getText()).append("\n\n");
+            }
+        }
+
+        // 添加执行的工具和结果摘要
+        prompt.append("## 执行的工具\n");
+        for (Part part : assistantMessage.getParts()) {
+            if (part instanceof ToolPart toolPart) {
+                prompt.append("- ").append(toolPart.getToolName());
+                if (toolPart.getParameters() != null && !toolPart.getParameters().isEmpty()) {
+                    prompt.append(" (参数: ").append(formatParamsBrief(toolPart.getParameters())).append(")");
+                }
+                prompt.append("\n");
+
+                if (toolPart.getResult() != null && toolPart.getResult().getData() != null) {
+                    String resultSummary = ToolResultFormatter.generateResultSummary(
+                            toolPart.getToolName(),
+                            toolPart.getResult().getData());
+                    prompt.append("  结果: ").append(resultSummary).append("\n");
+                }
+            }
+        }
+        prompt.append("\n");
+
+        prompt.append("## 要求\n");
+        prompt.append("请生成完整的分析总结，包括：\n");
+        prompt.append("1. 核心发现：分析过程中最重要的发现是什么\n");
+        prompt.append("2. 详细说明：结合所有工具结果，给出完整的分析\n");
+        prompt.append("3. 建议或结论：基于分析结果给出具体建议或结论\n\n");
+        prompt.append("请以 JSON 格式返回：\n");
+        prompt.append("{\n");
+        prompt.append("  \"summary\": \"你的完整总结\"\n");
+        prompt.append("}");
+
+        return prompt.toString();
+    }
+
+    /**
+     * 推送工具调用通知
+     */
+    public void pushToolCallNotification(ToolPart toolPart, Consumer<Part> partPusher) {
+        TextPart notification = new TextPart();
+        notification.setMessageId(toolPart.getMessageId());
+        notification.setSessionId(toolPart.getSessionId());
+
+        String toolName = toolPart.getToolName();
+        Map<String, Object> params = toolPart.getParameters();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("▶ 调用工具: ").append(toolName).append("\n");
+        if (!params.isEmpty()) {
+            sb.append("   参数: ").append(formatParamsBrief(params)).append("\n");
+        }
+
+        notification.setText(sb.toString());
+        notification.touch();
+        partPusher.accept(notification);
+    }
+
+    /**
+     * 推送工具执行进度通知
+     */
+    public void pushToolProgressNotification(ToolPart toolPart, Consumer<Part> partPusher) {
+        TextPart notification = new TextPart();
+        notification.setMessageId(toolPart.getMessageId());
+        notification.setSessionId(toolPart.getSessionId());
+
+        String toolName = toolPart.getToolName();
+
+        notification.setText(String.format("⏳ 执行中: %s\n", toolName));
+        notification.touch();
+        partPusher.accept(notification);
+    }
+
+    /**
+     * 推送工具完成通知
+     */
+    public void pushToolCompletedNotification(ToolPart toolPart, ToolResult result, Consumer<Part> partPusher) {
+        TextPart notification = new TextPart();
+        notification.setMessageId(toolPart.getMessageId());
+        notification.setSessionId(toolPart.getSessionId());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("✓ 工具完成: ").append(toolPart.getToolName()).append("\n");
+
+        // 根据结果类型添加摘要
+        Object data = result.getData();
+        if (data != null) {
+            String summary = ToolResultFormatter.generateResultSummary(toolPart.getToolName(), data);
+            if (!summary.isEmpty()) {
+                sb.append("   ").append(summary).append("\n");
+            }
+        }
+
+        notification.setText(sb.toString());
+        notification.touch();
+        partPusher.accept(notification);
+    }
+
+    /**
+     * 推送工具错误通知
+     */
+    public void pushToolErrorNotification(ToolPart toolPart, ToolResult result, Consumer<Part> partPusher) {
+        TextPart notification = new TextPart();
+        notification.setMessageId(toolPart.getMessageId());
+        notification.setSessionId(toolPart.getSessionId());
+
+        notification.setText(String.format("✗ 工具失败: %s\n   原因: %s\n",
+                toolPart.getToolName(),
+                result.getError() != null ? result.getError() : "未知错误"));
+        notification.touch();
+        partPusher.accept(notification);
+    }
+
+    /**
+     * 推送阶段性结论（通过 LLM 生成）
+     */
+    public void pushIntermediateConclusion(ToolPart toolPart, ToolResult result,
+                                           Session session, Consumer<Part> partPusher) {
+        try {
+            // 构建阶段性结论提示词
+            String conclusionPrompt = buildIntermediateConclusionPrompt(toolPart, result, session);
+
+            // 调用 LLM 生成阶段性结论
+            JsonNode json = llmService.jsonRequest(conclusionPrompt);
+            String conclusionText = json.path("conclusion").asText("");
+
+            if (!conclusionText.isEmpty()) {
+                TextPart conclusionPart = new TextPart();
+                conclusionPart.setMessageId(toolPart.getMessageId());
+                conclusionPart.setSessionId(toolPart.getSessionId());
+
+                // 获取当前会话中已完成的工具数量
+                int completedCount = countCompletedTools(session);
+                conclusionPart.setText(String.format("📊 阶段性结论 %d:\n%s\n",
+                        completedCount, conclusionText));
+
+                conclusionPart.touch();
+                partPusher.accept(conclusionPart);
+            }
+
+        } catch (Exception e) {
+            logger.warn("生成阶段性结论失败: toolName={}", toolPart.getToolName(), e);
+            // 失败不影响主流程
+        }
+    }
+
+    /**
+     * 构建阶段性结论提示词
+     */
+    private String buildIntermediateConclusionPrompt(ToolPart toolPart, ToolResult result, Session session) {
+        StringBuilder prompt = new StringBuilder();
+
+        prompt.append("你是一个代码分析助手。刚刚执行了一个工具，请生成简短的阶段性结论。\n\n");
+        prompt.append("## 工具信息\n");
+        prompt.append("- 工具名称: ").append(toolPart.getToolName()).append("\n");
+        prompt.append("- 工具参数: ").append(formatParamsBrief(toolPart.getParameters())).append("\n");
+        prompt.append("- 执行结果: ").append(ToolResultFormatter.formatToolResult(result)).append("\n\n");
+
+        prompt.append("## 用户原始问题\n");
+        Message latestUser = session.getLatestUserMessage();
+        if (latestUser != null && !latestUser.getParts().isEmpty()) {
+            Part firstPart = latestUser.getParts().get(0);
+            if (firstPart instanceof TextPart) {
+                prompt.append(((TextPart) firstPart).getText()).append("\n\n");
+            }
+        }
+
+        prompt.append("## 要求\n");
+        prompt.append("请生成一个简短的阶段性结论（1-3句话），说明这个工具的执行发现了什么，");
+        prompt.append("以及这对解决用户问题有什么帮助。\n\n");
+        prompt.append("请以 JSON 格式返回：\n");
+        prompt.append("{\n");
+        prompt.append("  \"conclusion\": \"你的阶段性结论\"\n");
+        prompt.append("}");
+
+        return prompt.toString();
+    }
+
+    /**
+     * 统计已完成的工具数量
+     */
+    private int countCompletedTools(Session session) {
+        int count = 0;
+        for (Message message : session.getMessages()) {
+            if (message.isAssistantMessage()) {
+                for (Part part : message.getParts()) {
+                    if (part instanceof ToolPart) {
+                        ToolPart.ToolState state = ((ToolPart) part).getState();
+                        if (state == ToolPart.ToolState.COMPLETED) {
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 格式化参数简述
+     */
+    private String formatParamsBrief(Map<String, Object> params) {
+        return ParamsFormatter.formatBrief(params);
+    }
+}

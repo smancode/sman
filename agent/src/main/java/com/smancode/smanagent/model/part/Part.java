@@ -1,5 +1,8 @@
 package com.smancode.smanagent.model.part;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 import java.time.Instant;
 
 /**
@@ -8,6 +11,19 @@ import java.time.Instant;
  * Part 是消息的最小组成单元，支持独立创建、更新、删除。
  * 每个 Part 都有自己的类型和状态，可以独立渲染。
  */
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = TextPart.class, name = "TEXT"),
+        @JsonSubTypes.Type(value = ToolPart.class, name = "TOOL"),
+        @JsonSubTypes.Type(value = ReasoningPart.class, name = "REASONING"),
+        @JsonSubTypes.Type(value = GoalPart.class, name = "GOAL"),
+        @JsonSubTypes.Type(value = ProgressPart.class, name = "PROGRESS"),
+        @JsonSubTypes.Type(value = TodoPart.class, name = "TODO")
+})
 public abstract class Part {
 
     /**

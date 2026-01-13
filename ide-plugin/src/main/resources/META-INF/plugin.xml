@@ -11,16 +11,21 @@
 
     <!-- Product and plugin compatibility -->
     <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Tool Window -->
         <toolWindow id="SmanAgent"
                     factoryClass="com.smancode.smanagent.ide.ui.SmanAgentToolWindowFactory"
                     anchor="right"
-                    icon="/META-INF/icon.png"/>
+                    icon="/META-INF/icon.png"
+                    secondary="false"/>
 
         <!-- Project Service -->
         <projectService serviceImplementation="com.smancode.smanagent.ide.service.StorageService"/>
+
+        <!-- Startup Activity -->
+        <startupActivity class="com.smancode.smanagent.ide.SmanAgentPlugin"/>
     </extensions>
 
     <actions>

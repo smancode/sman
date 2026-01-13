@@ -5,13 +5,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 提示词分发器
+ * 提示词分发器（极简架构版）
  * <p>
- * 负责根据不同场景组装完整的提示词，包括系统提示词、工具介绍等。
+ * 新架构特点：
+ * - 无意图识别：完全由 LLM 决定行为
+ * - 无阶段划分：一个主循环处理所有
+ * - system-reminder 支持：允许用户随时打断
  */
 @Service
 public class PromptDispatcher {
@@ -22,69 +24,9 @@ public class PromptDispatcher {
     private PromptLoaderService promptLoader;
 
     /**
-     * 构建意图识别提示词
-     *
-     * @param userInput 用户输入
-     * @return 完整提示词
-     */
-    public String buildIntentRecognitionPrompt(String userInput) {
-        String systemPrompt = promptLoader.loadPrompt("common/system-header.md");
-        String taskPrompt = promptLoader.loadPrompt("phases/01-intent-recognition.md");
-
-        return systemPrompt + "\n\n" + taskPrompt + "\n\n## 用户输入\n\n" + userInput;
-    }
-
-    /**
-     * 构建需求规划提示词
-     *
-     * @param userInput     用户输入
-     * @param toolSummary 工具摘要（可选）
-     * @return 完整提示词
-     */
-    public String buildRequirementPlanningPrompt(String userInput, String toolSummary) {
-        String systemPrompt = promptLoader.loadPrompt("common/system-header.md");
-        String taskPrompt = promptLoader.loadPrompt("phases/02-requirement-planning.md");
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(systemPrompt).append("\n\n");
-        sb.append(taskPrompt).append("\n\n");
-
-        if (toolSummary != null && !toolSummary.isEmpty()) {
-            sb.append("## 可用工具\n\n").append(toolSummary).append("\n\n");
-        }
-
-        sb.append("## 用户需求\n\n").append(userInput);
-
-        return sb.toString();
-    }
-
-    /**
-     * 构建子任务执行提示词
-     *
-     * @param userInput    用户输入
-     * @param subtask      当前子任务
-     * @param context      上下文信息（前序任务的结果）
-     * @return 完整提示词
-     */
-    public String buildExecutionPrompt(String userInput, String subtask, String context) {
-        String systemPrompt = promptLoader.loadPrompt("common/system-header.md");
-        String taskPrompt = promptLoader.loadPrompt("phases/03-execution.md");
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(systemPrompt).append("\n\n");
-        sb.append(taskPrompt).append("\n\n");
-        sb.append("## 用户原始需求\n\n").append(userInput).append("\n\n");
-        sb.append("## 当前子任务\n\n").append(subtask).append("\n\n");
-
-        if (context != null && !context.isEmpty()) {
-            sb.append("## 前序任务结果\n\n").append(context).append("\n\n");
-        }
-
-        return sb.toString();
-    }
-
-    /**
      * 构建系统提示词（包含工具介绍）
+     * <p>
+     * 新架构下只需要这一个基础系统提示词
      *
      * @return 完整系统提示词
      */
@@ -110,7 +52,7 @@ public class PromptDispatcher {
             | grep_file | 正则搜索 | 找方法使用 |
             | find_file | 文件查找 | 找类文件 |
             | read_file | 读取文件 | 看代码实现 |
-            | call_chain | 调用链分析 | 理调用关系 |
+            | call_chain | 调用链分析 | 理解调用关系 |
             | extract_xml | XML 提取 | 提取配置 |
 
             详细信息请参考工具文档。
@@ -118,7 +60,7 @@ public class PromptDispatcher {
     }
 
     /**
-     * 构建带变量的提示词
+     * 构建带变量的提示词（保留用于特殊场景）
      *
      * @param promptPath 提示词路径
      * @param variables  变量映射

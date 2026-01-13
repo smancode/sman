@@ -10,6 +10,11 @@ import java.util.List;
  * <p>
  * Session 代表一个完整的对话会话，包含多个 Message。
  * 每个 Message 可以包含多个 Part。
+ * <p>
+ * 极简设计（参考 OpenCode）：
+ * - 只有 3 种状态：IDLE, BUSY, RETRY
+ * - 移除 Goal 内部类，目标信息通过 GoalPart 表达
+ * - 所有状态通过 Part 系统管理
  */
 public class Session {
 
@@ -24,17 +29,12 @@ public class Session {
     private ProjectInfo projectInfo;
 
     /**
-     * 会话状态
+     * 会话状态（极简：只有 3 种）
      */
     private SessionStatus status;
 
     /**
-     * 当前目标
-     */
-    private Goal goal;
-
-    /**
-     * 消息列表
+     * 消息列表（线性消息流）
      */
     private List<Message> messages;
 
@@ -87,15 +87,6 @@ public class Session {
         touch();
     }
 
-    public Goal getGoal() {
-        return goal;
-    }
-
-    public void setGoal(Goal goal) {
-        this.goal = goal;
-        touch();
-    }
-
     public List<Message> getMessages() {
         return messages;
     }
@@ -141,6 +132,55 @@ public class Session {
         return null;
     }
 
+    /**
+     * 获取最新用户消息
+     *
+     * @return 最新用户消息，如果没有返回 null
+     */
+    public Message getLatestUserMessage() {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if (messages.get(i).isUserMessage()) {
+                return messages.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 检查是否有新的用户消息（在最新助手消息之后）
+     *
+     * @param lastAssistantId 最新助手消息 ID
+     * @return 是否有新用户消息
+     */
+    public boolean hasNewUserMessageAfter(String lastAssistantId) {
+        if (lastAssistantId == null) {
+            return !messages.isEmpty() && getLatestMessage().isUserMessage();
+        }
+
+        // 找到助手消息的位置
+        int assistantIndex = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i).getId().equals(lastAssistantId)) {
+                assistantIndex = i;
+                break;
+            }
+        }
+
+        // 如果找不到助手消息，返回 false
+        if (assistantIndex == -1) {
+            return false;
+        }
+
+        // 检查助手消息之后是否有用户消息
+        for (int i = assistantIndex + 1; i < messages.size(); i++) {
+            if (messages.get(i).isUserMessage()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public Instant getCreatedTime() {
         return createdTime;
     }
@@ -165,139 +205,32 @@ public class Session {
     }
 
     /**
-     * 开始工作
+     * 标记为忙碌
      */
-    public void startWorking() {
-        this.status = SessionStatus.WORKING;
+    public void markBusy() {
+        this.status = SessionStatus.BUSY;
         touch();
     }
 
     /**
-     * 完成工作
+     * 标记为空闲
      */
-    public void complete() {
-        this.status = SessionStatus.DONE;
+    public void markIdle() {
+        this.status = SessionStatus.IDLE;
         touch();
     }
 
     /**
-     * 取消工作
+     * 检查是否忙碌
      */
-    public void cancel() {
-        this.status = SessionStatus.CANCELLED;
-        touch();
+    public boolean isBusy() {
+        return status == SessionStatus.BUSY;
     }
 
     /**
-     * 检查是否在工作中
+     * 检查是否空闲
      */
-    public boolean isWorking() {
-        return status == SessionStatus.WORKING;
-    }
-
-    /**
-     * 检查是否已完成
-     */
-    public boolean isDone() {
-        return status == SessionStatus.DONE;
-    }
-
-    // ==================== Goal 内部类 ====================
-
-    /**
-     * 目标
-     */
-    public static class Goal {
-        /**
-         * 目标 ID
-         */
-        private String id;
-
-        /**
-         * 目标标题
-         */
-        private String title;
-
-        /**
-         * 目标描述
-         */
-        private String description;
-
-        /**
-         * 目标状态
-         */
-        private GoalStatus goalStatus;
-
-        /**
-         * 结论（完成时设置）
-         */
-        private String conclusion;
-
-        public Goal() {
-            this.goalStatus = GoalStatus.PENDING;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getTitle() {
-            return title;
-        }
-
-        public void setTitle(String title) {
-            this.title = title;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public GoalStatus getGoalStatus() {
-            return goalStatus;
-        }
-
-        public void setGoalStatus(GoalStatus goalStatus) {
-            this.goalStatus = goalStatus;
-        }
-
-        public String getConclusion() {
-            return conclusion;
-        }
-
-        public void setConclusion(String conclusion) {
-            this.conclusion = conclusion;
-            if (conclusion != null && !conclusion.isEmpty()) {
-                this.goalStatus = GoalStatus.COMPLETED;
-            }
-        }
-
-        /**
-         * 目标状态枚举
-         */
-        public enum GoalStatus {
-            /**
-             * 待处理
-             */
-            PENDING,
-
-            /**
-             * 进行中
-             */
-            IN_PROGRESS,
-
-            /**
-             * 已完成
-             */
-            COMPLETED
-        }
+    public boolean isIdle() {
+        return status == SessionStatus.IDLE;
     }
 }

@@ -4,10 +4,17 @@ spring:
   jackson:
     serialization:
       indent-output: true
+      write-dates-as-timestamps: false
     default-property-inclusion: non_null
+    time-format: iso
 
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 5
+    accept-count: 10
 
 # ==================== SmanCode 配置 ====================
 smancode:
@@ -25,22 +32,21 @@ llm:
     endpoints:
       # GLM-4.7（主模型）
       - base-url: https://open.bigmodel.cn/api/coding/paas/v4
-        api-key: ${GLM_API_KEY}
-        model: glm-4.7
-        max-tokens: 8192
+        api-key: ${GLM_API_KEY:}
+        model: GLM-4.7
+        max-tokens: 28192
         timeout: 60000
         enabled: true
       # DeepSeek V3.2（备选模型）
-      - base-url: https://api.siliconflow.cn/v1
-        api-key: ${DEEPSEEK_API_KEY}
-        model: Pro/deepseek-ai/DeepSeek-V3.2
-        max-tokens: 8192
-        timeout: 60000
-        enabled: false
-  retry:
-    max-retries: 3
-    base-delay: 1000
-    max-delay: 10000
+      #- base-url: https://api.siliconflow.cn/v1
+      #  api-key: ${DEEPSEEK_API_KEY:}
+      #  model: Pro/deepseek-ai/DeepSeek-V3.2
+      #  max-tokens: 8192
+      #  timeout: 60000
+      #  enabled: false
+    retry:
+      max-retries: 3
+      base-delay: 10000  # 10秒（指数退避基础值）
 
 # ==================== 向量搜索配置 ====================
 bank:
@@ -55,24 +61,40 @@ bank:
         enabled: ${BGE_RERANKER_ENABLED:true}
         base-url: ${BGE_RERANKER_BASE_URL:http://localhost:8001/v1}
         model: ${BGE_RERANKER_MODEL:BAAI/bge-reranker-v2-m3}
-
-# ==================== 项目配置 ====================
-bank:
-  analysis:
     static:
       project-root-path: ${ANALYSIS_PROJECT_PATH:/Users/liuchao/projects/autoloop}
 
 # ==================== WebSocket 配置 ====================
 websocket:
   path: /ws/analyze
+  thread-pool:
+    core-size: 32
+    max-size: 32
+    queue-capacity: 0  # 0 表示直接拒绝，不排队
 
 # ==================== 日志配置 ====================
 logging:
   level:
     root: INFO
     com.smancode.smanagent: DEBUG
-    ai.smancode.smanagent: DEBUG
     org.springframework.web: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# ==================== 项目缓存配置 ====================
+project:
+  # 项目路径（需要分析的代码路径）
+  path: ${PROJECT_PATH:/Users/liuchao/projects/smanagent}
+  # 项目Key（用于隔离不同项目的缓存）
+  key: ${PROJECT_KEY:smanagent}
+  # 缓存目录配置
+  cache:
+    base-dir: ./data
+    md5-dir: ./data/file-md5-cache
+    spoon-dir: ./data/spoon-snapshots
+  # 定时刷新配置
+  refresh:
+    enabled: ${PROJECT_REFRESH_ENABLED:true}
+    interval-minutes: 5
+    initial-delay-minutes: 1

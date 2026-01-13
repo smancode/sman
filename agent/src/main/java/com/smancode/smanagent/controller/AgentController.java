@@ -1,8 +1,8 @@
 package com.smancode.smanagent.controller;
 
 import com.smancode.smanagent.model.session.Session;
-import com.smancode.smanagent.smancode.core.SmanCodeOrchestrator;
-import com.smancode.smanagent.websocket.SessionManager;
+import com.smancode.smanagent.smancode.core.SmanAgentLoop;
+import com.smancode.smanagent.websocket.WebSocketSessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +24,10 @@ public class AgentController {
     private static final Logger logger = LoggerFactory.getLogger(AgentController.class);
 
     @Autowired
-    private SmanCodeOrchestrator orchestrator;
+    private SmanAgentLoop smanAgentLoop;
 
     @Autowired
-    private SessionManager sessionManager;
+    private WebSocketSessionManager sessionManager;
 
     /**
      * 创建新会话
@@ -87,7 +87,7 @@ public class AgentController {
             Session session = sessionManager.getOrCreateSession(sessionId, projectKey);
 
             // 处理请求
-            var responseMessage = orchestrator.process(session, userInput, part -> {
+            var responseMessage = smanAgentLoop.process(session, userInput, part -> {
                 // 同步模式下忽略 Part 推送
             });
 

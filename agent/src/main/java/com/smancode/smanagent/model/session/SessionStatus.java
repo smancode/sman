@@ -1,7 +1,12 @@
 package com.smancode.smanagent.model.session;
 
 /**
- * 会话状态
+ * 会话状态（极简设计）
+ * <p>
+ * 参考 OpenCode，只有 3 种状态：
+ * - IDLE: 空闲
+ * - BUSY: 忙碌（正在处理）
+ * - RETRY: 重试中
  */
 public enum SessionStatus {
     /**
@@ -10,17 +15,12 @@ public enum SessionStatus {
     IDLE,
 
     /**
-     * 工作中
+     * 忙碌（正在处理）
      */
-    WORKING,
+    BUSY,
 
     /**
-     * 已完成
+     * 重试中
      */
-    DONE,
-
-    /**
-     * 已取消
-     */
-    CANCELLED
+    RETRY
 }
