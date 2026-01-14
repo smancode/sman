@@ -50,17 +50,27 @@ public class SubTaskPart extends Part {
      */
     private String blockReason;
 
+    /**
+     * 依赖的其他 SubTask ID 列表
+     * <p>
+     * 如果不为空，必须等依赖的 SubTask 完成后才能执行。
+     * 用于支持并行执行：无依赖的 SubTask 可以并行跑。
+     */
+    private List<String> dependsOn;
+
     public SubTaskPart() {
         super();
         this.type = PartType.SUBTASK;
         this.status = SubTaskStatus.PENDING;
         this.requiredTools = new ArrayList<>();
+        this.dependsOn = new ArrayList<>();
     }
 
     public SubTaskPart(String id, String messageId, String sessionId) {
         super(id, messageId, sessionId, PartType.SUBTASK);
         this.status = SubTaskStatus.PENDING;
         this.requiredTools = new ArrayList<>();
+        this.dependsOn = new ArrayList<>();
     }
 
     public String getTarget() {
@@ -162,6 +172,37 @@ public class SubTaskPart extends Part {
     public void cancel() {
         this.status = SubTaskStatus.CANCELLED;
         touch();
+    }
+
+    public List<String> getDependsOn() {
+        return dependsOn;
+    }
+
+    public void setDependsOn(List<String> dependsOn) {
+        this.dependsOn = dependsOn != null ? dependsOn : new ArrayList<>();
+        touch();
+    }
+
+    /**
+     * 添加依赖
+     */
+    public void addDependency(String subTaskId) {
+        if (subTaskId != null && !subTaskId.isEmpty()) {
+            if (this.dependsOn == null || this.dependsOn.isEmpty()) {
+                this.dependsOn = new ArrayList<>();
+            }
+            if (!this.dependsOn.contains(subTaskId)) {
+                this.dependsOn.add(subTaskId);
+            }
+        }
+        touch();
+    }
+
+    /**
+     * 检查是否有依赖
+     */
+    public boolean hasDependencies() {
+        return dependsOn != null && !dependsOn.isEmpty();
     }
 
     /**

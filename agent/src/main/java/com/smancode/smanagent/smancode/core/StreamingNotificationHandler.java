@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smancode.smanagent.model.message.Message;
 import com.smancode.smanagent.model.part.Part;
 import com.smancode.smanagent.model.part.TextPart;
+import com.smancode.smanagent.model.part.ReasoningPart;
 import com.smancode.smanagent.model.part.ToolPart;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.smancode.llm.LlmService;
@@ -54,18 +55,18 @@ public class StreamingNotificationHandler {
             JsonNode json = llmService.jsonRequest(ackPrompt);
             String ackText = json.path("acknowledgment").asText("");
 
-            TextPart ackPart = new TextPart();
+            ReasoningPart ackPart = new ReasoningPart();
             ackPart.setSessionId(session.getId());
-            ackPart.setText("> 思考中... " + (ackText.isEmpty() ? "" : ackText + "\n"));
+            ackPart.setText(ackText.isEmpty() ? "思考中" : ackText);
             ackPart.touch();
             partPusher.accept(ackPart);
 
         } catch (Exception e) {
             logger.warn("生成确认消息失败", e);
             // 失败时使用默认确认
-            TextPart ackPart = new TextPart();
+            ReasoningPart ackPart = new ReasoningPart();
             ackPart.setSessionId(session.getId());
-            ackPart.setText("> 思考中... \n");
+            ackPart.setText("思考中");
             ackPart.touch();
             partPusher.accept(ackPart);
         }

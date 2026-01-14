@@ -30,6 +30,7 @@ object StyledMessageRenderer {
     private const val WARNING = "WARNING"
     private const val INFO = "INFO"
     private const val TOOL = "TOOL"
+    private const val CONCLUSION = "CONCLUSION"
 
     /**
      * 渲染 Part 到 JTextPane
@@ -37,17 +38,80 @@ object StyledMessageRenderer {
     fun renderToTextPane(part: PartData, textPane: JTextPane, colors: ColorPalette = ThemeColors.getCurrentColors()) {
         when (part.type) {
             PartType.TEXT -> {
-                // TEXT 使用 Markdown 渲染为 HTML
                 val text = (part.data["text"] as? String) ?: ""
-                val html = MarkdownRenderer.markdownToHtml(text)
-                val wrappedHtml = wrapHtml(html, false)
-                appendHtml(textPane, wrappedHtml)
+
+                // 检查是否是阶段性结论（以 "⏺ 阶段性结论" 或 "📊 阶段性结论" 开头）
+                if (text.startsWith("⏺ 阶段性结论") || text.startsWith("📊 阶段性结论")) {
+                    // 特殊渲染阶段性结论：只把"⏺ 阶段性结论 X:"部分染成紫色
+                    val colonIndex = text.indexOf(":")
+                    if (colonIndex > 0) {
+                        val prefix = text.substring(0, colonIndex + 1)  // "⏺ 阶段性结论 X:"
+                        val content = text.substring(colonIndex + 1)     // 后面的内容
+                        // 转义 HTML 特殊字符
+                        val escapedPrefix = prefix.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                        val escapedContent = content.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                        val html = """
+                            <div style="margin: 5px 0; text-align: left;">
+                                <span style="color: ${toHexString(colors.conclusion)};">$escapedPrefix</span><span style="color: ${toHexString(colors.textPrimary)};">$escapedContent</span>
+                            </div>
+                        """.trimIndent()
+                        appendHtml(textPane, html)
+                    } else {
+                        // 没有 ":" 的情况，全部紫色
+                        val html = """
+                            <div style="margin: 5px 0; text-align: left;">
+                                <span style="color: ${toHexString(colors.conclusion)};">$text</span>
+                            </div>
+                        """.trimIndent()
+                        appendHtml(textPane, html)
+                    }
+                } else {
+                    // 检查是否是工具摘要格式：toolName(params)\nline1\nline2
+                    // 特征：第一行包含函数调用格式，即 xxx(yyy)
+                    val lines = text.split("\n")
+                    val firstLine = lines.firstOrNull() ?: ""
+
+                    if (lines.size > 1 && firstLine.contains("(") && firstLine.contains(")")) {
+                        // 这是工具摘要格式，前端负责渲染
+                        val toolCallContent = firstLine  // toolName(params)
+                        val resultLines = lines.drop(1).filter { it.isNotBlank() }
+
+                        // 转义 HTML 特殊字符
+                        val escapedToolCall = toolCallContent.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+
+                        val html = StringBuilder()
+                        html.append("<div style=\"margin: 5px 0; text-align: left;\">")
+                        // 工具调用行
+                        html.append("<span style=\"color: ${toHexString(colors.codeFunction)};\">⏺ $escapedToolCall</span>")
+                        // 结果行（每行前面加 └─）
+                        resultLines.forEach { line ->
+                            val escapedLine = line.replace("&", "&amp;")
+                                .replace("<", "&lt;")
+                                .replace(">", "&gt;")
+                            html.append("<br><span style=\"color: ${toHexString(colors.textPrimary)};\">  └─ $escapedLine</span>")
+                        }
+                        html.append("</div>")
+                        appendHtml(textPane, html.toString())
+                    } else {
+                        // 普通 TEXT 使用 Markdown 渲染
+                        val htmlContent = MarkdownRenderer.markdownToHtml(text)
+                        val wrappedHtml = wrapHtml(htmlContent, false)
+                        appendHtml(textPane, wrappedHtml)
+                    }
+                }
             }
             PartType.REASONING -> {
-                // REASONING 显示为 "> 思考中"
+                // REASONING 显示为 "> " + 实际内容
+                val text = (part.data["text"] as? String) ?: "思考中"
                 val html = """
                     <div style="margin: 5px 0; text-align: left;">
-                        <span style="color: ${toHexString(colors.textSecondary)};">&gt; 思考中</span>
+                        <span style="color: ${toHexString(colors.textSecondary)};">&gt; $text</span>
                     </div>
                 """.trimIndent()
                 appendHtml(textPane, html)
@@ -114,6 +178,9 @@ object StyledMessageRenderer {
         result = result.replace(Regex("""\[TOOL\](.*?)\[RESET\]""")) { match ->
             "<span style=\"color: ${toHexString(colors.codeFunction)};\">${match.groupValues[1]}</span>"
         }
+        result = result.replace(Regex("""\[CONCLUSION\](.*?)\[RESET\]""")) { match ->
+            "<span style=\"color: ${toHexString(colors.conclusion)};\">${match.groupValues[1]}</span>"
+        }
 
         // 处理换行
         result = result.replace("\n", "<br>")
@@ -179,7 +246,7 @@ object StyledMessageRenderer {
                 } else {
                     ""
                 }
-                "⏺ [$TOOL]$toolName[RESET]($paramsStr)\n"
+                "⏺ <b style=\"color: #E5C07B;\">$toolName</b>($paramsStr)\n"
             }
             "RUNNING" -> {
                 // 不显示执行中状态，减少冗余
@@ -198,15 +265,15 @@ object StyledMessageRenderer {
                     results
                 }
 
-                // 每行结果前面加 └─
+                // 每行结果前面加 └─（与工具调用行对齐）
                 displayResults.forEach { result ->
-                    sb.append("  └─ $result\n")
+                    sb.append("    └─ $result\n")
                 }
                 sb.toString()
             }
             "ERROR" -> {
-                val error = part.data["error"] as? String ?: "执行失败"
-                "  └─ ($error)\n"
+                // ERROR 状态不显示，因为摘要 Part 已经包含了错误信息
+                ""
             }
             else -> {
                 val params = part.data["parameters"] as? Map<*, *>
@@ -215,7 +282,7 @@ object StyledMessageRenderer {
                 } else {
                     ""
                 }
-                "⏺ [$TOOL]$toolName[RESET]($paramsStr)\n"
+                "⏺ <b style=\"color: #E5C07B;\">$toolName</b>($paramsStr)\n"
             }
         }
     }

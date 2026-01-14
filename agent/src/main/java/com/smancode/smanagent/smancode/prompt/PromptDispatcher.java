@@ -33,8 +33,9 @@ public class PromptDispatcher {
     public String buildSystemPrompt() {
         String systemPrompt = promptLoader.loadPrompt("common/system-header.md");
         String toolIntroduction = promptLoader.loadPrompt("tools/tool-introduction.md");
+        String toolUsageGuidelines = promptLoader.loadPrompt("tools/tool-usage-guidelines.md");
 
-        return systemPrompt + "\n\n" + toolIntroduction;
+        return systemPrompt + "\n\n" + toolIntroduction + "\n\n" + toolUsageGuidelines;
     }
 
     /**
@@ -48,10 +49,10 @@ public class PromptDispatcher {
 
             | 工具 | 功能 | 使用场景 |
             |------|------|----------|
-            | semantic_search | 语义搜索 | 找功能实现 |
-            | grep_file | 正则搜索 | 找方法使用 |
-            | find_file | 文件查找 | 找类文件 |
-            | read_file | 读取文件 | 看代码实现 |
+            | **search** | **智能搜索（SubAgent）** | **万能入口，90%情况用这个** |
+            | read_file | 读取文件 | 已知类名时直接读取 |
+            | grep_file | 正则搜索 | 找方法使用位置 |
+            | find_file | 文件查找 | 按文件名模式查找 |
             | call_chain | 调用链分析 | 理解调用关系 |
             | extract_xml | XML 提取 | 提取配置 |
             | apply_change | 代码修改 | 应用代码修改 |

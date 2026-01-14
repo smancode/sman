@@ -35,7 +35,8 @@ public class ReadFileTool extends AbstractTool implements Tool {
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
-        params.put("relativePath", new ParameterDef("relativePath", String.class, true, "文件相对路径"));
+        params.put("simpleName", new ParameterDef("simpleName", String.class, false, "类名（系统自动查找文件，推荐使用）"));
+        params.put("relativePath", new ParameterDef("relativePath", String.class, false, "文件相对路径"));
         params.put("startLine", new ParameterDef("startLine", Integer.class, false, "开始行号（默认 1）", 1));
         params.put("endLine", new ParameterDef("endLine", Integer.class, false, "结束行号（默认 100）", 100));
         params.put("mode", new ParameterDef("mode", String.class, false, "执行模式：local/intellij", "intellij"));
@@ -47,10 +48,35 @@ public class ReadFileTool extends AbstractTool implements Tool {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 获取参数
+            // 优先使用 simpleName
+            String simpleName = (String) params.get("simpleName");
             String relativePath = (String) params.get("relativePath");
+
+            // 如果提供了 simpleName，自动查找文件
+            if (simpleName != null && !simpleName.trim().isEmpty()) {
+                logger.info("使用 simpleName 模式: simpleName={}", simpleName);
+                // 构造可能的文件路径模式
+                String filePattern = simpleName + ".java";
+
+                // 这里需要调用 find_file 工具的逻辑来查找文件
+                // 暂时返回提示信息
+                String displayContent = String.format(
+                    "⚠️ simpleName 模式暂未完全实现\n" +
+                    "请使用 find_file 先查找文件：\n" +
+                    "  filePattern: %s\n" +
+                    "然后使用 read_file 读取文件",
+                    filePattern
+                );
+
+                long duration = System.currentTimeMillis() - startTime;
+                ToolResult toolResult = ToolResult.success(null, "查找文件", displayContent);
+                toolResult.setExecutionTimeMs(duration);
+                return toolResult;
+            }
+
+            // 使用 relativePath 模式
             if (relativePath == null || relativePath.trim().isEmpty()) {
-                return ToolResult.failure("缺少 relativePath 参数");
+                return ToolResult.failure("缺少 relativePath 参数（或使用 simpleName 参数）");
             }
 
             int startLine = getOptInt(params, "startLine", 1);

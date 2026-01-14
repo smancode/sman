@@ -58,6 +58,9 @@ public class SmanAgentLoop {
     @Autowired
     private ContextCompactor contextCompactor;
 
+    @Autowired(required = false)
+    private com.smancode.smanagent.subagent.SearchSubAgent searchSubAgent;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -98,13 +101,28 @@ public class SmanAgentLoop {
             // 3. 标记会话为忙碌
             session.markBusy();
 
-            // 4. 主循环：调用 LLM 处理
+            // 4. 【预处理】调用 search 进行深度理解和知识加载
+            Part searchContextPart = performSearchPreprocessing(session, userInput, partPusher);
+            if (searchContextPart != null) {
+                // 将 search 结果作为上下文注入到会话
+                Message searchContextMessage = new Message();
+                searchContextMessage.setId(UUID.randomUUID().toString());
+                searchContextMessage.setSessionId(session.getId());
+                searchContextMessage.setRole(com.smancode.smanagent.model.message.Role.SYSTEM);
+                searchContextMessage.addPart(searchContextPart);
+                searchContextMessage.touch();
+                session.addMessage(searchContextMessage);
+
+                logger.info("Search 预处理完成，上下文已注入到会话");
+            }
+
+            // 5. 主循环：调用 LLM 处理
             Message assistantMessage = processWithLLM(session, partPusher);
 
-            // 5. 添加助手消息到会话
+            // 6. 添加助手消息到会话
             session.addMessage(assistantMessage);
 
-            // 6. 标记会话为空闲
+            // 7. 标记会话为空闲
             session.markIdle();
 
             return assistantMessage;
@@ -365,6 +383,230 @@ public class SmanAgentLoop {
         logger.info("工具执行完成: toolName={}, success={}, summaryLength={}",
                 toolName, result.isSuccess(),
                 result.getSummary() != null ? result.getSummary().length() : 0);
+    }
+
+    /**
+     * Search 预处理：深度理解和知识加载
+     * <p>
+     * 在主流程之前调用 search SubAgent，获取业务背景、代码入口等信息，
+     * 并将这些信息注入到会话上下文中，供主流程使用。
+     * <p>
+     * 智能判断：
+     * - 第一轮对话：执行 Search
+     * - 新主题对话：执行 Search
+     * - 追问/修改：跳过 Search（已有上下文）
+     *
+     * @param session    会话
+     * @param userInput  用户输入
+     * @param partPusher Part 推送器
+     * @return Search 上下文 Part（如果 search 成功），否则返回 null
+     */
+    private Part performSearchPreprocessing(Session session, String userInput, Consumer<Part> partPusher) {
+        if (searchSubAgent == null) {
+            logger.info("SearchSubAgent 未启用，跳过预处理");
+            return null;
+        }
+
+        // 智能判断：是否需要执行 Search
+        if (!shouldPerformSearch(session, userInput)) {
+            logger.info("智能判断：跳过 Search（追问/修改模式）");
+            return null;
+        }
+
+        try {
+            logger.info("开始 Search 预处理: userInput={}", userInput);
+
+            // 推送 reasoning 表示正在搜索
+            String partId = UUID.randomUUID().toString();
+            ReasoningPart reasoningPart = new ReasoningPart(partId, null, session.getId());
+            reasoningPart.setText("正在深度理解需求并加载相关业务知识和代码信息..");
+            reasoningPart.touch();
+            partPusher.accept(reasoningPart);
+
+            // 调用 SearchSubAgent
+            String projectKey = session.getProjectInfo() != null ?
+                    session.getProjectInfo().getProjectKey() : "default";
+            com.smancode.smanagent.subagent.SearchSubAgent.SearchResult searchResult =
+                    searchSubAgent.search(projectKey, userInput);
+
+            if (searchResult.isError()) {
+                logger.warn("Search 预处理失败: {}", searchResult.getErrorMessage());
+                return null;
+            }
+
+            // 构建上下文 Part
+            StringBuilder contextText = new StringBuilder();
+            contextText.append("## Search 预处理结果\n\n");
+
+            if (searchResult.getBusinessContext() != null) {
+                contextText.append("### 业务背景\n");
+                contextText.append(searchResult.getBusinessContext()).append("\n\n");
+            }
+
+            if (searchResult.getBusinessKnowledge() != null && !searchResult.getBusinessKnowledge().isEmpty()) {
+                contextText.append("### 业务知识\n");
+                for (String knowledge : searchResult.getBusinessKnowledge()) {
+                    contextText.append("- ").append(knowledge).append("\n");
+                }
+                contextText.append("\n");
+            }
+
+            if (searchResult.getCodeEntries() != null && !searchResult.getCodeEntries().isEmpty()) {
+                contextText.append("### 相关代码入口\n");
+                for (com.smancode.smanagent.subagent.SearchSubAgent.CodeEntry entry : searchResult.getCodeEntries()) {
+                    contextText.append("- ").append(entry.getClassName());
+                    if (entry.getMethod() != null) {
+                        contextText.append(".").append(entry.getMethod()).append("()");
+                    }
+                    if (entry.getReason() != null) {
+                        contextText.append(" (").append(entry.getReason()).append(")");
+                    }
+                    contextText.append("\n");
+                }
+                contextText.append("\n");
+            }
+
+            if (searchResult.getCodeRelations() != null) {
+                contextText.append("### 代码关系\n");
+                contextText.append(searchResult.getCodeRelations()).append("\n\n");
+            }
+
+            if (searchResult.getSummary() != null) {
+                contextText.append("### 总结\n");
+                contextText.append(searchResult.getSummary()).append("\n");
+            }
+
+            // 创建 TextPart 包含上下文信息
+            String contextPartId = UUID.randomUUID().toString();
+            TextPart contextPart = new TextPart(contextPartId, null, session.getId());
+            contextPart.setText(contextText.toString());
+            contextPart.touch();
+
+            logger.info("Search 预处理完成: contextLength={}", contextText.length());
+            return contextPart;
+
+        } catch (Exception e) {
+            logger.error("Search 预处理异常", e);
+            return null;
+        }
+    }
+
+    /**
+     * 智能判断是否需要执行 Search（LLM 驱动）
+     * <p>
+     * 使用 LLM 判断是否需要重新 Search，避免硬编码规则。
+     * <p>
+     * 判断逻辑交给 LLM：
+     * - 分析用户输入是"新主题"还是"追问/修改"
+     * - 新主题 → 需要 Search
+     * - 追问/修改 → 跳过 Search（已有上下文）
+     *
+     * @param session   会话
+     * @param userInput 用户输入
+     * @return true 表示需要 Search，false 表示跳过
+     */
+    private boolean shouldPerformSearch(Session session, String userInput) {
+        int messageCount = session.getMessages().size();
+
+        // 规则1: 第一轮对话（消息数 ≤ 2），直接 Search
+        if (messageCount <= 2) {
+            logger.debug("判断结果: 需要 Search（第一轮对话，messageCount={}）", messageCount);
+            return true;
+        }
+
+        // 规则2: 使用 LLM 判断（LLM 驱动）
+        try {
+            String judgmentPrompt = buildSearchJudgmentPrompt(session, userInput);
+            String judgmentSystem = buildSearchJudgmentSystem();
+
+            String response = llmService.jsonRequest(judgmentSystem, judgmentPrompt).asText();
+
+            // 解析 LLM 判断结果
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode json = mapper.readTree(response);
+
+            boolean needSearch = json.path("needSearch").asBoolean(true);  // 默认需要 Search
+            String reason = json.path("reason").asText("无原因");
+
+            logger.info("LLM 判断结果: needSearch={}, reason={}", needSearch, reason);
+            return needSearch;
+
+        } catch (Exception e) {
+            // LLM 判断失败，保守策略：执行 Search
+            logger.warn("LLM 判断失败，保守策略：执行 Search。error={}", e.getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * 构建 Search 判断的系统提示词
+     */
+    private String buildSearchJudgmentSystem() {
+        return """
+                # Search 判断专家
+
+                你需要判断用户输入是否需要重新执行 Search。
+
+                ## 判断标准
+
+                1. **新主题**: 用户提出了全新的问题或需求 → needSearch = true
+                   - 例如: "支付流程是怎样的？"
+                   - 例如: "用户认证怎么实现的？"
+
+                2. **追问/修改**: 用户基于当前对话的补充或修改 → needSearch = false
+                   - 例如: "把浮层颜色改成红色"
+                   - 例如: "另外，还需要添加关闭按钮"
+                   - 例如: "不对，应该是会话级上限3次"
+
+                ## 输出格式
+
+                请严格按照以下 JSON 格式输出：
+
+                ```json
+                {
+                  "needSearch": true/false,
+                  "reason": "判断原因（用中文简要说明）"
+                }
+                ```
+
+                ## 注意事项
+
+                - 优先复用已有上下文，避免重复 Search
+                - 当不确定时，选择 needSearch = true（更安全）
+                """;
+    }
+
+    /**
+     * 构建 Search 判断的用户提示词
+     */
+    private String buildSearchJudgmentPrompt(Session session, String userInput) {
+        // 获取最近几条消息作为上下文
+        java.util.List<com.smancode.smanagent.model.message.Message> recentMessages = session.getMessages();
+        int startIdx = Math.max(0, recentMessages.size() - 6);  // 最近 3 轮对话
+        java.util.List<com.smancode.smanagent.model.message.Message> contextMessages =
+                recentMessages.subList(startIdx, recentMessages.size());
+
+        StringBuilder context = new StringBuilder();
+        context.append("## 最近对话历史\n\n");
+        for (com.smancode.smanagent.model.message.Message msg : contextMessages) {
+            context.append("**").append(msg.getRole()).append("**: ");
+            for (Part part : msg.getParts()) {
+                if (part instanceof TextPart) {
+                    context.append(((TextPart) part).getText());
+                } else if (part instanceof ReasoningPart) {
+                    context.append("[思考: ").append(((ReasoningPart) part).getText()).append("]");
+                }
+            }
+            context.append("\n\n");
+        }
+
+        context.append("## 当前用户输入\n\n");
+        context.append(userInput).append("\n\n");
+
+        context.append("## 任务\n\n");
+        context.append("请基于对话历史和当前用户输入，判断是否需要重新执行 Search。");
+
+        return context.toString();
     }
 
     /**

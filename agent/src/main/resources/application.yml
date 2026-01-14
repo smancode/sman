@@ -72,6 +72,14 @@ websocket:
     max-size: 32
     queue-capacity: 0  # 0 表示直接拒绝，不排队
 
+# ==================== SubTask 配置 ====================
+subtask:
+  thread-pool:
+    core-size: 8      # 核心线程数
+    max-size: 16      # 最大线程数
+    queue-capacity: 100  # 队列容量
+  max-internal-iterations: 3  # SubTask 内部 LLM 最大迭代次数
+
 # ==================== 日志配置 ====================
 logging:
   level:

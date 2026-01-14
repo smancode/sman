@@ -142,27 +142,30 @@ public class SubTaskExecutor {
 
     /**
      * 创建摘要 Part
+     * <p>
+     * 返回结构化数据，不包含任何显示格式（⏺、└─ 等由前端添加）
      */
     private Part createSummaryPart(ToolPart toolPart, String summary, ToolResult fullResult) {
-        // 构建工具调用行：⏺ toolName(param1, param2)
+        // 创建摘要文本 Part（纯数据，不包含显示格式）
+        // 前端会识别这种格式并渲染：toolName(params)\nline1\nline2\n...
         StringBuilder sb = new StringBuilder();
-        sb.append("⏺ ").append(toolPart.getToolName());
+        sb.append(toolPart.getToolName());
 
         // 添加参数（简化格式）
         Map<String, Object> params = toolPart.getParameters();
         if (params != null && !params.isEmpty()) {
-            // 将参数转换为简短字符串，如 (VectorSearchService.java)
             String paramsStr = formatParamsForTitle(params);
             sb.append("(").append(paramsStr).append(")");
         }
         sb.append("\n");
 
-        // 添加摘要内容，每行前面加 └─
+        // 添加摘要内容（纯文本行，不添加 └─ 前缀）
         if (summary != null && !summary.isEmpty()) {
             String[] lines = summary.split("\n");
             for (String line : lines) {
-                if (!line.trim().isEmpty()) {
-                    sb.append("  └─ ").append(line).append("\n");
+                String trimmedLine = line.trim();
+                if (!trimmedLine.isEmpty() && !isRedundantSummaryLine(trimmedLine, params)) {
+                    sb.append(trimmedLine).append("\n");
                 }
             }
         }
@@ -174,6 +177,41 @@ public class SubTaskExecutor {
         textPart.touch();
 
         return textPart;
+    }
+
+    /**
+     * 检查摘要行是否与参数重复（冗余）
+     * 例如："查询: VectorSearchService" 当参数中有 query=VectorSearchService 时就是冗余的
+     */
+    private boolean isRedundantSummaryLine(String line, Map<String, Object> params) {
+        if (params == null || params.isEmpty()) {
+            return false;
+        }
+
+        // 检查是否是 "key: value" 格式
+        if (!line.contains(":")) {
+            return false;
+        }
+
+        // 提取 key 和 value
+        int colonIndex = line.indexOf(':');
+        String lineKey = line.substring(0, colonIndex).trim().toLowerCase();
+        String lineValue = line.substring(colonIndex + 1).trim().toLowerCase();
+
+        // 检查参数中是否有相同的 key 和 value
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            String paramKey = entry.getKey().toLowerCase();
+            String paramValue = entry.getValue() != null ? entry.getValue().toString().toLowerCase() : "";
+
+            // 如果 key 匹配且 value 也匹配（或 value 包含在参数值中），认为是冗余
+            if (lineKey.equals(paramKey) && !paramValue.isEmpty()) {
+                if (lineValue.equals(paramValue) || paramValue.contains(lineValue) || lineValue.contains(paramValue)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

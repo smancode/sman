@@ -29,17 +29,17 @@ public class ApplyChangeTool extends AbstractTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "应用代码修改";
+        return "应用代码修改（替换现有内容或创建新文件）";
     }
 
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
         params.put("relativePath", new ParameterDef("relativePath", String.class, true, "文件相对路径"));
-        params.put("searchContent", new ParameterDef("searchContent", String.class, true, "搜索内容"));
-        params.put("replaceContent", new ParameterDef("replaceContent", String.class, true, "替换内容"));
+        params.put("mode", new ParameterDef("mode", String.class, false, "修改模式：replace(替换)/create(新建)", "replace"));
+        params.put("newContent", new ParameterDef("newContent", String.class, true, "新内容"));
+        params.put("searchContent", new ParameterDef("searchContent", String.class, false, "搜索内容（replace 模式必须）"));
         params.put("description", new ParameterDef("description", String.class, false, "修改描述"));
-        params.put("mode", new ParameterDef("mode", String.class, false, "执行模式：local/intellij", "intellij"));
         return params;
     }
 

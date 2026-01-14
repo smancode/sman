@@ -56,6 +56,9 @@ interface ColorPalette {
     val warning: Color
     val info: Color
 
+    // 阶段性结论颜色
+    val conclusion: Color
+
     // 代码语法高亮颜色 (基于 IntelliJ Darcula / Light)
     val codeKeyword: Color
     val codeString: Color
@@ -93,6 +96,7 @@ object DarkColors : ColorPalette {
     override val error = Color(0xFF6B68)          // #FF6B68 - 错误红
     override val warning = Color(0xFFC66D)         // #FFC66D - 警告橙
     override val info = Color(0x61AFEF)           // #61AFEF - 信息蓝
+    override val conclusion = Color(0xC678DD)     // #C678DD - 阶段性结论紫
 
     // 代码语法高亮 (Darcula 配色)
     override val codeKeyword = Color(0xC678DD)    // #C678DD - 关键字 (紫色)
@@ -130,6 +134,7 @@ object LightColors : ColorPalette {
     override val error = Color(0xE45649)          // #E45649 - 错误红 (稍暗)
     override val warning = Color(0xFFA500)         // #FFA500 - 警告橙
     override val info = Color(0x0066CC)           // #0066CC - 信息蓝
+    override val conclusion = Color(0x6F42C1)     // #6F42C1 - 阶段性结论紫
 
     // 代码语法高亮 (IntelliJ Light 配色)
     override val codeKeyword = Color(0x0000FF)    // #0000FF - 关键字 (蓝色)

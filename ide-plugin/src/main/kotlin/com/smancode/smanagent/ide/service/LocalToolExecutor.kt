@@ -136,27 +136,103 @@ class LocalToolExecutor(private val project: Project) {
      * 读取文件
      */
     private fun executeReadFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        // 检查 relativePath 参数
         val relativePath = parameters["relativePath"]?.toString()
             ?: parameters["path"]?.toString()
-            ?: return ToolResult(false, "缺少 relativePath 参数")
-        
+
+        // 获取行号参数
+        val startLine = (parameters["startLine"] as? Number)?.toInt() ?: 1
+        val endLine = (parameters["endLine"] as? Number)?.toInt() ?: 100
+
+        // 如果没有 relativePath，检查是否有 simpleName
+        val actualPath = if (relativePath == null) {
+            val simpleName = parameters["simpleName"]?.toString()
+            if (simpleName == null) {
+                return ToolResult(false, "缺少 relativePath 或 simpleName 参数")
+            }
+
+            // 使用 simpleName 搜索文件（支持任意文件类型）
+            logger.info("使用 simpleName 搜索文件: $simpleName")
+
+            // 先尝试带扩展名的搜索
+            val searchResult = executeFindFile(mapOf("pattern" to simpleName), projectPath)
+
+            // 如果没找到，尝试添加常见的扩展名
+            val actualSearchResult = if (!searchResult.success) {
+                val extensions = listOf(".java", ".xml", ".kt", ".js", ".ts", ".jsx", ".tsx", ".py", ".go", ".rs", ".c", ".cpp", ".h", ".hpp", ".md", ".json", ".yaml", ".yml", ".properties")
+                var found: ToolResult? = null
+                for (ext in extensions) {
+                    val result = executeFindFile(mapOf("pattern" to "$simpleName$ext"), projectPath)
+                    if (result.success) {
+                        found = result
+                        break
+                    }
+                }
+                found ?: searchResult
+            } else {
+                searchResult
+            }
+
+            if (!actualSearchResult.success) {
+                return ToolResult(false, "未找到文件: $simpleName")
+            }
+
+            // 从搜索结果中提取第一个文件的路径
+            val searchContent = actualSearchResult.result.toString()
+            val pathMatch = Regex("- `([^`]+)`").find(searchContent)
+            if (pathMatch == null) {
+                return ToolResult(false, "搜索结果解析失败")
+            }
+            pathMatch.groupValues[1]
+        } else {
+            relativePath
+        }
+
         val basePath = projectPath ?: project.basePath ?: ""
-        val file = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
-        
+        val file = if (File(actualPath).isAbsolute) File(actualPath) else File(basePath, actualPath)
+
         if (!file.exists()) {
             return ToolResult(false, "文件不存在: ${file.absolutePath}")
         }
-        
+
         return ReadAction.compute<ToolResult, Exception> {
             val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
                 ?: return@compute ToolResult(false, "无法找到文件: ${file.absolutePath}")
-            
+
             val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
                 ?: return@compute ToolResult(false, "无法读取文件: ${file.absolutePath}")
-            
+
             val content = psiFile.text
-            
-            ToolResult(true, content)
+            val allLines = content.lines()
+            val totalLines = allLines.size
+
+            // 如果用户没有指定行号，使用默认值
+            val actualStartLine = if (relativePath == null && startLine == 1 && endLine == 100) 1 else startLine
+            val actualEndLine = if (relativePath == null && startLine == 1 && endLine == 100) 100 else endLine
+
+            // 转换为 0-based 索引
+            val startIndex = (actualStartLine - 1).coerceAtLeast(0)
+            val endIndex = actualEndLine.coerceAtMost(totalLines)
+
+            val selectedLines = if (startIndex >= totalLines) {
+                listOf("// 文件只有 $totalLines 行，请求的起始行 $actualStartLine 超出范围")
+            } else {
+                allLines.toList().subList(startIndex, endIndex)
+            }
+
+            val sb = StringBuilder()
+            sb.append(selectedLines.joinToString("\n"))
+
+            // 如果还有更多内容，提示用户
+            if (endIndex < totalLines) {
+                val remainingLines = totalLines - endIndex
+                sb.append("\n\n... (文件共 $totalLines 行，当前显示第 ${actualStartLine}-$endIndex 行，还有 $remainingLines 行未显示)")
+                sb.append("\n提示：可以使用 startLine=${endIndex + 1}, endLine=${Math.min(endIndex + 100, totalLines)} 继续读取")
+            } else if (startIndex > 0 || endIndex < totalLines) {
+                sb.append("\n\n(文件共 $totalLines 行，当前显示第 ${actualStartLine}-$endIndex 行)")
+            }
+
+            ToolResult(true, sb.toString())
         }
     }
     
@@ -310,54 +386,73 @@ class LocalToolExecutor(private val project: Project) {
     
     /**
      * 应用代码修改
+     * 支持两种模式：
+     * 1. replace: 替换现有内容（需要 searchContent）
+     * 2. create: 创建新文件
      */
     private fun executeApplyChange(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
         val relativePath = parameters["relativePath"]?.toString()
             ?: return ToolResult(false, "缺少 relativePath 参数")
-        
-        val searchContent = parameters["searchContent"]?.toString()
-            ?: return ToolResult(false, "缺少 searchContent 参数")
-        
-        val replaceContent = parameters["replaceContent"]?.toString()
-            ?: return ToolResult(false, "缺少 replaceContent 参数")
-        
+
+        val mode = parameters["mode"]?.toString()?.lowercase() ?: "replace"
+        val newContent = parameters["newContent"]?.toString()
+            ?: return ToolResult(false, "缺少 newContent 参数")
+
         val description = parameters["description"]?.toString() ?: "代码修改"
-        
+
         val basePath = projectPath ?: project.basePath ?: ""
         val file = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
-        
-        if (!file.exists()) {
-            return ToolResult(false, "文件不存在: ${file.absolutePath}")
+
+        // 创建新文件模式
+        if (mode == "create") {
+            if (file.exists()) {
+                return ToolResult(false, "文件已存在: ${file.absolutePath}，请使用 replace 模式")
+            }
+
+            return com.intellij.openapi.application.WriteAction.compute<ToolResult, Exception> {
+                // 确保父目录存在
+                file.parentFile?.mkdirs()
+
+                // 创建文件并写入内容
+                file.writeText(newContent)
+
+                // 刷新文件系统
+                LocalFileSystem.getInstance().refreshAndFindFileByPath(file.absolutePath)
+
+                val sb = StringBuilder()
+                sb.append("## ✅ 文件创建成功\n\n")
+                sb.append("**文件**: `$relativePath`\n")
+                sb.append("**描述**: $description\n\n")
+                sb.append("新文件已创建并保存。\n")
+
+                ToolResult(true, sb.toString())
+            }
         }
-        
-        return ReadAction.compute<ToolResult, Exception> {
-            val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
-                ?: return@compute ToolResult(false, "无法找到文件: ${file.absolutePath}")
-            
-            val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-                ?: return@compute ToolResult(false, "无法读取文件: ${file.absolutePath}")
-            
-            val content = psiFile.text
-            
-            // 查找并替换
-            if (!content.contains(searchContent)) {
-                return@compute ToolResult(false, "未找到要替换的内容")
+
+        // 修改现有文件模式
+        if (!file.exists()) {
+            return ToolResult(false, "文件不存在: ${file.absolutePath}，如需创建新文件请使用 mode: \"create\"")
+        }
+
+        val searchContent = parameters["searchContent"]?.toString()
+            ?: return ToolResult(false, "replace 模式缺少 searchContent 参数")
+
+        // 使用 CodeEditService 进行模糊匹配和自动格式化
+        val codeEditService = CodeEditService(project)
+
+        return when (val result = codeEditService.applyChange(relativePath, searchContent, newContent, basePath)) {
+            is CodeEditService.EditResult.Success -> {
+                val sb = StringBuilder()
+                sb.append("## ✅ 代码修改成功\n\n")
+                sb.append("**文件**: `$relativePath`\n")
+                sb.append("**描述**: $description\n\n")
+                sb.append("修改已应用并保存，已自动格式化修改的部分。\n")
+
+                ToolResult(true, sb.toString())
             }
-            
-            val newContent = content.replace(searchContent, replaceContent)
-            
-            // 应用修改
-            com.intellij.openapi.application.WriteAction.run<Exception> {
-                virtualFile.setBinaryContent(newContent.toByteArray())
+            is CodeEditService.EditResult.Failure -> {
+                ToolResult(false, result.error)
             }
-            
-            val sb = StringBuilder()
-            sb.append("## ✅ 代码修改成功\n\n")
-            sb.append("**文件**: `$relativePath`\n")
-            sb.append("**描述**: $description\n\n")
-            sb.append("修改已应用并保存。\n")
-            
-            ToolResult(true, sb.toString())
         }
     }
     
