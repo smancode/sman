@@ -28,6 +28,11 @@ public class ToolPart extends Part {
     private com.smancode.smanagent.tools.ToolResult result;
 
     /**
+     * LLM 生成的摘要（由 LLM 基于完整结果生成）
+     */
+    private String summary;
+
+    /**
      * 当前状态（极简枚举）
      */
     private ToolState state;
@@ -68,6 +73,15 @@ public class ToolPart extends Part {
 
     public void setResult(com.smancode.smanagent.tools.ToolResult result) {
         this.result = result;
+        touch();
+    }
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
         touch();
     }
 

@@ -127,6 +127,14 @@ public class SearchTool extends AbstractTool implements Tool {
                     resultContent.append(subAgentResult.getSummary()).append("\n");
                 }
 
+                logger.info("【SearchTool结果】businessContext={}, businessKnowledge数量={}, codeEntries数量={}, codeRelations长度={}, summary长度={}, resultContent长度={}",
+                        subAgentResult.getBusinessContext(),
+                        subAgentResult.getBusinessKnowledge() != null ? subAgentResult.getBusinessKnowledge().size() : 0,
+                        subAgentResult.getCodeEntries() != null ? subAgentResult.getCodeEntries().size() : 0,
+                        subAgentResult.getCodeRelations() != null ? subAgentResult.getCodeRelations().length() : 0,
+                        subAgentResult.getSummary() != null ? subAgentResult.getSummary().length() : 0,
+                        resultContent.length());
+
                 ToolResult toolResult = ToolResult.success(
                         resultContent.toString(),
                         "智能搜索结果",

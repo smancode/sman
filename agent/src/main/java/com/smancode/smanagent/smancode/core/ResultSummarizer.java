@@ -34,36 +34,77 @@ public class ResultSummarizer {
      * @return 摘要文本
      */
     public String summarize(String toolName, ToolResult result, Session parentSession) {
+        logger.info("【ResultSummarizer开始】toolName={}, success={}", toolName, result.isSuccess());
+
         if (!result.isSuccess()) {
-            return "执行失败: " + (result.getError() != null ? result.getError() : "未知错误");
+            String errorSummary = "执行失败: " + (result.getError() != null ? result.getError() : "未知错误");
+            logger.info("【ResultSummarizer失败】toolName={}, summary={}", toolName, errorSummary);
+            return errorSummary;
         }
 
         Object data = result.getData();
+        logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
+                toolName,
+                data != null ? data.getClass().getSimpleName() : "null",
+                data);
+
         if (data == null) {
+            logger.warn("【ResultSummarizer空数据】toolName={}, data为null，返回默认消息", toolName);
             return "执行完成，无返回数据";
         }
 
         String dataStr = String.valueOf(data);
+        logger.info("【ResultSummarizer数据字符串】toolName={}, data长度={}", toolName, dataStr.length());
 
         // 根据数据大小决定压缩策略
         int dataSize = dataStr.length();
 
         if (dataSize < 500) {
-            // 小数据：直接返回
-            return dataStr;
+            // 小数据：直接返回（添加路径信息）
+            String summary = enrichWithPath(result, dataStr);
+            logger.info("【ResultSummarizer小数据】toolName={}, summary长度={}", toolName, summary.length());
+            return summary;
         } else if (dataSize < 5000) {
             // 中等数据：简单压缩
-            return simpleCompress(toolName, dataStr);
+            String compressed = simpleCompress(toolName, dataStr, result);
+            String summary = enrichWithPath(result, compressed);
+            logger.info("【ResultSummarizer中等数据】toolName={}, 压缩后长度={}", toolName, summary.length());
+            return summary;
         } else {
             // 大数据：LLM 智能压缩
-            return llmCompress(toolName, dataStr, parentSession);
+            logger.info("【ResultSummarizer大数据】toolName={}, 使用LLM压缩", toolName);
+            return llmCompress(toolName, dataStr, parentSession, result);
         }
+    }
+
+    /**
+     * 为摘要添加文件路径信息
+     */
+    private String enrichWithPath(ToolResult result, String content) {
+        // 如果有相对路径，在摘要开头添加
+        if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("路径: ").append(result.getRelativePath()).append("\n");
+            sb.append(content);
+            return sb.toString();
+        }
+
+        // 如果有相关文件列表，在摘要开头添加
+        if (result.getRelatedFilePaths() != null && !result.getRelatedFilePaths().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("找到文件: ").append(result.getRelatedFilePaths().size()).append(" 个\n");
+            result.getRelatedFilePaths().forEach(path -> sb.append("  - ").append(path).append("\n"));
+            sb.append("\n").append(content);
+            return sb.toString();
+        }
+
+        return content;
     }
 
     /**
      * 简单压缩（针对中等数据）
      */
-    private String simpleCompress(String toolName, String data) {
+    private String simpleCompress(String toolName, String data, ToolResult result) {
         return switch (toolName) {
             case "semantic_search" -> {
                 // 提取关键信息：文件路径 + 相关性分数
@@ -95,6 +136,13 @@ public class ResultSummarizer {
             case "read_file" -> {
                 // 提取类/方法签名和关键逻辑
                 StringBuilder sb = new StringBuilder();
+
+                // 新增：优先使用 relativePath
+                logger.info("【read_file压缩】relativePath={}", result.getRelativePath());
+                if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
+                    sb.append("路径: ").append(result.getRelativePath()).append("\n");
+                }
+
                 String[] lines = data.split("\n");
                 boolean inComment = false;
 
@@ -156,7 +204,7 @@ public class ResultSummarizer {
     /**
      * LLM 智能压缩（针对大数据）
      */
-    private String llmCompress(String toolName, String data, Session parentSession) {
+    private String llmCompress(String toolName, String data, Session parentSession, ToolResult result) {
         try {
             // 构建压缩提示词
             String prompt = buildCompressionPrompt(toolName, data, parentSession);
@@ -169,15 +217,15 @@ public class ResultSummarizer {
             String summary = json.path("summary").asText("");
 
             if (!summary.isEmpty()) {
-                return summary;
+                return enrichWithPath(result, summary);
             }
 
             // 降级到简单压缩
-            return simpleCompress(toolName, data);
+            return simpleCompress(toolName, data, result);
 
         } catch (Exception e) {
             logger.warn("LLM 压缩失败，降级到简单压缩: toolName={}", toolName, e);
-            return simpleCompress(toolName, data);
+            return simpleCompress(toolName, data, result);
         }
     }
 

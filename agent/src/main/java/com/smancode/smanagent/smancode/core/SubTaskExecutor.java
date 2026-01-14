@@ -81,45 +81,38 @@ public class SubTaskExecutor {
                     fullResult.getDisplayContent() != null ? fullResult.getDisplayContent().length() : 0,
                     fullResult.getError(), fullResult.getDisplayContent());
 
-            // 4. 生成摘要（关键！）
-            String summary = resultSummarizer.summarize(toolName, fullResult, parentSession);
+            logger.info("【工具原始数据】toolName={}, data类型={}, data长度={}, data内容={}",
+                    toolName,
+                    fullResult.getData() != null ? fullResult.getData().getClass().getSimpleName() : "null",
+                    fullResult.getData() != null ? fullResult.getData().toString().length() : 0,
+                    fullResult.getData());
 
-            // 5. 创建压缩后的结果
-            ToolResult compressedResult = ToolResult.success(
-                    summary,                      // 只保留摘要
-                    fullResult.getDisplayTitle(),
-                    null                         // 清理完整内容
-            );
-            compressedResult.setSuccess(fullResult.isSuccess());
-            if (!fullResult.isSuccess()) {
-                compressedResult.setError(fullResult.getError());
-            }
+            // 4. 保留完整结果（不压缩），让 LLM 处理
+            // 注意：不在这里生成摘要，让 LLM 在下一次调用时基于完整结果生成摘要
 
-            // 6. 更新工具状态并发送
+            // 5. 更新工具状态并发送（保留完整结果）
             if (fullResult.isSuccess()) {
                 toolPart.setState(ToolPart.ToolState.COMPLETED);
             } else {
                 toolPart.setState(ToolPart.ToolState.ERROR);
             }
-            toolPart.setResult(compressedResult);
+            toolPart.setResult(fullResult);  // 保留完整结果
             toolPart.touch();
             partPusher.accept(toolPart);
 
-            // 7. 推送摘要（而不是完整结果）
-            Part summaryPart = createSummaryPart(toolPart, summary, fullResult);
+            // 6. 推送工具摘要（用于前端显示，不影响 LLM 处理）
+            String displaySummary = resultSummarizer.summarize(toolName, fullResult, parentSession);
+            Part summaryPart = createSummaryPart(toolPart, displaySummary, fullResult);
             partPusher.accept(summaryPart);
 
-            // 11. 推送阶段性结论
-            pushIntermediateConclusion(toolPart, summary, parentSession, partPusher);
-
-            // 12. 清理子会话
+            // 8. 清理子会话
             sessionManager.cleanupChildSession(childSession.getId());
 
             return SubTaskResult.builder()
                     .toolName(toolName)
                     .success(fullResult.isSuccess())
-                    .summary(summary)
-                    .displayTitle(compressedResult.getDisplayTitle())
+                    .summary(displaySummary)  // 只用于前端显示
+                    .displayTitle(fullResult.getDisplayTitle())
                     .build();
 
         } catch (Exception e) {

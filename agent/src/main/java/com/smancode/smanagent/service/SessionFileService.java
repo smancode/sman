@@ -1,5 +1,6 @@
 package com.smancode.smanagent.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -34,6 +35,8 @@ public class SessionFileService {
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         // 美化输出
         this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        // 忽略未知属性（兼容旧版本会话文件）
+        this.objectMapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 
     /**

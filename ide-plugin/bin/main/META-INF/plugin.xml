@@ -1,0 +1,34 @@
+<!-- Plugin Configuration File -->
+<idea-plugin>
+    <id>com.smancode.smanagent</id>
+    <name>SmanAgent</name>
+    <vendor email="support@smancode.ai" url="https://smancode.ai">SmanCode AI</vendor>
+
+    <description><![CDATA[
+        智能代码分析助手 - 支持语义搜索、调用链分析、代码理解等功能
+        CLI 风格界面，平铺直叙，清晰高效。
+    ]]></description>
+
+    <!-- Product and plugin compatibility -->
+    <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Tool Window -->
+        <toolWindow id="SmanAgent"
+                    factoryClass="com.smancode.smanagent.ide.ui.SmanAgentToolWindowFactory"
+                    anchor="right"
+                    icon="/META-INF/icon.png"
+                    secondary="false"/>
+
+        <!-- Project Service -->
+        <projectService serviceImplementation="com.smancode.smanagent.ide.service.StorageService"/>
+
+        <!-- Startup Activity -->
+        <startupActivity class="com.smancode.smanagent.ide.SmanAgentPlugin"/>
+    </extensions>
+
+    <actions>
+        <!-- Actions can be added here -->
+    </actions>
+</idea-plugin>

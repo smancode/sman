@@ -78,6 +78,12 @@ CASE G: User already knows the EXACT class name (skip `search`)
 - User provides a file path
 - You need to see the full implementation
 
+**⚠️ CRITICAL - Pay attention to file path in result**:
+- `read_file` result will include a line like: `路径: agent/src/main/java/com/smancode/smanagent/tools/read/ReadFileTool.java`
+- **USE THIS EXACT PATH** when calling `apply_change` later
+- DO NOT convert to package format (e.g., `com/smancode/...`)
+- Copy the path EXACTLY as shown in the result
+
 **Supported File Types**:
 - **Java**: `.java` (e.g., `"PaymentService"`)
 - **Kotlin**: `.kt` (e.g., `"PaymentService"`)
@@ -432,13 +438,19 @@ CASE G: User already knows the EXACT class name (skip `search`)
 
 **Parameters**:
 - `relativePath` (required): File path
-  - Example: `"service/PaymentService.java"`, `"src/main/resources/application.yml"`
+  - **CRITICAL**: Use the EXACT path returned by `find_file` or shown in `read_file` result
+  - Example: `"agent/src/main/java/com/smancode/smanagent/tools/read/ReadFileTool.java"`
+  - DO NOT convert to package format (e.g., `com/smancode/...`)
+  - DO NOT remove directory prefixes (e.g., `agent/src/main/java/`)
 - `mode` (optional): Modification mode
   - `"replace"` - Replace existing code (default)
   - `"create"` - Create new file
 - `newContent` (required): New code content
 - `searchContent` (required for replace mode): Exact code to replace
-  - MUST match exactly, including spaces and indentation
+  - **CRITICAL**: MUST preserve original line breaks and indentation
+  - Copy EXACTLY from `read_file` result, including all newlines and spaces
+  - DO NOT compress multiple lines into one line
+  - DO NOT remove indentation or line breaks
 - `description` (optional): Change description
 
 **Examples**:
@@ -501,8 +513,12 @@ CASE G: User already knows the EXACT class name (skip `search`)
 **⚠️ Common Mistakes**:
 - ❌ Not using `read_file` first → `searchContent` won't match
 - ❌ Truncated `searchContent` → Must include full method/expression
+- ❌ Compressing multiple lines into one line → MUST preserve line breaks!
+- ❌ Converting path to package format → Use EXACT path from `find_file`
+  - Wrong: `"com/smancode/smanagent/tools/read/ReadFileTool.java"`
+  - Correct: `"agent/src/main/java/com/smancode/smanagent/tools/read/ReadFileTool.java"`
 - ❌ Using `replace` for new files → Use `mode: "create"` instead
-- ✅ **BEST PRACTICE**: `read_file` → copy exact code → `apply_change`
+- ✅ **BEST PRACTICE**: `find_file` (get exact path) → `read_file` (copy exact code) → `apply_change`
 
 ---
 

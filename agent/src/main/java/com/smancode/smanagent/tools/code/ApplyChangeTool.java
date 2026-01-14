@@ -38,7 +38,7 @@ public class ApplyChangeTool extends AbstractTool implements Tool {
         params.put("relativePath", new ParameterDef("relativePath", String.class, true, "文件相对路径"));
         params.put("mode", new ParameterDef("mode", String.class, false, "修改模式：replace(替换)/create(新建)", "replace"));
         params.put("newContent", new ParameterDef("newContent", String.class, true, "新内容"));
-        params.put("searchContent", new ParameterDef("searchContent", String.class, false, "搜索内容（replace 模式必须）"));
+        params.put("searchContent", new ParameterDef("searchContent", String.class, true, "搜索内容（replace 模式必须）"));
         params.put("description", new ParameterDef("description", String.class, false, "修改描述"));
         return params;
     }
@@ -54,32 +54,36 @@ public class ApplyChangeTool extends AbstractTool implements Tool {
                 return ToolResult.failure("缺少 relativePath 参数");
             }
 
+            String newContent = (String) params.get("newContent");
+            if (newContent == null || newContent.trim().isEmpty()) {
+                return ToolResult.failure("缺少 newContent 参数");
+            }
+
+            String mode = getOptString(params, "mode", "replace");
             String searchContent = (String) params.get("searchContent");
-            if (searchContent == null || searchContent.trim().isEmpty()) {
-                return ToolResult.failure("缺少 searchContent 参数");
-            }
-
-            String replaceContent = (String) params.get("replaceContent");
-            if (replaceContent == null || replaceContent.trim().isEmpty()) {
-                return ToolResult.failure("缺少 replaceContent 参数");
-            }
-
             String description = getOptString(params, "description", "");
 
-            logger.info("执行代码修改: projectKey={}, relativePath={}, description={}",
-                projectKey, relativePath, description);
+            // replace 模式必须提供 searchContent
+            if ("replace".equalsIgnoreCase(mode) && (searchContent == null || searchContent.trim().isEmpty())) {
+                return ToolResult.failure("replace 模式缺少 searchContent 参数");
+            }
+
+            logger.info("执行代码修改: projectKey={}, relativePath={}, mode={}, description={}",
+                projectKey, relativePath, mode, description);
 
             // 此工具需要通过 WebSocket 转发到 IDE 执行
             // 返回占位结果
             String displayContent = String.format(
                 "工具需要在 IDE 中执行\n" +
                 "参数：relativePath=%s\n" +
+                "     mode=%s\n" +
                 "     searchContent=%s\n" +
-                "     replaceContent=%s\n" +
+                "     newContent=%s\n" +
                 "     description=%s",
                 relativePath,
-                searchContent.substring(0, Math.min(50, searchContent.length())) + "...",
-                replaceContent.substring(0, Math.min(50, replaceContent.length())) + "...",
+                mode,
+                searchContent != null ? searchContent.substring(0, Math.min(50, searchContent.length())) + "..." : "(null)",
+                newContent.substring(0, Math.min(50, newContent.length())) + "...",
                 description
             );
 

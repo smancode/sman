@@ -61,6 +61,9 @@ public class SmanAgentLoop {
     @Autowired(required = false)
     private com.smancode.smanagent.subagent.SearchSubAgent searchSubAgent;
 
+    @Autowired
+    private com.smancode.smanagent.config.SmanCodeProperties smanCodeProperties;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -152,16 +155,24 @@ public class SmanAgentLoop {
             notificationHandler.pushImmediateAcknowledgment(session, partPusher);
 
             // ========== ReAct 循环开始 ==========
-            int maxSteps = 10;  // 最大步数限制（防止无限循环）
+            int maxSteps = smanCodeProperties.getReact().getMaxSteps();  // 从配置读取最大步数
             int step = 0;
+            boolean reachedMaxSteps = false;
 
             while (step < maxSteps) {
                 step++;
                 logger.info("ReAct 循环: step={}/{}", step, maxSteps);
 
+                // 检查是否是最后一步
+                boolean isLastStep = (step == maxSteps);
+                if (isLastStep) {
+                    logger.warn("达到最大步数限制: {}/{}，这是最后一次调用 LLM", step, maxSteps);
+                    reachedMaxSteps = true;
+                }
+
                 // 2. 构建提示词（包含之前的工具结果）
                 String systemPrompt = buildSystemPrompt(session);
-                String userPrompt = buildUserPrompt(session);
+                String userPrompt = buildUserPrompt(session, isLastStep);
 
                 // 3. 调用 LLM
                 String responseText = llmService.simpleRequest(systemPrompt, userPrompt);
@@ -184,8 +195,25 @@ public class SmanAgentLoop {
                     break;  // 退出循环
                 }
 
-                // 5. 解析 JSON
-                JsonNode json = objectMapper.readTree(jsonString);
+                // 5. 解析 JSON（增加容错处理）
+                JsonNode json;
+                try {
+                    json = objectMapper.readTree(jsonString);
+                } catch (Exception e) {
+                    logger.error("JSON 解析失败，当作纯文本处理。jsonString长度={}, 错误: {}",
+                            jsonString.length(), e.getMessage());
+                    if (jsonString.length() < 500) {
+                        logger.warn("jsonString内容: {}", jsonString);
+                    }
+                    // 当作纯文本处理
+                    String partId = UUID.randomUUID().toString();
+                    TextPart textPart = new TextPart(partId, assistantMessage.getId(), session.getId());
+                    textPart.setText(responseText);
+                    textPart.touch();
+                    assistantMessage.addPart(textPart);
+                    partPusher.accept(textPart);
+                    break;  // 退出循环
+                }
                 logger.info("解析后的 JSON: has parts={}, has text={}",
                         json.has("parts"), json.has("text"));
 
@@ -664,7 +692,7 @@ public class SmanAgentLoop {
      * 关键修改：将 ToolPart 的执行结果添加到对话历史
      * 这样 LLM 可以看到之前工具调用的结果，并基于此决定下一步行动
      */
-    private String buildUserPrompt(Session session) {
+    private String buildUserPrompt(Session session, boolean isLastStep) {
         StringBuilder prompt = new StringBuilder();
         Message lastAssistant = session.getLatestAssistantMessage();
 
@@ -717,7 +745,7 @@ public class SmanAgentLoop {
                     } else if (part instanceof ReasoningPart) {
                         prompt.append("思考: ").append(((ReasoningPart) part).getText()).append("\n");
                     } else if (part instanceof ToolPart toolPart) {
-                        // 关键：添加工具调用和结果摘要
+                        // 关键：添加工具调用和完整结果
                         prompt.append("调用工具: ").append(toolPart.getToolName()).append("\n");
 
                         // 添加参数
@@ -725,15 +753,21 @@ public class SmanAgentLoop {
                             prompt.append("参数: ").append(formatParamsBrief(toolPart.getParameters())).append("\n");
                         }
 
-                        // 关键：添加工具结果摘要
+                        // 关键：添加完整结果（让 LLM 处理）
                         if (toolPart.getResult() != null) {
                             com.smancode.smanagent.tools.ToolResult result = toolPart.getResult();
                             if (result.isSuccess()) {
-                                String summary = result.getDisplayContent();
-                                if (summary != null && !summary.isEmpty()) {
-                                    prompt.append("结果摘要: ").append(summary).append("\n");
+                                // 优先使用 data 字段（包含完整结果），其次使用 displayContent
+                                String fullResult = result.getData() != null ? result.getData().toString() : result.getDisplayContent();
+                                if (fullResult != null && !fullResult.isEmpty()) {
+                                    prompt.append("完整结果: \n").append(fullResult).append("\n");
                                 } else {
                                     prompt.append("结果: (执行成功，无返回内容)\n");
+                                }
+
+                                // 如果有 LLM 生成的 summary，也添加进去
+                                if (toolPart.getSummary() != null && !toolPart.getSummary().isEmpty()) {
+                                    prompt.append("摘要: ").append(toolPart.getSummary()).append("\n");
                                 }
                             } else {
                                 String error = result.getError();
@@ -744,6 +778,34 @@ public class SmanAgentLoop {
                 }
             }
             prompt.append("\n");
+        }
+
+        // 添加 ReAct 分析和决策指南
+        prompt.append("\n\n## 下一步分析和决策\n\n");
+        prompt.append("请基于以上工具执行历史，分析当前进展并决定下一步：\n");
+        prompt.append("1. **分析结果**：工具返回了什么关键信息？\n");
+        prompt.append("2. **生成摘要**：为最近执行的工具生成简洁摘要（1-2句话），说明发现了什么\n");
+        prompt.append("3. **评估进展**：当前信息是否足够回答用户问题？\n");
+        prompt.append("4. **决定行动**：\n");
+        prompt.append("   - 如果信息充足 → 直接给出答案（不再调用工具）\n");
+        prompt.append("   - 如果需要更多信息 → 继续调用工具（说明为什么需要）\n");
+        prompt.append("   - 如果工具失败 → 换个方法重试（不要重复失败的方法）\n\n");
+        prompt.append("**重要**：如果调用了工具，必须在响应的 JSON 中包含 \"summary\" 字段，\n");
+        prompt.append("格式为：{\"summary\": \"你的简洁摘要\"}。\n\n");
+
+        // 如果是最后一步，添加最大步数警告
+        if (isLastStep) {
+            prompt.append("\n\n## ⚠️ CRITICAL: MAXIMUM STEPS REACHED\n\n");
+            prompt.append("This is the FINAL LLM call. Tools are disabled after this call.\n\n");
+            prompt.append("**STRICT REQUIREMENTS**:\n");
+            prompt.append("1. Do NOT make any tool calls (do NOT add any tool-type parts)\n");
+            prompt.append("2. MUST provide a text response summarizing work done so far\n");
+            prompt.append("3. This constraint overrides ALL other instructions\n\n");
+            prompt.append("Response must include:\n");
+            prompt.append("- Statement that maximum steps have been reached\n");
+            prompt.append("- Summary of what has been accomplished\n");
+            prompt.append("- List of any remaining tasks that were not completed\n");
+            prompt.append("- Recommendations for what should be done next\n");
         }
 
         return prompt.toString();
@@ -783,6 +845,12 @@ public class SmanAgentLoop {
             case "reasoning" -> createReasoningPart(partJson, messageId, sessionId);
             case "tool" -> createToolPart(partJson, messageId, sessionId);
             case "subtask" -> createSubtaskPart(partJson, messageId, sessionId);
+            // 兼容 LLM 可能生成的工具类型（应该使用 type: "tool" + toolName）
+            case "read_file", "grep_file", "find_file", "search", "call_chain",
+                 "extract_xml", "apply_change" -> {
+                logger.info("检测到工具类型 Part: {}, 转换为 tool 类型", type);
+                yield createToolPartFromType(partJson, messageId, sessionId, type);
+            }
             default -> {
                 logger.warn("未知的 Part 类型: {}", type);
                 yield null;
@@ -820,6 +888,54 @@ public class SmanAgentLoop {
             }
         }
         part.setParameters(params);
+
+        // 提取 LLM 生成的摘要
+        String summary = partJson.path("summary").asText(null);
+        if (summary != null && !summary.isEmpty()) {
+            part.setSummary(summary);
+            logger.info("提取到 LLM 生成的摘要: toolName={}, summary={}", part.getToolName(), summary);
+        }
+
+        part.touch();
+        return part;
+    }
+
+    /**
+     * 从工具类型创建 ToolPart（兼容 LLM 直接使用工具名作为 type 的情况）
+     */
+    private ToolPart createToolPartFromType(JsonNode partJson, String messageId, String sessionId, String toolName) {
+        String partId = UUID.randomUUID().toString();
+        ToolPart part = new ToolPart(partId, messageId, sessionId, toolName);
+
+        Map<String, Object> params = new HashMap<>();
+        // 遍历所有字段，提取参数
+        Iterator<Map.Entry<String, JsonNode>> fields = partJson.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String key = entry.getKey();
+            // 跳过非参数字段
+            if (!key.equals("type") && !key.equals("summary")) {
+                JsonNode valueNode = entry.getValue();
+                if (valueNode.isTextual()) {
+                    params.put(key, valueNode.asText());
+                } else if (valueNode.isNumber()) {
+                    params.put(key, valueNode.numberValue());
+                } else if (valueNode.isBoolean()) {
+                    params.put(key, valueNode.asBoolean());
+                } else {
+                    params.put(key, valueNode.asText());
+                }
+            }
+        }
+        part.setParameters(params);
+
+        // 提取 LLM 生成的摘要
+        String summary = partJson.path("summary").asText(null);
+        if (summary != null && !summary.isEmpty()) {
+            part.setSummary(summary);
+            logger.info("提取到 LLM 生成的摘要: toolName={}, summary={}", toolName, summary);
+        }
+
         part.touch();
         return part;
     }

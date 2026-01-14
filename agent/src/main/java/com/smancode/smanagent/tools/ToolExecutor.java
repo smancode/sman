@@ -193,8 +193,47 @@ public class ToolExecutor {
             String content = result.has("result") ? result.get("result").asText() : null;
             String error = result.has("error") ? result.get("error").asText() : null;
 
+            logger.info("【IDE返回原始JSON】success={}, has relativePath={}, has relatedFilePaths={}, has metadata={}",
+                success, result.has("relativePath"), result.has("relatedFilePaths"), result.has("metadata"));
+            if (result.has("relativePath")) {
+                logger.info("【IDE返回relativePath】{}", result.get("relativePath").asText());
+            }
+
             if (success) {
-                return ToolResult.success(content, tool.getName() + " 结果", null);
+                // 使用 IDE 返回的 result 作为 displayContent
+                ToolResult toolResult = ToolResult.success(content, tool.getName() + " 结果", content);
+
+                // 新增：解析 IDE 返回的额外字段
+                if (result.has("relativePath")) {
+                    toolResult.setRelativePath(result.get("relativePath").asText());
+                }
+
+                // 新增：解析 relatedFilePaths
+                if (result.has("relatedFilePaths") && result.get("relatedFilePaths").isArray()) {
+                    JsonNode filesArray = result.get("relatedFilePaths");
+                    java.util.List<String> filePaths = new java.util.ArrayList<>();
+                    for (JsonNode fileNode : filesArray) {
+                        filePaths.add(fileNode.asText());
+                    }
+                    toolResult.setRelatedFilePaths(filePaths);
+                }
+
+                // 新增：解析 metadata
+                if (result.has("metadata") && result.get("metadata").isObject()) {
+                    JsonNode metadataNode = result.get("metadata");
+                    java.util.Map<String, Object> metadata = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(
+                        metadataNode,
+                        java.util.Map.class
+                    );
+                    toolResult.setMetadata(metadata);
+                }
+
+                // 如果有 relativePath，更新 displayTitle
+                if (toolResult.getRelativePath() != null) {
+                    toolResult.setDisplayTitle(toolResult.getRelativePath());
+                }
+
+                return toolResult;
             } else {
                 return ToolResult.failure(error != null ? error : "执行失败");
             }

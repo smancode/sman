@@ -1,6 +1,7 @@
 package com.smancode.smanagent.tools;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,6 +43,27 @@ public class ToolResult {
      * 执行时间
      */
     private Instant executionTime;
+
+    /**
+     * 相对路径（用于后续重新读取或修改）
+     * <p>
+     * 例如: "agent/src/main/java/com/smancode/smanagent/service/VectorSearchService.java"
+     */
+    private String relativePath;
+
+    /**
+     * 相关文件路径列表（用于 find_file 等工具）
+     * <p>
+     * 存储 find_file 找到的所有匹配文件路径
+     */
+    private List<String> relatedFilePaths;
+
+    /**
+     * 元数据（存储扩展信息）
+     * <p>
+     * 例如: absolutePath, totalLines, startLine, endLine 等
+     */
+    private Map<String, Object> metadata;
 
     public ToolResult() {
         this.executionTime = Instant.now();
@@ -132,5 +154,47 @@ public class ToolResult {
         if (executionTime != null) {
             this.executionTimeMs = java.time.Duration.between(executionTime, Instant.now()).toMillis();
         }
+    }
+
+    public String getRelativePath() {
+        return relativePath;
+    }
+
+    public void setRelativePath(String relativePath) {
+        this.relativePath = relativePath;
+    }
+
+    public List<String> getRelatedFilePaths() {
+        return relatedFilePaths;
+    }
+
+    public void setRelatedFilePaths(List<String> relatedFilePaths) {
+        this.relatedFilePaths = relatedFilePaths;
+    }
+
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata;
+    }
+
+    /**
+     * 创建成功结果（带相对路径）
+     *
+     * @param data         数据
+     * @param relativePath 相对路径
+     * @param displayContent 显示内容
+     * @return 成功结果
+     */
+    public static ToolResult successWithPath(Object data, String relativePath, String displayContent) {
+        ToolResult result = new ToolResult();
+        result.setSuccess(true);
+        result.setData(data);
+        result.setRelativePath(relativePath);
+        result.setDisplayTitle(relativePath);  // 标题使用相对路径
+        result.setDisplayContent(displayContent);
+        return result;
     }
 }

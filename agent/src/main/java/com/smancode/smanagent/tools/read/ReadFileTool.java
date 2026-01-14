@@ -29,24 +29,24 @@ public class ReadFileTool extends AbstractTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "读取文件内容（支持行范围）";
+        return "Read file content. By default reads lines 1-100. To read entire file, set endLine to a large number (e.g., 999999).";
     }
 
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
-        params.put("simpleName", new ParameterDef("simpleName", String.class, false, "类名（系统自动查找文件，推荐使用）"));
-        params.put("relativePath", new ParameterDef("relativePath", String.class, false, "文件相对路径"));
-        params.put("startLine", new ParameterDef("startLine", Integer.class, false, "开始行号（默认 1）", 1));
-        params.put("endLine", new ParameterDef("endLine", Integer.class, false, "结束行号（默认 100）", 100));
-        params.put("mode", new ParameterDef("mode", String.class, false, "执行模式：local/intellij", "intellij"));
+        params.put("simpleName", new ParameterDef("simpleName", String.class, false, "Class name (system will auto-find the file, recommended)"));
+        params.put("relativePath", new ParameterDef("relativePath", String.class, false, "File relative path"));
+        params.put("startLine", new ParameterDef("startLine", Integer.class, false, "Start line number (default: 1, use 1 for entire file)", 1));
+        params.put("endLine", new ParameterDef("endLine", Integer.class, false, "End line number (default: 100, set to 999999 for entire file)", 100));
+        params.put("mode", new ParameterDef("mode", String.class, false, "Execution mode: local/intellij", "intellij"));
         return params;
     }
 
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
+        logger.info("ReadFileTool.execute 开始执行: projectKey={}, params={}", projectKey, params);
         long startTime = System.currentTimeMillis();
-
         try {
             // 优先使用 simpleName
             String simpleName = (String) params.get("simpleName");

@@ -58,7 +58,14 @@ public class ToolRegistry {
      * @return 工具实例，如果不存在则返回 null
      */
     public Tool getTool(String name) {
-        return toolMap.get(name);
+        logger.debug("ToolRegistry.getTool 获取工具: name={}", name);
+        Tool tool = toolMap.get(name);
+        if (tool == null) {
+            logger.warn("ToolRegistry.getTool 未找到工具: name={}", name);
+        } else {
+            logger.debug("ToolRegistry.getTool 找到工具: name={}, class={}", name, tool.getClass().getSimpleName());
+        }
+        return tool;
     }
 
     /**

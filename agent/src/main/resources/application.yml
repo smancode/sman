@@ -25,6 +25,8 @@ smancode:
   prompt:
     max-system-prompt-length: 5000
     max-iteration-prompt-length: 3000
+  react:
+    max-steps: 25  # ReAct 循环最大步数
 
 # ==================== LLM 配置 ====================
 llm:
