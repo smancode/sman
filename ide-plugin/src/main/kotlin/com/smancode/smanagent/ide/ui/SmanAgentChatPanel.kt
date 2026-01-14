@@ -15,6 +15,7 @@ import com.smancode.smanagent.ide.service.AgentWebSocketClient
 import com.smancode.smanagent.ide.service.SessionInfo
 import com.smancode.smanagent.ide.service.storageService
 import com.smancode.smanagent.ide.util.SessionIdGenerator
+import com.smancode.smanagent.ide.util.SystemInfoProvider
 import com.smancode.smanagent.ide.theme.ThemeColors
 import com.smancode.smanagent.ide.theme.ColorPalette
 import org.slf4j.Logger
@@ -48,8 +49,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         // 使用 HTMLEditorKit 支持 Markdown 渲染
         editorKit = com.smancode.smanagent.ide.renderer.MarkdownRenderer.createStyledEditorKit()
         contentType = "text/html"
-        // 设置边距：左右各8px
-        margin = java.awt.Insets(0, 8, 0, 8)
+        // 设置边距：左右各16px
+        margin = java.awt.Insets(0, 16, 0, 16)
     }
 
     private val controlBar = CliControlBar(
@@ -383,6 +384,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                         sendNextPendingRequest()
                     }
                 }
+
+                onToolCall = { data ->
+                    // 处理工具调用
+                    logger.info("收到工具调用: {}", data)
+                    handleToolCall(data)
+                }
             }
 
             // 异步连接，不阻塞 UI 线程
@@ -437,7 +444,11 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         try {
             if (request.isNewSession) {
-                webSocketClient?.analyze(request.sessionId, request.projectKey, request.input)
+                // 新会话：获取系统信息
+                val userIp = SystemInfoProvider.getLocalIpAddress()
+                val userName = SystemInfoProvider.getHostName()
+                logger.info("检测到系统信息: userIp={}, userName={}", userIp, userName)
+                webSocketClient?.analyze(request.sessionId, request.projectKey, request.input, userIp, userName)
             } else {
                 webSocketClient?.chat(request.sessionId, request.input)
             }
@@ -541,6 +552,56 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         val doc = outputArea.styledDocument
         StyledMessageRenderer.renderSystemMessageToDocument(text, doc, colors)
         outputArea.caretPosition = doc.length
+    }
+
+    /**
+     * 处理工具调用
+     */
+    private fun handleToolCall(data: Map<String, Any>) {
+        try {
+            val toolName = data["toolName"] as? String ?: ""
+            val toolCallId = data["toolCallId"] as? String ?: ""
+            val params = data["params"] as? Map<String, Any?> ?: emptyMap()
+
+            logger.info("执行工具: toolName={}, toolCallId={}, params={}", toolName, toolCallId, params)
+
+            // 在后台线程执行工具
+            Thread {
+                try {
+                    val toolExecutor = com.smancode.smanagent.ide.service.LocalToolExecutor(project)
+                    val result = toolExecutor.execute(toolName, params, project.basePath)
+
+                    logger.info("工具执行完成: toolName={}, success={}, result={}",
+                            toolName, result.success, result.result)
+
+                    // 发送 TOOL_RESULT 响应
+                    val response = mapOf(
+                        "type" to "TOOL_RESULT",
+                        "toolCallId" to toolCallId,
+                        "toolName" to toolName,
+                        "success" to result.success,
+                        "result" to result.result,
+                        "executionTime" to result.executionTime
+                    )
+                    webSocketClient?.send(response)
+
+                } catch (e: Exception) {
+                    logger.error("工具执行失败: toolName={}", toolName, e)
+                    // 发送错误响应
+                    val response = mapOf(
+                        "type" to "TOOL_RESULT",
+                        "toolCallId" to toolCallId,
+                        "toolName" to toolName,
+                        "success" to false,
+                        "result" to (e.message ?: "工具执行失败"),
+                        "executionTime" to 0L
+                    )
+                    webSocketClient?.send(response)
+                }
+            }.start()
+        } catch (e: Exception) {
+            logger.error("处理工具调用失败", e)
+        }
     }
 
     fun dispose() {

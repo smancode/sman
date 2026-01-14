@@ -154,6 +154,45 @@
 }
 ```
 
+---
+
+### 7. apply_change - 代码修改
+**功能**：应用代码修改
+
+**使用场景**：
+- 添加新方法
+- 修改现有代码
+- 重构代码结构
+- 修复 bug
+
+**参数**：
+- `relativePath`（必需）：文件相对路径，如 `service/PaymentService.java`
+- `searchContent`（必需）：搜索内容，要被替换的原代码
+- `replaceContent`（必需）：替换内容，修改后的代码
+- `description`（可选）：修改描述，说明本次修改的目的
+
+**返回**：修改结果，包含：
+- 修改的文件路径
+- 修改的行数
+- 修改预览
+
+**示例**：
+```json
+{
+  "relativePath": "service/PaymentService.java",
+  "searchContent": "public void executePayment() {\n    // 原有逻辑\n}",
+  "replaceContent": "public void executePayment() {\n    // 新增逻辑\n    logPayment();\n}",
+  "description": "添加支付日志记录"
+}
+```
+
+**注意事项**：
+- `searchContent` 必须精确匹配原代码（包括空格、缩进）
+- `replaceContent` 会替换整个 `searchContent` 匹配的部分
+- 建议先使用 `read_file` 查看原代码，确保 `searchContent` 准确
+
+---
+
 ## 工具选择指南
 
 | 需求 | 推荐工具 | 说明 |
@@ -164,9 +203,25 @@
 | 看代码实现 | read_file | 读取文件内容 |
 | 理调用关系 | call_chain | 分析调用链 |
 | 提取配置 | extract_xml | 提取 XML 标签 |
+| **修改代码** | **apply_change** | **应用代码修改** |
+
+---
+
+## 典型工作流程
+
+当用户要求"实现功能X"时，建议按以下流程操作：
+
+1. **理解需求** → 用 semantic_search 查找相关代码
+2. **定位代码** → 用 find_file 找到文件，read_file 查看具体实现
+3. **分析影响** → 用 call_chain 分析调用关系
+4. **实施修改** → 用 apply_change 修改代码
+5. **验证结果** → 如果需要，再次 read_file 确认修改正确
+
+---
 
 ## 注意事项
 
 1. **参数校验**：所有必需参数必须提供，否则工具会报错
 2. **返回格式**：工具返回统一格式的结果，包含 `success`、`data`、`displayTitle`、`displayContent`
 3. **错误处理**：如果工具执行失败，会返回错误信息，请根据错误信息调整策略
+4. **代码修改**：使用 apply_change 前，务必先 read_file 确认原代码，确保 searchContent 准确匹配

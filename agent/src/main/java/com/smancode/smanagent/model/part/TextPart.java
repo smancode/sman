@@ -1,5 +1,7 @@
 package com.smancode.smanagent.model.part;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 /**
  * 文本内容 Part
  * <p>
@@ -56,6 +58,7 @@ public class TextPart extends Part {
     /**
      * 获取文本长度
      */
+    @JsonIgnore
     public int getLength() {
         return text != null ? text.length() : 0;
     }
@@ -63,6 +66,7 @@ public class TextPart extends Part {
     /**
      * 检查是否为空
      */
+    @JsonIgnore
     public boolean isEmpty() {
         return text == null || text.isEmpty();
     }

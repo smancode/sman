@@ -274,11 +274,43 @@ public class LlmService {
         int startIndex = trimmedResponse.indexOf(jsonStart);
         if (startIndex != -1) {
             startIndex += jsonStart.length();
-            int endIndex = trimmedResponse.indexOf(jsonEnd, startIndex);
-            if (endIndex != -1) {
-                String jsonContent = trimmedResponse.substring(startIndex, endIndex).trim();
-                if (isValidJsonStructure(jsonContent)) {
-                    return jsonContent;
+            // 从 startIndex 开始找第一个 {，然后智能匹配对应的 }
+            int firstBrace = trimmedResponse.indexOf('{', startIndex);
+            if (firstBrace != -1) {
+                int depth = 0;
+                boolean inString = false;
+                boolean escape = false;
+
+                for (int i = firstBrace; i < trimmedResponse.length(); i++) {
+                    char c = trimmedResponse.charAt(i);
+
+                    if (escape) {
+                        escape = false;
+                        continue;
+                    }
+
+                    if (c == '\\' && inString) {
+                        escape = true;
+                        continue;
+                    }
+
+                    if (c == '"' && !escape) {
+                        inString = !inString;
+                        continue;
+                    }
+
+                    if (!inString) {
+                        if (c == '{') depth++;
+                        else if (c == '}') {
+                            depth--;
+                            if (depth == 0) {
+                                String jsonContent = trimmedResponse.substring(firstBrace, i + 1).trim();
+                                if (isValidJsonStructure(jsonContent)) {
+                                    return jsonContent;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

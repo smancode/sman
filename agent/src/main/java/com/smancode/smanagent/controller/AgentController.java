@@ -2,7 +2,7 @@ package com.smancode.smanagent.controller;
 
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.smancode.core.SmanAgentLoop;
-import com.smancode.smanagent.websocket.WebSocketSessionManager;
+import com.smancode.smanagent.smancode.core.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +27,7 @@ public class AgentController {
     private SmanAgentLoop smanAgentLoop;
 
     @Autowired
-    private WebSocketSessionManager sessionManager;
+    private SessionManager sessionManager;
 
     /**
      * 创建新会话
@@ -67,7 +67,7 @@ public class AgentController {
      */
     @DeleteMapping("/sessions/{sessionId}")
     public ResponseEntity<Void> deleteSession(@PathVariable String sessionId) {
-        sessionManager.removeSession(sessionId);
+        sessionManager.cleanupSession(sessionId);
         return ResponseEntity.ok().build();
     }
 
@@ -130,7 +130,7 @@ public class AgentController {
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> stats() {
         return ResponseEntity.ok(Map.of(
-            "activeSessions", sessionManager.getSessionCount()
+            "activeSessions", sessionManager.getStats().total()
         ));
     }
 }

@@ -32,5 +32,10 @@ public enum PartType {
     /**
      * TODO 列表
      */
-    TODO
+    TODO,
+
+    /**
+     * 子任务（SubTask，可执行的小目标）
+     */
+    SUBTASK
 }

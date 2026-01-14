@@ -1,5 +1,7 @@
 package com.smancode.smanagent.tools;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.smancode.smanagent.websocket.ToolForwardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,9 @@ public class ToolExecutor {
 
     @Autowired
     private ToolRegistry toolRegistry;
+
+    @Autowired(required = false)
+    private ToolForwardingService toolForwardingService;
 
     /**
      * 执行工具
@@ -97,10 +102,107 @@ public class ToolExecutor {
     private ToolResult executeIntellij(Tool tool, String projectKey, Map<String, Object> params) {
         logger.debug("IntelliJ 执行工具: {}", tool.getName());
 
-        // TODO: 通过 WebSocket 转发到 IDE 执行
-        // 目前先返回工具自己的占位结果
-        logger.warn("WebSocket 推送功能尚未实现，返回工具的占位结果");
+        // 检查转发服务是否可用
+        if (toolForwardingService == null) {
+            logger.warn("工具转发服务未启用，返回占位结果: {}", tool.getName());
+            return tool.execute(projectKey, params);
+        }
+
+        // 检查是否应该转发
+        if (!toolForwardingService.shouldForwardToIde(tool.getName())) {
+            logger.info("工具 {} 不需要转发，本地执行", tool.getName());
+            return tool.execute(projectKey, params);
+        }
+
+        // 没有 Session ID，无法转发
+        logger.warn("WebSocket 转发需要 Session ID，暂时返回占位结果: {}", tool.getName());
         return tool.execute(projectKey, params);
+    }
+
+    /**
+     * 带会话的执行工具（用于 IntelliJ 模式）
+     *
+     * @param toolName       工具名称
+     * @param projectKey     项目标识
+     * @param params         参数
+     * @param webSocketSessionId WebSocket Session ID
+     * @return 执行结果
+     */
+    public ToolResult executeWithSession(String toolName, String projectKey,
+                                         Map<String, Object> params, String webSocketSessionId) {
+        long startTime = System.currentTimeMillis();
+
+        try {
+            Tool tool = toolRegistry.getTool(toolName);
+            if (tool == null) {
+                return ToolResult.failure("工具不存在: " + toolName);
+            }
+
+            Tool.ExecutionMode mode = tool.getExecutionMode(params);
+
+            logger.info("执行工具（带会话）: toolName={}, projectKey={}, mode={}, sessionId={}",
+                toolName, projectKey, mode, webSocketSessionId != null ? webSocketSessionId.substring(0, 8) : "null");
+
+            ToolResult result;
+            if (mode == Tool.ExecutionMode.LOCAL) {
+                result = executeLocal(tool, projectKey, params);
+            } else {
+                result = executeIntellijWithSession(tool, projectKey, params, webSocketSessionId);
+            }
+
+            long duration = System.currentTimeMillis() - startTime;
+            result.setExecutionTimeMs(duration);
+
+            logger.info("工具执行完成: toolName={}, success={}, duration={}ms",
+                toolName, result.isSuccess(), duration);
+
+            return result;
+
+        } catch (Exception e) {
+            logger.error("工具执行异常: toolName={}", toolName, e);
+            long duration = System.currentTimeMillis() - startTime;
+            ToolResult result = ToolResult.failure("执行异常: " + e.getMessage());
+            result.setExecutionTimeMs(duration);
+            return result;
+        }
+    }
+
+    /**
+     * IntelliJ 执行工具（带 Session ID）
+     */
+    private ToolResult executeIntellijWithSession(Tool tool, String projectKey,
+                                                   Map<String, Object> params, String webSocketSessionId) {
+        logger.debug("IntelliJ 执行工具（带会话）: {}, sessionId={}",
+            tool.getName(), webSocketSessionId != null ? webSocketSessionId.substring(0, 8) : "null");
+
+        if (toolForwardingService == null || webSocketSessionId == null) {
+            logger.warn("工具转发服务未启用或 Session ID 为空，返回占位结果: {}", tool.getName());
+            return tool.execute(projectKey, params);
+        }
+
+        try {
+            // 通过 WebSocket 转发到 IDE
+            JsonNode result = toolForwardingService.forwardToolCall(
+                webSocketSessionId,
+                tool.getName(),
+                params
+            );
+
+            // 转换结果
+            boolean success = result.has("success") && result.get("success").asBoolean();
+            String content = result.has("result") ? result.get("result").asText() : null;
+            String error = result.has("error") ? result.get("error").asText() : null;
+
+            if (success) {
+                return ToolResult.success(content, tool.getName() + " 结果", null);
+            } else {
+                return ToolResult.failure(error != null ? error : "执行失败");
+            }
+
+        } catch (Exception e) {
+            logger.error("转发工具执行失败: {}", tool.getName(), e);
+            return ToolResult.failure("转发失败: " + e.getMessage());
+        }
     }
 
     /**

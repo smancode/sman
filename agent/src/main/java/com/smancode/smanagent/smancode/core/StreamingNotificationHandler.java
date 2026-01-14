@@ -56,7 +56,7 @@ public class StreamingNotificationHandler {
 
             TextPart ackPart = new TextPart();
             ackPart.setSessionId(session.getId());
-            ackPart.setText("🤔 思考中...\n" + (ackText.isEmpty() ? "" : ackText + "\n"));
+            ackPart.setText("> 思考中... " + (ackText.isEmpty() ? "" : ackText + "\n"));
             ackPart.touch();
             partPusher.accept(ackPart);
 
@@ -65,7 +65,7 @@ public class StreamingNotificationHandler {
             // 失败时使用默认确认
             TextPart ackPart = new TextPart();
             ackPart.setSessionId(session.getId());
-            ackPart.setText("🤔 思考中...\n");
+            ackPart.setText("> 思考中... \n");
             ackPart.touch();
             partPusher.accept(ackPart);
         }
@@ -175,7 +175,7 @@ public class StreamingNotificationHandler {
         Map<String, Object> params = toolPart.getParameters();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("▶ 调用工具: ").append(toolName).append("\n");
+        sb.append("→ 调用工具: ").append(toolName).append("\n");
         if (!params.isEmpty()) {
             sb.append("   参数: ").append(formatParamsBrief(params)).append("\n");
         }

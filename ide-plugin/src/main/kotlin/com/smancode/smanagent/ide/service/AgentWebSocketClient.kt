@@ -38,6 +38,7 @@ class AgentWebSocketClient(
     var onComplete: ((Map<String, Any>) -> Unit)? = null
     var onError: ((Map<String, Any>) -> Unit)? = null
     var onPong: ((Map<String, Any>) -> Unit)? = null
+    var onToolCall: ((Map<String, Any>) -> Unit)? = null
 
     /**
      * 连接到服务器
@@ -121,15 +122,17 @@ class AgentWebSocketClient(
     /**
      * 发送分析请求
      */
-    fun analyze(sessionId: String, projectKey: String, input: String) {
+    fun analyze(sessionId: String, projectKey: String, input: String, userIp: String, userName: String) {
         val request = mapOf(
             "type" to "analyze",
             "sessionId" to sessionId,
             "projectKey" to projectKey,
-            "input" to input
+            "input" to input,
+            "userIp" to userIp,
+            "userName" to userName
         )
         send(request)
-        logger.info("发送分析请求: {}", input)
+        logger.info("发送分析请求: userIp={}, userName={}, input={}", userIp, userName, input)
     }
 
     /**
@@ -169,6 +172,10 @@ class AgentWebSocketClient(
                 "complete" -> onComplete?.invoke(data)
                 "error" -> onError?.invoke(data)
                 "pong" -> onPong?.invoke(data)
+                "TOOL_CALL" -> {
+                    logger.info("收到 TOOL_CALL: {}", data)
+                    onToolCall?.invoke(data)
+                }
                 else -> logger.warn("未知消息类型: {}", type)
             }
 

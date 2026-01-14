@@ -1,6 +1,7 @@
 package com.smancode.smanagent.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.smancode.smanagent.model.message.Message;
 import com.smancode.smanagent.model.message.Role;
 import com.smancode.smanagent.model.part.Part;
@@ -9,6 +10,8 @@ import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.model.session.SessionStatus;
 import com.smancode.smanagent.service.SessionFileService;
 import com.smancode.smanagent.smancode.core.SmanAgentLoop;
+import com.smancode.smanagent.smancode.core.SessionManager;
+import com.smancode.smanagent.websocket.ToolForwardingService;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,10 +46,13 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     private SmanAgentLoop smanAgentLoop;
 
     @Autowired
-    private WebSocketSessionManager sessionManager;
+    private SessionFileService sessionFileService;
 
     @Autowired
-    private SessionFileService sessionFileService;
+    private SessionManager sessionManager;
+
+    @Autowired(required = false)
+    private ToolForwardingService toolForwardingService;
 
     @Resource(name = "webSocketExecutorService")
     private ExecutorService executorService;
@@ -67,7 +73,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        logger.info("WebSocket 连接建立: sessionId={}", session.getId());
+        logger.info("WebSocket 连接建立: wsSessionId={}", session.getId());
+
+        // 不在这里注册到 ToolForwardingService，等待 handleAnalyze/handleChat 时用用户自定义的 sessionId 注册
 
         // 发送连接成功消息
         Map<String, Object> message = Map.of(
@@ -75,7 +83,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             "message", "WebSocket 连接成功"
         );
         String json = objectMapper.writeValueAsString(message);
-        logger.info("【发送到前端】sessionId={}, type=connected, 完整内容={}", session.getId(), json);
+        logger.info("【发送到前端】wsSessionId={}, type=connected, 完整内容={}", session.getId(), json);
         sendMessage(session, message);
     }
 
@@ -93,6 +101,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 case "analyze" -> handleAnalyze(session, request);
                 case "chat" -> handleChat(session, request);
                 case "ping" -> handlePing(session);
+                case "TOOL_RESULT" -> handleToolResult(session, request);
                 default -> logger.warn("未知消息类型: {}", type);
             }
 
@@ -105,6 +114,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         logger.info("WebSocket 连接关闭: sessionId={}, status={}", session.getId(), status);
+
+        // 从 ToolForwardingService 注销
+        if (toolForwardingService != null) {
+            toolForwardingService.unregisterSession(session.getId());
+        }
 
         // 清理会话
         activeSessions.entrySet().removeIf(entry -> entry.getValue().getId().equals(session.getId()));
@@ -127,6 +141,8 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             sessionId = (String) request.get("sessionId");
             String userInput = (String) request.get("input");
             String projectKey = (String) request.get("projectKey");
+            String userIp = (String) request.get("userIp");
+            String userName = (String) request.get("userName");
 
             // 生成 traceId：sessionId_HHmmss
             String traceId = sessionId + "_" + java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"));
@@ -149,7 +165,18 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 session = sessionFileService.loadSession(sessionId);
                 if (session == null) {
                     session = sessionManager.getOrCreateSession(sessionId, projectKey);
+                    // 新会话：设置用户信息
+                    session.setUserIp(userIp);
+                    session.setUserName(userName);
+                    logger.info("新会话已创建，设置用户信息: sessionId={}, userIp={}, userName={}",
+                            sessionId, userIp, userName);
+                } else {
+                    // 从文件加载的会话也需要注册到 SessionManager
+                    sessionManager.registerSession(session);
                 }
+
+                // 设置 WebSocket Session ID（用于工具转发）
+                session.setWebSocketSessionId(sessionId);
 
                 // 添加用户消息到会话（不发送到前端，前端已经显示了）
                 Message userMessage = createUserMessage(sessionId, userInput);
@@ -160,6 +187,15 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
                 // 注册 WebSocket 会话
                 activeSessions.put(sessionId, wsSession);
+
+                // 注册到 ToolForwardingService（使用用户自定义的 sessionId）
+                if (toolForwardingService != null) {
+                    toolForwardingService.registerSession(sessionId, wsSession);
+                    logger.info("✅ 已注册到 ToolForwardingService: sessionId={}, wsSessionId={}",
+                            sessionId, wsSession.getId());
+                } else {
+                    logger.warn("⚠️  ToolForwardingService 未注入，工具转发功能将不可用");
+                }
 
                 // 创建 effectively final 变量供 lambda 使用
                 final String finalSessionId = sessionId;
@@ -276,7 +312,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
 
-                // 没有在处理，从文件加载或从 sessionManager 获取
+                // 没有在处理，从文件加载或从 SessionManager 获取
                 session = sessionFileService.loadSession(sessionId);
                 if (session == null) {
                     session = sessionManager.getSession(sessionId);
@@ -285,6 +321,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                     sendError(wsSession, "会话不存在");
                     return;
                 }
+                // 确保会话已注册到 SessionManager
+                sessionManager.registerSession(session);
+
+                // 设置 WebSocket Session ID（用于工具转发）
+                session.setWebSocketSessionId(sessionId);
 
                 // 添加用户消息到会话（不发送到前端，前端已经显示了）
                 Message userMessage = createUserMessage(sessionId, userInput);
@@ -295,6 +336,15 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
                 // 注册 WebSocket 会话
                 activeSessions.put(sessionId, wsSession);
+
+                // 注册到 ToolForwardingService（使用用户自定义的 sessionId）
+                if (toolForwardingService != null) {
+                    toolForwardingService.registerSession(sessionId, wsSession);
+                    logger.info("✅ 已注册到 ToolForwardingService: sessionId={}, wsSessionId={}",
+                            sessionId, wsSession.getId());
+                } else {
+                    logger.warn("⚠️  ToolForwardingService 未注入，工具转发功能将不可用");
+                }
 
                 // 创建 effectively final 变量供 lambda 使用
                 final String finalSessionId = sessionId;
@@ -602,6 +652,30 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
             map.put("data", data);
             return map;
+        }
+    }
+
+    /**
+     * 处理 IDE 插件返回的 TOOL_RESULT 消息
+     */
+    private void handleToolResult(WebSocketSession session, Map<String, Object> request) {
+        try {
+            String payload = objectMapper.writeValueAsString(request);
+            JsonNode data = objectMapper.readTree(payload);
+
+            logger.info("收到 TOOL_RESULT 消息: {}", data.toString());
+
+            if (toolForwardingService != null) {
+                boolean handled = toolForwardingService.handleToolResult(data);
+                if (!handled) {
+                    logger.warn("处理 TOOL_RESULT 失败");
+                }
+            } else {
+                logger.warn("ToolForwardingService 未启用，忽略 TOOL_RESULT");
+            }
+
+        } catch (Exception e) {
+            logger.error("处理 TOOL_RESULT 消息失败", e);
         }
     }
 }

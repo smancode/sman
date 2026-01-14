@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -64,30 +65,26 @@ public class SubTaskExecutor {
         Session childSession = sessionManager.createChildSession(parentSession.getId());
 
         try {
-            // 2. 推送工具调用通知
-            notificationHandler.pushToolCallNotification(toolPart, partPusher);
-
-            // 3. 更新状态为 RUNNING
+            // 2. 更新状态为 RUNNING（但不发送，避免冗余）
             toolPart.setState(ToolPart.ToolState.RUNNING);
             toolPart.touch();
-            partPusher.accept(toolPart);
 
-            // 4. 推送执行进度
-            notificationHandler.pushToolProgressNotification(toolPart, partPusher);
-
-            // 5. 在子会话中执行工具
+            // 3. 在子会话中执行工具
             String projectKey = childSession.getProjectInfo().getProjectKey();
+            String wsSessionId = childSession.getWebSocketSessionId();  // 获取 WebSocket Session ID
+
             logger.info("【工具执行中】toolName={}, projectKey={}", toolName, projectKey);
-            ToolResult fullResult = toolExecutor.execute(toolName, projectKey, toolPart.getParameters());
+            ToolResult fullResult = toolExecutor.executeWithSession(toolName, projectKey,
+                    toolPart.getParameters(), wsSessionId);
             logger.info("【工具执行完成】toolName={}, success={}, displayTitle={}, displayContent长度={}, error={}, 完整displayContent={}",
                     toolName, fullResult.isSuccess(), fullResult.getDisplayTitle(),
                     fullResult.getDisplayContent() != null ? fullResult.getDisplayContent().length() : 0,
                     fullResult.getError(), fullResult.getDisplayContent());
 
-            // 6. 生成摘要（关键！）
+            // 4. 生成摘要（关键！）
             String summary = resultSummarizer.summarize(toolName, fullResult, parentSession);
 
-            // 7. 创建压缩后的结果
+            // 5. 创建压缩后的结果
             ToolResult compressedResult = ToolResult.success(
                     summary,                      // 只保留摘要
                     fullResult.getDisplayTitle(),
@@ -98,7 +95,7 @@ public class SubTaskExecutor {
                 compressedResult.setError(fullResult.getError());
             }
 
-            // 8. 更新工具状态
+            // 6. 更新工具状态并发送
             if (fullResult.isSuccess()) {
                 toolPart.setState(ToolPart.ToolState.COMPLETED);
             } else {
@@ -108,14 +105,7 @@ public class SubTaskExecutor {
             toolPart.touch();
             partPusher.accept(toolPart);
 
-            // 9. 推送完成通知
-            if (fullResult.isSuccess()) {
-                notificationHandler.pushToolCompletedNotification(toolPart, compressedResult, partPusher);
-            } else {
-                notificationHandler.pushToolErrorNotification(toolPart, compressedResult, partPusher);
-            }
-
-            // 10. 推送摘要（而不是完整结果）
+            // 7. 推送摘要（而不是完整结果）
             Part summaryPart = createSummaryPart(toolPart, summary, fullResult);
             partPusher.accept(summaryPart);
 
@@ -140,8 +130,6 @@ public class SubTaskExecutor {
             toolPart.touch();
             partPusher.accept(toolPart);
 
-            notificationHandler.pushToolErrorNotification(toolPart, toolPart.getResult(), partPusher);
-
             sessionManager.cleanupChildSession(childSession.getId());
 
             return SubTaskResult.builder()
@@ -156,23 +144,28 @@ public class SubTaskExecutor {
      * 创建摘要 Part
      */
     private Part createSummaryPart(ToolPart toolPart, String summary, ToolResult fullResult) {
-        // 计算原始输出大小
-        String originalOutput = ToolResultFormatter.formatToolResult(fullResult);
-        int originalSize = originalOutput.length();
-        int compressedSize = summary.length();
-        double compressionRatio = originalSize > 0 ? (double) compressedSize / originalSize : 0;
-
-        // 构建摘要文本
+        // 构建工具调用行：⏺ toolName(param1, param2)
         StringBuilder sb = new StringBuilder();
-        sb.append("📄 工具结果摘要\n");
-        sb.append("   ").append(toolPart.getToolName()).append("\n");
-        sb.append("   原始大小: ").append(formatSize(originalSize)).append("\n");
-        sb.append("   压缩后: ").append(formatSize(compressedSize));
-        if (compressionRatio > 0) {
-            sb.append(" (压缩比: ").append(String.format("%.1f%%", compressionRatio * 100)).append(")");
+        sb.append("⏺ ").append(toolPart.getToolName());
+
+        // 添加参数（简化格式）
+        Map<String, Object> params = toolPart.getParameters();
+        if (params != null && !params.isEmpty()) {
+            // 将参数转换为简短字符串，如 (VectorSearchService.java)
+            String paramsStr = formatParamsForTitle(params);
+            sb.append("(").append(paramsStr).append(")");
         }
-        sb.append("\n\n");
-        sb.append(summary).append("\n");
+        sb.append("\n");
+
+        // 添加摘要内容，每行前面加 └─
+        if (summary != null && !summary.isEmpty()) {
+            String[] lines = summary.split("\n");
+            for (String line : lines) {
+                if (!line.trim().isEmpty()) {
+                    sb.append("  └─ ").append(line).append("\n");
+                }
+            }
+        }
 
         TextPart textPart = new TextPart();
         textPart.setMessageId(toolPart.getMessageId());
@@ -181,6 +174,34 @@ public class SubTaskExecutor {
         textPart.touch();
 
         return textPart;
+    }
+
+    /**
+     * 格式化参数为标题格式
+     * 例如：{pattern: "*.java"} -> "*.java"
+     */
+    private String formatParamsForTitle(Map<String, Object> params) {
+        if (params == null || params.isEmpty()) {
+            return "";
+        }
+
+        // 如果只有一个参数，直接返回其值
+        if (params.size() == 1) {
+            Object value = params.values().iterator().next();
+            return value != null ? value.toString() : "";
+        }
+
+        // 多个参数，用逗号分隔
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            if (!first) {
+                sb.append(", ");
+            }
+            sb.append(entry.getKey()).append("=").append(entry.getValue());
+            first = false;
+        }
+        return sb.toString();
     }
 
     /**
@@ -199,8 +220,11 @@ public class SubTaskExecutor {
             logger.info("【阶段性结论LLM响应】toolName={}, 响应长度={}, 完整响应={}",
                     toolPart.getToolName(), conclusion != null ? conclusion.length() : 0, conclusion);
 
+            // 清理可能的 Markdown 代码块格式
+            String cleanedConclusion = cleanMarkdownJson(conclusion);
+
             // 解析结论
-            JsonNode json = objectMapper.readTree(conclusion);
+            JsonNode json = objectMapper.readTree(cleanedConclusion);
             String conclusionText = json.path("conclusion").asText("");
 
             if (!conclusionText.isEmpty()) {
@@ -211,7 +235,7 @@ public class SubTaskExecutor {
 
                 // 获取已完成的工具数量
                 int completedCount = countCompletedTools(session);
-                conclusionPart.setText(String.format("📊 阶段性结论 %d:\n%s\n",
+                conclusionPart.setText(String.format("⏺ 阶段性结论 %d:\n%s\n",
                         completedCount, conclusionText));
 
                 conclusionPart.touch();
@@ -288,6 +312,42 @@ public class SubTaskExecutor {
         } else {
             return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
         }
+    }
+
+    /**
+     * 清理 Markdown 代码块格式，提取纯 JSON
+     * <p>
+     * 处理 LLM 返回的 ```json ... ``` 格式
+     *
+     * @param response LLM 响应
+     * @return 纯净的 JSON 字符串
+     */
+    private String cleanMarkdownJson(String response) {
+        if (response == null || response.isEmpty()) {
+            return response;
+        }
+
+        String trimmed = response.trim();
+
+        // 检查是否以 ``` 开头
+        if (trimmed.startsWith("```")) {
+            // 找到第一个换行符
+            int firstNewline = trimmed.indexOf('\n');
+            if (firstNewline > 0) {
+                // 跳过第一行（```json 或 ```）
+                String content = trimmed.substring(firstNewline + 1);
+
+                // 找到结尾的 ```
+                int lastBackticks = content.lastIndexOf("```");
+                if (lastBackticks > 0) {
+                    content = content.substring(0, lastBackticks);
+                }
+
+                return content.trim();
+            }
+        }
+
+        return trimmed;
     }
 
     // 注入依赖

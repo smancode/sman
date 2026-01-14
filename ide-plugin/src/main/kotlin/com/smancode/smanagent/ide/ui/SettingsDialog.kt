@@ -15,8 +15,6 @@ import javax.swing.*
  * 配置项：
  * - 服务器 URL
  * - 项目名称
- * - AI 名称
- * - 模式
  * - 保存对话历史
  */
 class SettingsDialog(private val project: Project) : JDialog() {
@@ -25,8 +23,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     private val serverUrlField = JTextField(storage.backendUrl, 30)
     private val projectKeyField = JTextField(project.name, 30)
-    private val aiNameField = JTextField("SmanAgent", 30)
-    private val modeField = JTextField("analysis", 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
     init {
@@ -60,31 +56,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         gbc.fill = GridBagConstraints.HORIZONTAL
         panel.add(projectKeyField, gbc)
 
-        // AI 名称
-        gbc.gridx = 0
-        gbc.gridy = 2
-        gbc.weightx = 0.0
-        gbc.fill = GridBagConstraints.NONE
-        panel.add(JLabel("AI 名称:"), gbc)
-        gbc.gridx = 1
-        gbc.weightx = 1.0
-        gbc.fill = GridBagConstraints.HORIZONTAL
-        panel.add(aiNameField, gbc)
-
-        // 模式
-        gbc.gridx = 0
-        gbc.gridy = 3
-        gbc.weightx = 0.0
-        gbc.fill = GridBagConstraints.NONE
-        panel.add(JLabel("模式:"), gbc)
-        gbc.gridx = 1
-        gbc.weightx = 1.0
-        gbc.fill = GridBagConstraints.HORIZONTAL
-        panel.add(modeField, gbc)
-
         // 保存历史
         gbc.gridx = 0
-        gbc.gridy = 4
+        gbc.gridy = 2
         gbc.gridwidth = 2
         panel.add(saveHistoryCheckBox, gbc)
 
@@ -108,15 +82,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         pack()
         setLocationRelativeTo(null)
-        minimumSize = java.awt.Dimension(400, 250)
+        minimumSize = java.awt.Dimension(400, 180)
         isResizable = false
     }
 
     private fun saveSettings() {
         val serverUrl = serverUrlField.text.trim()
         val projectKey = projectKeyField.text.trim()
-        val aiName = aiNameField.text.trim()
-        val mode = modeField.text.trim()
 
         // 基础验证
         if (serverUrl.isEmpty()) {
@@ -126,11 +98,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         if (projectKey.isEmpty()) {
             JOptionPane.showMessageDialog(this, "项目名称不能为空！", "错误", JOptionPane.ERROR_MESSAGE)
-            return
-        }
-
-        if (mode.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "模式不能为空！", "错误", JOptionPane.ERROR_MESSAGE)
             return
         }
 

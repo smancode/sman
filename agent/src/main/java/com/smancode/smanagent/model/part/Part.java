@@ -22,7 +22,8 @@ import java.time.Instant;
         @JsonSubTypes.Type(value = ReasoningPart.class, name = "REASONING"),
         @JsonSubTypes.Type(value = GoalPart.class, name = "GOAL"),
         @JsonSubTypes.Type(value = ProgressPart.class, name = "PROGRESS"),
-        @JsonSubTypes.Type(value = TodoPart.class, name = "TODO")
+        @JsonSubTypes.Type(value = TodoPart.class, name = "TODO"),
+        @JsonSubTypes.Type(value = SubTaskPart.class, name = "SUBTASK")
 })
 public abstract class Part {
 

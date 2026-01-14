@@ -57,7 +57,8 @@ public class FindFileTool extends AbstractTool implements Tool {
             logger.info("执行文件查找: projectKey={}, filePattern={}, searchPath={}",
                 projectKey, filePattern, searchPath);
 
-            // 注意：这个工具需要在 IDE 中执行
+            // 此工具需要通过 WebSocket 转发到 IDE 执行
+            // 返回占位结果
             String displayContent = String.format(
                 "工具需要在 IDE 中执行\n" +
                 "参数：filePattern=%s, searchPath=%s",

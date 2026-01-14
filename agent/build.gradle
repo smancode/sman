@@ -28,11 +28,17 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
+    // Spoon 代码分析
+    implementation 'fr.inria.gforge.spoon:spoon-core:11.0.0'
+
     // Jackson JSON 处理
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.0'
     implementation 'com.fasterxml.jackson.core:jackson-core:2.18.0'
     implementation 'com.fasterxml.jackson.core:jackson-annotations:2.18.0'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.0'
+
+    // SnakeYAML
+    implementation 'org.yaml:snakeyaml:2.0'
 
     // HTTP 客户端
     implementation 'org.apache.httpcomponents.client5:httpclient5:5.2.1'
@@ -41,6 +47,17 @@ dependencies {
     // 工具类
     implementation 'org.apache.commons:commons-lang3:3.14.0'
     implementation 'commons-io:commons-io:2.15.1'
+
+    // H2 数据库
+    implementation 'com.h2database:h2:2.2.224'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Java Parser
+    implementation 'com.github.javaparser:javaparser-core:3.25.8'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 向量检索
+    implementation 'io.github.jbellis:jvector:3.0.6'
 
     // 开发工具
     developmentOnly 'org.springframework.boot:spring-boot-devtools'

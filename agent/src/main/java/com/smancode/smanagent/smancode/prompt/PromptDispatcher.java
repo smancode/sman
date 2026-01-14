@@ -54,6 +54,7 @@ public class PromptDispatcher {
             | read_file | 读取文件 | 看代码实现 |
             | call_chain | 调用链分析 | 理解调用关系 |
             | extract_xml | XML 提取 | 提取配置 |
+            | apply_change | 代码修改 | 应用代码修改 |
 
             详细信息请参考工具文档。
             """;

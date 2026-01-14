@@ -35,19 +35,22 @@ object StyledMessageRenderer {
      * 渲染 Part 到 JTextPane
      */
     fun renderToTextPane(part: PartData, textPane: JTextPane, colors: ColorPalette = ThemeColors.getCurrentColors()) {
-        val doc = textPane.styledDocument
-
         when (part.type) {
-            PartType.TEXT, PartType.REASONING -> {
-                // TEXT 和 REASONING 使用 Markdown 渲染为 HTML
-                val text = when (part.type) {
-                    PartType.TEXT -> (part.data["text"] as? String) ?: ""
-                    PartType.REASONING -> (part.data["text"] as? String) ?: ""
-                    else -> ""
-                }
+            PartType.TEXT -> {
+                // TEXT 使用 Markdown 渲染为 HTML
+                val text = (part.data["text"] as? String) ?: ""
                 val html = MarkdownRenderer.markdownToHtml(text)
-                val wrappedHtml = wrapHtml(html, part.type == PartType.REASONING)
+                val wrappedHtml = wrapHtml(html, false)
                 appendHtml(textPane, wrappedHtml)
+            }
+            PartType.REASONING -> {
+                // REASONING 显示为 "> 思考中"
+                val html = """
+                    <div style="margin: 5px 0; text-align: left;">
+                        <span style="color: ${toHexString(colors.textSecondary)};">&gt; 思考中</span>
+                    </div>
+                """.trimIndent()
+                appendHtml(textPane, html)
             }
             PartType.USER -> {
                 // 用户消息：使用 HTML 插入，保持与其他消息类型一致
@@ -74,7 +77,8 @@ object StyledMessageRenderer {
                     else -> ""
                 }
                 val html = convertStyledTextToHtml(text, colors)
-                appendHtml(textPane, html)
+                val wrappedHtml = wrapHtml(html, false)
+                appendHtml(textPane, wrappedHtml)
             }
         }
     }
@@ -168,32 +172,50 @@ object StyledMessageRenderer {
 
         return when (state) {
             "PENDING" -> {
-                "▶ 调用工具: [$TOOL]$toolName[RESET]\n"
+                val params = part.data["parameters"] as? Map<*, *>
+                // 构建参数字符串：key1=value1, key2=value2
+                val paramsStr = if (params != null && params.isNotEmpty()) {
+                    params.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                } else {
+                    ""
+                }
+                "⏺ [$TOOL]$toolName[RESET]($paramsStr)\n"
             }
             "RUNNING" -> {
-                "⏳ 执行中: [$TOOL]$toolName[RESET]\n"
+                // 不显示执行中状态，减少冗余
+                ""
             }
             "COMPLETED" -> {
-                val title = part.data["title"] as? String ?: ""
                 val content = part.data["content"] as? String ?: ""
-                val preview = if (content.length > 100) content.substring(0, 100) + "..." else content
 
                 val sb = StringBuilder()
-                sb.append("✓ 工具完成: [$TOOL]$toolName[RESET]\n")
-                if (title.isNotEmpty()) {
-                    sb.append("  └─ $title\n")
+
+                // 按行分割内容
+                val results = content.split("\n").filter { it.isNotEmpty() }
+                val displayResults = if (results.size > 3) {
+                    results.take(3) + listOf("...")
+                } else {
+                    results
                 }
-                if (preview.isNotEmpty()) {
-                    sb.append("  └─ $preview\n")
+
+                // 每行结果前面加 └─
+                displayResults.forEach { result ->
+                    sb.append("  └─ $result\n")
                 }
                 sb.toString()
             }
             "ERROR" -> {
-                val error = part.data["error"] as? String ?: ""
-                "✗ 工具失败: [$ERROR]$toolName[RESET]\n  └─ 原因: $error\n"
+                val error = part.data["error"] as? String ?: "执行失败"
+                "  └─ ($error)\n"
             }
             else -> {
-                "▶ 调用工具: [$TOOL]$toolName[RESET] ($state)\n"
+                val params = part.data["parameters"] as? Map<*, *>
+                val paramsStr = if (params != null && params.isNotEmpty()) {
+                    params.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                } else {
+                    ""
+                }
+                "⏺ [$TOOL]$toolName[RESET]($paramsStr)\n"
             }
         }
     }

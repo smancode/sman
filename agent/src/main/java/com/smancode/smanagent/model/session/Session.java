@@ -24,9 +24,24 @@ public class Session {
     private String id;
 
     /**
+     * WebSocket Session ID（根会话才有，用于工具转发）
+     */
+    private String webSocketSessionId;
+
+    /**
      * 项目信息
      */
     private ProjectInfo projectInfo;
+
+    /**
+     * 用户内网IP地址
+     */
+    private String userIp;
+
+    /**
+     * 用户电脑名称（hostname）
+     */
+    private String userName;
 
     /**
      * 会话状态（极简：只有 3 种）
@@ -69,12 +84,38 @@ public class Session {
         this.id = id;
     }
 
+    public String getWebSocketSessionId() {
+        return webSocketSessionId;
+    }
+
+    public void setWebSocketSessionId(String webSocketSessionId) {
+        this.webSocketSessionId = webSocketSessionId;
+    }
+
     public ProjectInfo getProjectInfo() {
         return projectInfo;
     }
 
     public void setProjectInfo(ProjectInfo projectInfo) {
         this.projectInfo = projectInfo;
+        touch();
+    }
+
+    public String getUserIp() {
+        return userIp;
+    }
+
+    public void setUserIp(String userIp) {
+        this.userIp = userIp;
+        touch();
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
         touch();
     }
 

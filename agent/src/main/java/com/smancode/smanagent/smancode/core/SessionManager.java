@@ -30,6 +30,38 @@ public class SessionManager {
     private final Map<String, String> childToParent = new ConcurrentHashMap<>();
 
     /**
+     * 注册已存在的会话（用于从文件加载的会话）
+     *
+     * @param session 会话
+     */
+    public void registerSession(Session session) {
+        if (session == null || session.getId() == null) {
+            return;
+        }
+        sessions.put(session.getId(), session);
+        logger.debug("注册会话: sessionId={}", session.getId());
+    }
+
+    /**
+     * 获取或注册会话
+     *
+     * @param session 会话（如果不存在则注册）
+     * @return 会话
+     */
+    public Session getOrRegister(Session session) {
+        if (session == null || session.getId() == null) {
+            return null;
+        }
+        Session existing = sessions.get(session.getId());
+        if (existing != null) {
+            return existing;
+        }
+        sessions.put(session.getId(), session);
+        logger.debug("注册会话: sessionId={}", session.getId());
+        return session;
+    }
+
+    /**
      * 创建根会话（用户会话）
      */
     public Session createRootSession(String projectId) {
@@ -64,13 +96,15 @@ public class SessionManager {
         childSession.setId(generateSessionId());
         childSession.setStatus(SessionStatus.IDLE);
         childSession.setProjectInfo(parentSession.getProjectInfo());
+        // 继承父会话的 WebSocket Session ID（用于工具转发）
+        childSession.setWebSocketSessionId(parentSession.getWebSocketSessionId());
 
         // 继承父会话的项目信息，但不继承消息
         sessions.put(childSession.getId(), childSession);
         childToParent.put(childSession.getId(), parentSessionId);
 
-        logger.info("创建子会话: sessionId={}, parentSessionId={}",
-                childSession.getId(), parentSessionId);
+        logger.info("创建子会话: sessionId={}, parentSessionId={}, webSocketSessionId={}",
+                childSession.getId(), parentSessionId, parentSession.getWebSocketSessionId());
 
         return childSession;
     }
@@ -80,6 +114,50 @@ public class SessionManager {
      */
     public Session getSession(String sessionId) {
         return sessions.get(sessionId);
+    }
+
+    /**
+     * 获取或创建会话
+     *
+     * @param sessionId  会话 ID
+     * @param projectKey 项目 Key
+     * @return 会话
+     */
+    public Session getOrCreateSession(String sessionId, String projectKey) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            sessionId = generateSessionId();
+        }
+
+        Session session = sessions.get(sessionId);
+        if (session == null) {
+            // 创建新会话
+            com.smancode.smanagent.model.session.ProjectInfo projectInfo =
+                    new com.smancode.smanagent.model.session.ProjectInfo();
+            projectInfo.setProjectKey(projectKey);
+            projectInfo.setProjectPath("/path/to/project"); // TODO: 从配置获取
+
+            session = new Session(sessionId, projectInfo);
+            session.setCreatedTime(java.time.Instant.now());
+            session.setStatus(SessionStatus.IDLE);
+
+            sessions.put(sessionId, session);
+            logger.info("创建新会话: sessionId={}, projectKey={}", sessionId, projectKey);
+        }
+
+        return session;
+    }
+
+    /**
+     * 结束会话
+     *
+     * @param sessionId 会话 ID
+     */
+    public void endSession(String sessionId) {
+        Session session = sessions.get(sessionId);
+        if (session != null) {
+            session.markIdle();
+            logger.info("结束会话: sessionId={}", sessionId);
+        }
     }
 
     /**
