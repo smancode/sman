@@ -582,6 +582,7 @@ public class LlmService {
         Map<String, Object> body = new HashMap<>();
         body.put("model", endpoint.getModel());
         body.put("max_tokens", endpoint.getMaxTokens());
+        body.put("temperature", 0.0);  // 设置为 0，确保输出稳定，避免幻觉
 
         // 构建消息列表
         List<Map<String, String>> messages = new ArrayList<>();

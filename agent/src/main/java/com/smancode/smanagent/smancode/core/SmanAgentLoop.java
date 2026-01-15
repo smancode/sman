@@ -1159,7 +1159,9 @@ public class SmanAgentLoop {
                     } else if (part instanceof ReasoningPart) {
                         prompt.append("思考: ").append(((ReasoningPart) part).getText()).append("\n");
                     } else if (part instanceof ToolPart toolPart) {
-                        // 关键：添加工具调用和完整结果
+                        // 关键：智能摘要机制
+                        // - 有 summary：说明是历史工具，只发送摘要（避免 Token 爆炸）
+                        // - 无 summary：说明是新执行完的工具，发送完整结果 + 要求 LLM 生成摘要
                         prompt.append("调用工具: ").append(toolPart.getToolName()).append("\n");
 
                         // 添加参数
@@ -1167,21 +1169,27 @@ public class SmanAgentLoop {
                             prompt.append("参数: ").append(formatParamsBrief(toolPart.getParameters())).append("\n");
                         }
 
-                        // 关键：添加摘要结果（避免 Token 爆炸）
                         if (toolPart.getResult() != null) {
                             com.smancode.smanagent.tools.ToolResult result = toolPart.getResult();
                             if (result.isSuccess()) {
-                                // 优先使用摘要（由 ResultSummarizer 生成，已压缩）
+                                // 智能摘要机制
                                 if (toolPart.getSummary() != null && !toolPart.getSummary().isEmpty()) {
+                                    // 有 summary：历史工具，只发送摘要
                                     prompt.append("结果: \n").append(toolPart.getSummary()).append("\n");
                                 } else {
-                                    // 降级：使用 data 字段（可能包含完整结果，需要小心）
-                                    String dataResult = result.getData() != null ? result.getData().toString() : null;
-                                    if (dataResult != null && dataResult.length() < 1000) {
-                                        // 只有小数据才直接使用
-                                        prompt.append("结果: \n").append(dataResult).append("\n");
+                                    // 无 summary：新执行完的工具，发送完整结果
+                                    String fullData = result.getData() != null ? result.getData().toString() : null;
+                                    if (fullData != null && !fullData.isEmpty()) {
+                                        prompt.append("结果: \n").append(fullData).append("\n");
+
+                                        // 要求 LLM 生成智能摘要
+                                        prompt.append("\n【重要】你刚刚执行了工具 ").append(toolPart.getToolName()).append("，\n");
+                                        prompt.append("请在返回的 JSON 中为该工具调用添加一个 \"summary\" 字段，\n");
+                                        prompt.append("包含以下内容：\n");
+                                        prompt.append("1. 关键发现（最重要的 1-3 点信息）\n");
+                                        prompt.append("2. 必要细节（供后续分析使用，如类名、方法名、核心逻辑等）\n");
+                                        prompt.append("\nsummary 应该简洁但包含所有必要信息，避免重复工具结果中的冗余内容。\n");
                                     } else {
-                                        // 大数据使用 displayContent
                                         String displayContent = result.getDisplayContent();
                                         if (displayContent != null && !displayContent.isEmpty()) {
                                             prompt.append("结果: \n").append(displayContent).append("\n");

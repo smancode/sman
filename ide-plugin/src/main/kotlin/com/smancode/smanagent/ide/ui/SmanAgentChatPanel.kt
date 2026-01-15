@@ -253,8 +253,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         // 先保存当前会话
         saveCurrentSessionIfNeeded()
 
-        // 获取历史会话列表
-        val history = storageService.getHistorySessions()
+        // 获取历史会话列表（仅当前项目）
+        val history = storageService.getHistorySessions(projectKey)
 
         // 显示弹窗
         HistoryPopup(
