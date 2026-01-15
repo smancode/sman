@@ -45,8 +45,8 @@ public class ReadFileTool extends AbstractTool implements Tool {
 
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
-        long startTime = System.currentTimeMillis();
         logger.info("ReadFileTool.execute called: projectKey={}, params={}", projectKey, params);
+        long startTime = System.currentTimeMillis();
         try {
             // 优先使用 simpleName
             String simpleName = (String) params.get("simpleName");
