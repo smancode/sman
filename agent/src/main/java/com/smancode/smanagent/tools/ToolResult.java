@@ -46,8 +46,6 @@ public class ToolResult {
 
     /**
      * 相对路径（用于后续重新读取或修改）
-     * <p>
-     * 例如: "agent/src/main/java/com/smancode/smanagent/service/VectorSearchService.java"
      */
     private String relativePath;
 

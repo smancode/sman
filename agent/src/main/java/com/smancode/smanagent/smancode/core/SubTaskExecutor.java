@@ -178,7 +178,7 @@ public class SubTaskExecutor {
 
     /**
      * 检查摘要行是否与参数重复（冗余）
-     * 例如："查询: VectorSearchService" 当参数中有 query=VectorSearchService 时就是冗余的
+     * 例如："查询: read_file" 当参数中有 query=read_file 时就是冗余的
      */
     private boolean isRedundantSummaryLine(String line, Map<String, Object> params) {
         if (params == null || params.isEmpty()) {

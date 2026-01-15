@@ -51,20 +51,15 @@ llm:
       base-delay: 10000  # 10秒（指数退避基础值）
 
 # ==================== 向量搜索配置 ====================
-bank:
-  analysis:
-    vector:
-      enabled: ${VECTOR_ENABLED:true}
-      embedding:
-        base-url: ${BGE_M3_EMBED_BASE_URL:http://localhost:8000/v1}
-        model: ${BGE_M3_MODEL:BAAI/bge-m3}
-        api-key: ${BGE_M3_API_KEY:ok}
-      reranker:
-        enabled: ${BGE_RERANKER_ENABLED:true}
-        base-url: ${BGE_RERANKER_BASE_URL:http://localhost:8001/v1}
-        model: ${BGE_RERANKER_MODEL:BAAI/bge-reranker-v2-m3}
-    static:
-      project-root-path: ${ANALYSIS_PROJECT_PATH:/Users/liuchao/projects/autoloop}
+# 注意：向量搜索功能已迁移至 Knowledge 服务
+# Agent 端不再需要 BGE-M3 和 Reranker 配置
+
+# ==================== Knowledge 服务配置 ====================
+knowledge:
+  service:
+    base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://localhost:8088}
+    search-path: /api/knowledge/search
+    timeout: 30000  # 30秒（30000毫秒）
 
 # ==================== WebSocket 配置 ====================
 websocket:
