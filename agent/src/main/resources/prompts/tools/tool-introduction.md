@@ -123,41 +123,27 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
   }
 }
 
-// Example 4: Read specific lines of a file
+// Example 4: Read entire file (recommended)
 {
   "toolName": "read_file",
   "parameters": {
     "simpleName": "PaymentService",
     "startLine": 1,
-    "endLine": 100
-  }
-}
-
-// Example 5: Read more lines (when file is longer than 100 lines)
-{
-  "toolName": "read_file",
-  "parameters": {
-    "simpleName": "PaymentService",
-    "startLine": 101,
-    "endLine": 200
+    "endLine": 999999
   }
 }
 ```
 
 ### File Reading Tips
 
-**Default behavior**: `read_file` reads first 100 lines by default.
+**Default behavior**: `read_file` reads first 300 lines by default. This is sufficient for most files.
 
-**When file is longer**: The result will tell you the total lines and how to read more:
-```
-... (文件共 250 行，当前显示第 1-100 行，还有 150 行未显示)
-提示：可以使用 startLine=101, endLine=200 继续读取
-```
+**For complete file content**: Use `endLine=999999` to read the entire file.
 
 **Use line range parameters**:
 - `startLine`: 开始行号（默认 1）
-- `endLine`: 结束行号（默认 100）
-- Example: `read_file(simpleName="MyClass", startLine=1, endLine=200)`
+- `endLine`: 结束行号（默认 300，设置为 999999 读取完整文件）
+- Example: `read_file(simpleName="MyClass", startLine=1, endLine=999999)`
 
 ---
 

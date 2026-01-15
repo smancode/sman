@@ -122,15 +122,15 @@ public class CommitMessageGenerator {
         }
 
         prompt.append("## 要求\n");
-        prompt.append("1. 最多 30 个字符（中文）\n");
+        prompt.append("1. 最多 50 个字符（中文）\n");
         prompt.append("2. 概括变更的核心业务价值（不说技术细节）\n");
         prompt.append("3. 使用动词开头：修复、添加、优化、重构等\n\n");
 
         prompt.append("## 示例\n");
-        prompt.append("- 修复登录页样式问题\n");
-        prompt.append("- 添加用户密码强度校验\n");
-        prompt.append("- 优化查询性能\n");
-        prompt.append("- 重构认证逻辑\n\n");
+        prompt.append("- fix:修复登录页样式问题\n");
+        prompt.append("- feat:添加用户密码强度校验\n");
+        prompt.append("- perf:优化查询性能\n");
+        prompt.append("- refactor:重构认证逻辑\n\n");
 
         prompt.append("请直接返回 commit message，不要其他内容。");
 

@@ -76,18 +76,3 @@ subtask:
     max-size: 32      # 最大线程数
     queue-capacity: 100  # 队列容量
   max-internal-iterations: 5  # SubTask 内部 LLM 最大迭代次数
-
-# ==================== 日志配置 ====================
-logging:
-  level:
-    root: INFO
-    com.smancode.smanagent: DEBUG
-    org.springframework.web: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
-# ==================== 项目配置 ====================
-project:
-  # 项目Key（用于隔离不同项目的业务知识）
-  key: ${PROJECT_KEY:smanagent}

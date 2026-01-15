@@ -107,15 +107,12 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
   - Use this when you have the exact path
 - `startLine` (optional): Start line number, default 1
   - Example: `1`, `50`, `101`
-- `endLine` (optional): End line number, default 100
-  - Example: `100`, `200`, `500`
+- `endLine` (optional): End line number, default 300
+  - Example: `300`, `500`, `999999` (for entire file)
 
 **Default Behavior**:
-- Reads **first 100 lines** by default
-- If file has more lines, result will tell you:
-  - Total line count
-  - How many lines remaining
-  - How to continue reading (with suggested `startLine` and `endLine`)
+- Reads **first 300 lines** by default (sufficient for most files)
+- For complete file content, use `endLine=999999`
 
 **Examples**:
 
@@ -142,33 +139,20 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 ```
 
 ```json
-// Example 3: Read specific line range
+// Example 3: Read entire file (recommended)
 {
   "toolName": "read_file",
   "parameters": {
     "simpleName": "VectorSearchService",
     "startLine": 1,
-    "endLine": 200
+    "endLine": 999999
   }
 }
-// Reads first 200 lines
+// Reads complete file
 ```
 
 ```json
-// Example 4: Read more lines (when file is longer)
-{
-  "toolName": "read_file",
-  "parameters": {
-    "simpleName": "VectorSearchService",
-    "startLine": 101,
-    "endLine": 200
-  }
-}
-// Use this when result says "还有 150 行未显示"
-```
-
-```json
-// Example 5: Read by exact path
+// Example 4: Read by exact path
 {
   "toolName": "read_file",
   "parameters": {
@@ -183,15 +167,16 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 ```
 [文件内容]
 
-... (文件共 250 行，当前显示第 1-100 行，还有 150 行未显示)
-提示：可以使用 startLine=101, endLine=200 继续读取
+... (文件共 350 行，当前显示第 1-300 行，还有 50 行未显示)
+提示：可以使用 startLine=301, endLine=999999 继续读取
 ```
 
 **⚠️ Common Mistakes**:
 - ❌ Using `find_file` first when you have the class name → Use `read_file` with `simpleName` directly
-- ❌ Not reading more lines when file is truncated → Use `startLine`/`endLine` to continue
+- ❌ Reading files in chunks (1-100, 101-200, etc.) → Use `endLine=999999` to read complete file at once
 - ❌ Assuming only Java files are supported → All file types are supported!
 - ✅ **FAST PATH**: `read_file` + `simpleName` = Instant access to any file
+- ✅ **BEST PRACTICE**: Use `endLine=999999` to read complete file content in one call
 
 ---
 
