@@ -37,13 +37,13 @@ public class StreamingNotificationHandler {
      * 立即推送确认消息（返回判断结果）
      * <p>
      * 返回一个 AcknowledgmentResult 对象，包含：
-     * - needSearch: 是否需要执行 Search
+     * - needConsult: 是否需要专家咨询
      * - isChat: 是否是闲聊
      */
     public AcknowledgmentResult pushImmediateAcknowledgment(Session session, Consumer<Part> partPusher) {
         Message latestUser = session.getLatestUserMessage();
         if (latestUser == null || latestUser.getParts().isEmpty()) {
-            return new AcknowledgmentResult(true, false);  // 默认需要 Search
+            return new AcknowledgmentResult(true, false);  // 默认需要专家咨询
         }
 
         Part firstPart = latestUser.getParts().get(0);
@@ -59,7 +59,7 @@ public class StreamingNotificationHandler {
             JsonNode json = llmService.jsonRequest(ackPrompt);
 
             String ackText = json.path("acknowledgment").asText("");
-            boolean needSearch = json.path("needSearch").asBoolean(true);
+            boolean needConsult = json.path("needConsult").asBoolean(true);
             boolean isChat = json.path("isChat").asBoolean(false);
 
             // 如果不是闲聊且有确认语，则推送
@@ -71,11 +71,11 @@ public class StreamingNotificationHandler {
                 partPusher.accept(ackPart);
             }
 
-            return new AcknowledgmentResult(needSearch, isChat);
+            return new AcknowledgmentResult(needConsult, isChat);
 
         } catch (Exception e) {
             logger.warn("生成确认消息失败", e);
-            // 失败时使用默认确认，保守策略：需要 Search
+            // 失败时使用默认确认，保守策略：需要专家咨询
             ReasoningPart ackPart = new ReasoningPart();
             ackPart.setSessionId(session.getId());
             ackPart.setText("思考中");
@@ -89,16 +89,16 @@ public class StreamingNotificationHandler {
      * 确认结果
      */
     public static class AcknowledgmentResult {
-        private final boolean needSearch;
+        private final boolean needConsult;
         private final boolean isChat;
 
-        public AcknowledgmentResult(boolean needSearch, boolean isChat) {
-            this.needSearch = needSearch;
+        public AcknowledgmentResult(boolean needConsult, boolean isChat) {
+            this.needConsult = needConsult;
             this.isChat = isChat;
         }
 
-        public boolean isNeedSearch() {
-            return needSearch;
+        public boolean isNeedConsult() {
+            return needConsult;
         }
 
         public boolean isChat() {
@@ -115,7 +115,7 @@ public class StreamingNotificationHandler {
 
                 You are analyzing a user's input to determine:
                 1. Is this a casual chat (greeting/thanks/self-introduction)?
-                2. Does this require a Search (user has no specific target)?
+                2. Does this require expert consultation (user has no specific target)?
                 3. Generate a brief acknowledgment if needed
 
                 ## User Input
@@ -128,13 +128,13 @@ public class StreamingNotificationHandler {
                 - Thanks: "谢谢", "感谢", "thx"
                 - Self-introduction: "我是...", "我是阿瓜"
 
-                ### needSearch = false (User has clear target)
+                ### needConsult = false (User has clear target)
                 - User provides specific class name: "ReadFileTool.execute 方法分析一下"
                 - User provides specific file path: "分析 com/smancode/... 下的文件"
                 - User provides explicit instruction on what to analyze
                 - DO NOT add extra steps when user is clear!
 
-                ### needSearch = true (User needs help finding context)
+                ### needConsult = true (User needs help finding context)
                 - User describes problem in natural language: "支付流程是怎样的？"
                 - User mentions business terms without specific class: "账号挂失怎么处理？"
                 - User asks vague questions requiring context discovery
@@ -144,7 +144,7 @@ public class StreamingNotificationHandler {
                 ```json
                 {
                   "acknowledgment": "简短确认语（闲聊时留空）",
-                  "needSearch": true/false,
+                  "needConsult": true/false,
                   "isChat": true/false
                 }
                 ```
@@ -152,13 +152,13 @@ public class StreamingNotificationHandler {
                 ## Examples
 
                 Input: "ReadFileTool.execute 方法分析一下"
-                Output: {"acknowledgment": "收到，已理解需求", "needSearch": false, "isChat": false}
+                Output: {"acknowledgment": "收到，已理解需求", "needConsult": false, "isChat": false}
 
                 Input: "支付流程是怎样的？"
-                Output: {"acknowledgment": "正在分析支付流程", "needSearch": true, "isChat": false}
+                Output: {"acknowledgment": "正在分析支付流程", "needConsult": true, "isChat": false}
 
                 Input: "你好"
-                Output: {"acknowledgment": "", "needSearch": false, "isChat": true}
+                Output: {"acknowledgment": "", "needConsult": false, "isChat": true}
                 """, userQuestion);
     }
 

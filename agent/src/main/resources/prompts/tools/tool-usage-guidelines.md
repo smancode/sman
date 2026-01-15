@@ -11,16 +11,16 @@
 ## Core Principles
 
 <tool_philosophy>
-1. **Start With `search`**: 90% of queries can be answered by `search` alone
-2. **Right Tool, Second**: Use other tools only when `search` results suggest you need deeper investigation
-3. **Chain Efficiently**: Let `search` guide you to the right next steps
+1. **Start With `expert_consult`**: 90% of queries can be answered by `expert_consult` alone
+2. **Right Tool, Second**: Use other tools only when `expert_consult` results suggest you need deeper investigation
+3. **Chain Efficiently**: Let `expert_consult` guide you to the right next steps
 </tool_philosophy>
 
 ## The Golden Rule
 
-**⚡ WHEN IN DOUBT, CALL `search` FIRST**
+**⚡ WHEN IN DOUBT, CALL `expert_consult` FIRST**
 
-`search` is an intelligent SubAgent that:
+`expert_consult` is an intelligent SubAgent that:
 - Understands business requirements (e.g., "520提额浮层提示")
 - Understands code queries (e.g., "VectorSearchService是干啥的")
 - Returns comprehensive answers (business context + code entries + relationships)
@@ -31,29 +31,29 @@
 <decision_logic>
 **Question: What does the user want?**
 
-STEP 1: ALWAYS START WITH `search`
+STEP 1: ALWAYS START WITH `expert_consult`
 → Use `search(query: "user's exact question")`
 → Analyze the results
 → Decide if you need more information
 
-STEP 2: BASED ON SEARCH RESULTS
+STEP 2: BASED ON EXPERT CONSULT RESULTS
 
-CASE A: `search` returned enough information
+CASE A: `expert_consult` returned enough information
 → You're done! Summarize the answer for the user
 
-CASE B: `search` suggests specific class to read
+CASE B: `expert_consult` suggests specific class to read
 → Use `read_file` with `simpleName`
 → Example: `{"simpleName": "PaymentService"}`
 
-CASE C: `search` suggests finding method usage
+CASE C: `expert_consult` suggests finding method usage
 → Use `grep_file` to find all usages
 → Example: `{"pattern": "executePayment", "filePattern": ".*Service\\.java"}`
 
-CASE D: `search` suggests understanding call relationships
+CASE D: `expert_consult` suggests understanding call relationships
 → Use `call_chain` with `methodRef`
 → Example: `{"methodRef": "PaymentService.executePayment", "direction": "callers"}`
 
-CASE E: `search` suggests finding files
+CASE E: `expert_consult` suggests finding files
 → Use `find_file` with `filePattern`
 → Example: `{"filePattern": ".*Controller\\.java"}`
 
@@ -61,9 +61,9 @@ CASE F: User wants to modify code
 → Use `read_file` first to see exact code
 → Then use `apply_change` with exact search/replace content
 
-CASE G: User already knows the EXACT class name (skip `search`)
+CASE G: User already knows the EXACT class name (skip `expert_consult`)
 → Use `read_file` with `simpleName` directly
-→ This is the ONLY case where you can skip `search`
+→ This is the ONLY case where you can skip `expert_consult`
 </decision_logic>
 
 ## Tool Specifications
@@ -226,7 +226,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```json
 // Example 1: Business requirement search (MOST COMMON)
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
     "query": "520提额添加客户经理页面增加浮层提示"
   }
@@ -241,7 +241,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```json
 // Example 2: Code query
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
     "query": "VectorSearchService是干啥的"
   }
@@ -255,7 +255,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 
 **Returns**: Structured answer with business context, code entries, and relationships
 
-**⚡ Key Point**: This is an intelligent SubAgent, not just a search tool. It reasons about the query and provides comprehensive answers.
+**⚡ Key Point**: This is an intelligent SubAgent, not just a expert_consult tool. It reasons about the query and provides comprehensive answers.
 
 ---
 
@@ -629,7 +629,7 @@ read_file (verify exact code) → apply_change
 | User Input | Best Tool | Example |
 |------------|-----------|---------|
 | "What does X do?" | `read_file` | `simpleName: "X"` |
-| "How does Y work?" | `search` | `query: "Y process", type: "both"` |
+| "How does Y work?" | `expert_consult` | `query: "Y process", type: "both"` |
 | "Where is Z used?" | `grep_file` | `pattern: "Z"` |
 | "Find all A classes" | `find_file` | `filePattern: ".*A\\.java"` |
 | "Who calls M?" | `call_chain` | `methodRef: "C.M", direction: "callers"` |

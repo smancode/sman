@@ -101,12 +101,12 @@ public class SmanAgentLoop {
             // 3. 标记会话为忙碌
             session.markBusy();
 
-            // 4. 【智能判断】先判断用户意图，再决定是否需要 Search
+            // 4. 【智能判断】先判断用户意图，再决定是否需要专家咨询
             StreamingNotificationHandler.AcknowledgmentResult ackResult =
                     notificationHandler.pushImmediateAcknowledgment(session, partPusher);
 
-            logger.info("用户意图判断: needSearch={}, isChat={}",
-                    ackResult.isNeedSearch(), ackResult.isChat());
+            logger.info("用户意图判断: needConsult={}, isChat={}",
+                    ackResult.isNeedConsult(), ackResult.isChat());
 
             // 5. 主循环：调用 LLM 处理
             Message assistantMessage = processWithLLM(session, partPusher);

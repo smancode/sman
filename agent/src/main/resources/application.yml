@@ -59,7 +59,7 @@ knowledge:
   service:
     base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://localhost:8088}
     search-path: /api/knowledge/search
-    timeout: 30000  # 30秒（30000毫秒）
+    timeout: 300000  # 300秒
 
 # ==================== WebSocket 配置 ====================
 websocket:
@@ -72,10 +72,10 @@ websocket:
 # ==================== SubTask 配置 ====================
 subtask:
   thread-pool:
-    core-size: 8      # 核心线程数
-    max-size: 16      # 最大线程数
+    core-size: 32      # 核心线程数
+    max-size: 32      # 最大线程数
     queue-capacity: 100  # 队列容量
-  max-internal-iterations: 3  # SubTask 内部 LLM 最大迭代次数
+  max-internal-iterations: 5  # SubTask 内部 LLM 最大迭代次数
 
 # ==================== 日志配置 ====================
 logging:
@@ -87,19 +87,7 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# ==================== 项目缓存配置 ====================
+# ==================== 项目配置 ====================
 project:
-  # 项目路径（需要分析的代码路径）
-  path: ${PROJECT_PATH:/Users/liuchao/projects/smanagent}
-  # 项目Key（用于隔离不同项目的缓存）
+  # 项目Key（用于隔离不同项目的业务知识）
   key: ${PROJECT_KEY:smanagent}
-  # 缓存目录配置
-  cache:
-    base-dir: ./data
-    md5-dir: ./data/file-md5-cache
-    spoon-dir: ./data/spoon-snapshots
-  # 定时刷新配置
-  refresh:
-    enabled: ${PROJECT_REFRESH_ENABLED:true}
-    interval-minutes: 5
-    initial-delay-minutes: 1

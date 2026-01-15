@@ -2,23 +2,41 @@
 
 ## ⚡ Most Important Rule
 
-**START WITH `search` FOR EVERYTHING**
+**START WITH `expert_consult` FOR EVERYTHING**
 
-When in doubt, call `search` first. It's an intelligent SubAgent that understands both business requirements and code queries.
+When in doubt, call `expert_consult` first. It's an expert consultation tool with **bidirectional Business ↔ Code understanding**.
 
-> 90% of queries can be answered by `search` alone. Only use other tools when `search` results suggest you need deeper investigation.
+> 90% of queries can be answered by `expert_consult` alone. Only use other tools when `expert_consult` results suggest you need deeper investigation.
 
 ## Quick Reference
 
 | Tool | Best For | When to Use |
 |------|----------|-------------|
-| **search** | **万能搜索入口** | **绝大多数情况，优先使用这个** |
+| **expert_consult** | **Business ↔ Code expert consultation** | **Business/rule/code analysis: prioritize this first** |
 | read_file | **Read any file** | You already know the file name (Java, XML, YAML, etc.) |
 | grep_file | Find method usage | You know the method name and want all usages |
 | find_file | Find files by pattern | You know the file name pattern |
 | call_chain | Analyze call relationships | You need to understand who calls what |
 | extract_xml | Extract XML content | You need to parse XML configurations |
 | apply_change | Modify code | You've read the code and are ready to change it |
+
+## Expert Consultation: Bidirectional Business ↔ Code
+
+**`expert_consult` is your FIRST choice for both business and code questions:**
+
+### Direction 1: Business → Code
+**Ask about business requirements, get code entries:**
+- "新增还款方式怎么配置" → Returns: Business rules + Configuration classes + Code locations
+- "520提额浮层提示怎么实现" → Returns: UI logic + Backend handlers + Workflow
+- "资金划拨流程是怎样的" → Returns: Process flow + Key services + State machines
+
+### Direction 2: Code → Business
+**Ask about code, get business context:**
+- "BusinessContract在哪些业务场景里面会用？" → Returns: All business scenarios + Usage patterns + Related rules
+- "transaction.xml在放还款里面怎么工作的？" → Returns: Payment workflow + Transaction logic + Business meanings
+- "PaymentService.executePayment是干什么的？" → Returns: Business purpose + Scenarios + Related entities
+
+**Key Point**: Knowledge graph has **bidirectional mappings** between business entities and code. `expert_consult` leverages this to answer questions from BOTH directions.
 
 ## Decision Tree
 
@@ -31,13 +49,13 @@ When in doubt, call `search` first. It's an intelligent SubAgent that understand
                   │
                   ▼
         ┌─────────────────┐
-        │  Call search    │ ◄─── START HERE ALWAYS
+        │ Call expert_consult │ ◄─── START HERE ALWAYS
         │  with the query │
         └────────┬────────┘
                  │
                  ▼
         ┌─────────────────────────┐
-        │  Analyze search results │
+        │ Analyze consult results │
         └────────┬────────────────┘
                  │
         ┌────────┴────────┐
@@ -56,39 +74,46 @@ When in doubt, call `search` first. It's an intelligent SubAgent that understand
     └──────────┘   └──────────┘   └──────────┘
 ```
 
-**Examples**:
-- User: "VectorSearchService是干啥的" → `search(query: "VectorSearchService是干啥的")`
-- User: "520提额浮层提示怎么实现" → `search(query: "520提额浮层提示怎么实现")`
-- User: "What does PaymentService do?" → `search(query: "What does PaymentService do?")`
-- User: "支付流程是怎样的" → `search(query: "支付流程是怎样的")`
+## Examples
+
+### Business → Code Examples
+- User: "新增还款方式怎么配置" → `expert_consult(query: "新增还款方式怎么配置")`
+- User: "520提额浮层提示怎么实现" → `expert_consult(query: "520提额浮层提示怎么实现")`
+- User: "资金划拨流程是怎样的" → `expert_consult(query: "资金划拨流程是怎样的")`
+
+### Code → Business Examples
+- User: "BusinessContract在哪些业务场景里面会用？" → `expert_consult(query: "BusinessContract在哪些业务场景里面会用？")`
+- User: "transaction.xml在放还款里面怎么工作的？" → `expert_consult(query: "transaction.xml在放还款里面怎么工作的？")`
+- User: "PaymentService.executePayment是干什么的？" → `expert_consult(query: "PaymentService.executePayment是干什么的？")`
 
 ## Key Points
 
-1. **`search` is intelligent SubAgent** - It understands business requirements and code queries
-2. **`search` returns comprehensive answers** - Business context + knowledge + code entries + relationships
-3. **Other tools are for deep dives** - Use them after `search` when you need more specific information
-4. **`read_file` is still the fastest** - If you already know the exact class name, use `read_file(simpleName="ClassName")`
+1. **`expert_consult` is bidirectional** - Business → Code AND Code → Business
+2. **`expert_consult` returns comprehensive answers** - Business context + knowledge + code entries + relationships
+3. **`expert_consult` maps entities** - Understands how business entities map to code and vice versa
+4. **Other tools are for deep dives** - Use them after `expert_consult` when you need more specific information
+5. **`read_file` is still the fastest** - If you already know the exact class name, use `read_file(simpleName="ClassName")`
 
-## Examples
+## Code Examples
 
 ```json
-// Example 1: Business requirement search (MOST COMMON)
+// Example 1: Business → Code (MOST COMMON)
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
-    "query": "520提额添加客户经理页面增加浮层提示"
+    "query": "新增还款方式怎么配置"
   }
 }
-// Returns: Business context, rules, code entries, relationships
+// Returns: Business rules + Configuration classes + Implementation locations
 
-// Example 2: Code query
+// Example 2: Code → Business
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
-    "query": "VectorSearchService是干啥的"
+    "query": "BusinessContract在哪些业务场景里面会用？"
   }
 }
-// Returns: What it does, how it's used, system role
+// Returns: All business scenarios + Usage patterns + Related rules
 
 // Example 3: Direct class read (ONLY when you know the exact name)
 {
@@ -136,4 +161,4 @@ When in doubt, call `search` first. It's an intelligent SubAgent that understand
 
 ---
 
-**Remember**: When in doubt, `search` it out! The intelligent search will guide you to the right next steps.
+**Remember**: When in doubt, `expert_consult` it out! The bidirectional expert consultation will guide you to the right next steps.

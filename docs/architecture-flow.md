@@ -133,9 +133,9 @@ flowchart TD
 
     SearchStart --> PushReasoning[推送 reasoning<br/>正在深度理解...]
 
-    PushReasoning --> SearchAgent[SearchSubAgent.search]
+    PushReasoning --> ExpertConsultAgent[ExpertConsultTool.search]
 
-    SearchAgent --> AnalyzeQuery[分析查询类型<br/>业务需求 vs 代码查询]
+    ExpertConsultAgent --> AnalyzeQuery[分析查询类型<br/>业务需求 vs 代码查询]
 
     AnalyzeQuery --> BizCheck{业务需求?}
     BizCheck -->|是| GetKG[从知识图谱查询<br/>▼▼▼]
@@ -163,7 +163,7 @@ flowchart TD
 
     SkipSearch --> MainFlow
 
-    style SearchAgent fill:#e1f5ff,stroke:#01579b,stroke-width:3px
+    style ExpertConsultAgent fill:#e1f5ff,stroke:#01579b,stroke-width:3px
     style LLMReason fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
     style KGData fill:#fff3e0,stroke:#ef6c00
     style MainFlow fill:#e8f5e9
@@ -203,7 +203,7 @@ flowchart TB
         ST3["CodeMapping<br/>业务↔代码 双向映射"]
     end
 
-    subgraph Consumer["消费者：SearchSubAgent"]
+    subgraph Consumer["消费者：ExpertConsultTool"]
         CS1["查询业务背景"]
         CS2["查询业务知识"]
         CS3["查询代码映射"]
@@ -235,7 +235,7 @@ sequenceDiagram
     participant User as 用户
     participant Loop as SmanAgentLoop
     participant Judge as Search判断 LLM
-    participant Search as SearchSubAgent
+    participant Search as ExpertConsultTool
     participant KG as KnowledgeGraphClient
     participant Main as 主 LLM
 
@@ -291,7 +291,7 @@ flowchart TD
     CheckContext -->|有| UseContext[使用 Search 上下文<br/>业务背景+代码入口]
     CheckContext -->|无| Normal[正常模式]
 
-    UseContext --> BuildPrompt[构建 Prompt<br/>系统提示词+对话历史<br/>+Search上下文+工具结果]
+    UseContext --> BuildPrompt[构建 Prompt<br/>系统提示词+对话历史<br/>+专家咨询上下文+工具结果]
     Normal --> BuildPrompt
 
     BuildPrompt --> CallLLM[调用 LLM]

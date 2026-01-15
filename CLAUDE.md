@@ -119,6 +119,19 @@ Tools implement `Tool` interface:
 - Supports cloud-native deployment (Agent and Knowledge can scale independently)
 - Agent becomes a pure ReAct orchestrator
 
+## Tool Naming Evolution
+
+**Important**: The search functionality has been renamed from `search` to `expert_consult` to better reflect its purpose:
+
+| Old Name | New Name | Reason |
+|----------|----------|--------|
+| `search` | `expert_consult` | More accurately describes the function - it's an expert consultation that queries business knowledge and locates code entries |
+| `SearchTool` | `ExpertConsultTool` | Aligns with the new naming convention |
+| `needSearch` | `needConsult` | Clarifies that this is about consultation, not just searching |
+| `SearchSubAgent` | (removed) | Functionality moved to Knowledge service |
+
+**Prompt Updates**: All prompts in `agent/src/main/resources/prompts/` have been updated to use `expert_consult` instead of `search`.
+
 ## Testing
 
 Tests located in:

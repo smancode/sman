@@ -18,7 +18,7 @@
     ↓
 LLM 分析 → 需要更多信息？
     ↓
-是的 → 调用 search 工具（统一搜索代码+领域知识）
+是的 → 调用 expert_consult 工具（统一搜索代码+领域知识）
     ↓
 获取搜索结果
     ↓
@@ -28,9 +28,9 @@ LLM 基于搜索结果 → 决定下一步
     └→ 直接回答问题
 ```
 
-### 1.2 search 工具
+### 1.2 expert_consult 工具
 
-**核心组件**：`SearchTool` - 统一搜索工具
+**核心组件**：`ExpertConsultTool` - 统一搜索工具
 
 **功能**：
 - 同时搜索代码和领域知识
@@ -105,7 +105,7 @@ public interface SearchService {
 ```
 
 **实现**：`SearchServiceImpl`
-- 代码搜索：调用 `VectorSearchService.semanticSearch()`
+- 代码搜索：调用 `Knowledge 服务.semanticSearch()`
 - 知识搜索：查询 `DomainKnowledgeRepository.findAllWithEmbedding()`
 - 混合排序：按 score 降序，返回 topK
 
@@ -113,14 +113,14 @@ public interface SearchService {
 
 ## 4. 工具集成
 
-### 4.1 SearchTool
+### 4.1 ExpertConsultTool
 
-**位置**：`com.smancode.smanagent.tools.search.SearchTool`
+**位置**：`com.smancode.smanagent.tools.search.ExpertConsultTool`
 
 **工具定义**：
 ```java
 @Component
-public class SearchTool extends AbstractTool implements Tool {
+public class ExpertConsultTool extends AbstractTool implements Tool {
     @Override
     public String getName() {
         return "search";
@@ -161,7 +161,7 @@ LLM 会自然地调用 `search` 工具：
 
 工作流程：
 1. 理解用户问题
-2. 如果需要更多信息，调用 search 工具
+2. 如果需要更多信息，调用 expert_consult 工具
 3. 基于搜索结果，分析并回答问题
 4. 如果问题复杂，可以拆解为多个 SubTask
 ```
@@ -207,7 +207,7 @@ LLM 会自然地调用 `search` 工具：
 ### Phase 2: 搜索服务 ✅
 - [x] `SearchService` 接口
 - [x] `SearchServiceImpl` 实现
-- [x] `SearchTool` 工具
+- [x] `ExpertConsultTool` 工具
 
 ### Phase 3: 向量搜索（待完善）
 - [ ] BGE-M3 向量化服务

@@ -79,8 +79,8 @@ object StyledMessageRenderer {
                     if (lines.size > 1 && firstLine.contains("(") && firstLine.contains(")")) {
                         // 这是工具摘要格式，前端负责渲染
                         val toolCallContent = firstLine  // toolName(params)
-                        // 过滤掉空行和 "null" 字符串
-                        val resultLines = lines.drop(1).filter { it.isNotBlank() && it != "null" }
+                        // 过滤掉空行、"null" 字符串和 "路径:" 前缀的行
+                        val resultLines = lines.drop(1).filter { it.isNotBlank() && it != "null" && !it.trim().startsWith("路径:") }
 
                         // 提取工具名称（括号前的部分）
                         val toolName = toolCallContent.substringBefore("(")

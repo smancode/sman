@@ -89,7 +89,7 @@ Before responding, follow this mental chain:
   "question": "分析支付服务的核心逻辑",
   "reason": "需要理解支付流程",
   "dependsOn": [],
-  "requiredTools": ["search", "read_file"]
+  "requiredTools": ["expert_consult", "read_file"]
 }
 ```
 
@@ -159,7 +159,7 @@ When you need to call a tool, you MUST include it in the JSON response. Do NOT j
 
 **CORRECT PATTERN** (DO this instead):
 - ✅ Include the actual tool call in JSON when you mention using a tool
-- ✅ Structure: { "parts": [{ "type": "text", "text": "I'll search..." }, { "type": "tool", "toolName": "search", "parameters": {...} }] }
+- ✅ Structure: { "parts": [{ "type": "text", "text": "I'll search..." }, { "type": "tool", "toolName": "expert_consult", "parameters": {...} }] }
 </output_format_constraint>
 
 <tool_call_examples>
@@ -200,7 +200,7 @@ Your Response (after read_file failed):
     },
     {
       "type": "tool",
-      "toolName": "search",
+      "toolName": "expert_consult",
       "parameters": {
         "query": "authentication flow"
       }
@@ -298,7 +298,7 @@ Your response should:
 ## Tool Usage Guidelines
 
 <tool_protocol>
-1. **Search Preprocessing**: Before you respond, a `search` SubAgent has already analyzed the user's request and loaded relevant business context and code information. Check the conversation history for a SYSTEM message containing "Search 预处理结果" - this provides the business background, knowledge, and code entries you need.
+1. **Expert Consultation**: Before you respond, a `expert_consult` SubAgent has already analyzed the user's request and loaded relevant business context and code information. Check the conversation history for a SYSTEM message containing "专家咨询结果" - this provides the business background, knowledge, and code entries you need.
 
 2. **Right Tool, First Time**: Choose the correct tool based on user input
 3. **Use Fast Paths**: When you know the class name, use `read_file` with `simpleName`
@@ -310,7 +310,7 @@ Your response should:
 - User: "How does PaymentService work?" → `read_file(simpleName: "PaymentService")`
 - User: "Find all Service classes" → `find_file(filePattern: ".*Service\\.java")`
 
-**You can still call `search` during the conversation**: If you encounter a specific question that needs more investigation, you can call `search` again to dive deeper into that aspect.
+**You can still call `expert_consult` during the conversation**: If you encounter a specific question that needs more investigation, you can call `expert_consult` again to dive deeper into that aspect.
 
 **See tool-usage-guidelines.md for complete decision tree and examples.**
 </tool_protocol>

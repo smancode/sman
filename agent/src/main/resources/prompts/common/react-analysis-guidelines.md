@@ -89,18 +89,18 @@
 
 ### 示例1：成功路径
 ```
-工具结果: read_file(VectorSearchService)
+工具结果: read_file(ExpertConsultTool)
 结果摘要:
-  路径: agent/src/main/java/.../VectorSearchService.java
-  public class VectorSearchService {
+  路径: agent/src/main/java/.../ExpertConsultTool.java
+  public class ExpertConsultTool {
       public void search(String query) {
           // 执行向量搜索
       }
   }
 
 你的分析：
-- ✅ 找到了 VectorSearchService 类
-- ✅ 看到了核心方法 search()
+- ✅ 找到了 ExpertConsultTool 类
+- ✅ 看到了核心方法 expert_consult()
 - ⚠️ 但还不知道具体的搜索算法实现
 
 你的决策：继续读取相关类来理解完整逻辑
@@ -110,13 +110,13 @@
   "parts": [
     {
       "type": "text",
-      "text": "我找到了 VectorSearchService 类，它有一个 search() 方法。让我继续读取相关的向量索引类来理解完整的搜索流程。"
+      "text": "我找到了 ExpertConsultTool 类，它有一个 expert_consult() 方法。让我继续读取相关的向量索引类来理解完整的搜索流程。"
     },
     {
       "type": "tool",
       "toolName": "call_chain",
       "parameters": {
-        "method": "VectorSearchService.search",
+        "method": "ExpertConsultTool.search",
         "depth": 2
       }
     }
