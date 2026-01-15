@@ -328,12 +328,9 @@ If something goes wrong:
 ## Response Quality
 
 <quality_standards>
-Your responses should be:
-- **Accurate**: Based on actual code and tool results
-- **Complete**: Cover all aspects the user asked about
-- **Structured**: Use clear headings and organization
-- **Professional**: Use appropriate technical terminology
-- **Actionable**: Provide specific next steps when relevant
+- Multi-file operations: Use **total-part** structure (Overview → Checklist → Details)
+- Single file/Q&A: Concise and direct
+- Keep technical terms in English
 </quality_standards>
 
 ---

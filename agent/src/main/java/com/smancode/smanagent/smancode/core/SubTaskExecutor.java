@@ -90,17 +90,18 @@ public class SubTaskExecutor {
             // 4. 保留完整结果（不压缩），让 LLM 处理
             // 注意：不在这里生成摘要，让 LLM 在下一次调用时基于完整结果生成摘要
 
-            // 5. 更新工具状态并发送（保留完整结果）
+            // 5. 更新工具状态（不推送完整 TOOL Part，只推送摘要）
             if (fullResult.isSuccess()) {
                 toolPart.setState(ToolPart.ToolState.COMPLETED);
             } else {
                 toolPart.setState(ToolPart.ToolState.ERROR);
             }
-            toolPart.setResult(fullResult);  // 保留完整结果
+            toolPart.setResult(fullResult);  // 保留完整结果（用于后续可能需要完整内容的场景）
             toolPart.touch();
-            partPusher.accept(toolPart);
+            // 不再推送完整 TOOL Part，避免重复
+            // partPusher.accept(toolPart);
 
-            // 6. 推送工具摘要（用于前端显示，不影响 LLM 处理）
+            // 6. 推送工具摘要（唯一推送给前端的内容）
             String displaySummary = resultSummarizer.summarize(toolName, fullResult, parentSession);
             Part summaryPart = createSummaryPart(toolPart, displaySummary, fullResult);
             partPusher.accept(summaryPart);
@@ -214,6 +215,17 @@ public class SubTaskExecutor {
     private String formatParamsForTitle(Map<String, Object> params) {
         if (params == null || params.isEmpty()) {
             return "";
+        }
+
+        // 特殊处理 apply_change：只保留 relativePath，且只显示文件名
+        String relativePath = (String) params.get("relativePath");
+        if (relativePath != null) {
+            // 提取文件名
+            int lastSlash = Math.max(relativePath.lastIndexOf('/'), relativePath.lastIndexOf('\\'));
+            if (lastSlash >= 0 && lastSlash < relativePath.length() - 1) {
+                return relativePath.substring(lastSlash + 1);
+            }
+            return relativePath;
         }
 
         // 如果只有一个参数，直接返回其值

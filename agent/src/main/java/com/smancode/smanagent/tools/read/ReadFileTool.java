@@ -45,8 +45,8 @@ public class ReadFileTool extends AbstractTool implements Tool {
 
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
-        logger.info("ReadFileTool.execute 开始执行: projectKey={}, params={}", projectKey, params);
         long startTime = System.currentTimeMillis();
+        logger.info("ReadFileTool.execute called: projectKey={}, params={}", projectKey, params);
         try {
             // 优先使用 simpleName
             String simpleName = (String) params.get("simpleName");
@@ -54,22 +54,22 @@ public class ReadFileTool extends AbstractTool implements Tool {
 
             // 如果提供了 simpleName，自动查找文件
             if (simpleName != null && !simpleName.trim().isEmpty()) {
-                logger.info("使用 simpleName 模式: simpleName={}", simpleName);
-                // 构造可能的文件路径模式
-                String filePattern = simpleName + ".java";
+                // 解析行号参数
+                int startLine = getOptInt(params, "startLine", 1);
+                int endLine = getOptInt(params, "endLine", 100);
 
-                // 这里需要调用 find_file 工具的逻辑来查找文件
-                // 暂时返回提示信息
+                logger.info("使用 simpleName 模式: simpleName={}, startLine={}, endLine={}",
+                    simpleName, startLine, endLine);
+
+                // 返回需要 IDE 执行的提示（包含完整参数）
                 String displayContent = String.format(
-                    "⚠️ simpleName 模式暂未完全实现\n" +
-                    "请使用 find_file 先查找文件：\n" +
-                    "  filePattern: %s\n" +
-                    "然后使用 read_file 读取文件",
-                    filePattern
+                    "工具需要在 IDE 中执行\n" +
+                    "参数：simpleName=%s, startLine=%d, endLine=%d",
+                    simpleName, startLine, endLine
                 );
 
                 long duration = System.currentTimeMillis() - startTime;
-                ToolResult toolResult = ToolResult.success(null, "查找文件", displayContent);
+                ToolResult toolResult = ToolResult.success(null, "读取文件（IDE 执行）", displayContent);
                 toolResult.setExecutionTimeMs(duration);
                 return toolResult;
             }

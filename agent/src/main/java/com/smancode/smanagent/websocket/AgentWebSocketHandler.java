@@ -9,6 +9,8 @@ import com.smancode.smanagent.model.part.TextPart;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.model.session.SessionStatus;
 import com.smancode.smanagent.service.SessionFileService;
+import com.smancode.smanagent.smancode.command.CommitCommandHandler;
+import com.smancode.smanagent.smancode.command.CommitCommandResult;
 import com.smancode.smanagent.smancode.core.SmanAgentLoop;
 import com.smancode.smanagent.smancode.core.SessionManager;
 import com.smancode.smanagent.websocket.ToolForwardingService;
@@ -53,6 +55,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired(required = false)
     private ToolForwardingService toolForwardingService;
+
+    @Autowired
+    private CommitCommandHandler commitCommandHandler;
 
     @Resource(name = "webSocketExecutorService")
     private ExecutorService executorService;
@@ -102,6 +107,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 case "chat" -> handleChat(session, request);
                 case "ping" -> handlePing(session);
                 case "TOOL_RESULT" -> handleToolResult(session, request);
+                case "COMMAND" -> handleCommand(session, request);
                 default -> logger.warn("未知消息类型: {}", type);
             }
 
@@ -676,6 +682,49 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
         } catch (Exception e) {
             logger.error("处理 TOOL_RESULT 消息失败", e);
+        }
+    }
+
+    /**
+     * 处理内置命令
+     */
+    private void handleCommand(WebSocketSession wsSession, Map<String, Object> request) {
+        String sessionId = null;
+        try {
+            sessionId = (String) request.get("sessionId");
+            String command = (String) request.get("command");
+
+            logger.info("【命令处理】收到命令: sessionId={}, command={}", sessionId, command);
+
+            if ("commit".equals(command)) {
+                // 处理 /commit 命令
+                CommitCommandResult result = commitCommandHandler.handle(sessionId);
+
+                // 发送 COMMAND_RESULT
+                Map<String, Object> response = new HashMap<>();
+                response.put("type", "COMMAND_RESULT");
+                response.put("command", "commit");
+                response.put("commit_message", result.getCommitMessage());
+                response.put("add_files", result.getAddFiles());
+                response.put("modify_files", result.getModifyFiles());
+                response.put("delete_files", result.getDeleteFiles());
+
+                String json = objectMapper.writeValueAsString(response);
+                logger.info("【发送到前端】sessionId={}, type=COMMAND_RESULT, 完整内容={}", sessionId, json);
+                sendMessage(wsSession, response);
+
+                // 关闭 WebSocket（与现有流程一致）
+                wsSession.close(CloseStatus.NORMAL);
+                logger.info("【命令处理】WebSocket 连接已关闭（命令处理完成）: sessionId={}", sessionId);
+            }
+
+        } catch (Exception e) {
+            logger.error("【命令处理】处理命令失败: sessionId={}", sessionId, e);
+            try {
+                sendError(wsSession, "处理命令失败: " + e.getMessage());
+            } catch (Exception sendError) {
+                logger.error("【命令处理】发送错误消息失败", sendError);
+            }
         }
     }
 }

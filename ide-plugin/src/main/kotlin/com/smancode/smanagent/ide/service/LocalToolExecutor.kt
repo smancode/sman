@@ -489,16 +489,10 @@ class LocalToolExecutor(private val project: Project) {
 
         return when (val result = codeEditService.applyChange(relativePath, searchContent, newContent, basePath)) {
             is CodeEditService.EditResult.Success -> {
-                val sb = StringBuilder()
-                sb.append("## ✅ 代码修改成功\n\n")
-                sb.append("**文件**: `$relativePath`\n")
-                sb.append("**描述**: $description\n\n")
-                sb.append("修改已应用并保存，已自动格式化修改的部分。\n")
-
-                ToolResult(true, sb.toString())
+                ToolResult(true, "✅ 执行成功")
             }
             is CodeEditService.EditResult.Failure -> {
-                ToolResult(false, result.error)
+                ToolResult(false, "❌ ${result.error}")
             }
         }
     }

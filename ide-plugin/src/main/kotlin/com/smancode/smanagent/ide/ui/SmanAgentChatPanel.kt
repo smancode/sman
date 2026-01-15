@@ -12,6 +12,7 @@ import com.smancode.smanagent.ide.model.GraphModels.UserPartData
 import com.smancode.smanagent.ide.model.PartData
 import com.smancode.smanagent.ide.renderer.StyledMessageRenderer
 import com.smancode.smanagent.ide.service.AgentWebSocketClient
+import com.smancode.smanagent.ide.service.GitCommitHandler
 import com.smancode.smanagent.ide.service.SessionInfo
 import com.smancode.smanagent.ide.service.storageService
 import com.smancode.smanagent.ide.util.SessionIdGenerator
@@ -409,6 +410,13 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                     }
                 }
 
+                onCommandResult = { data ->
+                    SwingUtilities.invokeLater {
+                        logger.info("收到命令结果: {}", data)
+                        handleCommandResult(data)
+                    }
+                }
+
                 onToolCall = { data ->
                     // 处理工具调用
                     logger.info("收到工具调用: {}", data)
@@ -486,6 +494,13 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     fun sendMessage(inputText: String? = null) {
         val text = inputText ?: inputArea.text.trim()
         if (text.isEmpty()) return
+
+        // 检测内置命令
+        if (text.startsWith("/commit")) {
+            handleCommitCommand()
+            inputArea.text = ""
+            return
+        }
 
         // 确保有 sessionId（新建或复用）
         if (currentSessionId == null) {
@@ -571,10 +586,10 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     /**
      * 追加系统消息
      */
-    private fun appendSystemMessage(text: String) {
+    private fun appendSystemMessage(text: String, isProcessing: Boolean = false) {
         val colors = ThemeColors.getCurrentColors()
         val doc = outputArea.styledDocument
-        StyledMessageRenderer.renderSystemMessageToDocument(text, doc, colors)
+        StyledMessageRenderer.renderSystemMessageToDocument(text, doc, colors, isProcessing)
         outputArea.caretPosition = doc.length
     }
 
@@ -760,6 +775,107 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             // 出错时使用默认光标
             outputArea.cursor = Cursor.getDefaultCursor()
         }
+    }
+
+    /**
+     * 处理 /commit 命令
+     */
+    private fun handleCommitCommand() {
+        if (currentSessionId == null) {
+            appendSystemMessage("错误：没有活动的会话")
+            return
+        }
+
+        logger.info("【/commit命令】开始处理: sessionId={}", currentSessionId)
+
+        // 显示处理中状态（灰色）
+        appendSystemMessage("> 处理自动commit..", true)
+
+        // 确保连接
+        ensureWebSocketConnected()
+
+        // 发送 COMMAND 消息
+        val request: Map<String, Any> = mapOf(
+            "type" to "COMMAND",
+            "command" to "commit",
+            "sessionId" to currentSessionId!!
+        )
+
+        webSocketClient?.send(request)
+        logger.info("【/commit命令】已发送请求到后端")
+    }
+
+    /**
+     * 处理命令结果（COMMAND_RESULT）
+     */
+    private fun handleCommandResult(data: Map<String, Any>) {
+        val command = data["command"] as? String ?: return
+
+        if (command == "commit") {
+            val commitMessage = data["commit_message"] as? String ?: ""
+            val addFiles = data["add_files"] as? List<String> ?: emptyList()
+            val modifyFiles = data["modify_files"] as? List<String> ?: emptyList()
+            val deleteFiles = data["delete_files"] as? List<String> ?: emptyList()
+
+            logger.info("【/commit命令】收到结果: message={}, add={}, modify={}, delete={}",
+                    commitMessage, addFiles.size, modifyFiles.size, deleteFiles.size)
+
+            // 检查是否有变更
+            if (addFiles.isEmpty() && modifyFiles.isEmpty() && deleteFiles.isEmpty()) {
+                appendSystemMessage("⚠️ 没有需要提交的文件")
+                return
+            }
+
+            // 执行 Git 操作
+            val gitHandler = GitCommitHandler(project)
+            gitHandler.executeCommit(commitMessage, addFiles, modifyFiles, deleteFiles) { result ->
+                SwingUtilities.invokeLater {
+                    when (result) {
+                        is GitCommitHandler.CommitResult.Success -> {
+                            // 显示成功结果
+                            displayCommitResult(commitMessage, result.files)
+                        }
+                        is GitCommitHandler.CommitResult.NoChanges -> {
+                            appendSystemMessage("⚠️ ${result.message}")
+                        }
+                        is GitCommitHandler.CommitResult.Error -> {
+                            appendSystemMessage("❌ 提交失败: ${result.message}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 显示 commit 结果
+     */
+    private fun displayCommitResult(commitMessage: String, files: GitCommitHandler.FileChangeSummary) {
+        val sb = StringBuilder()
+
+        // commit message
+        sb.append("\n✅ 提交成功\n")
+        sb.append("Commit: $commitMessage\n\n")
+
+        // 文件变更
+        sb.append("文件变更:\n")
+
+        if (files.addFiles.isNotEmpty()) {
+            sb.append("  新增 (${files.addFiles.size}):\n")
+            files.addFiles.forEach { file -> sb.append("    + $file\n") }
+        }
+
+        if (files.modifyFiles.isNotEmpty()) {
+            sb.append("  修改 (${files.modifyFiles.size}):\n")
+            files.modifyFiles.forEach { file -> sb.append("    ~ $file\n") }
+        }
+
+        if (files.deleteFiles.isNotEmpty()) {
+            sb.append("  删除 (${files.deleteFiles.size}):\n")
+            files.deleteFiles.forEach { file -> sb.append("    - $file\n") }
+        }
+
+        appendSystemMessage(sb.toString())
     }
 
     fun dispose() {

@@ -34,57 +34,132 @@ public class StreamingNotificationHandler {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 立即推送确认消息
+     * 立即推送确认消息（返回判断结果）
+     * <p>
+     * 返回一个 AcknowledgmentResult 对象，包含：
+     * - needSearch: 是否需要执行 Search
+     * - isChat: 是否是闲聊
      */
-    public void pushImmediateAcknowledgment(Session session, Consumer<Part> partPusher) {
+    public AcknowledgmentResult pushImmediateAcknowledgment(Session session, Consumer<Part> partPusher) {
         Message latestUser = session.getLatestUserMessage();
         if (latestUser == null || latestUser.getParts().isEmpty()) {
-            return;
+            return new AcknowledgmentResult(true, false);  // 默认需要 Search
         }
 
         Part firstPart = latestUser.getParts().get(0);
         if (!(firstPart instanceof TextPart)) {
-            return;
+            return new AcknowledgmentResult(true, false);
         }
 
         String userQuestion = ((TextPart) firstPart).getText();
 
-        // 调用 LLM 生成简短确认
+        // 调用 LLM 生成简短确认并判断
         String ackPrompt = buildAcknowledgmentPrompt(userQuestion);
         try {
             JsonNode json = llmService.jsonRequest(ackPrompt);
-            String ackText = json.path("acknowledgment").asText("");
 
-            ReasoningPart ackPart = new ReasoningPart();
-            ackPart.setSessionId(session.getId());
-            ackPart.setText(ackText.isEmpty() ? "思考中" : ackText);
-            ackPart.touch();
-            partPusher.accept(ackPart);
+            String ackText = json.path("acknowledgment").asText("");
+            boolean needSearch = json.path("needSearch").asBoolean(true);
+            boolean isChat = json.path("isChat").asBoolean(false);
+
+            // 如果不是闲聊且有确认语，则推送
+            if (!isChat && !ackText.isEmpty()) {
+                ReasoningPart ackPart = new ReasoningPart();
+                ackPart.setSessionId(session.getId());
+                ackPart.setText(ackText);
+                ackPart.touch();
+                partPusher.accept(ackPart);
+            }
+
+            return new AcknowledgmentResult(needSearch, isChat);
 
         } catch (Exception e) {
             logger.warn("生成确认消息失败", e);
-            // 失败时使用默认确认
+            // 失败时使用默认确认，保守策略：需要 Search
             ReasoningPart ackPart = new ReasoningPart();
             ackPart.setSessionId(session.getId());
             ackPart.setText("思考中");
             ackPart.touch();
             partPusher.accept(ackPart);
+            return new AcknowledgmentResult(true, false);
         }
     }
 
     /**
-     * 构建确认消息提示词
+     * 确认结果
+     */
+    public static class AcknowledgmentResult {
+        private final boolean needSearch;
+        private final boolean isChat;
+
+        public AcknowledgmentResult(boolean needSearch, boolean isChat) {
+            this.needSearch = needSearch;
+            this.isChat = isChat;
+        }
+
+        public boolean isNeedSearch() {
+            return needSearch;
+        }
+
+        public boolean isChat() {
+            return isChat;
+        }
+    }
+
+    /**
+     * 构建确认消息提示词（英文思考，中文回答）
      */
     private String buildAcknowledgmentPrompt(String userQuestion) {
-        StringBuilder prompt = new StringBuilder();
-        prompt.append("用户提出了以下问题，请生成一句简短的确认语（1句话，不超过30字），");
-        prompt.append("表明你理解了问题并将进行分析。\n\n");
-        prompt.append("用户问题: ").append(userQuestion).append("\n\n");
-        prompt.append("请以 JSON 格式返回：\n");
-        prompt.append("{\n");
-        prompt.append("  \"acknowledgment\": \"你的确认语\"\n");
-        prompt.append("}");
-        return prompt.toString();
+        return String.format("""
+                # Task: Analyze User Input
+
+                You are analyzing a user's input to determine:
+                1. Is this a casual chat (greeting/thanks/self-introduction)?
+                2. Does this require a Search (user has no specific target)?
+                3. Generate a brief acknowledgment if needed
+
+                ## User Input
+                %s
+
+                ## Analysis Rules (Think in English)
+
+                ### isChat = true
+                - Greetings: "你好", "嗨", "早上好", "hello"
+                - Thanks: "谢谢", "感谢", "thx"
+                - Self-introduction: "我是...", "我是阿瓜"
+
+                ### needSearch = false (User has clear target)
+                - User provides specific class name: "ReadFileTool.execute 方法分析一下"
+                - User provides specific file path: "分析 com/smancode/... 下的文件"
+                - User provides explicit instruction on what to analyze
+                - DO NOT add extra steps when user is clear!
+
+                ### needSearch = true (User needs help finding context)
+                - User describes problem in natural language: "支付流程是怎样的？"
+                - User mentions business terms without specific class: "账号挂失怎么处理？"
+                - User asks vague questions requiring context discovery
+
+                ## Output Format (Chinese)
+
+                ```json
+                {
+                  "acknowledgment": "简短确认语（闲聊时留空）",
+                  "needSearch": true/false,
+                  "isChat": true/false
+                }
+                ```
+
+                ## Examples
+
+                Input: "ReadFileTool.execute 方法分析一下"
+                Output: {"acknowledgment": "收到，已理解需求", "needSearch": false, "isChat": false}
+
+                Input: "支付流程是怎样的？"
+                Output: {"acknowledgment": "正在分析支付流程", "needSearch": true, "isChat": false}
+
+                Input: "你好"
+                Output: {"acknowledgment": "", "needSearch": false, "isChat": true}
+                """, userQuestion);
     }
 
     /**

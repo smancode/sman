@@ -36,6 +36,7 @@ class AgentWebSocketClient(
     // 回调
     var onConnected: ((Map<String, Any>) -> Unit)? = null
     var onComplete: ((Map<String, Any>) -> Unit)? = null
+    var onCommandResult: ((Map<String, Any>) -> Unit)? = null
     var onError: ((Map<String, Any>) -> Unit)? = null
     var onPong: ((Map<String, Any>) -> Unit)? = null
     var onToolCall: ((Map<String, Any>) -> Unit)? = null
@@ -170,6 +171,7 @@ class AgentWebSocketClient(
                     onPartCallback?.invoke(part)
                 }
                 "complete" -> onComplete?.invoke(data)
+                "COMMAND_RESULT" -> onCommandResult?.invoke(data)
                 "error" -> onError?.invoke(data)
                 "pong" -> onPong?.invoke(data)
                 "TOOL_CALL" -> {

@@ -29,7 +29,7 @@ class CliInputArea(
     private val minRows = 3
 
     private val cornerRadius = JBUI.scale(8)
-    private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行"
+    private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行\n/commit  自动总结并 #AI commit#"
     private var showPlaceholder = true
     private var isFocused = false
 

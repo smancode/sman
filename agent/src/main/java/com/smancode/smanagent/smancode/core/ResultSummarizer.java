@@ -194,6 +194,14 @@ public class ResultSummarizer {
                 }
                 yield sb.length() > 0 ? sb.toString() : data.substring(0, 500);
             }
+            case "apply_change" -> {
+                // 只保留成功状态，详细说明由 LLM 生成
+                if (data.contains("✅") || data.contains("成功")) {
+                    yield "✅ 修改已应用";
+                } else {
+                    yield "❌ 修改失败";
+                }
+            }
             default -> {
                 // 默认：截取前 1000 字符
                 yield data.length() > 1000 ? data.substring(0, 1000) + "\n... (已压缩)" : data;

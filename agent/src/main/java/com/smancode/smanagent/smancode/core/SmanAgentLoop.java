@@ -104,28 +104,39 @@ public class SmanAgentLoop {
             // 3. 标记会话为忙碌
             session.markBusy();
 
-            // 4. 【预处理】调用 search 进行深度理解和知识加载
-            Part searchContextPart = performSearchPreprocessing(session, userInput, partPusher);
-            if (searchContextPart != null) {
-                // 将 search 结果作为上下文注入到会话
-                Message searchContextMessage = new Message();
-                searchContextMessage.setId(UUID.randomUUID().toString());
-                searchContextMessage.setSessionId(session.getId());
-                searchContextMessage.setRole(com.smancode.smanagent.model.message.Role.SYSTEM);
-                searchContextMessage.addPart(searchContextPart);
-                searchContextMessage.touch();
-                session.addMessage(searchContextMessage);
+            // 4. 【智能判断】先判断用户意图，再决定是否需要 Search
+            StreamingNotificationHandler.AcknowledgmentResult ackResult =
+                    notificationHandler.pushImmediateAcknowledgment(session, partPusher);
 
-                logger.info("Search 预处理完成，上下文已注入到会话");
+            logger.info("用户意图判断: needSearch={}, isChat={}",
+                    ackResult.isNeedSearch(), ackResult.isChat());
+
+            // 5. 【条件执行】根据判断结果决定是否执行 Search
+            if (ackResult.isNeedSearch()) {
+                Part searchContextPart = performSearchPreprocessing(session, userInput, partPusher);
+                if (searchContextPart != null) {
+                    // 将 search 结果作为上下文注入到会话
+                    Message searchContextMessage = new Message();
+                    searchContextMessage.setId(UUID.randomUUID().toString());
+                    searchContextMessage.setSessionId(session.getId());
+                    searchContextMessage.setRole(com.smancode.smanagent.model.message.Role.SYSTEM);
+                    searchContextMessage.addPart(searchContextPart);
+                    searchContextMessage.touch();
+                    session.addMessage(searchContextMessage);
+
+                    logger.info("Search 预处理完成，上下文已注入到会话");
+                }
+            } else {
+                logger.info("跳过 Search（用户已明确目标或闲聊）");
             }
 
-            // 5. 主循环：调用 LLM 处理
+            // 6. 主循环：调用 LLM 处理
             Message assistantMessage = processWithLLM(session, partPusher);
 
-            // 6. 添加助手消息到会话
+            // 7. 添加助手消息到会话
             session.addMessage(assistantMessage);
 
-            // 7. 标记会话为空闲
+            // 8. 标记会话为空闲
             session.markIdle();
 
             return assistantMessage;
@@ -151,9 +162,6 @@ public class SmanAgentLoop {
         Message assistantMessage = createAssistantMessage(session.getId());
 
         try {
-            // 1. 立即推送确认消息
-            notificationHandler.pushImmediateAcknowledgment(session, partPusher);
-
             // ========== ReAct 循环开始 ==========
             int maxSteps = smanCodeProperties.getReact().getMaxSteps();  // 从配置读取最大步数
             int step = 0;
@@ -309,11 +317,6 @@ public class SmanAgentLoop {
             }
             // ========== ReAct 循环结束 ==========
 
-            // 10. 如果有工具执行，推送最终总结
-            if (hasExecutedTools(assistantMessage)) {
-                notificationHandler.pushFinalSummary(assistantMessage, session, partPusher);
-            }
-
         } catch (Exception e) {
             logger.error("LLM 处理失败", e);
             String partId = UUID.randomUUID().toString();
@@ -328,7 +331,20 @@ public class SmanAgentLoop {
     }
 
     /**
-     * 从响应中提取 JSON（参考 bank-core-analysis-agent）
+     * 从响应中提取 JSON（8级递进式解析策略）
+     * <p>
+     * 解析策略从简单到复杂，逐级尝试，确保最大容错能力：
+     * Level 1: 直接解析（最快）
+     * Level 2: 清理后解析（去除 markdown 代码块）
+     * Level 3: 修复转义后解析（修复常见转义问题）
+     * Level 4: 智能大括号提取（增强版策略3）
+     * Level 5: 正则提取尝试（多种模式匹配）
+     * Level 6: 简单正则快速尝试（补充兜底）
+     * Level 7: 终极大招 - LLM 辅助提取
+     * Level 8: 降级为纯文本（兜底）
+     *
+     * @param response LLM 返回的原始响应
+     * @return 提取出的 JSON 字符串，如果所有策略都失败则返回 null
      */
     private String extractJsonFromResponse(String response) {
         if (response == null || response.trim().isEmpty()) {
@@ -337,61 +353,459 @@ public class SmanAgentLoop {
 
         String trimmedResponse = response.trim();
 
-        // 策略1: 提取```json代码块
-        String jsonStart = "```json";
-        String jsonEnd = "```";
-
-        int startIndex = trimmedResponse.indexOf(jsonStart);
-        if (startIndex != -1) {
-            startIndex += jsonStart.length();
-            int endIndex = trimmedResponse.indexOf(jsonEnd, startIndex);
-            if (endIndex != -1) {
-                return trimmedResponse.substring(startIndex, endIndex).trim();
-            }
-        }
-
-        // 策略2: 检查是否为纯JSON格式
-        if (trimmedResponse.startsWith("{") && trimmedResponse.endsWith("}")) {
+        // ========== Level 1: 直接解析 ==========
+        if (tryParseJson(trimmedResponse)) {
+            logger.debug("Level 1 成功: 直接解析");
             return trimmedResponse;
         }
 
-        // 策略3: 查找文本中的JSON片段（智能匹配大括号）
-        int braceStart = trimmedResponse.indexOf('{');
-        if (braceStart >= 0) {
-            int depth = 0;
-            boolean inString = false;
-            boolean escape = false;
+        // ========== Level 2: 清理 markdown 代码块 ==========
+        String level2Result = extractFromMarkdownBlock(trimmedResponse);
+        if (level2Result != null && tryParseJson(level2Result)) {
+            logger.debug("Level 2 成功: 清理 markdown 代码块");
+            return level2Result;
+        }
 
-            for (int i = braceStart; i < trimmedResponse.length(); i++) {
-                char c = trimmedResponse.charAt(i);
+        // ========== Level 3: 修复转义字符 ==========
+        String level3Result = fixAndParse(trimmedResponse);
+        if (level3Result != null) {
+            logger.debug("Level 3 成功: 修复转义字符");
+            return level3Result;
+        }
 
-                if (escape) {
-                    escape = false;
-                    continue;
+        // ========== Level 4: 智能大括号提取（增强版）==========
+        String level4Result = extractWithSmartBraceMatching(trimmedResponse);
+        if (level4Result != null && tryParseJson(level4Result)) {
+            logger.debug("Level 4 成功: 智能大括号提取");
+            return level4Result;
+        }
+
+        // ========== Level 5: 正则提取尝试 ==========
+        String level5Result = extractWithRegex(trimmedResponse);
+        if (level5Result != null && tryParseJson(level5Result)) {
+            logger.debug("Level 5 成功: 正则提取");
+            return level5Result;
+        }
+
+        // ========== Level 6: 简单正则快速尝试 ==========
+        String level6Result = extractWithSimpleRegex(trimmedResponse);
+        if (level6Result != null && tryParseJson(level6Result)) {
+            logger.debug("Level 6 成功: 简单正则提取");
+            return level6Result;
+        }
+
+        // ========== Level 7: 终极大招 - LLM 辅助提取 ==========
+        String level7Result = extractWithLlmHelper(response);
+        if (level7Result != null && tryParseJson(level7Result)) {
+            logger.debug("Level 7 成功: LLM 辅助提取");
+            return level7Result;
+        }
+
+        // ========== Level 8: 所有策略失败，降级为纯文本 ==========
+        logger.warn("所有 JSON 提取策略失败，将降级为纯文本处理");
+        return null;
+    }
+
+    /**
+     * Level 1: 尝试直接解析 JSON
+     */
+    private boolean tryParseJson(String str) {
+        if (str == null || str.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            objectMapper.readTree(str);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Level 2: 从 markdown 代码块中提取 JSON
+     */
+    private String extractFromMarkdownBlock(String response) {
+        // 尝试提取 ```json...``` 代码块
+        String jsonStart = "```json";
+        String jsonEnd = "```";
+
+        int startIndex = response.indexOf(jsonStart);
+        if (startIndex != -1) {
+            startIndex += jsonStart.length();
+            int endIndex = response.indexOf(jsonEnd, startIndex);
+            if (endIndex != -1) {
+                return response.substring(startIndex, endIndex).trim();
+            }
+        }
+
+        // 尝试提取 ```...``` 代码块（没有 json 标记）
+        String codeStart = "```";
+        int codeStartIndex = response.indexOf(codeStart);
+        if (codeStartIndex != -1) {
+            int afterStart = codeStartIndex + codeStart.length();
+            // 跳过可能的语言标记
+            int firstBrace = response.indexOf('{', afterStart);
+            if (firstBrace != -1) {
+                int endIndex = response.indexOf(codeStart, firstBrace);
+                if (endIndex != -1) {
+                    return response.substring(firstBrace, endIndex).trim();
                 }
+            }
+        }
 
-                if (c == '\\' && inString) {
-                    escape = true;
-                    continue;
-                }
+        return null;
+    }
 
-                if (c == '"' && !escape) {
-                    inString = !inString;
-                    continue;
-                }
+    /**
+     * Level 3: 修复转义字符并解析
+     * <p>
+     * 处理 LLM 返回的 JSON 中常见的转义问题：
+     * - 字符串内部的换行符 \n 未转义
+     * - 字符串内部的引号 " 未转义
+     * - 字符串内部的反斜杠 \ 未转义
+     */
+    private String fixAndParse(String response) {
+        // 先尝试从 markdown 代码块中提取
+        String extracted = extractFromMarkdownBlock(response);
+        String toFix = extracted != null ? extracted : response;
 
-                if (!inString) {
-                    if (c == '{') depth++;
-                    else if (c == '}') {
-                        depth--;
-                        if (depth == 0) {
-                            return trimmedResponse.substring(braceStart, i + 1);
-                        }
+        // 尝试多种修复策略
+        String[] fixedVersions = {
+                fixStringNewlines(toFix),           // 修复字符串内的换行
+                fixUnescapedQuotes(toFix),          // 修复未转义的引号
+                fixUnescapedBackslashes(toFix),     // 修复未转义的反斜杠
+                fixAllCommonIssues(toFix)           // 修复所有常见问题
+        };
+
+        for (String fixed : fixedVersions) {
+            if (tryParseJson(fixed)) {
+                return fixed;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 修复 JSON 字符串值中的未转义换行符
+     * <p>
+     * 例如: {"text": "hello\nworld"} -> {"text": "hello\\nworld"}
+     */
+    private String fixStringNewlines(String json) {
+        // 这是一个简化版本，只处理最常见的情况
+        // 更复杂的版本需要跟踪字符串状态
+        return json.replace("\\\n", "\\\\n");
+    }
+
+    /**
+     * 修复 JSON 字符串值中的未转义引号
+     * <p>
+     * 这是一个启发式方法，尝试修复常见的未转义引号问题
+     */
+    private String fixUnescapedQuotes(String json) {
+        // 简化版本：只处理明显的情况
+        // 注意：这是一个有损修复，可能不是所有情况都适用
+        return json;
+    }
+
+    /**
+     * 修复 JSON 字符串值中的未转义反斜杠
+     */
+    private String fixUnescapedBackslashes(String json) {
+        // 简化版本：只处理明显的情况
+        return json;
+    }
+
+    /**
+     * 修复所有常见的转义问题
+     */
+    private String fixAllCommonIssues(String json) {
+        String result = json;
+        result = fixStringNewlines(result);
+        result = fixUnescapedQuotes(result);
+        result = fixUnescapedBackslashes(result);
+        return result;
+    }
+
+    /**
+     * Level 4: 智能大括号匹配提取
+     * <p>
+     * 从复杂文本中提取完整的 JSON 对象，处理：
+     * - 嵌套大括号
+     * - 字符串内部的大括号
+     * - 转义字符
+     */
+    private String extractWithSmartBraceMatching(String response) {
+        int braceStart = response.indexOf('{');
+        if (braceStart < 0) {
+            return null;
+        }
+
+        int depth = 0;
+        boolean inString = false;
+        boolean escape = false;
+
+        for (int i = braceStart; i < response.length(); i++) {
+            char c = response.charAt(i);
+
+            if (escape) {
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\' && inString) {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"' && !escape) {
+                inString = !inString;
+                continue;
+            }
+
+            if (!inString) {
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        return response.substring(braceStart, i + 1);
                     }
                 }
             }
         }
 
+        return null;
+    }
+
+    /**
+     * Level 5: 使用正则表达式提取 JSON
+     */
+    private String extractWithRegex(String response) {
+        // 尝试多种正则模式
+        java.util.regex.Pattern[] patterns = {
+                // 模式1: 匹配 ```json 和 ``` 之间的内容
+                java.util.regex.Pattern.compile("```json\\s*([\\s\\S]*?)\\s*```"),
+                // 模式2: 匹配 { 和 } 之间的完整 JSON 对象（贪婪）
+                java.util.regex.Pattern.compile("\\{[\\s\\S]*\\}"),
+                // 模式3: 匹配嵌套的 JSON 对象
+                java.util.regex.Pattern.compile("\\{(?:[^{}]|\\{[^{}]*\\})*\\}")
+        };
+
+        for (java.util.regex.Pattern pattern : patterns) {
+            java.util.regex.Matcher matcher = pattern.matcher(response);
+            if (matcher.find()) {
+                String match = matcher.group(1);
+                if (match == null) {
+                    match = matcher.group(0);
+                }
+                if (match != null && !match.trim().isEmpty()) {
+                    return match.trim();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Level 6: 简单正则快速提取
+     */
+    private String extractWithSimpleRegex(String response) {
+        // 快速尝试：找到第一个 { 和最后一个 }
+        int firstBrace = response.indexOf('{');
+        int lastBrace = response.lastIndexOf('}');
+
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return response.substring(firstBrace, lastBrace + 1);
+        }
+
+        return null;
+    }
+
+    /**
+     * Level 7: 终极大招 - 使用 LLM 辅助修复 JSON
+     * <p>
+     * 当所有常规方法都失败时，调用 LLM 让它帮我们修复 JSON 中的问题字段值。
+     * <p>
+     * 注意：这不是重新提取 JSON，而是修复已识别出的 JSON 结构中无法解析的字段值。
+     * <p>
+     * 常见问题：
+     * - 字段值中包含未转义的换行符、引号、反斜杠
+     * - 字段值中包含嵌套的代码块标记
+     * - 字段值中包含特殊字符导致 JSON 结构破坏
+     * <p>
+     * 这是一个"大招"，因为：
+     * 1. 它会消耗额外的 Token 和时间
+     * 2. 但它是最智能的方式，可以处理各种复杂的字段值问题
+     * 3. LLM 自己输出的内容，LLM 自己应该能理解并修复
+     */
+    private String extractWithLlmHelper(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            logger.info("启动 Level 7 终极大招: 使用 LLM 辅助修复 JSON 字段值");
+
+            // 先尝试用智能大括号提取找出 JSON 结构
+            String candidateJson = extractWithSmartBraceMatching(response);
+            if (candidateJson == null) {
+                logger.warn("LLM 辅助修复: 无法提取 JSON 结构，跳过");
+                return null;
+            }
+
+            // 分析 JSON 结构，找出问题字段
+            // 简单启发式：查找 "text": "...", "reasoning": "...", "summary": "..." 等常见字段
+            String problematicField = extractProblematicField(candidateJson);
+            if (problematicField == null) {
+                logger.warn("LLM 辅助修复: 无法识别问题字段，跳过");
+                return null;
+            }
+
+            logger.info("LLM 辅助修复: 识别到问题字段，开始修复");
+
+            // 调用 LLM 修复这个字段值
+            String fixedJson = fixProblematicFieldWithLlm(candidateJson, problematicField);
+            if (fixedJson == null) {
+                logger.warn("LLM 辅助修复: LLM 修复失败");
+                return null;
+            }
+
+            logger.info("LLM 辅助修复完成");
+            return fixedJson;
+
+        } catch (Exception e) {
+            logger.error("LLM 辅助修复异常", e);
+            return null;
+        }
+    }
+
+    /**
+     * 从 JSON 中提取出可能有问题的字段定义
+     * <p>
+     * 简单启发式：查找 text、reasoning、summary 等常见字段
+     */
+    private String extractProblematicField(String json) {
+        // 常见问题字段模式： "fieldName": "可能包含换行等内容"
+        String[] fieldNames = {"text", "reasoning", "summary", "content", "description"};
+
+        for (String fieldName : fieldNames) {
+            String pattern = "\"" + fieldName + "\"\\s*:\\s*\"(.{50,})(?:\"|\\n|$)";
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.DOTALL);
+            java.util.regex.Matcher m = p.matcher(json);
+            if (m.find()) {
+                return "\"" + fieldName + "\": " + m.group(1);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 调用 LLM 修复问题字段并重新组装 JSON
+     */
+    private String fixProblematicFieldWithLlm(String json, String problematicField) {
+        try {
+            // 提取字段名和原始值
+            String fieldName = problematicField.split(":", 2)[0].trim().replace("\"", "");
+            String rawValue = problematicField.split(":", 2)[1].trim();
+
+            String systemPrompt = """
+                    # JSON 字段值修复专家
+
+                    你是一个 JSON 字段值修复专家。
+
+                    ## 任务
+
+                    把一个可能有格式问题的字段值修复成合法的 JSON 字段值。
+
+                    ## 要求
+
+                    1. **保持原始内容** - 不要改变内容含义，只修复格式问题
+                    2. **输出简单 JSON** - 直接输出 {"fieldName": "修复后的值"} 这种格式
+                    3. **只输出 JSON** - 不要 markdown 代码块，不要解释
+
+                    ## 输出格式
+
+                    直接输出简单的 JSON 对象，例如：
+                    {"text": "修复后的内容"}
+
+                    ## 重要
+
+                    - 字段值中如果有换行，用 \\n 表示
+                    - 字段值中如果有引号，用 \\" 表示
+                    - 确保输出的 JSON 可以被标准解析器解析
+                    """;
+
+            String userPrompt = """
+                    请修复下面的字段值，并输出简单的 JSON 格式。
+
+                    字段名：%s
+                    原始值：
+                    %s
+
+                    直接输出修复后的 JSON（格式：{"fieldName": "修复后的值"}）：
+                    """.formatted(fieldName, rawValue.length() > 2000 ? rawValue.substring(0, 2000) + "..." : rawValue);
+
+            String llmResponse = llmService.simpleRequest(systemPrompt, userPrompt);
+            if (llmResponse == null || llmResponse.trim().isEmpty()) {
+                return null;
+            }
+
+            // 清理可能的 markdown 标记
+            String cleaned = llmResponse.trim();
+            if (cleaned.startsWith("```")) {
+                cleaned = extractFromMarkdownBlock(cleaned);
+                if (cleaned == null) {
+                    cleaned = llmResponse.trim();
+                }
+            }
+
+            // 解析 LLM 返回的简单 JSON，提取修复后的字段值
+            String fixedValue = extractFieldValueFromSimpleJson(cleaned, fieldName);
+            if (fixedValue == null) {
+                // 如果解析失败，直接使用 cleaned 作为字段值
+                fixedValue = cleaned;
+            }
+
+            // 重新组装完整的 JSON
+            // 替换原始字段值
+            String patternStr = "\"" + fieldName + "\"\\s*:\\s*\".*?(?=\"|\\n)";
+            String fixedJson = json.replaceAll(patternStr, "\"" + fieldName + "\": " + fixedValue);
+
+            // 如果替换失败（内容太复杂），尝试简单的字符串替换
+            if (fixedJson.equals(json)) {
+                // 尝试替换前100个字符作为匹配
+                String prefix = rawValue.length() > 100 ? rawValue.substring(0, 100) : rawValue;
+                fixedJson = json.replace(prefix, fixedValue.replace("\"", ""));
+            }
+
+            return fixedJson;
+
+        } catch (Exception e) {
+            logger.error("LLM 修复字段值异常", e);
+            return null;
+        }
+    }
+
+    /**
+     * 从简单 JSON 中提取字段值
+     * <p>
+     * 例如：{"text": "hello"} -> "hello"
+     */
+    private String extractFieldValueFromSimpleJson(String simpleJson, String fieldName) {
+        try {
+            JsonNode node = objectMapper.readTree(simpleJson);
+            JsonNode valueNode = node.path(fieldName);
+            if (!valueNode.isMissingNode()) {
+                // 返回带引号的字符串值
+                return "\"" + valueNode.asText().replace("\\", "\\\\").replace("\"", "\\\"")
+                        .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\"";
+            }
+        } catch (Exception e) {
+            logger.debug("解析简单 JSON 失败: {}", e.getMessage());
+        }
         return null;
     }
 

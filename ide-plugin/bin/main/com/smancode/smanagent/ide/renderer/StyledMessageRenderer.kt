@@ -414,9 +414,16 @@ object StyledMessageRenderer {
     /**
      * 渲染系统消息（旧接口，保持兼容）
      */
-    fun renderSystemMessageToDocument(text: String, doc: StyledDocument, colors: ColorPalette = ThemeColors.getCurrentColors()) {
-        val content = "\n[SYSTEM] $text\n"
-        val attr = createAttributes(colors.textMuted, italic = true)
+    fun renderSystemMessageToDocument(
+        text: String,
+        doc: StyledDocument,
+        colors: ColorPalette = ThemeColors.getCurrentColors(),
+        isProcessing: Boolean = false
+    ) {
+        val content = "\n$text\n"
+        // 处理中状态使用更浅的灰色
+        val textColor = if (isProcessing) colors.textMuted else colors.textPrimary
+        val attr = createAttributes(textColor, italic = isProcessing)
         doc.insertString(doc.length, content, attr)
     }
 
