@@ -170,13 +170,10 @@ object StyledMessageRenderer {
                                 """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;">$codeContent</span>"""
                             }
 
-                            // 预处理长路径：对超长路径进行换行
-                            htmlContent = preprocessLongPaths(htmlContent)
-
                             // 如果是处理中消息，包裹灰色样式
                             if (isProcessing) {
                                 htmlContent = """
-                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textSecondary)};">
+                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textMuted)};">
                                         $htmlContent
                                     </div>
                                 """.trimIndent()
@@ -310,20 +307,6 @@ object StyledMessageRenderer {
             "margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         }
         return "<div style=\"$style\">$content</div>"
-    }
-
-    /**
-     * 预处理长路径：在超长路径中插入零宽空格（zero-width space）以强制换行
-     * HTMLEditorKit 对 word-break 支持差，所以手动插入换行点
-     */
-    private fun preprocessLongPaths(html: String): String {
-        // 匹配文件路径模式（如 agent/src/main/java/.../File.java）
-        // 在斜杠、点等特殊字符后插入零宽空格，允许在这些位置换行
-        return html.replace(Regex("""([a-zA-Z0-9_/\\.]{50,})""")) { matchResult ->
-            val path = matchResult.groupValues[1]
-            // 在每个 / 后插入零宽空格
-            path.replace("/", "/\u200B")
-        }
     }
 
     /**

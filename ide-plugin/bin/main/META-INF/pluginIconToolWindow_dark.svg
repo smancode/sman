@@ -1,11 +1,10 @@
 <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- 
-    Canvas: 13x13 (IntelliJ Tool Window Standard)
-    Pattern: 8x12 (Original)
-    Layout: Centered (Offset X=2, Y=0.5 -> rounded to Y=0 to keep pixel perfect)
-    Color: Black (#000000) - No Background
+    Canvas: 13x13
+    Theme: Dark Theme Variant
+    Color: IDE Standard Gray (#AFB1B3) - Visible on dark backgrounds
   -->
-  <path fill="#000000" d="
+  <path fill="#AFB1B3" d="
     M2,0 H10 V1 H2 Z
     M2,1 H3 V2 H2 Z
     M9,1 H10 V2 H9 Z

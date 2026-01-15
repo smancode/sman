@@ -1,13 +1,23 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- 硅基人 toolWindow 图标：24x24，用于侧边栏显示，更大更清晰 -->
-  
-  <!-- 外部六边形边框 (红色，加粗) -->
-  <path d="M6.75 3L17.25 3L22.5 12L17.25 21L6.75 21L1.5 12L6.75 3Z" stroke="#B33636" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
-  
-  <!-- 内部填充 (半透明红色，增强视觉效果) -->
-  <path d="M6.75 3L17.25 3L22.5 12L17.25 21L6.75 21L1.5 12L6.75 3Z" fill="#B33636" fill-opacity="0.15"/>
-  
-  <!-- 内部 S 字样 (白色，加粗) -->
-  <path d="M16.5 7.5H7.5V12H16.5V16.5H7.5" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 
+    Canvas: 13x13 (IntelliJ Tool Window Standard)
+    Pattern: 8x12 (Original)
+    Layout: Centered (Offset X=2, Y=0.5 -> rounded to Y=0 to keep pixel perfect)
+    Color: Black (#000000) - No Background
+  -->
+  <path fill="#000000" d="
+    M2,0 H10 V1 H2 Z
+    M2,1 H3 V2 H2 Z
+    M9,1 H10 V2 H9 Z
+    M2,3 H3 V5 H2 Z
+    M9,3 H10 V5 H9 Z
+    M4,3 H5 V6 H4 Z
+    M7,3 H8 V6 H7 Z
+    M2,6 H3 V8 H2 Z
+    M9,6 H10 V8 H9 Z
+    M4,8 H8 V9 H4 Z
+    M2,9 H3 V11 H2 Z
+    M9,9 H10 V11 H9 Z
+    M2,11 H10 V12 H2 Z
+  "/>
 </svg>
-

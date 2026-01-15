@@ -629,16 +629,35 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             String.format("#%06X", colors.textPrimary.rgb and 0xFFFFFF)
         }
 
-        // 获取当前 HTML 内容
-        val currentHtml = outputArea.text
-        // 在 </body> 前插入新内容
-        val newHtml = if (currentHtml.contains("</body>")) {
+        // 使用与 StyledMessageRenderer 相同的方式追加 HTML，避免覆盖已有样式
+        val html = if (outputArea.text.contains("<body>")) {
+            // 已有 HTML 内容，在 </body> 前插入
+            val currentHtml = outputArea.text
             currentHtml.replace("</body>", "<div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body>")
         } else {
+            // 空 HTML，初始化
             "<html><body><div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body></html>"
         }
 
-        outputArea.text = newHtml
+        // 使用 HTMLEditorKit 的方式来追加内容，避免覆盖已有样式
+        val kit = outputArea.editorKit as? javax.swing.text.html.HTMLEditorKit
+        val doc = outputArea.styledDocument
+
+        if (kit != null && outputArea.text.contains("<body>")) {
+            // 使用 HTMLEditorKit.read() 追加内容（与 StyledMessageRenderer 一致）
+            try {
+                val reader = java.io.StringReader(html)
+                // 先清空，然后重新写入整个文档
+                doc.remove(0, doc.length)
+                kit.read(reader, doc, 0)
+            } catch (e: Exception) {
+                logger.error("追加系统消息失败", e)
+            }
+        } else {
+            // 回退到直接设置
+            outputArea.text = html
+        }
+
         // 滚动到底部
         outputArea.caretPosition = outputArea.document.length
 

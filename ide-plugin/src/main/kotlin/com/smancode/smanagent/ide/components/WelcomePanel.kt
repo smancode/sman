@@ -34,11 +34,9 @@ class WelcomePanel : JPanel(GridBagLayout()) {
             }
 
             if (originalIcon != null) {
-                // 获取去色/禁用状态图标
-                val grayIcon = IconLoader.getDisabledIcon(originalIcon)
-
-                // 放大图标 (4倍)
-                val scaledIcon = IconUtil.scale(grayIcon, null, 4.0f)
+                // 放大图标 (8倍 -> ~100px)
+                // 直接使用原图标，不再去色，以保持清晰度和主题适应性
+                val scaledIcon = IconUtil.scale(originalIcon, null, 8.0f)
 
                 add(JLabel(scaledIcon), gbc)
             }
@@ -58,7 +56,7 @@ class WelcomePanel : JPanel(GridBagLayout()) {
         // Description
         gbc.gridy++
         gbc.insets = JBUI.insetsBottom(160)
-        val descLabel = JLabel("SmanAgent-智能代码分析助手，帮助用户分析需求、理解代码逻辑。").apply {
+        val descLabel = JLabel("SmanAgent - 代码分析助手，帮助开发者理解代码逻辑和架构。").apply {
             font = font.deriveFont(JBUI.scale(13f))
             foreground = ThemeColors.getCurrentColors().textSecondary
         }
