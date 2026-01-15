@@ -22,16 +22,31 @@ public class CallChainTool extends AbstractTool implements Tool {
 
     private static final Logger logger = LoggerFactory.getLogger(CallChainTool.class);
 
+    /**
+     * 获取工具名称
+     *
+     * @return 工具唯一标识名称
+     */
     @Override
     public String getName() {
         return "call_chain";
     }
 
+    /**
+     * 获取工具描述
+     *
+     * @return 工具功能描述文本
+     */
     @Override
     public String getDescription() {
         return "分析方法调用链（向上和向下）";
     }
 
+    /**
+     * 获取工具参数定义
+     *
+     * @return 参数定义映射，包含 className, methodName, direction, maxDepth, mode
+     */
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
@@ -43,6 +58,16 @@ public class CallChainTool extends AbstractTool implements Tool {
         return params;
     }
 
+    /**
+     * 执行调用链分析
+     * <p>
+     * 根据传入的类名和方法名，分析调用链路。
+     * 注意：该工具需要在 IDE 环境中执行才能获取完整的 AST 信息。
+     *
+     * @param projectKey 项目标识
+     * @param params     参数集合，包含 className, methodName, direction, maxDepth 等
+     * @return 分析结果（包含调用链信息或错误信息）
+     */
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();
