@@ -421,9 +421,9 @@ object StyledMessageRenderer {
         isProcessing: Boolean = false
     ) {
         val content = "\n$text\n"
-        // 处理中状态使用更浅的灰色
+        // 处理中状态使用更浅的灰色（不使用斜体）
         val textColor = if (isProcessing) colors.textMuted else colors.textPrimary
-        val attr = createAttributes(textColor, italic = isProcessing)
+        val attr = createAttributes(textColor, italic = false)
         doc.insertString(doc.length, content, attr)
     }
 

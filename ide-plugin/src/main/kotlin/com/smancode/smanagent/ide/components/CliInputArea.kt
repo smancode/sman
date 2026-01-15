@@ -77,8 +77,15 @@ class CliInputArea(
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
                     val fm = g2.fontMetrics
                     val x = insets.left
-                    val y = insets.top + fm.ascent
-                    g2.drawString(placeholderText, x, y)
+                    var y = insets.top + fm.ascent
+
+                    // 按行分割绘制
+                    val lines = placeholderText.split("\n")
+                    for (line in lines) {
+                        g2.drawString(line, x, y)
+                        y += fm.height  // 移动到下一行
+                    }
+
                     g2.color = oldColor
                 }
             }

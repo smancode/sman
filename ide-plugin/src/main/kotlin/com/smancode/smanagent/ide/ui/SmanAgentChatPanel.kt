@@ -170,9 +170,10 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         // 中间：内容区域（欢迎面板或聊天消息）
         add(centerPanel, BorderLayout.CENTER)
 
-        // 底部：任务进度栏 + 输入框
+        // 底部：任务进度栏 + 输入框（上方留 10px 间距）
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
+            border = javax.swing.border.EmptyBorder(10, 0, 0, 0)
             add(taskProgressBar, BorderLayout.NORTH)
             add(inputArea, BorderLayout.CENTER)
         }
@@ -495,12 +496,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         val text = inputText ?: inputArea.text.trim()
         if (text.isEmpty()) return
 
-        // 检测内置命令
-        if (text.startsWith("/commit")) {
-            handleCommitCommand()
-            inputArea.text = ""
-            return
-        }
+        // 检测是否是内置命令
+        val isCommitCommand = text.startsWith("/commit")
 
         // 确保有 sessionId（新建或复用）
         if (currentSessionId == null) {
@@ -526,6 +523,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         // UI 显示用户消息
         appendPartToUI(userPart)
+
+        // 处理内置命令
+        if (isCommitCommand) {
+            handleCommitCommand()
+            return
+        }
 
         // 判断是否为新会话（根据是否已有非用户消息的 Part）
         val session = storageService.getSession(currentSessionId!!)
