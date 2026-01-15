@@ -687,8 +687,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                     val toolExecutor = com.smancode.smanagent.ide.service.LocalToolExecutor(project)
                     val result = toolExecutor.execute(toolName, params, project.basePath)
 
-                    logger.info("工具执行完成: toolName={}, success={}, result={}",
-                            toolName, result.success, result.result)
+                    logger.info("工具执行完成: toolName={}, success={}, result={}, relativePath={}, relatedFilePaths={}, hasMetadata={}",
+                            toolName, result.success,
+                            if (result.result is String) "[${result.result.toString().take(100)}..." else result.result,
+                            result.relativePath,
+                            result.relatedFilePaths,
+                            result.metadata != null)
 
                     // 发送 TOOL_RESULT 响应
                     val response = mutableMapOf(
@@ -990,10 +994,6 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
             logger.info("【/commit命令】收到结果: message={}, add={}, modify={}, delete={}",
                     commitMessage, addFiles.size, modifyFiles.size, deleteFiles.size)
-
-            // 保存后端返回的 commit 数据到历史（简化格式）
-            val backendResultText = buildCommitResultText(commitMessage, addFiles, modifyFiles, deleteFiles)
-            appendSystemMessage(backendResultText, isProcessing = false, saveToHistory = true)
 
             // 检查是否有变更
             if (addFiles.isEmpty() && modifyFiles.isEmpty() && deleteFiles.isEmpty()) {

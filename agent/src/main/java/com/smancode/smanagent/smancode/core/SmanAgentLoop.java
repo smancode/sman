@@ -250,6 +250,43 @@ public class SmanAgentLoop {
                     }
                 }
 
+                // 7.5 处理 LLM 生成的摘要：将新工具的 summary 保存到上一个无摘要的工具
+                logger.info("【摘要处理】开始检查 currentParts 中的 summary，总 Part 数={}", currentParts.size());
+
+                Part summaryCarrier = currentParts.stream()
+                        .filter(p -> p instanceof ToolPart)
+                        .filter(p -> {
+                            String summary = ((ToolPart) p).getSummary();
+                            boolean hasSummary = summary != null && !summary.isEmpty();
+                            logger.info("【摘要处理】检查 ToolPart: toolName={}, hasSummary={}, summary={}",
+                                    ((ToolPart) p).getToolName(), hasSummary,
+                                    hasSummary ? summary.substring(0, Math.min(50, summary.length())) : "null");
+                            return hasSummary;
+                        })
+                        .findFirst()
+                        .orElse(null);
+
+                logger.info("【摘要处理】summaryCarrier={}", summaryCarrier != null ? ((ToolPart) summaryCarrier).getToolName() : "null");
+
+                if (summaryCarrier != null && summaryCarrier instanceof ToolPart) {
+                    String summary = ((ToolPart) summaryCarrier).getSummary();
+                    logger.info("【摘要处理】找到 summary，开始查找目标工具，summary={}", summary);
+
+                    // 查找上一个无摘要的 ToolPart
+                    ToolPart targetTool = findLastToolWithoutSummary(session);
+                    if (targetTool != null) {
+                        targetTool.setSummary(summary);
+                        logger.info("【摘要处理】成功保存摘要: targetTool={}, summary={}",
+                                targetTool.getToolName(), summary);
+                        // 清空 summaryCarrier 的 summary，避免混淆
+                        ((ToolPart) summaryCarrier).setSummary(null);
+                    } else {
+                        logger.warn("【摘要处理】LLM 生成了摘要，但没有找到需要摘要的历史工具");
+                    }
+                } else {
+                    logger.info("【摘要处理】没有找到包含 summary 的 ToolPart");
+                }
+
                 // 8. 检查是否有工具调用
                 boolean hasTools = currentParts.stream().anyMatch(p -> p instanceof ToolPart);
 
@@ -1178,17 +1215,17 @@ public class SmanAgentLoop {
                                     prompt.append("结果: \n").append(toolPart.getSummary()).append("\n");
                                 } else {
                                     // 无 summary：新执行完的工具，发送完整结果
+                                    // 新增：添加 relativePath（如果有）
+                                    if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
+                                        prompt.append("文件路径: ").append(result.getRelativePath()).append("\n");
+                                    }
+
                                     String fullData = result.getData() != null ? result.getData().toString() : null;
                                     if (fullData != null && !fullData.isEmpty()) {
                                         prompt.append("结果: \n").append(fullData).append("\n");
-
-                                        // 要求 LLM 生成智能摘要
-                                        prompt.append("\n【重要】你刚刚执行了工具 ").append(toolPart.getToolName()).append("，\n");
-                                        prompt.append("请在返回的 JSON 中为该工具调用添加一个 \"summary\" 字段，\n");
-                                        prompt.append("包含以下内容：\n");
-                                        prompt.append("1. 关键发现（最重要的 1-3 点信息）\n");
-                                        prompt.append("2. 必要细节（供后续分析使用，如类名、方法名、核心逻辑等）\n");
-                                        prompt.append("\nsummary 应该简洁但包含所有必要信息，避免重复工具结果中的冗余内容。\n");
+                                        // 标记为需要生成摘要，要求保留文件路径
+                                        prompt.append("【此工具结果尚无摘要，需要你生成】\n");
+                                        prompt.append("【重要：生成摘要时必须保留文件路径信息】\n");
                                     } else {
                                         String displayContent = result.getDisplayContent();
                                         if (displayContent != null && !displayContent.isEmpty()) {
@@ -1232,14 +1269,23 @@ public class SmanAgentLoop {
         prompt.append("\n\n## 下一步分析和决策\n\n");
         prompt.append("请基于以上工具执行历史，分析当前进展并决定下一步：\n");
         prompt.append("1. **分析结果**：工具返回了什么关键信息？\n");
-        prompt.append("2. **生成摘要**：为最近执行的工具生成简洁摘要（1-2句话），说明发现了什么\n");
+        prompt.append("2. **生成摘要（重要）**：\n");
+        prompt.append("   - 如果发现工具结果标注了【此工具结果尚无摘要，需要你生成】\n");
+        prompt.append("   - 并且你决定调用新工具：在新工具的 ToolPart 中添加 \"summary\" 字段，\n");
+        prompt.append("     为**刚才执行的工具**（不是新工具）生成摘要\n");
+        prompt.append("   - **关键要求：生成摘要时必须保留文件路径（relativePath）信息**\n");
+        prompt.append("     摘要格式应包含：\"路径: xxx/yyy/File.java\" 或 \"read_file(路径: xxx/yyy/File.java): ...\"\n");
+        prompt.append("   - 如果不调用新工具：直接返回文本答案即可，不需要生成摘要\n");
+        prompt.append("   - 摘要格式：{\"type\": \"tool\", \"toolName\": \"新工具名\", \"parameters\": {...}, \"summary\": \"刚才工具的摘要\"}\n");
         prompt.append("3. **评估进展**：当前信息是否足够回答用户问题？\n");
         prompt.append("4. **决定行动**：\n");
         prompt.append("   - 如果信息充足 → 直接给出答案（不再调用工具）\n");
         prompt.append("   - 如果需要更多信息 → 继续调用工具（说明为什么需要）\n");
         prompt.append("   - 如果工具失败 → 换个方法重试（不要重复失败的方法）\n\n");
-        prompt.append("**重要**：如果调用了工具，必须在响应的 JSON 中包含 \"summary\" 字段，\n");
-        prompt.append("格式为：{\"summary\": \"你的简洁摘要\"}。\n\n");
+        prompt.append("**示例**：\n");
+        prompt.append("如果你刚刚执行了 read_file（无摘要），文件路径是 agent/src/main/java/CallChainTool.java，现在要调用 apply_change，\n");
+        prompt.append("返回的 JSON 中应该包含：\n");
+        prompt.append("{\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(路径: agent/src/main/java/CallChainTool.java): 找到了CallChainTool类，包含callChain方法...\"}\n\n");
 
         // 如果是最后一步，添加最大步数警告
         if (isLastStep) {
@@ -1444,6 +1490,52 @@ public class SmanAgentLoop {
         message.addPart(textPart);
         partPusher.accept(textPart);
         return message;
+    }
+
+    /**
+     * 查找最后一个无摘要的 ToolPart
+     * <p>
+     * 用于将 LLM 生成的摘要保存到对应的历史工具
+     *
+     * @param session 会话
+     * @return 最后一个无摘要的 ToolPart，如果没有则返回 null
+     */
+    private ToolPart findLastToolWithoutSummary(Session session) {
+        logger.info("【查找无摘要工具】开始查找，消息总数={}", session.getMessages().size());
+
+        // 从后往前遍历所有消息
+        for (int i = session.getMessages().size() - 1; i >= 0; i--) {
+            Message message = session.getMessages().get(i);
+            logger.info("【查找无摘要工具】检查消息 {}/{}: role={}, Part 数={}",
+                    i + 1, session.getMessages().size(),
+                    message.getRole(), message.getParts().size());
+
+            if (message.isAssistantMessage()) {
+                // 从后往前遍历该消息的所有 Part
+                for (int j = message.getParts().size() - 1; j >= 0; j--) {
+                    Part part = message.getParts().get(j);
+                    if (part instanceof ToolPart toolPart) {
+                        String summary = toolPart.getSummary();
+                        boolean hasSummary = summary != null && !summary.isEmpty();
+
+                        logger.info("【查找无摘要工具】  检查 ToolPart: toolName={}, hasSummary={}, summary={}",
+                                toolPart.getToolName(), hasSummary,
+                                hasSummary ? summary.substring(0, Math.min(30, summary.length())) : "null");
+
+                        // 检查是否有摘要
+                        if (!hasSummary) {
+                            // 找到最后一个无摘要的 ToolPart
+                            logger.info("【查找无摘要工具】✅ 找到无摘要的工具: toolName={}, messageId={}",
+                                    toolPart.getToolName(), message.getId());
+                            return toolPart;
+                        }
+                    }
+                }
+            }
+        }
+
+        logger.info("【查找无摘要工具】❌ 没有找到无摘要的工具");
+        return null;
     }
 
     /**

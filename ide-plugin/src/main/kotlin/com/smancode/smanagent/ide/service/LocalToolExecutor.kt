@@ -66,14 +66,29 @@ class LocalToolExecutor(private val project: Project) {
                 "apply_change" -> executeApplyChange(parameters, projectPath)
                 else -> ToolResult(false, "不支持的工具: $toolName")
             }
-            
+
             val elapsed = System.currentTimeMillis() - startTime
-            ToolResult(result.success, result.result, elapsed)
-            
+            // 保留所有字段，只更新 executionTime
+            ToolResult(
+                success = result.success,
+                result = result.result,
+                executionTime = elapsed,
+                relativePath = result.relativePath,
+                relatedFilePaths = result.relatedFilePaths,
+                metadata = result.metadata
+            )
+
         } catch (e: Exception) {
             logger.error("工具执行失败: $toolName", e)
             val elapsed = System.currentTimeMillis() - startTime
-            ToolResult(false, "工具执行异常: ${e.message}", elapsed)
+            ToolResult(
+                success = false,
+                result = "工具执行异常: ${e.message}",
+                executionTime = elapsed,
+                relativePath = null,
+                relatedFilePaths = null,
+                metadata = null
+            )
         }
     }
     
@@ -172,7 +187,7 @@ class LocalToolExecutor(private val project: Project) {
 
         // 获取行号参数
         val startLine = (parameters["startLine"] as? Number)?.toInt() ?: 1
-        val endLine = (parameters["endLine"] as? Number)?.toInt() ?: 100
+        val endLine = (parameters["endLine"] as? Number)?.toInt() ?: 300
 
         // 如果没有 relativePath，检查是否有 simpleName
         val actualPath = if (relativePath == null) {
@@ -240,8 +255,8 @@ class LocalToolExecutor(private val project: Project) {
             val totalLines = allLines.size
 
             // 如果用户没有指定行号，使用默认值
-            val actualStartLine = if (relativePath == null && startLine == 1 && endLine == 100) 1 else startLine
-            val actualEndLine = if (relativePath == null && startLine == 1 && endLine == 100) 100 else endLine
+            val actualStartLine = if (relativePath == null && startLine == 1 && endLine == 300) 1 else startLine
+            val actualEndLine = if (relativePath == null && startLine == 1 && endLine == 300) 300 else endLine
 
             // 转换为 0-based 索引
             val startIndex = (actualStartLine - 1).coerceAtLeast(0)
@@ -266,12 +281,12 @@ class LocalToolExecutor(private val project: Project) {
             }
 
             // 计算相对路径
-            val relativePath = toRelativePath(file.absolutePath, basePath)
+            val calculatedRelativePath = toRelativePath(file.absolutePath, basePath)
 
             ToolResult(
                 success = true,
                 result = sb.toString(),
-                relativePath = relativePath,  // 新增：存储相对路径
+                relativePath = calculatedRelativePath,  // 存储相对路径
                 metadata = mapOf(  // 新增：存储元数据
                     "absolutePath" to file.absolutePath,
                     "totalLines" to totalLines,

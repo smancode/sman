@@ -81,11 +81,11 @@ public class SubTaskExecutor {
                     fullResult.getDisplayContent() != null ? fullResult.getDisplayContent().length() : 0,
                     fullResult.getError(), fullResult.getDisplayContent());
 
-            logger.info("【工具原始数据】toolName={}, data类型={}, data长度={}, data内容={}",
-                    toolName,
-                    fullResult.getData() != null ? fullResult.getData().getClass().getSimpleName() : "null",
-                    fullResult.getData() != null ? fullResult.getData().toString().length() : 0,
-                    fullResult.getData());
+            // logger.info("【工具原始数据】toolName={}, data类型={}, data长度={}, data内容={}",
+            //         toolName,
+            //         fullResult.getData() != null ? fullResult.getData().getClass().getSimpleName() : "null",
+            //         fullResult.getData() != null ? fullResult.getData().toString().length() : 0,
+            //         fullResult.getData());
 
             // 4. 保留完整结果（不压缩），让 LLM 处理
             // 注意：不在这里生成摘要，让 LLM 在下一次调用时基于完整结果生成摘要

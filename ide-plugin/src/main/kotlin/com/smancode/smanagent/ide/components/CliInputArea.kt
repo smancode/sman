@@ -221,18 +221,16 @@ class CliInputArea(
         val insets = textArea.insets
         val newHeight = rows * lineHeight + insets.top + insets.bottom
 
-        // 设置 JScrollPane 的视口首选高度
-        scrollPane.viewport.preferredSize = Dimension(
-            scrollPane.viewport.width,
-            newHeight
-        )
+        // 获取当前视口高度
+        val currentHeight = scrollPane.viewport.height
 
-        revalidate()
-        repaint()
-
-        // 确保光标可见
-        SwingUtilities.invokeLater {
-            textArea.caretPosition = textArea.document.length
+        // 只在高度真正变化时才更新（避免不必要的重布局）
+        if (currentHeight != newHeight) {
+            scrollPane.viewport.preferredSize = Dimension(
+                scrollPane.viewport.width,
+                newHeight
+            )
+            revalidate()
         }
     }
 

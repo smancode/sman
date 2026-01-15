@@ -43,10 +43,10 @@ public class ResultSummarizer {
         }
 
         Object data = result.getData();
-        logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
-                toolName,
-                data != null ? data.getClass().getSimpleName() : "null",
-                data);
+        // logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
+        //         toolName,
+        //         data != null ? data.getClass().getSimpleName() : "null",
+        //         data);
 
         if (data == null) {
             logger.warn("【ResultSummarizer空数据】toolName={}, data为null，返回默认消息", toolName);

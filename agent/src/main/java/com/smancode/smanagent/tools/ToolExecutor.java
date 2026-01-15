@@ -246,7 +246,13 @@ public class ToolExecutor {
 
                 return toolResult;
             } else {
-                return ToolResult.failure(error != null ? error : "执行失败");
+                // 失败时，优先使用 error 字段，否则使用 result 字段（前端可能把错误信息放在 result 中）
+                String errorMessage = error != null ? error : content;
+                if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                    errorMessage = "执行失败";
+                }
+                logger.info("【工具执行失败】toolName={}, errorMessage={}", tool.getName(), errorMessage);
+                return ToolResult.failure(errorMessage);
             }
 
         } catch (Exception e) {

@@ -39,7 +39,7 @@ public class ReadFileTool extends AbstractTool implements Tool {
      */
     @Override
     public String getDescription() {
-        return "Read file content. By default reads lines 1-100. To read entire file, set endLine to a large number (e.g., 999999).";
+        return "Read file content. By default reads lines 1-300. To read entire file, set endLine to a large number (e.g., 999999).";
     }
 
     /**
@@ -53,7 +53,7 @@ public class ReadFileTool extends AbstractTool implements Tool {
         params.put("simpleName", new ParameterDef("simpleName", String.class, false, "Class name (system will auto-find the file, recommended)"));
         params.put("relativePath", new ParameterDef("relativePath", String.class, false, "File relative path"));
         params.put("startLine", new ParameterDef("startLine", Integer.class, false, "Start line number (default: 1, use 1 for entire file)", 1));
-        params.put("endLine", new ParameterDef("endLine", Integer.class, false, "End line number (default: 100, set to 999999 for entire file)", 100));
+        params.put("endLine", new ParameterDef("endLine", Integer.class, false, "End line number (default: 300, set to 999999 for entire file)", 300));
         params.put("mode", new ParameterDef("mode", String.class, false, "Execution mode: local/intellij", "intellij"));
         return params;
     }
@@ -84,7 +84,7 @@ public class ReadFileTool extends AbstractTool implements Tool {
             if (simpleName != null && !simpleName.trim().isEmpty()) {
                 // 解析行号参数
                 int startLine = getOptInt(params, "startLine", 1);
-                int endLine = getOptInt(params, "endLine", 100);
+                int endLine = getOptInt(params, "endLine", 300);
 
                 logger.info("使用 simpleName 模式: simpleName={}, startLine={}, endLine={}",
                     simpleName, startLine, endLine);
@@ -108,7 +108,7 @@ public class ReadFileTool extends AbstractTool implements Tool {
             }
 
             int startLine = getOptInt(params, "startLine", 1);
-            int endLine = getOptInt(params, "endLine", 100);
+            int endLine = getOptInt(params, "endLine", 300);
 
             logger.info("执行读取文件: projectKey={}, relativePath={}, startLine={}, endLine={}",
                 projectKey, relativePath, startLine, endLine);
