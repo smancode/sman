@@ -111,11 +111,13 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     init {
         try {
             initComponents()
+            // 先应用主题（确保渲染正常）
+            applyTheme()
             // 注册监听器
             setupLinkNavigation()
+            // 加载历史会话（在主题应用后）
             loadLastSession()
             // 不在 init 时连接 WebSocket，延迟到第一次发送消息时连接
-            applyTheme()
             logger.info("SmanAgentChatPanel 初始化成功")
         } catch (e: Exception) {
             logger.error("SmanAgentChatPanel 初始化失败", e)
@@ -330,6 +332,21 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                         appendPartToUI(part)
                     }
                     showChat()
+
+                    // 延迟触发重绘，确保布局完全就绪
+                    SwingUtilities.invokeLater {
+                        // 强制重新计算尺寸（模拟组件大小变化）
+                        val currentSize = outputArea.size
+                        outputArea.size = java.awt.Dimension(1, 1)
+                        outputArea.revalidate()
+                        outputArea.repaint()
+                        scrollPane.revalidate()
+                        scrollPane.repaint()
+                        // 恢复原始大小
+                        outputArea.size = currentSize
+                        outputArea.revalidate()
+                        outputArea.repaint()
+                    }
 
                     logger.info("加载上次会话: sessionId={}, parts={}", lastSessionId, session.parts.size)
                 } else {
@@ -598,7 +615,14 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         val colors = ThemeColors.getCurrentColors()
 
         // 将文本转换为 HTML 格式（保留换行）
-        val htmlText = text.replace("\n", "<br>")
+        var htmlText = text.replace("\n", "<br>")
+
+        // 处理特殊颜色标记（与 StyledMessageRenderer 保持一致）
+        // 替换 "Commit:" 为蓝色
+        htmlText = htmlText.replace("Commit:", "<span style='color: ${toHexString(colors.codeFunction)};'>Commit:</span>")
+        // 替换 "文件变更:" 为黄色
+        htmlText = htmlText.replace("文件变更:", "<span style='color: ${toHexString(colors.warning)};'>文件变更:</span>")
+
         val colorHex = if (isProcessing) {
             String.format("#%06X", colors.textMuted.rgb and 0xFFFFFF)
         } else {
@@ -844,18 +868,112 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         // 显示处理中状态（灰色），并保存到历史
         appendSystemMessage("处理自动commit..", true, saveToHistory = true)
 
-        // 确保连接
-        ensureWebSocketConnected()
-
-        // 发送 COMMAND 消息
+        // 构建请求
         val request: Map<String, Any> = mapOf(
             "type" to "COMMAND",
             "command" to "commit",
             "sessionId" to currentSessionId!!
         )
 
-        webSocketClient?.send(request)
-        logger.info("【/commit命令】已发送请求到后端")
+        // 发送请求（复用现有的连接队列机制）
+        sendCommandWhenConnected(request)
+    }
+
+    /**
+     * 确保 WebSocket 连接后发送命令
+     */
+    private fun sendCommandWhenConnected(request: Map<String, Any>) {
+        // 检查连接状态
+        if (webSocketClient != null && webSocketClient?.isConnected() == true) {
+            logger.debug("WebSocket 已连接，直接发送命令")
+            webSocketClient?.send(request)
+            logger.info("【/commit命令】已发送请求到后端")
+            return
+        }
+
+        // 如果正在连接，等待连接完成
+        if (isConnecting) {
+            logger.debug("WebSocket 正在连接中，延迟发送命令")
+            // 使用定时器轮询连接状态
+            val timer = javax.swing.Timer(100, null)
+            timer.addActionListener {
+                if (webSocketClient?.isConnected() == true) {
+                    webSocketClient?.send(request)
+                    logger.info("【/commit命令】连接建立后发送请求到后端")
+                    timer.stop()
+                } else if (!isConnecting) {
+                    // 连接失败
+                    logger.error("【/commit命令】连接失败")
+                    appendSystemMessage("❌ 连接后端失败", saveToHistory = true)
+                    timer.stop()
+                }
+            }
+            timer.isRepeats = true
+            timer.start()
+            return
+        }
+
+        // 需要建立新连接
+        logger.info("WebSocket 未连接，建立新连接...")
+        connectToBackendForCommand(request)
+    }
+
+    /**
+     * 建立连接并发送命令（专用于 /commit 命令）
+     */
+    private fun connectToBackendForCommand(request: Map<String, Any>) {
+        if (isConnecting) {
+            logger.debug("已有连接正在建立，跳过")
+            return
+        }
+
+        isConnecting = true
+        try {
+            val serverUrl = storageService.backendUrl
+            logger.info("连接到后端: {}", serverUrl)
+
+            // 复用现有 WebSocketClient，但添加新的连接回调
+            webSocketClient = AgentWebSocketClient(serverUrl) { part ->
+                SwingUtilities.invokeLater {
+                    if (part.sessionId == currentSessionId) {
+                        if (part.type != PartType.USER) {
+                            logger.debug("渲染 Part: type={}, sessionId={}", part.type, part.sessionId)
+                            appendPartToUI(part)
+                        }
+                        storageService.addPartToSession(part.sessionId, part)
+                    }
+                }
+            }.apply {
+                onCommandResult = { data ->
+                    SwingUtilities.invokeLater {
+                        logger.info("收到命令结果: {}", data)
+                        handleCommandResult(data)
+                    }
+                }
+            }
+
+            // 连接成功后发送命令
+            webSocketClient?.connect()?.thenAccept {
+                logger.info("WebSocket 连接成功，发送命令")
+                SwingUtilities.invokeLater {
+                    isConnecting = false
+                    webSocketClient?.send(request)
+                    logger.info("【/commit命令】已发送请求到后端")
+                }
+            }?.exceptionally { ex ->
+                logger.error("WebSocket 连接失败", ex)
+                SwingUtilities.invokeLater {
+                    isConnecting = false
+                    appendSystemMessage("❌ 连接后端失败: ${ex.message}", saveToHistory = true)
+                }
+                null
+            }
+
+        } catch (e: Exception) {
+            logger.error("连接后端失败", e)
+            isConnecting = false
+            appendSystemMessage("❌ 连接后端失败: ${e.message}", saveToHistory = true)
+        }
     }
 
     /**
@@ -920,7 +1038,7 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         if (modifyFiles.isNotEmpty()) {
             sb.append("  修改 (${modifyFiles.size}):\n")
-            modifyFiles.forEach { file -> sb.append("    ~ $file\n") }
+            modifyFiles.forEach { file -> sb.append("    $file\n") }
         }
 
         if (deleteFiles.isNotEmpty()) {
@@ -951,7 +1069,7 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         if (files.modifyFiles.isNotEmpty()) {
             sb.append("  修改 (${files.modifyFiles.size}):\n")
-            files.modifyFiles.forEach { file -> sb.append("    ~ $file\n") }
+            files.modifyFiles.forEach { file -> sb.append("    $file\n") }
         }
 
         if (files.deleteFiles.isNotEmpty()) {

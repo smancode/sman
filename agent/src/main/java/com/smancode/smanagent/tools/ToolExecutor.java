@@ -198,6 +198,17 @@ public class ToolExecutor {
             if (result.has("relativePath")) {
                 logger.info("【IDE返回relativePath】{}", result.get("relativePath").asText());
             }
+            if (result.has("metadata") && result.get("metadata").isObject()) {
+                JsonNode metadata = result.get("metadata");
+                logger.info("【IDE返回metadata】has changeSummary={}, has description={}, has searchContent={}",
+                        metadata.has("changeSummary"), metadata.has("description"), metadata.has("searchContent"));
+                if (metadata.has("changeSummary")) {
+                    logger.info("【IDE返回changeSummary】{}", metadata.get("changeSummary").asText());
+                }
+                if (metadata.has("description")) {
+                    logger.info("【IDE返回description】{}", metadata.get("description").asText());
+                }
+            }
 
             if (success) {
                 // 使用 IDE 返回的 result 作为 displayContent

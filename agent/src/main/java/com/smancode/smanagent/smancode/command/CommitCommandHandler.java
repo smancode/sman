@@ -45,14 +45,14 @@ public class CommitCommandHandler {
             return createEmptyResult();
         }
 
-        logger.info("【Commit命令处理】会话已加载: sessionId={}, 消息数={}",
-                sessionId, session.getMessages() != null ? session.getMessages().size() : 0);
+        logger.info("【Commit命令处理】会话已加载: sessionId={}, 消息数={}, lastCommitTime={}",
+                sessionId, session.getMessages() != null ? session.getMessages().size() : 0, session.getLastCommitTime());
 
         // 2. 提取文件变更
         List<FileChange> changes = fileChangeTracker.extractFileChanges(session);
 
         if (changes.isEmpty()) {
-            logger.info("【Commit命令处理】没有文件变更，返回空结果");
+            logger.info("【Commit命令处理】没有新文件变更，返回空结果");
             return createEmptyResult();
         }
 
@@ -62,30 +62,49 @@ public class CommitCommandHandler {
         String commitMessage = messageGenerator.generate(changes, session);
         logger.info("【Commit命令处理】生成commit message: {}", commitMessage);
 
-        // 4. 按类型分组文件路径
-        List<String> addFiles = new ArrayList<>();
-        List<String> modifyFiles = new ArrayList<>();
-        List<String> deleteFiles = new ArrayList<>();
+        // 4. 按类型分组文件路径（去重）
+        java.util.Set<String> addFilesSet = new java.util.HashSet<>();
+        java.util.Set<String> modifyFilesSet = new java.util.HashSet<>();
+        java.util.Set<String> deleteFilesSet = new java.util.HashSet<>();
 
         for (FileChange change : changes) {
+            // 移除可能的 ~ 前缀
+            String relativePath = change.getRelativePath();
+            if (relativePath != null && relativePath.startsWith("~")) {
+                relativePath = relativePath.substring(1);
+            }
+
             switch (change.getType()) {
                 case ADD -> {
-                    if (change.getRelativePath() != null) {
-                        addFiles.add(change.getRelativePath());
+                    if (relativePath != null) {
+                        addFilesSet.add(relativePath);
                     }
                 }
                 case MODIFY -> {
-                    if (change.getRelativePath() != null) {
-                        modifyFiles.add(change.getRelativePath());
+                    if (relativePath != null) {
+                        modifyFilesSet.add(relativePath);
                     }
                 }
                 case DELETE -> {
-                    if (change.getRelativePath() != null) {
-                        deleteFiles.add(change.getRelativePath());
+                    if (relativePath != null) {
+                        deleteFilesSet.add(relativePath);
                     }
                 }
             }
         }
+
+        // 转换为 List 并排序
+        List<String> addFiles = new java.util.ArrayList<>(addFilesSet);
+        List<String> modifyFiles = new java.util.ArrayList<>(modifyFilesSet);
+        List<String> deleteFiles = new java.util.ArrayList<>(deleteFilesSet);
+        java.util.Collections.sort(addFiles);
+        java.util.Collections.sort(modifyFiles);
+        java.util.Collections.sort(deleteFiles);
+
+        // 5. 更新 lastCommitTime（记录当前时间，表示本次 commit 已处理到此时间点）
+        session.setLastCommitTime(java.time.Instant.now());
+        sessionFileService.saveSession(session);
+        logger.info("【Commit命令处理】已更新 lastCommitTime: {}", session.getLastCommitTime());
 
         CommitCommandResult result = new CommitCommandResult(commitMessage, addFiles, modifyFiles, deleteFiles);
 

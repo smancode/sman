@@ -22,16 +22,35 @@ public class ApplyChangeTool extends AbstractTool implements Tool {
 
     private static final Logger logger = LoggerFactory.getLogger(ApplyChangeTool.class);
 
+    /**
+     * 获取工具名称
+     *
+     * @return 工具名称
+     */
     @Override
     public String getName() {
         return "apply_change";
     }
 
+    /**
+     * 获取工具描述
+     *
+     * @return 工具描述信息，说明支持替换和创建两种模式
+     */
     @Override
     public String getDescription() {
         return "应用代码修改（替换现有内容或创建新文件）";
     }
 
+    /**
+     * 获取工具参数定义
+     * <p>
+     * 支持两种模式：
+     * 1. replace 模式：需要 searchContent 和 newContent
+     * 2. create 模式：只需要 newContent
+     *
+     * @return 参数定义 Map，包含 relativePath、mode、newContent、searchContent、description
+     */
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
@@ -43,6 +62,19 @@ public class ApplyChangeTool extends AbstractTool implements Tool {
         return params;
     }
 
+    /**
+     * 执行代码修改操作
+     * <p>
+     * 支持两种模式：
+     * 1. replace 模式：替换现有内容（需要 searchContent）
+     * 2. create 模式：创建新文件（只需要 newContent）
+     * <p>
+     * 注意：此工具需要在 IDE 中执行，实际修改由 IDE 完成
+     *
+     * @param projectKey 项目标识
+     * @param params     参数 Map，支持：relativePath、mode、newContent、searchContent、description
+     * @return 工具执行结果
+     */
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();

@@ -489,7 +489,33 @@ class LocalToolExecutor(private val project: Project) {
 
         return when (val result = codeEditService.applyChange(relativePath, searchContent, newContent, basePath)) {
             is CodeEditService.EditResult.Success -> {
-                ToolResult(true, "✅ 执行成功")
+                // 构建改动摘要（放在 metadata 中供后端生成 commit message 使用）
+                val changeSummary = StringBuilder()
+                if (description.isNotEmpty()) {
+                    changeSummary.append("**改动**: $description\n\n")
+                }
+                // 添加改动摘要（搜索内容的前几行）
+                val searchLines = searchContent.lines().take(3)
+                if (searchLines.isNotEmpty()) {
+                    changeSummary.append("**修改位置**:\n")
+                    searchLines.forEach { line ->
+                        changeSummary.append("  $line\n")
+                    }
+                    if (searchContent.lines().size > 3) {
+                        changeSummary.append("  ...\n")
+                    }
+                }
+
+                ToolResult(
+                    success = true,
+                    result = "✅ 执行成功",
+                    relativePath = relativePath,
+                    metadata = mapOf(
+                        "changeSummary" to changeSummary.toString(),
+                        "description" to description,
+                        "searchContent" to searchContent
+                    )
+                )
             }
             is CodeEditService.EditResult.Failure -> {
                 ToolResult(false, "❌ ${result.error}")

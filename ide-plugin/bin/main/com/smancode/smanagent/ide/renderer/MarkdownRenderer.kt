@@ -50,7 +50,7 @@ object MarkdownRenderer {
         val styleSheet = StyleSheet()
 
         // 基础样式 - 使用主题颜色
-        styleSheet.addRule("body { font-family: 'JetBrains Mono', monospace; font-size: 13pt; color: ${toHexString(colors.textPrimary)}; text-align: left; }")
+        styleSheet.addRule("body { font-family: 'JetBrains Mono', monospace; font-size: 13pt; color: ${toHexString(colors.textPrimary)}; text-align: left; max-width: 100%; overflow-wrap: break-word; }")
 
         // 标题样式 - 使用 info 颜色
         styleSheet.addRule("h1 { font-size: 18pt; color: ${toHexString(colors.info)}; margin-top: 10px; }")

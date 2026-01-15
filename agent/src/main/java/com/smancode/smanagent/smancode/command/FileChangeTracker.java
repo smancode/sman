@@ -26,6 +26,7 @@ public class FileChangeTracker {
     /**
      * 从会话中提取所有文件变更
      * 只统计 agent 通过工具修改的文件
+     * 只提取上次 commit 之后的新变更
      *
      * @param session 会话
      * @return 文件变更列表
@@ -38,13 +39,19 @@ public class FileChangeTracker {
             return changes;
         }
 
-        logger.info("【文件变更追踪】开始提取文件变更: sessionId={}, 消息数={}",
-                session.getId(), session.getMessages().size());
+        java.time.Instant lastCommitTime = session.getLastCommitTime();
+        logger.info("【文件变更追踪】开始提取文件变更: sessionId={}, 消息数={}, lastCommitTime={}",
+                session.getId(), session.getMessages().size(), lastCommitTime);
 
         // 遍历会话中的所有消息
         for (Message message : session.getMessages()) {
             // 只处理 assistant 消息（agent 的响应）
             if (!message.isAssistantMessage()) {
+                continue;
+            }
+
+            // 只提取上次 commit 之后的消息
+            if (lastCommitTime != null && !message.getCreatedTime().isAfter(lastCommitTime)) {
                 continue;
             }
 
@@ -113,6 +120,7 @@ public class FileChangeTracker {
 
     /**
      * 从工具结果中提取变更摘要
+     * 优先从 metadata 中获取详细的改动信息，否则使用 displayContent
      *
      * @param result 工具执行结果
      * @return 变更摘要
@@ -122,17 +130,71 @@ public class FileChangeTracker {
             return "";
         }
 
+        logger.debug("【FileChangeTracker】开始提取变更摘要: hasMetadata={}, hasChangeSummary={}, hasData={}, displayContent={}",
+                result.getMetadata() != null,
+                result.getMetadata() != null && result.getMetadata().containsKey("changeSummary"),
+                result.getData() != null,
+                result.getDisplayContent() != null ? result.getDisplayContent().substring(0, Math.min(50, result.getDisplayContent().length())) : "null");
+
+        // 优先从 metadata 中获取 changeSummary（最详细的变更说明）
+        if (result.getMetadata() != null && result.getMetadata().containsKey("changeSummary")) {
+            Object changeSummary = result.getMetadata().get("changeSummary");
+            if (changeSummary != null) {
+                String summary = changeSummary.toString();
+                logger.info("【FileChangeTracker】使用 metadata.changeSummary: {}", summary);
+                return summary;
+            }
+        }
+
+        // 如果有 description，使用 description
+        if (result.getMetadata() != null && result.getMetadata().containsKey("description")) {
+            Object description = result.getMetadata().get("description");
+            if (description != null) {
+                String desc = description.toString();
+                if (!desc.isEmpty()) {
+                    logger.info("【FileChangeTracker】使用 metadata.description: {}", desc);
+                    return desc;
+                }
+            }
+        }
+
+        // 如果有 searchContent，构建摘要
+        if (result.getMetadata() != null && result.getMetadata().containsKey("searchContent")) {
+            Object searchContent = result.getMetadata().get("searchContent");
+            if (searchContent != null) {
+                String content = searchContent.toString();
+                if (!content.isEmpty()) {
+                    // 提取前几行作为摘要
+                    String[] lines = content.split("\n");
+                    StringBuilder preview = new StringBuilder();
+                    preview.append("修改位置:\n");
+                    for (int i = 0; i < Math.min(3, lines.length); i++) {
+                        preview.append("  ").append(lines[i]).append("\n");
+                    }
+                    if (lines.length > 3) {
+                        preview.append("  ...\n");
+                    }
+                    logger.info("【FileChangeTracker】使用 metadata.searchContent 构建摘要");
+                    return preview.toString();
+                }
+            }
+        }
+
+        // 如果没有 changeSummary，使用 displayContent
         String displayContent = result.getDisplayContent();
         if (displayContent != null && !displayContent.isEmpty()) {
+            logger.info("【FileChangeTracker】使用 displayContent: {}", displayContent);
             return displayContent;
         }
 
-        // 如果没有 displayContent，使用 displayTitle
+        // 最后使用 displayTitle
         String displayTitle = result.getDisplayTitle();
         if (displayTitle != null && !displayTitle.isEmpty()) {
+            logger.info("【FileChangeTracker】使用 displayTitle: {}", displayTitle);
             return displayTitle;
         }
 
+        logger.warn("【FileChangeTracker】无法提取变更摘要，返回空字符串");
         return "";
     }
 }

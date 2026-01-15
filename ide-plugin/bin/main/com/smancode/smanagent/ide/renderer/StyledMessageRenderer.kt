@@ -277,6 +277,9 @@ object StyledMessageRenderer {
      * 将 HTML 追加到 JTextPane
      */
     private fun appendHtml(textPane: JTextPane, html: String) {
+        // 确保容器已完成布局（解决初始化时宽度未确定的问题）
+        textPane.size = textPane.parent?.size ?: textPane.size
+
         val doc = textPane.styledDocument
         val kit = textPane.editorKit as? javax.swing.text.html.HTMLEditorKit ?: return
 

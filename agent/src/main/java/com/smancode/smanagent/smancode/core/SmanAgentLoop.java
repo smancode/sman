@@ -1167,21 +1167,47 @@ public class SmanAgentLoop {
                             prompt.append("参数: ").append(formatParamsBrief(toolPart.getParameters())).append("\n");
                         }
 
-                        // 关键：添加完整结果（让 LLM 处理）
+                        // 关键：添加摘要结果（避免 Token 爆炸）
                         if (toolPart.getResult() != null) {
                             com.smancode.smanagent.tools.ToolResult result = toolPart.getResult();
                             if (result.isSuccess()) {
-                                // 优先使用 data 字段（包含完整结果），其次使用 displayContent
-                                String fullResult = result.getData() != null ? result.getData().toString() : result.getDisplayContent();
-                                if (fullResult != null && !fullResult.isEmpty()) {
-                                    prompt.append("完整结果: \n").append(fullResult).append("\n");
+                                // 优先使用摘要（由 ResultSummarizer 生成，已压缩）
+                                if (toolPart.getSummary() != null && !toolPart.getSummary().isEmpty()) {
+                                    prompt.append("结果: \n").append(toolPart.getSummary()).append("\n");
                                 } else {
-                                    prompt.append("结果: (执行成功，无返回内容)\n");
+                                    // 降级：使用 data 字段（可能包含完整结果，需要小心）
+                                    String dataResult = result.getData() != null ? result.getData().toString() : null;
+                                    if (dataResult != null && dataResult.length() < 1000) {
+                                        // 只有小数据才直接使用
+                                        prompt.append("结果: \n").append(dataResult).append("\n");
+                                    } else {
+                                        // 大数据使用 displayContent
+                                        String displayContent = result.getDisplayContent();
+                                        if (displayContent != null && !displayContent.isEmpty()) {
+                                            prompt.append("结果: \n").append(displayContent).append("\n");
+                                        } else {
+                                            prompt.append("结果: (执行成功，无返回内容)\n");
+                                        }
+                                    }
                                 }
 
-                                // 如果有 LLM 生成的 summary，也添加进去
-                                if (toolPart.getSummary() != null && !toolPart.getSummary().isEmpty()) {
-                                    prompt.append("摘要: ").append(toolPart.getSummary()).append("\n");
+                                // 新增：如果有 metadata，添加关键变更信息（用于 apply_change 等工具）
+                                if (result.getMetadata() != null && !result.getMetadata().isEmpty()) {
+                                    java.util.Map<String, Object> metadata = result.getMetadata();
+                                    // 添加 description（如果有）
+                                    if (metadata.containsKey("description")) {
+                                        Object desc = metadata.get("description");
+                                        if (desc != null && !desc.toString().isEmpty()) {
+                                            prompt.append("变更说明: ").append(desc.toString()).append("\n");
+                                        }
+                                    }
+                                    // 添加 changeSummary（如果有）
+                                    if (metadata.containsKey("changeSummary")) {
+                                        Object summary = metadata.get("changeSummary");
+                                        if (summary != null && !summary.toString().isEmpty()) {
+                                            prompt.append("变更详情: \n").append(summary.toString()).append("\n");
+                                        }
+                                    }
                                 }
                             } else {
                                 String error = result.getError();
@@ -1298,7 +1324,17 @@ public class SmanAgentLoop {
             Iterator<Map.Entry<String, JsonNode>> fields = paramsJson.fields();
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> entry = fields.next();
-                params.put(entry.getKey(), entry.getValue().asText());
+                JsonNode valueNode = entry.getValue();
+                // 根据实际类型转换，避免将数字转为字符串
+                if (valueNode.isTextual()) {
+                    params.put(entry.getKey(), valueNode.asText());
+                } else if (valueNode.isNumber()) {
+                    params.put(entry.getKey(), valueNode.numberValue());
+                } else if (valueNode.isBoolean()) {
+                    params.put(entry.getKey(), valueNode.asBoolean());
+                } else {
+                    params.put(entry.getKey(), valueNode.asText());
+                }
             }
         }
         part.setParameters(params);

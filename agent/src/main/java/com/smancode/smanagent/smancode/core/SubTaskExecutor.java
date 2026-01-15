@@ -101,8 +101,11 @@ public class SubTaskExecutor {
             // 不再推送完整 TOOL Part，避免重复
             // partPusher.accept(toolPart);
 
-            // 6. 推送工具摘要（唯一推送给前端的内容）
+            // 6. 生成并保存摘要（供 LLM 循环使用）
             String displaySummary = resultSummarizer.summarize(toolName, fullResult, parentSession);
+            toolPart.setSummary(displaySummary);  // 保存摘要到 ToolPart，供 LLM 循环使用
+
+            // 7. 推送工具摘要（唯一推送给前端的内容）
             Part summaryPart = createSummaryPart(toolPart, displaySummary, fullResult);
             partPusher.accept(summaryPart);
 

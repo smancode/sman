@@ -63,6 +63,11 @@ public class Session {
      */
     private Instant updatedTime;
 
+    /**
+     * 上次 commit 时间（用于增量统计文件变更）
+     */
+    private Instant lastCommitTime;
+
     public Session() {
         this.status = SessionStatus.IDLE;
         this.messages = new ArrayList<>();
@@ -273,5 +278,14 @@ public class Session {
      */
     public boolean isIdle() {
         return status == SessionStatus.IDLE;
+    }
+
+    public Instant getLastCommitTime() {
+        return lastCommitTime;
+    }
+
+    public void setLastCommitTime(Instant lastCommitTime) {
+        this.lastCommitTime = lastCommitTime;
+        touch();
     }
 }
