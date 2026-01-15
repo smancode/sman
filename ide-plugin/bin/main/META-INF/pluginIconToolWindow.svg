@@ -1,31 +1,18 @@
 <svg width="400" height="400" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
-  <!-- 背景设为白色（可选） -->
-  <rect width="8" height="8" fill="#f0f0f0"/>
-  
-  <!-- 黑色像素块组 -->
-  <g fill="#1a1a1a">
-    <!-- 1. 顶部边框 (Top Bar) -->
-    <rect x="0" y="0" width="8" height="1" />
-    <!-- 顶部两侧的小竖条 -->
-    <rect x="0" y="1" width="1" height="1" />
-    <rect x="7" y="1" width="1" height="1" />
-
-    <!-- 2. 中间两侧的竖条 (Middle Side Bars) -->
-    <rect x="0" y="3" width="1" height="2" />
-    <rect x="7" y="3" width="1" height="2" />
-
-    <!-- 3. 眼睛 (Eyes) -->
-    <rect x="2" y="3" width="1" height="2" />
-    <rect x="5" y="3" width="1" height="2" />
-
-    <!-- 4. 底部两侧的小竖条 (Bottom Side Nubs) -->
-    <rect x="0" y="6" width="1" height="1" />
-    <rect x="7" y="6" width="1" height="1" />
-
-    <!-- 5. 嘴巴 (Mouth) -->
-    <rect x="3" y="6" width="2" height="1" />
-
-    <!-- 6. 底部边框 (Bottom Bar) -->
-    <rect x="0" y="7" width="8" height="1" />
+  <rect width="8" height="8" fill="#1a1a1a" />
+  <g fill="#f0f0f0">
+    <!-- 1. 头顶 (4格宽) -->
+    <rect x="2" y="1" width="4" height="1" />
+    <!-- 2. 额头 (8格宽) -->
+    <rect x="0" y="2" width="8" height="1" />
+    <!-- 3. 眼睛层 (左右脸颊+眉心) -->
+    <rect x="0" y="3" width="2" height="2" />
+    <rect x="3" y="3" width="2" height="2" />
+    <rect x="6" y="3" width="2" height="2" />
+    <!-- 4. 下巴 (8格宽) -->
+    <rect x="0" y="5" width="8" height="1" />
+    <!-- 5. 脚 (两个宽脚，中间空2格) -->
+    <rect x="1" y="6" width="2" height="1" />
+    <rect x="5" y="6" width="2" height="1" />
   </g>
 </svg>

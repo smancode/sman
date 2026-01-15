@@ -7,6 +7,7 @@ import com.smancode.smanagent.ide.components.CliControlBar
 import com.smancode.smanagent.ide.components.CliInputArea
 import com.smancode.smanagent.ide.components.TaskProgressBar
 import com.smancode.smanagent.ide.components.WelcomePanel
+import com.smancode.smanagent.ide.model.GraphModels
 import com.smancode.smanagent.ide.model.GraphModels.PartType
 import com.smancode.smanagent.ide.model.GraphModels.UserPartData
 import com.smancode.smanagent.ide.model.PartData
@@ -29,6 +30,7 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionAdapter
 import java.io.File
+import java.io.StringReader
 import java.net.URL
 import java.time.Instant
 import java.util.*
@@ -588,12 +590,60 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
     /**
      * 追加系统消息
+     * @param text 消息文本
+     * @param isProcessing 是否是处理中状态（灰色）
+     * @param saveToHistory 是否保存到历史记录（默认 true）
      */
-    private fun appendSystemMessage(text: String, isProcessing: Boolean = false) {
+    private fun appendSystemMessage(text: String, isProcessing: Boolean = false, saveToHistory: Boolean = true) {
         val colors = ThemeColors.getCurrentColors()
-        val doc = outputArea.styledDocument
-        StyledMessageRenderer.renderSystemMessageToDocument(text, doc, colors, isProcessing)
-        outputArea.caretPosition = doc.length
+
+        // 将文本转换为 HTML 格式（保留换行）
+        val htmlText = text.replace("\n", "<br>")
+        val colorHex = if (isProcessing) {
+            String.format("#%06X", colors.textMuted.rgb and 0xFFFFFF)
+        } else {
+            String.format("#%06X", colors.textPrimary.rgb and 0xFFFFFF)
+        }
+
+        // 获取当前 HTML 内容
+        val currentHtml = outputArea.text
+        // 在 </body> 前插入新内容
+        val newHtml = if (currentHtml.contains("</body>")) {
+            currentHtml.replace("</body>", "<div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body>")
+        } else {
+            "<html><body><div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body></html>"
+        }
+
+        outputArea.text = newHtml
+        // 滚动到底部
+        outputArea.caretPosition = outputArea.document.length
+
+        // 保存到历史记录
+        if (saveToHistory && currentSessionId != null) {
+            val now = Instant.now()
+            // 如果是处理中消息，添加特殊标记，用于历史加载时识别
+            val savedText = if (isProcessing) {
+                "[PROCESSING]$text"
+            } else {
+                text
+            }
+            val systemPart = GraphModels.TextPartData(
+                id = UUID.randomUUID().toString(),
+                messageId = UUID.randomUUID().toString(),
+                sessionId = currentSessionId!!,
+                createdTime = now,
+                updatedTime = now,
+                data = mapOf("text" to savedText)
+            )
+            storageService.addPartToSession(currentSessionId!!, systemPart)
+        }
+    }
+
+    /**
+     * 将 Color 转换为十六进制字符串
+     */
+    private fun toHexString(color: java.awt.Color): String {
+        return "#${color.red.toString(16).padStart(2, '0')}${color.green.toString(16).padStart(2, '0')}${color.blue.toString(16).padStart(2, '0')}"
     }
 
     /**
@@ -791,8 +841,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         logger.info("【/commit命令】开始处理: sessionId={}", currentSessionId)
 
-        // 显示处理中状态（灰色）
-        appendSystemMessage("> 处理自动commit..", true)
+        // 显示处理中状态（灰色），并保存到历史
+        appendSystemMessage("处理自动commit..", true, saveToHistory = true)
 
         // 确保连接
         ensureWebSocketConnected()
@@ -823,9 +873,13 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             logger.info("【/commit命令】收到结果: message={}, add={}, modify={}, delete={}",
                     commitMessage, addFiles.size, modifyFiles.size, deleteFiles.size)
 
+            // 保存后端返回的 commit 数据到历史（简化格式）
+            val backendResultText = buildCommitResultText(commitMessage, addFiles, modifyFiles, deleteFiles)
+            appendSystemMessage(backendResultText, isProcessing = false, saveToHistory = true)
+
             // 检查是否有变更
             if (addFiles.isEmpty() && modifyFiles.isEmpty() && deleteFiles.isEmpty()) {
-                appendSystemMessage("⚠️ 没有需要提交的文件")
+                appendSystemMessage("⚠️ 没有需要提交的文件", saveToHistory = true)
                 return
             }
 
@@ -839,15 +893,42 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                             displayCommitResult(commitMessage, result.files)
                         }
                         is GitCommitHandler.CommitResult.NoChanges -> {
-                            appendSystemMessage("⚠️ ${result.message}")
+                            appendSystemMessage("⚠️ ${result.message}", saveToHistory = true)
                         }
                         is GitCommitHandler.CommitResult.Error -> {
-                            appendSystemMessage("❌ 提交失败: ${result.message}")
+                            appendSystemMessage("❌ 提交失败: ${result.message}", saveToHistory = true)
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * 构建 commit 结果文本（用于展示和保存）
+     */
+    private fun buildCommitResultText(commitMessage: String, addFiles: List<String>, modifyFiles: List<String>, deleteFiles: List<String>): String {
+        val sb = StringBuilder()
+
+        sb.append("Commit: $commitMessage\n\n")
+        sb.append("文件变更:\n")
+
+        if (addFiles.isNotEmpty()) {
+            sb.append("  新增 (${addFiles.size}):\n")
+            addFiles.forEach { file -> sb.append("    + $file\n") }
+        }
+
+        if (modifyFiles.isNotEmpty()) {
+            sb.append("  修改 (${modifyFiles.size}):\n")
+            modifyFiles.forEach { file -> sb.append("    ~ $file\n") }
+        }
+
+        if (deleteFiles.isNotEmpty()) {
+            sb.append("  删除 (${deleteFiles.size}):\n")
+            deleteFiles.forEach { file -> sb.append("    - $file\n") }
+        }
+
+        return sb.toString()
     }
 
     /**
@@ -878,7 +959,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             files.deleteFiles.forEach { file -> sb.append("    - $file\n") }
         }
 
-        appendSystemMessage(sb.toString())
+        // 保存到历史记录
+        appendSystemMessage(sb.toString(), isProcessing = false, saveToHistory = true)
     }
 
     fun dispose() {

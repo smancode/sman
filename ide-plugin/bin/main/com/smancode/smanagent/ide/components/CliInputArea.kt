@@ -20,6 +20,7 @@ import javax.swing.event.DocumentListener
  * - 回车发送，Shift+Enter 换行
  * - 鼠标滚轮支持，隐藏滚动条
  * - 背景色与消息区一致，实现悬浮效果
+ * - 命令自动补全：输入 `/` 显示灰色提示，Tab 补全
  */
 class CliInputArea(
     private val onSendCallback: (String) -> Unit
@@ -32,6 +33,10 @@ class CliInputArea(
     private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行\n/commit  自动总结并 #AI commit#"
     private var showPlaceholder = true
     private var isFocused = false
+
+    // 命令补全相关
+    private val commands = listOf("/commit")
+    private var suggestionText: String? = null
 
     // 文本区域和滚动面板
     val textArea: JTextArea
@@ -69,13 +74,16 @@ class CliInputArea(
 
             override fun paintComponent(g: Graphics) {
                 super.paintComponent(g)
+
+                val g2 = g as Graphics2D
+                val fm = g2.fontMetrics
+                val colors = ThemeColors.getCurrentColors()
+
                 // 绘制占位符
                 if (showPlaceholder && text.isBlank()) {
-                    val g2 = g as Graphics2D
                     val oldColor = g2.color
-                    g2.color = ThemeColors.getCurrentColors().textMuted
+                    g2.color = colors.textMuted
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                    val fm = g2.fontMetrics
                     val x = insets.left
                     var y = insets.top + fm.ascent
 
@@ -87,6 +95,27 @@ class CliInputArea(
                     }
 
                     g2.color = oldColor
+                }
+
+                // 绘制命令建议（灰色提示）
+                if (suggestionText != null) {
+                    val currentText = this.text.trim()
+                    if (currentText.startsWith("/") && !currentText.contains(" ")) {
+                        val oldColor = g2.color
+                        g2.color = colors.textMuted
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+                        // 计算当前文本的宽度，在光标位置绘制建议
+                        val currentTextWidth = fm.stringWidth(currentText)
+                        val x = insets.left + currentTextWidth
+                        val y = insets.top + fm.ascent
+
+                        // 绘制建议文本（去掉已输入的部分）
+                        val suggestion = suggestionText!!.substring(currentText.length)
+                        g2.drawString(suggestion as String, x, y)
+
+                        g2.color = oldColor
+                    }
                 }
             }
         }
@@ -149,19 +178,22 @@ class CliInputArea(
             }
         })
 
-        // 文本变化监听（用于自动增高）
+        // 文本变化监听（用于自动增高和命令建议）
         textArea.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {
                 updatePlaceholder()
                 updateHeight()
+                updateSuggestion()
             }
             override fun removeUpdate(e: javax.swing.event.DocumentEvent?) {
                 updatePlaceholder()
                 updateHeight()
+                updateSuggestion()
             }
             override fun changedUpdate(e: javax.swing.event.DocumentEvent?) {
                 updatePlaceholder()
                 updateHeight()
+                updateSuggestion()
             }
         })
 
@@ -214,6 +246,7 @@ class CliInputArea(
 
         val enterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)
         val shiftEnterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, java.awt.event.InputEvent.SHIFT_DOWN_MASK)
+        val tabKey = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0)
 
         inputMap.put(enterKey, "sendMessage")
         actionMap.put("sendMessage", object : AbstractAction() {
@@ -223,6 +256,42 @@ class CliInputArea(
         })
 
         inputMap.put(shiftEnterKey, "insert-break")
+
+        // Tab 键补全命令
+        inputMap.put(tabKey, "autocomplete")
+        actionMap.put("autocomplete", object : AbstractAction() {
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
+                autocomplete()
+            }
+        })
+    }
+
+    /**
+     * 更新命令建议
+     */
+    private fun updateSuggestion() {
+        val text = textArea.text.trim()
+
+        // 只有在以 / 开头且不包含空格时才显示建议
+        if (text.startsWith("/") && !text.contains(" ")) {
+            // 查找匹配的命令
+            suggestionText = commands.find { it.startsWith(text) }
+        } else {
+            suggestionText = null
+        }
+
+        textArea.repaint()
+    }
+
+    /**
+     * 自动补全命令
+     */
+    private fun autocomplete() {
+        if (suggestionText != null) {
+            textArea.text = suggestionText!!
+            suggestionText = null
+            textArea.repaint()
+        }
     }
 
     private fun triggerSend() {

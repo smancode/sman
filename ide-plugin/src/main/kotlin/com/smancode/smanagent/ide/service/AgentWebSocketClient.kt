@@ -164,6 +164,8 @@ class AgentWebSocketClient(
             val data = objectMapper.readValue<Map<String, Any>>(message)
             val type = data["type"] as? String ?: ""
 
+            logger.info("【WebSocket客户端】收到消息: type={}, data={}", type, data)
+
             when (type) {
                 "connected" -> onConnected?.invoke(data)
                 "part" -> {
@@ -171,7 +173,10 @@ class AgentWebSocketClient(
                     onPartCallback?.invoke(part)
                 }
                 "complete" -> onComplete?.invoke(data)
-                "COMMAND_RESULT" -> onCommandResult?.invoke(data)
+                "COMMAND_RESULT" -> {
+                    logger.info("【WebSocket客户端】触发 COMMAND_RESULT 回调")
+                    onCommandResult?.invoke(data)
+                }
                 "error" -> onError?.invoke(data)
                 "pong" -> onPong?.invoke(data)
                 "TOOL_CALL" -> {

@@ -131,7 +131,57 @@ object StyledMessageRenderer {
                         val hasJsonPattern = trimmedText.contains("{\"text\":") && trimmedText.contains("\"summary\"")
 
                         if (!hasJsonPattern) {
-                            var htmlContent = MarkdownRenderer.markdownToHtml(text)
+                            // 检查是否是处理中消息（以 [PROCESSING] 开头）
+                            val isProcessing = text.startsWith("[PROCESSING]")
+                            val actualText = if (isProcessing) {
+                                text.substring("[PROCESSING]".length)
+                            } else {
+                                text
+                            }
+
+                            // 检查是否是 commit 结果（以 "Commit:" 开头）或处理中消息
+                            val processedText = if (actualText.startsWith("Commit:")) {
+                                // 将 "Commit:" 转换为蓝色，"文件变更:" 转换为黄色
+                                var result = actualText
+                                // 替换 "Commit:" 为蓝色
+                                result = result.replace("Commit:", "<span style='color: ${toHexString(colors.codeFunction)};'>Commit:</span>")
+                                // 替换 "文件变更:" 为黄色
+                                result = result.replace("文件变更:", "<span style='color: ${toHexString(colors.warning)};'>文件变更:</span>")
+                                result
+                            } else {
+                                actualText
+                            }
+
+                            var htmlContent = MarkdownRenderer.markdownToHtml(processedText)
+
+                            // 后处理代码块 - 将 <pre><code>...</code></pre> 替换为自定义样式
+                            // HTMLEditorKit 对 pre 标签的 CSS 支持很差，所以用 div + font-family 模拟
+                            htmlContent = htmlContent.replace(Regex("""<pre>(.*?)</pre>""", RegexOption.DOT_MATCHES_ALL)) { matchResult ->
+                                val codeContent = matchResult.groupValues[1]
+                                    .replace("&lt;", "<")
+                                    .replace("&gt;", ">")
+                                    .replace("&amp;", "&")
+                                // 使用 div 模拟 pre，但添加换行处理
+                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
+                            }
+                            // 处理行内代码 <code>...</code>（不在 pre 内的）
+                            htmlContent = htmlContent.replace(Regex("""<code>(.*?)</code>""")) { matchResult ->
+                                val codeContent = matchResult.groupValues[1]
+                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;">$codeContent</span>"""
+                            }
+
+                            // 预处理长路径：对超长路径进行换行
+                            htmlContent = preprocessLongPaths(htmlContent)
+
+                            // 如果是处理中消息，包裹灰色样式
+                            if (isProcessing) {
+                                htmlContent = """
+                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textSecondary)};">
+                                        $htmlContent
+                                    </div>
+                                """.trimIndent()
+                            }
+
                             // 处理代码链接：自动识别并包装为可点击链接
                             htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
                             val wrappedHtml = wrapHtml(htmlContent, false)
@@ -252,11 +302,25 @@ object StyledMessageRenderer {
      */
     private fun wrapHtml(content: String, isReasoning: Boolean = false): String {
         val style = if (isReasoning) {
-            "color: #61AFEF; font-style: italic; margin: 5px 0; text-align: left;"
+            "color: #61AFEF; font-style: italic; margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         } else {
-            "margin: 5px 0; text-align: left;"
+            "margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         }
         return "<div style=\"$style\">$content</div>"
+    }
+
+    /**
+     * 预处理长路径：在超长路径中插入零宽空格（zero-width space）以强制换行
+     * HTMLEditorKit 对 word-break 支持差，所以手动插入换行点
+     */
+    private fun preprocessLongPaths(html: String): String {
+        // 匹配文件路径模式（如 agent/src/main/java/.../File.java）
+        // 在斜杠、点等特殊字符后插入零宽空格，允许在这些位置换行
+        return html.replace(Regex("""([a-zA-Z0-9_/\\.]{50,})""")) { matchResult ->
+            val path = matchResult.groupValues[1]
+            // 在每个 / 后插入零宽空格
+            path.replace("/", "/\u200B")
+        }
     }
 
     /**
