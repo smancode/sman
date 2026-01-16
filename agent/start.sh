@@ -51,9 +51,21 @@ echo "📁 创建日志目录..."
 mkdir -p logs
 mkdir -p logs/gc  # GC日志目录
 
-# 3. 编译项目
-echo "📦 编译项目..."
-if ./gradlew clean build -x test; then
+# 3. 设置必要的环境变量（如果未设置）
+echo "🔧 配置环境变量..."
+if [ -z "$GLM_API_KEY" ]; then
+    echo "⚠️  GLM_API_KEY 未设置，使用默认值"
+    export GLM_API_KEY="857f6982a73c4fb79e75e8dae2ba19ba.JKJ2SSd24kiA5KRc"
+fi
+
+if [ -z "$PROJECT_PATH" ]; then
+    echo "⚠️  PROJECT_PATH 未设置，使用默认值"
+    export PROJECT_PATH="/path/to/your/project"
+fi
+
+# 4. 编译项目
+echo "📦 编译项目（增量编译）..."
+if ./gradlew build -x test; then
     echo "✅ 编译成功"
 else
     echo "❌ 编译失败，退出启动"

@@ -94,18 +94,10 @@ class LocalToolExecutor(private val project: Project) {
     
     /**
      * 将绝对路径转换为相对路径
+     * 使用 PathUtil 进行路径归一化，确保跨平台兼容性
      */
     private fun toRelativePath(absolutePath: String, basePath: String): String {
-        if (basePath.isEmpty()) return absolutePath
-        
-        val normalizedAbsolute = absolutePath.replace("\\", "/")
-        val normalizedBase = basePath.replace("\\", "/").removeSuffix("/")
-        
-        return if (normalizedAbsolute.startsWith(normalizedBase)) {
-            normalizedAbsolute.removePrefix(normalizedBase).removePrefix("/")
-        } else {
-            absolutePath
-        }
+        return PathUtil.toRelativePath(absolutePath, basePath)
     }
     
     /**
@@ -143,7 +135,8 @@ class LocalToolExecutor(private val project: Project) {
                     findFiles(file)
                 } else if (regex.matches(file.name) && SOURCE_FILE_EXTENSIONS.any { file.name.endsWith(".$it") }) {
                     // 只匹配源码文件，排除 .class 等编译产物
-                    val relativePath = file.absolutePath.removePrefix(basePath).removePrefix("/")
+                    // 使用 PathUtil 确保跨平台路径兼容性
+                    val relativePath = toRelativePath(file.absolutePath, basePath)
                     matches.add(mapOf(
                         "path" to relativePath,
                         "name" to file.name
