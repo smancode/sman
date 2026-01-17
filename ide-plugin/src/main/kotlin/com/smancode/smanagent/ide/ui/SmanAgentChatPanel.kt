@@ -122,6 +122,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             initComponents()
             // 先应用主题（确保渲染正常）
             applyTheme()
+            // 初始化文件路径缓存
+            com.smancode.smanagent.ide.renderer.CodeLinkProcessor.initForProject(project, storageService)
             // 注册监听器
             setupLinkNavigation()
             // 加载历史会话（在主题应用后）

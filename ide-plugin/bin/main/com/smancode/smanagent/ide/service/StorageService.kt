@@ -76,7 +76,10 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var currentSessionId: String = "",
 
         // 历史会话列表（仅 SessionInfo，不含 parts）
-        var sessionInfos: MutableList<SessionInfo> = mutableListOf()
+        var sessionInfos: MutableList<SessionInfo> = mutableListOf(),
+
+        // 文件路径缓存：fileName -> filePath（用于类名跳转）
+        var filePathCache: MutableMap<String, String> = mutableMapOf()
     )
 
     private var state = SettingsState()
@@ -410,6 +413,42 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
      */
     fun setCurrentSessionId(sessionId: String?) {
         state.currentSessionId = sessionId ?: ""
+    }
+
+    // ==================== 文件路径缓存管理 ====================
+
+    /**
+     * 从缓存获取文件路径
+     * @param fileName 文件名（如 "FileFilterUtil.java"）
+     * @return 文件路径，如果不存在返回 null
+     */
+    fun getFilePath(fileName: String): String? {
+        return state.filePathCache[fileName]
+    }
+
+    /**
+     * 更新文件路径缓存
+     * @param fileName 文件名
+     * @param filePath 文件路径
+     */
+    fun putFilePath(fileName: String, filePath: String) {
+        state.filePathCache[fileName] = filePath
+        logger.debug("缓存文件路径: {} -> {}", fileName, filePath)
+    }
+
+    /**
+     * 清空文件路径缓存（项目切换或缓存失效时调用）
+     */
+    fun clearFilePathCache() {
+        state.filePathCache.clear()
+        logger.info("文件路径缓存已清空")
+    }
+
+    /**
+     * 获取缓存大小
+     */
+    fun getFilePathCacheSize(): Int {
+        return state.filePathCache.size
     }
 
     // ==================== 配置管理 ====================
