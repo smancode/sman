@@ -6,6 +6,7 @@ import com.smancode.smanagent.ide.model.GraphModels
 import com.smancode.smanagent.ide.model.GraphModels.PartType
 import com.smancode.smanagent.ide.theme.ThemeColors
 import com.smancode.smanagent.ide.theme.ColorPalette
+import org.slf4j.LoggerFactory
 import javax.swing.text.MutableAttributeSet
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
@@ -20,6 +21,7 @@ import java.io.StringReader
  * 使用 JTextPane + HTMLEditorKit 实现 Markdown 渲染
  */
 object StyledMessageRenderer {
+    private val logger = LoggerFactory.getLogger(StyledMessageRenderer::class.java)
 
     // 样式标记常量
     private const val RESET = "RESET"
@@ -37,9 +39,12 @@ object StyledMessageRenderer {
      * 渲染 Part 到 JTextPane
      */
     fun renderToTextPane(part: PartData, textPane: JTextPane, project: Project, colors: ColorPalette = ThemeColors.getCurrentColors()) {
+        logger.info("=== renderToTextPane === part.type={}", part.type)
+
         when (part.type) {
             PartType.TEXT -> {
                 val text = (part.data["text"] as? String) ?: ""
+                logger.info("→ TEXT 类型，text长度: {}, 前100字符: {}", text.length, text.take(100))
 
                 // 检查是否是阶段性结论（以 "⏺ 阶段性结论" 或 "📊 阶段性结论" 开头）
                 if (text.startsWith("⏺ 阶段性结论") || text.startsWith("📊 阶段性结论")) {
@@ -129,6 +134,7 @@ object StyledMessageRenderer {
                         // 这种格式通常是 LLM 返回的原始 JSON，内容已经在工具摘要中显示过了
                         val trimmedText = text.trim()
                         val hasJsonPattern = trimmedText.contains("{\"text\":") && trimmedText.contains("\"summary\"")
+                        logger.info("→ hasJsonPattern: {}", hasJsonPattern)
 
                         if (!hasJsonPattern) {
                             // 检查是否是处理中消息（以 [PROCESSING] 开头）

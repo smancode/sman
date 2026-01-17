@@ -6,9 +6,11 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.smancode.smanagent.ide.theme.ThemeColors
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.regex.Pattern
+import java.awt.Color
 
 /**
  * 代码链接处理器
@@ -112,61 +114,89 @@ object CodeLinkProcessor {
         if (html.isBlank()) return html
 
         try {
+            logger.info("=== CodeLinkProcessor 开始 === html长度: {}", html.length)
             var result = html
             val processedLinks = HashSet<String>() // 避免重复处理
 
-            for (pattern in PATTERNS) {
+            for ((patternIndex, pattern) in PATTERNS.withIndex()) {
+                logger.info("→ 使用模式 {}: {}", patternIndex, pattern)
                 val matcher = pattern.matcher(result)
                 val buffer = StringBuffer()
 
+                var matchCount = 0
                 while (matcher.find()) {
+                    matchCount++
                     val fullText = matcher.group(0)
+                    logger.info("→ 匹配 #{}: fullText='{}'", matchCount, fullText)
 
                     // 避免重复处理
                     if (processedLinks.contains(fullText)) {
+                        logger.info("  已跳过（重复处理）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
                     processedLinks.add(fullText)
 
                     val className = matcher.group(1)       // 类名
-                    val extension = matcher.group(2)        // 扩展名 .java
-                    val separator = matcher.group(3)        // #, : 或 null
+                    val extension = if (matcher.groupCount() >= 2) matcher.group(2) else null        // 扩展名 .java
+                    val separator = if (matcher.groupCount() >= 3) matcher.group(3) else null        // #, : 或 null
                     val methodName = if (matcher.groupCount() >= 4) matcher.group(4) else null
                     val params = if (matcher.groupCount() >= 5) matcher.group(5) else null
                     val lineNumber = if (matcher.groupCount() >= 4 && separator == ":")
                         matcher.group(4) else null
 
+                    logger.info("  解析: className='{}', extension='{}', separator='{}', methodName='{}', lineNumber='{}'",
+                        className, extension, separator, methodName, lineNumber)
+
                     // 黑名单过滤：跳过前端相关的类名/方法名
                     if (className in FRONTEND_BLACKLIST ||
                         (methodName != null && methodName in FRONTEND_BLACKLIST)) {
+                        logger.info("  已跳过（黑名单）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
 
                     // 构建文件名
                     val fileName = if (extension != null) "$className$extension" else className
+                    logger.info("  搜索文件: fileName='{}'", fileName)
 
                     // 搜索文件
-                    val matchedFiles = findFilesByName(fileName, project)
+                    var matchedFiles = findFilesByName(fileName, project)
+
+                    // 如果没找到且没有扩展名，尝试添加 .java 后缀
+                    if (matchedFiles.isEmpty() && extension == null) {
+                        val fileNameWithJava = "$fileName.java"
+                        logger.info("  未找到，尝试使用 .java 后缀: fileName='{}'", fileNameWithJava)
+                        matchedFiles = findFilesByName(fileNameWithJava, project)
+                    }
+
+                    logger.info("  搜索结果: 找到 {} 个文件", matchedFiles.size)
+
                     if (matchedFiles.isEmpty()) {
                         // 没找到文件，保持原样
+                        logger.info("  已跳过（未找到文件）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
 
                     val file = matchedFiles.first()
                     val filePath = file.virtualFile.path
+                    logger.info("  文件路径: {}", filePath)
+
                     val lineSuffix = resolveLineSuffix(file, separator, methodName, lineNumber, params)
+                    logger.info("  行号后缀: '{}'", lineSuffix)
 
                     // 构建链接
                     val linkHtml = buildLinkHtml(fullText, filePath, lineSuffix)
+                    logger.info("  链接HTML: {}", linkHtml)
                     matcher.appendReplacement(buffer, linkHtml)
                 }
                 matcher.appendTail(buffer)
                 result = buffer.toString()
+                logger.info("→ 模式 {} 完成，共匹配 {} 次", patternIndex, matchCount)
             }
 
+            logger.info("=== CodeLinkProcessor 完成 ===")
             return result
 
         } catch (e: Exception) {
@@ -285,7 +315,19 @@ object CodeLinkProcessor {
     private fun buildLinkHtml(text: String, filePath: String, lineSuffix: String): String {
         // 使用 file:// 协议
         val fileUrl = "file://$filePath$lineSuffix"
-        // 添加样式，去掉链接的默认背景色和下划线
-        return "<a href=\"$fileUrl\" style=\"text-decoration: none; color: inherit; background-color: transparent;\">$text</a>"
+
+        // 使用主题颜色，自动适配深色/浅色主题
+        val colors = ThemeColors.getCurrentColors()
+        val linkColor = toHexString(colors.codeFunction)  // 使用代码函数高亮色（蓝色）
+
+        // 添加样式：使用主题色 + 无下划线 + 手型光标
+        return "<a href=\"$fileUrl\" style=\"text-decoration: none; color: $linkColor; background-color: transparent; cursor: pointer;\">$text</a>"
+    }
+
+    /**
+     * 将 Color 转换为十六进制字符串
+     */
+    private fun toHexString(color: Color): String {
+        return "#${color.red.toString(16).padStart(2, '0')}${color.green.toString(16).padStart(2, '0')}${color.blue.toString(16).padStart(2, '0')}"
     }
 }

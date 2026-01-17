@@ -595,6 +595,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      * 追加 Part 到 UI
      */
     private fun appendPartToUI(part: PartData) {
+        logger.info("=== appendPartToUI === type={}, data={}", part.type, part.data.keys)
+
         // TodoPart 特殊处理：更新任务栏而非插入消息流
         if (part.type == PartType.TODO) {
             taskProgressBar.updateTasks(part)
@@ -770,6 +772,7 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun navigateToUrl(url: URL) {
         try {
+            logger.info("=== 链接点击触发 === URL: {}, protocol: {}, ref: {}", url, url.protocol, url.ref)
             when (url.protocol) {
                 "file" -> navigateToFile(url)
                 "http", "https" -> {
@@ -788,34 +791,48 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun navigateToFile(url: URL) {
         try {
+            logger.info("→ navigateToFile 开始: URL={}, toExternalForm={}", url, url.toExternalForm())
+
             val file = File(url.toURI())
+            logger.info("→ File.fromURI: path={}, exists={}", file.path, file.exists())
+
             val virtualFile = com.intellij.openapi.vfs.VirtualFileManager.getInstance()
-                .findFileByUrl(url.toExternalForm()) ?: run {
-                // 尝试通过 LocalFileSystem 查找
+                .findFileByUrl(url.toExternalForm())
+
+            logger.info("→ VirtualFileManager.findFileByUrl: {}", virtualFile)
+
+            val finalVirtualFile = virtualFile ?: run {
+                logger.info("→ 尝试 LocalFileSystem.findFileByIoFile")
                 com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByIoFile(file)
             }
 
-            if (virtualFile == null) {
-                logger.warn("文件不存在: {}", file.path)
+            logger.info("→ 最终 virtualFile: {}, path={}", finalVirtualFile, finalVirtualFile?.path)
+
+            if (finalVirtualFile == null) {
+                logger.warn("❌ 文件不存在: {}", file.path)
                 return
             }
 
             // 打开文件
             val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
-            fileEditorManager.openFile(virtualFile, true)
+            fileEditorManager.openFile(finalVirtualFile, true)
+            logger.info("→ 文件已打开: {}", finalVirtualFile.path)
 
             // 跳转到指定行（URL 中包含 #L123 格式的行号）
             url.ref?.let { ref ->
-                // 支持格式：#L123 或 #123
+                logger.info("→ URL ref: {}", ref)
                 val lineNumber = ref.removePrefix("L").toIntOrNull()
                 if (lineNumber != null && lineNumber > 0) {
-                    jumpToLine(virtualFile, lineNumber)
+                    logger.info("→ 开始跳转到行: {}", lineNumber)
+                    jumpToLine(finalVirtualFile, lineNumber)
+                } else {
+                    logger.warn("→ 行号解析失败: ref={}", ref)
                 }
             }
 
-            logger.info("成功导航到文件: file://{}", file.path)
+            logger.info("✅ 成功导航到文件: file://{}", file.path)
         } catch (e: Exception) {
-            logger.error("文件导航失败: url={}", url, e)
+            logger.error("❌ 文件导航失败: url={}", url, e)
         }
     }
 
@@ -824,19 +841,40 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun jumpToLine(virtualFile: com.intellij.openapi.vfs.VirtualFile, lineNumber: Int) {
         try {
+            logger.info("→ jumpToLine 开始: file={}, line={}", virtualFile.path, lineNumber)
+
             val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
-            val editor = fileEditorManager.selectedTextEditor ?: return
+
+            // 获取选中文件的编辑器（openFile 后会自动选中）
+            val editor = fileEditorManager.selectedTextEditor
+            logger.info("→ selectedTextEditor: {}, file={}", editor, editor?.virtualFile?.path)
+
+            if (editor == null) {
+                logger.warn("❌ 未找到活动编辑器: file={}", virtualFile.path)
+                return
+            }
+
+            // 验证编辑器对应的文件是否是目标文件
+            if (editor.virtualFile != virtualFile) {
+                logger.warn("❌ 编辑器文件不匹配: expected={}, actual={}", virtualFile.path, editor.virtualFile?.path)
+                return
+            }
+
+            logger.info("→ 编辑器文件匹配 ✅")
 
             val document = editor.document
             val lineCount = document.lineCount
+            logger.info("→ document lineCount={}", lineCount)
 
             if (lineNumber > lineCount) {
-                logger.warn("行号超出范围: lineNumber={}, lineCount={}", lineNumber, lineCount)
+                logger.warn("❌ 行号超出范围: lineNumber={}, lineCount={}", lineNumber, lineCount)
                 return
             }
 
             // 跳转到目标行
             val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
+            logger.info("→ lineStartOffset={}", lineStartOffset)
+
             editor.caretModel.moveToOffset(lineStartOffset)
             editor.selectionModel.removeSelection()
 
@@ -844,9 +882,9 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             val scrollingModel = editor.scrollingModel
             scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
 
-            logger.debug("跳转到行: file={}, line={}", virtualFile.path, lineNumber)
+            logger.info("✅ 跳转到行成功: file={}, line={}", virtualFile.path, lineNumber)
         } catch (e: Exception) {
-            logger.error("跳转失败: file={}, line={}", virtualFile.path, lineNumber, e)
+            logger.error("❌ 跳转失败: file={}, line={}", virtualFile.path, lineNumber, e)
         }
     }
 
@@ -856,23 +894,45 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun updateCursorForPosition(point: Point) {
         try {
-            val pos = outputArea.viewToModel(point)
-            if (pos < 0) return
+            val pos = outputArea.getUI().viewToModel(outputArea, point)
+            if (pos < 0) {
+                outputArea.cursor = Cursor.getDefaultCursor()
+                return
+            }
 
+            // 尝试检测鼠标下方的文本是否包含类名模式
             val doc = outputArea.styledDocument
-            val element = doc.getCharacterElement(pos)
-            val attributes = element.attributes
+            var isLikelyLink = false
 
-            // 检查是否是链接（HTMLDocument 中链接会有 href 属性）
-            val isLink = attributes.getAttribute(javax.swing.text.html.HTML.Attribute.HREF) != null
+            try {
+                // 获取鼠标周围的文本
+                val start = maxOf(0, pos - 20)
+                val end = minOf(doc.length, pos + 20)
+                val text = doc.getText(start, end - start)
+                val relativePos = pos - start
 
-            outputArea.cursor = if (isLink) {
+                // 检查是否在类名模式上（大写字母开头的单词）
+                // 简单检测：鼠标位置前后是否有大写字母
+                if (relativePos < text.length) {
+                    val charBefore = if (relativePos > 0) text[relativePos - 1] else ' '
+                    val charAt = text[relativePos]
+                    val charAfter = if (relativePos < text.length - 1) text[relativePos + 1] else ' '
+
+                    // 如果在类名上（大写字母或跟在大写字母后的小写字母）
+                    isLikelyLink = charAt.isUpperCase() ||
+                                   (charAt.isLetter() && charBefore.isUpperCase()) ||
+                                   (charAt.isLowerCase() && (charBefore.isLetter() || charAfter.isLetter()))
+                }
+            } catch (e: Exception) {
+                // 忽略错误，使用默认光标
+            }
+
+            outputArea.cursor = if (isLikelyLink) {
                 Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             } else {
                 Cursor.getDefaultCursor()
             }
         } catch (e: Exception) {
-            // 出错时使用默认光标
             outputArea.cursor = Cursor.getDefaultCursor()
         }
     }
