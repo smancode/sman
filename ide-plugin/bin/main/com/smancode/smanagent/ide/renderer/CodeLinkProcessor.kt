@@ -28,6 +28,12 @@ object CodeLinkProcessor {
 
     private val logger = LoggerFactory.getLogger(CodeLinkProcessor::class.java)
 
+    // 文件搜索缓存：fileName -> PsiFile
+    private val fileCache = mutableMapOf<String, PsiFile?>()
+
+    // 缓存大小限制，防止内存泄漏
+    private const val MAX_CACHE_SIZE = 1000
+
     /**
      * 前端相关的类名/方法名黑名单
      * 这些是插件自己的类，不应该被转换为链接
@@ -114,12 +120,10 @@ object CodeLinkProcessor {
         if (html.isBlank()) return html
 
         try {
-            logger.info("=== CodeLinkProcessor 开始 === html长度: {}", html.length)
             var result = html
             val processedLinks = HashSet<String>() // 避免重复处理
 
             for ((patternIndex, pattern) in PATTERNS.withIndex()) {
-                logger.info("→ 使用模式 {}: {}", patternIndex, pattern)
                 val matcher = pattern.matcher(result)
                 val buffer = StringBuffer()
 
@@ -127,11 +131,9 @@ object CodeLinkProcessor {
                 while (matcher.find()) {
                     matchCount++
                     val fullText = matcher.group(0)
-                    logger.info("→ 匹配 #{}: fullText='{}'", matchCount, fullText)
 
                     // 避免重复处理
                     if (processedLinks.contains(fullText)) {
-                        logger.info("  已跳过（重复处理）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
@@ -145,20 +147,15 @@ object CodeLinkProcessor {
                     val lineNumber = if (matcher.groupCount() >= 4 && separator == ":")
                         matcher.group(4) else null
 
-                    logger.info("  解析: className='{}', extension='{}', separator='{}', methodName='{}', lineNumber='{}'",
-                        className, extension, separator, methodName, lineNumber)
-
                     // 黑名单过滤：跳过前端相关的类名/方法名
                     if (className in FRONTEND_BLACKLIST ||
                         (methodName != null && methodName in FRONTEND_BLACKLIST)) {
-                        logger.info("  已跳过（黑名单）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
 
                     // 构建文件名
                     val fileName = if (extension != null) "$className$extension" else className
-                    logger.info("  搜索文件: fileName='{}'", fileName)
 
                     // 搜索文件
                     var matchedFiles = findFilesByName(fileName, project)
@@ -166,37 +163,27 @@ object CodeLinkProcessor {
                     // 如果没找到且没有扩展名，尝试添加 .java 后缀
                     if (matchedFiles.isEmpty() && extension == null) {
                         val fileNameWithJava = "$fileName.java"
-                        logger.info("  未找到，尝试使用 .java 后缀: fileName='{}'", fileNameWithJava)
                         matchedFiles = findFilesByName(fileNameWithJava, project)
                     }
 
-                    logger.info("  搜索结果: 找到 {} 个文件", matchedFiles.size)
-
                     if (matchedFiles.isEmpty()) {
                         // 没找到文件，保持原样
-                        logger.info("  已跳过（未找到文件）")
                         matcher.appendReplacement(buffer, matcher.group(0))
                         continue
                     }
 
                     val file = matchedFiles.first()
                     val filePath = file.virtualFile.path
-                    logger.info("  文件路径: {}", filePath)
-
                     val lineSuffix = resolveLineSuffix(file, separator, methodName, lineNumber, params)
-                    logger.info("  行号后缀: '{}'", lineSuffix)
 
                     // 构建链接
                     val linkHtml = buildLinkHtml(fullText, filePath, lineSuffix)
-                    logger.info("  链接HTML: {}", linkHtml)
                     matcher.appendReplacement(buffer, linkHtml)
                 }
                 matcher.appendTail(buffer)
                 result = buffer.toString()
-                logger.info("→ 模式 {} 完成，共匹配 {} 次", patternIndex, matchCount)
             }
 
-            logger.info("=== CodeLinkProcessor 完成 ===")
             return result
 
         } catch (e: Exception) {
@@ -297,16 +284,52 @@ object CodeLinkProcessor {
     }
 
     /**
-     * 在项目中搜索文件
+     * 在项目中搜索文件（带缓存）
      */
     private fun findFilesByName(fileName: String, project: Project): List<PsiFile> {
         return try {
-            FilenameIndex.getFilesByName(project, fileName, GlobalSearchScope.projectScope(project))
+            // 检查缓存
+            val cached = fileCache[fileName]
+            if (cached != null) {
+                logger.debug("缓存命中: fileName={}", fileName)
+                return listOf(cached)
+            }
+
+            // 缓存未命中，执行搜索
+            val files = FilenameIndex.getFilesByName(project, fileName, GlobalSearchScope.projectScope(project))
                 .toList()
+
+            // 更新缓存（只缓存第一个结果，或缓存 null）
+            if (files.isNotEmpty()) {
+                // 缓存大小限制，超过时清空旧缓存
+                if (fileCache.size >= MAX_CACHE_SIZE) {
+                    fileCache.clear()
+                    logger.debug("缓存已满，清空缓存")
+                }
+                fileCache[fileName] = files.first()
+                logger.debug("缓存更新: fileName={}, file={}", fileName, files.first().name)
+            } else {
+                // 也缓存未找到的情况，避免重复搜索
+                if (fileCache.size >= MAX_CACHE_SIZE) {
+                    fileCache.clear()
+                }
+                fileCache[fileName] = null
+                logger.debug("缓存未找到: fileName={}", fileName)
+            }
+
+            files
         } catch (e: Exception) {
             logger.error("搜索文件失败: fileName={}", fileName, e)
             emptyList()
         }
+    }
+
+    /**
+     * 清空缓存（项目切换时调用）
+     */
+    fun clearCache() {
+        fileCache.clear()
+        logger.info("文件搜索缓存已清空")
     }
 
     /**

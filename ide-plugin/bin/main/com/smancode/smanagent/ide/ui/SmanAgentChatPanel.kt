@@ -70,9 +70,18 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         }
     }
 
-    // 添加鼠标监听器实现悬停手型光标效果
+    // 添加鼠标监听器实现悬停手型光标效果（带防抖）
     private val mouseMotionListener = object : MouseMotionAdapter() {
+        private var lastUpdateTime = 0L
+        private val DEBOUNCE_MS = 16  // 约 60FPS
+
         override fun mouseMoved(e: MouseEvent) {
+            val now = System.currentTimeMillis()
+            // 防抖：限制更新频率
+            if (now - lastUpdateTime < DEBOUNCE_MS) {
+                return
+            }
+            lastUpdateTime = now
             updateCursorForPosition(e.point)
         }
     }
