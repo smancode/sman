@@ -28,19 +28,6 @@ object CodeLinkProcessor {
 
     private val logger = LoggerFactory.getLogger(CodeLinkProcessor::class.java)
 
-    // 项目级别的文件路径缓存（持久化）
-    private val projectCache = mutableMapOf<String, com.smancode.smanagent.ide.service.StorageService>()
-
-    /**
-     * 为项目初始化缓存（在项目打开时调用）
-     */
-    fun initForProject(project: Project, storageService: com.smancode.smanagent.ide.service.StorageService) {
-        if (!projectCache.containsKey(project.name)) {
-            projectCache[project.name] = storageService
-            logger.info("初始化项目文件缓存: project={}", project.name)
-        }
-    }
-
     /**
      * 前端相关的类名/方法名黑名单
      * 这些是插件自己的类，不应该被转换为链接
@@ -290,70 +277,17 @@ object CodeLinkProcessor {
     }
 
     /**
-     * 在项目中搜索文件（使用持久化缓存）
+     * 在项目中搜索文件
+     * <p>
+     * 注意：这里只用 FilenameIndex 验证类名是否存在（用于生成链接）
+     * 实际跳转由 PsiNavigationHelper 用 PSI API 完成（有内置缓存）
      */
     private fun findFilesByName(fileName: String, project: Project): List<PsiFile> {
         return try {
-            // 获取存储服务
-            val storageService = projectCache[project.name]
-            if (storageService == null) {
-                logger.warn("项目缓存未初始化: project={}", project.name)
-                return performFileSearch(fileName, project)
-            }
-
-            // 检查持久化缓存
-            val cachedPath = storageService.getFilePath(fileName)
-            if (cachedPath != null) {
-                logger.debug("持久化缓存命中: fileName={}, path={}", fileName, cachedPath)
-                // 验证文件是否仍然存在
-                val virtualFile = com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByPath(cachedPath)
-                if (virtualFile != null) {
-                    val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(virtualFile)
-                    if (psiFile != null) {
-                        return listOf(psiFile)
-                    } else {
-                        // 文件存在但 PsiFile 无效，从缓存移除
-                        storageService.putFilePath(fileName, cachedPath) // 标记为需要更新
-                    }
-                } else {
-                    // 文件不存在，从缓存移除
-                    storageService.putFilePath(fileName, cachedPath) // 标记为需要更新
-                }
-            }
-
-            // 缓存未命中或失效，执行搜索
-            val files = performFileSearch(fileName, project)
-
-            // 更新持久化缓存
-            if (files.isNotEmpty()) {
-                val filePath = files.first().virtualFile.path
-                storageService.putFilePath(fileName, filePath)
-                logger.debug("持久化缓存更新: fileName={}, path={}", fileName, filePath)
-            }
-
-            files
+            FilenameIndex.getFilesByName(project, fileName, GlobalSearchScope.projectScope(project)).toList()
         } catch (e: Exception) {
             logger.error("搜索文件失败: fileName={}", fileName, e)
             emptyList()
-        }
-    }
-
-    /**
-     * 实际执行文件搜索
-     */
-    private fun performFileSearch(fileName: String, project: Project): List<PsiFile> {
-        return FilenameIndex.getFilesByName(project, fileName, GlobalSearchScope.projectScope(project))
-            .toList()
-    }
-
-    /**
-     * 清空项目的持久化缓存（项目切换或缓存失效时调用）
-     */
-    fun clearProjectCache(projectName: String) {
-        val storageService = projectCache[projectName]
-        if (storageService != null) {
-            storageService.clearFilePathCache()
-            logger.info("项目文件缓存已清空: project={}", projectName)
         }
     }
 
