@@ -138,8 +138,9 @@ object PsiNavigationHelper {
         // 拆分 类名 和 方法名
         val lastDotIndex = fullPath.lastIndexOf('.')
         if (lastDotIndex == -1) {
-            logger.warn("无法解析位置: {}", location)
-            return false
+            // 没有点号，可能是纯类名（如 FileFilterUtil），尝试直接跳转到类
+            logger.info("未检测到点号，尝试作为类名跳转: {}", fullPath)
+            return navigateToClass(project, fullPath)
         }
 
         val className = fullPath.substring(0, lastDotIndex)

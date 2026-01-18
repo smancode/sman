@@ -146,7 +146,7 @@ object StyledMessageRenderer {
                             }
 
                             // 检查是否是 commit 结果（以 "Commit:" 开头）或处理中消息
-                            val processedText = if (actualText.startsWith("Commit:")) {
+                            val textForMarkdown = if (actualText.startsWith("Commit:")) {
                                 // 将 "Commit:" 转换为蓝色，"文件变更:" 转换为黄色
                                 var result = actualText
                                 // 替换 "Commit:" 为蓝色
@@ -158,7 +158,11 @@ object StyledMessageRenderer {
                                 actualText
                             }
 
-                            var htmlContent = MarkdownRenderer.markdownToHtml(processedText)
+                            // 关键改动：先 Markdown 渲染，再处理代码链接
+                            var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
+
+                            // 处理代码链接：只处理文本节点，避免在 HTML 标签属性内处理
+                            htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
 
                             // 后处理代码块 - 将 <pre><code>...</code></pre> 替换为自定义样式
                             // HTMLEditorKit 对 pre 标签的 CSS 支持很差，所以用 div + font-family 模拟
@@ -185,8 +189,6 @@ object StyledMessageRenderer {
                                 """.trimIndent()
                             }
 
-                            // 处理代码链接：自动识别并包装为可点击链接
-                            htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
                             val wrappedHtml = wrapHtml(htmlContent, false)
                             appendHtml(textPane, wrappedHtml)
                         }

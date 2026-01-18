@@ -105,8 +105,11 @@ object CodeLinkProcessor {
 
     /**
      * 处理 HTML 中的代码引用，转换为可点击链接
+     * <p>
+     * 注意：此函数应在 Markdown 渲染**之后**调用，
+     * 并跳过 HTML 标签内部的内容，避免破坏标签结构。
      *
-     * @param html 原始 HTML
+     * @param html 渲染后的 HTML
      * @param project IntelliJ 项目
      * @return 处理后的 HTML
      */
@@ -117,14 +120,24 @@ object CodeLinkProcessor {
             var result = html
             val processedLinks = HashSet<String>() // 避免重复处理
 
-            for ((patternIndex, pattern) in PATTERNS.withIndex()) {
+            // 逐个模式处理，每次都从原始 HTML 开始（避免累积错误）
+            for (pattern in PATTERNS) {
                 val matcher = pattern.matcher(result)
                 val buffer = StringBuffer()
 
-                var matchCount = 0
                 while (matcher.find()) {
-                    matchCount++
+                    val matchStart = matcher.start()
                     val fullText = matcher.group(0)
+
+                    // 检查匹配是否在已生成的链接内或 HTML 标签属性内
+                    // 情况1: <a href="psi_location://X">FileFilterUtil</a> - 应该跳过
+                    // 情况2: <code>FileFilterUtil</code> - 应该生成链接
+                    val skipThisMatch = isInExistingLinkOrAttribute(result, matchStart)
+
+                    if (skipThisMatch) {
+                        matcher.appendReplacement(buffer, matcher.group(0))
+                        continue
+                    }
 
                     // 避免重复处理
                     if (processedLinks.contains(fullText)) {
@@ -148,28 +161,33 @@ object CodeLinkProcessor {
                         continue
                     }
 
+                    logger.info("CodeLinkProcessor: 匹配到类名引用 - fullText={}, className={}, methodName={}, matchStart={}",
+                        fullText, className, methodName, matchStart)
+
                     // 构建文件名
                     val fileName = if (extension != null) "$className$extension" else className
+                    logger.info("CodeLinkProcessor: 查找文件 - fileName={}", fileName)
 
-                    // 搜索文件
+                    // 搜索文件（用于验证类是否存在和解析行号）
                     var matchedFiles = findFilesByName(fileName, project)
+                    logger.info("CodeLinkProcessor: 查找结果 - 找到 {} 个文件", matchedFiles.size)
 
                     // 如果没找到且没有扩展名，尝试添加 .java 后缀
                     if (matchedFiles.isEmpty() && extension == null) {
                         val fileNameWithJava = "$fileName.java"
+                        logger.info("CodeLinkProcessor: 尝试带扩展名 - fileName={}", fileNameWithJava)
                         matchedFiles = findFilesByName(fileNameWithJava, project)
+                        logger.info("CodeLinkProcessor: 带扩展名查找结果 - 找到 {} 个文件", matchedFiles.size)
                     }
 
-                    if (matchedFiles.isEmpty()) {
-                        // 没找到文件，保持原样
-                        matcher.appendReplacement(buffer, matcher.group(0))
-                        continue
+                    // 解析行号
+                    val lineSuffix = if (matchedFiles.isNotEmpty()) {
+                        resolveLineSuffix(matchedFiles.first(), separator, methodName, lineNumber, params)
+                    } else {
+                        ""
                     }
 
-                    val file = matchedFiles.first()
-                    val lineSuffix = resolveLineSuffix(file, separator, methodName, lineNumber, params)
-
-                    // 构建链接（使用 className 和 methodName）
+                    // 构建链接
                     val linkHtml = buildLinkHtml(fullText, className, methodName, lineNumber, lineSuffix)
                     matcher.appendReplacement(buffer, linkHtml)
                 }
@@ -183,6 +201,49 @@ object CodeLinkProcessor {
             logger.error("处理代码链接失败", e)
             return html // 出错时返回原 HTML
         }
+    }
+
+    /**
+     * 检查匹配位置是否在已生成的链接内或 HTML 标签属性内
+     * @return true 表示应该跳过此匹配
+     */
+    private fun isInExistingLinkOrAttribute(html: String, matchStart: Int): Boolean {
+        // 向前查找，找到最近的标签边界
+        var inTag = false
+        var inHref = false
+        var tagContent = false  // 在标签内容中（如 <code>xxx</code> 中的 xxx）
+
+        for (i in (matchStart - 1) downTo 0) {
+            if (i < 0) break
+            val char = html[i]
+
+            when {
+                char == '"' || char == '\'' -> {
+                    // 在属性值内（如 href="..."）
+                    inHref = true
+                    return true
+                }
+                char == '>' -> {
+                    // 标签结束
+                    if (!inHref) {
+                        tagContent = true  // 现在进入标签内容
+                    }
+                    break
+                }
+                char == '<' -> {
+                    // 遇到开始标签
+                    if (i > 0 && html[i - 1] != '/') {
+                        // <xxx> 的情况，不在内容内
+                        tagContent = false
+                    }
+                    // </xxx> 继续向前查找
+                }
+            }
+        }
+
+        // 如果在标签内容中（如 <code>FileFilterUtil</code>），允许生成链接
+        // 如果在标签属性中（如 <a href="xxx">），跳过
+        return !tagContent && inHref
     }
 
     /**

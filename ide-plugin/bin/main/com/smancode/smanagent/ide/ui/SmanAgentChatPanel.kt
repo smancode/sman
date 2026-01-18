@@ -66,7 +66,75 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     // 添加 HyperlinkListener 处理链接点击
     private val hyperlinkListener = javax.swing.event.HyperlinkListener { e ->
         if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-            navigateToUrl(e.url)
+            logger.info("=== HyperlinkEvent 触发 === url={}, description={}, sourceElement={}",
+                e.url, e.description, e.sourceElement)
+
+            // 优先级：description > url > sourceElement
+            val href = when {
+                e.description != null -> e.description.toString()
+                e.url != null -> e.url.toExternalForm()
+                else -> null
+            }
+
+            logger.info("→ 提取的 href: {}", href)
+
+            if (href != null) {
+                handleHyperlinkClick(href)
+            } else {
+                logger.error("无法获取链接: url={}, desc={}, element={}",
+                    e.url, e.description, e.sourceElement)
+                // 最后尝试：从 sourceElement 获取
+                val element = e.sourceElement
+                if (element != null) {
+                    logger.info("→ 尝试从 sourceElement 获取: {}", element)
+                    // Document.getCharacterElement(element) 可以获取更多属性
+                }
+            }
+        }
+    }
+
+    /**
+     * 处理链接点击
+     */
+    private fun handleHyperlinkClick(href: String) {
+        try {
+            when {
+                href.startsWith("psi_location://") -> {
+                    val location = href.removePrefix("psi_location://")
+                    logger.info("→ PSI 导航开始: location={}", location)
+                    val success = com.smancode.smanagent.ide.core.PsiNavigationHelper.navigateToLocation(project, location)
+                    logger.info("→ PSI 导航结果: success={}", success)
+                }
+                href.startsWith("file://") -> {
+                    val url = java.net.URL(href)
+                    navigateToFile(url)
+                }
+                href.startsWith("http://") || href.startsWith("https://") -> {
+                    val url = java.net.URL(href)
+                    com.intellij.ide.BrowserUtil.browse(url)
+                }
+                else -> logger.warn("不支持的协议: {}", href.take(50))
+            }
+        } catch (ex: Exception) {
+            logger.error("处理链接失败: href={}", href, ex)
+        }
+    }
+
+    // 鼠标点击监听器 - 处理自定义协议链接（HTMLEditorKit 不支持自定义协议）
+    private val mouseClickListener = object : MouseAdapter() {
+        override fun mouseClicked(e: MouseEvent) {
+            if (e.button == MouseEvent.BUTTON1) {
+                // 左键点击，检查是否在链接上
+                val point = e.point
+                val pos = outputArea.getUI().viewToModel(outputArea, point)
+                if (pos >= 0) {
+                    val linkUrl = extractLinkAtPosition(pos)
+                    if (linkUrl != null) {
+                        logger.info("=== MouseListener 检测到链接点击 === pos={}, url={}", pos, linkUrl)
+                        handleHyperlinkClick(linkUrl)
+                    }
+                }
+            }
         }
     }
 
@@ -83,6 +151,68 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             }
             lastUpdateTime = now
             updateCursorForPosition(e.point)
+        }
+    }
+
+    /**
+     * 从指定位置的文档中提取链接 URL
+     * 遍历所有 HTML 标签，找到包含该位置的 <a href="...">
+     */
+    private fun extractLinkAtPosition(pos: Int): String? {
+        try {
+            val doc = outputArea.styledDocument
+            val text = doc.getText(0, doc.length)
+
+            // 查找包含 pos 的 <a href="..."> 标签
+            var searchStart = 0
+            while (searchStart < text.length) {
+                // 查找下一个 <a 标签
+                val tagStart = text.indexOf("<a", searchStart)
+                if (tagStart == -1 || tagStart > pos) break
+
+                // 查找 href 属性
+                val hrefStart = text.indexOf("href=\"", tagStart)
+                if (hrefStart == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                val hrefValueStart = hrefStart + 6 // "href=\"" 的长度
+                val hrefValueEnd = text.indexOf("\"", hrefValueStart)
+                if (hrefValueEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                val href = text.substring(hrefValueStart, hrefValueEnd)
+
+                // 查找 > 标签结束
+                val tagEnd = text.indexOf(">", hrefValueEnd)
+                if (tagEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                // 查找 </a> 结束标签
+                val linkContentStart = tagEnd + 1
+                val linkContentEnd = text.indexOf("</a>", linkContentStart)
+                if (linkContentEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                // 检查 pos 是否在链接内容范围内
+                if (pos >= linkContentStart && pos <= linkContentEnd) {
+                    return href
+                }
+
+                searchStart = linkContentEnd + 4 // "</a>" 的长度
+            }
+
+            return null
+        } catch (e: Exception) {
+            logger.error("提取链接失败: pos={}", pos, e)
+            return null
         }
     }
 
@@ -770,35 +900,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      * 设置代码链接导航功能
      */
     private fun setupLinkNavigation() {
-        // 添加 HyperlinkListener 处理链接点击
+        // 添加 HyperlinkListener 处理标准协议链接（http/https/file）
         outputArea.addHyperlinkListener(hyperlinkListener)
+        // 添加鼠标点击监听器处理自定义协议链接（psi_location://）
+        outputArea.addMouseListener(mouseClickListener)
         // 添加鼠标移动监听器实现悬停手型光标
         outputArea.addMouseMotionListener(mouseMotionListener)
-    }
-
-    /**
-     * 导航到 URL
-     */
-    private fun navigateToUrl(url: URL) {
-        try {
-            logger.info("=== 链接点击触发 === URL: {}, protocol: {}, ref: {}", url, url.protocol, url.ref)
-            when (url.protocol) {
-                "psi_location" -> {
-                    // 使用 PSI API 进行导航（跨平台兼容）
-                    val location = url.toExternalForm().removePrefix("psi_location://")
-                    logger.info("→ PSI 导航: location={}", location)
-                    com.smancode.smanagent.ide.core.PsiNavigationHelper.navigateToLocation(project, location)
-                }
-                "file" -> navigateToFile(url)
-                "http", "https" -> {
-                    // 使用浏览器打开 HTTP 链接
-                    com.intellij.ide.BrowserUtil.browse(url)
-                }
-                else -> logger.warn("不支持的协议: {}", url.protocol)
-            }
-        } catch (e: Exception) {
-            logger.error("导航失败: url={}", url, e)
-        }
     }
 
     /**
