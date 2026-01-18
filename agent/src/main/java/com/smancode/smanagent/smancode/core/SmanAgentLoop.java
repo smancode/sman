@@ -4,6 +4,7 @@ import com.smancode.smanagent.model.message.Message;
 import com.smancode.smanagent.model.part.*;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.smancode.llm.LlmService;
+import com.smancode.smanagent.smancode.prompt.DynamicPromptInjector;
 import com.smancode.smanagent.smancode.prompt.PromptDispatcher;
 import com.smancode.smanagent.tools.ToolExecutor;
 import com.smancode.smanagent.tools.ToolRegistry;
@@ -60,6 +61,9 @@ public class SmanAgentLoop {
 
     @Autowired
     private com.smancode.smanagent.config.SmanCodeProperties smanCodeProperties;
+
+    @Autowired
+    private com.smancode.smanagent.smancode.prompt.DynamicPromptInjector dynamicPromptInjector;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -899,9 +903,24 @@ public class SmanAgentLoop {
      */
     private String buildUserPrompt(Session session, boolean isLastStep) {
         StringBuilder prompt = new StringBuilder();
-        Message lastAssistant = session.getLatestAssistantMessage();
+
+        // ========== 动态 Prompt 注入（首次请求自动加载）==========
+        // 每个会话首次请求时，一次性加载所有必要的 Prompt
+        // 避免硬编码模式匹配、避免复杂的对话状态跟踪、避免额外的 LLM 调用
+        DynamicPromptInjector.InjectResult injectResult =
+            dynamicPromptInjector.detectAndInject(session.getId());
+
+        if (injectResult.hasContent()) {
+            logger.info("会话 {} 首次加载 Prompt: complexTaskWorkflow={}, codingBestPractices={}",
+                session.getId(),
+                injectResult.isNeedComplexTaskWorkflow(),
+                injectResult.isNeedCodingBestPractices());
+            prompt.append(injectResult.getInjectedContent());
+        }
+        // ========== 动态 Prompt 注入结束 ==========
 
         // 检查是否有新的用户消息（支持打断）
+        Message lastAssistant = session.getLatestAssistantMessage();
         if (lastAssistant != null && session.hasNewUserMessageAfter(lastAssistant.getId())) {
             prompt.append("\n\n");
             prompt.append("<system-reminder>\n");
@@ -930,20 +949,20 @@ public class SmanAgentLoop {
         int contextSize = Math.min(6, messages.size());
 
         if (!messages.isEmpty()) {
-            prompt.append("\n\n## 对话历史\n\n");
+            prompt.append("\n\n## Conversation History\n\n");
         }
 
         for (int i = Math.max(0, messages.size() - contextSize); i < messages.size(); i++) {
             Message msg = messages.get(i);
             if (msg.isUserMessage()) {
-                prompt.append("### 用户\n");
+                prompt.append("### User\n");
                 for (Part part : msg.getParts()) {
                     if (part instanceof TextPart) {
                         prompt.append(((TextPart) part).getText()).append("\n");
                     }
                 }
             } else {
-                prompt.append("### 助手\n");
+                prompt.append("### Assistant\n");
                 for (Part part : msg.getParts()) {
                     if (part instanceof TextPart) {
                         prompt.append(((TextPart) part).getText()).append("\n");
@@ -1020,26 +1039,26 @@ public class SmanAgentLoop {
         }
 
         // 添加 ReAct 分析和决策指南
-        prompt.append("\n\n## 下一步分析和决策\n\n");
-        prompt.append("请基于以上工具执行历史，分析当前进展并决定下一步：\n");
-        prompt.append("1. **分析结果**：工具返回了什么关键信息？\n");
-        prompt.append("2. **生成摘要（重要）**：\n");
-        prompt.append("   - 如果发现工具结果标注了【此工具结果尚无摘要，需要你生成】\n");
-        prompt.append("   - 并且你决定调用新工具：在新工具的 ToolPart 中添加 \"summary\" 字段，\n");
-        prompt.append("     为**刚才执行的工具**（不是新工具）生成摘要\n");
-        prompt.append("   - **关键要求：生成摘要时必须保留文件路径（relativePath）信息**\n");
-        prompt.append("     摘要格式应包含：\"路径: xxx/yyy/File.java\" 或 \"read_file(路径: xxx/yyy/File.java): ...\"\n");
-        prompt.append("   - 如果不调用新工具：直接返回文本答案即可，不需要生成摘要\n");
-        prompt.append("   - 摘要格式：{\"type\": \"tool\", \"toolName\": \"新工具名\", \"parameters\": {...}, \"summary\": \"刚才工具的摘要\"}\n");
-        prompt.append("3. **评估进展**：当前信息是否足够回答用户问题？\n");
-        prompt.append("4. **决定行动**：\n");
-        prompt.append("   - 如果信息充足 → 直接给出答案（不再调用工具）\n");
-        prompt.append("   - 如果需要更多信息 → 继续调用工具（说明为什么需要）\n");
-        prompt.append("   - 如果工具失败 → 换个方法重试（不要重复失败的方法）\n\n");
-        prompt.append("**示例**：\n");
-        prompt.append("如果你刚刚执行了 read_file（无摘要），文件路径是 agent/src/main/java/CallChainTool.java，现在要调用 apply_change，\n");
-        prompt.append("返回的 JSON 中应该包含：\n");
-        prompt.append("{\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(路径: agent/src/main/java/CallChainTool.java): 找到了CallChainTool类，包含callChain方法...\"}\n\n");
+        prompt.append("\n\n## Next Step Analysis and Decision\n\n");
+        prompt.append("Based on the tool execution history above, analyze the current progress and decide the next step:\n");
+        prompt.append("1. **Analyze Results**: What key information did the tools return?\n");
+        prompt.append("2. **Generate Summary (Important)**:\n");
+        prompt.append("   - If you see a tool result marked with【此工具结果尚无摘要，需要你生成】\n");
+        prompt.append("   - AND you decide to call a new tool: Add a \"summary\" field in the new tool's ToolPart,\n");
+        prompt.append("     generating a summary for the **previously executed tool** (not the new one)\n");
+        prompt.append("   - **Critical Requirement: When generating summary, must preserve file path (relativePath) info**\n");
+        prompt.append("     Summary format should include: \"path: xxx/yyy/File.java\" or \"read_file(path: xxx/yyy/File.java): ...\"\n");
+        prompt.append("   - If not calling a new tool: Just return a text answer, no need to generate summary\n");
+        prompt.append("   - Summary format: {\"type\": \"tool\", \"toolName\": \"newToolName\", \"parameters\": {...}, \"summary\": \"previous tool summary\"}\n");
+        prompt.append("3. **Evaluate Progress**: Is the current information sufficient to answer the user's question?\n");
+        prompt.append("4. **Decide Action**:\n");
+        prompt.append("   - If sufficient information → Provide answer directly (no more tool calls)\n");
+        prompt.append("   - If need more information → Continue calling tools (explain why)\n");
+        prompt.append("   - If tool failed → Try a different approach (don't repeat failed methods)\n\n");
+        prompt.append("**Example**:\n");
+        prompt.append("If you just executed read_file (no summary), file path is agent/src/main/java/CallChainTool.java, now you want to call apply_change,\n");
+        prompt.append("the returned JSON should include:\n");
+        prompt.append("{\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(path: agent/src/main/java/CallChainTool.java): Found CallChainTool class with callChain method...\"}\n\n");
 
         // 如果是最后一步，添加最大步数警告
         if (isLastStep) {
@@ -1368,5 +1387,34 @@ public class SmanAgentLoop {
             return map1.equals(map2);
         }
         return obj1.equals(obj2);
+    }
+
+    /**
+     * 从消息中提取文本内容
+     *
+     * @param message 消息
+     * @return 文本内容（如果有的话）
+     */
+    private String extractTextFromMessage(Message message) {
+        if (message == null || message.getParts() == null) {
+            return null;
+        }
+
+        StringBuilder text = new StringBuilder();
+        for (Part part : message.getParts()) {
+            if (part instanceof TextPart) {
+                String content = ((TextPart) part).getText();
+                if (content != null) {
+                    text.append(content).append("\n");
+                }
+            } else if (part instanceof ReasoningPart) {
+                String content = ((ReasoningPart) part).getText();
+                if (content != null) {
+                    text.append(content).append("\n");
+                }
+            }
+        }
+
+        return text.length() > 0 ? text.toString() : null;
     }
 }

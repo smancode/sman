@@ -24,10 +24,13 @@ Before processing, determine if the task is a "Complex Task":
 
 ---
 
-## Phase 1: Analysis Phase
+## Phase 1: Analysis & Detail Learning Phase (分析与细节学习阶段)
 
 <objective>
-Establish complete business understanding and technical context. Ensure "doing the right thing" before making changes.
+Establish complete business understanding, technical context, AND implementation details BEFORE proposing solutions.
+<br/>
+<br/>
+**CRITICAL**: This phase combines business analysis with code-level detail learning. You MUST understand all implementation details (annotations, field patterns, validation rules) BEFORE presenting solutions to the user.
 </objective>
 
 <analysis_protocol>
@@ -41,32 +44,151 @@ Establish complete business understanding and technical context. Ensure "doing t
 
 2. **Technical Understanding**:
    - Call `call_chain` to understand complete call chain and layer structure
-   - Call `read_file` to read key class code
    - Goal: Understand the complete chain: Handler → Service → Mapper
 
-3. **Impact Assessment**:
-   - Identify all files that need modification
-   - Identify potential side effects and risk points
+3. **Detail Learning (NEW - CRITICAL)**:
+   - **READ ALL target files completely** (use `endLine=999999`)
+   - Identify field-level annotations (`@AmountCheck`, `@NotNull`, `@Valid`, etc.)
+   - Identify existing validation patterns
+   - Identify custom validation annotations or frameworks
+   - Understand data flow patterns (DTO → Entity → DB)
 
-### 1.2 Uncertainty Handling
+### 1.2 What Details You Must Learn
+
+<detail_learning_checklist>
+Before proposing ANY solution, you MUST understand:
+
+**Field-Level Details**:
+- [ ] Target class structure (all fields, types, annotations)
+- [ ] Validation annotations on each field (`@NotNull`, `@Min`, `@Max`, custom)
+- [ ] Custom annotations (e.g., `@AmountCheck`, `@BusinessRule`)
+- [ ] How similar fields are defined in the same class
+
+**Validation Patterns**:
+- [ ] Where validation happens (method-level vs field-level vs separate validator)
+- [ ] Validation framework (JSR-303, custom, Spring Validator)
+- [ ] Error handling patterns when validation fails
+
+**Code Patterns**:
+- [ ] How DTO fields map to Entity fields
+- [ ] How Entity fields map to database columns
+- [ ] Transaction boundaries
+- [ ] Cascading patterns
+
+**Example**:
+```java
+// Before saying "add totalAmount to ReqDto", you MUST read:
+
+@NotNull
+@AmountCheck(min = 0, max = 1000000, message = "金额必须在0-100万之间")
+private BigDecimal amount;
+
+// And understand:
+// - @AmountCheck is a custom annotation
+// - It has min/max parameters
+// - It's used for validation
+// - Similar fields use the same pattern
+```
+</detail_learning_checklist>
+
+### 1.3 Detail Learning Steps
+
+**Step 1: Read Target Classes Completely**
+
+```json
+{
+  "type": "tool",
+  "toolName": "read_file",
+  "parameters": {
+    "simpleName": "ReqDto",
+    "startLine": 1,
+    "endLine": 999999
+  }
+}
+```
+
+**What to observe**:
+- All field definitions and their annotations
+- All validation rules
+- Import statements (which validation framework?)
+- Custom annotations and their parameters
+
+**Step 2: Read Annotation Definitions (if custom)**
+
+If you see `@AmountCheck`, read its definition:
+
+```json
+{
+  "type": "tool",
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": "AmountCheck\\.java"
+  }
+}
+```
+
+Then read the annotation to understand its usage:
+
+```json
+{
+  "type": "tool",
+  "toolName": "read_file",
+  "parameters": {
+    "simpleName": "AmountCheck",
+    "startLine": 1,
+    "endLine": 100
+  }
+}
+```
+
+**Step 3: Find Similar Patterns**
+
+```json
+{
+  "type": "tool",
+  "toolName": "grep_file",
+  "parameters": {
+    "pattern": "@AmountCheck",
+    "filePattern": ".*Dto\\.java"
+  }
+}
+```
+
+**Step 4: Understand Validation Flow**
+
+```json
+{
+  "type": "tool",
+  "toolName": "call_chain",
+  "parameters": {
+    "method": "ValidParamService.validate",
+    "depth": 2
+  }
+}
+```
+
+### 1.4 Uncertainty Handling
 
 **MUST request user assistance when encountering ANY of the following situations**:
 
 | Situation Type | Manifestation | Response Action |
 |----------------|---------------|-----------------|
-| **Requirement Out of Scope** | Search shows the requirement doesn't belong to current system, no corresponding implementation found | Explain to user: "Did not find [feature/module] implementation in current system. Please confirm if this belongs to this system?" |
+| **Requirement Out of Scope** | Search shows the requirement doesn't belong to current system | Explain to user: "Did not find [feature/module] implementation in current system. Please confirm if this belongs to this system?" |
 | **Ambiguous Requirement** | expert_consult returns unclear results, or multiple possible entries found | Explain to user: "Found multiple possible entries:<br>1. [Entry A] - [brief]<br>2. [Entry B] - [brief]<br>Which one do you need to process?" |
 | **Conflicting Search Results** | Different tools return inconsistent or contradictory results | Explain to user: "Found conflicting information:<br>- expert_consult returned: [Conclusion A]<br>- call_chain returned: [Conclusion B]<br>Which one should I follow?" |
 | **Missing Key Information** | Still lack necessary business rules or technical details after analysis | Explain to user: "Analysis found missing [specific missing info]. Can you provide more details?" |
 | **Multiple Similar Implementations** | Multiple similar implementations exist in the system, uncertain which to use | Explain to user: "Found multiple similar implementations:<br>1. [Implementation A] - [characteristics]<br>2. [Implementation B] - [characteristics]<br>Which one should I reference/modify?" |
 
-### 1.3 Analysis Completion Criteria
+### 1.5 Analysis Completion Criteria
 
 Only proceed to Phase 2 (Planning) when **ALL** conditions are met:
 
 - ✅ Understood business background and rules
 - ✅ Located all related code files
 - ✅ Clarified call chain and layer structure
+- ✅ **Read all target files completely**
+- ✅ **Understood field-level annotations and patterns**
+- ✅ **Understood validation patterns**
 - ✅ All uncertainties resolved (through user confirmation or further investigation)
 
 <analysis_uncertainty_template>
@@ -89,31 +211,61 @@ Only proceed to Phase 2 (Planning) when **ALL** conditions are met:
   "parts": [
     {
       "type": "text",
-      "text": "## 需要你的帮助\n\n在分析\"合并支付字段\"需求时，我搜索到了多个可能的放款接口入口：\n\n1. **DisburseController.execute()** - 核心放款接口\n2. **DisburseController.quickExecute()** - 快速放款接口\n3. **BatchDisburseController.batchExecute()** - 批量放款接口\n\n请问\"合并支付字段\"需要支持哪个接口？还是都需要支持？"
+      "text": "## 需要你的帮助\n\n在分析\"合并支付字段\"需求时，我发现 ReqDto 中使用了自定义注解 @AmountCheck 进行金额校验。\n\n请问新增的 mergePaymentAmount 字段是否也应该使用 @AmountCheck 注解？还是有其他校验方式？"
     }
   ]
 }
 ```
 </analysis_uncertainty_template>
+</analysis_protocol>
 
 ---
 
-## Phase 2: Planning Phase
+## Phase 2: Planning Phase (Based on Detailed Analysis)
 
 <objective>
-Design feasible technical solutions based on analysis results for user selection and confirmation.
+Design feasible technical solutions based on **detailed code-level analysis** for user selection and confirmation.
+<br/>
+<br/>
+**CRITICAL**: Solutions MUST be based on complete understanding of implementation details (annotations, patterns, validation rules). NO guessing or assumptions!
 </objective>
 
 <planning_protocol>
 ### 2.1 Solution Design Principles
 
 **A good solution should**:
+- **Based on Facts**: Every detail in the solution must be observed in actual code, not assumed
 - **Complete**: Cover all files and modification points
-- **Reasonable**: Follow design principles (Single Responsibility, Open-Closed, etc.)
-- **Explainable**: Explain why this approach was chosen
+- **Annotation-Aware**: Include all necessary annotations (`@AmountCheck`, `@NotNull`, etc.)
+- **Pattern-Consistent**: Follow existing patterns observed in Phase 1
+- **Explainable**: Explain why this approach was chosen (with code evidence)
 - **Revertible**: Changes should be incremental and easy to rollback
 
-### 2.2 Multi-Solution Comparison (REQUIRED)
+### 2.2 What Details Must Be in the Solution
+
+<solution_requirements>
+**Each solution MUST include**:
+
+**Field-Level Details**:
+- Complete field declaration with ALL annotations
+- Example: `@NotNull @AmountCheck(min = 0, max = 1000000) private BigDecimal mergePaymentAmount;`
+
+**Annotation Details**:
+- Which annotations to use (based on Phase 1 observations)
+- Annotation parameters (min, max, message, etc.)
+- Why these annotations are needed
+
+**Implementation Details**:
+- Exact location of changes (which method, which line)
+- How to integrate with existing code
+- Impact on related code
+
+**Evidence from Analysis**:
+- Reference to observed patterns (e.g., "Similar to existing `amount` field")
+- Reference to annotation usage (e.g., "All amount fields use @AmountCheck")
+</solution_requirements>
+
+### 2.3 Multi-Solution Comparison (REQUIRED)
 
 **If multiple technical approaches exist, MUST list at least 2 solutions**:
 
@@ -125,13 +277,23 @@ Design feasible technical solutions based on analysis results for user selection
 **核心思路**：[用1-2句话说明核心设计思想]
 
 **改动清单**：
-1. `[文件路径]` - [改动说明]
-2. `[文件路径]` - [改动说明]
-...
+1. `[文件路径]` - [改动说明，包含具体代码和注解]
+   ```java
+   // 基于分析：现有 amount 字段使用了 @AmountCheck 注解
+   @NotNull
+   @AmountCheck(min = 0, max = 1000000, message = "合并支付金额必须在0-100万之间")
+   private BigDecimal mergePaymentAmount;
+   ```
+2. `[文件路径]` - [改动说明，包含具体代码]
+   ...
+
+**基于分析的证据**：
+- ReqDto 中现有 `amount` 字段使用了 `@AmountCheck` 注解
+- ValidParamService 中已有金额校验逻辑
+- 因此新增字段也应使用相同的注解模式
 
 **选择理由**：
-- [为什么选择这个位置/方法]
-- [如何体现设计原则]
+- [为什么选择这个位置/方法，基于代码观察]
 
 **优势**：
 - ✅ [优势1]
@@ -149,9 +311,12 @@ Design feasible technical solutions based on analysis results for user selection
 **核心思路**：[用1-2句话说明核心设计思想]
 
 **改动清单**：
-1. `[文件路径]` - [改动说明]
+1. `[文件路径]` - [改动说明，包含具体代码]
 2. `[文件路径]` - [改动说明]
-...
+   ...
+
+**基于分析的证据**：
+- [代码观察支持这个方案]
 
 **选择理由**：
 - [说明这个方案的设计出发点]
@@ -199,7 +364,72 @@ If user provides modification suggestions or alternative solutions:
 
 ---
 
-## Phase 3: Execution Phase
+## Phase 3: Quick Verification Phase (快速验证阶段)
+
+<objective>
+Quick verification that detailed analysis from Phase 1 was complete, and solution from Phase 2 is accurate.
+<br/>
+<br/>
+**NOTE**: This phase is LIGHTWEIGHT since detailed analysis was done in Phase 1. Only quick checks needed.
+</objective>
+
+<verification_protocol>
+### 3.1 What to Verify
+
+**Quick checks before coding**:
+
+<verification_checklist>
+- [ ] **Re-read target files** (quick scan, not full read)
+- [ ] **Verify annotations match plan** (confirm @AmountCheck, @NotNull, etc. are correct)
+- [ ] **Verify patterns match observations** (confirm no new patterns discovered)
+- [ ] **Final sanity check** (does the plan make sense?)
+</verification_checklist>
+
+### 3.2 Quick Verification Steps
+
+**Step 1: Quick Re-scan Target Files**
+
+```json
+{
+  "type": "text",
+  "text": "**阶段3：快速验证**\n\n快速验证 Phase 1 的分析是否完整，Phase 2 的方案是否准确。"
+}
+```
+
+**Step 2: Confirm No Surprises**
+
+```json
+{
+  "type": "text",
+  "text": "## 验证完成\n\nPhase 1 分析已涵盖所有细节（注解、模式、校验规则），Phase 2 方案基于这些细节设计。\n\n未发现新的问题或模式，可以开始执行编码。"
+}
+```
+
+### 3.3 What If New Details Found?
+
+If during verification you discover IMPORTANT details not covered in Phase 1:
+
+**Option A: Minor details** (logging style, import order)
+- Proceed with coding, use observed patterns
+- No need to re-confirm with user
+
+**Option B: Major details** (new annotation type, different validation approach)
+- MUST pause and inform user
+- Explain the new finding
+- Ask if solution needs adjustment
+
+```json
+{
+  "type": "text",
+  "text": "## ⚠️ 发现新细节\n\n在验证时，我发现 ReqDto 还使用了 @JsonFormat 注解进行日期格式化。\n\n这会影响数据传输，请问方案是否需要补充对日期格式的处理？"
+}
+```
+
+</verification_protocol>
+
+---
+
+## Phase 4: Execution Phase
 
 <objective>
 Complete code modifications accurately and with high quality according to user-confirmed solution.
@@ -356,7 +586,65 @@ Before starting coding, confirm:
 
 ---
 
-**Phase 3: Execution Phase**
+**Phase 3: Context Learning Phase** ⚠️ **CRITICAL - DO NOT SKIP**
+
+```json
+{
+  "parts": [
+    {
+      "type": "text",
+      "text": "**阶段3：上下文学习**\n\n在执行编码前，我需要学习项目的编码规范，确保代码与现有代码保持一致。"
+    },
+    {
+      "type": "tool",
+      "toolName": "read_file",
+      "parameters": {
+        "simpleName": "ValidParamService",
+        "startLine": 1,
+        "endLine": 999999
+      }
+    }
+  ]
+}
+```
+
+*Tool returns: ValidParamService uses @Slf4j, Spring StringUtils, BusinessException*
+
+```json
+{
+  "parts": [
+    {
+      "type": "text",
+      "text": "**Step 2/3**: 发现项目中的通用模式"
+    },
+    {
+      "type": "tool",
+      "toolName": "grep_file",
+      "parameters": {
+        "pattern": "import.*StringUtils",
+        "filePattern": ".*Service\\.java"
+      }
+    }
+  ]
+}
+```
+
+*Tool returns: Confirms Spring StringUtils is used*
+
+```json
+{
+  "parts": [
+    {
+      "type": "text",
+      "text": "## 上下文学习完成\n\n我已确认项目编码规范：\n- **日志**：使用 Lombok @Slf4j\n- **字符串**：使用 Spring StringUtils\n- **异常**：使用自定义 BusinessException\n- **Service 注解**：使用 @Service\n\n现在开始执行编码..."
+    }
+  ]
+}
+```
+
+---
+
+**Phase 4: Execution Phase**
 
 ```json
 {
@@ -418,7 +706,7 @@ Before starting coding, confirm:
         │                 │
         ▼                 ▼
   ┌──────────┐      ┌──────────┐
-  │ 3-Phase  │      │ Direct   │
+  │ 4-Phase  │      │ Direct   │
   │ Workflow │      │ Handle   │
   └─────┬────┘      └──────────┘
         │
@@ -455,8 +743,18 @@ Before starting coding, confirm:
              └──────┬───────┘
                     │
                     ▼
+             ┌──────────────────┐
+             │ Phase 3:         │
+             │ Context Learning │⚠️ MANDATORY
+             │ - Read target    │
+             │ - Read similar   │
+             │ - grep patterns  │
+             │ - Confirm norms  │
+             └──────┬───────────┘
+                    │
+                    ▼
              ┌──────────────┐
-             │ Phase 3:     │
+             │ Phase 4:     │
              │ Execution    │
              │ - DTO → Svc   │
              │   → Mapper   │
@@ -472,7 +770,8 @@ Before starting coding, confirm:
 2. **Uncertainty Handling**: When encountering ANY uncertainty, MUST request user assistance, no guessing
 3. **Multi-Solution Comparison**: Phase 2 MUST list at least 2 solutions with pros and cons
 4. **Wait for Confirmation**: Phase 2 output solution then MUST wait for user confirmation, no auto-proceed to Phase 3
-5. **Sequential Execution**: Phase 3 follow order: data structure → business logic → data access
-6. **Progress Reporting**: Report progress after each file modification, provide summary when all completed
+5. **Context Learning MANDATORY**: Phase 3 is REQUIRED for ALL coding tasks - learn patterns before coding
+6. **Sequential Execution**: Phase 4 follow order: data structure → business logic → data access
+7. **Progress Reporting**: Report progress after each file modification, provide summary when all completed
 </critical_constraints>
 </workflow_definition>

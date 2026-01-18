@@ -69,72 +69,128 @@ public class CommitMessageGenerator {
     }
 
     /**
-     * 构建 LLM 提示词
+     * 构建 LLM 提示词（遵循 prompt_rules.md 规范）
      */
     private String buildPrompt(List<FileChange> changes, Session session) {
         StringBuilder prompt = new StringBuilder();
 
-        prompt.append("你是 Git commit message 生成助手。根据以下 Agent 执行的代码变更操作，生成一个简洁的 commit message。\n\n");
+        // ========== System Configuration ==========
+        prompt.append("<system_config>\n");
+        prompt.append("  <language_rule>\n");
+        prompt.append("    <thinking_language>English (For logic & reasoning)</thinking_language>\n");
+        prompt.append("    <output_language>Simplified Chinese (For commit message)</output_language>\n");
+        prompt.append("    <preserve_english>Keep technical terms and type prefixes in English</preserve_english>\n");
+        prompt.append("  </language_rule>\n");
+        prompt.append("</system_config>\n\n");
+
+        // ========== Role & Task Definition ==========
+        prompt.append("# Role\n");
+        prompt.append("You are a Git commit message generator. Analyze code changes and generate concise commit messages.\n\n");
+
+        // ========== Input Data ==========
+        prompt.append("<input_data>\n");
 
         // 用户原始问题
-        prompt.append("## 用户原始问题\n");
+        prompt.append("  <user_question>\n");
         Message latestUser = session.getLatestUserMessage();
         if (latestUser != null && latestUser.getContent() != null) {
-            prompt.append(latestUser.getContent()).append("\n\n");
+            prompt.append("    ").append(latestUser.getContent()).append("\n");
         } else {
-            prompt.append("(无)\n\n");
+            prompt.append("    (None)\n");
         }
+        prompt.append("  </user_question>\n\n");
 
         // 按类型分组变更
         Map<FileChange.ChangeType, List<FileChange>> grouped = changes.stream()
                 .collect(Collectors.groupingBy(FileChange::getType));
 
-        prompt.append("## Agent 执行的变更操作\n");
+        prompt.append("  <file_changes>\n");
 
         if (grouped.containsKey(FileChange.ChangeType.MODIFY)) {
-            prompt.append("### 文件修改 (apply_change)\n");
+            prompt.append("    <modifications>\n");
             List<FileChange> modifyChanges = grouped.get(FileChange.ChangeType.MODIFY);
-            for (int i = 0; i < modifyChanges.size(); i++) {
-                FileChange change = modifyChanges.get(i);
-                prompt.append(String.format("%d. %s\n   变更内容: %s\n\n",
-                        i + 1, change.getRelativePath(), change.getChangeSummary()));
+            for (FileChange change : modifyChanges) {
+                prompt.append("      <file>\n");
+                prompt.append("        <path>").append(change.getRelativePath()).append("</path>\n");
+                prompt.append("        <summary>").append(escapeXml(change.getChangeSummary())).append("</summary>\n");
+                prompt.append("      </file>\n");
             }
+            prompt.append("    </modifications>\n\n");
         }
 
         if (grouped.containsKey(FileChange.ChangeType.ADD)) {
-            prompt.append("### 新增文件 (create_file)\n");
+            prompt.append("    <additions>\n");
             List<FileChange> addChanges = grouped.get(FileChange.ChangeType.ADD);
-            for (int i = 0; i < addChanges.size(); i++) {
-                FileChange change = addChanges.get(i);
-                prompt.append(String.format("%d. %s\n   变更内容: %s\n\n",
-                        i + 1, change.getRelativePath(), change.getChangeSummary()));
+            for (FileChange change : addChanges) {
+                prompt.append("      <file>\n");
+                prompt.append("        <path>").append(change.getRelativePath()).append("</path>\n");
+                prompt.append("        <summary>").append(escapeXml(change.getChangeSummary())).append("</summary>\n");
+                prompt.append("      </file>\n");
             }
+            prompt.append("    </additions>\n\n");
         }
 
         if (grouped.containsKey(FileChange.ChangeType.DELETE)) {
-            prompt.append("### 删除文件 (delete_file)\n");
+            prompt.append("    <deletions>\n");
             List<FileChange> deleteChanges = grouped.get(FileChange.ChangeType.DELETE);
-            for (int i = 0; i < deleteChanges.size(); i++) {
-                FileChange change = deleteChanges.get(i);
-                prompt.append(String.format("%d. %s\n   变更内容: %s\n\n",
-                        i + 1, change.getRelativePath(), change.getChangeSummary()));
+            for (FileChange change : deleteChanges) {
+                prompt.append("      <file>\n");
+                prompt.append("        <path>").append(change.getRelativePath()).append("</path>\n");
+                prompt.append("        <summary>").append(escapeXml(change.getChangeSummary())).append("</summary>\n");
+                prompt.append("      </file>\n");
             }
+            prompt.append("    </deletions>\n\n");
         }
 
-        prompt.append("## 要求\n");
-        prompt.append("1. 最多 50 个字符（中文）\n");
-        prompt.append("2. 概括变更的核心业务价值（不说技术细节）\n");
-        prompt.append("3. 使用动词开头：修复、添加、优化、重构等\n\n");
+        prompt.append("  </file_changes>\n");
+        prompt.append("</input_data>\n\n");
 
-        prompt.append("## 示例\n");
-        prompt.append("- fix:修复登录页样式问题\n");
-        prompt.append("- feat:添加用户密码强度校验\n");
-        prompt.append("- perf:优化查询性能\n");
-        prompt.append("- refactor:重构认证逻辑\n\n");
+        // ========== Thinking Process ==========
+        prompt.append("<thinking_process>\n");
+        prompt.append("Before generating the commit message:\n");
+        prompt.append("1. **Analyze in English**: What is the core business value of these changes?\n");
+        prompt.append("2. **Identify Type**: Is it a fix, feature, performance, refactoring, or chore?\n");
+        prompt.append("3. **Synthesize**: Extract the essence, not technical details.\n");
+        prompt.append("</thinking_process>\n\n");
 
-        prompt.append("请直接返回 commit message，不要其他内容。");
+        // ========== Output Format ==========
+        prompt.append("<output_format>\n");
+        prompt.append("**CRITICAL**: You MUST respond with a valid commit message in the following format:\n\n");
+        prompt.append("```\n");
+        prompt.append("type:message\n");
+        prompt.append("```\n\n");
+        prompt.append("**Where**:\n");
+        prompt.append("- `type`: One of [fix, feat, perf, refactor, chore, test, docs, style]\n");
+        prompt.append("- `message`: Concise Chinese description (max 30 characters)\n\n");
+        prompt.append("**Examples**:\n");
+        prompt.append("- `fix:修复登录样式`\n");
+        prompt.append("- `feat:添加密码校验`\n");
+        prompt.append("- `perf:优化查询性能`\n");
+        prompt.append("- `refactor:重构认证逻辑`\n");
+        prompt.append("- `chore:更新依赖`\n\n");
+        prompt.append("**Requirements**:\n");
+        prompt.append("- Start with verb (修复/添加/优化/重构/更新)\n");
+        prompt.append("- Focus on business value, not implementation details\n");
+        prompt.append("- Max 30 Chinese characters (will be truncated if longer)\n");
+        prompt.append("- Keep type prefix in English\n");
+        prompt.append("- Return ONLY the commit message, no explanations\n");
+        prompt.append("</output_format>\n");
 
         return prompt.toString();
+    }
+
+    /**
+     * 转义 XML 特殊字符
+     */
+    private String escapeXml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replace("&", "&amp;")
+                   .replace("<", "&lt;")
+                   .replace(">", "&gt;")
+                   .replace("\"", "&quot;")
+                   .replace("'", "&apos;");
     }
 
     /**
