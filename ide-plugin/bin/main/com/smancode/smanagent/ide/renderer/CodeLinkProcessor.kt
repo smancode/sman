@@ -180,11 +180,10 @@ object CodeLinkProcessor {
                     }
 
                     val file = matchedFiles.first()
-                    val filePath = file.virtualFile.path
                     val lineSuffix = resolveLineSuffix(file, separator, methodName, lineNumber, params)
 
-                    // 构建链接
-                    val linkHtml = buildLinkHtml(fullText, filePath, lineSuffix)
+                    // 构建链接（使用 className 和 methodName）
+                    val linkHtml = buildLinkHtml(fullText, className, methodName, lineNumber, lineSuffix)
                     matcher.appendReplacement(buffer, linkHtml)
                 }
                 matcher.appendTail(buffer)
@@ -360,17 +359,55 @@ object CodeLinkProcessor {
 
     /**
      * 构建链接 HTML
+     * <p>
+     * 使用自定义 psi_location:// 协议，由 PsiNavigationHelper 处理跳转
+     * 跨平台兼容，避免文件路径问题
+     *
+     * @param text 显示文本
+     * @param className 类名
+     * @param methodName 方法名（可选）
+     * @param lineNumber 行号字符串（可选）
+     * @param lineSuffix 已解析的行号后缀（如 #L42），可选
+     * @return HTML 链接
      */
-    private fun buildLinkHtml(text: String, filePath: String, lineSuffix: String): String {
-        // 使用 file:// 协议
-        val fileUrl = "file://$filePath$lineSuffix"
+    private fun buildLinkHtml(
+        text: String,
+        className: String,
+        methodName: String?,
+        lineNumber: String?,
+        lineSuffix: String
+    ): String {
+        // 构建 psi_location:// 协议 URL
+        val locationUrl = when {
+            // 方法 + 行号（极少见，但支持）
+            methodName != null && lineNumber != null -> {
+                "psi_location://$className.$methodName:$lineNumber"
+            }
+            // 仅方法
+            methodName != null -> {
+                "psi_location://$className.$methodName"
+            }
+            // 类 + 行号
+            lineNumber != null -> {
+                "psi_location://$className:$lineNumber"
+            }
+            // 使用已解析的行号后缀
+            lineSuffix.isNotEmpty() -> {
+                val num = lineSuffix.removePrefix("#L")
+                "psi_location://$className:$num"
+            }
+            // 仅类名
+            else -> {
+                "psi_location://$className"
+            }
+        }
 
         // 使用主题颜色，自动适配深色/浅色主题
         val colors = ThemeColors.getCurrentColors()
         val linkColor = toHexString(colors.codeFunction)  // 使用代码函数高亮色（蓝色）
 
         // 添加样式：使用主题色 + 无下划线 + 手型光标
-        return "<a href=\"$fileUrl\" style=\"text-decoration: none; color: $linkColor; background-color: transparent; cursor: pointer;\">$text</a>"
+        return "<a href=\"$locationUrl\" style=\"text-decoration: none; color: $linkColor; background-color: transparent; cursor: pointer;\">$text</a>"
     }
 
     /**

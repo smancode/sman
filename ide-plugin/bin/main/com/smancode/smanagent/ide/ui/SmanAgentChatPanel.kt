@@ -785,6 +785,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         try {
             logger.info("=== 链接点击触发 === URL: {}, protocol: {}, ref: {}", url, url.protocol, url.ref)
             when (url.protocol) {
+                "psi_location" -> {
+                    // 使用 PSI API 进行导航（跨平台兼容）
+                    val location = url.toExternalForm().removePrefix("psi_location://")
+                    logger.info("→ PSI 导航: location={}", location)
+                    com.smancode.smanagent.ide.core.PsiNavigationHelper.navigateToLocation(project, location)
+                }
                 "file" -> navigateToFile(url)
                 "http", "https" -> {
                     // 使用浏览器打开 HTTP 链接
