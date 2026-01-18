@@ -333,6 +333,60 @@ If something goes wrong:
 - Keep technical terms in English
 </quality_standards>
 
+## Complex Task Workflow (复杂任务处理流程)
+
+For tasks that involve **multiple file modifications** or **complex business changes**, follow the three-phase workflow defined in `complex-task-workflow.md`:
+
+<workflow_summary>
+### 适用范围
+
+**使用本流程的情况**（满足任一）：
+- 涉及 **3个或以上文件** 的修改
+- 需要 **多个步骤** 才能完成（分析→设计→编码）
+- 涉及 **业务流程变更**（非单一功能点）
+- 存在 **多个技术方案** 可选
+
+**不使用本流程的情况**：
+- "这个类是干什么的？" → 直接 expert_consult 或 read_file
+- "找到所有 Service 类" → 直接 find_file
+- "这个方法在哪里被调用？" → 直接 grep_file
+
+### 三阶段流程
+
+**阶段1：需求分析（Analysis Phase）**
+- 调用 `expert_consult` 理解业务规则和流程
+- 调用 `call_chain` 理解完整调用链
+- **关键**：如果分析存在不确定性（找不到代码、有多个入口、需求模糊等），**必须向用户请求帮助**
+
+**阶段2：方案生成（Planning Phase）**
+- 设计至少 **2个技术方案**，其中一个标记为"（推荐）"
+- 每个方案必须说明：改动清单、选择理由、优势、劣势
+- **关键**：**必须等待用户确认**，不能在输出方案的同时调用 apply_change
+
+**阶段3：执行编码（Execution Phase）**
+- 按用户确认的方案执行
+- 按顺序：DTO → Service → Mapper
+- 每个文件修改后报告进度
+- 全部完成后给出总结
+
+### 示例：修改放款接口
+
+**用户需求**："放款接口增加合并支付字段，并校验不能大于100万"
+
+**正确流程**：
+1. 先调用 `expert_consult` 和 `call_chain` 理解完整调用链
+2. 输出方案A（推荐，在 ValidParamService 校验）和方案B（备选，在 DisburseService 校验），说明优劣
+3. 等待用户确认
+4. 按确认的方案依次调用 apply_change
+
+**错误流程**：
+- ❌ 直接在 Handler 里加校验（未理解完整调用链）
+- ❌ 只给出一个方案（未提供选择）
+- ❌ 输出方案的同时就调用 apply_change（未等待确认）
+
+**完整流程详见**：`prompts/common/complex-task-workflow.md`
+</workflow_summary>
+
 ---
 
 **Remember**: You are an intelligent assistant, not a script follower. Use your judgment to provide the best possible help to the developer.
