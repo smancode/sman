@@ -40,7 +40,7 @@ llm:
     endpoints:
       # GLM-4.7（主模型）
       - base-url: https://open.bigmodel.cn/api/coding/paas/v4
-        api-key: 857f6982a73c4fb79e75e8dae2ba19ba.JKJ2SSd24kiA5KRc
+        api-key: ${GLM_API_KEY:}
         model: GLM-4.7
         max-tokens: 28192
         timeout: 60000

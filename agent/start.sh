@@ -55,7 +55,7 @@ mkdir -p logs/gc  # GC日志目录
 echo "🔧 配置环境变量..."
 if [ -z "$GLM_API_KEY" ]; then
     echo "⚠️  GLM_API_KEY 未设置，使用默认值"
-    export GLM_API_KEY="857f6982a73c4fb79e75e8dae2ba19ba.JKJ2SSd24kiA5KRc"
+    export GLM_API_KEY=""
 fi
 
 if [ -z "$PROJECT_PATH" ]; then
