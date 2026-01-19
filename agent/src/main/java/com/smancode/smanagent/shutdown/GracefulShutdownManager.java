@@ -7,6 +7,7 @@ import com.smancode.smanagent.websocket.AgentWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ExecutorService;
@@ -38,7 +39,7 @@ public class GracefulShutdownManager implements SmartLifecycle {
     private volatile boolean shuttingDown = false;
 
     public GracefulShutdownManager(GracefulShutdownProperties properties,
-                                   AgentWebSocketHandler webSocketHandler,
+                                   @Lazy AgentWebSocketHandler webSocketHandler,
                                    ThreadPoolConfig threadPoolConfig,
                                    SessionManager sessionManager) {
         this.properties = properties;

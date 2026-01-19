@@ -9,6 +9,7 @@ import com.smancode.smanagent.tools.Tool;
 import com.smancode.smanagent.tools.ToolResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -67,6 +68,9 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
     public ToolResult execute(String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();
 
+        // 获取 traceId（用于追踪）
+        String traceId = MDC.get("traceId");
+
         try {
             // 获取参数
             String query = (String) params.get("query");
@@ -74,13 +78,16 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
                 return ToolResult.failure("缺少 query 参数");
             }
 
-            logger.info("执行专家咨询: projectKey={}, query={}, url={}",
-                    projectKey, query, knowledgeProperties.getSearchUrl());
+            logger.info("执行专家咨询: projectKey={}, query={}, url={}, traceId={}",
+                    projectKey, query, knowledgeProperties.getSearchUrl(), traceId);
 
             // 构建请求体
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("projectKey", projectKey);
             requestBody.put("query", query);
+            if (traceId != null && !traceId.isEmpty()) {
+                requestBody.put("traceId", traceId);
+            }
 
             // 设置请求头
             HttpHeaders headers = new HttpHeaders();
@@ -98,7 +105,7 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
             long duration = System.currentTimeMillis() - startTime;
 
             if (!response.getStatusCode().is2xxSuccessful()) {
-                logger.warn("Knowledge 服务返回错误: status={}", response.getStatusCode());
+                logger.warn("Knowledge 服务返回错误: status={}, traceId={}", response.getStatusCode(), traceId);
                 ToolResult toolResult = ToolResult.failure("Knowledge 服务返回错误: " + response.getStatusCode());
                 toolResult.setExecutionTimeMs(duration);
                 return toolResult;
@@ -138,7 +145,7 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
             }
 
         } catch (Exception e) {
-            logger.error("专家咨询失败", e);
+            logger.error("专家咨询失败: traceId={}", traceId, e);
             long duration = System.currentTimeMillis() - startTime;
             ToolResult toolResult = ToolResult.failure("专家咨询失败: " + e.getMessage());
             toolResult.setExecutionTimeMs(duration);
