@@ -10,11 +10,17 @@ spring:
 
 server:
   port: 8080
+  shutdown: graceful              # 启用优雅停机
+  shutdown-timeout: 60s           # Spring Boot 最多等待 60 秒
   tomcat:
     threads:
       max: 20
       min-spare: 5
     accept-count: 10
+
+# ==================== 优雅停机配置 ====================
+graceful-shutdown:
+  await-termination-timeout: 30s  # 等待在途请求完成的最大时长
 
 # ==================== SmanCode 配置 ====================
 smancode:
@@ -65,14 +71,14 @@ knowledge:
 websocket:
   path: /ws/analyze
   thread-pool:
-    core-size: 32
-    max-size: 32
+    core-size: 8
+    max-size: 8
     queue-capacity: 0  # 0 表示直接拒绝，不排队
 
 # ==================== SubTask 配置 ====================
 subtask:
   thread-pool:
-    core-size: 32      # 核心线程数
-    max-size: 32      # 最大线程数
-    queue-capacity: 100  # 队列容量
+    core-size: 8      # 核心线程数
+    max-size: 8      # 最大线程数
+    queue-capacity: 0  # 0 表示直接拒绝，不排队
   max-internal-iterations: 5  # SubTask 内部 LLM 最大迭代次数
