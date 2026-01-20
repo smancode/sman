@@ -1,19 +1,30 @@
+# Gradle
 .gradle/
 build/
-idea/
-*.iml
-*.iws
-*.ipr
-out/
-.DS_Store
-*.log
-*.pid
-*.seed
-*.pid.lock
-bin/
-tmp/
-temp/
-logs/
-app.pid
 
-/data/
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Runtime
+*.pid
+*.db
+*.sqlite
+data/
+bin/
+
+# Temporary
+*.tmp
+*.bak
+*.backup

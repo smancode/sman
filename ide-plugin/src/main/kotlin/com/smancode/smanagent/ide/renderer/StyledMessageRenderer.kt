@@ -6,6 +6,7 @@ import com.smancode.smanagent.ide.model.GraphModels
 import com.smancode.smanagent.ide.model.GraphModels.PartType
 import com.smancode.smanagent.ide.theme.ThemeColors
 import com.smancode.smanagent.ide.theme.ColorPalette
+import org.slf4j.LoggerFactory
 import javax.swing.text.MutableAttributeSet
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
@@ -20,6 +21,7 @@ import java.io.StringReader
  * 使用 JTextPane + HTMLEditorKit 实现 Markdown 渲染
  */
 object StyledMessageRenderer {
+    private val logger = LoggerFactory.getLogger(StyledMessageRenderer::class.java)
 
     // 样式标记常量
     private const val RESET = "RESET"
@@ -37,9 +39,12 @@ object StyledMessageRenderer {
      * 渲染 Part 到 JTextPane
      */
     fun renderToTextPane(part: PartData, textPane: JTextPane, project: Project, colors: ColorPalette = ThemeColors.getCurrentColors()) {
+        logger.info("=== renderToTextPane === part.type={}", part.type)
+
         when (part.type) {
             PartType.TEXT -> {
                 val text = (part.data["text"] as? String) ?: ""
+                logger.info("→ TEXT 类型，text长度: {}, 前100字符: {}", text.length, text.take(100))
 
                 // 检查是否是阶段性结论（以 "⏺ 阶段性结论" 或 "📊 阶段性结论" 开头）
                 if (text.startsWith("⏺ 阶段性结论") || text.startsWith("📊 阶段性结论")) {
@@ -79,8 +84,8 @@ object StyledMessageRenderer {
                     if (lines.size > 1 && firstLine.contains("(") && firstLine.contains(")")) {
                         // 这是工具摘要格式，前端负责渲染
                         val toolCallContent = firstLine  // toolName(params)
-                        // 过滤掉空行和 "null" 字符串
-                        val resultLines = lines.drop(1).filter { it.isNotBlank() && it != "null" }
+                        // 过滤掉空行、"null" 字符串和 "路径:" 前缀的行
+                        val resultLines = lines.drop(1).filter { it.isNotBlank() && it != "null" && !it.trim().startsWith("路径:") }
 
                         // 提取工具名称（括号前的部分）
                         val toolName = toolCallContent.substringBefore("(")
@@ -129,6 +134,7 @@ object StyledMessageRenderer {
                         // 这种格式通常是 LLM 返回的原始 JSON，内容已经在工具摘要中显示过了
                         val trimmedText = text.trim()
                         val hasJsonPattern = trimmedText.contains("{\"text\":") && trimmedText.contains("\"summary\"")
+                        logger.info("→ hasJsonPattern: {}", hasJsonPattern)
 
                         if (!hasJsonPattern) {
                             // 检查是否是处理中消息（以 [PROCESSING] 开头）
@@ -140,7 +146,7 @@ object StyledMessageRenderer {
                             }
 
                             // 检查是否是 commit 结果（以 "Commit:" 开头）或处理中消息
-                            val processedText = if (actualText.startsWith("Commit:")) {
+                            val textForMarkdown = if (actualText.startsWith("Commit:")) {
                                 // 将 "Commit:" 转换为蓝色，"文件变更:" 转换为黄色
                                 var result = actualText
                                 // 替换 "Commit:" 为蓝色
@@ -152,7 +158,11 @@ object StyledMessageRenderer {
                                 actualText
                             }
 
-                            var htmlContent = MarkdownRenderer.markdownToHtml(processedText)
+                            // 关键改动：先 Markdown 渲染，再处理代码链接
+                            var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
+
+                            // 处理代码链接：只处理文本节点，避免在 HTML 标签属性内处理
+                            htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
 
                             // 后处理代码块 - 将 <pre><code>...</code></pre> 替换为自定义样式
                             // HTMLEditorKit 对 pre 标签的 CSS 支持很差，所以用 div + font-family 模拟
@@ -170,20 +180,15 @@ object StyledMessageRenderer {
                                 """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;">$codeContent</span>"""
                             }
 
-                            // 预处理长路径：对超长路径进行换行
-                            htmlContent = preprocessLongPaths(htmlContent)
-
                             // 如果是处理中消息，包裹灰色样式
                             if (isProcessing) {
                                 htmlContent = """
-                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textSecondary)};">
+                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textMuted)};">
                                         $htmlContent
                                     </div>
                                 """.trimIndent()
                             }
 
-                            // 处理代码链接：自动识别并包装为可点击链接
-                            htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
                             val wrappedHtml = wrapHtml(htmlContent, false)
                             appendHtml(textPane, wrappedHtml)
                         }
@@ -310,20 +315,6 @@ object StyledMessageRenderer {
             "margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         }
         return "<div style=\"$style\">$content</div>"
-    }
-
-    /**
-     * 预处理长路径：在超长路径中插入零宽空格（zero-width space）以强制换行
-     * HTMLEditorKit 对 word-break 支持差，所以手动插入换行点
-     */
-    private fun preprocessLongPaths(html: String): String {
-        // 匹配文件路径模式（如 agent/src/main/java/.../File.java）
-        // 在斜杠、点等特殊字符后插入零宽空格，允许在这些位置换行
-        return html.replace(Regex("""([a-zA-Z0-9_/\\.]{50,})""")) { matchResult ->
-            val path = matchResult.groupValues[1]
-            // 在每个 / 后插入零宽空格
-            path.replace("/", "/\u200B")
-        }
     }
 
     /**

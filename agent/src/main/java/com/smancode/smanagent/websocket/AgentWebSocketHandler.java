@@ -14,6 +14,7 @@ import com.smancode.smanagent.smancode.command.CommitCommandResult;
 import com.smancode.smanagent.smancode.core.SmanAgentLoop;
 import com.smancode.smanagent.smancode.core.SessionManager;
 import com.smancode.smanagent.websocket.ToolForwardingService;
+import com.smancode.smanagent.shutdown.GracefulShutdownManager;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Autowired
     private CommitCommandHandler commitCommandHandler;
 
+    @Autowired(required = false)
+    private GracefulShutdownManager gracefulShutdownManager;
+
     @Resource(name = "webSocketExecutorService")
     private ExecutorService executorService;
 
@@ -94,6 +98,17 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        // 检查是否正在停机
+        if (gracefulShutdownManager != null && gracefulShutdownManager.isShuttingDown()) {
+            logger.warn("服务正在停机，拒绝新请求: wsSessionId={}", session.getId());
+            try {
+                session.close(new CloseStatus(1001, "Server is shutting down"));
+            } catch (Exception e) {
+                logger.warn("关闭停机时的 WebSocket 连接失败: wsSessionId={}", session.getId(), e);
+            }
+            return;
+        }
+
         String payload = message.getPayload();
         logger.debug("收到 WebSocket 消息: payload={}", payload);
 
@@ -726,5 +741,116 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 logger.error("【命令处理】发送错误消息失败", sendError);
             }
         }
+    }
+
+    // ==================== 优雅停机相关方法 ====================
+
+    /**
+     * 获取当前活跃的 WebSocket 会话数量
+     */
+    public int getActiveSessionCount() {
+        return activeSessions.size();
+    }
+
+    /**
+     * 获取当前处理中的会话数量
+     */
+    public int getProcessingSessionCount() {
+        return processingSessions.size();
+    }
+
+    /**
+     * 等待所有处理中的会话完成
+     *
+     * @param timeoutMs 超时时间（毫秒）
+     * @return true 表示所有会话已完成，false 表示超时
+     */
+    public boolean waitForPendingSessions(long timeoutMs) {
+        long startTime = System.currentTimeMillis();
+        int initialCount = processingSessions.size();
+
+        if (initialCount == 0) {
+            logger.info("没有在途会话需要等待");
+            return true;
+        }
+
+        logger.info("开始等待在途会话完成，初始数量: {}, 超时: {} ms", initialCount, timeoutMs);
+
+        while (!processingSessions.isEmpty()) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            if (elapsed > timeoutMs) {
+                int remaining = processingSessions.size();
+                logger.warn("等待在途会话超时，剩余 {} 个", remaining);
+                return false;
+            }
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warn("等待在途会话被中断");
+                return false;
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startTime;
+        logger.info("✅ 所有在途会话已完成，耗时: {} ms", duration);
+        return true;
+    }
+
+    /**
+     * 停机时主动关闭所有 WebSocket 连接
+     *
+     * @return 已关闭的连接数量
+     */
+    public int closeAllForShutdown() {
+        int closedCount = 0;
+        CloseStatus shutdownStatus = new CloseStatus(1001, "Server is shutting down");
+
+        // 创建副本避免并发修改
+        var sessionsCopy = Map.copyOf(activeSessions);
+
+        for (Map.Entry<String, WebSocketSession> entry : sessionsCopy.entrySet()) {
+            String sessionId = entry.getKey();
+            WebSocketSession wsSession = entry.getValue();
+
+            try {
+                // 发送停机通知
+                Map<String, Object> shutdownMessage = Map.of(
+                    "type", "shutdown",
+                    "message", "服务器正在关闭，请稍后重连",
+                    "timestamp", System.currentTimeMillis()
+                );
+                sendMessage(wsSession, shutdownMessage);
+
+                // 短暂等待，确保消息发送
+                Thread.sleep(50);
+
+                // 关闭连接
+                wsSession.close(shutdownStatus);
+                closedCount++;
+
+                logger.info("已关闭 WebSocket 连接（停机）: sessionId={}", sessionId);
+
+            } catch (Exception e) {
+                logger.warn("关闭 WebSocket 连接失败: sessionId={}", sessionId, e);
+            }
+        }
+
+        // 从 ToolForwardingService 注销所有会话
+        if (toolForwardingService != null) {
+            for (String sessionId : sessionsCopy.keySet()) {
+                try {
+                    toolForwardingService.unregisterSession(sessionId);
+                } catch (Exception e) {
+                    logger.warn("从 ToolForwardingService 注销失败: sessionId={}", sessionId, e);
+                }
+            }
+        }
+
+        // 清空活跃会话
+        activeSessions.clear();
+
+        return closedCount;
     }
 }

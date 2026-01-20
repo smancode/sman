@@ -43,10 +43,10 @@ public class ResultSummarizer {
         }
 
         Object data = result.getData();
-        logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
-                toolName,
-                data != null ? data.getClass().getSimpleName() : "null",
-                data);
+        // logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
+        //         toolName,
+        //         data != null ? data.getClass().getSimpleName() : "null",
+        //         data);
 
         if (data == null) {
             logger.warn("【ResultSummarizer空数据】toolName={}, data为null，返回默认消息", toolName);
@@ -134,50 +134,15 @@ public class ResultSummarizer {
                 yield sb.toString();
             }
             case "read_file" -> {
-                // 提取类/方法签名和关键逻辑
+                // 不压缩 read_file 的结果，直接返回完整内容
+                logger.info("【read_file不压缩】data长度={}", data.length());
+
+                // 只添加路径信息
                 StringBuilder sb = new StringBuilder();
-
-                // 新增：优先使用 relativePath
-                logger.info("【read_file压缩】relativePath={}", result.getRelativePath());
                 if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
-                    sb.append("路径: ").append(result.getRelativePath()).append("\n");
+                    sb.append(result.getRelativePath()).append("\n");
                 }
-
-                String[] lines = data.split("\n");
-                boolean inComment = false;
-
-                for (String line : lines) {
-                    String trimmed = line.trim();
-
-                    // 跳过注释
-                    if (trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-                        inComment = true;
-                        continue;
-                    }
-                    if (inComment && trimmed.endsWith("*/")) {
-                        inComment = false;
-                        continue;
-                    }
-                    if (inComment) continue;
-                    if (trimmed.startsWith("//")) continue;
-
-                    // 保留关键行
-                    if (trimmed.startsWith("package ") ||
-                        trimmed.startsWith("import ") ||
-                        trimmed.startsWith("public class ") ||
-                        trimmed.startsWith("private class ") ||
-                        trimmed.startsWith("public ") ||
-                        trimmed.startsWith("private ") ||
-                        trimmed.startsWith("protected ")) {
-                        sb.append(line).append("\n");
-                    }
-
-                    // 限制大小
-                    if (sb.length() > 2000) {
-                        sb.append("\n... (内容已压缩，完整内容在子会话中)");
-                        break;
-                    }
-                }
+                sb.append(data);
                 yield sb.toString();
             }
             case "call_chain" -> {

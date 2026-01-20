@@ -156,11 +156,11 @@ public class SubTaskParallelExecutor {
             // 调用 LLM
             String response = llmService.simpleRequest(prompt);
 
-            // 检查是否需要更多信息（调用 search 工具）
+            // 检查是否需要更多信息（调用 expert_consult 工具）
             if (needsSearch(response)) {
-                // 这里应该让 LLM 调用 search 工具
+                // 这里应该让 LLM 调用 expert_consult 工具
                 // 暂时跳过，等待工具系统集成
-                logger.debug("SubTask 请求搜索: id={}, iteration={}", subTask.getId(), iteration);
+                logger.debug("SubTask 请求专家咨询: id={}, iteration={}", subTask.getId(), iteration);
                 continue;
             }
 

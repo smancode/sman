@@ -32,7 +32,8 @@ class CliInputArea(
     private val cornerRadius = JBUI.scale(8)
     private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行\n/commit  自动总结并 #AI commit#"
     private var showPlaceholder = true
-    private var isFocused = false
+    var isFocused = false
+    private var isHovered = false
 
     // 命令补全相关
     private val commands = listOf("/commit")
@@ -60,7 +61,7 @@ class CliInputArea(
 
     init {
         isOpaque = false
-        layout = BorderLayout()
+        layout = null  // 使用绝对布局
         border = null
 
         // 创建文本区域
@@ -122,16 +123,13 @@ class CliInputArea(
 
         // 配置文本区域
         textArea.rows = minRows
-        textArea.font = Font("JetBrains Mono", Font.PLAIN, 13)
+        // 🔥 使用 IntelliJ 的标准字体，支持中文
+        textArea.font = com.intellij.util.ui.UIUtil.getLabelFont()
         val colors = ThemeColors.getCurrentColors()
         textArea.foreground = colors.textPrimary
         textArea.caretColor = colors.textPrimary
-        textArea.border = EmptyBorder(
-            JBUI.scale(12),
-            JBUI.scale(12),
-            JBUI.scale(12),
-            JBUI.scale(12)
-        )
+        val padding = JBUI.scale(12)
+        textArea.border = EmptyBorder(padding, padding, padding, padding)
 
         // 创建滚动面板（显示滚动条但隐藏它）
         scrollPane = JScrollPane(textArea).apply {
@@ -147,23 +145,15 @@ class CliInputArea(
             }
         }
 
-        // 包装在有边框的面板中
-        val inputWrapper = JPanel(BorderLayout()).apply {
-            isOpaque = true
-            background = colors.background
-            border = InputBorder(cornerRadius, colors)
-
-            add(scrollPane, BorderLayout.CENTER)
-        }
-
-        add(inputWrapper, BorderLayout.CENTER)
+        // 添加组件（使用绝对布局）
+        add(scrollPane)
 
         // 焦点监听
         textArea.addFocusListener(object : java.awt.event.FocusAdapter() {
             override fun focusGained(e: java.awt.event.FocusEvent?) {
                 if (!isFocused) {
                     isFocused = true
-                    inputWrapper.repaint()
+                    repaint()
                 }
                 showPlaceholder = false
                 textArea.repaint()
@@ -172,9 +162,26 @@ class CliInputArea(
             override fun focusLost(e: java.awt.event.FocusEvent?) {
                 if (isFocused) {
                     isFocused = false
-                    inputWrapper.repaint()
+                    repaint()
                 }
                 updatePlaceholder()
+            }
+        })
+
+        // 鼠标悬浮监听
+        addMouseListener(object : java.awt.event.MouseAdapter() {
+            override fun mouseEntered(e: java.awt.event.MouseEvent?) {
+                if (!isHovered) {
+                    isHovered = true
+                    repaint()
+                }
+            }
+
+            override fun mouseExited(e: java.awt.event.MouseEvent?) {
+                if (isHovered) {
+                    isHovered = false
+                    repaint()
+                }
             }
         })
 
@@ -201,6 +208,59 @@ class CliInputArea(
         setupActions()
     }
 
+    override fun getPreferredSize(): Dimension {
+        val d = textArea.preferredSize ?: Dimension(100, JBUI.scale(80))
+        val minHeight = JBUI.scale(40)
+        if (d.height < minHeight) d.height = minHeight
+        return d
+    }
+
+    override fun getMinimumSize(): Dimension {
+        return getPreferredSize()
+    }
+
+    override fun doLayout() {
+        val w = width
+        val h = height
+        scrollPane.setBounds(0, 0, w, h)
+    }
+
+    override fun paintComponent(g: Graphics) {
+        val g2 = g as Graphics2D
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+        val colors = ThemeColors.getCurrentColors()
+        // 绘制圆角背景（与消息区背景一致）
+        g2.color = colors.background
+        g2.fillRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+    }
+
+    override fun paint(g: Graphics) {
+        super.paint(g)
+
+        // 只在悬浮或焦点时绘制边框
+        if (isHovered || isFocused) {
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+            val colors = ThemeColors.getCurrentColors()
+            if (isFocused) {
+                // 焦点状态：暗灰色边框
+                g2.color = colors.textSecondary
+                g2.stroke = BasicStroke(1.5f)
+            } else {
+                // 悬浮状态：更明显的边框
+                g2.color = colors.divider
+                g2.stroke = BasicStroke(1.3f)
+            }
+            g2.drawRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+        }
+    }
+
+    override fun requestFocusInWindow(): Boolean {
+        return textArea.requestFocusInWindow()
+    }
+
     private fun updatePlaceholder() {
         val shouldShow = textArea.text.isBlank() && !textArea.hasFocus()
         if (showPlaceholder != shouldShow) {
@@ -221,49 +281,17 @@ class CliInputArea(
         val insets = textArea.insets
         val newHeight = rows * lineHeight + insets.top + insets.bottom
 
-        // 设置 JScrollPane 的视口首选高度
-        scrollPane.viewport.preferredSize = Dimension(
-            scrollPane.viewport.width,
-            newHeight
-        )
+        // 获取当前视口高度
+        val currentHeight = scrollPane.viewport.height
 
-        revalidate()
-        repaint()
-
-        // 确保光标可见
-        SwingUtilities.invokeLater {
-            textArea.caretPosition = textArea.document.length
+        // 只在高度真正变化时才更新（避免不必要的重布局）
+        if (currentHeight != newHeight) {
+            scrollPane.viewport.preferredSize = Dimension(
+                scrollPane.viewport.width,
+                newHeight
+            )
+            revalidate()
         }
-    }
-
-    override fun requestFocusInWindow(): Boolean {
-        return textArea.requestFocusInWindow()
-    }
-
-    private fun setupActions() {
-        val inputMap = textArea.getInputMap(JComponent.WHEN_FOCUSED)
-        val actionMap = textArea.actionMap
-
-        val enterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)
-        val shiftEnterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, java.awt.event.InputEvent.SHIFT_DOWN_MASK)
-        val tabKey = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0)
-
-        inputMap.put(enterKey, "sendMessage")
-        actionMap.put("sendMessage", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
-                triggerSend()
-            }
-        })
-
-        inputMap.put(shiftEnterKey, "insert-break")
-
-        // Tab 键补全命令
-        inputMap.put(tabKey, "autocomplete")
-        actionMap.put("autocomplete", object : AbstractAction() {
-            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
-                autocomplete()
-            }
-        })
     }
 
     /**
@@ -294,6 +322,32 @@ class CliInputArea(
         }
     }
 
+    private fun setupActions() {
+        val inputMap = textArea.getInputMap(JComponent.WHEN_FOCUSED)
+        val actionMap = textArea.actionMap
+
+        val enterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)
+        val shiftEnterKey = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, java.awt.event.InputEvent.SHIFT_DOWN_MASK)
+        val tabKey = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0)
+
+        inputMap.put(enterKey, "sendMessage")
+        actionMap.put("sendMessage", object : AbstractAction() {
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
+                triggerSend()
+            }
+        })
+
+        inputMap.put(shiftEnterKey, "insert-break")
+
+        // Tab 键补全命令
+        inputMap.put(tabKey, "autocomplete")
+        actionMap.put("autocomplete", object : AbstractAction() {
+            override fun actionPerformed(e: java.awt.event.ActionEvent?) {
+                autocomplete()
+            }
+        })
+    }
+
     private fun triggerSend() {
         val text = textArea.text.trim()
         if (text.isNotEmpty()) {
@@ -310,32 +364,5 @@ class CliInputArea(
             textArea.repaint()
         }
         updateHeight() // 重置高度
-    }
-}
-
-/**
- * 输入框边框（淡灰色，支持焦点状态）
- */
-private class InputBorder(
-    private val radius: Int,
-    private val colors: com.smancode.smanagent.ide.theme.ColorPalette
-) : javax.swing.border.Border {
-
-    override fun paintBorder(c: Component?, g: Graphics?, x: Int, y: Int, width: Int, height: Int) {
-        val g2 = g as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-        // 淡灰色边框（与背景色相近）
-        g2.color = colors.border
-        g2.stroke = BasicStroke(1.0f)
-        g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius)
-    }
-
-    override fun getBorderInsets(c: Component?): Insets {
-        return JBUI.emptyInsets()
-    }
-
-    override fun isBorderOpaque(): Boolean {
-        return true
     }
 }

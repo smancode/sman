@@ -3,6 +3,8 @@
 # SmanAgent 启动脚本
 # 支持：内存优化、错误恢复、健康检查、日志管理
 
+source ~/.bashrc
+
 set -e
 
 # 强制使用Java 21
@@ -51,9 +53,21 @@ echo "📁 创建日志目录..."
 mkdir -p logs
 mkdir -p logs/gc  # GC日志目录
 
-# 3. 编译项目
-echo "📦 编译项目..."
-if ./gradlew clean build -x test; then
+# 3. 设置必要的环境变量（如果未设置）
+echo "🔧 配置环境变量..."
+if [ -z "$GLM_API_KEY" ]; then
+    echo "⚠️  GLM_API_KEY 未设置，使用默认值"
+    export GLM_API_KEY=""
+fi
+
+if [ -z "$PROJECT_PATH" ]; then
+    echo "⚠️  PROJECT_PATH 未设置，使用默认值"
+    export PROJECT_PATH="/path/to/your/project"
+fi
+
+# 4. 编译项目
+echo "📦 编译项目（增量编译）..."
+if ./gradlew build -x test; then
     echo "✅ 编译成功"
 else
     echo "❌ 编译失败，退出启动"

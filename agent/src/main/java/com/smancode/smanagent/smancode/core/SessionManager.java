@@ -2,8 +2,10 @@ package com.smancode.smanagent.smancode.core;
 
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.model.session.SessionStatus;
+import com.smancode.smanagent.service.SessionFileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -18,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionManager {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
+
+    @Autowired
+    private SessionFileService sessionFileService;
 
     /**
      * 会话存储
@@ -239,5 +244,45 @@ public class SessionManager {
      * 会话统计信息
      */
     public record SessionStats(int total, int root, int child) {
+    }
+
+    // ==================== 优雅停机相关方法 ====================
+
+    /**
+     * 持久化所有活跃会话
+     * <p>
+     * 此方法由 GracefulShutdownManager 在停机时调用
+     *
+     * @return 成功持久化的会话数量
+     */
+    public int persistAllSessions() {
+        int totalSessions = sessions.size();
+        if (totalSessions == 0) {
+            logger.info("没有会话需要持久化");
+            return 0;
+        }
+
+        logger.info("开始持久化所有会话，共 {} 个", totalSessions);
+
+        int successCount = 0;
+        int failCount = 0;
+
+        for (Map.Entry<String, Session> entry : sessions.entrySet()) {
+            String sessionId = entry.getKey();
+            Session session = entry.getValue();
+
+            try {
+                sessionFileService.saveSession(session);
+                successCount++;
+                logger.debug("持久化会话成功: sessionId={}", sessionId);
+            } catch (Exception e) {
+                failCount++;
+                logger.error("持久化会话失败: sessionId={}", sessionId, e);
+            }
+        }
+
+        logger.info("会话持久化完成，成功: {}, 失败: {}, 总计: {}", successCount, failCount, totalSessions);
+
+        return successCount;
     }
 }

@@ -4,6 +4,7 @@ import com.smancode.smanagent.model.message.Message;
 import com.smancode.smanagent.model.part.*;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.smancode.llm.LlmService;
+import com.smancode.smanagent.smancode.prompt.DynamicPromptInjector;
 import com.smancode.smanagent.smancode.prompt.PromptDispatcher;
 import com.smancode.smanagent.tools.ToolExecutor;
 import com.smancode.smanagent.tools.ToolRegistry;
@@ -58,11 +59,11 @@ public class SmanAgentLoop {
     @Autowired
     private ContextCompactor contextCompactor;
 
-    @Autowired(required = false)
-    private com.smancode.smanagent.subagent.SearchSubAgent searchSubAgent;
-
     @Autowired
     private com.smancode.smanagent.config.SmanCodeProperties smanCodeProperties;
+
+    @Autowired
+    private com.smancode.smanagent.smancode.prompt.DynamicPromptInjector dynamicPromptInjector;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -104,33 +105,14 @@ public class SmanAgentLoop {
             // 3. 标记会话为忙碌
             session.markBusy();
 
-            // 4. 【智能判断】先判断用户意图，再决定是否需要 Search
+            // 4. 【智能判断】先判断用户意图，再决定是否需要专家咨询
             StreamingNotificationHandler.AcknowledgmentResult ackResult =
                     notificationHandler.pushImmediateAcknowledgment(session, partPusher);
 
-            logger.info("用户意图判断: needSearch={}, isChat={}",
-                    ackResult.isNeedSearch(), ackResult.isChat());
+            logger.info("用户意图判断: needConsult={}, isChat={}",
+                    ackResult.isNeedConsult(), ackResult.isChat());
 
-            // 5. 【条件执行】根据判断结果决定是否执行 Search
-            if (ackResult.isNeedSearch()) {
-                Part searchContextPart = performSearchPreprocessing(session, userInput, partPusher);
-                if (searchContextPart != null) {
-                    // 将 search 结果作为上下文注入到会话
-                    Message searchContextMessage = new Message();
-                    searchContextMessage.setId(UUID.randomUUID().toString());
-                    searchContextMessage.setSessionId(session.getId());
-                    searchContextMessage.setRole(com.smancode.smanagent.model.message.Role.SYSTEM);
-                    searchContextMessage.addPart(searchContextPart);
-                    searchContextMessage.touch();
-                    session.addMessage(searchContextMessage);
-
-                    logger.info("Search 预处理完成，上下文已注入到会话");
-                }
-            } else {
-                logger.info("跳过 Search（用户已明确目标或闲聊）");
-            }
-
-            // 6. 主循环：调用 LLM 处理
+            // 5. 主循环：调用 LLM 处理
             Message assistantMessage = processWithLLM(session, partPusher);
 
             // 7. 添加助手消息到会话
@@ -248,6 +230,43 @@ public class SmanAgentLoop {
                     if (part != null) {
                         currentParts.add(part);
                     }
+                }
+
+                // 7.5 处理 LLM 生成的摘要：将新工具的 summary 保存到上一个无摘要的工具
+                logger.info("【摘要处理】开始检查 currentParts 中的 summary，总 Part 数={}", currentParts.size());
+
+                Part summaryCarrier = currentParts.stream()
+                        .filter(p -> p instanceof ToolPart)
+                        .filter(p -> {
+                            String summary = ((ToolPart) p).getSummary();
+                            boolean hasSummary = summary != null && !summary.isEmpty();
+                            logger.info("【摘要处理】检查 ToolPart: toolName={}, hasSummary={}, summary={}",
+                                    ((ToolPart) p).getToolName(), hasSummary,
+                                    hasSummary ? summary.substring(0, Math.min(50, summary.length())) : "null");
+                            return hasSummary;
+                        })
+                        .findFirst()
+                        .orElse(null);
+
+                logger.info("【摘要处理】summaryCarrier={}", summaryCarrier != null ? ((ToolPart) summaryCarrier).getToolName() : "null");
+
+                if (summaryCarrier != null && summaryCarrier instanceof ToolPart) {
+                    String summary = ((ToolPart) summaryCarrier).getSummary();
+                    logger.info("【摘要处理】找到 summary，开始查找目标工具，summary={}", summary);
+
+                    // 查找上一个无摘要的 ToolPart
+                    ToolPart targetTool = findLastToolWithoutSummary(session);
+                    if (targetTool != null) {
+                        targetTool.setSummary(summary);
+                        logger.info("【摘要处理】成功保存摘要: targetTool={}, summary={}",
+                                targetTool.getToolName(), summary);
+                        // 清空 summaryCarrier 的 summary，避免混淆
+                        ((ToolPart) summaryCarrier).setSummary(null);
+                    } else {
+                        logger.warn("【摘要处理】LLM 生成了摘要，但没有找到需要摘要的历史工具");
+                    }
+                } else {
+                    logger.info("【摘要处理】没有找到包含 summary 的 ToolPart");
                 }
 
                 // 8. 检查是否有工具调用
@@ -828,230 +847,6 @@ public class SmanAgentLoop {
     }
 
     /**
-     * Search 预处理：深度理解和知识加载
-     * <p>
-     * 在主流程之前调用 search SubAgent，获取业务背景、代码入口等信息，
-     * 并将这些信息注入到会话上下文中，供主流程使用。
-     * <p>
-     * 智能判断：
-     * - 第一轮对话：执行 Search
-     * - 新主题对话：执行 Search
-     * - 追问/修改：跳过 Search（已有上下文）
-     *
-     * @param session    会话
-     * @param userInput  用户输入
-     * @param partPusher Part 推送器
-     * @return Search 上下文 Part（如果 search 成功），否则返回 null
-     */
-    private Part performSearchPreprocessing(Session session, String userInput, Consumer<Part> partPusher) {
-        if (searchSubAgent == null) {
-            logger.info("SearchSubAgent 未启用，跳过预处理");
-            return null;
-        }
-
-        // 智能判断：是否需要执行 Search
-        if (!shouldPerformSearch(session, userInput)) {
-            logger.info("智能判断：跳过 Search（追问/修改模式）");
-            return null;
-        }
-
-        try {
-            logger.info("开始 Search 预处理: userInput={}", userInput);
-
-            // 推送 reasoning 表示正在搜索
-            String partId = UUID.randomUUID().toString();
-            ReasoningPart reasoningPart = new ReasoningPart(partId, null, session.getId());
-            reasoningPart.setText("正在深度理解需求并加载相关业务知识和代码信息..");
-            reasoningPart.touch();
-            partPusher.accept(reasoningPart);
-
-            // 调用 SearchSubAgent
-            String projectKey = session.getProjectInfo() != null ?
-                    session.getProjectInfo().getProjectKey() : "default";
-            com.smancode.smanagent.subagent.SearchSubAgent.SearchResult searchResult =
-                    searchSubAgent.search(projectKey, userInput);
-
-            if (searchResult.isError()) {
-                logger.warn("Search 预处理失败: {}", searchResult.getErrorMessage());
-                return null;
-            }
-
-            // 构建上下文 Part
-            StringBuilder contextText = new StringBuilder();
-            contextText.append("## Search 预处理结果\n\n");
-
-            if (searchResult.getBusinessContext() != null) {
-                contextText.append("### 业务背景\n");
-                contextText.append(searchResult.getBusinessContext()).append("\n\n");
-            }
-
-            if (searchResult.getBusinessKnowledge() != null && !searchResult.getBusinessKnowledge().isEmpty()) {
-                contextText.append("### 业务知识\n");
-                for (String knowledge : searchResult.getBusinessKnowledge()) {
-                    contextText.append("- ").append(knowledge).append("\n");
-                }
-                contextText.append("\n");
-            }
-
-            if (searchResult.getCodeEntries() != null && !searchResult.getCodeEntries().isEmpty()) {
-                contextText.append("### 相关代码入口\n");
-                for (com.smancode.smanagent.subagent.SearchSubAgent.CodeEntry entry : searchResult.getCodeEntries()) {
-                    contextText.append("- ").append(entry.getClassName());
-                    if (entry.getMethod() != null) {
-                        contextText.append(".").append(entry.getMethod()).append("()");
-                    }
-                    if (entry.getReason() != null) {
-                        contextText.append(" (").append(entry.getReason()).append(")");
-                    }
-                    contextText.append("\n");
-                }
-                contextText.append("\n");
-            }
-
-            if (searchResult.getCodeRelations() != null) {
-                contextText.append("### 代码关系\n");
-                contextText.append(searchResult.getCodeRelations()).append("\n\n");
-            }
-
-            if (searchResult.getSummary() != null) {
-                contextText.append("### 总结\n");
-                contextText.append(searchResult.getSummary()).append("\n");
-            }
-
-            // 创建 TextPart 包含上下文信息
-            String contextPartId = UUID.randomUUID().toString();
-            TextPart contextPart = new TextPart(contextPartId, null, session.getId());
-            contextPart.setText(contextText.toString());
-            contextPart.touch();
-
-            logger.info("Search 预处理完成: contextLength={}", contextText.length());
-            return contextPart;
-
-        } catch (Exception e) {
-            logger.error("Search 预处理异常", e);
-            return null;
-        }
-    }
-
-    /**
-     * 智能判断是否需要执行 Search（LLM 驱动）
-     * <p>
-     * 使用 LLM 判断是否需要重新 Search，避免硬编码规则。
-     * <p>
-     * 判断逻辑交给 LLM：
-     * - 分析用户输入是"新主题"还是"追问/修改"
-     * - 新主题 → 需要 Search
-     * - 追问/修改 → 跳过 Search（已有上下文）
-     *
-     * @param session   会话
-     * @param userInput 用户输入
-     * @return true 表示需要 Search，false 表示跳过
-     */
-    private boolean shouldPerformSearch(Session session, String userInput) {
-        int messageCount = session.getMessages().size();
-
-        // 规则1: 第一轮对话（消息数 ≤ 2），直接 Search
-        if (messageCount <= 2) {
-            logger.debug("判断结果: 需要 Search（第一轮对话，messageCount={}）", messageCount);
-            return true;
-        }
-
-        // 规则2: 使用 LLM 判断（LLM 驱动）
-        try {
-            String judgmentPrompt = buildSearchJudgmentPrompt(session, userInput);
-            String judgmentSystem = buildSearchJudgmentSystem();
-
-            String response = llmService.jsonRequest(judgmentSystem, judgmentPrompt).asText();
-
-            // 解析 LLM 判断结果
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode json = mapper.readTree(response);
-
-            boolean needSearch = json.path("needSearch").asBoolean(true);  // 默认需要 Search
-            String reason = json.path("reason").asText("无原因");
-
-            logger.info("LLM 判断结果: needSearch={}, reason={}", needSearch, reason);
-            return needSearch;
-
-        } catch (Exception e) {
-            // LLM 判断失败，保守策略：执行 Search
-            logger.warn("LLM 判断失败，保守策略：执行 Search。error={}", e.getMessage());
-            return true;
-        }
-    }
-
-    /**
-     * 构建 Search 判断的系统提示词
-     */
-    private String buildSearchJudgmentSystem() {
-        return """
-                # Search 判断专家
-
-                你需要判断用户输入是否需要重新执行 Search。
-
-                ## 判断标准
-
-                1. **新主题**: 用户提出了全新的问题或需求 → needSearch = true
-                   - 例如: "支付流程是怎样的？"
-                   - 例如: "用户认证怎么实现的？"
-
-                2. **追问/修改**: 用户基于当前对话的补充或修改 → needSearch = false
-                   - 例如: "把浮层颜色改成红色"
-                   - 例如: "另外，还需要添加关闭按钮"
-                   - 例如: "不对，应该是会话级上限3次"
-
-                ## 输出格式
-
-                请严格按照以下 JSON 格式输出：
-
-                ```json
-                {
-                  "needSearch": true/false,
-                  "reason": "判断原因（用中文简要说明）"
-                }
-                ```
-
-                ## 注意事项
-
-                - 优先复用已有上下文，避免重复 Search
-                - 当不确定时，选择 needSearch = true（更安全）
-                """;
-    }
-
-    /**
-     * 构建 Search 判断的用户提示词
-     */
-    private String buildSearchJudgmentPrompt(Session session, String userInput) {
-        // 获取最近几条消息作为上下文
-        java.util.List<com.smancode.smanagent.model.message.Message> recentMessages = session.getMessages();
-        int startIdx = Math.max(0, recentMessages.size() - 6);  // 最近 3 轮对话
-        java.util.List<com.smancode.smanagent.model.message.Message> contextMessages =
-                recentMessages.subList(startIdx, recentMessages.size());
-
-        StringBuilder context = new StringBuilder();
-        context.append("## 最近对话历史\n\n");
-        for (com.smancode.smanagent.model.message.Message msg : contextMessages) {
-            context.append("**").append(msg.getRole()).append("**: ");
-            for (Part part : msg.getParts()) {
-                if (part instanceof TextPart) {
-                    context.append(((TextPart) part).getText());
-                } else if (part instanceof ReasoningPart) {
-                    context.append("[思考: ").append(((ReasoningPart) part).getText()).append("]");
-                }
-            }
-            context.append("\n\n");
-        }
-
-        context.append("## 当前用户输入\n\n");
-        context.append(userInput).append("\n\n");
-
-        context.append("## 任务\n\n");
-        context.append("请基于对话历史和当前用户输入，判断是否需要重新执行 Search。");
-
-        return context.toString();
-    }
-
-    /**
      * 创建压缩消息
      */
     private Message createCompactionMessage(String sessionId, String summary) {
@@ -1108,9 +903,24 @@ public class SmanAgentLoop {
      */
     private String buildUserPrompt(Session session, boolean isLastStep) {
         StringBuilder prompt = new StringBuilder();
-        Message lastAssistant = session.getLatestAssistantMessage();
+
+        // ========== 动态 Prompt 注入（首次请求自动加载）==========
+        // 每个会话首次请求时，一次性加载所有必要的 Prompt
+        // 避免硬编码模式匹配、避免复杂的对话状态跟踪、避免额外的 LLM 调用
+        DynamicPromptInjector.InjectResult injectResult =
+            dynamicPromptInjector.detectAndInject(session.getId());
+
+        if (injectResult.hasContent()) {
+            logger.info("会话 {} 首次加载 Prompt: complexTaskWorkflow={}, codingBestPractices={}",
+                session.getId(),
+                injectResult.isNeedComplexTaskWorkflow(),
+                injectResult.isNeedCodingBestPractices());
+            prompt.append(injectResult.getInjectedContent());
+        }
+        // ========== 动态 Prompt 注入结束 ==========
 
         // 检查是否有新的用户消息（支持打断）
+        Message lastAssistant = session.getLatestAssistantMessage();
         if (lastAssistant != null && session.hasNewUserMessageAfter(lastAssistant.getId())) {
             prompt.append("\n\n");
             prompt.append("<system-reminder>\n");
@@ -1139,27 +949,29 @@ public class SmanAgentLoop {
         int contextSize = Math.min(6, messages.size());
 
         if (!messages.isEmpty()) {
-            prompt.append("\n\n## 对话历史\n\n");
+            prompt.append("\n\n## Conversation History\n\n");
         }
 
         for (int i = Math.max(0, messages.size() - contextSize); i < messages.size(); i++) {
             Message msg = messages.get(i);
             if (msg.isUserMessage()) {
-                prompt.append("### 用户\n");
+                prompt.append("### User\n");
                 for (Part part : msg.getParts()) {
                     if (part instanceof TextPart) {
                         prompt.append(((TextPart) part).getText()).append("\n");
                     }
                 }
             } else {
-                prompt.append("### 助手\n");
+                prompt.append("### Assistant\n");
                 for (Part part : msg.getParts()) {
                     if (part instanceof TextPart) {
                         prompt.append(((TextPart) part).getText()).append("\n");
                     } else if (part instanceof ReasoningPart) {
                         prompt.append("思考: ").append(((ReasoningPart) part).getText()).append("\n");
                     } else if (part instanceof ToolPart toolPart) {
-                        // 关键：添加工具调用和完整结果
+                        // 关键：智能摘要机制
+                        // - 有 summary：说明是历史工具，只发送摘要（避免 Token 爆炸）
+                        // - 无 summary：说明是新执行完的工具，发送完整结果 + 要求 LLM 生成摘要
                         prompt.append("调用工具: ").append(toolPart.getToolName()).append("\n");
 
                         // 添加参数
@@ -1167,21 +979,27 @@ public class SmanAgentLoop {
                             prompt.append("参数: ").append(formatParamsBrief(toolPart.getParameters())).append("\n");
                         }
 
-                        // 关键：添加摘要结果（避免 Token 爆炸）
                         if (toolPart.getResult() != null) {
                             com.smancode.smanagent.tools.ToolResult result = toolPart.getResult();
                             if (result.isSuccess()) {
-                                // 优先使用摘要（由 ResultSummarizer 生成，已压缩）
+                                // 智能摘要机制
                                 if (toolPart.getSummary() != null && !toolPart.getSummary().isEmpty()) {
+                                    // 有 summary：历史工具，只发送摘要
                                     prompt.append("结果: \n").append(toolPart.getSummary()).append("\n");
                                 } else {
-                                    // 降级：使用 data 字段（可能包含完整结果，需要小心）
-                                    String dataResult = result.getData() != null ? result.getData().toString() : null;
-                                    if (dataResult != null && dataResult.length() < 1000) {
-                                        // 只有小数据才直接使用
-                                        prompt.append("结果: \n").append(dataResult).append("\n");
+                                    // 无 summary：新执行完的工具，发送完整结果
+                                    // 新增：添加 relativePath（如果有）
+                                    if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
+                                        prompt.append("文件路径: ").append(result.getRelativePath()).append("\n");
+                                    }
+
+                                    String fullData = result.getData() != null ? result.getData().toString() : null;
+                                    if (fullData != null && !fullData.isEmpty()) {
+                                        prompt.append("结果: \n").append(fullData).append("\n");
+                                        // 标记为需要生成摘要，要求保留文件路径
+                                        prompt.append("【此工具结果尚无摘要，需要你生成】\n");
+                                        prompt.append("【重要：生成摘要时必须保留文件路径信息】\n");
                                     } else {
-                                        // 大数据使用 displayContent
                                         String displayContent = result.getDisplayContent();
                                         if (displayContent != null && !displayContent.isEmpty()) {
                                             prompt.append("结果: \n").append(displayContent).append("\n");
@@ -1221,17 +1039,26 @@ public class SmanAgentLoop {
         }
 
         // 添加 ReAct 分析和决策指南
-        prompt.append("\n\n## 下一步分析和决策\n\n");
-        prompt.append("请基于以上工具执行历史，分析当前进展并决定下一步：\n");
-        prompt.append("1. **分析结果**：工具返回了什么关键信息？\n");
-        prompt.append("2. **生成摘要**：为最近执行的工具生成简洁摘要（1-2句话），说明发现了什么\n");
-        prompt.append("3. **评估进展**：当前信息是否足够回答用户问题？\n");
-        prompt.append("4. **决定行动**：\n");
-        prompt.append("   - 如果信息充足 → 直接给出答案（不再调用工具）\n");
-        prompt.append("   - 如果需要更多信息 → 继续调用工具（说明为什么需要）\n");
-        prompt.append("   - 如果工具失败 → 换个方法重试（不要重复失败的方法）\n\n");
-        prompt.append("**重要**：如果调用了工具，必须在响应的 JSON 中包含 \"summary\" 字段，\n");
-        prompt.append("格式为：{\"summary\": \"你的简洁摘要\"}。\n\n");
+        prompt.append("\n\n## Next Step Analysis and Decision\n\n");
+        prompt.append("Based on the tool execution history above, analyze the current progress and decide the next step:\n");
+        prompt.append("1. **Analyze Results**: What key information did the tools return?\n");
+        prompt.append("2. **Generate Summary (Important)**:\n");
+        prompt.append("   - If you see a tool result marked with【此工具结果尚无摘要，需要你生成】\n");
+        prompt.append("   - AND you decide to call a new tool: Add a \"summary\" field in the new tool's ToolPart,\n");
+        prompt.append("     generating a summary for the **previously executed tool** (not the new one)\n");
+        prompt.append("   - **Critical Requirement: When generating summary, must preserve file path (relativePath) info**\n");
+        prompt.append("     Summary format should include: \"path: xxx/yyy/File.java\" or \"read_file(path: xxx/yyy/File.java): ...\"\n");
+        prompt.append("   - If not calling a new tool: Just return a text answer, no need to generate summary\n");
+        prompt.append("   - Summary format: {\"type\": \"tool\", \"toolName\": \"newToolName\", \"parameters\": {...}, \"summary\": \"previous tool summary\"}\n");
+        prompt.append("3. **Evaluate Progress**: Is the current information sufficient to answer the user's question?\n");
+        prompt.append("4. **Decide Action**:\n");
+        prompt.append("   - If sufficient information → Provide answer directly (no more tool calls)\n");
+        prompt.append("   - If need more information → Continue calling tools (explain why)\n");
+        prompt.append("   - If tool failed → Try a different approach (don't repeat failed methods)\n\n");
+        prompt.append("**Example**:\n");
+        prompt.append("If you just executed read_file (no summary), file path is agent/src/main/java/CallChainTool.java, now you want to call apply_change,\n");
+        prompt.append("the returned JSON should include:\n");
+        prompt.append("{\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(path: agent/src/main/java/CallChainTool.java): Found CallChainTool class with callChain method...\"}\n\n");
 
         // 如果是最后一步，添加最大步数警告
         if (isLastStep) {
@@ -1285,6 +1112,7 @@ public class SmanAgentLoop {
             case "reasoning" -> createReasoningPart(partJson, messageId, sessionId);
             case "tool" -> createToolPart(partJson, messageId, sessionId);
             case "subtask" -> createSubtaskPart(partJson, messageId, sessionId);
+            case "todo" -> createTodoPart(partJson, messageId, sessionId);
             // 兼容 LLM 可能生成的工具类型（应该使用 type: "tool" + toolName）
             case "read_file", "grep_file", "find_file", "search", "call_chain",
                  "extract_xml", "apply_change" -> {
@@ -1399,6 +1227,41 @@ public class SmanAgentLoop {
     }
 
     /**
+     * 创建 TodoPart
+     */
+    private TodoPart createTodoPart(JsonNode partJson, String messageId, String sessionId) {
+        String partId = UUID.randomUUID().toString();
+        TodoPart part = new TodoPart(partId, messageId, sessionId);
+
+        // 解析 items 数组
+        JsonNode itemsJson = partJson.path("items");
+        if (itemsJson.isArray()) {
+            List<TodoPart.TodoItem> items = new ArrayList<>();
+            for (JsonNode itemJson : itemsJson) {
+                TodoPart.TodoItem item = new TodoPart.TodoItem();
+                item.setId(itemJson.path("id").asText(UUID.randomUUID().toString()));
+                item.setContent(itemJson.path("content").asText());
+
+                // 解析 status
+                String statusStr = itemJson.path("status").asText("PENDING");
+                try {
+                    item.setStatus(TodoPart.TodoStatus.valueOf(statusStr.toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    logger.warn("未知的 TodoStatus: {}, 使用默认值 PENDING", statusStr);
+                    item.setStatus(TodoPart.TodoStatus.PENDING);
+                }
+
+                items.add(item);
+            }
+            part.setItems(items);
+        }
+
+        part.touch();
+        logger.info("创建 TodoPart: items={}", part.getTotalCount());
+        return part;
+    }
+
+    /**
      * 创建忙碌消息
      */
     private Message createBusyMessage(String sessionId, Consumer<Part> partPusher) {
@@ -1436,6 +1299,52 @@ public class SmanAgentLoop {
         message.addPart(textPart);
         partPusher.accept(textPart);
         return message;
+    }
+
+    /**
+     * 查找最后一个无摘要的 ToolPart
+     * <p>
+     * 用于将 LLM 生成的摘要保存到对应的历史工具
+     *
+     * @param session 会话
+     * @return 最后一个无摘要的 ToolPart，如果没有则返回 null
+     */
+    private ToolPart findLastToolWithoutSummary(Session session) {
+        logger.info("【查找无摘要工具】开始查找，消息总数={}", session.getMessages().size());
+
+        // 从后往前遍历所有消息
+        for (int i = session.getMessages().size() - 1; i >= 0; i--) {
+            Message message = session.getMessages().get(i);
+            logger.info("【查找无摘要工具】检查消息 {}/{}: role={}, Part 数={}",
+                    i + 1, session.getMessages().size(),
+                    message.getRole(), message.getParts().size());
+
+            if (message.isAssistantMessage()) {
+                // 从后往前遍历该消息的所有 Part
+                for (int j = message.getParts().size() - 1; j >= 0; j--) {
+                    Part part = message.getParts().get(j);
+                    if (part instanceof ToolPart toolPart) {
+                        String summary = toolPart.getSummary();
+                        boolean hasSummary = summary != null && !summary.isEmpty();
+
+                        logger.info("【查找无摘要工具】  检查 ToolPart: toolName={}, hasSummary={}, summary={}",
+                                toolPart.getToolName(), hasSummary,
+                                hasSummary ? summary.substring(0, Math.min(30, summary.length())) : "null");
+
+                        // 检查是否有摘要
+                        if (!hasSummary) {
+                            // 找到最后一个无摘要的 ToolPart
+                            logger.info("【查找无摘要工具】✅ 找到无摘要的工具: toolName={}, messageId={}",
+                                    toolPart.getToolName(), message.getId());
+                            return toolPart;
+                        }
+                    }
+                }
+            }
+        }
+
+        logger.info("【查找无摘要工具】❌ 没有找到无摘要的工具");
+        return null;
     }
 
     /**
@@ -1514,5 +1423,34 @@ public class SmanAgentLoop {
             return map1.equals(map2);
         }
         return obj1.equals(obj2);
+    }
+
+    /**
+     * 从消息中提取文本内容
+     *
+     * @param message 消息
+     * @return 文本内容（如果有的话）
+     */
+    private String extractTextFromMessage(Message message) {
+        if (message == null || message.getParts() == null) {
+            return null;
+        }
+
+        StringBuilder text = new StringBuilder();
+        for (Part part : message.getParts()) {
+            if (part instanceof TextPart) {
+                String content = ((TextPart) part).getText();
+                if (content != null) {
+                    text.append(content).append("\n");
+                }
+            } else if (part instanceof ReasoningPart) {
+                String content = ((ReasoningPart) part).getText();
+                if (content != null) {
+                    text.append(content).append("\n");
+                }
+            }
+        }
+
+        return text.length() > 0 ? text.toString() : null;
     }
 }

@@ -66,14 +66,153 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     // 添加 HyperlinkListener 处理链接点击
     private val hyperlinkListener = javax.swing.event.HyperlinkListener { e ->
         if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
-            navigateToUrl(e.url)
+            logger.info("=== HyperlinkEvent 触发 === url={}, description={}, sourceElement={}",
+                e.url, e.description, e.sourceElement)
+
+            // 优先级：description > url > sourceElement
+            val href = when {
+                e.description != null -> e.description.toString()
+                e.url != null -> e.url.toExternalForm()
+                else -> null
+            }
+
+            logger.info("→ 提取的 href: {}", href)
+
+            if (href != null) {
+                handleHyperlinkClick(href)
+            } else {
+                logger.error("无法获取链接: url={}, desc={}, element={}",
+                    e.url, e.description, e.sourceElement)
+                // 最后尝试：从 sourceElement 获取
+                val element = e.sourceElement
+                if (element != null) {
+                    logger.info("→ 尝试从 sourceElement 获取: {}", element)
+                    // Document.getCharacterElement(element) 可以获取更多属性
+                }
+            }
         }
     }
 
-    // 添加鼠标监听器实现悬停手型光标效果
+    /**
+     * 处理链接点击
+     */
+    private fun handleHyperlinkClick(href: String) {
+        try {
+            when {
+                href.startsWith("psi_location://") -> {
+                    val location = href.removePrefix("psi_location://")
+                    logger.info("→ PSI 导航开始: location={}", location)
+                    val success = com.smancode.smanagent.ide.core.PsiNavigationHelper.navigateToLocation(project, location)
+                    logger.info("→ PSI 导航结果: success={}", success)
+                }
+                href.startsWith("file://") -> {
+                    val url = java.net.URL(href)
+                    navigateToFile(url)
+                }
+                href.startsWith("http://") || href.startsWith("https://") -> {
+                    val url = java.net.URL(href)
+                    com.intellij.ide.BrowserUtil.browse(url)
+                }
+                else -> logger.warn("不支持的协议: {}", href.take(50))
+            }
+        } catch (ex: Exception) {
+            logger.error("处理链接失败: href={}", href, ex)
+        }
+    }
+
+    // 鼠标点击监听器 - 处理自定义协议链接（HTMLEditorKit 不支持自定义协议）
+    private val mouseClickListener = object : MouseAdapter() {
+        override fun mouseClicked(e: MouseEvent) {
+            if (e.button == MouseEvent.BUTTON1) {
+                // 左键点击，检查是否在链接上
+                val point = e.point
+                val pos = outputArea.getUI().viewToModel(outputArea, point)
+                if (pos >= 0) {
+                    val linkUrl = extractLinkAtPosition(pos)
+                    if (linkUrl != null) {
+                        logger.info("=== MouseListener 检测到链接点击 === pos={}, url={}", pos, linkUrl)
+                        handleHyperlinkClick(linkUrl)
+                    }
+                }
+            }
+        }
+    }
+
+    // 添加鼠标监听器实现悬停手型光标效果（带防抖）
     private val mouseMotionListener = object : MouseMotionAdapter() {
+        private var lastUpdateTime = 0L
+        private val DEBOUNCE_MS = 16  // 约 60FPS
+
         override fun mouseMoved(e: MouseEvent) {
+            val now = System.currentTimeMillis()
+            // 防抖：限制更新频率
+            if (now - lastUpdateTime < DEBOUNCE_MS) {
+                return
+            }
+            lastUpdateTime = now
             updateCursorForPosition(e.point)
+        }
+    }
+
+    /**
+     * 从指定位置的文档中提取链接 URL
+     * 遍历所有 HTML 标签，找到包含该位置的 <a href="...">
+     */
+    private fun extractLinkAtPosition(pos: Int): String? {
+        try {
+            val doc = outputArea.styledDocument
+            val text = doc.getText(0, doc.length)
+
+            // 查找包含 pos 的 <a href="..."> 标签
+            var searchStart = 0
+            while (searchStart < text.length) {
+                // 查找下一个 <a 标签
+                val tagStart = text.indexOf("<a", searchStart)
+                if (tagStart == -1 || tagStart > pos) break
+
+                // 查找 href 属性
+                val hrefStart = text.indexOf("href=\"", tagStart)
+                if (hrefStart == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                val hrefValueStart = hrefStart + 6 // "href=\"" 的长度
+                val hrefValueEnd = text.indexOf("\"", hrefValueStart)
+                if (hrefValueEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                val href = text.substring(hrefValueStart, hrefValueEnd)
+
+                // 查找 > 标签结束
+                val tagEnd = text.indexOf(">", hrefValueEnd)
+                if (tagEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                // 查找 </a> 结束标签
+                val linkContentStart = tagEnd + 1
+                val linkContentEnd = text.indexOf("</a>", linkContentStart)
+                if (linkContentEnd == -1) {
+                    searchStart = tagStart + 2
+                    continue
+                }
+
+                // 检查 pos 是否在链接内容范围内
+                if (pos >= linkContentStart && pos <= linkContentEnd) {
+                    return href
+                }
+
+                searchStart = linkContentEnd + 4 // "</a>" 的长度
+            }
+
+            return null
+        } catch (e: Exception) {
+            logger.error("提取链接失败: pos={}", pos, e)
+            return null
         }
     }
 
@@ -253,8 +392,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         // 先保存当前会话
         saveCurrentSessionIfNeeded()
 
-        // 获取历史会话列表
-        val history = storageService.getHistorySessions()
+        // 获取历史会话列表（仅当前项目）
+        val history = storageService.getHistorySessions(projectKey)
 
         // 显示弹窗
         HistoryPopup(
@@ -595,6 +734,8 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      * 追加 Part 到 UI
      */
     private fun appendPartToUI(part: PartData) {
+        logger.info("=== appendPartToUI === type={}, data={}", part.type, part.data.keys)
+
         // TodoPart 特殊处理：更新任务栏而非插入消息流
         if (part.type == PartType.TODO) {
             taskProgressBar.updateTasks(part)
@@ -629,16 +770,35 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             String.format("#%06X", colors.textPrimary.rgb and 0xFFFFFF)
         }
 
-        // 获取当前 HTML 内容
-        val currentHtml = outputArea.text
-        // 在 </body> 前插入新内容
-        val newHtml = if (currentHtml.contains("</body>")) {
+        // 使用与 StyledMessageRenderer 相同的方式追加 HTML，避免覆盖已有样式
+        val html = if (outputArea.text.contains("<body>")) {
+            // 已有 HTML 内容，在 </body> 前插入
+            val currentHtml = outputArea.text
             currentHtml.replace("</body>", "<div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body>")
         } else {
+            // 空 HTML，初始化
             "<html><body><div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body></html>"
         }
 
-        outputArea.text = newHtml
+        // 使用 HTMLEditorKit 的方式来追加内容，避免覆盖已有样式
+        val kit = outputArea.editorKit as? javax.swing.text.html.HTMLEditorKit
+        val doc = outputArea.styledDocument
+
+        if (kit != null && outputArea.text.contains("<body>")) {
+            // 使用 HTMLEditorKit.read() 追加内容（与 StyledMessageRenderer 一致）
+            try {
+                val reader = java.io.StringReader(html)
+                // 先清空，然后重新写入整个文档
+                doc.remove(0, doc.length)
+                kit.read(reader, doc, 0)
+            } catch (e: Exception) {
+                logger.error("追加系统消息失败", e)
+            }
+        } else {
+            // 回退到直接设置
+            outputArea.text = html
+        }
+
         // 滚动到底部
         outputArea.caretPosition = outputArea.document.length
 
@@ -687,8 +847,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
                     val toolExecutor = com.smancode.smanagent.ide.service.LocalToolExecutor(project)
                     val result = toolExecutor.execute(toolName, params, project.basePath)
 
-                    logger.info("工具执行完成: toolName={}, success={}, result={}",
-                            toolName, result.success, result.result)
+                    logger.info("工具执行完成: toolName={}, success={}, result={}, relativePath={}, relatedFilePaths={}, hasMetadata={}",
+                            toolName, result.success,
+                            if (result.result is String) "[${result.result.toString().take(100)}..." else result.result,
+                            result.relativePath,
+                            result.relatedFilePaths,
+                            result.metadata != null)
 
                     // 发送 TOOL_RESULT 响应
                     val response = mutableMapOf(
@@ -736,28 +900,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      * 设置代码链接导航功能
      */
     private fun setupLinkNavigation() {
-        // 添加 HyperlinkListener 处理链接点击
+        // 添加 HyperlinkListener 处理标准协议链接（http/https/file）
         outputArea.addHyperlinkListener(hyperlinkListener)
+        // 添加鼠标点击监听器处理自定义协议链接（psi_location://）
+        outputArea.addMouseListener(mouseClickListener)
         // 添加鼠标移动监听器实现悬停手型光标
         outputArea.addMouseMotionListener(mouseMotionListener)
-    }
-
-    /**
-     * 导航到 URL
-     */
-    private fun navigateToUrl(url: URL) {
-        try {
-            when (url.protocol) {
-                "file" -> navigateToFile(url)
-                "http", "https" -> {
-                    // 使用浏览器打开 HTTP 链接
-                    com.intellij.ide.BrowserUtil.browse(url)
-                }
-                else -> logger.warn("不支持的协议: {}", url.protocol)
-            }
-        } catch (e: Exception) {
-            logger.error("导航失败: url={}", url, e)
-        }
     }
 
     /**
@@ -765,34 +913,48 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun navigateToFile(url: URL) {
         try {
+            logger.info("→ navigateToFile 开始: URL={}, toExternalForm={}", url, url.toExternalForm())
+
             val file = File(url.toURI())
+            logger.info("→ File.fromURI: path={}, exists={}", file.path, file.exists())
+
             val virtualFile = com.intellij.openapi.vfs.VirtualFileManager.getInstance()
-                .findFileByUrl(url.toExternalForm()) ?: run {
-                // 尝试通过 LocalFileSystem 查找
+                .findFileByUrl(url.toExternalForm())
+
+            logger.info("→ VirtualFileManager.findFileByUrl: {}", virtualFile)
+
+            val finalVirtualFile = virtualFile ?: run {
+                logger.info("→ 尝试 LocalFileSystem.findFileByIoFile")
                 com.intellij.openapi.vfs.LocalFileSystem.getInstance().findFileByIoFile(file)
             }
 
-            if (virtualFile == null) {
-                logger.warn("文件不存在: {}", file.path)
+            logger.info("→ 最终 virtualFile: {}, path={}", finalVirtualFile, finalVirtualFile?.path)
+
+            if (finalVirtualFile == null) {
+                logger.warn("❌ 文件不存在: {}", file.path)
                 return
             }
 
             // 打开文件
             val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
-            fileEditorManager.openFile(virtualFile, true)
+            fileEditorManager.openFile(finalVirtualFile, true)
+            logger.info("→ 文件已打开: {}", finalVirtualFile.path)
 
             // 跳转到指定行（URL 中包含 #L123 格式的行号）
             url.ref?.let { ref ->
-                // 支持格式：#L123 或 #123
+                logger.info("→ URL ref: {}", ref)
                 val lineNumber = ref.removePrefix("L").toIntOrNull()
                 if (lineNumber != null && lineNumber > 0) {
-                    jumpToLine(virtualFile, lineNumber)
+                    logger.info("→ 开始跳转到行: {}", lineNumber)
+                    jumpToLine(finalVirtualFile, lineNumber)
+                } else {
+                    logger.warn("→ 行号解析失败: ref={}", ref)
                 }
             }
 
-            logger.info("成功导航到文件: file://{}", file.path)
+            logger.info("✅ 成功导航到文件: file://{}", file.path)
         } catch (e: Exception) {
-            logger.error("文件导航失败: url={}", url, e)
+            logger.error("❌ 文件导航失败: url={}", url, e)
         }
     }
 
@@ -801,19 +963,40 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun jumpToLine(virtualFile: com.intellij.openapi.vfs.VirtualFile, lineNumber: Int) {
         try {
+            logger.info("→ jumpToLine 开始: file={}, line={}", virtualFile.path, lineNumber)
+
             val fileEditorManager = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project)
-            val editor = fileEditorManager.selectedTextEditor ?: return
+
+            // 获取选中文件的编辑器（openFile 后会自动选中）
+            val editor = fileEditorManager.selectedTextEditor
+            logger.info("→ selectedTextEditor: {}, file={}", editor, editor?.virtualFile?.path)
+
+            if (editor == null) {
+                logger.warn("❌ 未找到活动编辑器: file={}", virtualFile.path)
+                return
+            }
+
+            // 验证编辑器对应的文件是否是目标文件
+            if (editor.virtualFile != virtualFile) {
+                logger.warn("❌ 编辑器文件不匹配: expected={}, actual={}", virtualFile.path, editor.virtualFile?.path)
+                return
+            }
+
+            logger.info("→ 编辑器文件匹配 ✅")
 
             val document = editor.document
             val lineCount = document.lineCount
+            logger.info("→ document lineCount={}", lineCount)
 
             if (lineNumber > lineCount) {
-                logger.warn("行号超出范围: lineNumber={}, lineCount={}", lineNumber, lineCount)
+                logger.warn("❌ 行号超出范围: lineNumber={}, lineCount={}", lineNumber, lineCount)
                 return
             }
 
             // 跳转到目标行
             val lineStartOffset = document.getLineStartOffset(lineNumber - 1)
+            logger.info("→ lineStartOffset={}", lineStartOffset)
+
             editor.caretModel.moveToOffset(lineStartOffset)
             editor.selectionModel.removeSelection()
 
@@ -821,9 +1004,9 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             val scrollingModel = editor.scrollingModel
             scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
 
-            logger.debug("跳转到行: file={}, line={}", virtualFile.path, lineNumber)
+            logger.info("✅ 跳转到行成功: file={}, line={}", virtualFile.path, lineNumber)
         } catch (e: Exception) {
-            logger.error("跳转失败: file={}, line={}", virtualFile.path, lineNumber, e)
+            logger.error("❌ 跳转失败: file={}, line={}", virtualFile.path, lineNumber, e)
         }
     }
 
@@ -833,23 +1016,45 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun updateCursorForPosition(point: Point) {
         try {
-            val pos = outputArea.viewToModel(point)
-            if (pos < 0) return
+            val pos = outputArea.getUI().viewToModel(outputArea, point)
+            if (pos < 0) {
+                outputArea.cursor = Cursor.getDefaultCursor()
+                return
+            }
 
+            // 尝试检测鼠标下方的文本是否包含类名模式
             val doc = outputArea.styledDocument
-            val element = doc.getCharacterElement(pos)
-            val attributes = element.attributes
+            var isLikelyLink = false
 
-            // 检查是否是链接（HTMLDocument 中链接会有 href 属性）
-            val isLink = attributes.getAttribute(javax.swing.text.html.HTML.Attribute.HREF) != null
+            try {
+                // 获取鼠标周围的文本
+                val start = maxOf(0, pos - 20)
+                val end = minOf(doc.length, pos + 20)
+                val text = doc.getText(start, end - start)
+                val relativePos = pos - start
 
-            outputArea.cursor = if (isLink) {
+                // 检查是否在类名模式上（大写字母开头的单词）
+                // 简单检测：鼠标位置前后是否有大写字母
+                if (relativePos < text.length) {
+                    val charBefore = if (relativePos > 0) text[relativePos - 1] else ' '
+                    val charAt = text[relativePos]
+                    val charAfter = if (relativePos < text.length - 1) text[relativePos + 1] else ' '
+
+                    // 如果在类名上（大写字母或跟在大写字母后的小写字母）
+                    isLikelyLink = charAt.isUpperCase() ||
+                                   (charAt.isLetter() && charBefore.isUpperCase()) ||
+                                   (charAt.isLowerCase() && (charBefore.isLetter() || charAfter.isLetter()))
+                }
+            } catch (e: Exception) {
+                // 忽略错误，使用默认光标
+            }
+
+            outputArea.cursor = if (isLikelyLink) {
                 Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             } else {
                 Cursor.getDefaultCursor()
             }
         } catch (e: Exception) {
-            // 出错时使用默认光标
             outputArea.cursor = Cursor.getDefaultCursor()
         }
     }
@@ -990,10 +1195,6 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
             logger.info("【/commit命令】收到结果: message={}, add={}, modify={}, delete={}",
                     commitMessage, addFiles.size, modifyFiles.size, deleteFiles.size)
-
-            // 保存后端返回的 commit 数据到历史（简化格式）
-            val backendResultText = buildCommitResultText(commitMessage, addFiles, modifyFiles, deleteFiles)
-            appendSystemMessage(backendResultText, isProcessing = false, saveToHistory = true)
 
             // 检查是否有变更
             if (addFiles.isEmpty() && modifyFiles.isEmpty() && deleteFiles.isEmpty()) {

@@ -372,11 +372,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     }
 
     /**
-     * 获取所有会话信息（用于历史列表）
+     * 获取指定项目的会话信息（用于历史列表）
      */
-    fun getHistorySessions(): List<SessionInfo> {
-        val sessions = state.sessionInfos.toList()
-        logger.info("获取历史会话: 数量={}", sessions.size)
+    fun getHistorySessions(projectKey: String): List<SessionInfo> {
+        val sessions = state.sessionInfos.filter { it.projectKey == projectKey }
+        logger.info("获取历史会话: projectKey={}, 数量={}", projectKey, sessions.size)
         sessions.forEach { logger.info("  - id={}, title={}", it.id, it.title) }
         return sessions
     }

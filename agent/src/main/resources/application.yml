@@ -10,11 +10,17 @@ spring:
 
 server:
   port: 8080
+  shutdown: graceful              # 启用优雅停机
+  shutdown-timeout: 60s           # Spring Boot 最多等待 60 秒
   tomcat:
     threads:
       max: 20
       min-spare: 5
     accept-count: 10
+
+# ==================== 优雅停机配置 ====================
+graceful-shutdown:
+  await-termination-timeout: 30s  # 等待在途请求完成的最大时长
 
 # ==================== SmanCode 配置 ====================
 smancode:
@@ -51,60 +57,28 @@ llm:
       base-delay: 10000  # 10秒（指数退避基础值）
 
 # ==================== 向量搜索配置 ====================
-bank:
-  analysis:
-    vector:
-      enabled: ${VECTOR_ENABLED:true}
-      embedding:
-        base-url: ${BGE_M3_EMBED_BASE_URL:http://localhost:8000/v1}
-        model: ${BGE_M3_MODEL:BAAI/bge-m3}
-        api-key: ${BGE_M3_API_KEY:ok}
-      reranker:
-        enabled: ${BGE_RERANKER_ENABLED:true}
-        base-url: ${BGE_RERANKER_BASE_URL:http://localhost:8001/v1}
-        model: ${BGE_RERANKER_MODEL:BAAI/bge-reranker-v2-m3}
-    static:
-      project-root-path: ${ANALYSIS_PROJECT_PATH:/Users/liuchao/projects/autoloop}
+# 注意：向量搜索功能已迁移至 Knowledge 服务
+# Agent 端不再需要 BGE-M3 和 Reranker 配置
+
+# ==================== Knowledge 服务配置 ====================
+knowledge:
+  service:
+    base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://localhost:8088}
+    search-path: /api/knowledge/search
+    timeout: 300000  # 300秒
 
 # ==================== WebSocket 配置 ====================
 websocket:
   path: /ws/analyze
   thread-pool:
-    core-size: 32
-    max-size: 32
+    core-size: 8
+    max-size: 8
     queue-capacity: 0  # 0 表示直接拒绝，不排队
 
 # ==================== SubTask 配置 ====================
 subtask:
   thread-pool:
     core-size: 8      # 核心线程数
-    max-size: 16      # 最大线程数
-    queue-capacity: 100  # 队列容量
-  max-internal-iterations: 3  # SubTask 内部 LLM 最大迭代次数
-
-# ==================== 日志配置 ====================
-logging:
-  level:
-    root: INFO
-    com.smancode.smanagent: DEBUG
-    org.springframework.web: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
-# ==================== 项目缓存配置 ====================
-project:
-  # 项目路径（需要分析的代码路径）
-  path: ${PROJECT_PATH:/Users/liuchao/projects/smanagent}
-  # 项目Key（用于隔离不同项目的缓存）
-  key: ${PROJECT_KEY:smanagent}
-  # 缓存目录配置
-  cache:
-    base-dir: ./data
-    md5-dir: ./data/file-md5-cache
-    spoon-dir: ./data/spoon-snapshots
-  # 定时刷新配置
-  refresh:
-    enabled: ${PROJECT_REFRESH_ENABLED:true}
-    interval-minutes: 5
-    initial-delay-minutes: 1
+    max-size: 8      # 最大线程数
+    queue-capacity: 0  # 0 表示直接拒绝，不排队
+  max-internal-iterations: 5  # SubTask 内部 LLM 最大迭代次数

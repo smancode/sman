@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 接收来自 knowledge-graph-system 的业务图谱数据，并提供查询接口。
  * <p>
  * 数据流向：
- * knowledge-graph-system → /api/knowledge/update → 本地存储 → SearchSubAgent 查询
+ * knowledge-graph-system → /api/knowledge/update → 本地存储 → SearchTool 查询
  * <p>
  * 存储内容：
  * - 业务背景（BusinessContext）
@@ -92,7 +92,7 @@ public class KnowledgeGraphClient {
         codeMappingMap.put(projectKey, mapping);
     }
 
-    // ==================== 查询接口（供 SearchSubAgent 调用）====================
+    // ==================== 查询接口（供 SearchTool 调用）====================
 
     /**
      * 搜索业务上下文

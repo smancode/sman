@@ -11,16 +11,16 @@
 ## Core Principles
 
 <tool_philosophy>
-1. **Start With `search`**: 90% of queries can be answered by `search` alone
-2. **Right Tool, Second**: Use other tools only when `search` results suggest you need deeper investigation
-3. **Chain Efficiently**: Let `search` guide you to the right next steps
+1. **Start With `expert_consult`**: 90% of queries can be answered by `expert_consult` alone
+2. **Right Tool, Second**: Use other tools only when `expert_consult` results suggest you need deeper investigation
+3. **Chain Efficiently**: Let `expert_consult` guide you to the right next steps
 </tool_philosophy>
 
 ## The Golden Rule
 
-**⚡ WHEN IN DOUBT, CALL `search` FIRST**
+**⚡ WHEN IN DOUBT, CALL `expert_consult` FIRST**
 
-`search` is an intelligent SubAgent that:
+`expert_consult` is an intelligent SubAgent that:
 - Understands business requirements (e.g., "520提额浮层提示")
 - Understands code queries (e.g., "VectorSearchService是干啥的")
 - Returns comprehensive answers (business context + code entries + relationships)
@@ -31,29 +31,29 @@
 <decision_logic>
 **Question: What does the user want?**
 
-STEP 1: ALWAYS START WITH `search`
+STEP 1: ALWAYS START WITH `expert_consult`
 → Use `search(query: "user's exact question")`
 → Analyze the results
 → Decide if you need more information
 
-STEP 2: BASED ON SEARCH RESULTS
+STEP 2: BASED ON EXPERT CONSULT RESULTS
 
-CASE A: `search` returned enough information
+CASE A: `expert_consult` returned enough information
 → You're done! Summarize the answer for the user
 
-CASE B: `search` suggests specific class to read
+CASE B: `expert_consult` suggests specific class to read
 → Use `read_file` with `simpleName`
 → Example: `{"simpleName": "PaymentService"}`
 
-CASE C: `search` suggests finding method usage
+CASE C: `expert_consult` suggests finding method usage
 → Use `grep_file` to find all usages
 → Example: `{"pattern": "executePayment", "filePattern": ".*Service\\.java"}`
 
-CASE D: `search` suggests understanding call relationships
+CASE D: `expert_consult` suggests understanding call relationships
 → Use `call_chain` with `methodRef`
 → Example: `{"methodRef": "PaymentService.executePayment", "direction": "callers"}`
 
-CASE E: `search` suggests finding files
+CASE E: `expert_consult` suggests finding files
 → Use `find_file` with `filePattern`
 → Example: `{"filePattern": ".*Controller\\.java"}`
 
@@ -61,9 +61,9 @@ CASE F: User wants to modify code
 → Use `read_file` first to see exact code
 → Then use `apply_change` with exact search/replace content
 
-CASE G: User already knows the EXACT class name (skip `search`)
+CASE G: User already knows the EXACT class name (skip `expert_consult`)
 → Use `read_file` with `simpleName` directly
-→ This is the ONLY case where you can skip `search`
+→ This is the ONLY case where you can skip `expert_consult`
 </decision_logic>
 
 ## Tool Specifications
@@ -107,15 +107,12 @@ CASE G: User already knows the EXACT class name (skip `search`)
   - Use this when you have the exact path
 - `startLine` (optional): Start line number, default 1
   - Example: `1`, `50`, `101`
-- `endLine` (optional): End line number, default 100
-  - Example: `100`, `200`, `500`
+- `endLine` (optional): End line number, default 300
+  - Example: `300`, `500`, `999999` (for entire file)
 
 **Default Behavior**:
-- Reads **first 100 lines** by default
-- If file has more lines, result will tell you:
-  - Total line count
-  - How many lines remaining
-  - How to continue reading (with suggested `startLine` and `endLine`)
+- Reads **first 300 lines** by default (sufficient for most files)
+- For complete file content, use `endLine=999999`
 
 **Examples**:
 
@@ -142,33 +139,20 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```
 
 ```json
-// Example 3: Read specific line range
+// Example 3: Read entire file (recommended)
 {
   "toolName": "read_file",
   "parameters": {
     "simpleName": "VectorSearchService",
     "startLine": 1,
-    "endLine": 200
+    "endLine": 999999
   }
 }
-// Reads first 200 lines
+// Reads complete file
 ```
 
 ```json
-// Example 4: Read more lines (when file is longer)
-{
-  "toolName": "read_file",
-  "parameters": {
-    "simpleName": "VectorSearchService",
-    "startLine": 101,
-    "endLine": 200
-  }
-}
-// Use this when result says "还有 150 行未显示"
-```
-
-```json
-// Example 5: Read by exact path
+// Example 4: Read by exact path
 {
   "toolName": "read_file",
   "parameters": {
@@ -183,15 +167,16 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```
 [文件内容]
 
-... (文件共 250 行，当前显示第 1-100 行，还有 150 行未显示)
-提示：可以使用 startLine=101, endLine=200 继续读取
+... (文件共 350 行，当前显示第 1-300 行，还有 50 行未显示)
+提示：可以使用 startLine=301, endLine=999999 继续读取
 ```
 
 **⚠️ Common Mistakes**:
 - ❌ Using `find_file` first when you have the class name → Use `read_file` with `simpleName` directly
-- ❌ Not reading more lines when file is truncated → Use `startLine`/`endLine` to continue
+- ❌ Reading files in chunks (1-100, 101-200, etc.) → Use `endLine=999999` to read complete file at once
 - ❌ Assuming only Java files are supported → All file types are supported!
 - ✅ **FAST PATH**: `read_file` + `simpleName` = Instant access to any file
+- ✅ **BEST PRACTICE**: Use `endLine=999999` to read complete file content in one call
 
 ---
 
@@ -226,7 +211,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```json
 // Example 1: Business requirement search (MOST COMMON)
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
     "query": "520提额添加客户经理页面增加浮层提示"
   }
@@ -241,7 +226,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 ```json
 // Example 2: Code query
 {
-  "toolName": "search",
+  "toolName": "expert_consult",
   "parameters": {
     "query": "VectorSearchService是干啥的"
   }
@@ -255,7 +240,7 @@ CASE G: User already knows the EXACT class name (skip `search`)
 
 **Returns**: Structured answer with business context, code entries, and relationships
 
-**⚡ Key Point**: This is an intelligent SubAgent, not just a search tool. It reasons about the query and provides comprehensive answers.
+**⚡ Key Point**: This is an intelligent SubAgent, not just a expert_consult tool. It reasons about the query and provides comprehensive answers.
 
 ---
 
@@ -629,7 +614,7 @@ read_file (verify exact code) → apply_change
 | User Input | Best Tool | Example |
 |------------|-----------|---------|
 | "What does X do?" | `read_file` | `simpleName: "X"` |
-| "How does Y work?" | `search` | `query: "Y process", type: "both"` |
+| "How does Y work?" | `expert_consult` | `query: "Y process", type: "both"` |
 | "Where is Z used?" | `grep_file` | `pattern: "Z"` |
 | "Find all A classes" | `find_file` | `filePattern: ".*A\\.java"` |
 | "Who calls M?" | `call_chain` | `methodRef: "C.M", direction: "callers"` |

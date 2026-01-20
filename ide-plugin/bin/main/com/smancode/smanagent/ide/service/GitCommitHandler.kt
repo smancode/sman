@@ -1,11 +1,14 @@
 package com.smancode.smanagent.ide.service
 
+import com.intellij.openapi.vcs.changes.Change
+import com.intellij.openapi.vcs.changes.ChangeListManager
+import com.intellij.openapi.vfs.VirtualFile
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 /**
  * Git Commit 操作处理器
- * 使用 Runtime.exec 调用 git 命令
+ * 使用 IDEA ChangeListManager + ProcessBuilder（跨平台兼容）
  */
 class GitCommitHandler(private val project: com.intellij.openapi.project.Project) {
 
@@ -105,26 +108,50 @@ class GitCommitHandler(private val project: com.intellij.openapi.project.Project
 
     /**
      * 过滤有实际变更的文件
-     * 使用 git status --porcelain 检查
+     * 使用 IDEA ChangeListManager 检查文件状态
      */
     private fun filterChangedFiles(projectPath: String, files: List<String>): List<String> {
         try {
-            val process = Runtime.getRuntime().exec(
-                arrayOf("git", "status", "--porcelain"),
-                null,
-                java.io.File(projectPath)
-            )
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            val changedFiles = output.lines()
-                .mapNotNull { line ->
-                    // git status --porcelain 输出格式: XY filename
-                    if (line.length > 3) line.substring(3) else null
-                }
-                .toSet()
+            val changeListManager = ChangeListManager.getInstance(project)
 
+            // 获取所有变更文件的相对路径
+            val changedFiles = mutableSetOf<String>()
+
+            // 从 changeListManager 获取所有变更
+            for (change in changeListManager.allChanges) {
+                val virtualFile = getVirtualFile(change)
+                if (virtualFile != null) {
+                    val relativePath = PathUtil.toProjectRelativePath(virtualFile.path, projectPath)
+                    val normalizedPath = PathUtil.normalize(relativePath)
+                    changedFiles.add(normalizedPath)
+                    log.debug("【Git Commit】检测到变更文件: {}", normalizedPath)
+                }
+            }
+
+            // 同时检查 unversioned 文件
+            try {
+                val defaultChangeList = changeListManager.defaultChangeList
+                for (change in defaultChangeList.changes) {
+                    if (change.type == Change.Type.NEW) {
+                        val virtualFile = getVirtualFile(change)
+                        if (virtualFile != null) {
+                            val relativePath = PathUtil.toProjectRelativePath(virtualFile.path, projectPath)
+                            val normalizedPath = PathUtil.normalize(relativePath)
+                            changedFiles.add(normalizedPath)
+                            log.debug("【Git Commit】检测到新文件: {}", normalizedPath)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                log.debug("【Git Commit】获取 unversioned 文件失败（非致命）", e)
+            }
+
+            log.info("【Git Commit】Git 检测到 {} 个变更文件", changedFiles.size)
+
+            // 过滤出有实际变更的文件
             return files.filter { path ->
-                // 检查文件或其父目录是否在变更列表中
-                changedFiles.contains(path) || changedFiles.any { it.startsWith("$path/") }
+                val normalizedPath = PathUtil.normalize(path)
+                changedFiles.contains(normalizedPath)
             }
         } catch (e: Exception) {
             log.warn("【Git Commit】检查文件变更失败，返回所有文件", e)
@@ -133,18 +160,26 @@ class GitCommitHandler(private val project: com.intellij.openapi.project.Project
     }
 
     /**
+     * 从 Change 对象获取 VirtualFile
+     */
+    private fun getVirtualFile(change: Change): VirtualFile? {
+        return change.virtualFile
+            ?: (change.afterRevision?.file as? VirtualFile)
+            ?: (change.beforeRevision?.file as? VirtualFile)
+    }
+
+    /**
      * Git add 文件
      */
     private fun gitAddFiles(projectPath: String, files: List<String>) {
         for (file in files) {
             try {
-                val process = Runtime.getRuntime().exec(
-                    arrayOf("git", "add", file),
-                    null,
-                    java.io.File(projectPath)
-                )
-                process.waitFor()
-                log.debug("【Git Commit】git add: {}", file)
+                val result = executeGitCommand(projectPath, "add", file)
+                if (result.exitCode != 0) {
+                    log.warn("【Git Commit】git add 失败: {}, stderr: {}", file, result.stderr)
+                } else {
+                    log.debug("【Git Commit】git add: {}", file)
+                }
             } catch (e: Exception) {
                 log.warn("【Git Commit】git add 失败: {}", file, e)
             }
@@ -156,21 +191,108 @@ class GitCommitHandler(private val project: com.intellij.openapi.project.Project
      */
     private fun gitCommit(projectPath: String, message: String) {
         try {
-            val process = Runtime.getRuntime().exec(
-                arrayOf("git", "commit", "-m", message),
-                null,
-                java.io.File(projectPath)
-            )
-            val exitCode = process.waitFor()
-
-            if (exitCode == 0) {
-                log.info("【Git Commit】git commit 成功: {}", message)
-            } else {
-                val error = process.errorStream.bufferedReader().use { it.readText() }
-                throw Exception("Git commit 失败: $error")
+            val result = executeGitCommand(projectPath, "commit", "-m", message)
+            if (result.exitCode != 0) {
+                throw Exception("Git commit 失败: ${result.stderr}")
             }
+            log.info("【Git Commit】git commit 成功: {}", message)
         } catch (e: Exception) {
             throw Exception("Commit 失败: ${e.message}", e)
         }
     }
+
+    /**
+     * 执行 git 命令（跨平台）
+     */
+    private fun executeGitCommand(projectPath: String, vararg args: String): CommandResult {
+        val gitExecutable = findGitExecutable() ?: throw Exception("找不到 git 可执行文件")
+
+        val command = mutableListOf(gitExecutable)
+        command.addAll(args)
+
+        log.debug("【Git Commit】执行命令: {}", command.joinToString(" "))
+
+        val processBuilder = ProcessBuilder(command)
+        processBuilder.directory(java.io.File(projectPath))
+
+        val process = processBuilder.start()
+        val stdout = process.inputStream.bufferedReader().use { it.readText() }
+        val stderr = process.errorStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+
+        return CommandResult(exitCode, stdout.trim(), stderr.trim())
+    }
+
+    /**
+     * 查找 git 可执行文件
+     */
+    private fun findGitExecutable(): String? {
+        val os = System.getProperty("os.name").lowercase()
+
+        // Windows: 尝试常见路径
+        if (os.contains("win")) {
+            val commonPaths = listOf(
+                "C:\\Program Files\\Git\\bin\\git.exe",
+                "C:\\Program Files\\Git\\cmd\\git.exe",
+                "C:\\Program Files (x86)\\Git\\bin\\git.exe",
+                "C:\\Program Files (x86)\\Git\\cmd\\git.exe"
+            )
+
+            for (path in commonPaths) {
+                if (java.io.File(path).exists()) {
+                    return path
+                }
+            }
+
+            // 尝试从 PATH 环境变量查找
+            val pathEnv = System.getenv("PATH")
+            if (pathEnv != null) {
+                val pathDirs = pathEnv.split(";")
+                for (dir in pathDirs) {
+                    val gitExe = java.io.File(dir, "git.exe")
+                    if (gitExe.exists()) {
+                        return gitExe.absolutePath
+                    }
+                }
+            }
+        }
+
+        // Linux/macOS: 使用 which 查找
+        try {
+            val whichCommand = if (os.contains("mac") || os.contains("nix") || os.contains("nux")) "which" else "where"
+            val output = executeSimpleCommand(whichCommand, "git")
+            if (output != null) {
+                return output.trim()
+            }
+        } catch (e: Exception) {
+            log.debug("【Git Commit】使用 which/where 查找 git 失败", e)
+        }
+
+        // 默认使用 "git"，希望系统 PATH 中有
+        return "git"
+    }
+
+    /**
+     * 执行简单命令并返回输出
+     */
+    private fun executeSimpleCommand(vararg command: String): String? {
+        return try {
+            val processBuilder = ProcessBuilder(*command)
+            val process = processBuilder.start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            if (process.exitValue() == 0 && output.isNotBlank()) output else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 命令执行结果
+     */
+    private data class CommandResult(
+        val exitCode: Int,
+        val stdout: String,
+        val stderr: String
+    )
 }

@@ -22,16 +22,31 @@ public class ExtractXmlTool extends AbstractTool implements Tool {
 
     private static final Logger logger = LoggerFactory.getLogger(ExtractXmlTool.class);
 
+    /**
+     * 获取工具名称
+     *
+     * @return 工具唯一标识名称
+     */
     @Override
     public String getName() {
         return "extract_xml";
     }
 
+    /**
+     * 获取工具描述
+     *
+     * @return 工具功能描述
+     */
     @Override
     public String getDescription() {
         return "从 XML 文件中提取标签内容";
     }
 
+    /**
+     * 获取工具参数定义
+     *
+     * @return 参数定义映射表，包含 tagPattern、relativePath、mode 等参数
+     */
     @Override
     public Map<String, ParameterDef> getParameters() {
         Map<String, ParameterDef> params = new HashMap<>();
@@ -41,6 +56,19 @@ public class ExtractXmlTool extends AbstractTool implements Tool {
         return params;
     }
 
+    /**
+     * 执行 XML 提取操作
+     * <p>
+     * 从指定的 XML 文件中提取符合标签模式的内容。
+     * 此工具需要通过 WebSocket 转发到 IDE 执行。
+     *
+     * @param projectKey 项目标识
+     * @param params     参数映射表，包含：
+     *                   - tagPattern: 标签模式（必需）
+     *                   - relativePath: 文件相对路径（必需）
+     *                   - mode: 执行模式（可选，默认 intellij）
+     * @return 工具执行结果，包含提取的 XML 内容或错误信息
+     */
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();

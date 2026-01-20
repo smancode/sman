@@ -81,11 +81,11 @@ public class SubTaskExecutor {
                     fullResult.getDisplayContent() != null ? fullResult.getDisplayContent().length() : 0,
                     fullResult.getError(), fullResult.getDisplayContent());
 
-            logger.info("【工具原始数据】toolName={}, data类型={}, data长度={}, data内容={}",
-                    toolName,
-                    fullResult.getData() != null ? fullResult.getData().getClass().getSimpleName() : "null",
-                    fullResult.getData() != null ? fullResult.getData().toString().length() : 0,
-                    fullResult.getData());
+            // logger.info("【工具原始数据】toolName={}, data类型={}, data长度={}, data内容={}",
+            //         toolName,
+            //         fullResult.getData() != null ? fullResult.getData().getClass().getSimpleName() : "null",
+            //         fullResult.getData() != null ? fullResult.getData().toString().length() : 0,
+            //         fullResult.getData());
 
             // 4. 保留完整结果（不压缩），让 LLM 处理
             // 注意：不在这里生成摘要，让 LLM 在下一次调用时基于完整结果生成摘要
@@ -96,20 +96,20 @@ public class SubTaskExecutor {
             } else {
                 toolPart.setState(ToolPart.ToolState.ERROR);
             }
-            toolPart.setResult(fullResult);  // 保留完整结果（用于后续可能需要完整内容的场景）
+            toolPart.setResult(fullResult);  // 保留完整结果（用于 LLM 生成摘要）
             toolPart.touch();
-            // 不再推送完整 TOOL Part，避免重复
-            // partPusher.accept(toolPart);
 
-            // 6. 生成并保存摘要（供 LLM 循环使用）
+            // 6. 不自动生成摘要！保持 summary 为 null，等待 LLM 生成
+            // toolPart.setSummary(null);  // 默认就是 null，不需要显式设置
+
+            // 7. 生成前端显示摘要（用于前端显示，不影响 LLM 逻辑）
             String displaySummary = resultSummarizer.summarize(toolName, fullResult, parentSession);
-            toolPart.setSummary(displaySummary);  // 保存摘要到 ToolPart，供 LLM 循环使用
 
-            // 7. 推送工具摘要（唯一推送给前端的内容）
+            // 8. 推送工具摘要（唯一推送给前端的内容）
             Part summaryPart = createSummaryPart(toolPart, displaySummary, fullResult);
             partPusher.accept(summaryPart);
 
-            // 8. 清理子会话
+            // 9. 清理子会话
             sessionManager.cleanupChildSession(childSession.getId());
 
             return SubTaskResult.builder()
@@ -178,7 +178,7 @@ public class SubTaskExecutor {
 
     /**
      * 检查摘要行是否与参数重复（冗余）
-     * 例如："查询: VectorSearchService" 当参数中有 query=VectorSearchService 时就是冗余的
+     * 例如："查询: read_file" 当参数中有 query=read_file 时就是冗余的
      */
     private boolean isRedundantSummaryLine(String line, Map<String, Object> params) {
         if (params == null || params.isEmpty()) {
@@ -218,6 +218,23 @@ public class SubTaskExecutor {
     private String formatParamsForTitle(Map<String, Object> params) {
         if (params == null || params.isEmpty()) {
             return "";
+        }
+
+        // 特殊处理 grep_file：始终显示 pattern
+        Object pattern = params.get("pattern");
+        if (pattern != null) {
+            String patternStr = pattern.toString();
+            if (params.size() == 1) {
+                // 只有 pattern 时，只显示 pattern
+                return patternStr;
+            } else if (params.containsKey("relativePath")) {
+                // 有 pattern 和 relativePath 时，显示 pattern(文件名)
+                Object relPathObj = params.get("relativePath");
+                String relPath = relPathObj != null ? relPathObj.toString() : "";
+                int lastSlash = Math.max(relPath.lastIndexOf('/'), relPath.lastIndexOf('\\'));
+                String fileName = lastSlash >= 0 ? relPath.substring(lastSlash + 1) : relPath;
+                return patternStr + "(" + fileName + ")";
+            }
         }
 
         // 特殊处理 apply_change：只保留 relativePath，且只显示文件名

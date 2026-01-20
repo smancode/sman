@@ -18,7 +18,7 @@
         <toolWindow id="SmanAgent"
                     factoryClass="com.smancode.smanagent.ide.ui.SmanAgentToolWindowFactory"
                     anchor="right"
-                    icon="/META-INF/icon.png"
+                    icon="/META-INF/pluginIconToolWindow.svg"
                     secondary="false"/>
 
         <!-- Project Service -->
