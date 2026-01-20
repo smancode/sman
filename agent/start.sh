@@ -3,6 +3,8 @@
 # SmanAgent 启动脚本
 # 支持：内存优化、错误恢复、健康检查、日志管理
 
+source ~/.bashrc
+
 set -e
 
 # 强制使用Java 21

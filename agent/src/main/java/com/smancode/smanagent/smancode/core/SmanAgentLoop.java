@@ -1112,6 +1112,7 @@ public class SmanAgentLoop {
             case "reasoning" -> createReasoningPart(partJson, messageId, sessionId);
             case "tool" -> createToolPart(partJson, messageId, sessionId);
             case "subtask" -> createSubtaskPart(partJson, messageId, sessionId);
+            case "todo" -> createTodoPart(partJson, messageId, sessionId);
             // 兼容 LLM 可能生成的工具类型（应该使用 type: "tool" + toolName）
             case "read_file", "grep_file", "find_file", "search", "call_chain",
                  "extract_xml", "apply_change" -> {
@@ -1222,6 +1223,41 @@ public class SmanAgentLoop {
         TextPart part = new TextPart(partId, messageId, sessionId);
         part.setText(partJson.path("text").asText("子任务列表"));
         part.touch();
+        return part;
+    }
+
+    /**
+     * 创建 TodoPart
+     */
+    private TodoPart createTodoPart(JsonNode partJson, String messageId, String sessionId) {
+        String partId = UUID.randomUUID().toString();
+        TodoPart part = new TodoPart(partId, messageId, sessionId);
+
+        // 解析 items 数组
+        JsonNode itemsJson = partJson.path("items");
+        if (itemsJson.isArray()) {
+            List<TodoPart.TodoItem> items = new ArrayList<>();
+            for (JsonNode itemJson : itemsJson) {
+                TodoPart.TodoItem item = new TodoPart.TodoItem();
+                item.setId(itemJson.path("id").asText(UUID.randomUUID().toString()));
+                item.setContent(itemJson.path("content").asText());
+
+                // 解析 status
+                String statusStr = itemJson.path("status").asText("PENDING");
+                try {
+                    item.setStatus(TodoPart.TodoStatus.valueOf(statusStr.toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    logger.warn("未知的 TodoStatus: {}, 使用默认值 PENDING", statusStr);
+                    item.setStatus(TodoPart.TodoStatus.PENDING);
+                }
+
+                items.add(item);
+            }
+            part.setItems(items);
+        }
+
+        part.touch();
+        logger.info("创建 TodoPart: items={}", part.getTotalCount());
         return part;
     }
 
