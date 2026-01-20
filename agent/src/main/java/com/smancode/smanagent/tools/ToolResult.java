@@ -63,6 +63,13 @@ public class ToolResult {
      */
     private Map<String, Object> metadata;
 
+    /**
+     * 批量执行的子工具结果列表
+     * <p>
+     * 用于 batch 工具存储所有子工具的执行结果
+     */
+    private java.util.List<BatchSubResult> batchSubResults;
+
     public ToolResult() {
         this.executionTime = Instant.now();
     }
@@ -176,6 +183,14 @@ public class ToolResult {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public java.util.List<BatchSubResult> getBatchSubResults() {
+        return batchSubResults;
+    }
+
+    public void setBatchSubResults(java.util.List<BatchSubResult> batchSubResults) {
+        this.batchSubResults = batchSubResults;
     }
 
     /**

@@ -146,13 +146,20 @@ public class SubTaskExecutor {
         // 创建摘要文本 Part（纯数据，不包含显示格式）
         // 前端会识别这种格式并渲染：toolName(params)\nline1\nline2\n...
         StringBuilder sb = new StringBuilder();
-        sb.append(toolPart.getToolName());
+        String toolName = toolPart.getToolName();
+        sb.append(toolName);
 
-        // 添加参数（简化格式）
-        Map<String, Object> params = toolPart.getParameters();
-        if (params != null && !params.isEmpty()) {
-            String paramsStr = formatParamsForTitle(params);
-            sb.append("(").append(paramsStr).append(")");
+        // 特殊处理 batch 工具：使用 displayContent 而不是原始参数
+        if ("batch".equals(toolName) && fullResult.getDisplayContent() != null) {
+            // batch 工具的 displayContent 已经是简化格式："文件名, N个工具"
+            sb.append("(").append(fullResult.getDisplayContent()).append(")");
+        } else {
+            // 其他工具：格式化参数
+            Map<String, Object> params = toolPart.getParameters();
+            if (params != null && !params.isEmpty()) {
+                String paramsStr = formatParamsForTitle(params);
+                sb.append("(").append(paramsStr).append(")");
+            }
         }
         sb.append("\n");
 
@@ -161,7 +168,7 @@ public class SubTaskExecutor {
             String[] lines = summary.split("\n");
             for (String line : lines) {
                 String trimmedLine = line.trim();
-                if (!trimmedLine.isEmpty() && !isRedundantSummaryLine(trimmedLine, params)) {
+                if (!trimmedLine.isEmpty() && !isRedundantSummaryLine(trimmedLine, toolPart.getParameters())) {
                     sb.append(trimmedLine).append("\n");
                 }
             }

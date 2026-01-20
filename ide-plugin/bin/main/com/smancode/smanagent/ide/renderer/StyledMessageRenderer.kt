@@ -421,34 +421,15 @@ object StyledMessageRenderer {
     }
 
     private fun renderTodoPart(part: PartData): String {
-        val items = part.data["items"] as? List<*> ?: emptyList<Any>()
+        val items = TodoRenderer.extractItems(part)
 
-        val sb = StringBuilder()
-        sb.append("\n")
-        sb.append("📝 任务列表\n")
-
-        for (item in items) {
-            @Suppress("UNCHECKED_CAST")
-            val map = item as? Map<String, Any> ?: continue
-            val content = map["content"] as? String ?: ""
-            val status = map["status"] as? String ?: "PENDING"
-
-            val icon = when (status) {
-                "PENDING" -> "⏳"
-                "IN_PROGRESS" -> "▶"
-                "COMPLETED" -> "✓"
-                else -> "⏳"
+        return items.joinToString("\n") { item ->
+            val formatted = TodoRenderer.formatTodoItem(item)
+            when (TodoRenderer.getItemColorType(item)) {
+                "muted" -> "[$MUTED]$formatted[RESET]"
+                else -> formatted
             }
-
-            when (status) {
-                "PENDING" -> sb.append("$icon [$MUTED]$content[RESET]\n")
-                "IN_PROGRESS" -> sb.append("$icon [$INFO]$content[RESET]\n")
-                "COMPLETED" -> sb.append("$icon [$SUCCESS]$content[RESET]\n")
-                else -> sb.append("$icon [$MUTED]$content[RESET]\n")
-            }
-        }
-
-        return sb.toString()
+        } + if (items.isNotEmpty()) "\n" else ""
     }
 
     // ========== 以下方法保持向后兼容 ==========

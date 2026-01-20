@@ -14,6 +14,7 @@
 1. **Start With `expert_consult`**: 90% of queries can be answered by `expert_consult` alone
 2. **Right Tool, Second**: Use other tools only when `expert_consult` results suggest you need deeper investigation
 3. **Chain Efficiently**: Let `expert_consult` guide you to the right next steps
+4. **Batch When Possible**: Use `batch` for multiple independent operations (2-5x faster)
 </tool_philosophy>
 
 ## The Golden Rule
@@ -67,6 +68,105 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 </decision_logic>
 
 ## Tool Specifications
+
+### 0. batch - Batch Execution (⚡ 2-5x Faster!)
+
+**Best for**: Executing multiple independent tools concurrently
+
+**When to use**:
+- Reading multiple files at once
+- Multiple edits on the same file (OPTIMAL!)
+- grep + find + read combinations
+- Multiple independent operations
+
+**⚠️ CRITICAL**: Using batch tool will make users much happier! (2-5x faster)
+
+**Parameters**:
+- `tool_calls` (required): Array of tool calls to execute in parallel
+  - Each item: `{"tool": "tool_name", "parameters": {...}}`
+  - Maximum: 10 tool calls per batch
+
+**Examples**:
+
+```json
+// Example 1: Read multiple files at once
+{
+  "toolName": "batch",
+  "parameters": {
+    "tool_calls": [
+      {
+        "tool": "read_file",
+        "parameters": {"simpleName": "FileFilterUtil", "endLine": 999999}
+      },
+      {
+        "tool": "grep_file",
+        "parameters": {"pattern": "log\\\\.info", "filePattern": ".*\\.java"}
+      }
+    ]
+  }
+}
+```
+
+```json
+// Example 2: Multiple edits on the same file (OPTIMAL!)
+{
+  "toolName": "batch",
+  "parameters": {
+    "tool_calls": [
+      {
+        "tool": "apply_change",
+        "parameters": {
+          "relativePath": "core/src/main/java/com/autoloop/core/util/FileFilterUtil.java",
+          "mode": "replace",
+          "searchContent": "public class FileFilterUtil {",
+          "newContent": "public class FileFilterUtil {\n    private static final Logger log = LoggerFactory.getLogger(FileFilterUtil.class);",
+          "description": "添加 Logger 声明"
+        }
+      },
+      {
+        "tool": "apply_change",
+        "parameters": {
+          "relativePath": "core/src/main/java/com/autoloop/core/util/FileFilterUtil.java",
+          "mode": "replace",
+          "searchContent": "public boolean shouldAnalyze(Path filePath) {",
+          "newContent": "public boolean shouldAnalyze(Path filePath) {\n        log.info(\"shouldAnalyze called with filePath={}\", filePath);",
+          "description": "为 shouldAnalyze 方法添加入口日志"
+        }
+      },
+      {
+        "tool": "apply_change",
+        "parameters": {
+          "relativePath": "core/src/main/java/com/autoloop/core/util/FileFilterUtil.java",
+          "mode": "replace",
+          "searchContent": "private boolean matchesAnyPattern(String path, List<String> patterns) {",
+          "newContent": "private boolean matchesAnyPattern(String path, List<String> patterns) {\n        log.info(\"matchesAnyPattern called with path={}, patterns={}\", path, patterns);",
+          "description": "为 matchesAnyPattern 方法添加入口日志"
+        }
+      }
+    ]
+  }
+}
+```
+
+**Good Use Cases**:
+- ✅ Read many files at once
+- ✅ Multiple edits on the same file
+- ✅ grep + glob + read combos
+- ✅ Multiple independent operations
+
+**When NOT to Use**:
+- ❌ Operations that depend on prior tool output (e.g., create then read same file)
+- ❌ Ordered stateful mutations where sequence matters
+- ❌ Nested batch (batch within batch)
+
+**Returns**: Summary of all tool executions with individual results
+
+**⚠️ Common Mistakes**:
+- ❌ Using batch for dependent operations → Execute sequentially instead
+- ❌ Nesting batch within batch → Not allowed
+- ✅ **BEST PRACTICE**: Use batch for all independent multi-tool operations
+
+---
 
 ### 1. read_file - Read File Content
 
@@ -502,8 +602,9 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 - ❌ Converting path to package format → Use EXACT path from `find_file`
   - Wrong: `"com/smancode/smanagent/tools/read/ReadFileTool.java"`
   - Correct: `"agent/src/main/java/com/smancode/smanagent/tools/read/ReadFileTool.java"`
-- ❌ Using `replace` for new files → Use `mode: "create"` instead
-- ✅ **BEST PRACTICE**: `find_file` (get exact path) → `read_file` (copy exact code) → `apply_change`
+- ❌ Adding logging/annotation code without checking existing patterns → Read file first to see what's used
+
+**✅ BEST PRACTICE**: `find_file` (get exact path) → `read_file` (check existing patterns) → `apply_change`
 
 ---
 
@@ -619,6 +720,7 @@ read_file (verify exact code) → apply_change
 | "Find all A classes" | `find_file` | `filePattern: ".*A\\.java"` |
 | "Who calls M?" | `call_chain` | `methodRef: "C.M", direction: "callers"` |
 | "Modify code" | `read_file` + `apply_change` | Read first, then change |
+| **Multiple edits** | **`batch`** | **Multiple `apply_change` in parallel** |
 
 ---
 

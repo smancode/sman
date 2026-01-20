@@ -12,6 +12,8 @@ import org.springframework.web.socket.WebSocketSession;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -22,6 +24,7 @@ import java.util.concurrent.TimeoutException;
  * - 将需要转发的工具调用发送给 IDE Plugin
  * - 等待 IDE Plugin 返回工具执行结果
  * - 管理工具调用的超时和异常
+ * - 使用单线程执行器串行发送 WebSocket 消息（避免并发写入冲突）
  */
 @Service
 public class ToolForwardingService {
@@ -29,6 +32,20 @@ public class ToolForwardingService {
     private static final Logger logger = LoggerFactory.getLogger(ToolForwardingService.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 单线程执行器，用于串行发送 WebSocket 消息
+     * <p>
+     * WebSocket Session 不是线程安全的，多个线程同时调用 sendMessage()
+     * 会导致 IllegalStateException: TEXT_PARTIAL_WRITING
+     * <p>
+     * 解决方案：将所有消息发送任务提交到单线程执行器，确保串行发送
+     */
+    private final ExecutorService messageSender = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ws-message-sender");
+        t.setDaemon(true);
+        return t;
+    });
 
     // 存储 WebSocket Session (sessionId -> WebSocketSession)
     private final Map<String, WebSocketSession> activeSessions = new ConcurrentHashMap<>();
@@ -38,6 +55,23 @@ public class ToolForwardingService {
 
     // 工具调用超时时间（秒）
     private static final long TOOL_TIMEOUT = 30;
+
+    // Session ID 遮蔽长度（用于日志）
+    private static final int SESSION_ID_MASK_LENGTH = 8;
+
+    /**
+     * 遮蔽 Session ID（用于日志输出）
+     *
+     * @param sessionId Session ID，可能为 null
+     * @return 掩盖后的字符串，例如 "01234567..." 或 "null"
+     */
+    private static String maskSessionId(String sessionId) {
+        if (sessionId == null) {
+            return "null";
+        }
+        int length = Math.min(sessionId.length(), SESSION_ID_MASK_LENGTH);
+        return sessionId.substring(0, length) + "...";
+    }
 
     /**
      * 注册 WebSocket Session
@@ -51,7 +85,7 @@ public class ToolForwardingService {
      * 注销 WebSocket Session
      */
     public void unregisterSession(String sessionId) {
-        WebSocketSession removed = activeSessions.remove(sessionId);
+        activeSessions.remove(sessionId);
         logger.info("🔌 注销 WebSocket Session: sessionId={}, 当前总数={}", sessionId, activeSessions.size());
     }
 
@@ -82,7 +116,7 @@ public class ToolForwardingService {
      */
     public JsonNode forwardToolCall(String webSocketSessionId, String toolName,
                                     Map<String, Object> params) throws Exception {
-        logger.info("🔧 转发工具调用: tool={}, sessionId={}", toolName, webSocketSessionId);
+        logger.info("🔧 转发工具调用: tool={}, sessionId={}", toolName, maskSessionId(webSocketSessionId));
 
         String toolCallId = generateToolCallId(toolName, webSocketSessionId);
         CompletableFuture<JsonNode> future = new CompletableFuture<>();
@@ -101,10 +135,23 @@ public class ToolForwardingService {
             message.set("params", objectMapper.valueToTree(params));
 
             String payload = objectMapper.writeValueAsString(message);
-            logger.info("📤 发送 TOOL_CALL 消息: toolCallId={}, 完整消息={}", toolCallId, payload);
-            session.sendMessage(new TextMessage(payload));
-            logger.info("✅ 已发送 TOOL_CALL: toolCallId={}", toolCallId);
 
+            // 使用单线程执行器发送消息，避免并发写入冲突
+            CompletableFuture<Void> sendFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    logger.info("📤 发送 TOOL_CALL 消息: toolCallId={}", toolCallId);
+                    session.sendMessage(new TextMessage(payload));
+                    logger.info("✅ 已发送 TOOL_CALL: toolCallId={}", toolCallId);
+                } catch (Exception e) {
+                    logger.error("❌ 发送消息失败: toolCallId={}", toolCallId, e);
+                    throw new RuntimeException(e);
+                }
+            }, messageSender);
+
+            // 等待消息发送完成
+            sendFuture.get();
+
+            // 等待 IDE 返回结果
             JsonNode result = future.get(TOOL_TIMEOUT, TimeUnit.SECONDS);
             logger.info("✅ 收到 TOOL_RESULT: toolCallId={}", toolCallId);
             return result;
@@ -112,7 +159,7 @@ public class ToolForwardingService {
         } catch (TimeoutException e) {
             logger.error("⏰ 工具调用超时: toolCallId={}", toolCallId);
             pendingToolCalls.remove(toolCallId);
-            throw new java.util.concurrent.TimeoutException("工具调用超时: " + toolName);
+            throw new TimeoutException("工具调用超时: " + toolName);
 
         } catch (Exception e) {
             logger.error("❌ 转发工具调用失败: toolCallId={}", toolCallId, e);
@@ -145,6 +192,7 @@ public class ToolForwardingService {
     }
 
     private String generateToolCallId(String toolName, String webSocketSessionId) {
-        return toolName + "-" + webSocketSessionId.substring(0, Math.min(8, webSocketSessionId.length())) + "-" + System.currentTimeMillis();
+        String maskedId = maskSessionId(webSocketSessionId).replace(".", "");
+        return toolName + "-" + maskedId + "-" + System.currentTimeMillis();
     }
 }

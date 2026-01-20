@@ -39,6 +39,16 @@ class LocalToolExecutor(private val project: Project) {
             "py", "go", "rs", "c", "cpp", "h", "hpp",
             "md", "json", "properties"
         )
+
+        /**
+         * grep_file 最大返回结果数（防止 token 爆炸）
+         */
+        private const val MAX_GREP_RESULTS = 100
+
+        /**
+         * 每个文件最多显示的匹配数
+         */
+        private const val MAX_MATCHES_PER_FILE = 10
     }
     
     data class ToolResult(
@@ -293,48 +303,261 @@ class LocalToolExecutor(private val project: Project) {
     
     /**
      * 搜索文件内容
+     * 支持两种模式：
+     * 1. filePattern: 在多个文件中搜索（文件名匹配正则）
+     * 2. relativePath: 在单个文件中搜索
      */
     private fun executeGrepFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
         val pattern = parameters["pattern"]?.toString()
             ?: return ToolResult(false, "缺少 pattern 参数")
-        
-        val relativePath = parameters["relativePath"]?.toString() ?: "."
-        
+
+        val filePattern = parameters["filePattern"]?.toString()
+        val relativePath = parameters["relativePath"]?.toString()
+
         val basePath = projectPath ?: project.basePath ?: ""
-        val file = if (File(relativePath).isAbsolute) File(relativePath) else File(basePath, relativePath)
-        
-        if (!file.exists()) {
-            return ToolResult(false, "文件不存在: ${file.absolutePath}")
-        }
-        
+
         val regex = try {
             Regex(pattern)
         } catch (e: Exception) {
             return ToolResult(false, "无效的正则表达式: ${e.message}")
         }
-        
-        val content = file.readText()
-        val lines = content.lines()
-        
-        val matches = mutableListOf<Map<String, Any>>()
-        lines.forEachIndexed { index, line ->
-            if (regex.containsMatchIn(line)) {
-                matches.add(mapOf(
-                    "lineNumber" to (index + 1),
-                    "line" to line
-                ))
+
+        // 模式1：filePattern 搜索多个文件
+        if (filePattern != null && relativePath == null) {
+            return executeGrepMultiFiles(filePattern, pattern, regex, basePath)
+        }
+
+        // 模式2：relativePath 搜索单个文件
+        val actualPath = relativePath ?: "."
+        val file = if (File(actualPath).isAbsolute) File(actualPath) else File(basePath, actualPath)
+
+        if (!file.exists()) {
+            return ToolResult(false, "文件不存在: ${file.absolutePath}")
+        }
+
+        // 如果是目录，则在目录下所有源码文件中搜索
+        if (file.isDirectory) {
+            return executeGrepInDirectory(file, regex, basePath)
+        }
+
+        // 单个文件搜索
+        return executeGrepInSingleFile(file, regex, basePath)
+    }
+
+    /**
+     * 在多个文件中搜索（通过 filePattern 匹配文件名）
+     */
+    private fun executeGrepMultiFiles(filePattern: String, pattern: String, regex: Regex, basePath: String): ToolResult {
+        val fileRegex = try {
+            Regex(filePattern)
+        } catch (e: Exception) {
+            return ToolResult(false, "无效的文件名正则表达式: ${e.message}")
+        }
+
+        val baseDir = File(basePath)
+        if (!baseDir.exists()) {
+            return ToolResult(false, "项目目录不存在: $basePath")
+        }
+
+        // 按文件分组存储匹配结果
+        val matchesByFile = mutableMapOf<String, List<Map<String, Any>>>()
+        val matchedFilePaths = mutableListOf<String>()
+
+        fun searchFiles(dir: File) {
+            dir.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    if (!shouldSkipDirectory(file.name)) {
+                        searchFiles(file)
+                    }
+                } else if (fileRegex.matches(file.name) && SOURCE_FILE_EXTENSIONS.any { file.name.endsWith(".$it") }) {
+                    // 在这个文件中搜索 pattern
+                    val fileMatches = searchInFile(file, regex, basePath)
+                    if (fileMatches.isNotEmpty()) {
+                        val relativePath = toRelativePath(file.absolutePath, basePath)
+                        // 每个文件最多保存 MAX_MATCHES_PER_FILE 条
+                        matchesByFile[relativePath] = fileMatches.take(MAX_MATCHES_PER_FILE)
+                        matchedFilePaths.add(relativePath)
+                    }
+                }
             }
         }
-        
+
+        searchFiles(baseDir)
+
+        // 计算总匹配数
+        val totalMatches = matchesByFile.values.sumOf { it.size }
+
         val sb = StringBuilder()
-        sb.append("找到 ${matches.size} 处匹配:\n\n")
-        matches.forEach { match ->
-            val lineNum = match["lineNumber"] as Int
-            val line = match["line"] as String
-            sb.append(":$lineNum: $line\n")
+        if (matchesByFile.isEmpty()) {
+            sb.append("未找到匹配内容\n")
+            sb.append("搜索条件: 文件名匹配 `$filePattern`, 内容匹配 `$pattern`\n")
+        } else {
+            sb.append("在 ${matchedFilePaths.size} 个文件中找到 $totalMatches 处匹配")
+            if (totalMatches >= MAX_GREP_RESULTS) {
+                sb.append("（已限制显示前 $totalMatches 条，实际可能更多）")
+            }
+            sb.append(":\n\n")
+
+            // 按文件分组显示，最多显示 MAX_GREP_RESULTS 条
+            var displayedCount = 0
+            for ((filePath, matches) in matchesByFile) {
+                if (displayedCount >= MAX_GREP_RESULTS) break
+
+                sb.append("📄 $filePath (${matches.size} 处匹配):\n")
+                for (match in matches) {
+                    if (displayedCount >= MAX_GREP_RESULTS) break
+                    val lineNumber = match["lineNumber"] as Int
+                    val line = match["line"] as String
+                    sb.append("  :$lineNumber: $line\n")
+                    displayedCount++
+                }
+                sb.append("\n")
+            }
+
+            if (totalMatches > MAX_GREP_RESULTS) {
+                sb.append("... 还有 ${totalMatches - MAX_GREP_RESULTS} 条结果未显示（超出限制）\n")
+                sb.append("提示：请缩小搜索范围或使用更精确的正则表达式\n")
+            }
         }
-        
-        return ToolResult(true, sb.toString())
+
+        return ToolResult(
+            success = true,
+            result = sb.toString(),
+            relatedFilePaths = matchedFilePaths
+        )
+    }
+
+    /**
+     * 在目录中搜索所有源码文件
+     */
+    private fun executeGrepInDirectory(dir: File, regex: Regex, basePath: String): ToolResult {
+        // 按文件分组存储匹配结果
+        val matchesByFile = mutableMapOf<String, List<Map<String, Any>>>()
+        val matchedFilePaths = mutableListOf<String>()
+
+        fun searchFiles(directory: File) {
+            directory.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    if (!shouldSkipDirectory(file.name)) {
+                        searchFiles(file)
+                    }
+                } else if (SOURCE_FILE_EXTENSIONS.any { file.name.endsWith(".$it") }) {
+                    val fileMatches = searchInFile(file, regex, basePath)
+                    if (fileMatches.isNotEmpty()) {
+                        val relativePath = toRelativePath(file.absolutePath, basePath)
+                        // 每个文件最多保存 MAX_MATCHES_PER_FILE 条
+                        matchesByFile[relativePath] = fileMatches.take(MAX_MATCHES_PER_FILE)
+                        matchedFilePaths.add(relativePath)
+                    }
+                }
+            }
+        }
+
+        searchFiles(dir)
+
+        // 计算总匹配数
+        val totalMatches = matchesByFile.values.sumOf { it.size }
+
+        val sb = StringBuilder()
+        if (matchesByFile.isEmpty()) {
+            sb.append("未找到匹配内容\n")
+        } else {
+            sb.append("在 ${matchedFilePaths.size} 个文件中找到 $totalMatches 处匹配")
+            if (totalMatches >= MAX_GREP_RESULTS) {
+                sb.append("（已限制显示前 $totalMatches 条，实际可能更多）")
+            }
+            sb.append(":\n\n")
+
+            // 按文件分组显示，最多显示 MAX_GREP_RESULTS 条
+            var displayedCount = 0
+            for ((filePath, matches) in matchesByFile) {
+                if (displayedCount >= MAX_GREP_RESULTS) break
+
+                sb.append("📄 $filePath (${matches.size} 处匹配):\n")
+                for (match in matches) {
+                    if (displayedCount >= MAX_GREP_RESULTS) break
+                    val lineNumber = match["lineNumber"] as Int
+                    val line = match["line"] as String
+                    sb.append("  :$lineNumber: $line\n")
+                    displayedCount++
+                }
+                sb.append("\n")
+            }
+
+            if (totalMatches > MAX_GREP_RESULTS) {
+                sb.append("... 还有 ${totalMatches - MAX_GREP_RESULTS} 条结果未显示（超出限制）\n")
+                sb.append("提示：请缩小搜索范围或使用更精确的正则表达式\n")
+            }
+        }
+
+        return ToolResult(
+            success = true,
+            result = sb.toString(),
+            relatedFilePaths = matchedFilePaths
+        )
+    }
+
+    /**
+     * 在单个文件中搜索
+     */
+    private fun executeGrepInSingleFile(file: File, regex: Regex, basePath: String): ToolResult {
+        val matches = searchInFile(file, regex, basePath)
+
+        val sb = StringBuilder()
+        val relativePath = toRelativePath(file.absolutePath, basePath)
+
+        if (matches.isEmpty()) {
+            sb.append("未找到匹配内容\n")
+        } else {
+            // 限制显示数量
+            val displayMatches = matches.take(MAX_GREP_RESULTS)
+            sb.append("在 `$relativePath` 中找到 ${matches.size} 处匹配")
+            if (matches.size > MAX_GREP_RESULTS) {
+                sb.append("（已限制显示前 $MAX_GREP_RESULTS 条）")
+            }
+            sb.append(":\n\n")
+
+            displayMatches.forEach { match ->
+                val lineNumber = match["lineNumber"] as Int
+                val line = match["line"] as String
+                sb.append(":$lineNumber: $line\n")
+            }
+
+            if (matches.size > MAX_GREP_RESULTS) {
+                sb.append("\n... 还有 ${matches.size - MAX_GREP_RESULTS} 条结果未显示（超出限制）\n")
+            }
+        }
+
+        return ToolResult(
+            success = true,
+            result = sb.toString(),
+            relatedFilePaths = listOf(relativePath)
+        )
+    }
+
+    /**
+     * 在文件中搜索正则匹配的行
+     */
+    private fun searchInFile(file: File, regex: Regex, basePath: String): List<Map<String, Any>> {
+        val matches = mutableListOf<Map<String, Any>>()
+        try {
+            val content = file.readText()
+            val lines = content.lines()
+            val relativePath = toRelativePath(file.absolutePath, basePath)
+
+            lines.forEachIndexed { index, line ->
+                if (regex.containsMatchIn(line)) {
+                    matches.add(mapOf(
+                        "filePath" to relativePath,
+                        "lineNumber" to (index + 1),
+                        "line" to line
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("无法读取文件: ${file.absolutePath}, ${e.message}")
+        }
+        return matches
     }
     
     /**

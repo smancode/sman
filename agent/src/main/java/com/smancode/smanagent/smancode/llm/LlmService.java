@@ -31,6 +31,11 @@ public class LlmService {
 
     private static final Logger logger = LoggerFactory.getLogger(LlmService.class);
 
+    /**
+     * GLM-4.7 缓存 Token 计费标准：每千 tokens 0.005 元（按 50% 计费）
+     */
+    private static final double CACHE_COST_PER_1K_TOKENS = 0.005;
+
     @Autowired
     private LlmPoolConfig poolConfig;
 
@@ -112,7 +117,7 @@ public class LlmService {
     }
 
     /**
-     * 打印 tokens 使用情况
+     * 打印 tokens 使用情况（包含 GLM-4.7 缓存统计）
      */
     private void logTokensUsage(String rawApiResponse, long startTime) {
         try {
@@ -124,12 +129,30 @@ public class LlmService {
                 int completionTokens = usage.path("completion_tokens").asInt();
                 int totalTokens = usage.path("total_tokens").asInt();
 
+                // GLM-4.7 缓存 Token 统计
+                int cachedTokens = usage.path("prompt_tokens_details")
+                    .path("cached_tokens")
+                    .asInt();
+
                 long elapsedTime = System.currentTimeMillis() - startTime;
                 double elapsedSeconds = elapsedTime / 1000.0;
 
+                // 计算缓存命中率和节省金额
+                double cacheHitRatio = promptTokens > 0 ? (cachedTokens * 100.0 / promptTokens) : 0;
+                double costSavingsYuan = cachedTokens * CACHE_COST_PER_1K_TOKENS / 1000.0;
+
+                // 基础日志
                 logger.info("LLM 响应: 发送tokens={}, 接收tokens={}, 总tokens={}, 耗时{}s",
                         promptTokens, completionTokens, totalTokens,
                         String.format("%.1f", elapsedSeconds));
+
+                // 缓存统计（如果有缓存命中）
+                if (cachedTokens > 0) {
+                    logger.info("🎯 缓存命中: {} tokens ({}%), 节省约 ¥{}",
+                            cachedTokens,
+                            String.format("%.1f", cacheHitRatio),
+                            String.format("%.4f", costSavingsYuan));
+                }
             }
         } catch (Exception e) {
             // 忽略 tokens 解析错误

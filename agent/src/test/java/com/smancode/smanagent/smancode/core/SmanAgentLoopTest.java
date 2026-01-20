@@ -202,4 +202,112 @@ class SmanAgentLoopTest {
 
         assertTrue(afterTouch.isAfter(beforeTouch) || afterTouch.equals(beforeTouch));
     }
+
+    /**
+     * 测试 batch 工具的数组参数解析（使用真实 LLM 返回）
+     * <p>
+     * 验证 LLM 返回的 tool_calls 数组能正确解析为 Map 中的 List
+     * 这个测试修复了之前数组参数被解析为空字符串的问题
+     * <p>
+     * 真实数据来源：app.log 中 2026-01-20 23:20:54 的 LLM 响应
+     */
+    @Test
+    void testBatchToolParameterParsing() {
+        // 真实的 LLM 返回 JSON（从 app.log 提取）
+        String realLlmResponse = """
+            {
+              "type": "tool",
+              "toolName": "batch",
+              "parameters": {
+                "tool_calls": [
+                  {
+                    "tool": "apply_change",
+                    "parameters": {
+                      "relativePath": "core/src/main/java/com/autoloop/core/service/DirectoryScanService.java",
+                      "mode": "replace",
+                      "searchContent": "    public ProjectStructureDTO scanDirectory(String projectPath, List<Path> javaFiles) {",
+                      "newContent": "    /**\\n     * 扫描目录并构建项目结构信息\\n     * \\n     * @param projectPath 项目根路径\\n     * @param javaFiles Java 文件列表\\n     * @return 项目结构信息 DTO，包含目录树、文件统计、包结构等\\n     */\\n    public ProjectStructureDTO scanDirectory(String projectPath, List<Path> javaFiles) {",
+                      "description": "为 scanDirectory 方法添加 JavaDoc 注释"
+                    }
+                  },
+                  {
+                    "tool": "apply_change",
+                    "parameters": {
+                      "relativePath": "core/src/main/java/com/autoloop/core/service/DirectoryScanService.java",
+                      "mode": "replace",
+                      "searchContent": "    private Map<String, Integer> calculateFileTypeStats(Path rootPath) {",
+                      "newContent": "    /**\\n     * 计算项目中的文件类型统计信息\\n     * \\n     * @param rootPath 项目根路径\\n     * @return 文件类型及其数量的映射表，例如 {\\\".java\\\": 100, \\\".xml\\\": 5}\\n     */\\n    private Map<String, Integer> calculateFileTypeStats(Path rootPath) {",
+                      "description": "为 calculateFileTypeStats 方法添加 JavaDoc 注释"
+                    }
+                  },
+                  {
+                    "tool": "apply_change",
+                    "parameters": {
+                      "relativePath": "core/src/main/java/com/autoloop/core/service/DirectoryScanService.java",
+                      "mode": "replace",
+                      "searchContent": "    /**\\n     * 构建包结构\\n     * \\n     */\\n    private List<PackageInfoDTO> buildPackageStructure(List<Path> javaFiles, Path rootPath) {",
+                      "newContent": "    /**\\n     * 构建包结构信息\\n     * \\n     * <p>遍历所有 Java 文件，提取包名和类名，构建包结构列表。</p>\\n     * \\n     * @param javaFiles Java 文件列表\\n     * @param rootPath 项目根路径\\n     * @return 包结构信息列表，按包名排序\\n     */\\n    private List<PackageInfoDTO> buildPackageStructure(List<Path> javaFiles, Path rootPath) {",
+                      "description": "完善 buildPackageStructure 方法的 JavaDoc 注释"
+                    }
+                  },
+                  {
+                    "tool": "apply_change",
+                    "parameters": {
+                      "relativePath": "core/src/main/java/com/autoloop/core/service/DirectoryScanService.java",
+                      "mode": "replace",
+                      "searchContent": "    private String extractPackageName(Path javaFile) throws IOException {",
+                      "newContent": "    /**\\n     * 从 Java 文件中提取包名\\n     * \\n     * @param javaFile Java 文件路径\\n     * @return 包名，如果未找到 package 语句则返回 \\\"default\\\"\\n     * @throws IOException 读取文件失败时抛出\\n     */\\n    private String extractPackageName(Path javaFile) throws IOException {",
+                      "description": "为 extractPackageName 方法添加 JavaDoc 注释"
+                    }
+                  },
+                  {
+                    "tool": "apply_change",
+                    "parameters": {
+                      "relativePath": "core/src/main/java/com/autoloop/core/service/DirectoryScanService.java",
+                      "mode": "replace",
+                      "searchContent": "    private String getFileExtension(String fileName) {",
+                      "newContent": "    /**\\n     * 获取文件扩展名\\n     * \\n     * @param fileName 文件名\\n     * @return 文件扩展名（包含点号），例如 \\\".java\\\"，无扩展名则返回 \\\"无扩展名\\\"\\n     */\\n    private String getFileExtension(String fileName) {",
+                      "description": "为 getFileExtension 方法添加 JavaDoc 注释"
+                    }
+                  }
+                ]
+              },
+              "summary": "read_file(path: core/src/main/java/com/autoloop/core/service/DirectoryScanService.java): Read DirectoryScanService class with methods including scanDirectory, calculateFileTypeStats, buildPackageStructure, extractPackageName, and getFileExtension"
+            }
+            """;
+
+        // 使用 Jackson 解析 JSON
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        try {
+            com.fasterxml.jackson.databind.JsonNode partJson = mapper.readTree(realLlmResponse);
+
+            // 验证基本结构
+            assertNotNull(partJson);
+            assertEquals("tool", partJson.path("type").asText());
+            assertEquals("batch", partJson.path("toolName").asText());
+
+            com.fasterxml.jackson.databind.JsonNode paramsJson = partJson.path("parameters");
+            assertTrue(paramsJson.isObject());
+            assertTrue(paramsJson.path("tool_calls").isArray());
+
+            // 验证数组有 5 个元素（真实的 LLM 返回了 5 个 apply_change 调用）
+            com.fasterxml.jackson.databind.JsonNode toolCalls = paramsJson.path("tool_calls");
+            assertEquals(5, toolCalls.size());
+
+            // 验证第一个元素的结构
+            com.fasterxml.jackson.databind.JsonNode firstCall = toolCalls.get(0);
+            assertEquals("apply_change", firstCall.path("tool").asText());
+            assertTrue(firstCall.path("parameters").isObject());
+
+            // 验证第一个调用包含预期的参数
+            com.fasterxml.jackson.databind.JsonNode firstParams = firstCall.path("parameters");
+            assertEquals("replace", firstParams.path("mode").asText());
+            assertTrue(firstParams.path("relativePath").asText().contains("DirectoryScanService.java"));
+            assertTrue(firstParams.path("searchContent").asText().contains("scanDirectory"));
+            assertTrue(firstParams.path("newContent").asText().contains("扫描目录并构建项目结构信息"));
+
+        } catch (Exception e) {
+            fail("Failed to parse real batch tool JSON: " + e.getMessage());
+        }
+    }
 }

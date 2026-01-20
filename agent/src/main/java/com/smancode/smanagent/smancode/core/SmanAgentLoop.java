@@ -219,6 +219,11 @@ public class SmanAgentLoop {
                         textPart.touch();
                         assistantMessage.addPart(textPart);
                         partPusher.accept(textPart);
+
+                        // 检测混合格式：单个 text part 后可能还有其他 parts
+                        if (isSingleTextPart(json)) {
+                            extractAndPushAdditionalParts(responseText, jsonString, assistantMessage, partPusher);
+                        }
                     }
                     break;  // 退出循环
                 }
@@ -237,14 +242,7 @@ public class SmanAgentLoop {
 
                 Part summaryCarrier = currentParts.stream()
                         .filter(p -> p instanceof ToolPart)
-                        .filter(p -> {
-                            String summary = ((ToolPart) p).getSummary();
-                            boolean hasSummary = summary != null && !summary.isEmpty();
-                            logger.info("【摘要处理】检查 ToolPart: toolName={}, hasSummary={}, summary={}",
-                                    ((ToolPart) p).getToolName(), hasSummary,
-                                    hasSummary ? summary.substring(0, Math.min(50, summary.length())) : "null");
-                            return hasSummary;
-                        })
+                        .filter(SmanAgentLoop::hasToolPartSummary)
                         .findFirst()
                         .orElse(null);
 
@@ -314,6 +312,54 @@ public class SmanAgentLoop {
                         logger.info("工具执行完成: toolName={}, success={}, summaryLength={}",
                                 toolPart.getToolName(), result.isSuccess(),
                                 result.getSummary() != null ? result.getSummary().length() : 0);
+
+                        // ========== 特殊处理：展开 batch 工具的子结果 ==========
+                        // 如果是 batch 工具，需要将所有子工具的结果也添加到上下文
+                        // 这样 LLM 可以看到所有子工具的完整输出
+                        if ("batch".equals(toolPart.getToolName()) &&
+                            toolPart.getResult() != null &&
+                            toolPart.getResult().getBatchSubResults() != null) {
+
+                            logger.info("检测到 batch 工具，开始展开 {} 个子结果",
+                                toolPart.getResult().getBatchSubResults().size());
+
+                            // 为每个子结果创建一个虚拟的 ToolPart
+                            for (com.smancode.smanagent.tools.BatchSubResult subResult :
+                                toolPart.getResult().getBatchSubResults()) {
+
+                                // 创建子工具的 ToolPart
+                                String subPartId = UUID.randomUUID().toString();
+                                ToolPart subToolPart = new ToolPart(
+                                    subPartId,
+                                    assistantMessage.getId(),
+                                    session.getId(),
+                                    subResult.getToolName()
+                                );
+
+                                // 设置参数（使用 batch 的参数）
+                                subToolPart.setParameters(toolPart.getParameters());
+
+                                // 设置结果
+                                subToolPart.setResult(subResult.getResult());
+
+                                // 设置摘要（标记为 batch 子工具）
+                                if (subResult.getResult() != null) {
+                                    String subSummary = String.format("[batch] %s: %s",
+                                        subResult.getToolName(),
+                                        subResult.isSuccess() ? "成功" : subResult.getError());
+                                    subToolPart.setSummary(subSummary);
+                                }
+
+                                // 添加到助手消息
+                                assistantMessage.addPart(subToolPart);
+
+                                logger.info("展开 batch 子结果: toolName={}, success={}",
+                                    subResult.getToolName(), subResult.isSuccess());
+                            }
+
+                            logger.info("batch 子结果展开完成，当前 assistantMessage 包含 {} 个 Part",
+                                assistantMessage.getParts().size());
+                        }
 
                     } else {
                         // 非 ToolPart 直接添加
@@ -892,21 +938,8 @@ public class SmanAgentLoop {
         StringBuilder prompt = new StringBuilder();
         prompt.append(promptDispatcher.buildSystemPrompt());
         prompt.append("\n\n").append(promptDispatcher.getToolSummary());
-        return prompt.toString();
-    }
 
-    /**
-     * 构建用户提示词（包含压缩后的上下文和工具结果）
-     * <p>
-     * 关键修改：将 ToolPart 的执行结果添加到对话历史
-     * 这样 LLM 可以看到之前工具调用的结果，并基于此决定下一步行动
-     */
-    private String buildUserPrompt(Session session, boolean isLastStep) {
-        StringBuilder prompt = new StringBuilder();
-
-        // ========== 动态 Prompt 注入（首次请求自动加载）==========
-        // 每个会话首次请求时，一次性加载所有必要的 Prompt
-        // 避免硬编码模式匹配、避免复杂的对话状态跟踪、避免额外的 LLM 调用
+        // ========== 动态 Prompt 注入（移到 System Prompt 以提高缓存命中率）==========
         DynamicPromptInjector.InjectResult injectResult =
             dynamicPromptInjector.detectAndInject(session.getId());
 
@@ -918,6 +951,18 @@ public class SmanAgentLoop {
             prompt.append(injectResult.getInjectedContent());
         }
         // ========== 动态 Prompt 注入结束 ==========
+
+        return prompt.toString();
+    }
+
+    /**
+     * 构建用户提示词（包含压缩后的上下文和工具结果）
+     * <p>
+     * 关键修改：将 ToolPart 的执行结果添加到对话历史
+     * 这样 LLM 可以看到之前工具调用的结果，并基于此决定下一步行动
+     */
+    private String buildUserPrompt(Session session, boolean isLastStep) {
+        StringBuilder prompt = new StringBuilder();
 
         // 检查是否有新的用户消息（支持打断）
         Message lastAssistant = session.getLatestAssistantMessage();
@@ -1107,23 +1152,147 @@ public class SmanAgentLoop {
     private Part parsePart(JsonNode partJson, String messageId, String sessionId) {
         String type = partJson.path("type").asText();
 
+        // 标准格式：{"type": "tool", "toolName": "xxx", "parameters": {...}}
+        // 兼容格式：{"type": "batch", ...} (LLM 直接用工具名作为 type)
+        if ("tool".equals(type)) {
+            return createToolPart(partJson, messageId, sessionId);
+        }
+
+        // 兼容 LLM 可能直接用工具名作为 type 的情况
+        // 转换为标准格式：{"type": "tool", "toolName": type, ...}
+        if (isToolName(type)) {
+            logger.info("检测到工具类型 Part: {}, 转换为标准 tool 格式", type);
+            return createToolPartFromLegacyFormat(partJson, messageId, sessionId, type);
+        }
+
+        // 其他 Part 类型
         return switch (type) {
             case "text" -> createTextPart(partJson, messageId, sessionId);
             case "reasoning" -> createReasoningPart(partJson, messageId, sessionId);
-            case "tool" -> createToolPart(partJson, messageId, sessionId);
             case "subtask" -> createSubtaskPart(partJson, messageId, sessionId);
             case "todo" -> createTodoPart(partJson, messageId, sessionId);
-            // 兼容 LLM 可能生成的工具类型（应该使用 type: "tool" + toolName）
-            case "read_file", "grep_file", "find_file", "search", "call_chain",
-                 "extract_xml", "apply_change" -> {
-                logger.info("检测到工具类型 Part: {}, 转换为 tool 类型", type);
-                yield createToolPartFromType(partJson, messageId, sessionId, type);
-            }
             default -> {
                 logger.warn("未知的 Part 类型: {}", type);
                 yield null;
             }
         };
+    }
+
+    /**
+     * 判断 type 是否为工具名称
+     */
+    private boolean isToolName(String type) {
+        return toolRegistry.hasTool(type);
+    }
+
+    /**
+     * 从旧格式创建 ToolPart（兼容 LLM 直接使用工具名作为 type 的情况）
+     * <p>
+     * 旧格式：{"type": "batch", "parameters": {...}}
+     * 新格式：{"type": "tool", "toolName": "batch", "parameters": {...}}
+     */
+    private ToolPart createToolPartFromLegacyFormat(JsonNode partJson, String messageId, String sessionId, String toolName) {
+        String partId = UUID.randomUUID().toString();
+        ToolPart part = new ToolPart(partId, messageId, sessionId, toolName);
+
+        // 解析所有字段作为参数（跳过 type、summary 和 toolName）
+        Map<String, Object> params = new HashMap<>();
+        Iterator<Map.Entry<String, JsonNode>> fields = partJson.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String key = entry.getKey();
+            if (!key.equals("type") && !key.equals("summary") && !key.equals("toolName")) {
+                params.put(key, convertJsonNodeToObject(entry.getValue()));
+            }
+        }
+
+        part.setParameters(params);
+
+        // 提取 LLM 生成的摘要
+        String summary = partJson.path("summary").asText(null);
+        if (summary != null && !summary.isEmpty()) {
+            part.setSummary(summary);
+            logger.info("提取到 LLM 生成的摘要: toolName={}, summary={}", toolName, summary);
+        }
+
+        part.touch();
+        return part;
+    }
+
+    /**
+     * 从混合格式中提取额外的 Parts
+     * <p>
+     * 处理 LLM 返回混合格式的情况：前导文本 + XML 标签中的 JSON parts
+     * 例如：`我来帮你...<part>{"type": "text", ...}</part><part>{"type": "tool", ...}</part>`
+     *
+     * @param responseText 原始响应文本
+     * @param firstJson    已提取的第一个 JSON（text part）
+     * @return 额外的 Parts 列表
+     */
+    private List<Part> extractAdditionalParts(String responseText, String firstJson) {
+        List<Part> additionalParts = new ArrayList<>();
+
+        try {
+            // 找到第一个 JSON 结束的位置
+            int firstJsonEnd = responseText.indexOf(firstJson) + firstJson.length();
+
+            // 从第一个 JSON 后面查找是否有 <part> 标签
+            String remaining = responseText.substring(firstJsonEnd);
+
+            // 查找所有 <part>...</part> 标签
+            java.util.regex.Pattern partPattern = java.util.regex.Pattern.compile("<part>\\s*(\\{.*?\\})\\s*</part>", java.util.regex.Pattern.DOTALL);
+            java.util.regex.Matcher matcher = partPattern.matcher(remaining);
+
+            while (matcher.find()) {
+                String partJson = matcher.group(1);
+                try {
+                    JsonNode partNode = objectMapper.readTree(partJson);
+                    Part part = parsePart(partNode, "", "");  // messageId 和 sessionId 稍后设置
+                    if (part != null) {
+                        additionalParts.add(part);
+                        logger.info("提取到额外 part: type={}", partNode.path("type").asText());
+                    }
+                } catch (Exception e) {
+                    logger.warn("解析额外 part 失败: {}", e.getMessage());
+                }
+            }
+
+        } catch (Exception e) {
+            logger.warn("提取额外 parts 过程出错: {}", e.getMessage());
+        }
+
+        return additionalParts;
+    }
+
+    /**
+     * 判断 JSON 是否为单个 text part（用于检测混合格式）
+     *
+     * @param json JSON 节点
+     * @return 是否为单个 text part
+     */
+    private boolean isSingleTextPart(JsonNode json) {
+        return json.has("type") && "text".equals(json.path("type").asText());
+    }
+
+    /**
+     * 从混合格式中提取并推送额外的 parts
+     *
+     * @param responseText      原始响应文本
+     * @param firstJson         已提取的第一个 JSON
+     * @param assistantMessage  助手消息
+     * @param partPusher        Part 推送器
+     */
+    private void extractAndPushAdditionalParts(String responseText, String firstJson,
+                                                 Message assistantMessage, Consumer<Part> partPusher) {
+        logger.info("检测到混合格式：单个 text part，检查是否还有其他 part");
+        List<Part> additionalParts = extractAdditionalParts(responseText, firstJson);
+        if (!additionalParts.isEmpty()) {
+            logger.info("从混合格式中提取到 {} 个额外 parts", additionalParts.size());
+            additionalParts.forEach(part -> {
+                assistantMessage.addPart(part);
+                partPusher.accept(part);
+            });
+        }
     }
 
     private TextPart createTextPart(JsonNode partJson, String messageId, String sessionId) {
@@ -1142,29 +1311,98 @@ public class SmanAgentLoop {
         return part;
     }
 
+    /**
+     * 检查 ToolPart 是否有摘要
+     *
+     * @param part Part 对象
+     * @return 是否有摘要
+     */
+    private static boolean hasToolPartSummary(Part part) {
+        if (!(part instanceof ToolPart toolPart)) {
+            return false;
+        }
+
+        String summary = toolPart.getSummary();
+        boolean hasSummary = summary != null && !summary.isEmpty();
+        logger.info("【摘要处理】检查 ToolPart: toolName={}, hasSummary={}, summary={}",
+                toolPart.getToolName(), hasSummary,
+                hasSummary ? truncate(summary, 50) : "null");
+        return hasSummary;
+    }
+
+    /**
+     * 截断字符串到指定长度
+     *
+     * @param s        字符串
+     * @param maxLength 最大长度
+     * @return 截断后的字符串
+     */
+    private static String truncate(String s, int maxLength) {
+        return s.substring(0, Math.min(maxLength, s.length()));
+    }
+
+    /**
+     * 将 JsonNode 转换为 Map（支持嵌套对象和数组）
+     * <p>
+     * 用于解析 LLM 返回的工具参数
+     *
+     * @param node JSON 节点
+     * @return 转换后的 Map
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJsonNodeToMap(JsonNode node) {
+        Map<String, Object> result = new HashMap<>();
+        if (!node.isObject()) {
+            return result;
+        }
+
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            result.put(entry.getKey(), convertJsonNodeToObject(entry.getValue()));
+        }
+        return result;
+    }
+
+    /**
+     * 将 JsonNode 转换为 Java 对象
+     * <p>
+     * 支持的类型：String, Number, Boolean, List, Map
+     *
+     * @param node JSON 节点
+     * @return 转换后的 Java 对象
+     */
+    private Object convertJsonNodeToObject(JsonNode node) {
+        if (node.isNull()) {
+            return null;
+        } else if (node.isBoolean()) {
+            return node.asBoolean();
+        } else if (node.isNumber()) {
+            return node.numberValue();
+        } else if (node.isTextual()) {
+            return node.asText();
+        } else if (node.isArray()) {
+            // 递归处理数组
+            List<Object> list = new ArrayList<>();
+            for (JsonNode item : node) {
+                list.add(convertJsonNodeToObject(item));
+            }
+            return list;
+        } else if (node.isObject()) {
+            // 递归处理对象
+            return parseJsonNodeToMap(node);
+        } else {
+            return node.asText();
+        }
+    }
+
     private ToolPart createToolPart(JsonNode partJson, String messageId, String sessionId) {
         String partId = UUID.randomUUID().toString();
-        ToolPart part = new ToolPart(partId, messageId, sessionId, partJson.path("toolName").asText());
+        String toolName = partJson.path("toolName").asText();
+        ToolPart part = new ToolPart(partId, messageId, sessionId, toolName);
 
-        Map<String, Object> params = new HashMap<>();
-        JsonNode paramsJson = partJson.path("parameters");
-        if (paramsJson.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = paramsJson.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                JsonNode valueNode = entry.getValue();
-                // 根据实际类型转换，避免将数字转为字符串
-                if (valueNode.isTextual()) {
-                    params.put(entry.getKey(), valueNode.asText());
-                } else if (valueNode.isNumber()) {
-                    params.put(entry.getKey(), valueNode.numberValue());
-                } else if (valueNode.isBoolean()) {
-                    params.put(entry.getKey(), valueNode.asBoolean());
-                } else {
-                    params.put(entry.getKey(), valueNode.asText());
-                }
-            }
-        }
+        // 解析 parameters 对象
+        Map<String, Object> params = parseJsonNodeToMap(partJson.path("parameters"));
         part.setParameters(params);
 
         // 提取 LLM 生成的摘要
@@ -1178,45 +1416,6 @@ public class SmanAgentLoop {
         return part;
     }
 
-    /**
-     * 从工具类型创建 ToolPart（兼容 LLM 直接使用工具名作为 type 的情况）
-     */
-    private ToolPart createToolPartFromType(JsonNode partJson, String messageId, String sessionId, String toolName) {
-        String partId = UUID.randomUUID().toString();
-        ToolPart part = new ToolPart(partId, messageId, sessionId, toolName);
-
-        Map<String, Object> params = new HashMap<>();
-        // 遍历所有字段，提取参数
-        Iterator<Map.Entry<String, JsonNode>> fields = partJson.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fields.next();
-            String key = entry.getKey();
-            // 跳过非参数字段
-            if (!key.equals("type") && !key.equals("summary")) {
-                JsonNode valueNode = entry.getValue();
-                if (valueNode.isTextual()) {
-                    params.put(key, valueNode.asText());
-                } else if (valueNode.isNumber()) {
-                    params.put(key, valueNode.numberValue());
-                } else if (valueNode.isBoolean()) {
-                    params.put(key, valueNode.asBoolean());
-                } else {
-                    params.put(key, valueNode.asText());
-                }
-            }
-        }
-        part.setParameters(params);
-
-        // 提取 LLM 生成的摘要
-        String summary = partJson.path("summary").asText(null);
-        if (summary != null && !summary.isEmpty()) {
-            part.setSummary(summary);
-            logger.info("提取到 LLM 生成的摘要: toolName={}, summary={}", toolName, summary);
-        }
-
-        part.touch();
-        return part;
-    }
 
     private TextPart createSubtaskPart(JsonNode partJson, String messageId, String sessionId) {
         String partId = UUID.randomUUID().toString();

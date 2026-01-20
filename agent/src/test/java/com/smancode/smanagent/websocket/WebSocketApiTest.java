@@ -66,7 +66,8 @@ class WebSocketApiTest {
     void testSessionManager() {
         // 测试会话管理
         SessionManager.SessionStats stats = sessionManager.getStats();
-        assertEquals(0, stats.total());
+        // Note: There might be existing sessions from other tests, so we check relative changes
+        int initialTotal = stats.total();
 
         // 创建根会话
         Session session = sessionManager.createRootSession("test-project");
@@ -75,7 +76,7 @@ class WebSocketApiTest {
         assertEquals("test-project", session.getProjectInfo().getProjectKey());
 
         stats = sessionManager.getStats();
-        assertEquals(1, stats.total());
+        assertEquals(initialTotal + 1, stats.total());
 
         // 创建子会话
         Session childSession = sessionManager.createChildSession(session.getId());
@@ -83,17 +84,17 @@ class WebSocketApiTest {
         assertEquals(session.getId(), sessionManager.getParentSessionId(childSession.getId()));
 
         stats = sessionManager.getStats();
-        assertEquals(2, stats.total());
+        assertEquals(initialTotal + 2, stats.total());
 
         // 清理子会话
         sessionManager.cleanupChildSession(childSession.getId());
         stats = sessionManager.getStats();
-        assertEquals(1, stats.total());
+        assertEquals(initialTotal + 1, stats.total());
 
         // 清理根会话
         sessionManager.cleanupSession(session.getId());
         stats = sessionManager.getStats();
-        assertEquals(0, stats.total());
+        assertEquals(initialTotal, stats.total());
     }
 
     @Test

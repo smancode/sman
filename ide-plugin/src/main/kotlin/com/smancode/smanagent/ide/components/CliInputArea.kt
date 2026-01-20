@@ -33,7 +33,6 @@ class CliInputArea(
     private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行\n/commit  自动总结并 #AI commit#"
     private var showPlaceholder = true
     var isFocused = false
-    private var isHovered = false
 
     // 命令补全相关
     private val commands = listOf("/commit")
@@ -168,23 +167,6 @@ class CliInputArea(
             }
         })
 
-        // 鼠标悬浮监听
-        addMouseListener(object : java.awt.event.MouseAdapter() {
-            override fun mouseEntered(e: java.awt.event.MouseEvent?) {
-                if (!isHovered) {
-                    isHovered = true
-                    repaint()
-                }
-            }
-
-            override fun mouseExited(e: java.awt.event.MouseEvent?) {
-                if (isHovered) {
-                    isHovered = false
-                    repaint()
-                }
-            }
-        })
-
         // 文本变化监听（用于自动增高和命令建议）
         textArea.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {
@@ -238,23 +220,33 @@ class CliInputArea(
     override fun paint(g: Graphics) {
         super.paint(g)
 
-        // 只在悬浮或焦点时绘制边框
-        if (isHovered || isFocused) {
-            val g2 = g as Graphics2D
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        val g2 = g as Graphics2D
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-            val colors = ThemeColors.getCurrentColors()
-            if (isFocused) {
-                // 焦点状态：暗灰色边框
-                g2.color = colors.textSecondary
-                g2.stroke = BasicStroke(1.5f)
-            } else {
-                // 悬浮状态：更明显的边框
-                g2.color = colors.divider
-                g2.stroke = BasicStroke(1.3f)
-            }
-            g2.drawRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+        val colors = ThemeColors.getCurrentColors()
+        if (isFocused) {
+            // 焦点状态：完整亮度边框
+            g2.color = colors.textSecondary
+            g2.stroke = BasicStroke(1.5f)
+        } else {
+            // 非焦点状态：一半亮度的边框
+            g2.color = adjustColorBrightness(colors.textSecondary, 0.5f)
+            g2.stroke = BasicStroke(1.0f)
         }
+        g2.drawRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+    }
+
+    /**
+     * 调整颜色亮度
+     * @param factor 亮度系数，0.0 = 黑色，1.0 = 原色，>1.0 = 更亮
+     */
+    private fun adjustColorBrightness(color: java.awt.Color, factor: Float): java.awt.Color {
+        return java.awt.Color(
+            (color.red * factor).toInt().coerceIn(0, 255),
+            (color.green * factor).toInt().coerceIn(0, 255),
+            (color.blue * factor).toInt().coerceIn(0, 255),
+            color.alpha
+        )
     }
 
     override fun requestFocusInWindow(): Boolean {

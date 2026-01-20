@@ -53,10 +53,11 @@ public class StreamingNotificationHandler {
 
         String userQuestion = ((TextPart) firstPart).getText();
 
-        // 调用 LLM 生成简短确认并判断
-        String ackPrompt = buildAcknowledgmentPrompt(userQuestion);
+        // 调用 LLM 生成简短确认并判断（使用 System Prompt 提高缓存命中率）
+        String ackSystemPrompt = buildAcknowledgmentSystemPrompt();
+        String ackUserPrompt = buildAcknowledgmentUserPrompt(userQuestion);
         try {
-            JsonNode json = llmService.jsonRequest(ackPrompt);
+            JsonNode json = llmService.jsonRequest(ackSystemPrompt, ackUserPrompt);
 
             String ackText = json.path("acknowledgment").asText("");
             boolean needConsult = json.path("needConsult").asBoolean(true);
@@ -64,11 +65,7 @@ public class StreamingNotificationHandler {
 
             // 如果不是闲聊且有确认语，则推送
             if (!isChat && !ackText.isEmpty()) {
-                ReasoningPart ackPart = new ReasoningPart();
-                ackPart.setSessionId(session.getId());
-                ackPart.setText(ackText);
-                ackPart.touch();
-                partPusher.accept(ackPart);
+                pushAcknowledgment(ackText, session.getId(), partPusher);
             }
 
             return new AcknowledgmentResult(needConsult, isChat);
@@ -76,13 +73,24 @@ public class StreamingNotificationHandler {
         } catch (Exception e) {
             logger.warn("生成确认消息失败", e);
             // 失败时使用默认确认，保守策略：需要专家咨询
-            ReasoningPart ackPart = new ReasoningPart();
-            ackPart.setSessionId(session.getId());
-            ackPart.setText("思考中");
-            ackPart.touch();
-            partPusher.accept(ackPart);
+            pushAcknowledgment("思考中", session.getId(), partPusher);
             return new AcknowledgmentResult(true, false);
         }
+    }
+
+    /**
+     * 推送确认消息到前端
+     *
+     * @param text       确认文本
+     * @param sessionId  会话 ID
+     * @param partPusher Part 推送器
+     */
+    private void pushAcknowledgment(String text, String sessionId, Consumer<Part> partPusher) {
+        ReasoningPart ackPart = new ReasoningPart();
+        ackPart.setSessionId(sessionId);
+        ackPart.setText(text);
+        ackPart.touch();
+        partPusher.accept(ackPart);
     }
 
     /**
@@ -107,19 +115,16 @@ public class StreamingNotificationHandler {
     }
 
     /**
-     * 构建确认消息提示词（英文思考，中文回答）
+     * 构建确认消息 System Prompt（固定内容，可缓存）
      */
-    private String buildAcknowledgmentPrompt(String userQuestion) {
-        return String.format("""
+    private String buildAcknowledgmentSystemPrompt() {
+        return """
                 # Task: Analyze User Input
 
                 You are analyzing a user's input to determine:
                 1. Is this a casual chat (greeting/thanks/self-introduction)?
                 2. Does this require expert consultation (user has no specific target)?
                 3. Generate a brief acknowledgment if needed
-
-                ## User Input
-                %s
 
                 ## Analysis Rules (Think in English)
 
@@ -159,7 +164,14 @@ public class StreamingNotificationHandler {
 
                 Input: "你好"
                 Output: {"acknowledgment": "", "needConsult": false, "isChat": true}
-                """, userQuestion);
+                """;
+    }
+
+    /**
+     * 构建 User Prompt（只有用户输入是变化的）
+     */
+    private String buildAcknowledgmentUserPrompt(String userQuestion) {
+        return String.format("## User Input\n%s", userQuestion);
     }
 
     /**

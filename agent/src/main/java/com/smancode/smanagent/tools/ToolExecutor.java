@@ -5,6 +5,7 @@ import com.smancode.smanagent.websocket.ToolForwardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -18,7 +19,23 @@ import java.util.Map;
 public class ToolExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(ToolExecutor.class);
+    private static final int SESSION_ID_MASK_LENGTH = 8;
 
+    /**
+     * 遮蔽 Session ID（用于日志输出）
+     *
+     * @param sessionId Session ID，可能为 null
+     * @return 掩盖后的字符串，例如 "01234567..." 或 "null"
+     */
+    private static String maskSessionId(String sessionId) {
+        if (sessionId == null) {
+            return "null";
+        }
+        int length = Math.min(sessionId.length(), SESSION_ID_MASK_LENGTH);
+        return sessionId.substring(0, length) + "...";
+    }
+
+    @Lazy
     @Autowired
     private ToolRegistry toolRegistry;
 
@@ -35,6 +52,7 @@ public class ToolExecutor {
      */
     public ToolResult execute(String toolName, String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();
+        ToolResult result;
 
         try {
             // 1. 查找工具
@@ -44,38 +62,25 @@ public class ToolExecutor {
                 return ToolResult.failure("工具不存在: " + toolName);
             }
 
-            // 2. 确定执行模式
+            // 2. 确定执行模式并执行
             Tool.ExecutionMode mode = tool.getExecutionMode(params);
+            logger.info("执行工具: toolName={}, projectKey={}, mode={}", toolName, projectKey, mode);
 
-            logger.info("执行工具: toolName={}, projectKey={}, mode={}",
-                toolName, projectKey, mode);
-
-            // 3. 根据 mode 执行
-            ToolResult result;
-            if (mode == Tool.ExecutionMode.LOCAL) {
-                // 本地执行
-                result = executeLocal(tool, projectKey, params);
-            } else {
-                // IntelliJ 执行（需要通过 WebSocket 转发到 IDE）
-                result = executeIntellij(tool, projectKey, params);
-            }
-
-            // 4. 记录执行时长
-            long duration = System.currentTimeMillis() - startTime;
-            result.setExecutionTimeMs(duration);
-
-            logger.info("工具执行完成: toolName={}, success={}, duration={}ms",
-                toolName, result.isSuccess(), duration);
-
-            return result;
+            result = mode == Tool.ExecutionMode.LOCAL
+                ? executeLocal(tool, projectKey, params)
+                : executeIntellij(tool, projectKey, params);
 
         } catch (Exception e) {
             logger.error("工具执行异常: toolName={}", toolName, e);
-            long duration = System.currentTimeMillis() - startTime;
-            ToolResult result = ToolResult.failure("执行异常: " + e.getMessage());
-            result.setExecutionTimeMs(duration);
-            return result;
+            result = ToolResult.failure("执行异常: " + e.getMessage());
         }
+
+        // 3. 记录执行时长（统一处理，避免重复代码）
+        result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
+        logger.info("工具执行完成: toolName={}, success={}, duration={}ms",
+            toolName, result.isSuccess(), result.getExecutionTimeMs());
+
+        return result;
     }
 
     /**
@@ -141,10 +146,14 @@ public class ToolExecutor {
             Tool.ExecutionMode mode = tool.getExecutionMode(params);
 
             logger.info("执行工具（带会话）: toolName={}, projectKey={}, mode={}, sessionId={}",
-                toolName, projectKey, mode, webSocketSessionId != null ? webSocketSessionId.substring(0, 8) : "null");
+                toolName, projectKey, mode, maskSessionId(webSocketSessionId));
 
             ToolResult result;
             if (mode == Tool.ExecutionMode.LOCAL) {
+                // 如果工具需要 Session ID（实现了 SessionAwareTool 接口），则传递给它
+                if (tool instanceof SessionAwareTool sessionAwareTool) {
+                    sessionAwareTool.setWebSocketSessionId(webSocketSessionId);
+                }
                 result = executeLocal(tool, projectKey, params);
             } else {
                 result = executeIntellijWithSession(tool, projectKey, params, webSocketSessionId);
