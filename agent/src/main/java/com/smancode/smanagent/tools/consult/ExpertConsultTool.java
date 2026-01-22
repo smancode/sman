@@ -47,6 +47,15 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // 包级可见，用于测试
+    KnowledgeProperties getKnowledgeProperties() {
+        return knowledgeProperties;
+    }
+
+    RestTemplate getRestTemplate() {
+        return restTemplate;
+    }
+
     @Override
     public String getName() {
         return "expert_consult";
@@ -67,12 +76,9 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
     @Override
     public ToolResult execute(String projectKey, Map<String, Object> params) {
         long startTime = System.currentTimeMillis();
-
-        // 获取 traceId（用于追踪）
         String traceId = MDC.get("traceId");
 
         try {
-            // 获取参数
             String query = (String) params.get("query");
             if (query == null || query.trim().isEmpty()) {
                 return ToolResult.failure("缺少 query 参数");
@@ -81,75 +87,186 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
             logger.info("执行专家咨询: projectKey={}, query={}, url={}, traceId={}",
                     projectKey, query, knowledgeProperties.getSearchUrl(), traceId);
 
-            // 构建请求体
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("projectKey", projectKey);
             requestBody.put("query", query);
-            if (traceId != null && !traceId.isEmpty()) {
-                requestBody.put("traceId", traceId);
-            }
 
-            // 设置请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
+            String url = buildUrlWithTraceId(knowledgeProperties.getSearchUrl(), traceId);
             HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
 
-            // 调用 Knowledge 服务
-            ResponseEntity<String> response = restTemplate.postForEntity(
-                    knowledgeProperties.getSearchUrl(),
-                    request,
-                    String.class
-            );
-
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             long duration = System.currentTimeMillis() - startTime;
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 logger.warn("Knowledge 服务返回错误: status={}, traceId={}", response.getStatusCode(), traceId);
-                ToolResult toolResult = ToolResult.failure("Knowledge 服务返回错误: " + response.getStatusCode());
-                toolResult.setExecutionTimeMs(duration);
-                return toolResult;
+                return withDuration(ToolResult.failure("Knowledge 服务返回错误: " + response.getStatusCode()), duration);
             }
 
-            // 解析响应
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isEmpty()) {
-                ToolResult toolResult = ToolResult.success("未找到相关知识", "专家咨询结果", null);
-                toolResult.setExecutionTimeMs(duration);
-                return toolResult;
+                return withDuration(ToolResult.success("未找到相关知识", "专家咨询结果", null), duration);
             }
 
-            // 尝试解析 JSON 响应
-            try {
-                JsonNode jsonNode = objectMapper.readTree(responseBody);
-                JsonNode resultNode = jsonNode.path("result");
-
-                if (resultNode.isObject() && resultNode.has("content")) {
-                    String content = resultNode.get("content").asText();
-                    ToolResult toolResult = ToolResult.success(content, "专家咨询结果", responseBody);
-                    toolResult.setExecutionTimeMs(duration);
-                    return toolResult;
-                }
-
-                // 如果没有 content 字段，直接返回整个响应
-                ToolResult toolResult = ToolResult.success(responseBody, "专家咨询结果", responseBody);
-                toolResult.setExecutionTimeMs(duration);
-                return toolResult;
-
-            } catch (Exception e) {
-                // JSON 解析失败，直接返回原始响应
-                logger.debug("JSON 解析失败，返回原始响应: {}", e.getMessage());
-                ToolResult toolResult = ToolResult.success(responseBody, "专家咨询结果", responseBody);
-                toolResult.setExecutionTimeMs(duration);
-                return toolResult;
-            }
+            return parseResponse(responseBody, duration, traceId);
 
         } catch (Exception e) {
             logger.error("专家咨询失败: traceId={}", traceId, e);
             long duration = System.currentTimeMillis() - startTime;
-            ToolResult toolResult = ToolResult.failure("专家咨询失败: " + e.getMessage());
-            toolResult.setExecutionTimeMs(duration);
-            return toolResult;
+            return withDuration(ToolResult.failure("专家咨询失败: " + e.getMessage()), duration);
+        }
+    }
+
+    private String buildUrlWithTraceId(String baseUrl, String traceId) {
+        if (traceId != null && !traceId.isEmpty()) {
+            return baseUrl + "?traceId=" + traceId;
+        }
+        return baseUrl;
+    }
+
+    private ToolResult withDuration(ToolResult result, long duration) {
+        result.setExecutionTimeMs(duration);
+        return result;
+    }
+
+    private ToolResult parseResponse(String responseBody, long duration, String traceId) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(responseBody);
+            JsonNode successNode = jsonNode.path("success");
+
+            if (!successNode.isBoolean() || !successNode.asBoolean()) {
+                String error = jsonNode.has("error") ? jsonNode.get("error").asText() : "未知错误";
+                logger.warn("Knowledge 服务返回失败: error={}, traceId={}", error, traceId);
+                return withDuration(ToolResult.failure(error), duration);
+            }
+
+            JsonNode dataNode = jsonNode.path("data");
+            String displayContent = dataNode.isObject() && dataNode.has("summary")
+                    ? buildDisplayContent(dataNode)
+                    : responseBody;
+
+            return withDuration(ToolResult.success(responseBody, "专家咨询结果", displayContent), duration);
+
+        } catch (Exception e) {
+            logger.debug("JSON 解析失败，返回原始响应: {}", e.getMessage());
+            return withDuration(ToolResult.success(responseBody, "专家咨询结果", responseBody), duration);
+        }
+    }
+
+    private String buildDisplayContent(JsonNode dataNode) {
+        StringBuilder content = new StringBuilder();
+        content.append(dataNode.get("summary").asText()).append("\n\n");
+
+        appendEntities(content, dataNode);
+        appendRules(content, dataNode);
+        appendBusinessFlow(content, dataNode);
+        appendCodeLocation(content, dataNode);
+        appendConfidence(content, dataNode);
+
+        return content.toString();
+    }
+
+    private void appendEntities(StringBuilder content, JsonNode dataNode) {
+        JsonNode entities = dataNode.path("entities");
+        if (!entities.isArray() || entities.isEmpty()) {
+            return;
+        }
+
+        content.append("## 关联业务实体\n");
+        for (JsonNode entity : entities) {
+            String name = entity.path("name").asText("");
+            String sourceText = entity.path("sourceText").asText("");
+
+            content.append("- ").append(name);
+            if (!sourceText.isEmpty()) {
+                content.append(" (").append(sourceText).append(")");
+            }
+            content.append("\n");
+
+            appendCodeNodes(content, entity);
+        }
+        content.append("\n");
+    }
+
+    private void appendCodeNodes(StringBuilder content, JsonNode entity) {
+        JsonNode nodeDetail = entity.path("nodeDetail");
+        JsonNode codeNodes = nodeDetail.path("codeNodes");
+
+        if (!codeNodes.isArray() || codeNodes.isEmpty()) {
+            return;
+        }
+
+        content.append("  代码位置: ");
+        boolean first = true;
+        for (JsonNode codeNode : codeNodes) {
+            if (!first) {
+                content.append(", ");
+            }
+            content.append(codeNode.asText());
+            first = false;
+        }
+        content.append("\n");
+    }
+
+    private void appendRules(StringBuilder content, JsonNode dataNode) {
+        JsonNode rules = dataNode.path("rules");
+        if (!rules.isArray() || rules.isEmpty()) {
+            return;
+        }
+
+        content.append("## 相关业务规则\n");
+        for (JsonNode rule : rules) {
+            String ruleDesc = rule.path("description").asText();
+            if (ruleDesc.isEmpty()) {
+                ruleDesc = rule.path("name").asText(rule.toString());
+            }
+            content.append("- ").append(ruleDesc).append("\n");
+        }
+        content.append("\n");
+    }
+
+    private void appendBusinessFlow(StringBuilder content, JsonNode dataNode) {
+        JsonNode flow = dataNode.path("businessFlow");
+        if (!flow.isArray() || flow.isEmpty()) {
+            return;
+        }
+
+        content.append("## 业务流程\n");
+        for (JsonNode step : flow) {
+            String stepDesc = step.path("description").asText();
+            if (stepDesc.isEmpty()) {
+                stepDesc = step.path("name").asText(step.toString());
+            }
+            content.append("- ").append(stepDesc).append("\n");
+        }
+        content.append("\n");
+    }
+
+    private void appendCodeLocation(StringBuilder content, JsonNode dataNode) {
+        JsonNode codeLocation = dataNode.path("codeLocation");
+        if (!codeLocation.isObject()) {
+            return;
+        }
+
+        content.append("## 代码位置\n");
+        appendIfPresent(content, codeLocation, "className", "类");
+        appendIfPresent(content, codeLocation, "methodName", "方法");
+        appendIfPresent(content, codeLocation, "filePath", "文件");
+        content.append("\n");
+    }
+
+    private void appendIfPresent(StringBuilder content, JsonNode node, String field, String label) {
+        if (node.has(field)) {
+            content.append("- ").append(label).append(": ").append(node.get(field).asText()).append("\n");
+        }
+    }
+
+    private void appendConfidence(StringBuilder content, JsonNode dataNode) {
+        if (dataNode.has("confidence")) {
+            double confidence = dataNode.get("confidence").asDouble();
+            content.append("置信度: ").append(String.format("%.0f%%", confidence * 100)).append("\n");
         }
     }
 

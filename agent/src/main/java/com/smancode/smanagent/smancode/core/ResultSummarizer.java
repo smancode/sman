@@ -19,6 +19,9 @@ import org.springframework.stereotype.Component;
 public class ResultSummarizer {
 
     private static final Logger logger = LoggerFactory.getLogger(ResultSummarizer.class);
+    private static final int SMALL_DATA_THRESHOLD = 500;
+    private static final int LARGE_DATA_THRESHOLD = 5000;
+    private static final int COMPRESSION_THRESHOLD = 500;
 
     @Autowired
     private LlmService llmService;
@@ -42,12 +45,13 @@ public class ResultSummarizer {
             return errorSummary;
         }
 
-        Object data = result.getData();
-        // logger.info("【ResultSummarizer数据】toolName={}, data类型={}, data值={}",
-        //         toolName,
-        //         data != null ? data.getClass().getSimpleName() : "null",
-        //         data);
+        if ("expert_consult".equals(toolName) && result.getDisplayContent() != null) {
+            String displayContent = result.getDisplayContent();
+            logger.info("【ResultSummarizer expert_consult】使用 displayContent, 长度={}", displayContent.length());
+            return displayContent;
+        }
 
+        Object data = result.getData();
         if (data == null) {
             logger.warn("【ResultSummarizer空数据】toolName={}, data为null，返回默认消息", toolName);
             return "执行完成，无返回数据";
@@ -56,40 +60,37 @@ public class ResultSummarizer {
         String dataStr = String.valueOf(data);
         logger.info("【ResultSummarizer数据字符串】toolName={}, data长度={}", toolName, dataStr.length());
 
-        // 根据数据大小决定压缩策略
+        return compressBySize(toolName, dataStr, result, parentSession);
+    }
+
+    private String compressBySize(String toolName, String dataStr, ToolResult result, Session parentSession) {
         int dataSize = dataStr.length();
 
-        if (dataSize < 500) {
-            // 小数据：直接返回（添加路径信息）
+        if (dataSize < SMALL_DATA_THRESHOLD) {
             String summary = enrichWithPath(result, dataStr);
             logger.info("【ResultSummarizer小数据】toolName={}, summary长度={}", toolName, summary.length());
             return summary;
-        } else if (dataSize < 5000) {
-            // 中等数据：简单压缩
+        }
+
+        if (dataSize < LARGE_DATA_THRESHOLD) {
             String compressed = simpleCompress(toolName, dataStr, result);
             String summary = enrichWithPath(result, compressed);
             logger.info("【ResultSummarizer中等数据】toolName={}, 压缩后长度={}", toolName, summary.length());
             return summary;
-        } else {
-            // 大数据：LLM 智能压缩
-            logger.info("【ResultSummarizer大数据】toolName={}, 使用LLM压缩", toolName);
-            return llmCompress(toolName, dataStr, parentSession, result);
         }
+
+        logger.info("【ResultSummarizer大数据】toolName={}, 使用LLM压缩", toolName);
+        return llmCompress(toolName, dataStr, parentSession, result);
     }
 
     /**
      * 为摘要添加文件路径信息
      */
     private String enrichWithPath(ToolResult result, String content) {
-        // 如果有相对路径，在摘要开头添加
         if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("路径: ").append(result.getRelativePath()).append("\n");
-            sb.append(content);
-            return sb.toString();
+            return "路径: " + result.getRelativePath() + "\n" + content;
         }
 
-        // 如果有相关文件列表，在摘要开头添加
         if (result.getRelatedFilePaths() != null && !result.getRelatedFilePaths().isEmpty()) {
             StringBuilder sb = new StringBuilder();
             sb.append("找到文件: ").append(result.getRelatedFilePaths().size()).append(" 个\n");
@@ -106,72 +107,86 @@ public class ResultSummarizer {
      */
     private String simpleCompress(String toolName, String data, ToolResult result) {
         return switch (toolName) {
-            case "semantic_search" -> {
-                // 提取关键信息：文件路径 + 相关性分数
-                StringBuilder sb = new StringBuilder();
-                String[] lines = data.split("\n");
-                int count = 0;
-                for (String line : lines) {
-                    if (line.contains("filePath:") || line.contains("score:")) {
-                        sb.append(line.trim()).append("\n");
-                        count++;
-                        if (count >= 20) break;  // 最多保留 20 条
-                    }
-                }
-                yield sb.toString();
-            }
-            case "grep_file" -> {
-                // 提取匹配行和上下文
-                StringBuilder sb = new StringBuilder();
-                String[] lines = data.split("\n");
-                int count = 0;
-                for (String line : lines) {
-                    if (line.trim().isEmpty()) continue;
-                    sb.append(line.trim()).append("\n");
-                    count++;
-                    if (count >= 30) break;  // 最多保留 30 行
-                }
-                yield sb.toString();
-            }
-            case "read_file" -> {
-                // 不压缩 read_file 的结果，直接返回完整内容
-                logger.info("【read_file不压缩】data长度={}", data.length());
-
-                // 只添加路径信息
-                StringBuilder sb = new StringBuilder();
-                if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
-                    sb.append(result.getRelativePath()).append("\n");
-                }
-                sb.append(data);
-                yield sb.toString();
-            }
-            case "call_chain" -> {
-                // 保留调用链路径
-                StringBuilder sb = new StringBuilder();
-                String[] lines = data.split("\n");
-                int depth = 0;
-                for (String line : lines) {
-                    if (line.contains("->")) {
-                        sb.append(line.trim()).append("\n");
-                        depth++;
-                        if (depth >= 10) break;  // 最多 10 层
-                    }
-                }
-                yield sb.length() > 0 ? sb.toString() : data.substring(0, 500);
-            }
-            case "apply_change" -> {
-                // 只保留成功状态，详细说明由 LLM 生成
-                if (data.contains("✅") || data.contains("成功")) {
-                    yield "✅ 修改已应用";
-                } else {
-                    yield "❌ 修改失败";
-                }
-            }
-            default -> {
-                // 默认：截取前 1000 字符
-                yield data.length() > 1000 ? data.substring(0, 1000) + "\n... (已压缩)" : data;
-            }
+            case "semantic_search" -> extractLinesContaining(data, 20, "filePath:", "score:");
+            case "grep_file" -> extractNonEmptyLines(data, 30);
+            case "read_file" -> prefixWithPath(result, data);
+            case "call_chain" -> extractCallChain(data);
+            case "apply_change" -> extractApplyChangeStatus(data);
+            default -> truncateData(data, 1000);
         };
+    }
+
+    private String extractLinesContaining(String data, int maxLines, String... markers) {
+        StringBuilder sb = new StringBuilder();
+        String[] lines = data.split("\n");
+        int count = 0;
+
+        for (String line : lines) {
+            if (containsAny(line, markers)) {
+                sb.append(line.trim()).append("\n");
+                if (++count >= maxLines) break;
+            }
+        }
+        return sb.toString();
+    }
+
+    private boolean containsAny(String line, String[] markers) {
+        for (String marker : markers) {
+            if (line.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String extractNonEmptyLines(String data, int maxLines) {
+        StringBuilder sb = new StringBuilder();
+        String[] lines = data.split("\n");
+        int count = 0;
+
+        for (String line : lines) {
+            if (!line.trim().isEmpty()) {
+                sb.append(line.trim()).append("\n");
+                if (++count >= maxLines) break;
+            }
+        }
+        return sb.toString();
+    }
+
+    private String prefixWithPath(ToolResult result, String data) {
+        if (result.getRelativePath() != null && !result.getRelativePath().isEmpty()) {
+            return result.getRelativePath() + "\n" + data;
+        }
+        return data;
+    }
+
+    private String extractCallChain(String data) {
+        StringBuilder sb = new StringBuilder();
+        String[] lines = data.split("\n");
+        int depth = 0;
+        final int maxDepth = 10;
+
+        for (String line : lines) {
+            if (line.contains("->")) {
+                sb.append(line.trim()).append("\n");
+                if (++depth >= maxDepth) break;
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : data.substring(0, 500);
+    }
+
+    private String extractApplyChangeStatus(String data) {
+        if (data.contains("✅") || data.contains("成功")) {
+            return "✅ 修改已应用";
+        }
+        return "❌ 修改失败";
+    }
+
+    private String truncateData(String data, int maxLength) {
+        if (data.length() > maxLength) {
+            return data.substring(0, maxLength) + "\n... (已压缩)";
+        }
+        return data;
     }
 
     /**
@@ -251,7 +266,7 @@ public class ResultSummarizer {
         }
 
         String dataStr = String.valueOf(result.getData());
-        return dataStr.length() > 500;  // 超过 500 字符需要压缩
+        return dataStr.length() > COMPRESSION_THRESHOLD;
     }
 
     /**
