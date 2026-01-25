@@ -3,6 +3,7 @@ package com.smancode.smanagent.websocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -143,7 +144,7 @@ public class ToolForwardingService {
                     session.sendMessage(new TextMessage(payload));
                     logger.info("✅ 已发送 TOOL_CALL: toolCallId={}", toolCallId);
                 } catch (Exception e) {
-                    logger.error("❌ 发送消息失败: toolCallId={}", toolCallId, e);
+                    logger.error("❌ 发送消息失败: toolCallId={}, {}", toolCallId, StackTraceUtils.formatStackTrace(e));
                     throw new RuntimeException(e);
                 }
             }, messageSender);
@@ -162,7 +163,7 @@ public class ToolForwardingService {
             throw new TimeoutException("工具调用超时: " + toolName);
 
         } catch (Exception e) {
-            logger.error("❌ 转发工具调用失败: toolCallId={}", toolCallId, e);
+            logger.error("❌ 转发工具调用失败: toolCallId={}, {}", toolCallId, StackTraceUtils.formatStackTrace(e));
             pendingToolCalls.remove(toolCallId);
             throw e;
         }

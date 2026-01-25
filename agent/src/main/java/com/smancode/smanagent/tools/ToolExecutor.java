@@ -1,6 +1,7 @@
 package com.smancode.smanagent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.smancode.smanagent.util.StackTraceUtils;
 import com.smancode.smanagent.websocket.ToolForwardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +72,7 @@ public class ToolExecutor {
                 : executeIntellij(tool, projectKey, params);
 
         } catch (Exception e) {
-            logger.error("工具执行异常: toolName={}", toolName, e);
+            logger.error("工具执行异常: toolName={}, {}", toolName, StackTraceUtils.formatStackTrace(e));
             result = ToolResult.failure("执行异常: " + e.getMessage());
         }
 
@@ -168,7 +169,7 @@ public class ToolExecutor {
             return result;
 
         } catch (Exception e) {
-            logger.error("工具执行异常: toolName={}", toolName, e);
+            logger.error("工具执行异常: toolName={}, {}", toolName, StackTraceUtils.formatStackTrace(e));
             long duration = System.currentTimeMillis() - startTime;
             ToolResult result = ToolResult.failure("执行异常: " + e.getMessage());
             result.setExecutionTimeMs(duration);

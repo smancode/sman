@@ -3,6 +3,7 @@ package com.smancode.smanagent.shutdown;
 import com.smancode.smanagent.config.properties.GracefulShutdownProperties;
 import com.smancode.smanagent.config.ThreadPoolConfig;
 import com.smancode.smanagent.smancode.core.SessionManager;
+import com.smancode.smanagent.util.StackTraceUtils;
 import com.smancode.smanagent.websocket.AgentWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,7 +98,7 @@ public class GracefulShutdownManager implements SmartLifecycle {
             logger.info("========================================");
 
         } catch (Exception e) {
-            logger.error("优雅停机过程中发生错误", e);
+            logger.error("优雅停机过程中发生错误: {}", StackTraceUtils.formatStackTrace(e));
             running = false;
         }
     }
@@ -174,7 +175,7 @@ public class GracefulShutdownManager implements SmartLifecycle {
             int closed = webSocketHandler.closeAllForShutdown();
             logger.info("✅ 已关闭 {} 个 WebSocket 连接", closed);
         } catch (Exception e) {
-            logger.error("关闭 WebSocket 连接时发生错误", e);
+            logger.error("关闭 WebSocket 连接时发生错误: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 
@@ -186,7 +187,7 @@ public class GracefulShutdownManager implements SmartLifecycle {
             threadPoolConfig.waitForExecutorTermination();
             logger.info("✅ 线程池已优雅关闭");
         } catch (Exception e) {
-            logger.error("关闭线程池时发生错误", e);
+            logger.error("关闭线程池时发生错误: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 
@@ -198,7 +199,7 @@ public class GracefulShutdownManager implements SmartLifecycle {
             int persisted = sessionManager.persistAllSessions();
             logger.info("✅ 已持久化 {} 个会话", persisted);
         } catch (Exception e) {
-            logger.error("持久化会话时发生错误", e);
+            logger.error("持久化会话时发生错误: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 }

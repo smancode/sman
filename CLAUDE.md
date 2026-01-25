@@ -80,6 +80,32 @@ cd ide-plugin
 
 **CRITICAL**: LLM request logs and response content must NOT be truncated during use or in logging output.
 
+## Exception Logging (单行堆栈)
+
+**CRITICAL**: 所有异常日志必须使用单行格式，避免多行堆栈占用过多日志空间。
+
+**用法**:
+```java
+// ❌ 错误：多行堆栈
+logger.error("处理失败", e);
+
+// ✅ 正确：单行堆栈
+logger.error("处理失败: {}", StackTraceUtils.formatStackTrace(e));
+```
+
+**工具类位置**: `com.smancode.smanagent.util.StackTraceUtils`
+
+**格式示例**:
+```
+RuntimeException: 测试异常 <- TestStackTrace.methodC(TestStackTrace.java:18) <- TestStackTrace.methodB(TestStackTrace.java:14) <- ...
+```
+
+**特性**:
+- 将异常堆栈压缩为单行，用 ` <- ` 分隔
+- 自动包含 cause 链：`[Caused by: ...]`
+- 限制堆栈深度为 10 层，超出显示 `...`
+- 如果需要完整堆栈，使用 `StackTraceUtils.getFullStackTrace(e)`
+
 ## Key Design Principles
 
 1. **Agent Lightweight** - Agent focuses on ReAct loop and tool orchestration only

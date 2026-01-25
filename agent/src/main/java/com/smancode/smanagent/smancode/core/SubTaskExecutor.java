@@ -10,6 +10,7 @@ import com.smancode.smanagent.tools.ToolExecutor;
 import com.smancode.smanagent.tools.ToolResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -120,7 +121,7 @@ public class SubTaskExecutor {
                     .build();
 
         } catch (Exception e) {
-            logger.error("工具执行失败: toolName={}", toolName, e);
+            logger.error("工具执行失败: toolName={}, {}", toolName, StackTraceUtils.formatStackTrace(e));
 
             toolPart.setState(ToolPart.ToolState.ERROR);
             toolPart.setResult(ToolResult.failure(e.getMessage()));

@@ -1,6 +1,7 @@
 package com.smancode.smanagent.service;
 
 import com.smancode.smanagent.model.*;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -236,7 +237,7 @@ public class BusinessGraphService {
                 .map(Path::toFile)
                 .collect(Collectors.toList());
         } catch (IOException e) {
-            logger.error("扫描 Java 文件失败", e);
+            logger.error("扫描 Java 文件失败: {}", StackTraceUtils.formatStackTrace(e));
             return new ArrayList<>();
         }
     }

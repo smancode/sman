@@ -10,6 +10,7 @@ import com.smancode.smanagent.tools.ToolExecutor;
 import com.smancode.smanagent.tools.ToolRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -124,7 +125,7 @@ public class SmanAgentLoop {
             return assistantMessage;
 
         } catch (Exception e) {
-            logger.error("处理失败", e);
+            logger.error("处理失败: {}", StackTraceUtils.formatStackTrace(e));
             session.markIdle();
             return createErrorMessage(session.getId(), e.getMessage(), partPusher);
         }
@@ -383,7 +384,7 @@ public class SmanAgentLoop {
             // ========== ReAct 循环结束 ==========
 
         } catch (Exception e) {
-            logger.error("LLM 处理失败", e);
+            logger.error("LLM 处理失败: {}", StackTraceUtils.formatStackTrace(e));
             String partId = UUID.randomUUID().toString();
             TextPart errorPart = new TextPart(partId, assistantMessage.getId(), session.getId());
             errorPart.setText("处理失败: " + e.getMessage());
@@ -741,7 +742,7 @@ public class SmanAgentLoop {
             return fixedJson;
 
         } catch (Exception e) {
-            logger.error("LLM 辅助修复异常", e);
+            logger.error("LLM 辅助修复异常: {}", StackTraceUtils.formatStackTrace(e));
             return null;
         }
     }
@@ -849,7 +850,7 @@ public class SmanAgentLoop {
             return fixedJson;
 
         } catch (Exception e) {
-            logger.error("LLM 修复字段值异常", e);
+            logger.error("LLM 修复字段值异常: {}", StackTraceUtils.formatStackTrace(e));
             return null;
         }
     }

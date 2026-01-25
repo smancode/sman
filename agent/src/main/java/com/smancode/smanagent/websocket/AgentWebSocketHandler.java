@@ -15,6 +15,7 @@ import com.smancode.smanagent.smancode.core.SmanAgentLoop;
 import com.smancode.smanagent.smancode.core.SessionManager;
 import com.smancode.smanagent.websocket.ToolForwardingService;
 import com.smancode.smanagent.shutdown.GracefulShutdownManager;
+import com.smancode.smanagent.util.StackTraceUtils;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,7 +128,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             }
 
         } catch (Exception e) {
-            logger.error("处理消息失败", e);
+            logger.error("处理消息失败: {}", StackTraceUtils.formatStackTrace(e));
             sendError(session, "处理失败: " + e.getMessage());
         }
     }
@@ -249,7 +250,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                         }
 
                     } catch (Exception e) {
-                        logger.error("异步处理失败", e);
+                        logger.error("异步处理失败: {}", StackTraceUtils.formatStackTrace(e));
                     } finally {
                         processingSessions.remove(finalSessionId);
 
@@ -265,7 +266,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                                 sessionFileService.saveSession(finalSession);
                                 sendMessage(finalWsSession, Map.of("type", "complete", "sessionId", finalSessionId));
                             } catch (Exception e) {
-                                logger.error("处理新消息失败", e);
+                                logger.error("处理新消息失败: {}", StackTraceUtils.formatStackTrace(e));
                             } finally {
                                 processingSessions.remove(finalSessionId);
                             }
@@ -297,11 +298,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 MDC.remove("traceId");
             }
         } catch (Exception e) {
-            logger.error("处理分析请求异常: sessionId={}", sessionId, e);
+            logger.error("处理分析请求异常: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
             try {
                 sendError(wsSession, "处理失败: " + e.getMessage());
             } catch (Exception sendError) {
-                logger.error("发送错误消息失败", sendError);
+                logger.error("发送错误消息失败: {}", StackTraceUtils.formatStackTrace(sendError));
             }
         }
     }
@@ -390,7 +391,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                         sendMessage(finalWsSession, completeMessage);
 
                     } catch (Exception e) {
-                        logger.error("异步处理失败", e);
+                        logger.error("异步处理失败: {}", StackTraceUtils.formatStackTrace(e));
                     } finally {
                         processingSessions.remove(finalSessionId);
 
@@ -406,7 +407,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                                 sessionFileService.saveSession(finalSession);
                                 sendMessage(finalWsSession, Map.of("type", "complete", "sessionId", finalSessionId));
                             } catch (Exception e) {
-                                logger.error("处理新消息失败", e);
+                                logger.error("处理新消息失败: {}", StackTraceUtils.formatStackTrace(e));
                             } finally {
                                 processingSessions.remove(finalSessionId);
                             }
@@ -438,11 +439,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 MDC.remove("traceId");
             }
         } catch (Exception e) {
-            logger.error("处理聊天请求异常: sessionId={}", sessionId, e);
+            logger.error("处理聊天请求异常: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
             try {
                 sendError(wsSession, "处理失败: " + e.getMessage());
             } catch (Exception sendError) {
-                logger.error("发送错误消息失败", sendError);
+                logger.error("发送错误消息失败: {}", StackTraceUtils.formatStackTrace(sendError));
             }
         }
     }
@@ -481,7 +482,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             logger.info("【发送到前端】sessionId={}, type=error, 完整内容={}", session.getId(), json);
             sendMessage(session, message);
         } catch (Exception e) {
-            logger.error("发送错误消息失败", e);
+            logger.error("发送错误消息失败: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 
@@ -618,7 +619,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                     "part", partToMap(part)
                 ));
             } catch (Exception e) {
-                logger.error("推送 Part 失败", e);
+                logger.error("推送 Part 失败: {}", StackTraceUtils.formatStackTrace(e));
             }
         }
 
@@ -696,7 +697,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             }
 
         } catch (Exception e) {
-            logger.error("处理 TOOL_RESULT 消息失败", e);
+            logger.error("处理 TOOL_RESULT 消息失败: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 
@@ -734,11 +735,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             }
 
         } catch (Exception e) {
-            logger.error("【命令处理】处理命令失败: sessionId={}", sessionId, e);
+            logger.error("【命令处理】处理命令失败: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
             try {
                 sendError(wsSession, "处理命令失败: " + e.getMessage());
             } catch (Exception sendError) {
-                logger.error("【命令处理】发送错误消息失败", sendError);
+                logger.error("【命令处理】发送错误消息失败: {}", StackTraceUtils.formatStackTrace(sendError));
             }
         }
     }

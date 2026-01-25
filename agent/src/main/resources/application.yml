@@ -64,7 +64,7 @@ llm:
 knowledge:
   service:
     base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://localhost:8088}
-    search-path: /api/knowledge/search
+    search-path: /api/ai/tool-use
     timeout: 300000  # 300秒
 
 # ==================== WebSocket 配置 ====================

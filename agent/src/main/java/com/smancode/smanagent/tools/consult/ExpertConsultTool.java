@@ -7,6 +7,7 @@ import com.smancode.smanagent.tools.AbstractTool;
 import com.smancode.smanagent.tools.ParameterDef;
 import com.smancode.smanagent.tools.Tool;
 import com.smancode.smanagent.tools.ToolResult;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -113,7 +114,7 @@ public class ExpertConsultTool extends AbstractTool implements Tool {
             return parseResponse(responseBody, duration, traceId);
 
         } catch (Exception e) {
-            logger.error("专家咨询失败: traceId={}", traceId, e);
+            logger.error("专家咨询失败: traceId={}, {}", traceId, StackTraceUtils.formatStackTrace(e));
             long duration = System.currentTimeMillis() - startTime;
             return withDuration(ToolResult.failure("专家咨询失败: " + e.getMessage()), duration);
         }

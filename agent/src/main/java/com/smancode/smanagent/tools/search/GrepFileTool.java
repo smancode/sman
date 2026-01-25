@@ -4,6 +4,7 @@ import com.smancode.smanagent.tools.AbstractTool;
 import com.smancode.smanagent.tools.ParameterDef;
 import com.smancode.smanagent.tools.Tool;
 import com.smancode.smanagent.tools.ToolResult;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -75,7 +76,7 @@ public class GrepFileTool extends AbstractTool implements Tool {
             return toolResult;
 
         } catch (Exception e) {
-            logger.error("正则搜索失败", e);
+            logger.error("正则搜索失败: {}", StackTraceUtils.formatStackTrace(e));
             long duration = System.currentTimeMillis() - startTime;
             ToolResult toolResult = ToolResult.failure("搜索失败: " + e.getMessage());
             toolResult.setExecutionTimeMs(duration);

@@ -4,6 +4,7 @@ import com.smancode.smanagent.tools.AbstractTool;
 import com.smancode.smanagent.tools.ParameterDef;
 import com.smancode.smanagent.tools.Tool;
 import com.smancode.smanagent.tools.ToolResult;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -103,7 +104,7 @@ public class ExtractXmlTool extends AbstractTool implements Tool {
             return toolResult;
 
         } catch (Exception e) {
-            logger.error("XML 提取失败", e);
+            logger.error("XML 提取失败: {}", StackTraceUtils.formatStackTrace(e));
             long duration = System.currentTimeMillis() - startTime;
             ToolResult toolResult = ToolResult.failure("提取失败: " + e.getMessage());
             toolResult.setExecutionTimeMs(duration);

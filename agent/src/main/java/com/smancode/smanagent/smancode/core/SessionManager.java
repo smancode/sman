@@ -3,6 +3,7 @@ package com.smancode.smanagent.smancode.core;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.model.session.SessionStatus;
 import com.smancode.smanagent.service.SessionFileService;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -277,7 +278,7 @@ public class SessionManager {
                 logger.debug("持久化会话成功: sessionId={}", sessionId);
             } catch (Exception e) {
                 failCount++;
-                logger.error("持久化会话失败: sessionId={}", sessionId, e);
+                logger.error("持久化会话失败: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
             }
         }
 

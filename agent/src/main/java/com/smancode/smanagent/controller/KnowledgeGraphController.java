@@ -1,6 +1,7 @@
 package com.smancode.smanagent.controller;
 
 import com.smancode.smanagent.tools.knowledge.KnowledgeGraphClient;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,7 +67,7 @@ public class KnowledgeGraphController {
             ));
 
         } catch (Exception e) {
-            logger.error("更新业务背景失败", e);
+            logger.error("更新业务背景失败: {}", StackTraceUtils.formatStackTrace(e));
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,
                     "error", e.getMessage()
@@ -126,7 +127,7 @@ public class KnowledgeGraphController {
             ));
 
         } catch (Exception e) {
-            logger.error("更新业务知识失败", e);
+            logger.error("更新业务知识失败: {}", StackTraceUtils.formatStackTrace(e));
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,
                     "error", e.getMessage()
@@ -200,7 +201,7 @@ public class KnowledgeGraphController {
             ));
 
         } catch (Exception e) {
-            logger.error("更新代码映射失败", e);
+            logger.error("更新代码映射失败: {}", StackTraceUtils.formatStackTrace(e));
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,
                     "error", e.getMessage()

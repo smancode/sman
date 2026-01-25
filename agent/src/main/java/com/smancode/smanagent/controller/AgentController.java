@@ -3,6 +3,7 @@ package com.smancode.smanagent.controller;
 import com.smancode.smanagent.model.session.Session;
 import com.smancode.smanagent.smancode.core.SmanAgentLoop;
 import com.smancode.smanagent.smancode.core.SessionManager;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,7 +107,7 @@ public class AgentController {
             ));
 
         } catch (Exception e) {
-            logger.error("分析失败", e);
+            logger.error("分析失败: {}", StackTraceUtils.formatStackTrace(e));
             return ResponseEntity.status(500).body(Map.of(
                 "error", e.getMessage()
             ));

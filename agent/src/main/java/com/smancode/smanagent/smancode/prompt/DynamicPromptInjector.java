@@ -1,5 +1,6 @@
 package com.smancode.smanagent.smancode.prompt;
 
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,7 +80,7 @@ public class DynamicPromptInjector {
 
             logger.info("会话 {} Prompt 加载完成", sessionKey);
         } catch (Exception e) {
-            logger.error("加载 Prompt 失败, sessionKey={}", sessionKey, e);
+            logger.error("加载 Prompt 失败, sessionKey={}, {}", sessionKey, StackTraceUtils.formatStackTrace(e));
         }
 
         return result;

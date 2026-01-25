@@ -1,5 +1,6 @@
 package com.smancode.smanagent.smancode.prompt;
 
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -69,7 +70,7 @@ public class PromptLoaderService {
             logger.debug("提示词长度: {} 字符", content.length());
             return content;
         } catch (IOException e) {
-            logger.error("加载提示词失败: {}", promptPath, e);
+            logger.error("加载提示词失败: {}, {}", promptPath, StackTraceUtils.formatStackTrace(e));
             throw new RuntimeException("加载提示词失败: " + promptPath, e);
         }
     }

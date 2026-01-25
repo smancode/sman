@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.smancode.smanagent.model.session.Session;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -64,7 +65,7 @@ public class SessionFileService {
 
             return objectMapper.readValue(sessionPath.toFile(), Session.class);
         } catch (IOException e) {
-            logger.error("加载会话失败: sessionId={}", sessionId, e);
+            logger.error("加载会话失败: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
             return null;
         }
     }
@@ -114,7 +115,7 @@ public class SessionFileService {
                 logger.debug("删除会话成功: sessionId={}", sessionId);
             }
         } catch (IOException e) {
-            logger.error("删除会话失败: sessionId={}", sessionId, e);
+            logger.error("删除会话失败: sessionId={}, {}", sessionId, StackTraceUtils.formatStackTrace(e));
         }
     }
 

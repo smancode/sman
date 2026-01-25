@@ -8,6 +8,7 @@ import com.smancode.smanagent.tools.Tool;
 import com.smancode.smanagent.tools.ToolExecutor;
 import com.smancode.smanagent.tools.ToolRegistry;
 import com.smancode.smanagent.tools.ToolResult;
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -211,7 +212,7 @@ public class BatchTool extends AbstractTool implements Tool, SessionAwareTool {
                     BatchSubResult result = executeSingleTool(projectKey, call, index);
                     subResults.add(result);
                 } catch (Exception e) {
-                    logger.error("批量子工具执行异常: index={}", index, e);
+                    logger.error("批量子工具执行异常: index={}, {}", index, StackTraceUtils.formatStackTrace(e));
                     subResults.add(new BatchSubResult("unknown", false, null,
                         "执行异常: " + e.getMessage()));
                 }
@@ -248,7 +249,7 @@ public class BatchTool extends AbstractTool implements Tool, SessionAwareTool {
             return result;
 
         } catch (Exception e) {
-            logger.error("批量工具执行失败", e);
+            logger.error("批量工具执行失败: {}", StackTraceUtils.formatStackTrace(e));
             ToolResult result = ToolResult.failure("批量执行失败: " + e.getMessage());
             result.setExecutionTimeMs(System.currentTimeMillis() - startTime);
             return result;
@@ -301,7 +302,7 @@ public class BatchTool extends AbstractTool implements Tool, SessionAwareTool {
                 result.isSuccess() ? null : result.getError());
 
         } catch (Exception e) {
-            logger.error("执行批量子工具失败: toolName={}", toolName, e);
+            logger.error("执行批量子工具失败: toolName={}, {}", toolName, StackTraceUtils.formatStackTrace(e));
             return new BatchSubResult(toolName, false, null,
                 "执行失败: " + e.getMessage());
         }

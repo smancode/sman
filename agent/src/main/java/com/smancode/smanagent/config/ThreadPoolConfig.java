@@ -1,5 +1,6 @@
 package com.smancode.smanagent.config;
 
+import com.smancode.smanagent.util.StackTraceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -131,7 +132,7 @@ public class ThreadPoolConfig {
                 logger.warn("强制关闭线程池，剩余 {} 个任务未执行", remainingTasks.size());
             }
         } catch (Exception e) {
-            logger.error("强制关闭线程池失败", e);
+            logger.error("强制关闭线程池失败: {}", StackTraceUtils.formatStackTrace(e));
         }
     }
 }
