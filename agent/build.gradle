@@ -94,7 +94,7 @@ jar {
 bootJar {
     archiveBaseName = 'smanagent-agent'
     archiveVersion = project.version
-    mainClass = 'com.smancode.smanagent.BankCoreAgentApplication'
+    mainClass = 'com.smancode.smanagent.SmanAgentApplication'
 }
 
 // Spring Boot 插件配置
