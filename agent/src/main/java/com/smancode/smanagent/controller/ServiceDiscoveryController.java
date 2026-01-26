@@ -142,11 +142,11 @@ public class ServiceDiscoveryController {
     }
 
     /**
-     * 健康检查
+     * Knowledge 服务健康检查
      *
-     * GET /api/agent/health
+     * GET /api/agent/knowledge-health
      */
-    @GetMapping("/health")
+    @GetMapping("/knowledge-health")
     public ResponseEntity<Map<String, Object>> health() {
         Map<String, Object> health = new HashMap<>();
         health.put("status", "UP");
