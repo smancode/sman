@@ -465,6 +465,10 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
      * 发送消息到 WebSocket
      */
     private void sendMessage(WebSocketSession session, Object data) throws Exception {
+        if (session == null || !session.isOpen()) {
+            logger.warn("WebSocket session 已关闭，无法发送消息");
+            return;
+        }
         String json = objectMapper.writeValueAsString(data);
         session.sendMessage(new TextMessage(json));
     }

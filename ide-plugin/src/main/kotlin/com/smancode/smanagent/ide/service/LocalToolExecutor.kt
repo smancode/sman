@@ -317,7 +317,7 @@ class LocalToolExecutor(private val project: Project) {
         val basePath = projectPath ?: project.basePath ?: ""
 
         val regex = try {
-            Regex(pattern)
+            Regex(pattern, RegexOption.IGNORE_CASE)
         } catch (e: Exception) {
             return ToolResult(false, "无效的正则表达式: ${e.message}")
         }

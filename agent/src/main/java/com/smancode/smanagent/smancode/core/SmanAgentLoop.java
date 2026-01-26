@@ -774,78 +774,91 @@ public class SmanAgentLoop {
     private String fixProblematicFieldWithLlm(String json, String problematicField) {
         try {
             // 提取字段名和原始值
-            String fieldName = problematicField.split(":", 2)[0].trim().replace("\"", "");
-            String rawValue = problematicField.split(":", 2)[1].trim();
+            String[] fieldParts = problematicField.split(":", 2);
+            String fieldName = fieldParts[0].trim().replace("\"", "");
+            String rawValue = fieldParts[1].trim();
+
+            // 截断过长的值（避免 Token 浪费）
+            final int MAX_VALUE_LENGTH = 2000;
+            final int FALLBACK_PREFIX_LENGTH = 100;
+            String truncatedValue = rawValue.length() > MAX_VALUE_LENGTH
+                    ? rawValue.substring(0, MAX_VALUE_LENGTH) + "..."
+                    : rawValue;
 
             String systemPrompt = """
-                    # JSON 字段值修复专家
+                    <system_config>
+                        <language_rule>
+                            <input_processing>English (For logic & reasoning)</input_processing>
+                            <final_output>Valid JSON only</final_output>
+                        </language_rule>
+                    </system_config>
 
-                    你是一个 JSON 字段值修复专家。
+                    <context>
+                        <role>JSON Field Value Repair Expert</role>
+                        <task>Fix malformed field values to valid JSON string literals</task>
+                        <requirement>Preserve original meaning, only fix format issues (escape sequences)</requirement>
+                    </context>
 
-                    ## 任务
+                    <interaction_protocol>
+                    1. **Think First**: In <thinking> tags, analyze the input value in English
+                    2. **Fix Issues**: Escape newlines as \\n, quotes as \\", backslashes as \\\\
+                    3. **Final Output**: Return {\"fieldName\": \"fixed_value\"} in valid JSON
+                    </interaction_protocol>
 
-                    把一个可能有格式问题的字段值修复成合法的 JSON 字段值。
+                    <anti_hallucination_rules>
+                    1. **Strict Grounding**: Use ONLY the provided input value, do NOT invent content
+                    2. **No Markdown**: Do NOT wrap output in ```json``` blocks
+                    3. **No Explanation**: Output ONLY the JSON object, nothing else
+                    4. **Terminology**: Keep all text in original language (Chinese or English), do NOT translate
+                    </anti_hallucination_rules>
 
-                    ## 要求
+                    <output_format>
+                    STRICTLY follow this template. Do NOT change the field name:
 
-                    1. **保持原始内容** - 不要改变内容含义，只修复格式问题
-                    2. **输出简单 JSON** - 直接输出 {"fieldName": "修复后的值"} 这种格式
-                    3. **只输出 JSON** - 不要 markdown 代码块，不要解释
-
-                    ## 输出格式
-
-                    直接输出简单的 JSON 对象，例如：
-                    {"text": "修复后的内容"}
-
-                    ## 重要
-
-                    - 字段值中如果有换行，用 \\n 表示
-                    - 字段值中如果有引号，用 \\" 表示
-                    - 确保输出的 JSON 可以被标准解析器解析
+                    {"%s": "fixed_value_here"}
+                    </output_format>
                     """;
 
             String userPrompt = """
-                    请修复下面的字段值，并输出简单的 JSON 格式。
+                    <task>
+                    Fix the following field value to be a valid JSON string literal.
+                    </task>
 
-                    字段名：%s
-                    原始值：
+                    <input>
+                    <field_name>%s</field_name>
+                    <raw_value>
                     %s
+                    </raw_value>
+                    </input>
 
-                    直接输出修复后的 JSON（格式：{"fieldName": "修复后的值"}）：
-                    """.formatted(fieldName, rawValue.length() > 2000 ? rawValue.substring(0, 2000) + "..." : rawValue);
+                    <thinking>
+                    1. Analyze the raw value for escape issues (newlines, quotes, backslashes)
+                    2. Apply proper JSON escaping: \\n for newlines, \\" for quotes, \\\\\\\\ for backslashes
+                    3. Preserve ALL original content and language
+                    4. Output only the JSON object
+                    </thinking>
 
-            String llmResponse = llmService.simpleRequest(systemPrompt, userPrompt);
+                    Output the fixed JSON (format: {"fieldName": "fixed_value"}):
+                    """;
+
+            String formattedUserPrompt = String.format(userPrompt, fieldName, truncatedValue);
+
+            String llmResponse = llmService.simpleRequest(systemPrompt, formattedUserPrompt);
             if (llmResponse == null || llmResponse.trim().isEmpty()) {
                 return null;
             }
 
             // 清理可能的 markdown 标记
-            String cleaned = llmResponse.trim();
-            if (cleaned.startsWith("```")) {
-                cleaned = extractFromMarkdownBlock(cleaned);
-                if (cleaned == null) {
-                    cleaned = llmResponse.trim();
-                }
-            }
+            String cleanedResponse = cleanLlmResponse(llmResponse);
 
             // 解析 LLM 返回的简单 JSON，提取修复后的字段值
-            String fixedValue = extractFieldValueFromSimpleJson(cleaned, fieldName);
+            String fixedValue = extractFieldValueFromSimpleJson(cleanedResponse, fieldName);
             if (fixedValue == null) {
-                // 如果解析失败，直接使用 cleaned 作为字段值
-                fixedValue = cleaned;
+                fixedValue = cleanedResponse;
             }
 
-            // 重新组装完整的 JSON
-            // 替换原始字段值
-            String patternStr = "\"" + fieldName + "\"\\s*:\\s*\".*?(?=\"|\\n)";
-            String fixedJson = json.replaceAll(patternStr, "\"" + fieldName + "\": " + fixedValue);
-
-            // 如果替换失败（内容太复杂），尝试简单的字符串替换
-            if (fixedJson.equals(json)) {
-                // 尝试替换前100个字符作为匹配
-                String prefix = rawValue.length() > 100 ? rawValue.substring(0, 100) : rawValue;
-                fixedJson = json.replace(prefix, fixedValue.replace("\"", ""));
-            }
+            // 重新组装完整的 JSON：替换原始字段值
+            String fixedJson = replaceFieldInJson(json, fieldName, fixedValue, rawValue, FALLBACK_PREFIX_LENGTH);
 
             return fixedJson;
 
@@ -853,6 +866,38 @@ public class SmanAgentLoop {
             logger.error("LLM 修复字段值异常: {}", StackTraceUtils.formatStackTrace(e));
             return null;
         }
+    }
+
+    /**
+     * 清理 LLM 响应，移除可能的 markdown 标记
+     */
+    private String cleanLlmResponse(String response) {
+        String cleaned = response.trim();
+        if (cleaned.startsWith("```")) {
+            String extracted = extractFromMarkdownBlock(cleaned);
+            return extracted != null ? extracted : cleaned;
+        }
+        return cleaned;
+    }
+
+    /**
+     * 在 JSON 中替换指定字段的值
+     * 先尝试正则替换，失败则回退到简单字符串替换
+     */
+    private String replaceFieldInJson(String json, String fieldName, String newValue, String originalValue, int fallbackPrefixLength) {
+        // 尝试正则替换
+        String patternStr = "\"" + fieldName + "\"\\s*:\\s*\".*?(?=\"|\\n)";
+        String fixedJson = json.replaceAll(patternStr, "\"" + fieldName + "\": " + newValue);
+
+        // 如果正则替换失败，回退到简单字符串替换
+        if (fixedJson.equals(json)) {
+            String prefix = originalValue.length() > fallbackPrefixLength
+                    ? originalValue.substring(0, fallbackPrefixLength)
+                    : originalValue;
+            fixedJson = json.replace(prefix, newValue.replace("\"", ""));
+        }
+
+        return fixedJson;
     }
 
     /**

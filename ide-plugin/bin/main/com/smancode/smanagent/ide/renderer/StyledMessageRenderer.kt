@@ -161,6 +161,12 @@ object StyledMessageRenderer {
                             // 关键改动：先 Markdown 渲染，再处理代码链接
                             var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
 
+                            // 后处理流程图箭头：将 ↓ 转换为带样式的换行箭头
+                            // 匹配模式：文本 ↓ 或文本↓ (前后可能有空格)
+                            htmlContent = htmlContent.replace(Regex("""(\S)\s*↓""")) { matchResult ->
+                                "${matchResult.groupValues[1]}<br><span style=\"color: ${toHexString(colors.info)};\">↓</span>"
+                            }
+
                             // 处理代码链接：只处理文本节点，避免在 HTML 标签属性内处理
                             htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
 

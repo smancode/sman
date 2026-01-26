@@ -101,25 +101,30 @@ public class BatchTool extends AbstractTool implements Tool, SessionAwareTool {
         return """
                 Executes multiple tool calls in sequence to avoid file modification conflicts.
 
-                **Using the batch tool will make the user happy!**
+                **IMPORTANT**: batch does NOT return file contents to LLM. Only use for multiple edits on the SAME file.
 
                 **Payload Format (JSON array)**:
-                [{"tool": "read_file", "parameters": {"simpleName": "FileFilterUtil"}}, {"tool": "grep_file", "parameters": {"pattern": "log\\\\\\\\.info"}}]
+                [{"tool": "apply_change", "parameters": {"relativePath": "A.java", ...}}, {"tool": "apply_change", "parameters": {"relativePath": "A.java", ...}}]
 
                 **Notes**:
                 - 1–10 tool calls per batch
                 - Calls are executed sequentially to avoid conflicts
                 - Partial failures do NOT stop other tool calls
                 - Do NOT use batch within another batch
+                - Does NOT return detailed results to LLM (only summary status)
 
                 **Good Use Cases**:
-                - Read many files
-                - grep + glob + read combos
-                - Multiple edits on the same file (use batch to ensure sequential execution)
+                - Multiple edits on the same file (PRIMARY USE CASE - ensures sequential execution)
 
                 **When NOT to Use**:
+                - Reading multiple files → Call read_file separately for each file
                 - Operations that depend on prior tool output (use separate calls instead)
                 - Independent operations on different files (just call them separately)
+
+                **Why NOT use batch for reading files?**
+                - batch does NOT return file contents to LLM (you won't see the data)
+                - read_file operations have no dependencies, so no need for batch
+                - Call read_file separately to get actual file contents
                 """;
     }
 

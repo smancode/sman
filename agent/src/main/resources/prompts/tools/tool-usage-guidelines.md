@@ -149,22 +149,26 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 ```
 
 **Good Use Cases**:
-- ✅ Read many files at once
-- ✅ Multiple edits on the same file
-- ✅ grep + glob + read combos
-- ✅ Multiple independent operations
+- ✅ Multiple edits on the same file (PRIMARY USE CASE - ensures sequential execution)
+- ✅ grep + find + read combos where results depend on prior execution
 
 **When NOT to Use**:
+- ❌ Reading multiple files → Call read_file separately for each file
 - ❌ Operations that depend on prior tool output (e.g., create then read same file)
-- ❌ Ordered stateful mutations where sequence matters
 - ❌ Nested batch (batch within batch)
 
-**Returns**: Summary of all tool executions with individual results
+**Why NOT use batch for reading files?**
+- batch does NOT return file contents to LLM (you won't see the data)
+- read_file operations have no dependencies, so no need for batch
+- Call read_file separately to get actual file contents
+
+**Returns**: Summary of execution status only (not detailed results)
 
 **⚠️ Common Mistakes**:
+- ❌ Using batch to read multiple files → You won't see the file contents! Call read_file separately.
 - ❌ Using batch for dependent operations → Execute sequentially instead
 - ❌ Nesting batch within batch → Not allowed
-- ✅ **BEST PRACTICE**: Use batch for all independent multi-tool operations
+- ✅ **BEST PRACTICE**: Use batch ONLY for multiple edits on the SAME file
 
 ---
 
