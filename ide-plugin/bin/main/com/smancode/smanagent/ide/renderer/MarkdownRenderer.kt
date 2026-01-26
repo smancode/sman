@@ -69,8 +69,8 @@ object MarkdownRenderer {
         // 段落样式
         styleSheet.addRule("p { margin-top: 4px; margin-bottom: 4px; }")
 
-        // 标题样式 - 使用 info 颜色，保持与正文一致大小
-        styleSheet.addRule("h1, h2, h3 { font-size: 100%; font-weight: bold; color: ${toHexString(colors.info)}; margin-top: 10px; margin-bottom: 5px; }")
+        // 标题样式 - 使用 textPrimary 颜色确保在所有主题下清晰可见
+        styleSheet.addRule("h1, h2, h3 { font-size: 100%; font-weight: bold; color: ${toHexString(colors.textPrimary)}; margin-top: 10px; margin-bottom: 5px; }")
 
         // 文本样式
         styleSheet.addRule("strong { color: ${toHexString(colors.warning)}; }")

@@ -161,6 +161,11 @@ object StyledMessageRenderer {
                             // 关键改动：先 Markdown 渲染，再处理代码链接
                             var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
 
+                            // 后处理：移除不支持显示的 emoji 数字（1️⃣ 2️⃣ 3️⃣ 等）
+                            // 这些 emoji 在 Swing HTMLEditorKit 中无法正常显示
+                            // 精确匹配：数字 + variation selector + emoji（如 1️⃣ = 1 + VS16 + ⃣）
+                            htmlContent = htmlContent.replace(Regex("""[0-9]\uFE0F\u20E3"""), "")
+
                             // 后处理流程图箭头：将 ↓ 转换为带样式的换行箭头
                             // 匹配模式：文本 ↓ 或文本↓ (前后可能有空格)
                             htmlContent = htmlContent.replace(Regex("""(\S)\s*↓""")) { matchResult ->

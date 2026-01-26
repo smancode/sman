@@ -177,53 +177,7 @@ class HistoryPopup(
         list.background = JBColor(Color(0, 0, 0, 0), Color(0, 0, 0, 0))
 
         // 圆角面板
-        val roundedPanel = object : JPanel(BorderLayout()) {
-            override fun paintComponent(g: Graphics) {
-                val g2 = g as Graphics2D
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-                // 绘制背景
-                g2.color = ChatColors.surface
-                g2.fillRoundRect(0, 0, width, height, JBUI.scale(12), JBUI.scale(12))
-
-                // 绘制边框
-                g2.color = ChatColors.userBubbleBorder
-                val oldStroke = g2.stroke
-                g2.stroke = BasicStroke(1.5f)
-                g2.drawRoundRect(0, 0, width - 1, height - 1, JBUI.scale(12), JBUI.scale(12))
-                g2.stroke = oldStroke
-            }
-
-            override fun getPreferredSize(): Dimension {
-                val size = super.getPreferredSize()
-
-                // 计算最大宽度
-                var refWidth = 0
-                var p = component.parent
-                var depth = 0
-
-                while (p != null && depth < 10) {
-                    if (p.width > JBUI.scale(200)) {
-                        refWidth = p.width
-                        break
-                    }
-                    p = p.parent
-                    depth++
-                }
-
-                if (refWidth < JBUI.scale(200)) {
-                    val window = SwingUtilities.getWindowAncestor(component)
-                    refWidth = ((window?.width ?: 1200) * 0.3).toInt()
-                }
-
-                val maxWidth = (refWidth * 0.75).toInt()
-
-                if (size.width > maxWidth) {
-                    size.width = maxWidth
-                }
-                return size
-            }
-        }
+        val roundedPanel = RoundedPanel(component)
         roundedPanel.border = JBUI.Borders.empty(6)
         roundedPanel.isOpaque = false
 
@@ -260,6 +214,89 @@ class HistoryPopup(
     }
 
     data class GroupSeparator(val title: String)
+
+    /**
+     * 圆角面板容器
+     */
+    private class RoundedPanel(private val component: JComponent) : JPanel(BorderLayout()) {
+        override fun paintComponent(g: Graphics) {
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+            // 绘制背景
+            g2.color = ChatColors.surface
+            g2.fillRoundRect(0, 0, width, height, JBUI.scale(12), JBUI.scale(12))
+
+            // 绘制边框
+            g2.color = ChatColors.userBubbleBorder
+            val oldStroke = g2.stroke
+            g2.stroke = BasicStroke(1.5f)
+            g2.drawRoundRect(0, 0, width - 1, height - 1, JBUI.scale(12), JBUI.scale(12))
+            g2.stroke = oldStroke
+        }
+
+        override fun getPreferredSize(): Dimension {
+            val size = super.getPreferredSize()
+
+            // 计算最大宽度
+            var refWidth = 0
+            var p = component.parent
+            var depth = 0
+
+            while (p != null && depth < 10) {
+                if (p.width > JBUI.scale(200)) {
+                    refWidth = p.width
+                    break
+                }
+                p = p.parent
+                depth++
+            }
+
+            if (refWidth < JBUI.scale(200)) {
+                val window = SwingUtilities.getWindowAncestor(component)
+                refWidth = ((window?.width ?: 1200) * 0.3).toInt()
+            }
+
+            val maxWidth = (refWidth * 0.75).toInt()
+
+            if (size.width > maxWidth) {
+                size.width = maxWidth
+            }
+            return size
+        }
+    }
+
+    /**
+     * 自定义内容面板，支持悬停和选中状态绘制
+     */
+    private class ContentPanel(
+        private val isSelected: Boolean,
+        private val isHovered: Boolean
+    ) : JPanel(BorderLayout()) {
+        override fun paintComponent(g: Graphics) {
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+            // 遮罩层
+            g2.color = ChatColors.surface
+            g2.fillRect(0, 0, width, height)
+
+            val arc = JBUI.scale(12)
+
+            if (isSelected) {
+                g2.color = ChatColors.userBubbleBorder
+                g2.fillRoundRect(0, 0, width, height, arc, arc)
+            } else if (isHovered) {
+                g2.color = ChatColors.userBubbleBorder
+                val oldStroke = g2.stroke
+                g2.stroke = BasicStroke(1.5f)
+                g2.drawRoundRect(1, 1, width - 2, height - 2, arc, arc)
+                g2.stroke = oldStroke
+            }
+
+            super.paintChildren(g)
+        }
+    }
 
     class HistoryListCellRenderer(
         private val onDelete: (SessionInfo) -> Unit,
@@ -308,31 +345,7 @@ class HistoryPopup(
             if (value is SessionInfo) {
                 val isHovered = index == hoverIndexProvider()
 
-                val contentPanel = object : JPanel(BorderLayout()) {
-                    override fun paintComponent(g: Graphics) {
-                        val g2 = g as Graphics2D
-                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-                        // 遮罩层
-                        g2.color = ChatColors.surface
-                        g2.fillRect(0, 0, width, height)
-
-                        val arc = JBUI.scale(12)
-
-                        if (isSelected) {
-                            g2.color = ChatColors.userBubbleBorder
-                            g2.fillRoundRect(0, 0, width, height, arc, arc)
-                        } else if (isHovered) {
-                            g2.color = ChatColors.userBubbleBorder
-                            val oldStroke = g2.stroke
-                            g2.stroke = BasicStroke(1.5f)
-                            g2.drawRoundRect(1, 1, width - 2, height - 2, arc, arc)
-                            g2.stroke = oldStroke
-                        }
-
-                        super.paintChildren(g)
-                    }
-                }
+                val contentPanel = ContentPanel(isSelected, isHovered)
                 contentPanel.isOpaque = false
                 contentPanel.border = JBUI.Borders.empty(6, 10, 6, 10)
 

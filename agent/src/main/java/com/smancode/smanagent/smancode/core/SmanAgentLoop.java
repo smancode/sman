@@ -661,10 +661,7 @@ public class SmanAgentLoop {
         for (java.util.regex.Pattern pattern : patterns) {
             java.util.regex.Matcher matcher = pattern.matcher(response);
             if (matcher.find()) {
-                String match = matcher.group(1);
-                if (match == null) {
-                    match = matcher.group(0);
-                }
+                String match = matcher.group(0);  // 使用 group(0) 获取整个匹配
                 if (match != null && !match.trim().isEmpty()) {
                     return match.trim();
                 }
@@ -1088,8 +1085,8 @@ public class SmanAgentLoop {
                                     if (fullData != null && !fullData.isEmpty()) {
                                         prompt.append("结果: \n").append(fullData).append("\n");
                                         // 标记为需要生成摘要，要求保留文件路径
-                                        prompt.append("【此工具结果尚无摘要，需要你生成】\n");
-                                        prompt.append("【重要：生成摘要时必须保留文件路径信息】\n");
+                                        prompt.append("[This tool result has no summary yet, you need to generate one]\n");
+                                        prompt.append("[IMPORTANT: When generating summary, must preserve file path (relativePath) info]\n");
                                     } else {
                                         String displayContent = result.getDisplayContent();
                                         if (displayContent != null && !displayContent.isEmpty()) {
@@ -1134,7 +1131,7 @@ public class SmanAgentLoop {
         prompt.append("Based on the tool execution history above, analyze the current progress and decide the next step:\n");
         prompt.append("1. **Analyze Results**: What key information did the tools return?\n");
         prompt.append("2. **Generate Summary (Important)**:\n");
-        prompt.append("   - If you see a tool result marked with【此工具结果尚无摘要，需要你生成】\n");
+        prompt.append("   - If you see a tool result marked with [This tool result has no summary yet, you need to generate one]\n");
         prompt.append("   - AND you decide to call a new tool: Add a \"summary\" field in the new tool's ToolPart,\n");
         prompt.append("     generating a summary for the **previously executed tool** (not the new one)\n");
         prompt.append("   - **Critical Requirement: When generating summary, must preserve file path (relativePath) info**\n");
