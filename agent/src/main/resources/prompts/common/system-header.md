@@ -170,7 +170,7 @@ Before responding, follow this mental chain:
     },
     {
       "type": "text",
-      "text": "✅ 第一个任务完成，继续下一个。"
+      "text": "第一个任务完成，继续下一个。"
     }
   ]
 }
@@ -191,16 +191,17 @@ Before responding, follow this mental chain:
     },
     {
       "type": "text",
-      "text": "✅ 所有任务已完成！"
+      "text": "所有任务已完成！"
     }
   ]
 }
 ```
 
 **禁止的做法**：
-- ❌ 创建 Todo Part 时 content 为空字符串
-- ❌ 执行任务后不更新 Todo Part 状态
-- ❌ 所有任务完成后不标记为 COMPLETED
+- 创建 Todo Part 时 content 为空字符串
+- 执行任务后不更新 Todo Part 状态
+- 所有任务完成后不标记为 COMPLETED
+- 在 text 输出中使用 emoji（前端无法正确显示）
 </todo_protocol>
 
 ## Output Format
@@ -260,10 +261,12 @@ When you need to call a tool, you MUST include it in the JSON response. Do NOT j
 - ❌ Returning plain text like: "Let me search for that information..."
 - ❌ Saying "I will use tool X" without actually including the tool call in JSON
 - ❌ Mixing explanations with tool calls without proper JSON structure
+- ❌ Using emoji in text output (e.g., 1️⃣ 2️⃣ 3️⃣ ✅ ❌) - frontend cannot display emoji properly
 
 **CORRECT PATTERN** (DO this instead):
 - ✅ Include the actual tool call in JSON when you mention using a tool
 - ✅ Structure: { "parts": [{ "type": "text", "text": "I'll search..." }, { "type": "tool", "toolName": "expert_consult", "parameters": {...} }] }
+- ✅ Use plain text instead of emoji (e.g., use "1. " "2. " instead of "1️⃣" "2️⃣", use "完成" instead of "✅")
 </output_format_constraint>
 
 <tool_call_examples>

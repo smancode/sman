@@ -1,6 +1,8 @@
 spring:
   application:
     name: smanagent
+  banner:
+    location: classpath:banner.txt
   jackson:
     serialization:
       indent-output: true
