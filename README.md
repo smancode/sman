@@ -1,118 +1,144 @@
-# SiliconMan 统一插件
+# SmanAgent - IntelliJ IDEA AI 助手
 
-> 整合了 SiliconMan、SmanAgent、SmanCode 三个项目的所有功能，提供 AI 驱动的代码分析和开发助手。
+> 集成 ReAct Loop 的智能代码分析助手，支持多轮对话、本地工具执行和会话持久化。
+
+## 特性
+
+- **AI 驱动的代码分析**: 基于 GLM-4.7 的智能代码理解和分析
+- **多轮对话支持**: 完整的会话管理，支持上下文保持
+- **本地工具执行**: 6 个核心工具直接在 IntelliJ 中执行
+- **会话持久化**: 按项目隔离存储会话历史
+- **流式响应渲染**: 实时显示 AI 思考过程和执行结果
+- **三阶段工作流**: Analyze → Plan → Execute
 
 ## 版本信息
 
-- **版本**: 2.0.0
-- **兼容性**: IntelliJ IDEA 2024.1 - 2025.3
-- **包名**: com.smancode.sman
-
-## 核心功能
-
-- 🤖 **AI 驱动的代码分析**: 基于 Claude Code 的智能代码理解
-- 💬 **多轮对话支持**: 基于会话的上下文管理
-- 🔧 **本地工具集成**: 12+ 工具直接在 IntelliJ 中执行
-- 📊 **调用链可视化**: 代码结构分析和依赖关系展示
-- 🎯 **三阶段工作流**: Analyze → Plan → Execute
-- 🛡️ **降级模式支持**: AI 服务不可用时自动降级
-- ✏️ **代码编辑**: 智能代码重构和编辑
+- **版本**: 1.0.0
+- **兼容性**: IntelliJ IDEA 2023.2+
+- **语言**: Kotlin 1.9.20
 
 ## 快速开始
 
+### 前置要求
+
+- IntelliJ IDEA 2023.2 或更高版本
+- JDK 17 或更高版本
+- GLM API Key（从 [智谱 AI](https://open.bigmodel.cn/) 获取）
+
 ### 安装
 
+1. 克隆项目：
 ```bash
-# 克隆项目
-git clone <repository-url>
-cd smanunion
+git clone git@github.com:smancode/sman.git
+cd sman
+git checkout union
+```
 
-# 构建插件
-./gradlew buildPlugin
+2. 配置 API Key：
+```bash
+export LLM_API_KEY=your_api_key_here
+```
 
-# 在沙盒 IDE 中运行（用于开发）
+或在 IDE 中设置：
+- Run → Edit Configurations...
+- 在 Environment variables 中添加：`LLM_API_KEY=your_api_key_here`
+
+3. 构建并运行：
+```bash
 ./gradlew runIde
 ```
 
 ### 配置
 
-1. 打开 IDE 设置
-2. 导航到 `Tools → SiliconMan`
-3. 配置 LLM 端点：
-   - API Base URL
-   - API Key
-   - 模型名称
+编辑 `src/main/resources/smanagent.properties`：
 
-### 使用
+```properties
+# LLM 配置
+llm.api.key=your_api_key_here
+llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
+llm.model.name=glm-4-flash
+llm.response.max.tokens=4000
+llm.retry.max=3
+llm.retry.base.delay=1000
 
-1. 打开 SiliconMan 工具窗口（`Ctrl+Alt+S` 或 `Tools → SiliconMan`）
-2. 输入你的问题或需求
-3. AI 将分析代码并提供解决方案
+# 其他配置
+max.cache.size=100
+project.session.prefix=local
+```
 
 ## 可用工具
 
-| 工具名 | 功能 | 参数 |
-|--------|------|------|
-| `read_file` | 读取文件内容 | `relativePath`, `startLine`, `endLine` |
-| `grep_file` | 正则搜索文件 | `relativePath`, `pattern` |
-| `find_file` | 按文件名查找 | `name`, `extension` |
-| `call_chain` | 分析方法调用链 | `className`, `methodName` |
-| `apply_change` | 应用代码修改 | `changes` |
-| `extract_xml` | 提取 XML 标签 | `content`, `tagName` |
+| 工具 | 描述 | 参数 |
+|------|------|------|
+| `read_file` | 读取文件内容 | `simpleName`, `relativePath`, `startLine`, `endLine` |
+| `grep_file` | 正则搜索文件内容 | `pattern`, `relativePath`, `filePattern` |
+| `find_file` | 按文件名模式查找文件 | `pattern`, `filePattern` |
+| `call_chain` | 分析方法调用链 | `method`, `direction`, `depth`, `includeSource` |
+| `extract_xml` | 提取 XML 标签内容 | `relativePath`, `tagPattern`, `tagName` |
+| `apply_change` | 应用代码修改 | `relativePath`, `newContent`, `mode`, `description` |
 
-## 工作流程
+## 使用示例
 
-SiliconMan 遵循 **三阶段工作流**：
+### 1. 分析代码结构
 
-### 1. Analyze（分析）
+```
+>>> 分析 PaymentService 的职责
+```
 
-AI 分析你的需求：
-- 理解上下文
-- 识别关键概念
-- 检测潜在问题
+### 2. 查找调用关系
 
-### 2. Plan（规划）
+```
+>>> 找出所有调用 PaymentService.processPayment 的地方
+```
 
-AI 制定解决方案：
-- 列出实施步骤
-- 识别依赖关系
-- 评估风险
+### 3. 代码重构
 
-### 3. Execute（执行）
+```
+>>> 将 PaymentService 中的 validatePayment 方法提取到独立的 ValidationService
+```
 
-AI 执行解决方案：
-- 调用工具
-- 修改代码
-- 验证结果
+### 4. 理解业务逻辑
 
-## 技术栈
-
-- **Kotlin**: 1.9.20
-- **IntelliJ Platform**: 2024.1
-- **HTTP 客户端**: OkHttp 4.12.0
-- **JSON 处理**: Jackson 2.16.0
-- **Markdown**: Flexmark 0.64.8
-- **日志**: Logback 1.4.11
+```
+>>> 解释支付流程的实现逻辑
+```
 
 ## 架构
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         IntelliJ IDEA Plugin (Kotlin)              │
-│  ┌───────────────┐         ┌───────────────┐                      │
-│  │ Chat Panel UI │◄────────┤  ReAct Loop    │◄────┐               │
-│  └───────────────┘         └───────┬───────┘     │               │
-│          ▲                         │             │               │
-│          │                         ▼             │               │
-│    ┌─────┴─────┐          ┌───────────────┐    │               │
-│    │ Tool Exec │◄─────────│ Tool Registry │    │               │
-│    └───────────┘          └───────────────┘    │               │
-│                                                 │               │
-│  ┌──────────────────────────────────────────────┴─────┐        │
-│  │              LLM Service (HTTP Direct)             │        │
-│  └────────────────────────────────────────────────────┘        │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    IntelliJ Plugin                          │
+│  ┌──────────────┐      ┌──────────────┐                   │
+│  │ Chat UI      │◄────►│ SmanAgent    │                   │
+│  └──────────────┘      │   Service     │                   │
+│         ▲              └───────┬───────┘                   │
+│         │                      │                           │
+│         │              ┌───────┴───────┐                   │
+│         │              │ SmanAgent     │                   │
+│         │              │   Loop        │                   │
+│         │              └───────┬───────┘                   │
+│         │                      │                           │
+│         │              ┌───────┴────────────────────┐      │
+│         │              │                            │      │
+│         │         ┌────┴────┐              ┌────────┴──┐   │
+│         │         │ LLM     │              │ Tool      │   │
+│         └────────►│ Service │◄─────────────│ Registry  │   │
+│                   └─────────┘              └──────┬────┘   │
+│                                                   │         │
+│                                            ┌──────┴─────┐  │
+│                                            │ LocalTools │  │
+│                                            └────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+### 核心组件
+
+- **SmanAgentService**: 主服务管理器，负责初始化和协调所有组件
+- **SmanAgentLoop**: ReAct 循环实现，处理多轮对话
+- **LlmService**: LLM 调用服务，支持端点池、重试和缓存
+- **ToolRegistry**: 工具注册表，管理所有可用工具
+- **LocalToolExecutor**: 本地工具执行器，在 IntelliJ 中执行工具
+- **SessionFileService**: 会话文件服务，负责持久化
 
 ## 开发
 
@@ -123,10 +149,19 @@ AI 执行解决方案：
 ./gradlew test
 
 # 运行特定测试
-./gradlew test --tests "com.smancode.sman.core.llm.LlmServiceTest"
+./gradlew test --tests "*LocalToolFactoryTest*"
 
 # 查看测试报告
 open build/reports/tests/test/index.html
+```
+
+### 构建插件
+
+```bash
+# 构建插件包
+./gradlew buildPlugin
+
+# 输出: build/distributions/smanagent-1.0.0.zip
 ```
 
 ### 代码检查
@@ -139,25 +174,59 @@ open build/reports/tests/test/index.html
 ./gradlew verifyPluginConfiguration
 ```
 
-### 构建插件
+## 会话存储
 
-```bash
-# 构建插件包
-./gradlew buildPlugin
+会话按项目隔离存储在：
 
-# 输出: build/distributions/SiliconMan-2.0.0.zip
 ```
+~/.smanunion/sessions/{projectKey}/{sessionId}.json
+```
+
+示例：
+```
+~/.smanunion/sessions/MyProject/0128_120000_ABC123.json
+```
+
+## 技术栈
+
+- **Kotlin**: 1.9.20
+- **IntelliJ Platform SDK**: 2023.2
+- **OkHttp**: 4.12.0（HTTP 客户端）
+- **Jackson**: 2.16.0（JSON 处理）
+- **Flexmark**: 0.64.8（Markdown 渲染）
+- **Logback**: 1.4.11（日志）
+- **MockK**: 1.13.5（测试 Mock）
 
 ## 测试覆盖
 
 | 模块 | 测试数量 | 覆盖率 |
 |------|---------|--------|
-| LLM 服务 | 13 | ~80% |
-| ReAct 循环 | 7 | ~70% |
-| 工具系统 | 20 | ~40% |
-| UI 服务 | 4 | ~60% |
-| 提示词系统 | 10 | ~85% |
-| **总计** | **54** | **~67%** |
+| LLM 服务 | 3 | ~80% |
+| ReAct 循环 | 4 | ~70% |
+| 工具系统 | 6 | ~75% |
+| 会话管理 | 5 | ~85% |
+| 数据模型 | 3 | ~80% |
+| **总计** | **21** | **~78%** |
+
+## 故障排查
+
+### LLM 调用失败
+
+1. 检查 API Key 是否正确
+2. 检查网络连接
+3. 查看日志：`Help → Show Log in Explorer`
+
+### 工具执行失败
+
+1. 确认项目已打开
+2. 检查文件是否存在
+3. 查看异常堆栈
+
+### UI 无响应
+
+1. 检查是否在后台线程执行
+2. 查看线程状态
+3. 重启 IDE
 
 ## 贡献
 
@@ -171,16 +240,9 @@ open build/reports/tests/test/index.html
 
 ## 许可证
 
-[待补充]
+Apache License 2.0
 
 ## 联系方式
 
-- **Email**: support@smancode.ai
-- **Website**: https://smancode.ai
-- **GitHub**: https://github.com/smancode-ai/siliconman
-
-## 致谢
-
-- SiliconMan 团队
-- SmanAgent 团队
-- SmanCode 团队
+- **GitHub**: https://github.com/smancode/sman
+- **分支**: union
