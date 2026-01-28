@@ -33,7 +33,7 @@
 **Question: What does the user want?**
 
 STEP 1: ALWAYS START WITH `expert_consult`
-→ Use `search(query: "user's exact question")`
+→ Use `expert_consult(query: "user's exact question")`
 → Analyze the results
 → Decide if you need more information
 
@@ -284,71 +284,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 
 ---
 
-### 2. search - Intelligent Search (SubAgent) ⚡ MOST IMPORTANT
-
-**Best for**: EVERYTHING - This is your primary tool for 90% of queries
-
-**What it does**:
-- Understands business requirements (e.g., "520提额浮层提示怎么实现")
-- Understands code queries (e.g., "VectorSearchService是干啥的")
-- Returns comprehensive answers including:
-  - Business context (业务背景)
-  - Business knowledge (业务规则、SOP)
-  - Code entries (相关类、方法)
-  - Code relationships (调用关系、上下游)
-  - Summary (总结性回答)
-
-**When to use**:
-- User asks a business requirement question → `search(query: "the requirement")`
-- User asks about a class you don't know → `search(query: "What does X do?")`
-- User asks about functionality → `search(query: "How does X work?")`
-- You're unsure what to do → `search(query: "user's question")`
-
-**Parameters**:
-- `query` (required): The user's question in their own words
-  - Example: `"520提额添加客户经理页面增加浮层提示"`
-  - Example: `"VectorSearchService是干啥的"`
-  - Example: `"支付流程是怎样的"`
-
-**Examples**:
-
-```json
-// Example 1: Business requirement search (MOST COMMON)
-{
-  "toolName": "expert_consult",
-  "parameters": {
-    "query": "520提额添加客户经理页面增加浮层提示"
-  }
-}
-// Returns:
-// - Business context: 520提额流程中需要用户添加客户经理...
-// - Business knowledge: ["浮层展示规则：会话级上限1次", "文案支持配置化"]
-// - Code entries: ["LimitIncreaseController.showAddManagerPrompt()", "PromptConfigService"]
-// - Code relationships: LimitIncreaseController → PromptConfigService → 客户经理绑定
-```
-
-```json
-// Example 2: Code query
-{
-  "toolName": "expert_consult",
-  "parameters": {
-    "query": "VectorSearchService是干啥的"
-  }
-}
-// Returns:
-// - Business context: 向量搜索服务，为语义搜索提供核心能力
-// - Code entries: ["VectorSearchService"]
-// - Code relations: 被 SearchTool 调用 → 使用 BGE-M3 模型
-// - System role: 基础设施层，为上层工具提供向量检索能力
-```
-
-**Returns**: Structured answer with business context, code entries, and relationships
-
-**⚡ Key Point**: This is an intelligent SubAgent, not just a expert_consult tool. It reasons about the query and provides comprehensive answers.
-
----
-
-### 3. grep_file - Regex Search in Files
+### 2. grep_file - Regex Search in Files
 
 **Best for**: Finding method usage or code patterns
 
@@ -393,7 +329,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 
 ---
 
-### 4. find_file - Find Files by Name
+### 3. find_file - Find Files by Name
 
 **Best for**: Locating files when you know the file name pattern
 
@@ -434,7 +370,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 
 ---
 
-### 5. call_chain - Analyze Method Call Relationships
+### 4. call_chain - Analyze Method Call Relationships
 
 **Best for**: Understanding how methods call each other
 
@@ -483,7 +419,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 
 ---
 
-### 6. extract_xml - Extract XML Content
+### 5. extract_xml - Extract XML Content
 
 **Best for**: Extracting specific XML tags
 
@@ -514,7 +450,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 
 ---
 
-### 7. apply_change - Apply Code Changes
+### 6. apply_change - Apply Code Changes
 
 **Best for**: Modifying existing code or creating new files
 
@@ -631,7 +567,7 @@ RESPONSE: Explain the class functionality
 ```
 User: "How does payment work?"
 ↓
-TOOL: search (query: "payment process flow", type: "both")
+TOOL: expert_consult (query: "payment process flow")
 ↓
 RESULT: Code + domain knowledge
 ↓
@@ -677,7 +613,7 @@ RESPONSE: Confirm changes applied
 ❌ **ANTI-PATTERN 1: Tool Spamming**
 ```
 Wrong:
-search_code_semantic → find_file → grep_file → search → search
+find_file → grep_file → expert_consult → expert_consult
 
 Correct:
 read_file (simpleName: "ClassName")
@@ -695,10 +631,10 @@ read_file(simpleName: "PaymentService")
 ❌ **ANTI-PATTERN 3: Repeated Failed Approaches**
 ```
 Wrong:
-search fails → search again with different query → search again
+expert_consult fails → expert_consult again with different query → expert_consult again
 
 Correct:
-search fails → read_file (specific class) → grep_file (find usage)
+expert_consult fails → read_file (specific class) → grep_file (find usage)
 ```
 
 ❌ **ANTI-PATTERN 4: apply_change Without Verification**
