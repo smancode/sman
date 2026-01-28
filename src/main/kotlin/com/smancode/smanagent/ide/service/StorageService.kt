@@ -75,6 +75,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var backendUrl: String = "ws://localhost:8080/ws/agent",
         var currentSessionId: String = "",
 
+        // LLM 配置（用户在设置中配置）
+        var llmApiKey: String = "",                    // 用户配置的 API Key（加密存储）
+        var llmBaseUrl: String = "",                   // 用户配置的 Base URL
+        var llmModelName: String = "",                 // 用户配置的模型名称
+
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
     )
@@ -240,14 +245,10 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
      * 对于复杂对象（如 List、Map），使用 JSON 序列化
      */
     private fun serializePartData(data: Map<String, Any>): Map<String, String> {
-        return data.mapValues { entry ->
-            val value = entry.value
+        return data.mapValues { (_, value) ->
             when (value) {
-                is String -> value
-                is Number -> value.toString()
-                is Boolean -> value.toString()
-                is List<*> -> jsonMapper.writeValueAsString(value)
-                is Map<*, *> -> jsonMapper.writeValueAsString(value)
+                is String, is Number, is Boolean -> value.toString()
+                is List<*>, is Map<*, *> -> jsonMapper.writeValueAsString(value)
                 else -> jsonMapper.writeValueAsString(value)
             }
         }
@@ -258,90 +259,49 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
      */
     private fun deserializePartData(serializablePart: SerializablePart): PartData? {
         return try {
-            // 将 Map<String, String> 转回 Map<String, Any>
-            // 对于 JSON 字符串，反序列化为原始对象
             val dataMap = serializablePart.data.mapValues { (_, value) ->
-                try {
-                    // 尝试解析 JSON，如果失败则作为字符串处理
-                    when {
-                        value.startsWith("[") || value.startsWith("{") -> {
-                            jsonMapper.readValue(value)
-                        }
-                        else -> value
-                    }
-                } catch (e: Exception) {
-                    // JSON 解析失败，作为字符串处理
-                    value
-                }
+                parseJsonValue(value)
             }
 
-            // 根据 PartType 创建对应的 PartData
             val partType = PartType.valueOf(serializablePart.type)
-            val createdTime = Instant.ofEpochMilli(serializablePart.createdTime)
-            val updatedTime = Instant.ofEpochMilli(serializablePart.updatedTime)
+            val timestamps = Instant.ofEpochMilli(serializablePart.createdTime) to
+                            Instant.ofEpochMilli(serializablePart.updatedTime)
 
-            when (partType) {
-                PartType.TEXT -> GraphModels.TextPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.TOOL -> GraphModels.ToolPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.REASONING -> GraphModels.ReasoningPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.GOAL -> GraphModels.GoalPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.PROGRESS -> GraphModels.ProgressPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.USER -> GraphModels.UserPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-                PartType.TODO -> GraphModels.TodoPartData(
-                    id = serializablePart.id,
-                    messageId = serializablePart.messageId,
-                    sessionId = serializablePart.sessionId,
-                    createdTime = createdTime,
-                    updatedTime = updatedTime,
-                    data = dataMap
-                )
-            }
+            createPartData(partType, serializablePart, dataMap, timestamps)
         } catch (e: Exception) {
             logger.warn("反序列化 Part 失败: type={}, id={}, error={}",
                 serializablePart.type, serializablePart.id, e.message)
             null
+        }
+    }
+
+    private fun parseJsonValue(value: String): Any {
+        return try {
+            when {
+                value.startsWith("[") || value.startsWith("{") -> jsonMapper.readValue(value)
+                else -> value
+            }
+        } catch (e: Exception) {
+            value
+        }
+    }
+
+    private fun createPartData(
+        partType: PartType,
+        serializablePart: SerializablePart,
+        dataMap: Map<String, Any>,
+        timestamps: Pair<Instant, Instant>
+    ): PartData {
+        val (createdTime, updatedTime) = timestamps
+
+        return when (partType) {
+            PartType.TEXT -> GraphModels.TextPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.TOOL -> GraphModels.ToolPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.REASONING -> GraphModels.ReasoningPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.GOAL -> GraphModels.GoalPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.PROGRESS -> GraphModels.ProgressPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.USER -> GraphModels.UserPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
+            PartType.TODO -> GraphModels.TodoPartData(serializablePart.id, serializablePart.messageId, serializablePart.sessionId, createdTime, updatedTime, dataMap)
         }
     }
 
@@ -417,6 +377,19 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var backendUrl: String
         get() = state.backendUrl
         set(value) { state.backendUrl = value }
+
+    // LLM 配置
+    var llmApiKey: String
+        get() = state.llmApiKey
+        set(value) { state.llmApiKey = value }
+
+    var llmBaseUrl: String
+        get() = state.llmBaseUrl
+        set(value) { state.llmBaseUrl = value }
+
+    var llmModelName: String
+        get() = state.llmModelName
+        set(value) { state.llmModelName = value }
 
     companion object {
         fun getInstance(project: Project): StorageService {

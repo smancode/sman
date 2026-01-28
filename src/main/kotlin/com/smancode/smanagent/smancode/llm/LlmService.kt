@@ -100,6 +100,9 @@ class LlmService(
                 // 完整打印响应内容（不截取）
                 logger.info("=== LLM 响应 (完整内容):\n{}", rawApiResponse)
 
+                // 检查 LLM API 错误响应
+                checkForApiError(rawApiResponse)
+
                 // 提取纯文本内容
                 val content = extractContent(rawApiResponse)
 
@@ -195,6 +198,10 @@ class LlmService(
             // 构建请求
             // baseUrl + "/chat/completions" 组合成完整的 API URL
             val fullUrl = (endpoint.baseUrl ?: error("Endpoint baseUrl cannot be null")) + "/chat/completions"
+
+            // 日志：验证配置
+            logger.info("=== LLM 请求 === URL: $fullUrl, API Key: ${endpoint.apiKey?.take(10)}***, Model: ${endpoint.model}")
+
             val request = Request.Builder()
                 .url(fullUrl)
                 .post(requestBodyJson.toRequestBody(JSON_MEDIA_TYPE))
@@ -655,6 +662,62 @@ class LlmService(
         body["messages"] = messages
 
         return body
+    }
+
+    /**
+     * 检查 LLM API 错误响应
+     *
+     * 如果响应包含错误信息（如 401、400 等），抛出有意义的异常
+     */
+    private fun checkForApiError(rawApiResponse: String) {
+        try {
+            val root = objectMapper.readTree(rawApiResponse)
+
+            // 尝试解析 GLM API 错误格式
+            parseGlmApiError(root)?.let { throw it }
+
+            // 尝试解析 OpenAI 错误格式
+            parseOpenAiError(root)?.let { throw it }
+
+        } catch (e: RuntimeException) {
+            throw e
+        } catch (e: Exception) {
+            logger.debug("响应不是标准错误格式，继续处理: {}", e.message)
+        }
+    }
+
+    /**
+     * 解析 GLM API 错误格式
+     * @return RuntimeException 如果是错误，null 否则
+     */
+    private fun parseGlmApiError(root: com.fasterxml.jackson.databind.JsonNode): RuntimeException? {
+        val codeNode = root.path("code")
+        val msgNode = root.path("msg")
+        val successNode = root.path("success")
+
+        if (codeNode.isMissingNode || successNode.isMissingNode) return null
+
+        val code = codeNode.asInt()
+        val success = successNode.asBoolean()
+        val msg = msgNode.asText("未知错误")
+
+        return if (!success || code != 0) {
+            RuntimeException("LLM API 错误 [$code]: $msg")
+        } else null
+    }
+
+    /**
+     * 解析 OpenAI 错误格式
+     * @return RuntimeException 如果是错误，null 否则
+     */
+    private fun parseOpenAiError(root: com.fasterxml.jackson.databind.JsonNode): RuntimeException? {
+        val errorNode = root.path("error")
+        if (errorNode.isMissingNode || !errorNode.isObject) return null
+
+        val errorMsg = errorNode.path("message").asText()
+        val errorType = errorNode.path("type").asText("unknown_error")
+
+        return RuntimeException("LLM API 错误 [$errorType]: $errorMsg")
     }
 
     /**

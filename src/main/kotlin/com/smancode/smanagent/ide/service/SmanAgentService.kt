@@ -16,9 +16,6 @@ import com.smancode.smanagent.smancode.core.SmanAgentLoop
 import com.smancode.smanagent.smancode.core.StreamingNotificationHandler
 import com.smancode.smanagent.smancode.core.SubTaskExecutor
 import com.smancode.smanagent.smancode.llm.LlmService
-import com.smancode.smanagent.smancode.llm.config.LlmEndpoint
-import com.smancode.smanagent.smancode.llm.config.LlmPoolConfig
-import com.smancode.smanagent.smancode.llm.config.LlmRetryPolicy
 import com.smancode.smanagent.smancode.prompt.DynamicPromptInjector
 import com.smancode.smanagent.smancode.prompt.PromptDispatcher
 import com.smancode.smanagent.smancode.prompt.PromptLoaderService
@@ -38,18 +35,17 @@ class SmanAgentService(private val project: Project) : Disposable {
 
     private val logger = LoggerFactory.getLogger(SmanAgentService::class.java)
 
+    // 存储服务
+    private val storageService = project.storageService()
+
     // 服务初始化状态
     var initializationError: String? = null
         private set
 
     // 核心服务组件
-    private lateinit var llmService: LlmService
     private lateinit var toolRegistry: ToolRegistry
     private lateinit var toolExecutor: ToolExecutor
     private lateinit var sessionManager: com.smancode.smanagent.smancode.core.SessionManager
-    private lateinit var subTaskExecutor: SubTaskExecutor
-    private lateinit var notificationHandler: StreamingNotificationHandler
-    private lateinit var contextCompactor: ContextCompactor
     private lateinit var promptDispatcher: PromptDispatcher
     private lateinit var dynamicPromptInjector: DynamicPromptInjector
     private lateinit var smanAgentLoop: SmanAgentLoop
@@ -62,8 +58,28 @@ class SmanAgentService(private val project: Project) : Disposable {
         get() = project.name
 
     init {
+        loadUserConfig()
         initializeServices()
-        // 不再启动时加载所有历史会话，改为按需加载
+    }
+
+    /**
+     * 加载用户配置
+     */
+    private fun loadUserConfig() {
+        val userConfig = SmanAgentConfig.UserConfig(
+            llmApiKey = storageService.llmApiKey,
+            llmBaseUrl = storageService.llmBaseUrl,
+            llmModelName = storageService.llmModelName
+        )
+        SmanAgentConfig.setUserConfig(userConfig)
+    }
+
+    /**
+     * 重新加载用户配置（只更新配置，不重建服务）
+     */
+    fun reloadUserConfig() {
+        logger.info("重新加载用户配置")
+        loadUserConfig()
     }
 
     /**
@@ -71,11 +87,7 @@ class SmanAgentService(private val project: Project) : Disposable {
      */
     private fun initializeServices() {
         try {
-            // 获取 LLM 配置
-            val llmPoolConfig = createLlmPoolConfig()
-
             // 初始化核心服务
-            llmService = LlmService(llmPoolConfig)
             val promptLoader = PromptLoaderService()
             promptDispatcher = PromptDispatcher(promptLoader)
             toolRegistry = ToolRegistry()
@@ -87,22 +99,24 @@ class SmanAgentService(private val project: Project) : Disposable {
             toolRegistry.registerTools(localTools)
             logger.info("已注册 {} 个本地工具", localTools.size)
 
+            // 创建 LLM 服务（用于其他依赖它的组件）
+            val llmService = SmanAgentConfig.createLlmService()
+
             // 初始化高级服务
             val resultSummarizer = ResultSummarizer(llmService)
-            notificationHandler = StreamingNotificationHandler(llmService)
-            subTaskExecutor = SubTaskExecutor(
+            val notificationHandler = StreamingNotificationHandler(llmService)
+            val subTaskExecutor = SubTaskExecutor(
                 sessionManager = sessionManager,
                 toolExecutor = toolExecutor,
                 resultSummarizer = resultSummarizer,
                 llmService = llmService,
                 notificationHandler = notificationHandler
             )
-            contextCompactor = ContextCompactor(llmService)
+            val contextCompactor = ContextCompactor(llmService)
             dynamicPromptInjector = DynamicPromptInjector(promptLoader)
 
-            // 初始化主循环
+            // 初始化主循环（不再需要传递 llmService）
             smanAgentLoop = SmanAgentLoop(
-                llmService = llmService,
                 promptDispatcher = promptDispatcher,
                 toolRegistry = toolRegistry,
                 subTaskExecutor = subTaskExecutor,
@@ -123,64 +137,36 @@ class SmanAgentService(private val project: Project) : Disposable {
     /**
      * 格式化初始化错误信息
      */
-    private fun formatInitializationError(e: Exception): String {
-        return when {
-            e.message?.contains("LLM_API_KEY") == true -> """
-                ⚠️ 配置错误：缺少 API Key
+    private fun formatInitializationError(e: Exception): String = when {
+        e.message?.contains("LLM_API_KEY") == true -> """
+            ⚠️ 配置错误：缺少 API Key
 
-                请设置 LLM_API_KEY 环境变量：
+            请设置 LLM_API_KEY 环境变量：
 
-                1. 打开 Run → Edit Configurations...
-                2. 选择你的插件运行配置
-                3. 在 Environment variables 中添加：
-                   LLM_API_KEY=your_api_key_here
+            1. 打开 Run → Edit Configurations...
+            2. 选择你的插件运行配置
+            3. 在 Environment variables 中添加：
+               LLM_API_KEY=your_api_key_here
 
-                或在终端中执行：
-                export LLM_API_KEY=your_api_key_here
-            """.trimIndent()
+            或在终端中执行：
+            export LLM_API_KEY=your_api_key_here
+        """.trimIndent()
 
-            e.message?.contains("Connection") == true ||
-            e.message?.contains("timeout") == true -> """
-                ⚠️ 网络错误：无法连接到 LLM 服务
+        e.message?.contains("Connection") == true ||
+        e.message?.contains("timeout") == true -> """
+            ⚠️ 网络错误：无法连接到 LLM 服务
 
-                请检查：
-                • 网络连接是否正常
-                • API Key 是否有效
-                • LLM 服务是否可用
-            """.trimIndent()
+            请检查：
+            • 网络连接是否正常
+            • API Key 是否有效
+            • LLM 服务是否可用
+        """.trimIndent()
 
-            else -> """
-                ⚠️ 初始化失败：${e.message}
+        else -> """
+            ⚠️ 初始化失败：${e.message}
 
-                请查看日志获取详细信息。
-            """.trimIndent()
-        }
-    }
-
-    /**
-     * 创建 LLM 连接池配置
-     */
-    private fun createLlmPoolConfig(): LlmPoolConfig {
-        // 使用配置对象
-        val config = SmanAgentConfig
-
-        logger.info(config.getConfigSummary())
-
-        return LlmPoolConfig().apply {
-            endpoints.add(
-                LlmEndpoint().apply {
-                    this.baseUrl = config.llmBaseUrl
-                    this.apiKey = config.llmApiKey
-                    this.model = config.llmModelName
-                    this.maxTokens = config.llmResponseMaxTokens
-                    this.isEnabled = true
-                }
-            )
-            retry = LlmRetryPolicy().apply {
-                maxRetries = config.llmRetryMax
-                baseDelay = config.llmRetryBaseDelay
-            }
-        }
+            请查看日志获取详细信息。
+        """.trimIndent()
     }
 
     // ========== 公共 API ==========

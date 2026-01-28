@@ -1,5 +1,9 @@
 package com.smancode.smanagent.config
 
+import com.smancode.smanagent.smancode.llm.LlmService
+import com.smancode.smanagent.smancode.llm.config.LlmEndpoint
+import com.smancode.smanagent.smancode.llm.config.LlmPoolConfig
+import com.smancode.smanagent.smancode.llm.config.LlmRetryPolicy
 import org.slf4j.LoggerFactory
 import java.io.InputStream
 import java.util.Properties
@@ -7,11 +11,25 @@ import java.util.Properties
 /**
  * SmanAgent 配置管理器
  *
- * 从配置文件和环境变量中读取配置
+ * 从配置文件、环境变量和用户设置中读取配置
+ *
+ * 优先级：用户设置 > 环境变量 > 配置文件 > 默认值
  */
 object SmanAgentConfig {
 
     private val logger = LoggerFactory.getLogger(SmanAgentConfig::class.java)
+
+    // 用户配置缓存（从 StorageService 读取）
+    private var userConfig: UserConfig? = null
+
+    /**
+     * 用户配置
+     */
+    data class UserConfig(
+        val llmApiKey: String = "",
+        val llmBaseUrl: String = "",
+        val llmModelName: String = ""
+    )
 
     private val properties: Properties by lazy {
         loadProperties()
@@ -19,69 +37,96 @@ object SmanAgentConfig {
 
     // ==================== 类型安全的配置读取方法 ====================
 
-    /**
-     * 获取 String 配置
-     */
-    private fun getString(key: String, default: String): String {
-        return getProperty(key) ?: default
-    }
+    private fun getString(key: String, default: String): String = getProperty(key) ?: default
 
-    /**
-     * 获取 Int 配置
-     */
-    private fun getInt(key: String, default: Int): Int {
-        return getProperty(key)?.toIntOrNull() ?: default
-    }
-
-    /**
-     * 获取 Long 配置
-     */
-    private fun getLong(key: String, default: Long): Long {
-        return getProperty(key)?.toLongOrNull() ?: default
-    }
-
-    /**
-     * 获取 Double 配置
-     */
-    private fun getDouble(key: String, default: Double): Double {
-        return getProperty(key)?.toDoubleOrNull() ?: default
-    }
-
-    /**
-     * 获取 Boolean 配置
-     */
-    private fun getBoolean(key: String, default: Boolean): Boolean {
-        return getProperty(key)?.toBoolean() ?: default
+    private inline fun <reified T : Any> getConfigValue(key: String, default: T): T {
+        val value = getProperty(key) ?: return default
+        return when (T::class) {
+            String::class -> value as T
+            Int::class -> value.toIntOrNull() as? T ?: default
+            Long::class -> value.toLongOrNull() as? T ?: default
+            Double::class -> value.toDoubleOrNull() as? T ?: default
+            Boolean::class -> value.toBoolean() as? T ?: default
+            else -> default
+        }
     }
 
     // ==================== LLM API 配置 ====================
 
     /**
-     * LLM API Key
-     *
-     * 支持环境变量占位符格式：${ENV_VAR_NAME}
+     * 设置用户配置（从 StorageService 调用）
      */
-    val llmApiKey: String by lazy {
-        val configValue = getString("llm.api.key", "")
-        resolveApiKey(configValue) ?: throw IllegalStateException(
-            """
-            缺少 LLM API Key 配置。
-
-            请在以下位置之一配置：
-
-            1. 配置文件: src/main/resources/smanagent.properties
-               llm.api.key=your_api_key_here
-
-            2. 环境变量: LLM_API_KEY
-               export LLM_API_KEY=your_api_key_here
-
-            3. 环境变量占位符: $'{ENV_VAR_NAME}'
-               在配置文件中: llm.api.key=$'{YOUR_API_KEY_VAR}'
-
-            4. IDE 运行配置: Run → Edit Configurations → Environment variables
-            """.trimIndent()
-        )
+    fun setUserConfig(config: UserConfig) {
+        userConfig = config
+        logger.info("更新用户配置: baseUrl={}, model={}",
+            config.llmBaseUrl.takeIf { it.isNotEmpty() } ?: "(未设置)",
+            config.llmModelName.takeIf { it.isNotEmpty() } ?: "(未设置)")
     }
+
+    /**
+     * 读取配置的通用方法：用户设置 > 配置文件/环境变量 > 默认值
+     */
+    private inline fun <T> readConfig(
+        userValue: T?,
+        configKey: String,
+        default: T,
+        crossinline fromConfig: (String) -> T?
+    ): T {
+        return userValue?.takeIf { it.toString().isNotEmpty() }
+            ?: fromConfig(getString(configKey, ""))
+            ?: default
+    }
+
+    /**
+     * LLM API Key（优先级：用户设置 > 环境变量 > 配置文件）
+     */
+    val llmApiKey: String
+        get() = userConfig?.llmApiKey?.takeIf { it.isNotEmpty() }
+            ?: resolveApiKey(getString("llm.api.key", ""))
+            ?: throw IllegalStateException(
+                """
+                |缺少 LLM API Key 配置。
+                |
+                |请在以下位置之一配置：
+                |
+                |1. SmanAgent 设置界面（推荐）
+                |   打开工具窗口，点击设置按钮，填写 API Key
+                |
+                |2. 配置文件: src/main/resources/smanagent.properties
+                |   llm.api.key=your_api_key_here
+                |
+                |3. 环境变量: LLM_API_KEY
+                |   export LLM_API_KEY=your_api_key_here
+                |
+                |4. IDE 运行配置: Run → Edit Configurations → Environment variables
+                """.trimMargin()
+            )
+
+    /**
+     * LLM API 基础 URL（优先级：用户设置 > 配置文件 > 默认值）
+     */
+    val llmBaseUrl: String
+        get() = readConfig(
+            userValue = userConfig?.llmBaseUrl,
+            configKey = "llm.base.url",
+            default = "https://open.bigmodel.cn/api/coding/paas/v4",
+            fromConfig = { it }
+        ).also {
+            logger.info("使用 Base URL: $it")
+        }
+
+    /**
+     * LLM 模型名称（优先级：用户设置 > 配置文件 > 默认值）
+     */
+    val llmModelName: String
+        get() = readConfig(
+            userValue = userConfig?.llmModelName,
+            configKey = "llm.model.name",
+            default = "glm-4-flash",
+            fromConfig = { it }
+        ).also {
+            logger.info("使用模型: $it")
+        }
 
     /**
      * 解析 API Key 配置
@@ -108,116 +153,30 @@ object SmanAgentConfig {
         return System.getenv("LLM_API_KEY")
     }
 
-    /**
-     * LLM API 基础 URL
-     */
-    val llmBaseUrl: String by lazy {
-        getString("llm.base.url", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
-    }
+    // ==================== 其他 LLM 配置 ====================
 
-    /**
-     * LLM 模型名称
-     */
-    val llmModelName: String by lazy {
-        getString("llm.model.name", "glm-4-flash")
-    }
-
-    /**
-     * LLM 响应最大 Token 数
-     */
-    val llmResponseMaxTokens: Int by lazy {
-        getInt("llm.response.max.tokens", 8192)
-    }
-
-    /**
-     * 最大重试次数
-     */
-    val llmRetryMax: Int by lazy {
-        getInt("llm.retry.max", 3)
-    }
-
-    /**
-     * 重试基础延迟（毫秒）
-     */
-    val llmRetryBaseDelay: Long by lazy {
-        getLong("llm.retry.base.delay", 1000L)
-    }
-
-    /**
-     * 连接超时（毫秒）
-     */
-    val llmConnectTimeout: Int by lazy {
-        getInt("llm.timeout.connect", 30000)
-    }
-
-    /**
-     * 读取超时（毫秒）
-     */
-    val llmReadTimeout: Int by lazy {
-        getInt("llm.timeout.read", 60000)
-    }
-
-    /**
-     * 写入超时（毫秒）
-     */
-    val llmWriteTimeout: Int by lazy {
-        getInt("llm.timeout.write", 30000)
-    }
+    val llmResponseMaxTokens: Int by lazy { getConfigValue("llm.response.max.tokens", 8192) }
+    val llmRetryMax: Int by lazy { getConfigValue("llm.retry.max", 3) }
+    val llmRetryBaseDelay: Long by lazy { getConfigValue("llm.retry.base.delay", 1000L) }
+    val llmConnectTimeout: Int by lazy { getConfigValue("llm.timeout.connect", 30000) }
+    val llmReadTimeout: Int by lazy { getConfigValue("llm.timeout.read", 60000) }
+    val llmWriteTimeout: Int by lazy { getConfigValue("llm.timeout.write", 30000) }
 
     // ==================== ReAct 循环配置 ====================
 
-    /**
-     * ReAct 最大步数
-     */
-    val reactMaxSteps: Int by lazy {
-        getInt("react.max.steps", 10)
-    }
-
-    /**
-     * 启用流式输出
-     */
-    val reactEnableStreaming: Boolean by lazy {
-        getBoolean("react.enable.streaming", true)
-    }
+    val reactMaxSteps: Int by lazy { getConfigValue("react.max.steps", 10) }
+    val reactEnableStreaming: Boolean by lazy { getConfigValue("react.enable.streaming", true) }
 
     // ==================== 上下文压缩配置 ====================
 
-    /**
-     * 压缩最大 Token 数
-     */
-    val compactionMaxTokens: Int by lazy {
-        getInt("compaction.max.tokens", 100000)
-    }
-
-    /**
-     * 压缩阈值（Token 数）
-     */
-    val compactionThreshold: Int by lazy {
-        getInt("compaction.threshold", 80000)
-    }
-
-    /**
-     * 启用智能压缩
-     */
-    val compactionEnableIntelligent: Boolean by lazy {
-        getBoolean("compaction.enable.intelligent", true)
-    }
+    val compactionMaxTokens: Int by lazy { getConfigValue("compaction.max.tokens", 100000) }
+    val compactionThreshold: Int by lazy { getConfigValue("compaction.threshold", 80000) }
+    val compactionEnableIntelligent: Boolean by lazy { getConfigValue("compaction.enable.intelligent", true) }
 
     // ==================== 模型参数配置 ====================
 
-    /**
-     * 温度参数
-     */
-    val llmTemperature: Double by lazy {
-        getDouble("llm.temperature", 0.7)
-    }
-
-    /**
-     * 默认最大 Token 数
-     */
-    val llmDefaultMaxTokens: Int by lazy {
-        getInt("llm.default.max.tokens", 4096)
-    }
+    val llmTemperature: Double by lazy { getConfigValue("llm.temperature", 0.7) }
+    val llmDefaultMaxTokens: Int by lazy { getConfigValue("llm.default.max.tokens", 4096) }
 
     /**
      * 加载配置文件
@@ -267,27 +226,48 @@ object SmanAgentConfig {
     /**
      * 获取配置摘要（用于日志）
      */
-    fun getConfigSummary(): String {
-        return """
-            LLM 配置:
-            - BaseUrl: $llmBaseUrl
-            - Model: $llmModelName
-            - ResponseMaxTokens: $llmResponseMaxTokens
-            - Retry: ${llmRetryMax}次, 基础延迟${llmRetryBaseDelay}ms
-            - 超时: 连接${llmConnectTimeout}ms, 读取${llmReadTimeout}ms, 写入${llmWriteTimeout}ms
+    fun getConfigSummary(): String = """
+        LLM 配置:
+        - BaseUrl: $llmBaseUrl
+        - Model: $llmModelName
+        - ResponseMaxTokens: $llmResponseMaxTokens
+        - Retry: ${llmRetryMax}次, 基础延迟${llmRetryBaseDelay}ms
+        - 超时: 连接${llmConnectTimeout}ms, 读取${llmReadTimeout}ms, 写入${llmWriteTimeout}ms
 
-            ReAct 循环配置:
-            - 最大步数: $reactMaxSteps
-            - 流式输出: $reactEnableStreaming
+        ReAct 循环配置:
+        - 最大步数: $reactMaxSteps
+        - 流式输出: $reactEnableStreaming
 
-            上下文压缩配置:
-            - 最大Tokens: $compactionMaxTokens
-            - 压缩阈值: $compactionThreshold
-            - 智能压缩: $compactionEnableIntelligent
+        上下文压缩配置:
+        - 最大Tokens: $compactionMaxTokens
+        - 压缩阈值: $compactionThreshold
+        - 智能压缩: $compactionEnableIntelligent
 
-            模型参数配置:
-            - 温度: $llmTemperature
-            - 默认最大Tokens: $llmDefaultMaxTokens
-        """.trimIndent()
+        模型参数配置:
+        - 温度: $llmTemperature
+        - 默认最大Tokens: $llmDefaultMaxTokens
+    """.trimIndent()
+
+    /**
+     * 创建 LLM 服务（使用当前最新配置）
+     * 每次调用都创建新实例，确保使用最新配置
+     */
+    fun createLlmService(): LlmService {
+        val poolConfig = LlmPoolConfig().apply {
+            endpoints.add(
+                LlmEndpoint().apply {
+                    baseUrl = llmBaseUrl
+                    apiKey = llmApiKey
+                    model = llmModelName
+                    maxTokens = llmResponseMaxTokens
+                    isEnabled = true
+                }
+            )
+            retry = LlmRetryPolicy().apply {
+                maxRetries = llmRetryMax
+                baseDelay = llmRetryBaseDelay
+            }
+        }
+        return LlmService(poolConfig)
     }
 }

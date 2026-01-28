@@ -6,6 +6,7 @@ import com.smancode.smanagent.model.message.Message
 import com.smancode.smanagent.model.message.Role
 import com.smancode.smanagent.model.part.*
 import com.smancode.smanagent.model.session.Session
+import com.smancode.smanagent.config.SmanAgentConfig
 import com.smancode.smanagent.smancode.llm.LlmService
 import com.smancode.smanagent.smancode.prompt.DynamicPromptInjector
 import com.smancode.smanagent.smancode.prompt.PromptDispatcher
@@ -34,7 +35,7 @@ import java.util.function.Consumer
  * 6. 推送 Part 到前端
  */
 class SmanAgentLoop(
-    private val llmService: LlmService,
+    // private val llmService: LlmService,  // 移除，改为每次调用时创建
     private val promptDispatcher: PromptDispatcher,
     private val toolRegistry: ToolRegistry,
     private val subTaskExecutor: SubTaskExecutor,
@@ -161,7 +162,8 @@ class SmanAgentLoop(
                 val systemPrompt = buildSystemPrompt(session)
                 val userPrompt = buildUserPrompt(session, isLastStep)
 
-                // 3. 调用 LLM
+                // 3. 调用 LLM（每次都使用最新配置）
+                val llmService = SmanAgentConfig.createLlmService()
                 val responseText = llmService.simpleRequest(systemPrompt, userPrompt)
 
                 // 4. 从纯文本响应中提取 JSON
@@ -835,6 +837,8 @@ class SmanAgentLoop(
 
             val formattedUserPrompt = String.format(userPrompt, fieldName, truncatedValue)
 
+            // 调用 LLM（每次都使用最新配置）
+            val llmService = SmanAgentConfig.createLlmService()
             val llmResponse = llmService.simpleRequest(systemPrompt, formattedUserPrompt)
             if (llmResponse.isNullOrEmpty()) {
                 return null
