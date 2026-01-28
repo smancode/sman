@@ -55,9 +55,9 @@ export LLM_API_KEY=your_api_key_here
 ```properties
 # LLM 配置
 llm.api.key=your_api_key_here
-llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
-llm.model.name=glm-4-flash
-llm.response.max.tokens=4000
+llm.base.url=your_llm_base_url_here
+llm.model.name=your_llm_model_name_here
+llm.response.max.tokens=as_llm_supports
 llm.retry.max=3
 llm.retry.base.delay=1000
 

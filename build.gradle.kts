@@ -111,18 +111,15 @@ tasks {
             核心功能：
             - 🤖 AI 驱动的代码分析和需求理解
             - 💬 多轮对话支持
-            - 🔧 12+ 本地工具集成（read_class, text_search, call_chain等）
             - 📊 代码结构分析和调用链可视化
             - 🎯 三阶段工作流（Analyze → Plan → Execute）
             - 🛡️ 降级模式支持
-            - 🔌 WebSocket 实时通信
             - ✏️ 代码编辑和重构支持
         """.trimIndent())
 
         changeNotes.set("""
             <h3>2.0.0</h3>
             <ul>
-                <li>🚀 重大整合：合并 SiliconMan、SmanAgent、SmanCode 三个项目</li>
                 <li>✨ 统一架构：采用 com.smancode.sman 包结构</li>
                 <li>🔧 功能整合：整合所有核心功能到单一插件</li>
                 <li>📦 依赖优化：统一依赖版本，减少冲突</li>

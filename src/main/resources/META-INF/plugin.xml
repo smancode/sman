@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>com.smancode.smanagent</id>
     <name>SmanAgent</name>
-    <vendor email="support@smancode.ai" url="https://smancode.ai">SmanCode AI</vendor>
+    <vendor email="support@smancode.com" url="https://smancode.com">SmanCode AI</vendor>
 
     <description><![CDATA[
         智能代码分析助手 - 支持语义搜索、调用链分析、代码理解等功能
