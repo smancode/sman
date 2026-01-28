@@ -1,0 +1,106 @@
+# ========== Gradle ==========
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ========== IntelliJ IDEA ==========
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ========== Other IDEs ==========
+.vscode/
+.VS*
+.eclipse/
+.settings/
+.classpath
+.project
+*.swp
+*.swo
+*~
+.claude/
+
+# ========== AI Tools ==========
+.cursor/
+.qoder/
+.trae/
+.VSCodeCounter/
+.codebuddy/
+
+# ========== Operating System ==========
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ========== Java/Kotlin ==========
+*.class
+hs_err_pid*
+replay_pid*
+
+# ========== Logs ==========
+/logs/
+*.log
+*.log.*
+*.gz
+*.pid
+app.log
+app.pid
+server.log
+nohup.out
+
+# ========== Temporary Files ==========
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+
+# ========== Database ==========
+*.db
+*.sqlite
+*.sqlite3
+
+# ========== Test Results ==========
+.allure/
+allure-results/
+test-output/
+
+# ========== Generated Files ==========
+/bin/
+/gen/
+metadata
+
+# ========== Archives ==========
+*.zip
+*.jar
+*.war
+*.ear
+*.nar
+
+# ========== Project Specific ==========
+analysis-sessions
+analysis_results
+/cache/
+/assets/
+/expert/
+/todo/
+
+# ========== Local Configuration (keep templates) ==========
+*.backup
+application.yml.backup
+logback-spring.xml.backup
+
+# ========== Claude Code ==========
+CLAUDE.md
+.claude/

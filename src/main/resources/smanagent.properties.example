@@ -1,0 +1,30 @@
+# SmanAgent 配置文件示例
+# 支持环境变量占位符：${ENV_VAR_NAME}
+
+# ==================== LLM API 配置 ====================
+llm.api.key=${LLM_API_KEY}
+llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
+llm.model.name=glm-4-flash
+llm.max.tokens=8192
+
+# ==================== 重试配置 ====================
+llm.retry.max=3
+llm.retry.base.delay=1000
+
+# ==================== 超时配置（毫秒）===================
+llm.timeout.connect=30000
+llm.timeout.read=60000
+llm.timeout.write=30000
+
+# ==================== ReAct 循环配置 ====================
+react.max.steps=10
+react.enable.streaming=true
+
+# ==================== 上下文压缩配置 ====================
+compaction.max.tokens=100000
+compaction.threshold=80000
+compaction.enable.intelligent=true
+
+# ==================== 模型参数配置 ====================
+llm.temperature=0.7
+llm.default.max.tokens=4096

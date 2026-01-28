@@ -1,0 +1,24 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background: White -->
+  <rect width="16" height="16" fill="#FFFFFF"/>
+  
+  <!-- Pattern: Black (Original 8x12) -->
+  <!-- Transform: Scale 1.25x (Size becomes 10x15), Centered (X=3, Y=0.5) -->
+  <g transform="translate(3, 0.5) scale(1.25)">
+    <path fill="#000000" d="
+      M0,0 H8 V1 H0 Z
+      M0,1 H1 V2 H0 Z
+      M7,1 H8 V2 H7 Z
+      M0,3 H1 V5 H0 Z
+      M7,3 H8 V5 H7 Z
+      M2,3 H3 V6 H2 Z
+      M5,3 H6 V6 H5 Z
+      M0,6 H1 V8 H0 Z
+      M7,6 H8 V8 H7 Z
+      M2,8 H6 V9 H2 Z
+      M0,9 H1 V11 H0 Z
+      M7,9 H8 V11 H7 Z
+      M0,11 H8 V12 H0 Z
+    "/>
+  </g>
+</svg>
