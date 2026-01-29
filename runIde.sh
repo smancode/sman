@@ -40,7 +40,13 @@ if [ ! -f "./gradlew" ]; then
 fi
 echo ""
 
-# 3. 启动插件
+# 3. 准备插件资源（确保最新的 Prompt 文件被加载）
+echo "📦 准备插件资源..."
+./gradlew prepareSandbox --quiet
+echo "✅ 插件资源已准备"
+echo ""
+
+# 4. 启动插件
 echo "🚀 启动 IntelliJ IDEA 插件..."
 echo ""
 ./gradlew runIde

@@ -30,12 +30,12 @@ class CliInputArea(
     private val minRows = 3
 
     private val cornerRadius = JBUI.scale(8)
-    private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行\n/commit  自动总结并 #AI commit#"
+    private val placeholderText = "点击 + 新建会话，Enter 发送，Shift+Enter 换行"
     private var showPlaceholder = true
     var isFocused = false
 
     // 命令补全相关
-    private val commands = listOf("/commit")
+    private val commands = listOf<String>()
     private var suggestionText: String? = null
 
     // 文本区域和滚动面板
