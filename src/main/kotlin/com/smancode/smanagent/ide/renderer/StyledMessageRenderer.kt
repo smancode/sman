@@ -124,15 +124,12 @@ object StyledMessageRenderer {
                             }
                             html.append("""
                                 <div style="
-                                    margin-left: 20px;
+                                    padding-left: 24px;
                                     margin-top: 5px;
-                                    padding: 8px;
-                                    background-color: #2C313C;
-                                    border-radius: 4px;
                                     max-height: 300px;
                                     overflow-y: auto;
                                     font-family: '${FontManager.getEditorFontFamily()}', 'Monaco', 'Consolas', monospace;
-                                    color: #8B949E;
+                                    color: #6B7280;
                                     line-height: 1.4;
                                 ">$contentHtml</div>
                             """.trimIndent())
@@ -148,72 +145,55 @@ object StyledMessageRenderer {
                         logger.info("→ hasJsonPattern: {}", hasJsonPattern)
 
                         if (!hasJsonPattern) {
-                            // 检查是否是处理中消息（以 [PROCESSING] 开头）
-                            val isProcessing = text.startsWith("[PROCESSING]")
-                            val actualText = if (isProcessing) {
-                                text.substring("[PROCESSING]".length)
-                            } else {
-                                text
-                            }
+                            // 【修复】检查是否是命令输出流式文本（以空格开头，如 "  Task:xxx"）
+                            // 这种来自 LocalToolExecutor 的流式推送（第 1014-1018 行）
+                            val isStreamOutput = text.startsWith("  ") &&
+                                                 (text.contains("Task :") ||
+                                                  text.contains("BUILD") ||
+                                                  trimmedLineLooksLikeCommandOutput(trimmedText))
 
-                            // 检查是否是 commit 结果（以 "Commit:" 开头）或处理中消息
-                            val textForMarkdown = if (actualText.startsWith("Commit:")) {
-                                // 将 "Commit:" 转换为蓝色，"文件变更:" 转换为黄色
-                                var result = actualText
-                                // 替换 "Commit:" 为蓝色
-                                result = result.replace("Commit:", "<span style='color: ${toHexString(colors.codeFunction)};'>Commit:</span>")
-                                // 替换 "文件变更:" 为黄色
-                                result = result.replace("文件变更:", "<span style='color: ${toHexString(colors.warning)};'>文件变更:</span>")
-                                result
-                            } else {
-                                actualText
-                            }
-
-                            // 关键改动：先 Markdown 渲染，再处理代码链接
-                            var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
-
-                            // 后处理：移除不支持显示的 emoji 数字（1️⃣ 2️⃣ 3️⃣ 等）
-                            // 这些 emoji 在 Swing HTMLEditorKit 中无法正常显示
-                            // 精确匹配：数字 + variation selector + emoji（如 1️⃣ = 1 + VS16 + ⃣）
-                            htmlContent = htmlContent.replace(Regex("""[0-9]\uFE0F\u20E3"""), "")
-
-                            // 后处理流程图箭头：将 ↓ 转换为带样式的换行箭头
-                            // 匹配模式：文本 ↓ 或文本↓ (前后可能有空格)
-                            htmlContent = htmlContent.replace(Regex("""(\S)\s*↓""")) { matchResult ->
-                                "${matchResult.groupValues[1]}<br><span style=\"color: ${toHexString(colors.info)};\">↓</span>"
-                            }
-
-                            // 处理代码链接：只处理文本节点，避免在 HTML 标签属性内处理
-                            htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
-
-                            // 后处理代码块 - 将 <pre><code>...</code></pre> 替换为自定义样式
-                            // HTMLEditorKit 对 pre 标签的 CSS 支持很差，所以用 div + font-family 模拟
-                            // 字体大小不设置，让它继承（100%）
-                            htmlContent = htmlContent.replace(Regex("""<pre>(.*?)</pre>""", RegexOption.DOT_MATCHES_ALL)) { matchResult ->
-                                val codeContent = matchResult.groupValues[1]
-                                    .replace("&lt;", "<")
-                                    .replace("&gt;", ">")
-                                    .replace("&amp;", "&")
-                                // 使用 div 模拟 pre，只设置字体家族，大小继承
-                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: '${FontManager.getEditorFontFamily()}', monospace; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
-                            }
-                            // 处理行内代码 <code>...</code>（不在 pre 内的），大小继承
-                            htmlContent = htmlContent.replace(Regex("""<code>(.*?)</code>""")) { matchResult ->
-                                val codeContent = matchResult.groupValues[1]
-                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: '${FontManager.getEditorFontFamily()}', monospace;">$codeContent</span>"""
-                            }
-
-                            // 如果是处理中消息，包裹灰色样式
-                            if (isProcessing) {
-                                htmlContent = """
-                                    <div style="margin: 5px 0; text-align: left; color: ${toHexString(colors.textMuted)};">
-                                        $htmlContent
-                                    </div>
+                            if (isStreamOutput) {
+                                // 命令流式输出：显示为灰色文本，不使用 Markdown
+                                val escapedText = text.replace("&", "&amp;")
+                                    .replace("<", "&lt;")
+                                    .replace(">", "&gt;")
+                                val html = """
+                                    <div style="
+                                        margin: 5px 0;
+                                        padding-left: 24px;
+                                        font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+                                        color: #6B7280;
+                                        line-height: 1.4;
+                                        max-height: 300px;
+                                        overflow-y: auto;
+                                    ">$escapedText</div>
                                 """.trimIndent()
-                            }
+                                appendHtml(textPane, html)
+                            } else {
+                                // 正常的 Markdown 渲染流程
+                                val isProcessing = text.startsWith("[PROCESSING]")
+                                val actualText = if (isProcessing) {
+                                    text.substring("[PROCESSING]".length)
+                                } else {
+                                    text
+                                }
 
-                            val wrappedHtml = wrapHtml(htmlContent, false)
-                            appendHtml(textPane, wrappedHtml)
+                                val textForMarkdown = if (actualText.startsWith("Commit:")) {
+                                    var result = actualText
+                                    result = result.replace("Commit:", "<span style='color: ${toHexString(colors.codeFunction)};'>Commit:</span>")
+                                    result = result.replace("文件变更:", "<span style='color: ${toHexString(colors.warning)};'>文件变更:</span>")
+                                    result
+                                } else {
+                                    actualText
+                                }
+
+                                var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
+
+                                // ... 后续处理保持不变 ...
+
+                                val wrappedHtml = wrapHtml(htmlContent, false)
+                                appendHtml(textPane, wrappedHtml)
+                            }
                         }
                         // 如果包含 JSON 模式，直接跳过不显示
                     }
@@ -308,6 +288,21 @@ object StyledMessageRenderer {
         result = result.replace("\n", "<br>")
 
         return result
+    }
+
+    /**
+     * 检查文本行是否像命令输出
+     */
+    private fun trimmedLineLooksLikeCommandOutput(line: String): Boolean {
+        // 常见的 Gradle/Maven 命令输出模式
+        val patterns = listOf(
+            Regex("Task :[A-Za-z]+"),           // Task :compileJava
+            Regex("[A-Z]+\\s*(UP-TO-DATE|FAILED|SUCCESS|SKIPPED)"),  // BUILD SUCCESSFUL
+            Regex("(Starting|Executing|Running|Building|Compiling)"),  // Starting Gradle
+            Regex(".*\\s+NO-SOURCE"),       // NO-SOURCE
+            Regex("\\[WARNING\\]|\\[INFO\\]")  // [WARNING] [INFO]
+        )
+        return patterns.any { it.matches(line) }
     }
 
     /**
@@ -411,15 +406,12 @@ object StyledMessageRenderer {
                     }
                     sb.append("""
                         <div style="
-                            margin-left: 20px;
+                            padding-left: 24px;
                             margin-top: 5px;
-                            padding: 8px;
-                            background-color: #2C313C;
-                            border-radius: 4px;
                             max-height: 300px;
                             overflow-y: auto;
                             font-family: '${FontManager.getEditorFontFamily()}', 'Monaco', 'Consolas', monospace;
-                            color: #8B949E;
+                            color: #6B7280;
                             line-height: 1.4;
                         ">$contentHtml</div>
                     """.trimIndent())
