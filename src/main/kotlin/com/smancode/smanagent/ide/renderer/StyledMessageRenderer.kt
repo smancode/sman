@@ -103,11 +103,12 @@ object StyledMessageRenderer {
                             .replace(">", "&gt;")
 
                         val html = StringBuilder()
-                        html.append("<div style=\"margin: 5px 0;\">")
-                        // 工具调用行：⏺ toolName 黄色，(params) 灰色
+                        // 包装容器：工具名称 + 结果
+                        html.append("<div>")
+
+                        // 工具调用行
                         html.append("<span style=\"color: ${toHexString(colors.warning)};\">⏺ $escapedToolName</span>")
                         html.append("<span style=\"color: ${toHexString(colors.textPrimary)};\">($escapedParams)</span>")
-                        html.append("</div>")
 
                         // 如果有结果行，显示为可滚动的灰色文本块
                         if (resultLines.isNotEmpty()) {
@@ -125,8 +126,8 @@ object StyledMessageRenderer {
                             }
                             html.append("""
                                 <div style="
-                                    padding-left: 24px;
-                                    margin-top: 5px;
+                                    margin-left: 14px;
+                                    margin-top: 3px;
                                     max-height: 300px;
                                     overflow-y: auto;
                                     font-family: '${FontManager.getEditorFontFamily()}', 'Monaco', 'Consolas', monospace;
@@ -136,6 +137,7 @@ object StyledMessageRenderer {
                             """.trimIndent())
                         }
 
+                        html.append("</div>")
                         appendHtml(textPane, html.toString())
                     } else {
                         // 普通 TEXT 使用 Markdown 渲染
