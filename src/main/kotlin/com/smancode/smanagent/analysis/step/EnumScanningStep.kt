@@ -1,9 +1,11 @@
 package com.smancode.smanagent.analysis.step
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.smancode.smanagent.analysis.enum.EnumScanner
 import com.smancode.smanagent.analysis.model.StepResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.file.Paths
 
 /**
  * 枚举扫描步骤
@@ -20,9 +22,22 @@ class EnumScanningStep : AnalysisStep {
         val stepResult = StepResult.create(name, description).markStarted()
 
         return try {
-            // TODO: 实现枚举扫描
-            val enums = mapOf("enums" to emptyList<String>(), "constants" to emptyList<String>())
-            val enumsJson = jsonMapper.writeValueAsString(enums)
+            val basePath = context.project.basePath
+                ?: throw IllegalArgumentException("项目路径不存在")
+
+            val enums = withContext(Dispatchers.IO) {
+                EnumScanner().scan(Paths.get(basePath))
+            }
+
+            val enumsJson = jsonMapper.writeValueAsString(
+                mapOf(
+                    "enums" to enums.map { it.qualifiedName },
+                    "constants" to enums.flatMap { enum ->
+                        enum.constants.map { "${enum.enumName}.${it.name}" }
+                    },
+                    "count" to enums.size
+                )
+            )
             stepResult.markCompleted(enumsJson)
         } catch (e: Exception) {
             logger.error("枚举扫描失败", e)

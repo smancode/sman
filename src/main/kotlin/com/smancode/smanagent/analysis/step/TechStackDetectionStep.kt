@@ -2,8 +2,10 @@ package com.smancode.smanagent.analysis.step
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.smancode.smanagent.analysis.model.StepResult
+import com.smancode.smanagent.analysis.techstack.TechStackDetector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.file.Paths
 
 /**
  * 技术栈识别步骤
@@ -20,8 +22,13 @@ class TechStackDetectionStep : AnalysisStep {
         val stepResult = StepResult.create(name, description).markStarted()
 
         return try {
-            // TODO: 实现技术栈识别
-            val techStack = mapOf("frameworks" to emptyList<String>(), "languages" to emptyList<String>())
+            val basePath = context.project.basePath
+                ?: throw IllegalArgumentException("项目路径不存在")
+
+            val techStack = withContext(Dispatchers.IO) {
+                TechStackDetector().detect(Paths.get(basePath))
+            }
+
             val techStackJson = jsonMapper.writeValueAsString(techStack)
             stepResult.markCompleted(techStackJson)
         } catch (e: Exception) {

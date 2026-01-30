@@ -134,6 +134,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
             add(JButton("项目分析").apply { addActionListener { onProjectAnalysisClick() } })
             add(JButton("定时分析").apply { isEnabled = false })
+            add(JButton("查看分析结果").apply { addActionListener { onShowAnalysisResultsClick() } })
         }
 
         gbc.gridx = 0
@@ -235,7 +236,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     /**
-     * 项目分析按钮点击处理
+     * 项目分析按钮点击处理 - 后台运行
      */
     private fun onProjectAnalysisClick() {
         logger.info("点击项目分析按钮: projectKey={}", project.name)
@@ -248,25 +249,55 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         saveConfig(config)
 
-        val progressDialog = AnalysisProgressDialog(null, project.name).apply { isVisible = true }
-        val progressCallback = createProgressCallback(progressDialog)
-
+        // 后台执行分析
         analysisScope.launch {
             try {
                 analysisService.init()
-                val result = analysisService.executeAnalysis(progressCallback)
-
-                SwingUtilities.invokeLater {
-                    progressDialog.onAnalysisComplete(result.status == AnalysisStatus.COMPLETED)
-                    showAnalysisSummary(result)
-                    progressDialog.dispose()
-                }
+                analysisService.executeAnalysis(null)
+                logger.info("项目分析完成: projectKey={}", project.name)
             } catch (e: Exception) {
                 logger.error("项目分析失败", e)
+            }
+        }
+
+        // 弹窗提示，3秒后自动关闭
+        SwingUtilities.invokeLater {
+            val message = "开始项目分析，将在后台执行"
+            JOptionPane.showMessageDialog(this, message, "提示", JOptionPane.INFORMATION_MESSAGE)
+
+            // 3秒后自动关闭对话框
+            javax.swing.Timer(3000) { _ ->
+                isVisible = false
+            }.apply { isRepeats = false }.start()
+        }
+    }
+
+    /**
+     * 查看分析结果按钮点击处理
+     */
+    private fun onShowAnalysisResultsClick() {
+        logger.info("点击查看分析结果按钮: projectKey={}", project.name)
+
+        analysisScope.launch {
+            try {
+                val result = analysisService.getAnalysisResult(forceReload = true)
+
                 SwingUtilities.invokeLater {
-                    progressDialog.onAnalysisComplete(false)
-                    progressDialog.dispose()
-                    showError("项目分析失败：${e.message}")
+                    if (result == null) {
+                        JOptionPane.showMessageDialog(
+                            this@SettingsDialog,
+                            "暂无分析结果，请先执行项目分析",
+                            "提示",
+                            JOptionPane.INFORMATION_MESSAGE
+                        )
+                    } else {
+                        showAnalysisResultsDetail(result)
+                    }
+                }
+            } catch (e: Exception) {
+                logger.error("获取分析结果失败", e)
+                SwingUtilities.invokeLater {
+                    showError("获取分析结果失败：${e.message}")
                 }
             }
         }
@@ -284,6 +315,72 @@ class SettingsDialog(private val project: Project) : JDialog() {
         override fun onStepFailed(stepName: String, error: String) {
             SwingUtilities.invokeLater { dialog.onStepFailed(stepName, error) }
         }
+    }
+
+    /**
+     * 显示分析结果详情
+     */
+    private fun showAnalysisResultsDetail(result: ProjectAnalysisResult) {
+        val duration = result.endTime?.let { (it - result.startTime) / 1000 }?.let { "${it}秒" } ?: "进行中"
+
+        val message = buildString {
+            append("═══════════════════════════════════════\n")
+            append("          项目分析结果详情\n")
+            append("═══════════════════════════════════════\n\n")
+            append("项目: ${result.projectKey}\n")
+            append("状态: ${result.status.text}\n")
+            append("耗时: $duration\n")
+            append("开始时间: ${java.util.Date(result.startTime)}\n")
+            result.endTime?.let { append("结束时间: ${java.util.Date(it)}\n") }
+            append("\n")
+
+            append("───────────────────────────────────────\n")
+            append("步骤状态 (${result.steps.size}/${result.steps.size})\n")
+            append("───────────────────────────────────────\n\n")
+
+            result.steps.forEach { (stepName, stepResult) ->
+                val statusIcon = when (stepResult.status) {
+                    com.smancode.smanagent.analysis.model.StepStatus.COMPLETED -> "✅"
+                    com.smancode.smanagent.analysis.model.StepStatus.RUNNING -> "⏳"
+                    com.smancode.smanagent.analysis.model.StepStatus.FAILED -> "❌"
+                    com.smancode.smanagent.analysis.model.StepStatus.SKIPPED -> "⏭️"
+                    else -> "⏸️"
+                }
+
+                append("$statusIcon ${stepResult.stepDescription}\n")
+
+                // 显示耗时
+                stepResult.getDuration()?.let { append("   耗时: ${it}ms\n") }
+
+                // 显示数据量
+                stepResult.data?.let { data ->
+                    try {
+                        val map = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper().readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {})
+                        map.entries.forEach { (key, value) ->
+                            when (value) {
+                                is List<*> -> append("   $key: ${value.size} 项\n")
+                                is Map<*, *> -> {
+                                    val count = (value as Map<*, *>).values.firstOrNull()?.toString()
+                                        ?.toIntOrNull() ?: value.size
+                                    append("   $key: $count 项\n")
+                                }
+                                is Number -> append("   $key: $value\n")
+                                else -> append("   $key: $value\n")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        append("   数据: ${data.take(100)}...\n")
+                    }
+                }
+
+                // 显示错误
+                stepResult.error?.let { append("   ❌ 错误: $it\n") }
+
+                append("\n")
+            }
+        }
+
+        JOptionPane.showMessageDialog(this, message, "分析结果详情", result.status.messageType)
     }
 
     /**

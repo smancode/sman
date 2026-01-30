@@ -1,9 +1,11 @@
 package com.smancode.smanagent.analysis.step
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.smancode.smanagent.analysis.external.ExternalApiScanner
 import com.smancode.smanagent.analysis.model.StepResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.file.Paths
 
 /**
  * API 入口扫描步骤
@@ -20,9 +22,21 @@ class ApiEntryScanningStep : AnalysisStep {
         val stepResult = StepResult.create(name, description).markStarted()
 
         return try {
-            // TODO: 实现 API 入口扫描
-            val apiEntries = mapOf("apis" to emptyList<String>(), "controllers" to emptyList<String>())
-            val apiEntriesJson = jsonMapper.writeValueAsString(apiEntries)
+            val basePath = context.project.basePath
+                ?: throw IllegalArgumentException("项目路径不存在")
+
+            val externalApis = withContext(Dispatchers.IO) {
+                ExternalApiScanner().scan(Paths.get(basePath))
+            }
+
+            val apiEntriesJson = jsonMapper.writeValueAsString(
+                mapOf(
+                    "externalApis" to externalApis.map { it.qualifiedName },
+                    "controllers" to externalApis.map { it.apiName },
+                    "count" to externalApis.size,
+                    "types" to externalApis.map { it.apiType.name }.distinct()
+                )
+            )
             stepResult.markCompleted(apiEntriesJson)
         } catch (e: Exception) {
             logger.error("API 入口扫描失败", e)

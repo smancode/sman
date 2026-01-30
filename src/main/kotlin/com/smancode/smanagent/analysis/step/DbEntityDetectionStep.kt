@@ -1,9 +1,11 @@
 package com.smancode.smanagent.analysis.step
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.smancode.smanagent.analysis.database.DbEntityDetector
 import com.smancode.smanagent.analysis.model.StepResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.file.Paths
 
 /**
  * 数据库实体扫描步骤
@@ -20,9 +22,20 @@ class DbEntityDetectionStep : AnalysisStep {
         val stepResult = StepResult.create(name, description).markStarted()
 
         return try {
-            // TODO: 实现数据库实体扫描
-            val dbEntities = mapOf("entities" to emptyList<String>(), "tables" to emptyList<String>())
-            val dbEntitiesJson = jsonMapper.writeValueAsString(dbEntities)
+            val basePath = context.project.basePath
+                ?: throw IllegalArgumentException("项目路径不存在")
+
+            val dbEntities = withContext(Dispatchers.IO) {
+                DbEntityDetector().detect(Paths.get(basePath))
+            }
+
+            val dbEntitiesJson = jsonMapper.writeValueAsString(
+                mapOf(
+                    "entities" to dbEntities.map { it.qualifiedName },
+                    "tables" to dbEntities.map { it.tableName },
+                    "count" to dbEntities.size
+                )
+            )
             stepResult.markCompleted(dbEntitiesJson)
         } catch (e: Exception) {
             logger.error("数据库实体扫描失败", e)
