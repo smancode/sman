@@ -80,15 +80,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         defaultCloseOperation = DISPOSE_ON_CLOSE
 
         // 如果已有配置，填充掩码后的值
-        if (storage.llmApiKey.isNotEmpty()) {
-            llmApiKeyField.text = "****"
-        }
-        if (storage.bgeApiKey.isNotEmpty()) {
-            bgeApiKeyField.text = "****"
-        }
-        if (storage.rerankerApiKey.isNotEmpty()) {
-            rerankerApiKeyField.text = "****"
-        }
+        maskApiKeyIfExists(storage.llmApiKey, llmApiKeyField)
+        maskApiKeyIfExists(storage.bgeApiKey, bgeApiKeyField)
+        maskApiKeyIfExists(storage.rerankerApiKey, rerankerApiKeyField)
 
         val panel = createMainPanel()
         val buttonPanel = createButtonPanel()
@@ -100,6 +94,12 @@ class SettingsDialog(private val project: Project) : JDialog() {
         setLocationRelativeTo(null)
         minimumSize = java.awt.Dimension(500, 400)
         isResizable = false
+    }
+
+    private fun maskApiKeyIfExists(apiKey: String, field: JPasswordField) {
+        if (apiKey.isNotEmpty()) {
+            field.text = API_KEY_MASK
+        }
     }
 
     private fun createMainPanel(): JPanel {
@@ -326,92 +326,79 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * 测试 LLM 服务
      */
     private fun testLlmService(config: ConfigData): ServiceTestResult {
-        return try {
-            val request = Request.Builder()
-                .url("${config.llmBaseUrl}/chat/completions")
-                .addHeader("Authorization", "Bearer ${config.llmApiKey}")
-                .post(
-                    """
-                    {
-                        "model": "${config.llmModelName}",
-                        "messages": [{"role": "user", "content": "$LLM_TEST_MESSAGE"}],
-                        "max_tokens": 1
-                    }
-                    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
-                )
-                .build()
+        val request = Request.Builder()
+            .url("${config.llmBaseUrl}/chat/completions")
+            .addHeader("Authorization", "Bearer ${config.llmApiKey}")
+            .post(createLlmTestPayload(config.llmModelName))
+            .build()
 
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    ServiceTestResult(success = true, message = "✓ 连接成功")
-                } else {
-                    ServiceTestResult(success = false, message = "✗ HTTP ${response.code}")
-                }
-            }
-        } catch (e: Exception) {
-            ServiceTestResult(success = false, message = "✗ ${e.message?.take(50) ?: "连接失败"}")
-        }
+        return executeServiceTest(request)
     }
 
     /**
      * 测试 BGE-M3 服务
      */
     private fun testBgeM3Service(config: ConfigData): ServiceTestResult {
-        return try {
-            val request = Request.Builder()
-                .url("${config.bgeEndpoint}/v1/embeddings")
-                .post(
-                    """
-                    {
-                        "input": "$BGE_TEST_INPUT",
-                        "model": "$BGE_MODEL"
-                    }
-                    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
-                )
-                .build()
+        val request = Request.Builder()
+            .url("${config.bgeEndpoint}/v1/embeddings")
+            .post(createBgeTestPayload())
+            .build()
 
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    ServiceTestResult(success = true, message = "✓ 连接成功")
-                } else {
-                    ServiceTestResult(success = false, message = "✗ HTTP ${response.code}")
-                }
-            }
-        } catch (e: Exception) {
-            ServiceTestResult(success = false, message = "✗ ${e.message?.take(50) ?: "连接失败"}")
-        }
+        return executeServiceTest(request)
     }
 
     /**
      * 测试 Reranker 服务
      */
     private fun testRerankerService(config: ConfigData): ServiceTestResult {
-        return try {
-            val request = Request.Builder()
-                .url("${config.rerankerEndpoint}/rerank")
-                .post(
-                    """
-                    {
-                        "model": "$RERANKER_MODEL",
-                        "query": "$RERANKER_QUERY",
-                        "documents": ["$RERANKER_DOCUMENT"],
-                        "top_k": $RERANKER_TOP_K
-                    }
-                    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
-                )
-                .build()
+        val request = Request.Builder()
+            .url("${config.rerankerEndpoint}/rerank")
+            .post(createRerankerTestPayload())
+            .build()
 
+        return executeServiceTest(request)
+    }
+
+    /**
+     * 通用服务测试执行方法
+     */
+    private fun executeServiceTest(request: Request): ServiceTestResult {
+        return try {
             httpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    ServiceTestResult(success = true, message = "✓ 连接成功")
+                    ServiceTestResult(success = true, message = SUCCESS_MESSAGE)
                 } else {
-                    ServiceTestResult(success = false, message = "✗ HTTP ${response.code}")
+                    ServiceTestResult(success = false, message = "$ERROR_HTTP_PREFIX ${response.code}")
                 }
             }
         } catch (e: Exception) {
-            ServiceTestResult(success = false, message = "✗ ${e.message?.take(50) ?: "连接失败"}")
+            ServiceTestResult(success = false, message = "$ERROR_PREFIX ${e.message?.take(50) ?: CONNECTION_FAILED_MESSAGE}")
         }
     }
+
+    private fun createLlmTestPayload(modelName: String) = """
+        {
+            "model": "$modelName",
+            "messages": [{"role": "user", "content": "$LLM_TEST_MESSAGE"}],
+            "max_tokens": 1
+        }
+    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
+
+    private fun createBgeTestPayload() = """
+        {
+            "input": "$BGE_TEST_INPUT",
+            "model": "$BGE_MODEL"
+        }
+    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
+
+    private fun createRerankerTestPayload() = """
+        {
+            "model": "$RERANKER_MODEL",
+            "query": "$RERANKER_QUERY",
+            "documents": ["$RERANKER_DOCUMENT"],
+            "top_k": $RERANKER_TOP_K
+        }
+    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
 
     /**
      * 收集并验证配置
@@ -501,39 +488,37 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * 显示结果消息（包含测试结果）
      */
     private fun showResultMessage(config: ConfigData, testResults: ServiceTestResults) {
-        val message = buildString {
-            append("设置已保存！\n\n")
-            append("服务可用性测试结果:\n")
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-
-            append("\n【LLM API】\n")
-            append("  Base URL: ${config.llmBaseUrl}\n")
-            append("  模型: ${config.llmModelName}\n")
-            append("  状态: ${testResults.llmResult.message}\n")
-
-            append("\n【BGE-M3 向量化】\n")
-            append("  端点: ${config.bgeEndpoint}\n")
-            append("  状态: ${testResults.bgeM3Result.message}\n")
-
-            append("\n【BGE-Reranker 重排】\n")
-            append("  端点: ${config.rerankerEndpoint}\n")
-            append("  状态: ${testResults.rerankerResult.message}\n")
-
-            append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-            append("\n提示：\n")
-            append("- ✓ 表示服务可用\n")
-            append("- ✗ 表示服务不可用，请检查端点是否正确\n")
-            append("- 配置已保存，即使服务不可用也会保存\n")
-        }
-
-        val messageType = if (testResults.allSuccess()) {
-            JOptionPane.INFORMATION_MESSAGE
-        } else {
-            JOptionPane.WARNING_MESSAGE
-        }
-
+        val message = buildResultMessage(config, testResults)
+        val messageType = if (testResults.allSuccess()) JOptionPane.INFORMATION_MESSAGE else JOptionPane.WARNING_MESSAGE
         JOptionPane.showMessageDialog(this, message, "保存结果", messageType)
     }
+
+    private fun buildResultMessage(config: ConfigData, testResults: ServiceTestResults) = """
+        设置已保存！
+
+        服务可用性测试结果:
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        【LLM API】
+          Base URL: ${config.llmBaseUrl}
+          模型: ${config.llmModelName}
+          状态: ${testResults.llmResult.message}
+
+        【BGE-M3 向量化】
+          端点: ${config.bgeEndpoint}
+          状态: ${testResults.bgeM3Result.message}
+
+        【BGE-Reranker 重排】
+          端点: ${config.rerankerEndpoint}
+          状态: ${testResults.rerankerResult.message}
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        提示：
+        - ✓ 表示服务可用
+        - ✗ 表示服务不可用，请检查端点是否正确
+        - 配置已保存，即使服务不可用也会保存
+    """.trimIndent()
 
     /**
      * 显示错误消息
@@ -591,6 +576,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
         // 测试模型
         private const val BGE_MODEL = "BAAI/bge-m3"
         private const val RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+
+        // UI 消息常量
+        private const val API_KEY_MASK = "****"
+        private const val SUCCESS_MESSAGE = "✓ 连接成功"
+        private const val ERROR_HTTP_PREFIX = "✗ HTTP"
+        private const val ERROR_PREFIX = "✗"
+        private const val CONNECTION_FAILED_MESSAGE = "连接失败"
 
         fun show(project: Project) {
             val dialog = SettingsDialog(project)
