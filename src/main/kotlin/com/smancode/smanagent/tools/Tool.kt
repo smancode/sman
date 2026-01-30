@@ -1,5 +1,8 @@
 package com.smancode.smanagent.tools
 
+import com.smancode.smanagent.model.part.Part
+import java.util.function.Consumer
+
 /**
  * 工具接口
  *
@@ -29,13 +32,37 @@ interface Tool {
     fun getParameters(): Map<String, ParameterDef>
 
     /**
-     * 执行工具
+     * 执行工具（不带流式输出）
      *
      * @param projectKey 项目 Key
      * @param params     参数映射
      * @return 工具执行结果
      */
     fun execute(projectKey: String, params: Map<String, Any>): ToolResult
+
+    /**
+     * 执行工具（带流式输出）
+     *
+     * @param projectKey 项目 Key
+     * @param params     参数映射
+     * @param partPusher Part 推送器（用于实时推送输出）
+     * @return 工具执行结果
+     */
+    fun executeStreaming(
+        projectKey: String,
+        params: Map<String, Any>,
+        partPusher: Consumer<Part>
+    ): ToolResult {
+        // 默认实现：调用不带流式输出的方法
+        return execute(projectKey, params)
+    }
+
+    /**
+     * 检查工具是否支持流式输出
+     *
+     * @return true 如果支持流式输出
+     */
+    fun supportsStreaming(): Boolean = false
 
     /**
      * 获取执行模式

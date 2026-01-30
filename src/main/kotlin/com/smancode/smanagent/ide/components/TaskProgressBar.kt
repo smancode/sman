@@ -1,5 +1,6 @@
 package com.smancode.smanagent.ide.components
 
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.smancode.smanagent.ide.model.PartData
 import com.smancode.smanagent.ide.model.TodoItem
 import com.smancode.smanagent.ide.renderer.TodoRenderer
@@ -103,10 +104,13 @@ class TaskProgressBar : JPanel(BorderLayout()) {
      */
     private fun refreshTasksPanel(items: List<TodoItem>) {
         val colors = ThemeColors.getCurrentColors()
+        val editorFont = EditorColorsManager.getInstance().globalScheme
         tasksPanel.removeAll()
         items.forEach { item ->
             val taskLabel = JLabel(TodoRenderer.formatTodoItem(item)).apply {
-                font = java.awt.Font("JetBrains Mono", java.awt.Font.PLAIN, 11)
+                // 使用编辑器字体，稍微缩小一点（0.9倍）
+                val scaledSize = (editorFont.editorFontSize * 0.9).toInt().coerceAtLeast(10)
+                font = java.awt.Font(editorFont.editorFontName, java.awt.Font.PLAIN, scaledSize)
                 isOpaque = true
                 background = colors.background
             }

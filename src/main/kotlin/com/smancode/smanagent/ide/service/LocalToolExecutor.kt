@@ -10,7 +10,10 @@ import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
+import com.smancode.smanagent.model.part.Part
+import com.smancode.smanagent.model.part.TextPart
 import java.io.File
+import java.util.function.Consumer
 
 /**
  * 本地工具执行器
@@ -24,6 +27,7 @@ import java.io.File
  * - call_chain: 调用链分析
  * - extract_xml: 提取 XML 内容
  * - apply_change: 应用代码修改
+ * - run_shell_command: 执行 Shell 命令（支持流式输出）
  */
 class LocalToolExecutor(private val project: Project) {
 
@@ -44,6 +48,18 @@ class LocalToolExecutor(private val project: Project) {
          * grep_file 最大返回结果数（防止 token 爆炸）
          */
         private const val MAX_GREP_RESULTS = 100
+
+        /**
+         * 流式输出默认会话 ID
+         */
+        private const val DEFAULT_SESSION_ID = "current"
+
+        /**
+         * 通知符号
+         */
+        private const val ICON_EXECUTING = "\uD83D\uDD27"  // 🔧
+        private const val ICON_SUCCESS = "\u2705"           // ✅
+        private const val ICON_ERROR = "\u274C"             // ❌
 
         /**
          * 每个文件最多显示的匹配数
@@ -74,6 +90,7 @@ class LocalToolExecutor(private val project: Project) {
                 "call_chain" -> executeCallChain(parameters)
                 "extract_xml" -> executeExtractXml(parameters, projectPath)
                 "apply_change" -> executeApplyChange(parameters, projectPath)
+                "run_shell_command" -> executeShellCommand(parameters, projectPath, null)
                 else -> ToolResult(false, "不支持的工具: $toolName")
             }
 
@@ -101,7 +118,54 @@ class LocalToolExecutor(private val project: Project) {
             )
         }
     }
-    
+
+    /**
+     * 流式执行工具（用于支持实时输出的工具）
+     */
+    fun executeStreaming(
+        toolName: String,
+        parameters: Map<String, Any?>,
+        projectPath: String?,
+        partPusher: Consumer<Part>
+    ): ToolResult {
+        val startTime = System.currentTimeMillis()
+
+        logger.info("流式执行本地工具: $toolName, params=$parameters, projectPath=$projectPath")
+
+        return try {
+            val result = when (toolName) {
+                "run_shell_command" -> executeShellCommand(parameters, projectPath, partPusher)
+                else -> {
+                    // 不支持流式输出的工具，使用普通执行
+                    logger.warn("工具 $toolName 不支持流式输出，使用普通执行")
+                    execute(toolName, parameters, projectPath)
+                }
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            ToolResult(
+                success = result.success,
+                result = result.result,
+                executionTime = elapsed,
+                relativePath = result.relativePath,
+                relatedFilePaths = result.relatedFilePaths,
+                metadata = result.metadata
+            )
+
+        } catch (e: Exception) {
+            logger.error("流式工具执行失败: $toolName", e)
+            val elapsed = System.currentTimeMillis() - startTime
+            ToolResult(
+                success = false,
+                result = "工具执行异常: ${e.message}",
+                executionTime = elapsed,
+                relativePath = null,
+                relatedFilePaths = null,
+                metadata = null
+            )
+        }
+    }
+
     /**
      * 将绝对路径转换为相对路径
      * 使用 PathUtil 进行路径归一化，确保跨平台兼容性
@@ -109,7 +173,7 @@ class LocalToolExecutor(private val project: Project) {
     private fun toRelativePath(absolutePath: String, basePath: String): String {
         return PathUtil.toRelativePath(absolutePath, basePath)
     }
-    
+
     /**
      * 查找文件
      */
@@ -893,4 +957,147 @@ class LocalToolExecutor(private val project: Project) {
         }
         return null
     }
+
+    /**
+     * 执行 Shell 命令（支持流式输出）
+     *
+     * @param parameters 参数映射
+     * @param projectPath 项目路径
+     * @param partPusher Part 推送器（用于实时输出，null 表示不推送）
+     */
+    private fun executeShellCommand(
+        parameters: Map<String, Any?>,
+        projectPath: String?,
+        partPusher: Consumer<Part>?
+    ): ToolResult {
+        val command = parameters["command"]?.toString()
+            ?: return ToolResult(false, "缺少 command 参数")
+
+        val basePath = projectPath ?: project.basePath ?: ""
+        val workingDir = File(basePath)
+
+        if (!workingDir.exists()) {
+            return ToolResult(false, "工作目录不存在: $basePath")
+        }
+
+        logger.info("执行 Shell 命令: command='$command', dir='$basePath'")
+
+        // 推送开始通知
+        partPusher?.accept(createNotificationPart("$ICON_EXECUTING 执行命令: `$command`"))
+
+        return try {
+            // 检测操作系统并选择合适的 Shell
+            val (shell, shellArgs) = detectShell()
+            val fullCommand = buildList {
+                add(shell)
+                addAll(shellArgs)
+                add(command)
+            }
+
+            logger.info("使用 Shell: $shell ${shellArgs.joinToString(" ")}")
+
+            val process = ProcessBuilder(fullCommand)
+                .directory(workingDir)
+                .redirectErrorStream(true)  // 合并 stdout 和 stderr
+                .start()
+
+            val output = StringBuilder()
+
+            // 流式读取输出
+            process.inputStream.bufferedReader().use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+
+                    // 实时推送每一行
+                    if (partPusher != null) {
+                        partPusher.accept(TextPart().apply {
+                            text = "  $line"
+                            sessionId = DEFAULT_SESSION_ID
+                        })
+                    }
+                }
+            }
+
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0) {
+                partPusher?.accept(createNotificationPart("$ICON_SUCCESS 命令执行成功"))
+                ToolResult(true, output.toString())
+            } else {
+                val errorMsg = "命令执行失败 (退出码: $exitCode)\n$output"
+                partPusher?.accept(createNotificationPart("$ICON_ERROR $errorMsg"))
+                ToolResult(false, errorMsg)
+            }
+
+        } catch (e: Exception) {
+            logger.error("Shell 命令执行失败", e)
+            val errorMsg = "命令执行异常: ${e.message}"
+            partPusher?.accept(createNotificationPart("$ICON_ERROR $errorMsg"))
+            ToolResult(false, errorMsg)
+        }
+    }
+
+    /**
+     * 检测系统 Shell（带缓存优化）
+     */
+    private fun detectShell(): Pair<String, List<String>> {
+        val os = System.getProperty("os.name").lowercase()
+        return when {
+            os.contains("win") -> {
+                // Windows: 优先级 pwsh > powershell > cmd
+                when {
+                    hasCommandCached("pwsh") -> "pwsh" to listOf("-Command")
+                    hasCommandCached("powershell") -> "powershell" to listOf("-Command")
+                    else -> "cmd" to listOf("/c")
+                }
+            }
+            else -> "bash" to listOf("-c")
+        }
+    }
+
+    /**
+     * 检查命令是否可用（带缓存优化）
+     */
+    private fun hasCommandCached(command: String): Boolean {
+        // 使用缓存避免重复检测
+        return commandCache.getOrPut(command) {
+            checkCommandAvailability(command)
+        }
+    }
+
+    /**
+     * 检查命令可用性的实际实现
+     */
+    private fun checkCommandAvailability(command: String): Boolean {
+        return try {
+            val os = System.getProperty("os.name").lowercase()
+            val process = if (os.contains("win")) {
+                ProcessBuilder("where", command).start()
+            } else {
+                ProcessBuilder("which", command).start()
+            }
+            val available = process.waitFor() == 0
+            logger.debug("命令 $command 可用: $available")
+            available
+        } catch (e: Exception) {
+            logger.debug("检查命令 $command 失败: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 创建通知 Part
+     */
+    private fun createNotificationPart(text: String): Part {
+        return TextPart().apply {
+            this.text = text
+            sessionId = DEFAULT_SESSION_ID
+        }
+    }
+
+    /**
+     * 命令可用性缓存
+     */
+    private val commandCache = mutableMapOf<String, Boolean>()
 }

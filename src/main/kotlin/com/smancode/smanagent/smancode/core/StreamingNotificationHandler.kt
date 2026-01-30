@@ -118,7 +118,7 @@ class StreamingNotificationHandler(
             ### isChat = true
             - Greetings: "你好", "嗨", "早上好", "hello"
             - Thanks: "谢谢", "感谢", "thx"
-            - Self-introduction: "我是...", "我是阿瓜"
+            - Self-introduction: "我是..."
 
             ### needConsult = false (User has clear target)
             - User provides specific class name: "ReadFileTool.execute 方法分析一下"

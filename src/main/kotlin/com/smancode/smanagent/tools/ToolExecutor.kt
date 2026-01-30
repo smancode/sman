@@ -1,7 +1,9 @@
 package com.smancode.smanagent.tools
 
+import com.smancode.smanagent.model.part.Part
 import org.slf4j.LoggerFactory
 import java.lang.Exception
+import java.util.function.Consumer
 
 /**
  * 工具执行器
@@ -24,6 +26,19 @@ class ToolExecutor(
      * @return 执行结果
      */
     fun execute(toolName: String, projectKey: String, params: Map<String, Any>): ToolResult {
+        return execute(toolName, projectKey, params, null)
+    }
+
+    /**
+     * 执行工具（带流式输出）
+     *
+     * @param toolName   工具名称
+     * @param projectKey 项目标识
+     * @param params     参数
+     * @param partPusher Part 推送器（用于实时推送输出）
+     * @return 执行结果
+     */
+    fun execute(toolName: String, projectKey: String, params: Map<String, Any>, partPusher: Consumer<Part>?): ToolResult {
         val startTime = System.currentTimeMillis()
 
         try {
@@ -38,15 +53,22 @@ class ToolExecutor(
             val mode = tool.getExecutionMode(params)
             logger.info("执行工具: toolName={}, projectKey={}, mode={}", toolName, projectKey, mode)
 
-            val result = if (mode == Tool.ExecutionMode.LOCAL) {
-                executeLocal(tool, projectKey, params)
+            // 3. 根据是否支持流式输出选择执行方式
+            val result = if (partPusher != null && tool.supportsStreaming()) {
+                // 使用流式输出
+                executeLocalStreaming(tool, projectKey, params, partPusher)
             } else {
-                // 简化版本不支持 IntelliJ 模式，降级为本地执行
-                logger.warn("IntelliJ 模式不可用，降级为本地执行: {}", toolName)
-                executeLocal(tool, projectKey, params)
+                // 普通执行
+                if (mode == Tool.ExecutionMode.LOCAL) {
+                    executeLocal(tool, projectKey, params)
+                } else {
+                    // 简化版本不支持 IntelliJ 模式，降级为本地执行
+                    logger.warn("IntelliJ 模式不可用，降级为本地执行: {}", toolName)
+                    executeLocal(tool, projectKey, params)
+                }
             }
 
-            // 3. 记录执行时长
+            // 4. 记录执行时长
             result.executionTimeMs = System.currentTimeMillis() - startTime
             logger.info("工具执行完成: toolName={}, success={}, duration={}ms",
                 toolName, result.isSuccess, result.executionTimeMs)
@@ -61,25 +83,6 @@ class ToolExecutor(
         }
     }
 
-    /**
-     * 执行工具（带会话支持）
-     *
-     * @param toolName       工具名称
-     * @param projectKey     项目标识
-     * @param params         参数
-     * @param wsSessionId    WebSocket 会话 ID（用于 IntelliJ 模式）
-     * @return 执行结果
-     */
-    fun executeWithSession(
-        toolName: String,
-        projectKey: String,
-        params: Map<String, Any>,
-        wsSessionId: String?
-    ): ToolResult {
-        // 简化实现：直接调用 execute，忽略 wsSessionId
-        // 完整版本应该根据执行模式选择本地执行或 WebSocket 转发
-        return execute(toolName, projectKey, params)
-    }
 
     /**
      * 本地执行工具
@@ -92,6 +95,20 @@ class ToolExecutor(
     private fun executeLocal(tool: Tool, projectKey: String, params: Map<String, Any>): ToolResult {
         logger.debug("本地执行工具: {}", tool.getName())
         return tool.execute(projectKey, params)
+    }
+
+    /**
+     * 本地执行工具（带流式输出）
+     *
+     * @param tool       工具实例
+     * @param projectKey 项目标识
+     * @param params     参数
+     * @param partPusher Part 推送器
+     * @return 执行结果
+     */
+    private fun executeLocalStreaming(tool: Tool, projectKey: String, params: Map<String, Any>, partPusher: Consumer<Part>): ToolResult {
+        logger.debug("本地执行工具（流式输出）: {}", tool.getName())
+        return tool.executeStreaming(projectKey, params, partPusher)
     }
 
     /**

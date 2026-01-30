@@ -2,6 +2,9 @@ package com.smancode.smanagent.ide.service
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
+import com.smancode.smanagent.analysis.techstack.BuildType
+import com.smancode.smanagent.analysis.techstack.TechStack
+import com.smancode.smanagent.analysis.techstack.TechStackDetector
 import com.smancode.smanagent.config.SmanAgentConfig
 import com.smancode.smanagent.config.SmanCodeProperties
 import com.smancode.smanagent.model.part.Part
@@ -27,6 +30,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import java.nio.file.Path
+import java.nio.file.Paths.get
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Consumer
 
@@ -57,6 +62,9 @@ class SmanAgentService(private val project: Project) : Disposable {
     // 会话缓存
     private val sessionCache = ConcurrentHashMap<String, Session>()
 
+    // 技术栈缓存（启动时检测一次）
+    private var cachedTechStack: TechStack? = null
+
     // 项目标识（用于会话隔离）
     private val projectKey: String
         get() = project.name
@@ -64,6 +72,81 @@ class SmanAgentService(private val project: Project) : Disposable {
     init {
         loadUserConfig()
         initializeServices()
+        detectAndCacheTechStack()
+    }
+
+    /**
+     * 检测并缓存技术栈信息
+     */
+    private fun detectAndCacheTechStack() {
+        try {
+            val projectPath: Path = get(project.basePath)
+            val detector = TechStackDetector()
+            cachedTechStack = detector.detect(projectPath)
+            logger.info("技术栈检测完成: buildType={}, frameworks={}",
+                cachedTechStack?.buildType,
+                cachedTechStack?.frameworks?.map { it.name })
+        } catch (e: Exception) {
+            logger.warn("技术栈检测失败（非关键）", e)
+        }
+    }
+
+    /**
+     * 获取缓存的构建命令（基于检测到的技术栈）
+     */
+    fun getBuildCommands(): String {
+        val os = System.getProperty("os.name").lowercase()
+        val isWindows = os.contains("win")
+
+        return when (cachedTechStack?.buildType) {
+            BuildType.GRADLE_KTS, BuildType.GRADLE -> {
+                val wrapper = if (isWindows) "gradlew.bat" else "./gradlew"
+                """
+                ## 可用构建命令（Gradle 项目）
+
+                - 构建: `$wrapper build`
+                - 清理: `$wrapper clean`
+                - 测试: `$wrapper test`
+                - 运行: `$wrapper bootRun`
+                - 打包: `$wrapper bootJar`
+                """.trimIndent()
+            }
+            BuildType.MAVEN -> {
+                """
+                ## 可用构建命令（Maven 项目）
+
+                - 构建: `mvn clean install`
+                - 清理: `mvn clean`
+                - 测试: `mvn test`
+                - 运行: `mvn spring-boot:run`
+                - 打包: `mvn package`
+                """.trimIndent()
+            }
+            else -> {
+                """
+                ## 构建命令
+
+                未检测到构建工具（Gradle/Maven），请手动指定命令。
+                """.trimIndent()
+            }
+        }
+    }
+
+    /**
+     * 获取项目上下文信息（用于注入到 User Prompt）
+     */
+    fun getProjectContext(): String {
+        val os = System.getProperty("os.name")
+        val buildType = cachedTechStack?.buildType ?: BuildType.UNKNOWN
+
+        return """
+        ## 项目环境信息
+
+        - 操作系统: $os
+        - 构建工具: $buildType
+
+        ${getBuildCommands()}
+        """.trimIndent()
     }
 
     /**
@@ -229,6 +312,8 @@ class SmanAgentService(private val project: Project) : Disposable {
             }.let { projectInfo ->
                 Session(id, projectInfo).apply {
                     status = SessionStatus.IDLE
+                    // 注入项目上下文到 metadata
+                    metadata["projectContext"] = getProjectContext()
                 }
             }
         }.also { session ->
@@ -247,6 +332,8 @@ class SmanAgentService(private val project: Project) : Disposable {
                 sessionCache[sessionId] = it
                 // 【关键】注册到 SessionManager，否则创建子会话时会找不到父会话
                 sessionManager.registerSession(it)
+                // 更新项目上下文（可能技术栈有变化）
+                it.metadata["projectContext"] = getProjectContext()
                 logger.info("从文件加载会话: projectKey={}, sessionId={}, 消息数={}", projectKey, sessionId, it.messages.size)
             }
         }

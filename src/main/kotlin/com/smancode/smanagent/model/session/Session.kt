@@ -54,6 +54,11 @@ class Session {
         }
 
     /**
+     * 会话元数据（用于存储额外的会话信息）
+     */
+    val metadata: MutableMap<String, Any> = mutableMapOf()
+
+    /**
      * 会话状态（极简：只有 3 种）
      */
     var status: SessionStatus = SessionStatus.IDLE

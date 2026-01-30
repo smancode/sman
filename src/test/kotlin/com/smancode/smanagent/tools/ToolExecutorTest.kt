@@ -114,11 +114,11 @@ class ToolExecutorTest {
             toolRegistry.registerTool(dummy)
 
             // When
-            val result = toolExecutor.executeWithSession(
+            val result = toolExecutor.execute(
                 "dummy",
                 "test-project",
                 emptyMap(),
-                "ws-session-123"
+                null
             )
 
             // Then
@@ -134,7 +134,7 @@ class ToolExecutorTest {
             toolRegistry.registerTool(dummy)
 
             // When
-            val result = toolExecutor.executeWithSession(
+            val result = toolExecutor.execute(
                 "dummy",
                 "test-project",
                 emptyMap(),

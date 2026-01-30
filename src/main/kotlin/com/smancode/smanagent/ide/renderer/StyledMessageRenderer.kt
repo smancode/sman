@@ -1,5 +1,6 @@
 package com.smancode.smanagent.ide.renderer
 
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.ide.model.PartData
 import com.smancode.smanagent.ide.model.GraphModels
@@ -100,33 +101,45 @@ object StyledMessageRenderer {
                             .replace("<", "&lt;")
                             .replace(">", "&gt;")
 
-                        // 计算对齐缩进：⏺(1字符) + 1个空格 = 2个字符
-                        // 这样 └─ 会对齐到 toolName 的首字母（如 read_file 的 r）
-                        val indentSize = 1 + 1  // ⏺ 占1个字符 + 1个空格
-                        // 使用 &nbsp; 而不是空格，因为 HTML 会压缩连续空格
-                        val indent = "&nbsp;".repeat(indentSize)
-
                         val html = StringBuilder()
-                        html.append("<div style=\"margin: 0; text-align: left;\">")
+                        html.append("<div style=\"margin: 5px 0;\">")
                         // 工具调用行：⏺ toolName 黄色，(params) 灰色
                         html.append("<span style=\"color: ${toHexString(colors.warning)};\">⏺ $escapedToolName</span>")
                         html.append("<span style=\"color: ${toHexString(colors.textPrimary)};\">($escapedParams)</span>")
-                        // 结果行（最多显示3行，超出显示省略号）
-                        val displayLines = resultLines.take(3)
-                        displayLines.forEach { line ->
-                            // 先转义 HTML 特殊字符
-                            val escapedLine = line.replace("&", "&amp;")
-                                .replace("<", "&lt;")
-                                .replace(">", "&gt;")
-                            // 使用 CodeLinkProcessor 处理代码链接（支持点击跳转）
-                            val processedLine = CodeLinkProcessor.processCodeLinks(escapedLine, project)
-                            html.append("<br><span style=\"color: ${toHexString(colors.textPrimary)};\">$indent└─ $processedLine</span>")
-                        }
-                        // 如果有更多行，显示省略号
-                        if (resultLines.size > 3) {
-                            html.append("<br><span style=\"color: ${toHexString(colors.textPrimary)};\">$indent└─ ...</span>")
-                        }
                         html.append("</div>")
+
+                        // 如果有结果行，显示为可滚动的灰色文本块
+                        if (resultLines.isNotEmpty()) {
+                            val editorFont = EditorColorsManager.getInstance().globalScheme
+                            val displayLines = if (resultLines.size > 20) {
+                                resultLines.take(20) + listOf("... (共 ${resultLines.size} 行)")
+                            } else {
+                                resultLines
+                            }
+
+                            val contentHtml = displayLines.joinToString("") { line ->
+                                val escaped = line.replace("&", "&amp;")
+                                    .replace("<", "&lt;")
+                                    .replace(">", "&gt;")
+                                "$escaped<br>"
+                            }
+                            html.append("""
+                                <div style="
+                                    margin-left: 20px;
+                                    margin-top: 5px;
+                                    padding: 8px;
+                                    background-color: #2C313C;
+                                    border-radius: 4px;
+                                    max-height: 300px;
+                                    overflow-y: auto;
+                                    font-family: '${editorFont.editorFontName}', 'Monaco', 'Consolas', monospace;
+                                    font-size: ${editorFont.editorFontSize}px;
+                                    color: #8B949E;
+                                    line-height: 1.4;
+                                ">$contentHtml</div>
+                            """.trimIndent())
+                        }
+
                         appendHtml(textPane, html.toString())
                     } else {
                         // 普通 TEXT 使用 Markdown 渲染
@@ -182,13 +195,15 @@ object StyledMessageRenderer {
                                     .replace("&lt;", "<")
                                     .replace("&gt;", ">")
                                     .replace("&amp;", "&")
-                                // 使用 div 模拟 pre，但添加换行处理
-                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
+                                // 使用 div 模拟 pre，但添加换行处理，字体继承编辑器设置
+                                val editorFont = EditorColorsManager.getInstance().globalScheme
+                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: '${editorFont.editorFontName}', monospace; font-size: ${editorFont.editorFontSize}px; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
                             }
-                            // 处理行内代码 <code>...</code>（不在 pre 内的）
+                            // 处理行内代码 <code>...</code>（不在 pre 内的），字体继承编辑器设置
+                            val editorFont = EditorColorsManager.getInstance().globalScheme
                             htmlContent = htmlContent.replace(Regex("""<code>(.*?)</code>""")) { matchResult ->
                                 val codeContent = matchResult.groupValues[1]
-                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;">$codeContent</span>"""
+                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: '${editorFont.editorFontName}', monospace; font-size: ${editorFont.editorFontSize}px;">$codeContent</span>"""
                             }
 
                             // 如果是处理中消息，包裹灰色样式
@@ -208,14 +223,16 @@ object StyledMessageRenderer {
                 }
             }
             PartType.REASONING -> {
-                // REASONING 显示为 "> " + 实际内容
-                val text = (part.data["text"] as? String) ?: "思考中"
-                val html = """
-                    <div style="margin: 5px 0; text-align: left;">
-                        <span style="color: ${toHexString(colors.textSecondary)};">&gt; $text</span>
-                    </div>
-                """.trimIndent()
-                appendHtml(textPane, html)
+                // REASONING 只有在有内容时才显示
+                val text = part.data["text"] as? String
+                if (!text.isNullOrBlank()) {
+                    val html = """
+                        <div style="margin: 5px 0; text-align: left;">
+                            <span style="color: ${toHexString(colors.textSecondary)};">&gt; $text</span>
+                        </div>
+                    """.trimIndent()
+                    appendHtml(textPane, html)
+                }
             }
             PartType.USER -> {
                 // 用户消息：使用 HTML 插入，保持与其他消息类型一致
@@ -233,17 +250,24 @@ object StyledMessageRenderer {
                 appendHtml(textPane, html)
             }
             else -> {
-                // 其他类型：转换为 HTML
-                val text = when (part.type) {
-                    PartType.TOOL -> renderToolPart(part)
-                    PartType.GOAL -> renderGoalPart(part)
-                    PartType.PROGRESS -> renderProgressPart(part)
-                    PartType.TODO -> renderTodoPart(part)
-                    else -> ""
+                // TOOL Part 特殊处理：直接返回 HTML，不需要转换
+                if (part.type == PartType.TOOL) {
+                    val html = renderToolPart(part)
+                    if (html.isNotEmpty()) {
+                        appendHtml(textPane, html)
+                    }
+                } else {
+                    // 其他类型：转换为 HTML
+                    val text = when (part.type) {
+                        PartType.GOAL -> renderGoalPart(part)
+                        PartType.PROGRESS -> renderProgressPart(part)
+                        PartType.TODO -> renderTodoPart(part)
+                        else -> ""
+                    }
+                    val html = convertStyledTextToHtml(text, colors)
+                    val wrappedHtml = wrapHtml(html, false)
+                    appendHtml(textPane, wrappedHtml)
                 }
-                val html = convertStyledTextToHtml(text, colors)
-                val wrappedHtml = wrapHtml(html, false)
-                appendHtml(textPane, wrappedHtml)
             }
         }
     }
@@ -361,23 +385,49 @@ object StyledMessageRenderer {
                     ""
                 }
 
+                // 构建完整的 HTML
+                val editorFont = EditorColorsManager.getInstance().globalScheme
                 val sb = StringBuilder()
-                val toolName = part.data["toolName"] as? String ?: "unknown"
-                sb.append("⏺ <b style=\"color: #E5C07B;\">$toolName</b>($paramsStr)\n")
 
-                // 如果有内容，显示结果
+                // 工具名称行
+                sb.append("""<div style="margin: 5px 0;">""")
+                sb.append("""<span style="color: #E5C07B; font-weight: bold;">⏺ $toolName</span>""")
+                if (paramsStr.isNotEmpty()) {
+                    sb.append("""<span style="color: #ABB2BF;">($paramsStr)</span>""")
+                }
+                sb.append("</div>")
+
+                // 如果有内容，显示为可滚动的灰色文本块
                 if (!content.isNullOrBlank()) {
                     val results = content.split("\n").filter { it.isNotBlank() && it != "null" }
-                    val displayResults = if (results.size > 3) {
-                        results.take(3) + listOf("...")
+                    val displayResults = if (results.size > 20) {
+                        results.take(20) + listOf("... (共 ${results.size} 行)")
                     } else {
                         results
                     }
 
-                    // 每行结果前面加 └─（与工具调用行对齐）
-                    displayResults.forEach { result ->
-                        sb.append("    └─ $result\n")
+                    val contentHtml = displayResults.joinToString("") { line ->
+                        // HTML 转义
+                        val escaped = line.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                        "$escaped<br>"
                     }
+                    sb.append("""
+                        <div style="
+                            margin-left: 20px;
+                            margin-top: 5px;
+                            padding: 8px;
+                            background-color: #2C313C;
+                            border-radius: 4px;
+                            max-height: 300px;
+                            overflow-y: auto;
+                            font-family: '${editorFont.editorFontName}', 'Monaco', 'Consolas', monospace;
+                            font-size: ${editorFont.editorFontSize}px;
+                            color: #8B949E;
+                            line-height: 1.4;
+                        ">$contentHtml</div>
+                    """.trimIndent())
                 }
                 sb.toString()
             }

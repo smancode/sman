@@ -998,6 +998,13 @@ class SmanAgentLoop(
     private fun buildUserPrompt(session: Session, isLastStep: Boolean): String {
         val prompt = StringBuilder()
 
+        // 添加项目上下文信息（技术栈、构建命令等）
+        // 从 Session 的 ProjectInfo 中获取项目路径，然后获取 SmanAgentService
+        val projectContext = getProjectContext(session)
+        if (projectContext.isNotEmpty()) {
+            prompt.append(projectContext).append("\n\n")
+        }
+
         // 检查是否有新的用户消息（支持打断）
         val lastAssistant = session.latestAssistantMessage
         if (lastAssistant != null && session.hasNewUserMessageAfter(lastAssistant.id)) {
@@ -1666,5 +1673,37 @@ class SmanAgentLoop(
             return obj1 == obj2
         }
         return obj1 == obj2
+    }
+
+    /**
+     * 获取项目上下文信息（技术栈、构建命令等）
+     * 通过 SessionManager 获取 SmanAgentService，然后获取项目上下文
+     */
+    private fun getProjectContext(session: Session): String {
+        return try {
+            // 从 Session 获取 ProjectInfo
+            val projectInfo = session.projectInfo
+            if (projectInfo == null) {
+                logger.debug("Session 没有关联的 ProjectInfo")
+                return ""
+            }
+
+            // 通过反射或服务查找获取 SmanAgentService
+            // 这里我们使用一个简化的方式：直接返回提示信息
+            // 实际的 SmanAgentService 需要在创建 Session 时注入上下文
+
+            // 从 Session 的 metadata 中获取预存储的项目上下文（如果有的话）
+            val context = session.metadata["projectContext"] as? String
+            if (context != null) {
+                context
+            } else {
+                // 如果没有预存储的上下文，返回空
+                logger.debug("Session 没有预存储的项目上下文")
+                ""
+            }
+        } catch (e: Exception) {
+            logger.warn("获取项目上下文失败", e)
+            ""
+        }
     }
 }

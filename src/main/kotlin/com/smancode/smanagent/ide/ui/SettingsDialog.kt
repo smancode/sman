@@ -52,7 +52,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     // LLM 配置字段
-    private val llmApiKeyField = JPasswordField("", 30)
+    private val llmApiKeyField = createPasswordFieldWithStorage(storage.llmApiKey)
     private val llmBaseUrlField = createTextFieldWithDefault(
         storage.llmBaseUrl,
         "https://open.bigmodel.cn/api/coding/paas/v4"
@@ -67,14 +67,14 @@ class SettingsDialog(private val project: Project) : JDialog() {
         storage.bgeEndpoint,
         "http://localhost:8000"
     )
-    private val bgeApiKeyField = JPasswordField(storage.bgeApiKey, 30)
+    private val bgeApiKeyField = createPasswordFieldWithStorage(storage.bgeApiKey)
 
     // BGE-Reranker 配置字段
     private val rerankerEndpointField = createTextFieldWithDefault(
         storage.rerankerEndpoint,
         "http://localhost:8001"
     )
-    private val rerankerApiKeyField = JPasswordField(storage.rerankerApiKey, 30)
+    private val rerankerApiKeyField = createPasswordFieldWithStorage(storage.rerankerApiKey)
 
     // 其他配置字段
     private val projectKeyField = JTextField(project.name, 30)
@@ -89,11 +89,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
         isModal = true
         defaultCloseOperation = DISPOSE_ON_CLOSE
 
-        // 如果已有配置，填充掩码后的值
-        maskApiKeyIfExists(storage.llmApiKey, llmApiKeyField)
-        maskApiKeyIfExists(storage.bgeApiKey, bgeApiKeyField)
-        maskApiKeyIfExists(storage.rerankerApiKey, rerankerApiKeyField)
-
         val panel = createMainPanel()
         val buttonPanel = createButtonPanel()
 
@@ -106,9 +101,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
         isResizable = false
     }
 
-    private fun maskApiKeyIfExists(apiKey: String, field: JPasswordField) {
-        if (apiKey.isNotEmpty()) {
-            field.text = API_KEY_MASK
+    private fun createPasswordFieldWithStorage(storedValue: String): JPasswordField {
+        return JPasswordField(
+            if (storedValue.isNotEmpty()) API_KEY_MASK else "",
+            30
+        )
+    }
+
+    /**
+     * 获取密码字段的值
+     * 如果字段显示的是掩码，则返回存储的真实值；否则返回字段输入的值
+     */
+    private fun getPasswordFieldValue(field: JPasswordField, storedValue: String): String {
+        val fieldValue = String(field.password)
+        // 如果字段值是掩码，使用存储的真实值
+        return if (fieldValue == API_KEY_MASK) {
+            storedValue
+        } else {
+            fieldValue
         }
     }
 
@@ -695,13 +705,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * @return 配置对象，验证失败返回 null
      */
     private fun collectConfig(): ConfigData? {
-        val llmApiKey = String(llmApiKeyField.password).trim()
+        val llmApiKey = getPasswordFieldValue(llmApiKeyField, storage.llmApiKey).trim()
         val llmBaseUrl = llmBaseUrlField.text.trim()
         val llmModelName = llmModelNameField.text.trim()
         val bgeEndpoint = bgeEndpointField.text.trim()
-        val bgeApiKey = String(bgeApiKeyField.password).trim()
+        val bgeApiKey = getPasswordFieldValue(bgeApiKeyField, storage.bgeApiKey).trim()
         val rerankerEndpoint = rerankerEndpointField.text.trim()
-        val rerankerApiKey = String(rerankerApiKeyField.password).trim()
+        val rerankerApiKey = getPasswordFieldValue(rerankerApiKeyField, storage.rerankerApiKey).trim()
         val projectKey = projectKeyField.text.trim()
 
         // 验证必填字段

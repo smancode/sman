@@ -2,10 +2,12 @@ package com.smancode.smanagent.tools.ide
 
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.ide.service.LocalToolExecutor
+import com.smancode.smanagent.model.part.Part
 import com.smancode.smanagent.tools.AbstractTool
 import com.smancode.smanagent.tools.ParameterDef
 import com.smancode.smanagent.tools.Tool
 import com.smancode.smanagent.tools.ToolResult
+import java.util.function.Consumer
 
 /**
  * 本地工具适配器
@@ -14,7 +16,8 @@ class LocalToolAdapter(
     private val project: Project,
     private val toolName: String,
     private val toolDescription: String,
-    private val parameterDefs: Map<String, ParameterDef>
+    private val parameterDefs: Map<String, ParameterDef>,
+    private val supportsStreaming: Boolean = false  // 是否支持流式输出
 ) : AbstractTool(), Tool {
 
     private val localToolExecutor = LocalToolExecutor(project)
@@ -25,13 +28,32 @@ class LocalToolAdapter(
 
     override fun getParameters() = parameterDefs
 
+    override fun supportsStreaming(): Boolean = supportsStreaming
+
     override fun execute(projectKey: String, params: Map<String, Any>): ToolResult {
         val startTime = System.currentTimeMillis()
         val result = localToolExecutor.execute(toolName, params, project.basePath)
+        return buildResult(result, startTime)
+    }
+
+    override fun executeStreaming(
+        projectKey: String,
+        params: Map<String, Any>,
+        partPusher: Consumer<Part>
+    ): ToolResult {
+        val startTime = System.currentTimeMillis()
+        val result = localToolExecutor.executeStreaming(toolName, params, project.basePath, partPusher)
+        return buildResult(result, startTime)
+    }
+
+    /**
+     * 构建工具执行结果（公共逻辑）
+     */
+    private fun buildResult(result: LocalToolExecutor.ToolResult, startTime: Long): ToolResult {
         val duration = System.currentTimeMillis() - startTime
+        val resultText = result.result.toString()
 
         return if (result.success) {
-            val resultText = result.result.toString()
             ToolResult.success(resultText, toolName, resultText).also {
                 it.executionTimeMs = duration
                 it.relatedFilePaths = result.relatedFilePaths
@@ -39,7 +61,7 @@ class LocalToolAdapter(
                 it.metadata = result.metadata
             }
         } else {
-            ToolResult.failure(result.result.toString()).also {
+            ToolResult.failure(resultText).also {
                 it.executionTimeMs = duration
             }
         }
@@ -57,7 +79,8 @@ object LocalToolFactory {
         findFileTool(project),
         callChainTool(project),
         extractXmlTool(project),
-        applyChangeTool(project)
+        applyChangeTool(project),
+        runShellCommandTool(project)  // 新增：Shell 命令执行工具
     )
 
     private fun readFileTool(project: Project) = LocalToolAdapter(
@@ -127,5 +150,18 @@ object LocalToolFactory {
             "mode" to ParameterDef("mode", String::class.java, false, "Mode: replace/create"),
             "description" to ParameterDef("description", String::class.java, false, "Change description")
         )
+    )
+
+    /**
+     * Shell 命令执行工具（支持流式输出）
+     */
+    private fun runShellCommandTool(project: Project) = LocalToolAdapter(
+        project,
+        "run_shell_command",
+        "Execute shell command in project directory. Supports streaming output for long-running commands.",
+        mapOf(
+            "command" to ParameterDef("command", String::class.java, true, "Shell command to execute")
+        ),
+        supportsStreaming = true  // 启用流式输出
     )
 }

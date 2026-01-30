@@ -110,8 +110,12 @@ object CliMessageRenderer {
      * 渲染推理 Part
      */
     private fun renderReasoningPart(part: PartData, colors: ColorPalette): String {
-        val text = part.data["text"] as? String ?: ""
-        return "${colorize("🤔", colors.info)} ${colorize(text, colors.textSecondary)}\n"
+        val text = part.data["text"] as? String
+        return if (!text.isNullOrBlank()) {
+            "${colorize("🤔", colors.info)} ${colorize(text, colors.textSecondary)}\n"
+        } else {
+            ""
+        }
     }
 
     /**

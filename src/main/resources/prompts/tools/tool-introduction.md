@@ -19,6 +19,7 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
 | call_chain | Analyze call relationships | You need to understand who calls what |
 | extract_xml | Extract XML content | You need to parse XML configurations |
 | apply_change | Modify code | You've read the code and are ready to change it |
+| **run_shell_command** | **Execute shell commands** | **Build, test, run, or any CLI operations** |
 
 ## Expert Consultation: Bidirectional Business ↔ Code
 
@@ -144,6 +145,62 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
 - `startLine`: 开始行号（默认 1）
 - `endLine`: 结束行号（默认 300，设置为 999999 读取完整文件）
 - Example: `read_file(simpleName="MyClass", startLine=1, endLine=999999)`
+
+---
+
+## Shell Command Execution: run_shell_command
+
+**`run_shell_command` allows you to execute shell commands directly in the project directory.**
+
+### Use Cases
+
+**Build & Test**:
+- User: "帮我构建" → `run_shell_command(command="./gradlew build")`
+- User: "运行测试" → `run_shell_command(command="./gradlew test")`
+- User: "打包应用" → `run_shell_command(command="./gradlew bootJar")`
+
+**Git Operations**:
+- User: "查看状态" → `run_shell_command(command="git status")`
+- User: "提交代码" → `run_shell_command(command="git add . && git commit -m 'message'")`
+
+**Run Application**:
+- User: "启动应用" → `run_shell_command(command="./gradlew bootRun")`
+- User: "运行 Main 类" → `run_shell_command(command="java -cp build/libs MyApp")`
+
+### Important Notes
+
+1. **Auto-detect Build System**: Check project context for Gradle/Maven/npm
+2. **Cross-platform Compatible**: Automatically adjusts for Windows (gradlew.bat) vs Unix (./gradlew)
+3. **Streaming Output**: Real-time feedback for long-running commands
+4. **Working Directory**: Commands execute in project root automatically
+
+### Code Examples
+
+```json
+// Build project (Gradle)
+{
+  "toolName": "run_shell_command",
+  "parameters": {
+    "command": "./gradlew build"
+  }
+}
+
+// Run tests
+{
+  "toolName": "run_shell_command",
+  "parameters": {
+    "command": "./gradlew test"
+  }
+}
+
+// Start Spring Boot app
+{
+  "toolName": "run_shell_command",
+  "parameters": {
+    "command": "./gradlew bootRun"
+  }
+}
+```
 
 ---
 

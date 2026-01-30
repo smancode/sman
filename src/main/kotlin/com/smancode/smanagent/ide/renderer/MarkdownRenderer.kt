@@ -51,14 +51,13 @@ object MarkdownRenderer {
         val styleSheet = StyleSheet()
 
         // 获取字体信息
-        val labelFont = com.intellij.util.ui.UIUtil.getLabelFont()
         val editorFont = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance().globalScheme
 
-        // 基础样式 - 使用 UI 字体
+        // 基础样式 - 使用编辑器字体家族和大小
         styleSheet.addRule("""
             body {
-                font-family: "${labelFont.family}", sans-serif;
-                font-size: 100%;
+                font-family: "${editorFont.editorFontName}", sans-serif;
+                font-size: ${editorFont.editorFontSize}px;
                 color: ${toHexString(colors.textPrimary)};
                 margin-top: 0;
                 margin-bottom: 0;
@@ -82,7 +81,7 @@ object MarkdownRenderer {
         styleSheet.addRule("""
             code {
                 font-family: "${editorFont.editorFontName}", Monospaced;
-                font-size: 100%;
+                font-size: ${editorFont.editorFontSize}px;
                 color: ${toHexString(colors.codeString)};
             }
         """.trimIndent())
@@ -92,7 +91,7 @@ object MarkdownRenderer {
                 background-color: ${toHexString(colors.background)};
                 padding: 5px;
                 font-family: "${editorFont.editorFontName}", Monospaced;
-                font-size: 100%;
+                font-size: ${editorFont.editorFontSize}px;
                 margin-top: 8px;
                 margin-bottom: 8px;
             }

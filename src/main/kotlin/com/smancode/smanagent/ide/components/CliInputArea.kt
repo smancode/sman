@@ -154,8 +154,9 @@ class CliInputArea(
     private fun drawPlaceholder(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette) {
         val oldColor = setupGraphics(g2, colors)
 
-        val x = insets.left
-        var y = insets.top + fm.ascent
+        // 偏移位置：向右 5px，向下 5px
+        val x = insets.left + JBUI.scale(5)
+        var y = insets.top + fm.ascent + JBUI.scale(5)
 
         placeholderText.split("\n").forEach { line ->
             g2.drawString(line, x, y)

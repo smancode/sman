@@ -47,13 +47,14 @@ class PromptDispatcher(
 
             | 工具 | 功能 | 使用场景 |
             |------|------|----------|
-            | **search** | **智能搜索（SubAgent）** | **万能入口，90%情况用这个** |
+            | **expert_consult** | **智能搜索（SubAgent）** | **万能入口，90%情况用这个** |
             | read_file | 读取文件 | 已知类名时直接读取 |
             | grep_file | 正则搜索 | 找方法使用位置 |
             | find_file | 文件查找 | 按文件名模式查找 |
             | call_chain | 调用链分析 | 理解调用关系 |
             | extract_xml | XML 提取 | 提取配置 |
             | apply_change | 代码修改 | 应用代码修改 |
+            | **run_shell_command** | **Shell 命令执行** | **构建、测试、运行等 CLI 操作** |
 
             详细信息请参考工具文档。
         """.trimIndent()

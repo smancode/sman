@@ -1,6 +1,7 @@
 package com.smancode.smanagent.ide.ui
 
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.ide.components.HistoryPopup
 import com.smancode.smanagent.ide.components.CliControlBar
@@ -46,7 +47,9 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     private val welcomePanel = WelcomePanel()
     private val outputArea = JTextPane().apply {
         isEditable = false
-        font = java.awt.Font("JetBrains Mono", java.awt.Font.PLAIN, 13)
+        // 使用编辑器字体设置
+        val editorFont = EditorColorsManager.getInstance().globalScheme
+        font = java.awt.Font(editorFont.editorFontName, java.awt.Font.PLAIN, editorFont.editorFontSize)
         contentType = "text/html"
         margin = java.awt.Insets(0, 16, 0, 16)
     }
@@ -108,14 +111,17 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         val cardLayout = centerPanel.layout as java.awt.CardLayout
         cardLayout.show(centerPanel, "chat")
 
+        // 使用编辑器字体设置
+        val editorFont = EditorColorsManager.getInstance().globalScheme
+
         // 格式化错误信息为 HTML
         val errorHtml = """
             <html>
             <head>
                 <style>
                     body {
-                        font-family: 'JetBrains Mono', monospace;
-                        font-size: 13px;
+                        font-family: '${editorFont.editorFontName}', monospace;
+                        font-size: ${editorFont.editorFontSize}px;
                         color: #E57373;
                         background-color: #263238;
                         padding: 16px;
@@ -569,6 +575,7 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun appendSystemMessage(text: String, isProcessing: Boolean = false, saveToHistory: Boolean = true) {
         val colors = ThemeColors.getCurrentColors()
+        val editorFont = EditorColorsManager.getInstance().globalScheme
 
         // 将文本转换为 HTML 格式（保留换行）
         var htmlText = text.replace("\n", "<br>")
@@ -586,13 +593,14 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         }
 
         // 使用与 StyledMessageRenderer 相同的方式追加 HTML，避免覆盖已有样式
+        // 使用编辑器字体设置
         val html = if (outputArea.text.contains("<body>")) {
             // 已有 HTML 内容，在 </body> 前插入
             val currentHtml = outputArea.text
-            currentHtml.replace("</body>", "<div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body>")
+            currentHtml.replace("</body>", "<div style='color:$colorHex; font-family: \"${editorFont.editorFontName}\", monospace; font-size: ${editorFont.editorFontSize}px; margin: 4px 0;'>$htmlText</div></body>")
         } else {
             // 空 HTML，初始化
-            "<html><body><div style='color:$colorHex; font-family: \"JetBrains Mono\", monospace; margin: 4px 0;'>$htmlText</div></body></html>"
+            "<html><body><div style='color:$colorHex; font-family: \"${editorFont.editorFontName}\", monospace; font-size: ${editorFont.editorFontSize}px; margin: 4px 0;'>$htmlText</div></body></html>"
         }
 
         // 使用 HTMLEditorKit 的方式来追加内容，避免覆盖已有样式

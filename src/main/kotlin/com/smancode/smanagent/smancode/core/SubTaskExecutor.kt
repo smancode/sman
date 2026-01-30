@@ -97,14 +97,13 @@ class SubTaskExecutor(
 
             // 3. 在子会话中执行工具
             val projectKey = childSession.projectInfo!!.projectKey
-            val wsSessionId = childSession.webSocketSessionId  // 获取 WebSocket Session ID
 
             logger.info("【工具执行中】toolName={}, projectKey={}", toolName, projectKey)
-            val fullResult = toolExecutor.executeWithSession(
+            val fullResult = toolExecutor.execute(
                 toolName,
                 projectKey!!,
                 toolPart.parameters!!,
-                wsSessionId
+                partPusher  // 传递 partPusher 用于流式输出
             )
             logger.info("【工具执行完成】toolName={}, success={}, displayTitle={}, displayContent长度={}, error={}",
                 toolName, fullResult.isSuccess, fullResult.displayTitle,

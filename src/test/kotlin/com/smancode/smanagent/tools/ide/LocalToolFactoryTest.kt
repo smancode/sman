@@ -8,6 +8,7 @@ import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.DisplayName
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -27,16 +28,16 @@ class LocalToolFactoryTest {
     }
 
     @Test
-    @DisplayName("创建工具列表 - 应该创建 6 个工具")
-    fun testCreateTools_count_shouldBeSix() {
+    @DisplayName("创建工具列表 - 应该创建 7 个工具")
+    fun testCreateTools_count_shouldBeSeven() {
         // Given: 模拟项目对象
         val project = createMockProject()
 
         // When: 创建工具列表
         val tools = LocalToolFactory.createTools(project)
 
-        // Then: 应该创建 6 个工具
-        assertEquals(6, tools.size, "应该创建 6 个本地工具")
+        // Then: 应该创建 7 个工具
+        assertEquals(7, tools.size, "应该创建 7 个本地工具")
     }
 
     @Test
@@ -56,7 +57,8 @@ class LocalToolFactoryTest {
             "find_file",
             "call_chain",
             "extract_xml",
-            "apply_change"
+            "apply_change",
+            "run_shell_command"  // 新增
         )
 
         expectedTools.forEach { toolName ->
@@ -130,5 +132,36 @@ class LocalToolFactoryTest {
         val patternParam = params["pattern"]
         assertNotNull(patternParam, "应该有 pattern 参数")
         assertTrue(patternParam.isRequired, "pattern 参数应该是必需的")
+    }
+
+    @Test
+    @DisplayName("流式输出支持 - run_shell_command 应该支持流式输出")
+    fun testRunShellCommandTool_supportsStreaming() {
+        // Given: 工具注册表
+        val registry = ToolRegistry()
+        LocalToolFactory.createTools(createMockProject()).let { registry.registerTools(it) }
+
+        // When: 获取 run_shell_command 工具
+        val tool = registry.getTool("run_shell_command")
+
+        // Then: 验证支持流式输出
+        assertNotNull(tool)
+        assertTrue(tool.supportsStreaming(), "run_shell_command 应该支持流式输出")
+    }
+
+    @Test
+    @DisplayName("流式输出支持 - 其他工具不应该支持流式输出")
+    fun testOtherTools_doNotSupportStreaming() {
+        // Given: 工具列表
+        val tools = LocalToolFactory.createTools(createMockProject())
+
+        // When & Then: 只有 run_shell_command 支持流式输出
+        tools.forEach { tool ->
+            if (tool.getName() == "run_shell_command") {
+                assertTrue(tool.supportsStreaming(), "${tool.getName()} 应该支持流式输出")
+            } else {
+                assertFalse(tool.supportsStreaming(), "${tool.getName()} 不应该支持流式输出")
+            }
+        }
     }
 }
