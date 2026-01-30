@@ -45,7 +45,7 @@ class AstCacheService(
 
     init {
         l1Cache = LRUCache(config.l1MaxSize)
-        l2CacheDir = File(config.l2CachePath).apply { mkdirs() }
+        l2CacheDir = File(config.l2CacheDirPath).apply { mkdirs() }
 
         logger.info("AST 缓存服务初始化完成: L1={}, L2={}", config.l1MaxSize, l2CacheDir.absolutePath)
     }
@@ -278,9 +278,8 @@ class LRUCache<K, V>(
 ) {
     private val cache: MutableMap<K, V> =
         object : LinkedHashMap<K, V>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>): Boolean {
-                return size > maxSize
-            }
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>): Boolean =
+                size > maxSize
         }
 
     fun put(key: K, value: V) {
@@ -289,10 +288,8 @@ class LRUCache<K, V>(
         }
     }
 
-    fun get(key: K): V? {
-        synchronized(cache) {
-            return cache[key]
-        }
+    fun get(key: K): V? = synchronized(cache) {
+        cache[key]
     }
 
     fun remove(key: K) {
@@ -301,16 +298,12 @@ class LRUCache<K, V>(
         }
     }
 
-    fun contains(key: K): Boolean {
-        synchronized(cache) {
-            return cache.containsKey(key)
-        }
+    fun contains(key: K): Boolean = synchronized(cache) {
+        cache.containsKey(key)
     }
 
-    fun values(): Collection<V> {
-        synchronized(cache) {
-            return cache.values.toList()
-        }
+    fun values(): Collection<V> = synchronized(cache) {
+        cache.values.toList()
     }
 
     val entries: MutableSet<Map.Entry<K, V>>
@@ -318,10 +311,8 @@ class LRUCache<K, V>(
             cache.entries.toMutableSet()
         }
 
-    fun size(): Int {
-        synchronized(cache) {
-            return cache.size
-        }
+    fun size(): Int = synchronized(cache) {
+        cache.size
     }
 
     fun clear() {
@@ -336,16 +327,20 @@ class LRUCache<K, V>(
  *
  * @property projectKey 项目标识符（用于隔离不同项目的缓存）
  * @property l1MaxSize L1 缓存最大条数
- * @property l2CachePath L2 缓存路径（已包含 projectKey）
+ * @property l2CacheDirPath L2 缓存目录路径（已包含 projectKey）
  * @property defaultTtl 默认过期时间（毫秒）
  */
 data class AstCacheConfig(
     val projectKey: String,
     val l1MaxSize: Int = 100,
-    val l2CachePath: String,
-    val defaultTtl: Long = 30 * 60 * 1000 // 30 分钟
+    val l2CacheDirPath: String,
+    val defaultTtl: Long = DEFAULT_TTL
 ) {
     companion object {
+        private const val SMANUNION_DIR = ".smanunion"
+        private const val AST_CACHE_DIR = "ast_cache"
+        private const val DEFAULT_TTL = 30 * 60 * 1000L // 30 分钟
+
         /**
          * 创建配置（自动构建 projectKey 隔离路径）
          */
@@ -353,13 +348,13 @@ data class AstCacheConfig(
             projectKey: String,
             baseDir: String = System.getProperty("user.home"),
             l1MaxSize: Int = 100,
-            defaultTtl: Long = 30 * 60 * 1000
+            defaultTtl: Long = DEFAULT_TTL
         ): AstCacheConfig {
-            val projectDir = "$baseDir/.smanunion/$projectKey"
+            val projectDir = File(baseDir, SMANUNION_DIR).resolve(projectKey)
             return AstCacheConfig(
                 projectKey = projectKey,
                 l1MaxSize = l1MaxSize,
-                l2CachePath = "$projectDir/ast_cache",
+                l2CacheDirPath = File(projectDir, AST_CACHE_DIR).absolutePath,
                 defaultTtl = defaultTtl
             )
         }

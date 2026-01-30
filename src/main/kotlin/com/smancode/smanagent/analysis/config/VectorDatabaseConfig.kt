@@ -1,5 +1,7 @@
 package com.smancode.smanagent.analysis.config
 
+import java.io.File
+
 /**
  * 向量数据库配置
  *
@@ -10,8 +12,7 @@ package com.smancode.smanagent.analysis.config
  * @property projectKey 项目标识符（用于隔离不同项目的数据）
  * @property type 向量数据库类型
  * @property jvector JVector 配置
- * @property basePath 基础路径（已包含 projectKey）
- * @property storePath 存储路径（已包含 projectKey）
+ * @property vectorStorePath 向量存储路径（已包含 projectKey）
  * @property databasePath H2 数据库路径（已包含 projectKey）
  * @property vectorDimension 向量维度
  * @property l1CacheSize L1 缓存大小（内存 LRU）
@@ -20,13 +21,16 @@ data class VectorDatabaseConfig(
     val projectKey: String,
     val type: VectorDbType,
     val jvector: JVectorConfig,
-    val basePath: String,
-    val storePath: String,
+    val vectorStorePath: String,
     val databasePath: String,
     val vectorDimension: Int = 1024,
     val l1CacheSize: Int = 500
 ) {
     companion object {
+        private const val SMANUNION_DIR = ".smanunion"
+        private const val VECTOR_STORE_DIR = "vector_store"
+        private const val DATABASE_FILE = "analysis.mv.db"
+
         /**
          * 创建配置（自动构建 projectKey 隔离路径）
          */
@@ -38,14 +42,13 @@ data class VectorDatabaseConfig(
             vectorDimension: Int = 1024,
             l1CacheSize: Int = 500
         ): VectorDatabaseConfig {
-            val projectDir = "$baseDir/.smanunion/$projectKey"
+            val projectDir = File(baseDir, SMANUNION_DIR).resolve(projectKey)
             return VectorDatabaseConfig(
                 projectKey = projectKey,
                 type = type,
                 jvector = jvector,
-                basePath = "$projectDir/vector_store",
-                storePath = "$projectDir/vector_store",
-                databasePath = "$projectDir/analysis.mv.db",
+                vectorStorePath = File(projectDir, VECTOR_STORE_DIR).absolutePath,
+                databasePath = File(projectDir, DATABASE_FILE).absolutePath,
                 vectorDimension = vectorDimension,
                 l1CacheSize = l1CacheSize
             )
