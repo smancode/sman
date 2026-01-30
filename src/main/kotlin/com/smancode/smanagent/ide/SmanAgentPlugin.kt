@@ -31,9 +31,9 @@ class SmanAgentPlugin : StartupActivity {
             backendStarted.set(true)
         }
 
-        // 初始化 StorageService（确保使用正确的默认 URL）
+        // 初始化 StorageService
         val storageService = project.service<StorageService>()
-        logger.info("后端 URL: {}", storageService.backendUrl)
+        logger.info("StorageService 已初始化")
     }
 
     /**

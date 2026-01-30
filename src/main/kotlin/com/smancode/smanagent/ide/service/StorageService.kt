@@ -72,13 +72,20 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
      * 持久化状态（保存到 XML）
      */
     data class SettingsState(
-        var backendUrl: String = "ws://localhost:8080/ws/agent",
         var currentSessionId: String = "",
 
         // LLM 配置（用户在设置中配置）
         var llmApiKey: String = "",                    // 用户配置的 API Key（加密存储）
         var llmBaseUrl: String = "",                   // 用户配置的 Base URL
         var llmModelName: String = "",                 // 用户配置的模型名称
+
+        // BGE-M3 配置
+        var bgeEndpoint: String = "",                  // BGE-M3 服务端点
+        var bgeApiKey: String = "",                   // BGE-M3 API Key（可选）
+
+        // BGE-Reranker 配置
+        var rerankerEndpoint: String = "",            // Reranker 服务端点
+        var rerankerApiKey: String = "",               // Reranker API Key（可选）
 
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
@@ -374,10 +381,6 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
 
     // ==================== 配置管理 ====================
 
-    var backendUrl: String
-        get() = state.backendUrl
-        set(value) { state.backendUrl = value }
-
     // LLM 配置
     var llmApiKey: String
         get() = state.llmApiKey
@@ -390,6 +393,24 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var llmModelName: String
         get() = state.llmModelName
         set(value) { state.llmModelName = value }
+
+    // BGE-M3 配置
+    var bgeEndpoint: String
+        get() = state.bgeEndpoint
+        set(value) { state.bgeEndpoint = value }
+
+    var bgeApiKey: String
+        get() = state.bgeApiKey
+        set(value) { state.bgeApiKey = value }
+
+    // BGE-Reranker 配置
+    var rerankerEndpoint: String
+        get() = state.rerankerEndpoint
+        set(value) { state.rerankerEndpoint = value }
+
+    var rerankerApiKey: String
+        get() = state.rerankerApiKey
+        set(value) { state.rerankerApiKey = value }
 
     companion object {
         fun getInstance(project: Project): StorageService {

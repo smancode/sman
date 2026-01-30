@@ -17,7 +17,8 @@ import javax.swing.*
  *
  * 配置项：
  * - LLM API 配置（API Key、Base URL、模型名称）
- * - 服务器 URL
+ * - BGE-M3 配置（端点、API Key）
+ * - BGE-Reranker 配置（端点、API Key）
  * - 项目名称
  * - 保存对话历史
  */
@@ -39,8 +40,23 @@ class SettingsDialog(private val project: Project) : JDialog() {
         30
     )
 
+    // BGE-M3 配置字段
+    private val bgeEndpointField = JTextField(
+        storage.bgeEndpoint.takeIf { it.isNotEmpty() }
+            ?: "http://localhost:8000",
+        30
+    )
+    private val bgeApiKeyField = JTextField(storage.bgeApiKey, 30)
+
+    // BGE-Reranker 配置字段
+    private val rerankerEndpointField = JTextField(
+        storage.rerankerEndpoint.takeIf { it.isNotEmpty() }
+            ?: "http://localhost:8001",
+        30
+    )
+    private val rerankerApiKeyField = JTextField(storage.rerankerApiKey, 30)
+
     // 其他配置字段
-    private val serverUrlField = JTextField(storage.backendUrl, 30)
     private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
@@ -73,6 +89,12 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         // LLM API 配置
         row = addLlmConfigSection(panel, gbc, row)
+
+        // BGE-M3 配置
+        row = addBgeM3ConfigSection(panel, gbc, row)
+
+        // BGE-Reranker 配置
+        row = addRerankerConfigSection(panel, gbc, row)
 
         // 其他配置
         addOtherConfigSection(panel, gbc, row)
@@ -114,6 +136,58 @@ class SettingsDialog(private val project: Project) : JDialog() {
         return row
     }
 
+    private fun addBgeM3ConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        var row = startRow
+
+        // 分隔线
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        panel.add(JSeparator(), gbc)
+        row++
+
+        // 标题
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        panel.add(JLabel("<html><b>BGE-M3 向量化配置</b></html>"), gbc)
+        row++
+
+        // 端点
+        row = addLabeledField(panel, gbc, row, "端点:", bgeEndpointField)
+
+        // API Key（可选）
+        row = addLabeledField(panel, gbc, row, "API Key (可选):", bgeApiKeyField)
+
+        return row
+    }
+
+    private fun addRerankerConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        var row = startRow
+
+        // 分隔线
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        panel.add(JSeparator(), gbc)
+        row++
+
+        // 标题
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        panel.add(JLabel("<html><b>BGE-Reranker 重排配置</b></html>"), gbc)
+        row++
+
+        // 端点
+        row = addLabeledField(panel, gbc, row, "端点:", rerankerEndpointField)
+
+        // API Key（可选）
+        row = addLabeledField(panel, gbc, row, "API Key (可选):", rerankerApiKeyField)
+
+        return row
+    }
+
     private fun addOtherConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
@@ -130,9 +204,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
         gbc.gridwidth = 2
         panel.add(JLabel("<html><b>其他配置</b></html>"), gbc)
         row++
-
-        // 服务器 URL
-        row = addLabeledField(panel, gbc, row, "服务器 URL:", serverUrlField)
 
         // 项目名称
         row = addLabeledField(panel, gbc, row, "项目名称:", projectKeyField)
@@ -198,7 +269,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val llmApiKey = String(llmApiKeyField.password).trim()
         val llmBaseUrl = llmBaseUrlField.text.trim()
         val llmModelName = llmModelNameField.text.trim()
-        val serverUrl = serverUrlField.text.trim()
+        val bgeEndpoint = bgeEndpointField.text.trim()
+        val bgeApiKey = bgeApiKeyField.text.trim()
+        val rerankerEndpoint = rerankerEndpointField.text.trim()
+        val rerankerApiKey = rerankerApiKeyField.text.trim()
         val projectKey = projectKeyField.text.trim()
 
         // 验证必填字段
@@ -212,8 +286,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
             return null
         }
 
-        if (serverUrl.isEmpty()) {
-            showError("服务器 URL 不能为空！")
+        if (bgeEndpoint.isEmpty()) {
+            showError("BGE-M3 端点不能为空！")
+            return null
+        }
+
+        if (rerankerEndpoint.isEmpty()) {
+            showError("Reranker 端点不能为空！")
             return null
         }
 
@@ -222,7 +301,16 @@ class SettingsDialog(private val project: Project) : JDialog() {
             return null
         }
 
-        return ConfigData(llmApiKey, llmBaseUrl, llmModelName, serverUrl, projectKey)
+        return ConfigData(
+            llmApiKey = llmApiKey,
+            llmBaseUrl = llmBaseUrl,
+            llmModelName = llmModelName,
+            bgeEndpoint = bgeEndpoint,
+            bgeApiKey = bgeApiKey,
+            rerankerEndpoint = rerankerEndpoint,
+            rerankerApiKey = rerankerApiKey,
+            projectKey = projectKey
+        )
     }
 
     /**
@@ -234,7 +322,12 @@ class SettingsDialog(private val project: Project) : JDialog() {
         }
         storage.llmBaseUrl = config.llmBaseUrl
         storage.llmModelName = config.llmModelName
-        storage.backendUrl = config.serverUrl
+
+        storage.bgeEndpoint = config.bgeEndpoint
+        storage.bgeApiKey = config.bgeApiKey
+
+        storage.rerankerEndpoint = config.rerankerEndpoint
+        storage.rerankerApiKey = config.rerankerApiKey
 
         // 更新配置到 SmanAgentConfig（下次 LLM 调用会使用新配置）
         val userConfig = SmanAgentConfig.UserConfig(
@@ -255,8 +348,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
             append("  - Base URL: ${config.llmBaseUrl}\n")
             append("  - 模型: ${config.llmModelName}\n")
             append("  - API Key: ${if (config.llmApiKey.isNotEmpty()) "****" else "(使用配置文件或环境变量)"}\n")
+            append("\nBGE-M3 配置:\n")
+            append("  - 端点: ${config.bgeEndpoint}\n")
+            append("  - API Key: ${if (config.bgeApiKey.isNotEmpty()) "****" else "(未设置)"}\n")
+            append("\nBGE-Reranker 配置:\n")
+            append("  - 端点: ${config.rerankerEndpoint}\n")
+            append("  - API Key: ${if (config.rerankerApiKey.isNotEmpty()) "****" else "(未设置)"}\n")
             append("\n其他配置:\n")
-            append("  - 服务器 URL: ${config.serverUrl}\n")
             append("  - 项目名称: ${config.projectKey}")
         }
         JOptionPane.showMessageDialog(this, message)
@@ -276,7 +374,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val llmApiKey: String,
         val llmBaseUrl: String,
         val llmModelName: String,
-        val serverUrl: String,
+        val bgeEndpoint: String,
+        val bgeApiKey: String,
+        val rerankerEndpoint: String,
+        val rerankerApiKey: String,
         val projectKey: String
     )
 
