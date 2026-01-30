@@ -7,6 +7,7 @@ import com.smancode.smanagent.analysis.config.JVectorConfig
 import com.smancode.smanagent.analysis.model.ProjectAnalysisResult
 import com.smancode.smanagent.analysis.pipeline.ProjectAnalysisPipeline
 import com.smancode.smanagent.analysis.repository.ProjectAnalysisRepository
+import com.smancode.smanagent.analysis.util.ProjectHashCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -76,9 +77,45 @@ class ProjectAnalysisService(
     ): ProjectAnalysisResult {
         logger.info("开始项目分析: projectKey={}", project.name)
 
-        return ProjectAnalysisPipeline(repository, progressCallback)
-            .execute(project.name, project)
-            .also { cacheResult(it) }
+        // 检查是否可以使用缓存
+        shouldSkipAnalysis()?.let { cached ->
+            logger.info("项目未变化，跳过分析: projectKey={}", project.name)
+            return cached
+        }
+
+        // 执行分析
+        val result = ProjectAnalysisPipeline(
+            repository = repository,
+            progressCallback = progressCallback,
+            projectKey = project.name,
+            project = project
+        ).execute(project.name, project)
+
+        // 计算并保存 MD5
+        val resultWithMd5 = calculateProjectMd5()?.let { md5 ->
+            result.copy(projectMd5 = md5)
+        } ?: result
+
+        repository.saveAnalysisResult(resultWithMd5)
+        cacheResult(resultWithMd5)
+
+        return resultWithMd5
+    }
+
+    private suspend fun shouldSkipAnalysis(): ProjectAnalysisResult? {
+        val currentMd5 = calculateProjectMd5() ?: return null
+        val cached = getAnalysisResult(forceReload = false) ?: return null
+
+        return if (cached.projectMd5 == currentMd5) cached else null
+    }
+
+    private fun calculateProjectMd5(): String? {
+        return try {
+            ProjectHashCalculator.calculate(project)
+        } catch (e: Exception) {
+            logger.warn("计算项目 MD5 失败，将执行分析", e)
+            null
+        }
     }
 
     private fun cacheResult(result: ProjectAnalysisResult) {

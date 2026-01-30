@@ -18,7 +18,8 @@ data class ProjectAnalysisResult(
     val startTime: Long,
     val endTime: Long? = null,
     val status: AnalysisStatus,
-    val steps: Map<String, StepResult> = emptyMap()
+    val steps: Map<String, StepResult> = emptyMap(),
+    val projectMd5: String? = null
 ) {
     companion object {
         fun create(projectKey: String): ProjectAnalysisResult {

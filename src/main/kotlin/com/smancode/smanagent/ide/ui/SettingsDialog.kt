@@ -53,36 +53,36 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     // LLM 配置字段
     private val llmApiKeyField = JPasswordField("", 30)
-    private val llmBaseUrlField = JTextField(
-        storage.llmBaseUrl.takeIf { it.isNotEmpty() }
-            ?: "https://open.bigmodel.cn/api/coding/paas/v4",
-        30
+    private val llmBaseUrlField = createTextFieldWithDefault(
+        storage.llmBaseUrl,
+        "https://open.bigmodel.cn/api/coding/paas/v4"
     )
-    private val llmModelNameField = JTextField(
-        storage.llmModelName.takeIf { it.isNotEmpty() }
-            ?: "GLM-4.7",
-        30
+    private val llmModelNameField = createTextFieldWithDefault(
+        storage.llmModelName,
+        "GLM-4.7"
     )
 
     // BGE-M3 配置字段
-    private val bgeEndpointField = JTextField(
-        storage.bgeEndpoint.takeIf { it.isNotEmpty() }
-            ?: "http://localhost:8000",
-        30
+    private val bgeEndpointField = createTextFieldWithDefault(
+        storage.bgeEndpoint,
+        "http://localhost:8000"
     )
     private val bgeApiKeyField = JPasswordField(storage.bgeApiKey, 30)
 
     // BGE-Reranker 配置字段
-    private val rerankerEndpointField = JTextField(
-        storage.rerankerEndpoint.takeIf { it.isNotEmpty() }
-            ?: "http://localhost:8001",
-        30
+    private val rerankerEndpointField = createTextFieldWithDefault(
+        storage.rerankerEndpoint,
+        "http://localhost:8001"
     )
     private val rerankerApiKeyField = JPasswordField(storage.rerankerApiKey, 30)
 
     // 其他配置字段
     private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
+
+    private fun createTextFieldWithDefault(value: String, default: String): JTextField {
+        return JTextField(value.takeIf { it.isNotEmpty() } ?: default, 30)
+    }
 
     init {
         title = "SmanAgent 设置"
@@ -149,39 +149,52 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     private fun addLlmConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
-        var row = startRow
-
-        addSeparator(panel, gbc, row++)
-        addSectionTitle(panel, gbc, row++, "LLM API 配置")
-
-        row = addLabeledField(panel, gbc, row, "API Key:", llmApiKeyField)
-        row = addLabeledField(panel, gbc, row, "Base URL:", llmBaseUrlField)
-        row = addLabeledField(panel, gbc, row, "模型名称:", llmModelNameField)
-
-        return row
+        return addConfigSection(
+            panel, gbc, startRow,
+            title = "LLM API 配置",
+            fields = listOf(
+                "API Key:" to llmApiKeyField,
+                "Base URL:" to llmBaseUrlField,
+                "模型名称:" to llmModelNameField
+            )
+        )
     }
 
     private fun addBgeM3ConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
-        var row = startRow
-
-        addSeparator(panel, gbc, row++)
-        addSectionTitle(panel, gbc, row++, "BGE-M3 向量化配置")
-
-        row = addLabeledField(panel, gbc, row, "端点:", bgeEndpointField)
-        row = addLabeledField(panel, gbc, row, "API Key (可选):", bgeApiKeyField)
-
-        return row
+        return addConfigSection(
+            panel, gbc, startRow,
+            title = "BGE-M3 向量化配置",
+            fields = listOf(
+                "端点:" to bgeEndpointField,
+                "API Key (可选):" to bgeApiKeyField
+            )
+        )
     }
 
     private fun addRerankerConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        return addConfigSection(
+            panel, gbc, startRow,
+            title = "BGE-Reranker 重排配置",
+            fields = listOf(
+                "端点:" to rerankerEndpointField,
+                "API Key (可选):" to rerankerApiKeyField
+            )
+        )
+    }
+
+    private fun addConfigSection(
+        panel: JPanel,
+        gbc: GridBagConstraints,
+        startRow: Int,
+        title: String,
+        fields: List<Pair<String, JTextField>>
+    ): Int {
         var row = startRow
-
         addSeparator(panel, gbc, row++)
-        addSectionTitle(panel, gbc, row++, "BGE-Reranker 重排配置")
-
-        row = addLabeledField(panel, gbc, row, "端点:", rerankerEndpointField)
-        row = addLabeledField(panel, gbc, row, "API Key (可选):", rerankerApiKeyField)
-
+        addSectionTitle(panel, gbc, row++, title)
+        fields.forEach { (label, field) ->
+            row = addLabeledField(panel, gbc, row, label, field)
+        }
         return row
     }
 
@@ -253,22 +266,31 @@ class SettingsDialog(private val project: Project) : JDialog() {
         analysisScope.launch {
             try {
                 analysisService.init()
-                analysisService.executeAnalysis(null)
-                logger.info("项目分析完成: projectKey={}", project.name)
+
+                // 检查是否需要分析
+                val currentMd5 = com.smancode.smanagent.analysis.util.ProjectHashCalculator.calculate(project)
+                val cached = analysisService.getAnalysisResult(forceReload = false)
+
+                val shouldAnalyze = cached == null || cached.projectMd5 != currentMd5
+
+                SwingUtilities.invokeLater {
+                    val message = if (shouldAnalyze) {
+                        "开始项目分析，将在后台执行"
+                    } else {
+                        "项目未变化，使用已有分析结果"
+                    }
+                    showTemporaryMessage(message, delayMs = 3000)
+                }
+
+                if (shouldAnalyze) {
+                    analysisService.executeAnalysis(null)
+                    logger.info("项目分析完成: projectKey={}", project.name)
+                } else {
+                    logger.info("跳过分析，使用缓存结果: projectKey={}", project.name)
+                }
             } catch (e: Exception) {
                 logger.error("项目分析失败", e)
             }
-        }
-
-        // 弹窗提示，3秒后自动关闭
-        SwingUtilities.invokeLater {
-            val message = "开始项目分析，将在后台执行"
-            JOptionPane.showMessageDialog(this, message, "提示", JOptionPane.INFORMATION_MESSAGE)
-
-            // 3秒后自动关闭对话框
-            javax.swing.Timer(3000) { _ ->
-                isVisible = false
-            }.apply { isRepeats = false }.start()
         }
     }
 
@@ -355,21 +377,37 @@ class SettingsDialog(private val project: Project) : JDialog() {
                 // 显示数据量
                 stepResult.data?.let { data ->
                     try {
-                        val map = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper().readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {})
-                        map.entries.forEach { (key, value) ->
-                            when (value) {
-                                is List<*> -> append("   $key: ${value.size} 项\n")
-                                is Map<*, *> -> {
-                                    val count = (value as Map<*, *>).values.firstOrNull()?.toString()
-                                        ?.toIntOrNull() ?: value.size
-                                    append("   $key: $count 项\n")
+                        val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
+
+                        // 尝试解析为 Map
+                        try {
+                            val map = mapper.readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {})
+                            displayMapData(map, this)
+                        } catch (e: Exception) {
+                            // 尝试解析为 List
+                            try {
+                                val list = mapper.readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<List<Any>>() {})
+                                append("   数据项: ${list.size} 个\n")
+                                // 显示前几个条目
+                                list.take(3).forEach { item ->
+                                    when (item) {
+                                        is Map<*, *> -> {
+                                            val name = item["name"] ?: item["qualifiedName"] ?: item["className"]
+                                            append("   - $name\n")
+                                        }
+                                        else -> append("   - $item\n")
+                                    }
                                 }
-                                is Number -> append("   $key: $value\n")
-                                else -> append("   $key: $value\n")
+                                if (list.size > 3) {
+                                    append("   - ... (共 ${list.size} 项)\n")
+                                }
+                            } catch (e2: Exception) {
+                                // 解析失败，显示原始数据
+                                showDataPreview(data, this)
                             }
                         }
                     } catch (e: Exception) {
-                        append("   数据: ${data.take(100)}...\n")
+                        showDataPreview(data, this)
                     }
                 }
 
@@ -406,6 +444,69 @@ class SettingsDialog(private val project: Project) : JDialog() {
         }
 
         JOptionPane.showMessageDialog(this, message, "分析结果", result.status.messageType)
+    }
+
+    /**
+     * 显示 Map 类型的数据
+     */
+    private fun displayMapData(map: Map<String, Any>, sb: StringBuilder) {
+        map.forEach { (key, value) ->
+            when (value) {
+                is List<*> -> {
+                    val size = value.size
+                    sb.append("   $key: $size 项\n")
+                    // 显示前几个条目
+                    if (key == "enums" || key == "entities" || key == "externalApis" || key == "classes") {
+                        value.take(3).forEach { item ->
+                            when (item) {
+                                is Map<*, *> -> {
+                                    val name = item["name"] ?: item["qualifiedName"]
+                                    sb.append("     - $name\n")
+                                }
+                                is String -> sb.append("     - $item\n")
+                            }
+                        }
+                        if (size > 3) {
+                            sb.append("     - ... (共 $size 项)\n")
+                        }
+                    }
+                }
+                is Map<*, *> -> {
+                    // 处理嵌套 Map
+                    val nestedMap = value as Map<*, *>
+                    nestedMap.forEach { (nestedKey, nestedValue) ->
+                        when (nestedValue) {
+                            is List<*> -> {
+                                val size = nestedValue.size
+                                sb.append("   $key.$nestedKey: $size 项\n")
+                            }
+                            is Number -> sb.append("   $key.$nestedKey: $nestedValue\n")
+                            is String -> sb.append("   $key.$nestedKey: $nestedValue\n")
+                            else -> sb.append("   $key.$nestedKey: $nestedValue\n")
+                        }
+                    }
+                }
+                is Number -> sb.append("   $key: $value\n")
+                is String -> sb.append("   $key: $value\n")
+                else -> sb.append("   $key: $value\n")
+            }
+        }
+    }
+
+    /**
+     * 显示数据预览（当解析失败时）
+     */
+    private fun showDataPreview(data: String, sb: StringBuilder) {
+        val lines = data.lines().take(10)
+        sb.append("   数据预览:\n")
+        lines.forEach { line ->
+            if (line.isNotEmpty()) {
+                sb.append("   $line\n")
+            }
+        }
+        if (data.lines().size > 10) {
+            sb.append("   ...\n")
+        }
     }
 
     private val AnalysisStatus.text: String
@@ -523,40 +624,28 @@ class SettingsDialog(private val project: Project) : JDialog() {
         return results
     }
 
-    /**
-     * 测试 LLM 服务
-     */
     private fun testLlmService(config: ConfigData): ServiceTestResult {
         val request = Request.Builder()
             .url("${config.llmBaseUrl}/chat/completions")
             .addHeader("Authorization", "Bearer ${config.llmApiKey}")
             .post(createLlmTestPayload(config.llmModelName))
             .build()
-
         return executeServiceTest(request)
     }
 
-    /**
-     * 测试 BGE-M3 服务
-     */
     private fun testBgeM3Service(config: ConfigData): ServiceTestResult {
         val request = Request.Builder()
             .url("${config.bgeEndpoint}/v1/embeddings")
             .post(createBgeTestPayload())
             .build()
-
         return executeServiceTest(request)
     }
 
-    /**
-     * 测试 Reranker 服务
-     */
     private fun testRerankerService(config: ConfigData): ServiceTestResult {
         val request = Request.Builder()
             .url("${config.rerankerEndpoint}/rerank")
             .post(createRerankerTestPayload())
             .build()
-
         return executeServiceTest(request)
     }
 
@@ -583,14 +672,14 @@ class SettingsDialog(private val project: Project) : JDialog() {
             "messages": [{"role": "user", "content": "$LLM_TEST_MESSAGE"}],
             "max_tokens": 1
         }
-    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
+    """.trimIndent().toRequestBody(JSON_MEDIA_TYPE)
 
     private fun createBgeTestPayload() = """
         {
             "input": "$BGE_TEST_INPUT",
             "model": "$BGE_MODEL"
         }
-    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
+    """.trimIndent().toRequestBody(JSON_MEDIA_TYPE)
 
     private fun createRerankerTestPayload() = """
         {
@@ -599,7 +688,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
             "documents": ["$RERANKER_DOCUMENT"],
             "top_k": $RERANKER_TOP_K
         }
-    """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
+    """.trimIndent().toRequestBody(JSON_MEDIA_TYPE)
 
     /**
      * 收集并验证配置
@@ -714,6 +803,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     /**
+     * 显示临时提示消息（自动关闭）
+     */
+    private fun showTemporaryMessage(message: String, delayMs: Int = 3000) {
+        val dialog = JDialog(this@SettingsDialog, "提示", false)
+        val label = JLabel(message, SwingConstants.CENTER)
+        label.border = javax.swing.BorderFactory.createEmptyBorder(20, 20, 20, 20)
+        dialog.contentPane.add(label)
+        dialog.pack()
+        dialog.setLocationRelativeTo(this@SettingsDialog)
+
+        javax.swing.Timer(delayMs) { _ ->
+            dialog.dispose()
+        }.apply { isRepeats = false }.start()
+
+        dialog.isVisible = true
+    }
+
+    /**
      * 配置数据
      */
     private data class ConfigData(
@@ -769,6 +876,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         private const val ERROR_HTTP_PREFIX = "✗ HTTP"
         private const val ERROR_PREFIX = "✗"
         private const val CONNECTION_FAILED_MESSAGE = "连接失败"
+
+        // JSON 媒体类型（复用）
+        private val JSON_MEDIA_TYPE = "application/json".toMediaTypeOrNull()
 
         fun show(project: Project) {
             val dialog = SettingsDialog(project)

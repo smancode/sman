@@ -3,12 +3,9 @@ package com.smancode.smanagent.analysis.vectorization
 import com.smancode.smanagent.analysis.config.BgeM3Config
 import com.smancode.smanagent.analysis.database.JVectorStore
 import com.smancode.smanagent.analysis.model.VectorFragment
-import com.smancode.smanagent.analysis.model.StepResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import org.slf4j.Logger
 
 /**
  * 项目信息向量化服务
@@ -28,216 +25,156 @@ class ProjectInfoVectorizationService(
         dimension = 1024
     ))
 
-    private val json = Json { ignoreUnknownKeys = true }
+    /**
+     * 向量化配置
+     * 定义每种数据类型的向量化元数据
+     */
+    private data class VectorizationConfig(
+        val type: String,
+        val title: String,
+        val description: String,
+        val contentPrefix: String,
+        val tags: List<String>
+    )
+
+    /**
+     * 向量化配置映射
+     */
+    private val vectorizationConfigs = mapOf(
+        "project_structure" to VectorizationConfig(
+            type = "project_structure",
+            title = "项目结构",
+            description = "项目目录结构和文件组织方式",
+            contentPrefix = "项目结构:",
+            tags = listOf("project", "structure")
+        ),
+        "tech_stack" to VectorizationConfig(
+            type = "tech_stack",
+            title = "技术栈",
+            description = "项目使用的技术框架和工具",
+            contentPrefix = "技术栈:",
+            tags = listOf("project", "tech_stack")
+        ),
+        "db_entities" to VectorizationConfig(
+            type = "db_entities",
+            title = "数据库实体",
+            description = "数据库表和实体映射关系",
+            contentPrefix = "数据库实体:",
+            tags = listOf("database", "entity")
+        ),
+        "api_entries" to VectorizationConfig(
+            type = "api_entries",
+            title = "外部API接口",
+            description = "外部接口调用和集成点",
+            contentPrefix = "外部API:",
+            tags = listOf("api", "external")
+        ),
+        "enums" to VectorizationConfig(
+            type = "enums",
+            title = "枚举类",
+            description = "业务常量和状态定义",
+            contentPrefix = "枚举:",
+            tags = listOf("enum", "constant")
+        ),
+        "common_classes" to VectorizationConfig(
+            type = "common_classes",
+            title = "公共类",
+            description = "通用工具类和帮助类",
+            contentPrefix = "公共类:",
+            tags = listOf("class", "common", "utility")
+        ),
+        "xml_configs" to VectorizationConfig(
+            type = "xml_configs",
+            title = "XML配置",
+            description = "配置文件和映射文件",
+            contentPrefix = "XML配置:",
+            tags = listOf("xml", "config", "mapper")
+        )
+    )
 
     /**
      * 向量化项目结构
      */
-    suspend fun vectorizeProjectStructure(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            val content = "项目结构: $data"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:project_structure",
-                title = "项目结构",
-                content = "项目目录结构和文件组织方式",
-                fullContent = data,
-                tags = listOf("project", "structure", projectKey),
-                metadata = mapOf(
-                    "type" to "project_structure",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化项目结构: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化项目结构失败", e)
-            0
-        }
-    }
+    suspend fun vectorizeProjectStructure(data: String): Int =
+        vectorizeData("project_structure", data)
 
     /**
      * 向量化技术栈
      */
-    suspend fun vectorizeTechStack(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            val content = "技术栈: $data"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:tech_stack",
-                title = "技术栈",
-                content = "项目使用的技术框架和工具",
-                fullContent = data,
-                tags = listOf("project", "tech_stack", projectKey),
-                metadata = mapOf(
-                    "type" to "tech_stack",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化技术栈: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化技术栈失败", e)
-            0
-        }
-    }
+    suspend fun vectorizeTechStack(data: String): Int =
+        vectorizeData("tech_stack", data)
 
     /**
      * 向量化数据库实体
      */
-    suspend fun vectorizeDbEntities(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            // 简化：直接向量化整个数据
-            val content = "数据库实体: $data, 项目: $projectKey"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:db_entities",
-                title = "数据库实体",
-                content = "数据库表和实体映射关系",
-                fullContent = data,
-                tags = listOf("database", "entity", projectKey),
-                metadata = mapOf(
-                    "type" to "db_entities",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化数据库实体: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化数据库实体失败", e)
-            0
-        }
-    }
+    suspend fun vectorizeDbEntities(data: String): Int =
+        vectorizeData("db_entities", data)
 
     /**
      * 向量化 API 入口
      */
-    suspend fun vectorizeApiEntries(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            val content = "外部API: $data, 项目: $projectKey"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:api_entries",
-                title = "外部API接口",
-                content = "外部接口调用和集成点",
-                fullContent = data,
-                tags = listOf("api", "external", projectKey),
-                metadata = mapOf(
-                    "type" to "api_entries",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化API入口: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化API入口失败", e)
-            0
-        }
-    }
+    suspend fun vectorizeApiEntries(data: String): Int =
+        vectorizeData("api_entries", data)
 
     /**
      * 向量化枚举
      */
-    suspend fun vectorizeEnums(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            val content = "枚举: $data, 项目: $projectKey"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:enums",
-                title = "枚举类",
-                content = "业务常量和状态定义",
-                fullContent = data,
-                tags = listOf("enum", "constant", projectKey),
-                metadata = mapOf(
-                    "type" to "enums",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化枚举: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化枚举失败", e)
-            0
-        }
-    }
+    suspend fun vectorizeEnums(data: String): Int =
+        vectorizeData("enums", data)
 
     /**
      * 向量化公共类
      */
-    suspend fun vectorizeCommonClasses(data: String): Int = withContext(Dispatchers.IO) {
+    suspend fun vectorizeCommonClasses(data: String): Int =
+        vectorizeData("common_classes", data)
+
+    /**
+     * 向量化 XML 代码
+     */
+    suspend fun vectorizeXmlCodes(data: String): Int =
+        vectorizeData("xml_configs", data)
+
+    /**
+     * 通用向量化方法
+     */
+    private suspend fun vectorizeData(configKey: String, data: String): Int = withContext(Dispatchers.IO) {
         try {
-            val content = "公共类: $data, 项目: $projectKey"
+            val config = vectorizationConfigs[configKey]
+                ?: throw IllegalArgumentException("未知的向量化配置: $configKey")
+
+            val content = buildContentPrefix(config, data)
             val vector = bgeClient.embed(content)
 
             val fragment = VectorFragment(
-                id = "$projectKey:common_classes",
-                title = "公共类",
-                content = "通用工具类和帮助类",
+                id = "$projectKey:${config.type}",
+                title = config.title,
+                content = config.description,
                 fullContent = data,
-                tags = listOf("class", "common", "utility", projectKey),
+                tags = config.tags + projectKey,
                 metadata = mapOf(
-                    "type" to "common_classes",
+                    "type" to config.type,
                     "projectKey" to projectKey
                 ),
                 vector = vector
             )
 
             vectorStore.add(fragment)
-            logger.info("已向量化公共类: projectKey={}", projectKey)
+            logger.info("已向量化${config.title}: projectKey={}", projectKey)
             1
         } catch (e: Exception) {
-            logger.error("向量化公共类失败", e)
+            logger.error("向量化失败: configKey={}", configKey, e)
             0
         }
     }
 
     /**
-     * 向量化 XML 代码
+     * 构建内容前缀
      */
-    suspend fun vectorizeXmlCodes(data: String): Int = withContext(Dispatchers.IO) {
-        try {
-            val content = "XML配置: $data, 项目: $projectKey"
-            val vector = bgeClient.embed(content)
-
-            val fragment = VectorFragment(
-                id = "$projectKey:xml_configs",
-                title = "XML配置",
-                content = "配置文件和映射文件",
-                fullContent = data,
-                tags = listOf("xml", "config", "mapper", projectKey),
-                metadata = mapOf(
-                    "type" to "xml_configs",
-                    "projectKey" to projectKey
-                ),
-                vector = vector
-            )
-
-            vectorStore.add(fragment)
-            logger.info("已向量化XML配置: projectKey={}", projectKey)
-            1
-        } catch (e: Exception) {
-            logger.error("向量化XML配置失败", e)
-            0
+    private fun buildContentPrefix(config: VectorizationConfig, data: String): String {
+        return if (config.type == "project_structure") {
+            "${config.contentPrefix} $data"
+        } else {
+            "${config.contentPrefix} $data, 项目: $projectKey"
         }
     }
 

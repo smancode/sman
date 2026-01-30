@@ -76,6 +76,7 @@ class CliInputArea(
                 super.paintComponent(g)
 
                 val g2 = g as Graphics2D
+                g2.setupRenderingHints()
                 val fm = g2.fontMetrics
                 val colors = ThemeColors.getCurrentColors()
 
@@ -143,10 +144,15 @@ class CliInputArea(
         setupActions()
     }
 
-    private fun drawPlaceholder(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette) {
+    private fun setupGraphics(g2: java.awt.Graphics2D, colors: com.smancode.smanagent.ide.theme.ColorPalette): java.awt.Color {
         val oldColor = g2.color
         g2.color = colors.textMuted
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        return oldColor
+    }
+
+    private fun drawPlaceholder(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette) {
+        val oldColor = setupGraphics(g2, colors)
 
         val x = insets.left
         var y = insets.top + fm.ascent
@@ -163,9 +169,7 @@ class CliInputArea(
         val currentText = textArea.text.trim()
         if (!currentText.startsWith("/") || currentText.contains(" ")) return
 
-        val oldColor = g2.color
-        g2.color = colors.textMuted
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        val oldColor = setupGraphics(g2, colors)
 
         val currentTextWidth = fm.stringWidth(currentText)
         val x = insets.left + currentTextWidth
@@ -201,10 +205,9 @@ class CliInputArea(
 
     override fun paintComponent(g: Graphics) {
         val g2 = g as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        g2.setupRenderingHints()
 
         val colors = ThemeColors.getCurrentColors()
-        // 绘制圆角背景（与消息区背景一致）
         g2.color = colors.background
         g2.fillRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
     }
@@ -213,7 +216,7 @@ class CliInputArea(
         super.paint(g)
 
         val g2 = g as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        g2.setupRenderingHints()
 
         val colors = ThemeColors.getCurrentColors()
 
@@ -226,6 +229,10 @@ class CliInputArea(
         }
 
         g2.drawRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+    }
+
+    private fun Graphics2D.setupRenderingHints() {
+        setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
     }
 
     private fun java.awt.Color.scaleBrightness(factor: Float): java.awt.Color {

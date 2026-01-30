@@ -37,6 +37,18 @@ class ProjectAnalysisPipeline(
 
     private val logger = LoggerFactory.getLogger(ProjectAnalysisPipeline::class.java)
 
+    companion object {
+        // 步骤名称常量
+        private const val STEP_AST_SCANNING = "ast_scanning"
+        private const val STEP_PROJECT_STRUCTURE = "project_structure"
+        private const val STEP_TECH_STACK = "tech_stack_detection"
+        private const val STEP_DB_ENTITIES = "db_entity_detection"
+        private const val STEP_API_ENTRIES = "api_entry_scanning"
+        private const val STEP_ENUMS = "enum_scanning"
+        private const val STEP_COMMON_CLASSES = "common_class_scanning"
+        private const val STEP_XML_CODES = "xml_code_scanning"
+    }
+
     // 向量化服务（懒加载）
     private val vectorizationService by lazy {
         project?.let { proj ->
@@ -113,7 +125,7 @@ class ProjectAnalysisPipeline(
         repository.saveAnalysisResult(updatedResult)
 
         // 向量化步骤结果（AST步骤除外，因为太大）
-        if (step.name != "ast_scanning" && updatedResult.steps[step.name]?.status == StepStatus.COMPLETED) {
+        if (step.name != STEP_AST_SCANNING && updatedResult.steps[step.name]?.status == StepStatus.COMPLETED) {
             vectorizeStepData(step.name, updatedResult.steps[step.name]?.data)
         }
 
@@ -133,13 +145,13 @@ class ProjectAnalysisPipeline(
             }
 
             when (stepName) {
-                "project_structure" -> service.vectorizeProjectStructure(data)
-                "tech_stack_detection" -> service.vectorizeTechStack(data)
-                "db_entity_detection" -> service.vectorizeDbEntities(data)
-                "api_entry_scanning" -> service.vectorizeApiEntries(data)
-                "enum_scanning" -> service.vectorizeEnums(data)
-                "common_class_scanning" -> service.vectorizeCommonClasses(data)
-                "xml_code_scanning" -> service.vectorizeXmlCodes(data)
+                STEP_PROJECT_STRUCTURE -> service.vectorizeProjectStructure(data)
+                STEP_TECH_STACK -> service.vectorizeTechStack(data)
+                STEP_DB_ENTITIES -> service.vectorizeDbEntities(data)
+                STEP_API_ENTRIES -> service.vectorizeApiEntries(data)
+                STEP_ENUMS -> service.vectorizeEnums(data)
+                STEP_COMMON_CLASSES -> service.vectorizeCommonClasses(data)
+                STEP_XML_CODES -> service.vectorizeXmlCodes(data)
                 else -> logger.debug("无需向量化步骤: {}", stepName)
             }
         } catch (e: Exception) {

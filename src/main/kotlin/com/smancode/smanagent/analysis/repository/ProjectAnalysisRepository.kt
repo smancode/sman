@@ -48,10 +48,20 @@ class ProjectAnalysisRepository(
                 start_time BIGINT NOT NULL,
                 end_time BIGINT,
                 status VARCHAR(20) NOT NULL,
+                project_md5 VARCHAR(32),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        // 如果表已存在，尝试添加 project_md5 列（兼容旧数据）
+        try {
+            executeUpdate(connection, """
+                ALTER TABLE project_analysis ADD COLUMN IF NOT EXISTS project_md5 VARCHAR(32)
+            """)
+        } catch (e: Exception) {
+            logger.debug("添加 project_md5 列失败（可能已存在）", e)
+        }
 
         executeUpdate(connection, """
             CREATE TABLE IF NOT EXISTS analysis_step (
@@ -101,15 +111,24 @@ class ProjectAnalysisRepository(
 
     private fun saveMainRecord(connection: Connection, result: ProjectAnalysisResult) {
         connection.prepareStatement("""
-            MERGE INTO project_analysis (project_key, start_time, end_time, status, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            MERGE INTO project_analysis (project_key, start_time, end_time, status, project_md5, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """.trimIndent()).use { stmt ->
             stmt.setString(1, result.projectKey)
             stmt.setLong(2, result.startTime)
             stmt.setLongOrNull(3, result.endTime)
             stmt.setString(4, result.status.name)
+            stmt.setStringOrNull(5, result.projectMd5)
             stmt.executeUpdate()
         }
+    }
+
+    private fun java.sql.PreparedStatement.setStringOrNull(index: Int, value: String?) {
+        if (value != null) setString(index, value) else setNull(index, Types.VARCHAR)
+    }
+
+    private fun java.sql.PreparedStatement.setLongOrNull(index: Int, value: Long?) {
+        if (value != null) setLong(index, value) else setNull(index, Types.BIGINT)
     }
 
     /**
@@ -131,10 +150,6 @@ class ProjectAnalysisRepository(
             stmt.setString(9, stepResult.error)
             stmt.executeUpdate()
         }
-    }
-
-    private fun java.sql.PreparedStatement.setLongOrNull(index: Int, value: Long?) {
-        if (value != null) setLong(index, value) else setNull(index, Types.BIGINT)
     }
 
     /**
@@ -204,7 +219,8 @@ class ProjectAnalysisRepository(
             projectKey = getString("project_key"),
             startTime = getLong("start_time"),
             endTime = getLong("end_time").takeIf { !wasNull() },
-            status = AnalysisStatus.valueOf(getString("status"))
+            status = AnalysisStatus.valueOf(getString("status")),
+            projectMd5 = getString("project_md5").takeIf { !wasNull() }
             // steps 需要单独查询
         )
     }
