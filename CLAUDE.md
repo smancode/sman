@@ -4,13 +4,14 @@
 
 ## 项目概述
 
-SmanAgent 是一个 IntelliJ IDEA 插件，集成 ReAct Loop 架构的 AI 代码分析助手。
+SmanAgent 是一个 IntelliJ IDEA 插件，集成 ReAct Loop 架构的 AI 代码分析助手，提供 12 个项目分析模块。
 
 **核心特性**：
 - 基于 LLM 的智能代码分析
 - 本地工具执行（无后端依赖）
 - 会话持久化（按项目隔离）
 - 流式响应渲染
+- **项目分析能力**：12 个分析模块，全面理解项目结构
 
 ## 项目结构
 
@@ -51,6 +52,33 @@ com.smancode.smanagent/
 │       ├── PromptDispatcher    # 提示词分发
 │       └── DynamicPromptInjector # 动态注入
 │
+├── analysis/                     # 项目分析模块 (新增)
+│   ├── structure/               # 结构分析
+│   │   └── ProjectStructureScanner # 项目结构扫描
+│   ├── techstack/               # 技术栈识别
+│   │   └── TechStackDetector   # 技术栈检测
+│   ├── scanner/                 # 代码扫描
+│   │   └── PsiAstScanner       # AST 扫描器
+│   ├── entity/                  # 实体分析
+│   │   └── DbEntityScanner     # 数据库实体扫描
+│   ├── entry/                   # 入口分析
+│   │   └── ApiEntryScanner     # API 入口扫描
+│   ├── external/                # 外调接口
+│   │   └── ExternalApiScanner  # 外调接口扫描
+│   ├── `enum`/                  # 枚举分析
+│   │   └── EnumScanner         # 枚举扫描
+│   ├── common/                  # 公共类
+│   │   └── CommonClassScanner  # 公共类扫描
+│   ├── xml/                     # XML 分析
+│   │   └── XmlCodeScanner      # XML 代码扫描
+│   ├── sop/                     # SOP 生成
+│   │   └── CaseSopGenerator    # 案例 SOP 生成器
+│   ├── vectorization/           # 向量化
+│   │   ├── CodeVectorizationService # 代码向量化服务
+│   │   └── BgeClient           # BGE-M3 客户端
+│   └── walkthrough/             # 代码走读
+│       └── CodeWalkthroughGenerator # 代码走读生成器
+│
 ├── tools/                        # 工具系统
 │   ├── Tool                    # 工具接口
 │   ├── ToolRegistry            # 工具注册表
@@ -70,10 +98,15 @@ com.smancode.smanagent/
     │   ├── ReasoningPart       # 推理 Part
     │   ├── TodoPart            # Todo Part
     │   └── ProgressPart        # 进度 Part
-    └── session/                 # 会话模型
-        ├── Session             # 会话实体
-        ├── ProjectInfo         # 项目信息
-        └── SessionStatus       # 会话状态
+    ├── session/                 # 会话模型
+    │   ├── Session             # 会话实体
+    │   ├── ProjectInfo         # 项目信息
+    │   └── SessionStatus       # 会话状态
+    └── analysis/                # 分析模型 (新增)
+        ├── ClassAstInfo        # 类 AST 信息
+        ├── MethodInfo          # 方法信息
+        ├── FieldInfo           # 字段信息
+        └── VectorFragment      # 向量片段
 ```
 
 ## 核心设计原则
@@ -127,6 +160,51 @@ val relativePath = params["relativePath"] as? String
 
 // ❌ 错误：兜底处理
 val relativePath = params["relativePath"] as? String ?: "default"
+```
+
+## 项目分析模块
+
+### 12 个分析模块
+
+| # | 模块 | 功能 | 文件 |
+|---|------|------|------|
+| 01 | 项目结构扫描 | 识别模块、包、分层架构 | `ProjectStructureScanner.kt` |
+| 02 | 技术栈识别 | 检测框架、数据库、中间件 | `TechStackDetector.kt` |
+| 03 | AST 扫描 | 提取类、方法、字段信息 | `PsiAstScanner.kt` |
+| 04 | DB 实体扫描 | 识别数据库实体和关系 | `DbEntityScanner.kt` |
+| 05 | 入口扫描 | 识别 HTTP/API 入口 | `ApiEntryScanner.kt` |
+| 06 | 外调接口扫描 | 识别 Feign/Retrofit/HTTP 客户端 | `ExternalApiScanner.kt` |
+| 07 | Enum 扫描 | 提取枚举类和常量 | `EnumScanner.kt` |
+| 08 | 公共类扫描 | 识别工具类和帮助类 | `CommonClassScanner.kt` |
+| 09 | XML 代码扫描 | 解析 MyBatis Mapper 和配置 | `XmlCodeScanner.kt` |
+| 10 | 案例 SOP | 生成标准操作流程文档 | `CaseSopGenerator.kt` |
+| 11 | 语义化向量化 | 代码向量化，支持语义搜索 | `CodeVectorizationService.kt` |
+| 12 | 代码走读 | 生成架构分析和核心逻辑报告 | `CodeWalkthroughGenerator.kt` |
+
+详细设计文档：[docs/design/](docs/design/)
+
+### 分析模块使用示例
+
+```kotlin
+// 项目结构扫描
+val structureScanner = ProjectStructureScanner()
+val structure = structureScanner.scan(projectPath)
+
+// 技术栈识别
+val techStackDetector = TechStackDetector()
+val techStack = techStackDetector.detect(projectPath)
+
+// AST 扫描
+val psiScanner = PsiAstScanner()
+val astInfo = psiScanner.scanFile(kotlinFile)
+
+// 代码走读生成
+val walkthroughGenerator = CodeWalkthroughGenerator(psiScanner)
+val report = walkthroughGenerator.generateForClass(kotlinFile)
+
+// 案例SOP生成
+val sopGenerator = CaseSopGenerator(psiScanner)
+val sop = sopGenerator.generateFromClass(kotlinFile)
 ```
 
 ## 关键流程
@@ -272,6 +350,18 @@ logger.info("处理消息: " + sessionId + ", " + userInput)
 open build/reports/tests/test/index.html
 ```
 
+### 测试覆盖
+
+| 模块 | 测试数量 | 覆盖率 |
+|------|---------|--------|
+| LLM 服务 | 3 | ~80% |
+| ReAct 循环 | 4 | ~70% |
+| 工具系统 | 6 | ~75% |
+| 会话管理 | 5 | ~85% |
+| 数据模型 | 3 | ~80% |
+| 项目分析 | 175 | ~75% |
+| **总计** | **196** | **~76%** |
+
 ## 性能优化
 
 ### LLM 调用优化
@@ -284,6 +374,52 @@ open build/reports/tests/test/index.html
 
 - **PSI 缓存**：利用 IntelliJ 的 PSI 缓存
 - **并发执行**：独立工具可并发
+
+### 向量化优化
+
+- **批量处理**：支持批量向量化（batch size 10）
+- **LRU 缓存**：向量片段缓存（max size 1000）
+- **分级缓存**：L1 (热/LRU) + L2 (温) + L3 (冷/磁盘)
+
+## 配置说明
+
+### LLM 配置
+
+```properties
+# 基础配置
+llm.api.key=your_api_key_here
+llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
+llm.model.name=glm-4-flash
+llm.response.max.tokens=4000
+
+# 重试配置
+llm.retry.max=3
+llm.retry.base.delay=1000
+```
+
+### BGE-M3 向量化配置
+
+```properties
+# 启用向量化
+bge.enabled=true
+bge.endpoint=your_bge_endpoint
+bge.model.name=bge-m3
+
+# 批处理配置
+bge.batch.size=10
+bge.timeout.seconds=30
+```
+
+### Reranker 配置
+
+```properties
+# 启用重排
+reranker.enabled=true
+reranker.base.url=your_reranker_endpoint
+reranker.api.key=your_reranker_api_key
+reranker.model=bge-reranker-v2-m3
+reranker.top.k=5
+```
 
 ## 故障排查
 
@@ -307,6 +443,11 @@ open build/reports/tests/test/index.html
 - 确保会话已注册到 `SessionManager`
 - 检查 `SmanAgentService.getOrCreateSession()`
 
+**5. 向量化服务不可用**
+- 检查 BGE 配置是否正确
+- 验证 BGE 端点是否可访问
+- 查看日志中的详细错误信息
+
 ## 扩展指南
 
 ### 添加新 Part 类型
@@ -315,6 +456,14 @@ open build/reports/tests/test/index.html
 2. 更新 `PartType` 枚举
 3. 添加解析逻辑到 `parsePart()`
 4. 添加渲染器到 `StyledMessageRenderer`
+
+### 添加新的分析模块
+
+1. 在 `analysis/` 下创建新的子包
+2. 实现扫描器/生成器类
+3. 添加对应的模型类到 `model/analysis/`
+4. 编写单元测试
+5. 更新设计文档
 
 ### 修改 LLM 配置
 
@@ -327,6 +476,47 @@ llm.model.name=glm-4-flash
 llm.response.max.tokens=4000
 ```
 
+## 技术栈
+
+### 核心技术栈
+- **Kotlin**: 1.9.20
+- **IntelliJ Platform SDK**: 2023.2
+- **Kotlin Coroutines**: 1.7.3（协程支持）
+- **kotlinx.serialization**: 1.6.0（JSON 序列化）
+
+### 网络与 HTTP
+- **OkHttp**: 4.12.0（HTTP 客户端，用于 LLM/BGE API 调用）
+- **Java-WebSocket**: 1.5.4（WebSocket 支持，可选）
+
+### 数据处理
+- **Jackson**: 2.16.0（JSON 处理）
+- **jackson-module-kotlin**: 2.16.0（Kotlin Jackson 模块）
+- **org.json**: 20231013（JSON 解析）
+
+### 渲染与日志
+- **Flexmark**: 0.64.8（Markdown 渲染，支持表格、GFM 等）
+- **Flexmark Extensions**: 表格、删除线、自动链接等扩展
+- **Logback**: 1.4.11（日志框架）
+- **SLF4J**: 2.0.9（日志门面）
+
+### 测试框架
+- **JUnit**: 5.10.1（测试框架）
+- **MockK**: 1.13.8（Kotlin Mock 框架）
+- **Mockito-Kotlin**: 5.1.0（Kotlin Mockito 包装）
+- **Kotlin Test**: 1.9.20（Kotlin 测试工具）
+- **Kotlin Coroutines Test**: 1.7.3（协程测试）
+- **Spring Boot Test**: 3.2.0（Spring 测试支持，可选）
+
+### 向量化服务（可选，需自行配置）
+- **BGE-M3**: 文本嵌入模型（通过 HTTP API 调用，不包含在依赖中）
+- **BGE-Reranker**: 结果重排序服务（通过 HTTP API 调用，不包含在依赖中）
+
+### 重要说明
+1. **BGE 服务**：不包含在项目依赖中，需要单独部署和配置
+2. **向量数据库**：不依赖特定的向量数据库（如 JVector），向量数据可存储在任意向量库
+3. **数据库**：不包含 H2 或其他数据库依赖
+4. **Spring Boot**：仅在测试中使用，不是插件运行时依赖
+
 ## 提交前检查
 
 - [ ] 所有测试通过：`./gradlew test`
@@ -334,3 +524,5 @@ llm.response.max.tokens=4000
 - [ ] 插件验证通过：`./gradlew verifyPluginConfiguration`
 - [ ] 更新相关文档
 - [ ] 遵循 Kotlin 编码规范
+- [ ] 检查白名单机制是否正确实现
+- [ ] 确认无兜底处理和默认值

@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "1.9.20"
+    kotlin("plugin.serialization") version "1.9.20"
     id("org.jetbrains.intellij") version "1.17.3"
 }
 
@@ -11,6 +12,13 @@ repositories {
 }
 
 dependencies {
+    // Kotlin Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+
+    // Kotlin Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.0")
+
     // Markdown 渲染（使用必要模块以减少包大小）
     implementation("com.vladsch.flexmark:flexmark:0.64.8") {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
@@ -60,7 +68,7 @@ dependencies {
 intellij {
     version.set("2024.1")
     type.set("IC") // IntelliJ IDEA Community Edition
-    plugins.set(listOf("java"))
+    plugins.set(listOf("java", "org.jetbrains.kotlin"))
 
     // JavaFX支持配置
     downloadSources.set(true)
