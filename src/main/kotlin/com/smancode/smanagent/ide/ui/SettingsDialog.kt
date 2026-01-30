@@ -46,7 +46,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
             ?: "http://localhost:8000",
         30
     )
-    private val bgeApiKeyField = JTextField(storage.bgeApiKey, 30)
+    private val bgeApiKeyField = JPasswordField(storage.bgeApiKey, 30)
 
     // BGE-Reranker 配置字段
     private val rerankerEndpointField = JTextField(
@@ -54,7 +54,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
             ?: "http://localhost:8001",
         30
     )
-    private val rerankerApiKeyField = JTextField(storage.rerankerApiKey, 30)
+    private val rerankerApiKeyField = JPasswordField(storage.rerankerApiKey, 30)
 
     // 其他配置字段
     private val projectKeyField = JTextField(project.name, 30)
@@ -68,6 +68,12 @@ class SettingsDialog(private val project: Project) : JDialog() {
         // 如果已有配置，填充掩码后的值
         if (storage.llmApiKey.isNotEmpty()) {
             llmApiKeyField.text = "****"
+        }
+        if (storage.bgeApiKey.isNotEmpty()) {
+            bgeApiKeyField.text = "****"
+        }
+        if (storage.rerankerApiKey.isNotEmpty()) {
+            rerankerApiKeyField.text = "****"
         }
 
         val panel = createMainPanel()
@@ -270,9 +276,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val llmBaseUrl = llmBaseUrlField.text.trim()
         val llmModelName = llmModelNameField.text.trim()
         val bgeEndpoint = bgeEndpointField.text.trim()
-        val bgeApiKey = bgeApiKeyField.text.trim()
+        val bgeApiKey = String(bgeApiKeyField.password).trim()
         val rerankerEndpoint = rerankerEndpointField.text.trim()
-        val rerankerApiKey = rerankerApiKeyField.text.trim()
+        val rerankerApiKey = String(rerankerApiKeyField.password).trim()
         val projectKey = projectKeyField.text.trim()
 
         // 验证必填字段
@@ -317,17 +323,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * 保存配置到存储服务
      */
     private fun saveConfig(config: ConfigData) {
+        // LLM 配置：只有用户输入了新值才覆盖
         if (config.llmApiKey.isNotEmpty()) {
             storage.llmApiKey = config.llmApiKey
         }
         storage.llmBaseUrl = config.llmBaseUrl
         storage.llmModelName = config.llmModelName
 
+        // BGE-M3 配置：只有用户输入了新值才覆盖
         storage.bgeEndpoint = config.bgeEndpoint
-        storage.bgeApiKey = config.bgeApiKey
+        if (config.bgeApiKey.isNotEmpty()) {
+            storage.bgeApiKey = config.bgeApiKey
+        }
 
+        // BGE-Reranker 配置：只有用户输入了新值才覆盖
         storage.rerankerEndpoint = config.rerankerEndpoint
-        storage.rerankerApiKey = config.rerankerApiKey
+        if (config.rerankerApiKey.isNotEmpty()) {
+            storage.rerankerApiKey = config.rerankerApiKey
+        }
 
         // 更新配置到 SmanAgentConfig（下次 LLM 调用会使用新配置）
         val userConfig = SmanAgentConfig.UserConfig(
