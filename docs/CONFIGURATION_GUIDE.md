@@ -26,7 +26,12 @@ SmanAgent 使用 **Java Properties 格式** (`.properties`)，而不是 YAML 格
 | `vector-db.jvector.efSearch` | `vector.db.jvector.efSearch=50` | HNSW 搜索参数 |
 | `vector-db.jvector.enablePersist` | `vector.db.jvector.enablePersist=true` | 磁盘持久化 |
 | `vector-db.jvector.rerankerThreshold` | `vector.db.jvector.rerankerThreshold=0.1` | Reranker 阈值 |
-| `vector-db.jvector.basePath` | `vector.db.base.path=~/.smanunion/vector_store` | 持久化路径 |
+
+**存储路径（自动按项目隔离）：**
+- 向量存储：`~/.smanunion/{projectKey}/vector_store/`
+- H2 数据库：`~/.smanunion/{projectKey}/analysis.mv.db`
+- AST 缓存：`~/.smanunion/{projectKey}/ast_cache/`
+- 会话数据：`~/.smanunion/sessions/{projectKey}/`
 
 ### BGE-M3 配置
 

@@ -21,10 +21,13 @@ import java.util.concurrent.atomic.AtomicLong
  * - L3 (Cold): 实时解析，从源代码重新解析
  *
  * 防止内存爆炸，同时保持良好的性能！
+ *
+ * @property psiScanner PSI AST 扫描器
+ * @property config AST 缓存配置（必须使用 AstCacheConfig.create() 创建）
  */
 class AstCacheService(
     private val psiScanner: PsiAstScanner,
-    private val config: AstCacheConfig = AstCacheConfig()
+    private val config: AstCacheConfig
 ) {
 
     private val logger = LoggerFactory.getLogger(AstCacheService::class.java)
@@ -330,9 +333,35 @@ class LRUCache<K, V>(
 
 /**
  * AST 缓存配置
+ *
+ * @property projectKey 项目标识符（用于隔离不同项目的缓存）
+ * @property l1MaxSize L1 缓存最大条数
+ * @property l2CachePath L2 缓存路径（已包含 projectKey）
+ * @property defaultTtl 默认过期时间（毫秒）
  */
 data class AstCacheConfig(
+    val projectKey: String,
     val l1MaxSize: Int = 100,
-    val l2CachePath: String = "${System.getProperty("user.home")}/.smanunion/ast_cache",
+    val l2CachePath: String,
     val defaultTtl: Long = 30 * 60 * 1000 // 30 分钟
-)
+) {
+    companion object {
+        /**
+         * 创建配置（自动构建 projectKey 隔离路径）
+         */
+        fun create(
+            projectKey: String,
+            baseDir: String = System.getProperty("user.home"),
+            l1MaxSize: Int = 100,
+            defaultTtl: Long = 30 * 60 * 1000
+        ): AstCacheConfig {
+            val projectDir = "$baseDir/.smanunion/$projectKey"
+            return AstCacheConfig(
+                projectKey = projectKey,
+                l1MaxSize = l1MaxSize,
+                l2CachePath = "$projectDir/ast_cache",
+                defaultTtl = defaultTtl
+            )
+        }
+    }
+}
