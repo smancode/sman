@@ -9,9 +9,7 @@ package com.smancode.smanagent.analysis.config
  * @property storePath 存储路径
  * @property databasePath H2 数据库路径
  * @property vectorDimension 向量维度
- * @property l1CacheSize L1 缓存大小
- * @property l1AccessThreshold L1 访问阈值（升级到 L1）
- * @property l2AccessThreshold L2 访问阈值（升级到 L2）
+ * @property l1CacheSize L1 缓存大小（内存 LRU）
  */
 data class VectorDatabaseConfig(
     val type: VectorDbType,
@@ -20,9 +18,7 @@ data class VectorDatabaseConfig(
     val storePath: String = "${System.getProperty("user.home")}/.smanunion/vector_store",
     val databasePath: String = "${System.getProperty("user.home")}/.smanunion/analysis.mv.db",
     val vectorDimension: Int = 1024,
-    val l1CacheSize: Int = 100,
-    val l1AccessThreshold: Int = 10,
-    val l2AccessThreshold: Int = 3
+    val l1CacheSize: Int = 500
 )
 
 /**

@@ -4,9 +4,7 @@ import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
 import com.smancode.smanagent.analysis.model.VectorFragment
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 分层向量存储服务（生产级）
@@ -38,9 +36,6 @@ class TieredVectorStore(
     // L3: 冷数据存储（H2）
     private val l3Store = H2DatabaseService(config)
 
-    // 访问计数
-    private val accessCounter = ConcurrentHashMap<String, AtomicLong>()
-
     // 后台写入队列
     private val writeQueue = LinkedBlockingQueue<VectorFragment>()
 
@@ -60,9 +55,6 @@ class TieredVectorStore(
             "向量片段 id 不能为空"
         }
 
-        // 初始化访问计数
-        accessCounter.putIfAbsent(fragment.id, AtomicLong(0))
-
         // L1: 写入热缓存
         l1Cache.put(fragment.id, fragment)
 
@@ -79,9 +71,6 @@ class TieredVectorStore(
         require(id.isNotBlank()) {
             "向量片段 id 不能为空"
         }
-
-        // 增加访问计数
-        accessCounter.getOrPut(id) { AtomicLong(0) }.incrementAndGet()
 
         // L1: 查询热缓存
         l1Cache.get(id)?.let { fragment ->
@@ -188,8 +177,7 @@ class TieredVectorStore(
             "L1_maxSize" to config.l1CacheSize,
             "L2_type" to "JVector",
             "L2_stats" to (l2Stats ?: emptyMap<String, Any>()),
-            "writeQueue_size" to writeQueue.size,
-            "accessCounter_size" to accessCounter.size
+            "writeQueue_size" to writeQueue.size
         )
     }
 

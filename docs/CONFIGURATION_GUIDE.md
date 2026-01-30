@@ -85,17 +85,28 @@ vector.db.jvector.rerankerThreshold=0.1
 
 ```properties
 # L1 (Hot): 内存 LRU 缓存
-vector.db.l1.cache.size=100          # 最大缓存条数
-vector.db.l1.access.threshold=10     # 访问 10 次升级到 L1
-
-# L2 (Warm): JVector 向量索引
-vector.db.l2.access.threshold=3      # 访问 3 次升级到 L2
+# 存储最近访问的热点数据，建议根据项目规模调整：
+# - 小型项目: 100-500
+# - 中型项目: 500-1000
+# - 大型项目: 1000-2000
+vector.db.l1.cache.size=500          # 最大缓存条数（默认 500）
 
 # L3 (Cold): H2 数据库
 vector.db.h2.path=~/.smanunion/analysis.mv.db
 vector.db.h2.connection.pool.size=10 # 连接池大小
 vector.db.h2.connection.idle=2       # 空闲连接数
 ```
+
+**三层缓存工作原理：**
+- **L1 (Hot)**: 内存 LRU 缓存，存储最近访问的 500 个向量片段，O(1) 访问速度
+- **L2 (Warm)**: JVector HNSW 索引，存储全量数据，O(log n) 搜索速度
+- **L3 (Cold)**: H2 数据库，持久化存储，磁盘访问速度
+
+**数据流转：**
+- 新数据 → 立即写入 L1 和 L2/L3
+- L1 满 → 按 LRU 策略淘汰最久未使用的数据
+- L2 查询命中 → 自动升级到 L1
+- L3 查询命中 → 自动升级到 L2 和 L1
 
 ### Reranker 参数说明
 

@@ -210,9 +210,7 @@ object SmanAgentConfig {
             storePath = getString("vector.db.store.path", "$userHome/.smanunion/vector_store"),
             databasePath = getString("vector.db.h2.path", "$userHome/.smanunion/analysis.mv.db"),
             vectorDimension = getConfigValue("vector.db.dimension", 1024),
-            l1CacheSize = getConfigValue("vector.db.l1.cache.size", 100),
-            l1AccessThreshold = getConfigValue("vector.db.l1.access.threshold", 10),
-            l2AccessThreshold = getConfigValue("vector.db.l2.access.threshold", 3)
+            l1CacheSize = getConfigValue("vector.db.l1.cache.size", 500)
         )
     }
 
