@@ -2,6 +2,7 @@ package com.smancode.smanagent.ide.components
 
 import com.intellij.util.ui.JBUI
 import com.smancode.smanagent.ide.theme.ThemeColors
+import com.smancode.smanagent.ide.ui.FontManager
 import java.awt.*
 import java.awt.event.KeyEvent
 import javax.swing.*
@@ -92,8 +93,8 @@ class CliInputArea(
 
         // 配置文本区域
         textArea.rows = minRows
-        // 🔥 使用 IntelliJ 的标准字体，支持中文
-        textArea.font = com.intellij.util.ui.UIUtil.getLabelFont()
+        // 使用编辑器字体，与输出区域保持一致
+        textArea.font = FontManager.getEditorFont()
         val colors = ThemeColors.getCurrentColors()
         textArea.foreground = colors.textPrimary
         textArea.caretColor = colors.textPrimary

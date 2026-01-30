@@ -2,6 +2,7 @@ package com.smancode.smanagent.ide.renderer
 
 import com.smancode.smanagent.ide.theme.ColorPalette
 import com.smancode.smanagent.ide.theme.ThemeColors
+import com.smancode.smanagent.ide.ui.FontManager
 import com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension
 import com.vladsch.flexmark.ext.tables.TablesExtension
 import com.vladsch.flexmark.html.HtmlRenderer
@@ -50,14 +51,11 @@ object MarkdownRenderer {
         val editorKit = HTMLEditorKit()
         val styleSheet = StyleSheet()
 
-        // 获取字体信息
-        val editorFont = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance().globalScheme
-
-        // 基础样式 - 使用编辑器字体家族和大小
+        // 基础样式 - 使用编辑器字体家族，大小使用 100% 继承组件字体
         styleSheet.addRule("""
             body {
-                font-family: "${editorFont.editorFontName}", sans-serif;
-                font-size: ${editorFont.editorFontSize}px;
+                font-family: "${FontManager.getEditorFontFamily()}", sans-serif;
+                font-size: 100%;
                 color: ${toHexString(colors.textPrimary)};
                 margin-top: 0;
                 margin-bottom: 0;
@@ -77,11 +75,11 @@ object MarkdownRenderer {
         styleSheet.addRule("em { font-style: italic; }")
         styleSheet.addRule("i { font-style: italic; }")
 
-        // 代码样式 - 使用编辑器字体
+        // 代码样式 - 使用编辑器字体，大小 100% 继承
         styleSheet.addRule("""
             code {
-                font-family: "${editorFont.editorFontName}", Monospaced;
-                font-size: ${editorFont.editorFontSize}px;
+                font-family: "${FontManager.getEditorFontFamily()}", Monospaced;
+                font-size: 100%;
                 color: ${toHexString(colors.codeString)};
             }
         """.trimIndent())
@@ -90,8 +88,8 @@ object MarkdownRenderer {
             pre {
                 background-color: ${toHexString(colors.background)};
                 padding: 5px;
-                font-family: "${editorFont.editorFontName}", Monospaced;
-                font-size: ${editorFont.editorFontSize}px;
+                font-family: "${FontManager.getEditorFontFamily()}", Monospaced;
+                font-size: 100%;
                 margin-top: 8px;
                 margin-bottom: 8px;
             }

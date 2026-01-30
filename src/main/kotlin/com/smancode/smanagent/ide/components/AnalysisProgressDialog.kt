@@ -1,8 +1,8 @@
 package com.smancode.smanagent.ide.components
 
-import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.smancode.smanagent.analysis.model.StepResult
 import com.smancode.smanagent.analysis.model.StepStatus
+import com.smancode.smanagent.ide.ui.FontManager
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.*
@@ -58,8 +58,7 @@ class AnalysisProgressDialog(
     }
 
     private fun createTitleLabel() = JLabel("正在分析项目: $projectKey").apply {
-        val editorFont = EditorColorsManager.getInstance().globalScheme
-        font = java.awt.Font(editorFont.editorFontName, java.awt.Font.BOLD, editorFont.editorFontSize)
+        font = java.awt.Font(FontManager.getEditorFontName(), java.awt.Font.BOLD, FontManager.getEditorFontSize())
     }
 
     private fun createContentPanel(): JPanel {

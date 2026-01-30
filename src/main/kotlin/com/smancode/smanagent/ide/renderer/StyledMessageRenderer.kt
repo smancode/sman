@@ -1,8 +1,8 @@
 package com.smancode.smanagent.ide.renderer
 
-import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.ide.model.PartData
+import com.smancode.smanagent.ide.ui.FontManager
 import com.smancode.smanagent.ide.model.GraphModels
 import com.smancode.smanagent.ide.model.GraphModels.PartType
 import com.smancode.smanagent.ide.theme.ThemeColors
@@ -110,7 +110,6 @@ object StyledMessageRenderer {
 
                         // 如果有结果行，显示为可滚动的灰色文本块
                         if (resultLines.isNotEmpty()) {
-                            val editorFont = EditorColorsManager.getInstance().globalScheme
                             val displayLines = if (resultLines.size > 20) {
                                 resultLines.take(20) + listOf("... (共 ${resultLines.size} 行)")
                             } else {
@@ -132,8 +131,7 @@ object StyledMessageRenderer {
                                     border-radius: 4px;
                                     max-height: 300px;
                                     overflow-y: auto;
-                                    font-family: '${editorFont.editorFontName}', 'Monaco', 'Consolas', monospace;
-                                    font-size: ${editorFont.editorFontSize}px;
+                                    font-family: '${FontManager.getEditorFontFamily()}', 'Monaco', 'Consolas', monospace;
                                     color: #8B949E;
                                     line-height: 1.4;
                                 ">$contentHtml</div>
@@ -190,20 +188,19 @@ object StyledMessageRenderer {
 
                             // 后处理代码块 - 将 <pre><code>...</code></pre> 替换为自定义样式
                             // HTMLEditorKit 对 pre 标签的 CSS 支持很差，所以用 div + font-family 模拟
+                            // 字体大小不设置，让它继承（100%）
                             htmlContent = htmlContent.replace(Regex("""<pre>(.*?)</pre>""", RegexOption.DOT_MATCHES_ALL)) { matchResult ->
                                 val codeContent = matchResult.groupValues[1]
                                     .replace("&lt;", "<")
                                     .replace("&gt;", ">")
                                     .replace("&amp;", "&")
-                                // 使用 div 模拟 pre，但添加换行处理，字体继承编辑器设置
-                                val editorFont = EditorColorsManager.getInstance().globalScheme
-                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: '${editorFont.editorFontName}', monospace; font-size: ${editorFont.editorFontSize}px; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
+                                // 使用 div 模拟 pre，只设置字体家族，大小继承
+                                """<div style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: '${FontManager.getEditorFontFamily()}', monospace; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">$codeContent</div>"""
                             }
-                            // 处理行内代码 <code>...</code>（不在 pre 内的），字体继承编辑器设置
-                            val editorFont = EditorColorsManager.getInstance().globalScheme
+                            // 处理行内代码 <code>...</code>（不在 pre 内的），大小继承
                             htmlContent = htmlContent.replace(Regex("""<code>(.*?)</code>""")) { matchResult ->
                                 val codeContent = matchResult.groupValues[1]
-                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: '${editorFont.editorFontName}', monospace; font-size: ${editorFont.editorFontSize}px;">$codeContent</span>"""
+                                """<span style="background-color: ${toHexString(colors.background)}; color: ${toHexString(colors.textPrimary)}; padding: 2px 4px; border-radius: 3px; font-family: '${FontManager.getEditorFontFamily()}', monospace;">$codeContent</span>"""
                             }
 
                             // 如果是处理中消息，包裹灰色样式
@@ -386,7 +383,6 @@ object StyledMessageRenderer {
                 }
 
                 // 构建完整的 HTML
-                val editorFont = EditorColorsManager.getInstance().globalScheme
                 val sb = StringBuilder()
 
                 // 工具名称行
@@ -422,8 +418,7 @@ object StyledMessageRenderer {
                             border-radius: 4px;
                             max-height: 300px;
                             overflow-y: auto;
-                            font-family: '${editorFont.editorFontName}', 'Monaco', 'Consolas', monospace;
-                            font-size: ${editorFont.editorFontSize}px;
+                            font-family: '${FontManager.getEditorFontFamily()}', 'Monaco', 'Consolas', monospace;
                             color: #8B949E;
                             line-height: 1.4;
                         ">$contentHtml</div>
