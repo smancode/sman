@@ -37,7 +37,7 @@ class JVectorStore(
     private val logger = LoggerFactory.getLogger(JVectorStore::class.java)
 
     // VectorTypeSupport（用于创建 VectorFloat）
-    private val vts: VectorTypeSupport = VectorizationProvider.getInstance().vectorTypeSupport
+    private val vectorTypeSupport: VectorTypeSupport = VectorizationProvider.getInstance().vectorTypeSupport
 
     // 向量存储（按 ID 索引）
     private val vectors: ConcurrentHashMap<String, VectorFragment> = ConcurrentHashMap()
@@ -59,7 +59,7 @@ class JVectorStore(
 
     // 配置参数
     private val dimension: Int = config.vectorDimension
-    private val M: Int = config.jvector.M
+    private val maxConnections: Int = config.jvector.M
     private val efConstruction: Int = config.jvector.efConstruction
     private val rerankerThreshold: Double = config.jvector.rerankerThreshold
 
@@ -67,10 +67,15 @@ class JVectorStore(
     @Volatile
     private var indexBuilt: Boolean = false
 
+    companion object {
+        private const val OVERFLOW_FACTOR = 1.2f
+        private const val NEIGHBOR_OVERLAP = 1.2f
+    }
+
     init {
         logger.info(
             "JVectorStore 初始化: dimension={}, M={}, efConstruction={}, rerankerThreshold={}",
-            dimension, M, efConstruction, rerankerThreshold
+            dimension, maxConnections, efConstruction, rerankerThreshold
         )
     }
 
@@ -81,8 +86,9 @@ class JVectorStore(
         require(fragment.id.isNotBlank()) {
             "向量片段 id 不能为空"
         }
-        require(fragment.vector != null && fragment.vector!!.size == dimension) {
-            "向量维度不匹配: 期望 $dimension, 实际 ${fragment.vector!!.size}"
+        val vector = fragment.vector
+        require(vector != null && vector.size == dimension) {
+            "向量维度不匹配: 期望 $dimension, 实际 ${vector?.size}"
         }
 
         lock.write {
@@ -142,7 +148,7 @@ class JVectorStore(
             }
 
             // 如果向量数量很少，直接线性搜索
-            if (size < M) {
+            if (size < maxConnections) {
                 logger.debug("向量数量较少 ({}), 使用线性搜索", size)
                 return linearSearch(query, topK)
             }
@@ -171,17 +177,10 @@ class JVectorStore(
      * 确保索引已构建
      */
     private fun ensureIndexBuilt() {
-        // 双重检查锁定模式
-        if (indexBuilt && graphIndex != null) {
-            return
-        }
+        if (indexBuilt) return
 
         lock.write {
-            if (indexBuilt && graphIndex != null) {
-                return
-            }
-
-            buildIndex()
+            if (!indexBuilt) buildIndex()
         }
     }
 
@@ -198,43 +197,26 @@ class JVectorStore(
         logger.info("开始构建 HNSW 索引: 向量数量={}", size)
 
         try {
-            // 创建向量列表（按 ordinal 排序）
-            val vectorList: MutableList<VectorFloat<*>> = ArrayList()
-            (0 until size).forEach { ordinal ->
-                val id = ordinalToId[ordinal]
-                    ?: throw IllegalStateException("Missing ID for ordinal: $ordinal")
-                val fragment = vectors[id]
-                    ?: throw IllegalStateException("Missing vector for ID: $id")
-                val vectorArray = fragment.vector!!
-                vectorList.add(createVectorFloat(vectorArray))
-            }
-
-            // 创建 RandomAccessVectorValues
+            val vectorList = buildVectorList()
             val ravv = ListRandomAccessVectorValues(vectorList, dimension)
+            val bsp = BuildScoreProvider.randomAccessScoreProvider(ravv, VectorSimilarityFunction.DOT_PRODUCT)
 
-            // 创建 BuildScoreProvider
-            val bsp = BuildScoreProvider.randomAccessScoreProvider(
-                ravv,
-                VectorSimilarityFunction.DOT_PRODUCT
-            )
-
-            // 创建 GraphIndexBuilder
             val builder = GraphIndexBuilder(
-                bsp,           // BuildScoreProvider
-                dimension,     // dimension
-                M,             // maxDegree
-                efConstruction, // searchConcurrency
-                1.2f,          // overflowFactor
-                1.2f           // neighborOverlap
+                bsp,
+                dimension,
+                maxConnections,
+                efConstruction,
+                OVERFLOW_FACTOR,
+                NEIGHBOR_OVERLAP
             )
 
-            // 构建索引
-            graphIndex = builder.build(ravv)
-            builder.close()
-
-            indexBuilt = true
-
-            logger.info("HNSW 索引构建完成: 节点数量={}", size)
+            try {
+                graphIndex = builder.build(ravv)
+                indexBuilt = true
+                logger.info("HNSW 索引构建完成: 节点数量={}", size)
+            } finally {
+                builder.close()
+            }
         } catch (e: Exception) {
             logger.error("HNSW 索引构建失败", e)
             throw e
@@ -242,10 +224,32 @@ class JVectorStore(
     }
 
     /**
+     * 构建向量列表（按 ordinal 排序）
+     */
+    private fun buildVectorList(): List<VectorFloat<*>> {
+        val vectorList: MutableList<VectorFloat<*>> = ArrayList()
+        (0 until vectors.size).forEach { ordinal ->
+            vectorList.add(getVectorByOrdinal(ordinal))
+        }
+        return vectorList
+    }
+
+    /**
+     * 根据 ordinal 获取向量
+     */
+    private fun getVectorByOrdinal(ordinal: Int): VectorFloat<*> {
+        val id = ordinalToId[ordinal]
+            ?: throw IllegalStateException("Missing ID for ordinal: $ordinal")
+        val fragment = vectors[id]
+            ?: throw IllegalStateException("Missing vector for ID: $id")
+        return createVectorFloat(fragment.vector!!)
+    }
+
+    /**
      * 创建 VectorFloat（使用 VectorTypeSupport）
      */
     private fun createVectorFloat(floatArray: FloatArray): VectorFloat<*> {
-        val vector = vts.createFloatVector(floatArray.size)
+        val vector = vectorTypeSupport.createFloatVector(floatArray.size)
         for (i in floatArray.indices) {
             vector.set(i, floatArray[i])
         }
@@ -299,16 +303,7 @@ class JVectorStore(
      * 创建 RandomAccessVectorValues
      */
     private fun createRandomAccessVectorValues(): RandomAccessVectorValues {
-        val vectorList: MutableList<VectorFloat<*>> = ArrayList()
-        (0 until vectors.size).forEach { ordinal ->
-            val id = ordinalToId[ordinal]
-                ?: throw IllegalStateException("Missing ID for ordinal: $ordinal")
-            val fragment = vectors[id]
-                ?: throw IllegalStateException("Missing vector for ID: $id")
-            val vectorArray = fragment.vector!!
-            vectorList.add(createVectorFloat(vectorArray))
-        }
-
+        val vectorList = buildVectorList()
         return ListRandomAccessVectorValues(vectorList, dimension)
     }
 
@@ -318,7 +313,7 @@ class JVectorStore(
     fun getStats(): Map<String, Any> = mapOf(
         "totalVectors" to vectors.size,
         "dimension" to dimension,
-        "M" to M,
+        "M" to maxConnections,
         "efConstruction" to efConstruction,
         "indexBuilt" to indexBuilt,
         "rerankerThreshold" to rerankerThreshold
