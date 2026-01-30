@@ -15,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /**
  * 设置对话框
@@ -30,6 +31,14 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     private val logger = LoggerFactory.getLogger(SettingsDialog::class.java)
     private val storage = project.storageService()
+
+    // HTTP 客户端（复用）
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
 
     // LLM 配置字段
     private val llmApiKeyField = JPasswordField("", 30)
@@ -278,7 +287,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     /**
-     * 测试服务可用性（并发测试，超时 10 秒）
+     * 测试服务可用性（并发测试，超时 TEST_TIMEOUT_MS 毫秒）
      */
     private fun testServices(config: ConfigData): ServiceTestResults {
         val results = ServiceTestResults()
@@ -292,10 +301,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
         bgeThread.start()
         rerankerThread.start()
 
-        // 等待所有测试完成（最多 10 秒）
-        llmThread.join(10000)
-        bgeThread.join(10000)
-        rerankerThread.join(10000)
+        // 等待所有测试完成（最多 TEST_TIMEOUT_MS 毫秒）
+        llmThread.join(TEST_TIMEOUT_MS)
+        bgeThread.join(TEST_TIMEOUT_MS)
+        rerankerThread.join(TEST_TIMEOUT_MS)
 
         return results
     }
@@ -305,26 +314,21 @@ class SettingsDialog(private val project: Project) : JDialog() {
      */
     private fun testLlmService(config: ConfigData): ServiceTestResult {
         return try {
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            val request = okhttp3.Request.Builder()
+            val request = Request.Builder()
                 .url("${config.llmBaseUrl}/chat/completions")
                 .addHeader("Authorization", "Bearer ${config.llmApiKey}")
                 .post(
                     """
                     {
                         "model": "${config.llmModelName}",
-                        "messages": [{"role": "user", "content": "hi"}],
+                        "messages": [{"role": "user", "content": "$LLM_TEST_MESSAGE"}],
                         "max_tokens": 1
                     }
                     """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
                 )
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     ServiceTestResult(success = true, message = "✓ 连接成功")
                 } else {
@@ -341,24 +345,19 @@ class SettingsDialog(private val project: Project) : JDialog() {
      */
     private fun testBgeM3Service(config: ConfigData): ServiceTestResult {
         return try {
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            val request = okhttp3.Request.Builder()
+            val request = Request.Builder()
                 .url("${config.bgeEndpoint}/v1/embeddings")
                 .post(
                     """
                     {
-                        "input": "test",
-                        "model": "BAAI/bge-m3"
+                        "input": "$BGE_TEST_INPUT",
+                        "model": "$BGE_MODEL"
                     }
                     """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
                 )
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     ServiceTestResult(success = true, message = "✓ 连接成功")
                 } else {
@@ -375,26 +374,21 @@ class SettingsDialog(private val project: Project) : JDialog() {
      */
     private fun testRerankerService(config: ConfigData): ServiceTestResult {
         return try {
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            val request = okhttp3.Request.Builder()
+            val request = Request.Builder()
                 .url("${config.rerankerEndpoint}/rerank")
                 .post(
                     """
                     {
-                        "model": "BAAI/bge-reranker-v2-m3",
-                        "query": "test",
-                        "documents": ["test document"],
-                        "top_k": 1
+                        "model": "$RERANKER_MODEL",
+                        "query": "$RERANKER_QUERY",
+                        "documents": ["$RERANKER_DOCUMENT"],
+                        "top_k": $RERANKER_TOP_K
                     }
                     """.trimIndent().toRequestBody("application/json".toMediaTypeOrNull())
                 )
                 .build()
 
-            client.newCall(request).execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     ServiceTestResult(success = true, message = "✓ 连接成功")
                 } else {
@@ -569,6 +563,22 @@ class SettingsDialog(private val project: Project) : JDialog() {
     )
 
     companion object {
+        // 测试配置
+        private const val CONNECT_TIMEOUT_SECONDS = 5L
+        private const val READ_TIMEOUT_SECONDS = 10L
+        private const val TEST_TIMEOUT_MS = 10000L
+
+        // 测试数据
+        private const val LLM_TEST_MESSAGE = "hi"
+        private const val BGE_TEST_INPUT = "test"
+        private const val RERANKER_QUERY = "test"
+        private const val RERANKER_DOCUMENT = "test document"
+        private const val RERANKER_TOP_K = 1
+
+        // 测试模型
+        private const val BGE_MODEL = "BAAI/bge-m3"
+        private const val RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+
         fun show(project: Project) {
             val dialog = SettingsDialog(project)
             dialog.isVisible = true
