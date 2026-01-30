@@ -7,10 +7,10 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.smancode.smanagent.ide.theme.ThemeColors
+import com.smancode.smanagent.ide.util.ColorUtils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.regex.Pattern
-import java.awt.Color
 
 /**
  * 代码链接处理器
@@ -116,91 +116,99 @@ object CodeLinkProcessor {
     fun processCodeLinks(html: String, project: Project): String {
         if (html.isBlank()) return html
 
-        try {
-            var result = html
-            val processedLinks = HashSet<String>() // 避免重复处理
-
-            // 逐个模式处理，每次都从原始 HTML 开始（避免累积错误）
-            for (pattern in PATTERNS) {
-                val matcher = pattern.matcher(result)
-                val buffer = StringBuffer()
-
-                while (matcher.find()) {
-                    val matchStart = matcher.start()
-                    val fullText = matcher.group(0)
-
-                    // 检查匹配是否在已生成的链接内或 HTML 标签属性内
-                    // 情况1: <a href="psi_location://X">FileFilterUtil</a> - 应该跳过
-                    // 情况2: <code>FileFilterUtil</code> - 应该生成链接
-                    val skipThisMatch = isInExistingLinkOrAttribute(result, matchStart)
-
-                    if (skipThisMatch) {
-                        matcher.appendReplacement(buffer, matcher.group(0))
-                        continue
-                    }
-
-                    // 避免重复处理
-                    if (processedLinks.contains(fullText)) {
-                        matcher.appendReplacement(buffer, matcher.group(0))
-                        continue
-                    }
-                    processedLinks.add(fullText)
-
-                    val className = matcher.group(1)       // 类名
-                    val extension = if (matcher.groupCount() >= 2) matcher.group(2) else null        // 扩展名 .java
-                    val separator = if (matcher.groupCount() >= 3) matcher.group(3) else null        // #, : 或 null
-                    val methodName = if (matcher.groupCount() >= 4) matcher.group(4) else null
-                    val params = if (matcher.groupCount() >= 5) matcher.group(5) else null
-                    val lineNumber = if (matcher.groupCount() >= 4 && separator == ":")
-                        matcher.group(4) else null
-
-                    // 黑名单过滤：跳过前端相关的类名/方法名
-                    if (className in FRONTEND_BLACKLIST ||
-                        (methodName != null && methodName in FRONTEND_BLACKLIST)) {
-                        matcher.appendReplacement(buffer, matcher.group(0))
-                        continue
-                    }
-
-                    logger.info("CodeLinkProcessor: 匹配到类名引用 - fullText={}, className={}, methodName={}, matchStart={}",
-                        fullText, className, methodName, matchStart)
-
-                    // 构建文件名
-                    val fileName = if (extension != null) "$className$extension" else className
-                    logger.info("CodeLinkProcessor: 查找文件 - fileName={}", fileName)
-
-                    // 搜索文件（用于验证类是否存在和解析行号）
-                    var matchedFiles = findFilesByName(fileName, project)
-                    logger.info("CodeLinkProcessor: 查找结果 - 找到 {} 个文件", matchedFiles.size)
-
-                    // 如果没找到且没有扩展名，尝试添加 .java 后缀
-                    if (matchedFiles.isEmpty() && extension == null) {
-                        val fileNameWithJava = "$fileName.java"
-                        logger.info("CodeLinkProcessor: 尝试带扩展名 - fileName={}", fileNameWithJava)
-                        matchedFiles = findFilesByName(fileNameWithJava, project)
-                        logger.info("CodeLinkProcessor: 带扩展名查找结果 - 找到 {} 个文件", matchedFiles.size)
-                    }
-
-                    // 解析行号
-                    val lineSuffix = if (matchedFiles.isNotEmpty()) {
-                        resolveLineSuffix(matchedFiles.first(), separator, methodName, lineNumber, params)
-                    } else {
-                        ""
-                    }
-
-                    // 构建链接
-                    val linkHtml = buildLinkHtml(fullText, className, methodName, lineNumber, lineSuffix)
-                    matcher.appendReplacement(buffer, linkHtml)
-                }
-                matcher.appendTail(buffer)
-                result = buffer.toString()
-            }
-
-            return result
-
+        return try {
+            processWithPatterns(html, project)
         } catch (e: Exception) {
             logger.error("处理代码链接失败", e)
-            return html // 出错时返回原 HTML
+            html // 出错时返回原 HTML
         }
+    }
+
+    /**
+     * 使用所有模式处理 HTML
+     */
+    private fun processWithPatterns(html: String, project: Project): String {
+        var result = html
+        val processedLinks = HashSet<String>()
+
+        for (pattern in PATTERNS) {
+            result = processWithSinglePattern(result, pattern, project, processedLinks)
+        }
+
+        return result
+    }
+
+    /**
+     * 使用单个模式处理 HTML
+     */
+    private fun processWithSinglePattern(
+        html: String,
+        pattern: Pattern,
+        project: Project,
+        processedLinks: MutableSet<String>
+    ): String {
+        val matcher = pattern.matcher(html)
+        val buffer = StringBuffer()
+
+        while (matcher.find()) {
+            val matchStart = matcher.start()
+            val info = extractMatchInfo(matcher)
+
+            if (shouldSkipMatch(info, processedLinks, html, matchStart)) {
+                matcher.appendReplacement(buffer, matcher.group(0))
+                processedLinks.add(info.fullText)
+                continue
+            }
+
+            processedLinks.add(info.fullText)
+
+            val linkHtml = processSingleMatch(info, project)
+            matcher.appendReplacement(buffer, linkHtml)
+        }
+
+        matcher.appendTail(buffer)
+        return buffer.toString()
+    }
+
+    /**
+     * 处理单个匹配项
+     */
+    private fun processSingleMatch(info: MatchInfo, project: Project): String {
+        logger.debug("匹配到代码引用 - fullText={}, className={}, methodName={}",
+            info.fullText, info.className, info.methodName)
+
+        val fileName = buildFileName(info.className, info.extension)
+        val matchedFiles = findFilesWithFallback(fileName, info.extension, project)
+
+        val lineSuffix = if (matchedFiles.isNotEmpty()) {
+            resolveLineSuffix(matchedFiles.first(), info.separator, info.methodName, info.lineNumber)
+        } else {
+            ""
+        }
+
+        return buildLinkHtml(info.fullText, info.className, info.methodName, info.lineNumber, lineSuffix)
+    }
+
+    /**
+     * 构建文件名
+     */
+    private fun buildFileName(className: String, extension: String?): String {
+        return if (extension != null) "$className$extension" else className
+    }
+
+    /**
+     * 查找文件（带回退机制）
+     */
+    private fun findFilesWithFallback(fileName: String, extension: String?, project: Project): List<PsiFile> {
+        var matchedFiles = findFilesByName(fileName, project)
+
+        // 如果没找到且没有扩展名，尝试添加 .java 后缀
+        if (matchedFiles.isEmpty() && extension == null) {
+            val fileNameWithJava = "$fileName.java"
+            matchedFiles = findFilesByName(fileNameWithJava, project)
+        }
+
+        return matchedFiles
     }
 
     /**
@@ -208,10 +216,7 @@ object CodeLinkProcessor {
      * @return true 表示应该跳过此匹配
      */
     private fun isInExistingLinkOrAttribute(html: String, matchStart: Int): Boolean {
-        // 向前查找，找到最近的标签边界
-        var inTag = false
-        var inHref = false
-        var tagContent = false  // 在标签内容中（如 <code>xxx</code> 中的 xxx）
+        var tagContent = false // 在标签内容中（如 <code>xxx</code> 中的 xxx）
 
         for (i in (matchStart - 1) downTo 0) {
             if (i < 0) break
@@ -220,14 +225,11 @@ object CodeLinkProcessor {
             when {
                 char == '"' || char == '\'' -> {
                     // 在属性值内（如 href="..."）
-                    inHref = true
                     return true
                 }
                 char == '>' -> {
-                    // 标签结束
-                    if (!inHref) {
-                        tagContent = true  // 现在进入标签内容
-                    }
+                    // 标签结束，进入标签内容
+                    tagContent = true
                     break
                 }
                 char == '<' -> {
@@ -243,7 +245,7 @@ object CodeLinkProcessor {
 
         // 如果在标签内容中（如 <code>FileFilterUtil</code>），允许生成链接
         // 如果在标签属性中（如 <a href="xxx">），跳过
-        return !tagContent && inHref
+        return !tagContent
     }
 
     /**
@@ -253,15 +255,13 @@ object CodeLinkProcessor {
      * @param separator 分隔符 (#, :, 或 null)
      * @param methodName 方法名
      * @param lineNumber 行号字符串
-     * @param params 方法参数
      * @return 行号后缀，如 #L42
      */
     private fun resolveLineSuffix(
         file: PsiFile,
         separator: String?,
         methodName: String?,
-        lineNumber: String?,
-        params: String?
+        lineNumber: String?
     ): String {
         return try {
             when {
@@ -271,7 +271,7 @@ object CodeLinkProcessor {
                 }
                 // 方法格式：Abc#method 或 Abc.method
                 (separator == "#" || separator == ".") && methodName != null -> {
-                    val lineNum = findMethodLineNumber(file, methodName, params)
+                    val lineNum = findMethodLineNumber(file, methodName)
                     if (lineNum > 0) "#L$lineNum" else ""
                 }
                 else -> ""
@@ -287,10 +287,9 @@ object CodeLinkProcessor {
      *
      * @param file 文件
      * @param methodName 方法名
-     * @param params 方法参数（可选）
      * @return 行号（从1开始），找不到返回 -1
      */
-    private fun findMethodLineNumber(file: PsiFile, methodName: String, params: String?): Int {
+    private fun findMethodLineNumber(file: PsiFile, methodName: String): Int {
         return try {
             // 遍历文件中的类
             val classes = file.children.flatMap {
@@ -372,43 +371,91 @@ object CodeLinkProcessor {
         lineNumber: String?,
         lineSuffix: String
     ): String {
-        // 构建 psi_location:// 协议 URL
-        val locationUrl = when {
-            // 方法 + 行号（极少见，但支持）
-            methodName != null && lineNumber != null -> {
-                "psi_location://$className.$methodName:$lineNumber"
-            }
-            // 仅方法
-            methodName != null -> {
-                "psi_location://$className.$methodName"
-            }
-            // 类 + 行号
-            lineNumber != null -> {
-                "psi_location://$className:$lineNumber"
-            }
-            // 使用已解析的行号后缀
-            lineSuffix.isNotEmpty() -> {
-                val num = lineSuffix.removePrefix("#L")
-                "psi_location://$className:$num"
-            }
-            // 仅类名
-            else -> {
-                "psi_location://$className"
-            }
-        }
+        val locationUrl = buildLocationUrl(className, methodName, lineNumber, lineSuffix)
+        val linkColor = ColorUtils.toHexString(ThemeColors.getCurrentColors().codeFunction)
 
-        // 使用主题颜色，自动适配深色/浅色主题
-        val colors = ThemeColors.getCurrentColors()
-        val linkColor = toHexString(colors.codeFunction)  // 使用代码函数高亮色（蓝色）
-
-        // 添加样式：使用主题色 + 无下划线 + 手型光标
         return "<a href=\"$locationUrl\" style=\"text-decoration: none; color: $linkColor; background-color: transparent; cursor: pointer;\">$text</a>"
     }
 
     /**
-     * 将 Color 转换为十六进制字符串
+     * 构建 PSI 位置 URL
      */
-    private fun toHexString(color: Color): String {
-        return "#${color.red.toString(16).padStart(2, '0')}${color.green.toString(16).padStart(2, '0')}${color.blue.toString(16).padStart(2, '0')}"
+    private fun buildLocationUrl(
+        className: String,
+        methodName: String?,
+        lineNumber: String?,
+        lineSuffix: String
+    ): String = when {
+        methodName != null && lineNumber != null -> "psi_location://$className.$methodName:$lineNumber"
+        methodName != null -> "psi_location://$className.$methodName"
+        lineNumber != null -> "psi_location://$className:$lineNumber"
+        lineSuffix.isNotEmpty() -> {
+            val num = lineSuffix.removePrefix("#L")
+            "psi_location://$className:$num"
+        }
+        else -> "psi_location://$className"
+    }
+
+    /**
+     * 匹配信息数据类
+     */
+    private data class MatchInfo(
+        val fullText: String,
+        val className: String,
+        val extension: String?,
+        val separator: String?,
+        val methodName: String?,
+        val lineNumber: String?
+    )
+
+    /**
+     * 从正则匹配提取结构化信息
+     */
+    private fun extractMatchInfo(matcher: java.util.regex.Matcher): MatchInfo {
+        val className = matcher.group(1)
+        val extension = if (matcher.groupCount() >= 2) matcher.group(2) else null
+        val separator = if (matcher.groupCount() >= 3) matcher.group(3) else null
+        val methodName = if (matcher.groupCount() >= 4) matcher.group(4) else null
+        val lineNumber = if (matcher.groupCount() >= 4 && separator == ":") matcher.group(4) else null
+
+        return MatchInfo(
+            fullText = matcher.group(0),
+            className = className,
+            extension = extension,
+            separator = separator,
+            methodName = methodName,
+            lineNumber = lineNumber
+        )
+    }
+
+    /**
+     * 检查是否应该跳过此匹配
+     */
+    private fun shouldSkipMatch(
+        info: MatchInfo,
+        processedLinks: Set<String>,
+        html: String,
+        matchStart: Int
+    ): Boolean {
+        // 检查是否在已生成的链接内或 HTML 标签属性内
+        if (isInExistingLinkOrAttribute(html, matchStart)) {
+            return true
+        }
+
+        // 避免重复处理
+        if (info.fullText in processedLinks) {
+            return true
+        }
+
+        // 黑名单过滤
+        if (info.className in FRONTEND_BLACKLIST) {
+            return true
+        }
+
+        if (info.methodName != null && info.methodName in FRONTEND_BLACKLIST) {
+            return true
+        }
+
+        return false
     }
 }

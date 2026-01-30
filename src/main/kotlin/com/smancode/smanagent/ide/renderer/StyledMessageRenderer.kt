@@ -7,6 +7,7 @@ import com.smancode.smanagent.ide.model.GraphModels
 import com.smancode.smanagent.ide.model.GraphModels.PartType
 import com.smancode.smanagent.ide.theme.ThemeColors
 import com.smancode.smanagent.ide.theme.ColorPalette
+import com.smancode.smanagent.ide.util.ColorUtils
 import org.slf4j.LoggerFactory
 import javax.swing.text.MutableAttributeSet
 import javax.swing.text.SimpleAttributeSet
@@ -189,6 +190,9 @@ object StyledMessageRenderer {
 
                                 var htmlContent = MarkdownRenderer.markdownToHtml(textForMarkdown)
 
+                                // 处理代码链接（支持类名/方法跳转）
+                                htmlContent = CodeLinkProcessor.processCodeLinks(htmlContent, project)
+
                                 // ... 后续处理保持不变 ...
 
                                 val wrappedHtml = wrapHtml(htmlContent, false)
@@ -347,9 +351,7 @@ object StyledMessageRenderer {
     /**
      * 将 Color 转换为十六进制字符串
      */
-    private fun toHexString(color: Color): String {
-        return "#${color.red.toString(16).padStart(2, '0')}${color.green.toString(16).padStart(2, '0')}${color.blue.toString(16).padStart(2, '0')}"
-    }
+    private fun toHexString(color: Color): String = ColorUtils.toHexString(color)
 
     // ========== Part 渲染方法（返回样式标记文本） ==========
 

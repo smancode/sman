@@ -4,6 +4,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.smancode.smanagent.ide.util.LinkProtocols
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.awt.Cursor
@@ -98,16 +99,16 @@ class LinkNavigationHandler(
     private fun handleHyperlinkClick(href: String) {
         try {
             when {
-                href.startsWith("psi_location://") -> {
-                    val location = href.removePrefix("psi_location://")
+                LinkProtocols.isPsiLocation(href) -> {
+                    val location = LinkProtocols.extractPsiLocation(href) ?: return
                     logger.info("PSI 导航: location={}", location)
                     val success = com.smancode.smanagent.ide.core.PsiNavigationHelper.navigateToLocation(project, location)
                     logger.info("PSI 导航结果: success={}", success)
                 }
-                href.startsWith("file://") -> {
+                LinkProtocols.isFile(href) -> {
                     navigateToFile(URL(href))
                 }
-                href.startsWith("http://") || href.startsWith("https://") -> {
+                LinkProtocols.isHttp(href) -> {
                     com.intellij.ide.BrowserUtil.browse(URL(href))
                 }
                 else -> {
