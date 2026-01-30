@@ -21,10 +21,8 @@ class H2DatabaseService(
 
     private val logger = LoggerFactory.getLogger(H2DatabaseService::class.java)
     private val dataSource: DataSource = createDataSource()
+    private val vectorDimension = config.vectorDimension
 
-    /**
-     * 创建数据源
-     */
     private fun createDataSource(): DataSource {
         val hikariConfig = HikariConfig().apply {
             jdbcUrl = "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
@@ -45,8 +43,7 @@ class H2DatabaseService(
      * 初始化数据库表结构
      */
     suspend fun init() = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
+        dataSource.connection.use { connection ->
             // 创建配置表
             connection.createStatement().executeUpdate("""
                 CREATE TABLE IF NOT EXISTS config (
@@ -120,8 +117,6 @@ class H2DatabaseService(
             """.trimIndent())
 
             logger.info("H2 数据库表结构初始化完成")
-        } finally {
-            connection.close()
         }
     }
 
@@ -129,22 +124,17 @@ class H2DatabaseService(
      * 保存配置
      */
     suspend fun saveConfig(key: String, value: String) = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = """
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("""
                 MERGE INTO config (key, value, updated_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
-            """.trimIndent()
-
-            connection.prepareStatement(sql).use { stmt ->
+            """.trimIndent()).use { stmt ->
                 stmt.setString(1, key)
                 stmt.setString(2, value)
                 stmt.executeUpdate()
             }
 
             logger.debug("配置已保存: key={}", key)
-        } finally {
-            connection.close()
         }
     }
 
@@ -152,20 +142,12 @@ class H2DatabaseService(
      * 获取配置
      */
     suspend fun getConfig(key: String): String? = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = "SELECT value FROM config WHERE key = ?"
-            connection.prepareStatement(sql).use { stmt ->
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("SELECT value FROM config WHERE key = ?").use { stmt ->
                 stmt.setString(1, key)
                 val rs = stmt.executeQuery()
-                if (rs.next()) {
-                    rs.getString("value")
-                } else {
-                    null
-                }
+                if (rs.next()) rs.getString("value") else null
             }
-        } finally {
-            connection.close()
         }
     }
 
@@ -173,31 +155,26 @@ class H2DatabaseService(
      * 保存向量片段（冷数据）
      */
     suspend fun saveVectorFragment(fragment: VectorFragment) = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = """
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("""
                 MERGE INTO vector_fragments (
                     id, title, content, full_content, tags, metadata,
                     vector_data, cache_level, access_count, last_accessed
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """.trimIndent()
-
-            connection.prepareStatement(sql).use { stmt ->
+            """.trimIndent()).use { stmt ->
                 stmt.setString(1, fragment.id)
                 stmt.setString(2, fragment.title)
                 stmt.setString(3, fragment.content)
                 stmt.setString(4, fragment.fullContent)
                 stmt.setString(5, fragment.tags.joinToString(","))
-                stmt.setString(6, serializeMetadata(fragment.metadata))
-                stmt.setBytes(7, serializeVector(fragment.vector) ?: byteArrayOf())
+                stmt.setString(6, fragment.metadata.serializeToString())
+                stmt.setBytes(7, fragment.vector.toByteArray() ?: byteArrayOf())
                 stmt.setString(8, "cold")
                 stmt.setInt(9, 0)
                 stmt.executeUpdate()
             }
 
             logger.debug("向量片段已保存到冷存储: id={}", fragment.id)
-        } finally {
-            connection.close()
         }
     }
 
@@ -205,23 +182,17 @@ class H2DatabaseService(
      * 获取向量片段
      */
     suspend fun getVectorFragment(id: String): VectorFragment? = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = "SELECT * FROM vector_fragments WHERE id = ?"
-            connection.prepareStatement(sql).use { stmt ->
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("SELECT * FROM vector_fragments WHERE id = ?").use { stmt ->
                 stmt.setString(1, id)
                 val rs = stmt.executeQuery()
                 if (rs.next()) {
-                    // 更新访问计数和最后访问时间
                     updateAccessInfo(id)
-
-                    mapToVectorFragment(rs)
+                    rs.toVectorFragment(vectorDimension)
                 } else {
                     null
                 }
             }
-        } finally {
-            connection.close()
         }
     }
 
@@ -229,19 +200,15 @@ class H2DatabaseService(
      * 获取所有冷数据向量片段
      */
     suspend fun getAllColdFragments(): List<VectorFragment> = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = "SELECT * FROM vector_fragments WHERE cache_level = 'cold'"
-            connection.prepareStatement(sql).use { stmt ->
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("SELECT * FROM vector_fragments WHERE cache_level = 'cold'").use { stmt ->
                 val rs = stmt.executeQuery()
                 val fragments = mutableListOf<VectorFragment>()
                 while (rs.next()) {
-                    fragments.add(mapToVectorFragment(rs))
+                    fragments.add(rs.toVectorFragment(vectorDimension))
                 }
                 fragments
             }
-        } finally {
-            connection.close()
         }
     }
 
@@ -249,156 +216,41 @@ class H2DatabaseService(
      * 更新访问信息
      */
     private suspend fun updateAccessInfo(id: String) = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            val sql = """
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("""
                 UPDATE vector_fragments
                 SET access_count = access_count + 1,
                     last_accessed = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """.trimIndent()
-            connection.prepareStatement(sql).use { stmt ->
+            """.trimIndent()).use { stmt ->
                 stmt.setString(1, id)
                 stmt.executeUpdate()
             }
-        } finally {
-            connection.close()
         }
-    }
-
-    /**
-     * 将 ResultSet 映射为 VectorFragment
-     */
-    private fun mapToVectorFragment(rs: ResultSet): VectorFragment {
-        val vectorData = rs.getBytes("vector_data")
-        val vector = if (vectorData != null && vectorData.isNotEmpty()) {
-            deserializeVector(vectorData)
-        } else {
-            FloatArray(config.vectorDimension)
-        }
-
-        return VectorFragment(
-            id = rs.getString("id"),
-            title = rs.getString("title"),
-            content = rs.getString("content"),
-            fullContent = rs.getString("full_content"),
-            tags = rs.getString("tags").split(","),
-            metadata = deserializeMetadata(rs.getString("metadata")),
-            vector = vector
-        )
-    }
-
-    /**
-     * 序列化元数据
-     */
-    private fun serializeMetadata(metadata: Map<String, String>): String {
-        return metadata.entries.joinToString(";") { "${it.key}=${it.value}" }
-    }
-
-    /**
-     * 反序列化元数据
-     */
-    private fun deserializeMetadata(data: String?): Map<String, String> {
-        if (data.isNullOrBlank()) return emptyMap()
-        return data.split(";").mapNotNull { entry ->
-            val parts = entry.split("=", limit = 2)
-            if (parts.size == 2) parts[0] to parts[1] else null
-        }.toMap()
-    }
-
-    /**
-     * 序列化向量
-     */
-    private fun serializeVector(vector: FloatArray?): ByteArray? {
-        if (vector == null) return null
-
-        val result = ByteArray(vector.size * 4)
-        for (i in vector.indices) {
-            val bytes = floatToBytes(vector[i])
-            val offset = i * 4
-            result[offset] = bytes[0]
-            result[offset + 1] = bytes[1]
-            result[offset + 2] = bytes[2]
-            result[offset + 3] = bytes[3]
-        }
-        return result
-    }
-
-    /**
-     * 反序列化向量
-     */
-    private fun deserializeVector(data: ByteArray?): FloatArray {
-        if (data == null || data.isEmpty()) return FloatArray(config.vectorDimension)
-
-        val floatCount = data.size / 4
-        val result = FloatArray(floatCount)
-        for (i in 0 until floatCount) {
-            val offset = i * 4
-            val bytes = byteArrayOf(
-                data[offset],
-                data[offset + 1],
-                data[offset + 2],
-                data[offset + 3]
-            )
-            result[i] = bytesToFloat(bytes)
-        }
-        return result
-    }
-
-    /**
-     * Float 转 4 字节数组
-     */
-    private fun floatToBytes(value: Float): List<Byte> {
-        val bits = java.lang.Float.floatToIntBits(value)
-        return listOf(
-            (bits shr 24).toByte(),
-            (bits shr 16).toByte(),
-            (bits shr 8).toByte(),
-            bits.toByte()
-        )
-    }
-
-    /**
-     * 4 字节数组转 Float
-     */
-    private fun bytesToFloat(bytes: ByteArray): Float {
-        val bits = ((bytes[0].toInt() and 0xFF) shl 24) or
-                   ((bytes[1].toInt() and 0xFF) shl 16) or
-                   ((bytes[2].toInt() and 0xFF) shl 8) or
-                   (bytes[3].toInt() and 0xFF)
-        return java.lang.Float.intBitsToFloat(bits)
     }
 
     /**
      * 清理过期数据
      */
     suspend fun cleanupOldData(beforeDays: Int = 30) = withContext(Dispatchers.IO) {
-        val connection = dataSource.connection
-        try {
-            // H2 不支持 DATEADD，使用 DATEADD 替代
-            val sql = """
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("""
                 DELETE FROM vector_fragments
                 WHERE cache_level = 'cold'
                   AND last_accessed < DATEADD('DAY', -?, CURRENT_TIMESTAMP)
                   AND access_count < 5
-            """.trimIndent()
-
-            connection.prepareStatement(sql).use { stmt ->
+            """.trimIndent()).use { stmt ->
                 stmt.setInt(1, beforeDays)
                 val deleted = stmt.executeUpdate()
                 logger.info("清理了 {} 个过期的向量片段", deleted)
             }
-        } finally {
-            connection.close()
         }
     }
 
     /**
      * 初始化 H2 数据库
      */
-    suspend fun initDatabase() = withContext(Dispatchers.IO) {
-        init()
-    }
+    suspend fun initDatabase() = init()
 
     /**
      * 关闭数据库连接
@@ -409,4 +261,84 @@ class H2DatabaseService(
         }
         logger.info("H2 数据库连接已关闭")
     }
+}
+
+/**
+ * 序列化扩展函数
+ */
+
+private fun Map<String, String>.serializeToString(): String =
+    entries.joinToString(";") { "${it.key}=${it.value}" }
+
+private fun String?.deserializeToMap(): Map<String, String> {
+    if (isNullOrBlank()) return emptyMap()
+    return split(";").mapNotNull { entry ->
+        val parts = entry.split("=", limit = 2)
+        if (parts.size == 2) parts[0] to parts[1] else null
+    }.toMap()
+}
+
+private fun FloatArray?.toByteArray(): ByteArray? {
+    if (this == null) return null
+
+    val result = ByteArray(size * 4)
+    for (i in indices) {
+        val bytes = floatToBytes(this[i])
+        val offset = i * 4
+        result[offset] = bytes[0]
+        result[offset + 1] = bytes[1]
+        result[offset + 2] = bytes[2]
+        result[offset + 3] = bytes[3]
+    }
+    return result
+}
+
+private fun ByteArray?.toFloatArray(expectedSize: Int): FloatArray {
+    if (this == null || isEmpty()) return FloatArray(expectedSize)
+
+    val floatCount = size / 4
+    val result = FloatArray(floatCount)
+    for (i in 0 until floatCount) {
+        val offset = i * 4
+        result[i] = bytesToFloat(byteArrayOf(
+            this[offset],
+            this[offset + 1],
+            this[offset + 2],
+            this[offset + 3]
+        ))
+    }
+    return result
+}
+
+private fun floatToBytes(value: Float): List<Byte> {
+    val bits = java.lang.Float.floatToIntBits(value)
+    return listOf(
+        (bits shr 24).toByte(),
+        (bits shr 16).toByte(),
+        (bits shr 8).toByte(),
+        bits.toByte()
+    )
+}
+
+private fun bytesToFloat(bytes: ByteArray): Float {
+    val bits = ((bytes[0].toInt() and 0xFF) shl 24) or
+               ((bytes[1].toInt() and 0xFF) shl 16) or
+               ((bytes[2].toInt() and 0xFF) shl 8) or
+               (bytes[3].toInt() and 0xFF)
+    return java.lang.Float.intBitsToFloat(bits)
+}
+
+private fun ResultSet.toVectorFragment(vectorDimension: Int): VectorFragment {
+    val vectorData = getBytes("vector_data")
+    val vector = vectorData?.toFloatArray(vectorDimension) ?: FloatArray(vectorDimension)
+
+    return VectorFragment(
+        id = getString("id"),
+        title = getString("title"),
+        content = getString("content"),
+        fullContent = getString("full_content"),
+        tags = getString("tags").split(","),
+        metadata = getString("metadata").deserializeToMap(),
+        vector = vector
+    )
 }

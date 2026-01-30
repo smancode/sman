@@ -62,23 +62,105 @@ llm.response.max.tokens=as_llm_supports
 llm.retry.max=3
 llm.retry.base.delay=1000
 
-# BGE-M3 向量化配置
-bge.enabled=true
-bge.endpoint=your_bge_endpoint
-bge.model.name=bge-m3
-bge.batch.size=10
-bge.timeout.seconds=30
+# 向量数据库配置
+vector.db.type=JVECTOR
+vector.db.dimension=1024
+vector.db.l1.cache.size=100
+vector.db.h2.path=${user.home}/.smanunion/analysis.mv.db
 
-# Reranker 配置
+# H2 数据库配置（L3 冷数据存储）
+# H2 是嵌入式数据库，无需外部安装
+# 数据库文件自动创建在: ~/.smanunion/analysis.mv.db
+# JDBC URL: jdbc:h2:${vector.db.h2.path};MODE=PostgreSQL;AUTO_SERVER=TRUE
+
+# BGE-M3 向量化配置（可选，需自行部署）
+# BGE-M3 用于代码语义向量化和检索
+# 如需启用，请先部署 BGE-M3 服务：https://github.com/FlagOpen/FlagEmbedding
+bge.endpoint=http://localhost:8000/v1/embeddings
+bge.model.name=BAAI/bge-m3
+bge.dimension=1024
+bge.timeout.seconds=30
+bge.batch.size=10
+
+# BGE-Reranker 配置（可选，需自行部署）
+# Reranker 用于重排搜索结果，提升准确度
 reranker.enabled=true
-reranker.base.url=your_reranker_endpoint
-reranker.api.key=your_reranker_api_key
-reranker.model=bge-reranker-v2-m3
-reranker.top.k=5
+reranker.base.url=http://localhost:8001/v1
+reranker.model=BAAI/bge-reranker-v2-m3
+reranker.api.key=
+reranker.timeout.seconds=30
 
 # 其他配置
 max.cache.size=100
 project.session.prefix=local
+```
+
+#### H2 数据库说明
+
+H2 是纯 Java 实现的嵌入式关系数据库，无需外部安装和配置。
+
+**特性**：
+- **零配置**：自动创建数据库文件
+- **高性能**：内存模式 + 持久化存储
+- **SQL 兼容**：支持 PostgreSQL 语法模式
+- **连接池**：使用 HikariCP 优化性能
+
+**存储位置**：
+```
+~/.smanunion/analysis.mv.db    # 主数据库文件
+~/.smanunion/analysis.mv.db.trace.db  # 追踪日志（可选）
+```
+
+**连接方式**：
+```kotlin
+// 应用内使用（通过 H2DatabaseService）
+val h2Service = H2DatabaseService(vectorDbConfig)
+h2Service.init()  // 初始化表结构
+
+// 外部连接（用于调试）
+// JDBC URL: jdbc:h2:~/.smanunion/analysis;MODE=PostgreSQL;AUTO_SERVER=TRUE
+// 用户名: sa
+// 密码: (空)
+```
+
+**表结构**：
+- `config` - 配置存储
+- `metadata` - 元数据存储
+- `sop` - 标准操作流程
+- `vector_fragments` - 向量片段（L3 冷数据）
+
+#### BGE-M3 和 Reranker 部署（可选）
+
+如需使用语义搜索功能，需要部署 BGE-M3 和 Reranker 服务：
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/FlagOpen/FlagEmbedding.git
+cd FlagEmbedding
+
+# 2. 安装依赖
+pip install -r requirements.txt
+
+# 3. 启动 BGE-M3 服务（端口 8000）
+python -m FlagEmbedding.bge_m3 serve --port 8000
+
+# 4. 启动 Reranker 服务（端口 8001）
+python -m FlagEmbedding.reranker serve --port 8001
+```
+
+**Docker 部署**：
+```bash
+# BGE-M3
+docker run -d -p 8000:8000 \
+  -v ~/.smanunion/models:/models \
+  flagopen/bge-m3:latest \
+  --port 8000
+
+# Reranker
+docker run -d -p 8001:8001 \
+  -v ~/.smanunion/models:/models \
+  flagopen/bge-reranker:latest \
+  --port 8001
 ```
 
 ## 可用工具

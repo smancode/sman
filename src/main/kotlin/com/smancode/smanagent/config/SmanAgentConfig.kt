@@ -1,5 +1,9 @@
 package com.smancode.smanagent.config
 
+import com.smancode.smanagent.analysis.config.BgeM3Config
+import com.smancode.smanagent.analysis.config.RerankerConfig
+import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
+import com.smancode.smanagent.analysis.config.VectorDbType
 import com.smancode.smanagent.smancode.llm.LlmService
 import com.smancode.smanagent.smancode.llm.config.LlmEndpoint
 import com.smancode.smanagent.smancode.llm.config.LlmPoolConfig
@@ -178,6 +182,72 @@ object SmanAgentConfig {
     val llmTemperature: Double by lazy { getConfigValue("llm.temperature", 0.7) }
     val llmDefaultMaxTokens: Int by lazy { getConfigValue("llm.default.max.tokens", 4096) }
 
+    // ==================== 向量数据库配置 ====================
+
+    val vectorDbType: VectorDbType by lazy {
+        val typeStr = getString("vector.db.type", "JVECTOR").uppercase()
+        try {
+            VectorDbType.valueOf(typeStr)
+        } catch (e: IllegalArgumentException) {
+            logger.warn("未知的向量数据库类型: $typeStr，使用默认值 JVECTOR")
+            VectorDbType.JVECTOR
+        }
+    }
+
+    val vectorDbConfig: VectorDatabaseConfig by lazy {
+        val userHome = System.getProperty("user.home")
+        VectorDatabaseConfig(
+            type = vectorDbType,
+            jvector = com.smancode.smanagent.analysis.config.JVectorConfig(
+                dimension = getConfigValue("vector.db.jvector.dimension", 1024),
+                M = getConfigValue("vector.db.jvector.M", 16),
+                efConstruction = getConfigValue("vector.db.jvector.efConstruction", 100),
+                efSearch = getConfigValue("vector.db.jvector.efSearch", 50),
+                enablePersist = getConfigValue("vector.db.jvector.enablePersist", true)
+            ),
+            basePath = getString("vector.db.base.path", "$userHome/.smanunion/vector_store"),
+            storePath = getString("vector.db.store.path", "$userHome/.smanunion/vector_store"),
+            databasePath = getString("vector.db.h2.path", "$userHome/.smanunion/analysis.mv.db"),
+            vectorDimension = getConfigValue("vector.db.dimension", 1024),
+            l1CacheSize = getConfigValue("vector.db.l1.cache.size", 100),
+            l1AccessThreshold = getConfigValue("vector.db.l1.access.threshold", 10),
+            l2AccessThreshold = getConfigValue("vector.db.l2.access.threshold", 3)
+        )
+    }
+
+    // ==================== BGE-M3 配置 ====================
+
+    val bgeM3Config: BgeM3Config? by lazy {
+        val endpoint = getString("bge.endpoint", "")
+        if (endpoint.isBlank()) {
+            logger.warn("BGE-M3 未配置，向量化功能将不可用")
+            null
+        } else {
+            BgeM3Config(
+                endpoint = endpoint,
+                modelName = getString("bge.model.name", "BAAI/bge-m3"),
+                dimension = getConfigValue("bge.dimension", 1024),
+                timeoutSeconds = getConfigValue("bge.timeout.seconds", 30),
+                batchSize = getConfigValue("bge.batch.size", 10)
+            )
+        }
+    }
+
+    // ==================== BGE-Reranker 配置 ====================
+
+    val rerankerConfig: RerankerConfig by lazy {
+        RerankerConfig(
+            enabled = getConfigValue("reranker.enabled", true),
+            baseUrl = getString("reranker.base.url", "http://localhost:8001/v1"),
+            model = getString("reranker.model", "BAAI/bge-reranker-v2-m3"),
+            apiKey = getString("reranker.api.key", ""),
+            timeoutSeconds = getConfigValue("reranker.timeout.seconds", 30),
+            retry = getConfigValue("reranker.retry", 2),
+            maxRounds = getConfigValue("reranker.max.rounds", 3),
+            topK = getConfigValue("reranker.top.k", 15)
+        )
+    }
+
     /**
      * 加载配置文件
      */
@@ -246,6 +316,21 @@ object SmanAgentConfig {
         模型参数配置:
         - 温度: $llmTemperature
         - 默认最大Tokens: $llmDefaultMaxTokens
+
+        向量数据库配置:
+        - 类型: $vectorDbType
+        - 维度: ${vectorDbConfig.vectorDimension}
+        - L1缓存: ${vectorDbConfig.l1CacheSize}条
+        - H2路径: ${vectorDbConfig.databasePath}
+
+        BGE-M3 配置:
+        - 端点: ${bgeM3Config?.endpoint ?: "(未配置)"}
+        - 模型: ${bgeM3Config?.modelName ?: "(未配置)"}
+
+        BGE-Reranker 配置:
+        - 启用: ${rerankerConfig.enabled}
+        - 端点: ${rerankerConfig.baseUrl}
+        - 模型: ${rerankerConfig.model}
     """.trimIndent()
 
     /**

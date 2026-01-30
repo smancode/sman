@@ -1,9 +1,12 @@
 package com.smancode.smanagent.analysis.service
 
 import com.smancode.smanagent.analysis.model.ClassAstInfo
+import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
@@ -21,16 +24,24 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class AstCacheService(
     private val astDir: Path,
-    private val hotCacheSize: Long = 50 * 1024 * 1024  // 50 MB
+    private val hotCacheSize: Long = 50 * 1024 * 1024 // 50 MB
 ) {
     private val logger = LoggerFactory.getLogger(AstCacheService::class.java)
 
+    // 使用结构化并发作用域
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // JSON 序列化配置
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        prettyPrint = false
+    }
+
     // L1: 热数据缓存（内存，LRU）
-    private val hotCache = object : LinkedHashMap<String, ClassAstInfo>() {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ClassAstInfo>?): Boolean {
-            val currentSize = estimateSize()
-            return currentSize > hotCacheSize
-        }
+    private val hotCache = object : LinkedHashMap<String, ClassAstInfo>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ClassAstInfo>?): Boolean =
+            estimateSize() > hotCacheSize
     }
 
     // L2: 温数据缓存（内存映射）
@@ -59,8 +70,7 @@ class AstCacheService(
         }
 
         // L3: 从磁盘加载
-        val relativePath = className.replace('.', '/')
-        val file = astDir.resolve("$relativePath.json")
+        val file = astDir.resolve("${className.replace('.', '/')}.json")
         if (Files.exists(file)) {
             val ast = loadFromFile(file)
             // 提升到温数据缓存
@@ -84,10 +94,9 @@ class AstCacheService(
         hotCache[className] = ast
 
         // 2. 异步保存到磁盘
-        GlobalScope.launch(Dispatchers.IO) {
+        scope.launch {
             try {
-                val relativePath = className.replace('.', '/')
-                val file = astDir.resolve("$relativePath.json")
+                val file = astDir.resolve("${className.replace('.', '/')}.json")
                 Files.createDirectories(file.parent)
                 saveToFile(file, ast)
             } catch (e: Exception) {
@@ -103,9 +112,8 @@ class AstCacheService(
      * @return AST 信息
      */
     private fun loadFromFile(file: Path): ClassAstInfo {
-        val json = Files.readString(file)
-        // TODO: 使用 kotlinx.serialization 反序列化
-        throw NotImplementedError("TODO: Implement JSON deserialization")
+        val content = Files.readString(file)
+        return content.decodeFromString<ClassAstInfo>()
     }
 
     /**
@@ -115,21 +123,20 @@ class AstCacheService(
      * @param ast AST 信息
      */
     private fun saveToFile(file: Path, ast: ClassAstInfo) {
-        // TODO: 使用 kotlinx.serialization 序列化
-        Files.writeString(file, ast.toString())
+        val json = json.encodeToString(ClassAstInfo.serializer(), ast)
+        Files.writeString(file, json)
     }
 
     /**
      * 估算当前内存占用
      */
-    private fun estimateSize(): Long {
-        return hotCache.values.sumOf { it.estimateSize() }
-    }
+    private fun estimateSize(): Long =
+        hotCache.values.sumOf { it.estimateSize() }
 
     /**
      * 预加载热点类
      */
-    suspend fun preloadHotClasses(project: com.intellij.openapi.project.Project) {
+    suspend fun preloadHotClasses(project: Project) {
         // TODO: 实现 PSI 扫描，识别入口类、Service 类
     }
 
@@ -141,4 +148,19 @@ class AstCacheService(
         warmCache.clear()
         logger.info("AST cache cleared")
     }
+
+    /**
+     * 关闭服务
+     */
+    fun close() {
+        hotCache.clear()
+        warmCache.clear()
+        logger.info("AstCacheService closed")
+    }
 }
+
+/**
+ * JSON 解码扩展函数
+ */
+private inline fun <reified T> String.decodeFromString(): T =
+    Json.decodeFromString(this)
