@@ -194,9 +194,18 @@ object SmanAgentConfig {
         }
     }
 
-    val vectorDbConfig: VectorDatabaseConfig by lazy {
+    /**
+     * 创建向量数据库配置（按项目隔离）
+     *
+     * 每个项目应该调用此方法创建独立的配置
+     *
+     * @param projectKey 项目标识符
+     * @return 向量数据库配置（路径已包含 projectKey）
+     */
+    fun createVectorDbConfig(projectKey: String): VectorDatabaseConfig {
         val userHome = System.getProperty("user.home")
-        VectorDatabaseConfig(
+        return VectorDatabaseConfig.create(
+            projectKey = projectKey,
             type = vectorDbType,
             jvector = com.smancode.smanagent.analysis.config.JVectorConfig(
                 dimension = getConfigValue("vector.db.jvector.dimension", 1024),
@@ -206,12 +215,20 @@ object SmanAgentConfig {
                 enablePersist = getConfigValue("vector.db.jvector.enablePersist", true),
                 rerankerThreshold = getConfigValue("vector.db.jvector.rerankerThreshold", 0.1)
             ),
-            basePath = getString("vector.db.base.path", "$userHome/.smanunion/vector_store"),
-            storePath = getString("vector.db.store.path", "$userHome/.smanunion/vector_store"),
-            databasePath = getString("vector.db.h2.path", "$userHome/.smanunion/analysis.mv.db"),
+            baseDir = userHome,
             vectorDimension = getConfigValue("vector.db.dimension", 1024),
             l1CacheSize = getConfigValue("vector.db.l1.cache.size", 500)
         )
+    }
+
+    /**
+     * @deprecated 使用 createVectorDbConfig(projectKey) 代替
+     * 此方法仅用于向后兼容，不应在新代码中使用
+     */
+    @Deprecated("使用 createVectorDbConfig(projectKey) 代替")
+    val vectorDbConfig: VectorDatabaseConfig by lazy {
+        // 使用默认 projectKey = "default"（不推荐）
+        createVectorDbConfig("default")
     }
 
     // ==================== BGE-M3 配置 ====================

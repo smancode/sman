@@ -3,23 +3,55 @@ package com.smancode.smanagent.analysis.config
 /**
  * 向量数据库配置
  *
+ * 所有存储路径都按 projectKey 隔离：
+ * - vector_store: ~/.smanunion/{projectKey}/vector_store/
+ * - H2 database: ~/.smanunion/{projectKey}/analysis.mv.db
+ *
+ * @property projectKey 项目标识符（用于隔离不同项目的数据）
  * @property type 向量数据库类型
  * @property jvector JVector 配置
- * @property basePath 基础路径
- * @property storePath 存储路径
- * @property databasePath H2 数据库路径
+ * @property basePath 基础路径（已包含 projectKey）
+ * @property storePath 存储路径（已包含 projectKey）
+ * @property databasePath H2 数据库路径（已包含 projectKey）
  * @property vectorDimension 向量维度
  * @property l1CacheSize L1 缓存大小（内存 LRU）
  */
 data class VectorDatabaseConfig(
+    val projectKey: String,
     val type: VectorDbType,
     val jvector: JVectorConfig,
-    val basePath: String = "${System.getProperty("user.home")}/.smanunion/vector_store",
-    val storePath: String = "${System.getProperty("user.home")}/.smanunion/vector_store",
-    val databasePath: String = "${System.getProperty("user.home")}/.smanunion/analysis.mv.db",
+    val basePath: String,
+    val storePath: String,
+    val databasePath: String,
     val vectorDimension: Int = 1024,
     val l1CacheSize: Int = 500
-)
+) {
+    companion object {
+        /**
+         * 创建配置（自动构建 projectKey 隔离路径）
+         */
+        fun create(
+            projectKey: String,
+            type: VectorDbType,
+            jvector: JVectorConfig,
+            baseDir: String = System.getProperty("user.home"),
+            vectorDimension: Int = 1024,
+            l1CacheSize: Int = 500
+        ): VectorDatabaseConfig {
+            val projectDir = "$baseDir/.smanunion/$projectKey"
+            return VectorDatabaseConfig(
+                projectKey = projectKey,
+                type = type,
+                jvector = jvector,
+                basePath = "$projectDir/vector_store",
+                storePath = "$projectDir/vector_store",
+                databasePath = "$projectDir/analysis.mv.db",
+                vectorDimension = vectorDimension,
+                l1CacheSize = l1CacheSize
+            )
+        }
+    }
+}
 
 /**
  * 向量数据库类型

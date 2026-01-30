@@ -26,10 +26,11 @@ class VectorStoreServiceTest {
     @Test
     fun `test add vector fragment`() {
         // Given: 创建配置和服务
-        val config = VectorDatabaseConfig(
+        val config = VectorDatabaseConfig.create(
+            projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            basePath = tempDir.toString()
+            baseDir = tempDir.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -58,10 +59,11 @@ class VectorStoreServiceTest {
     @Test
     fun `test search vectors`() {
         // Given: 创建配置和服务
-        val config = VectorDatabaseConfig(
+        val config = VectorDatabaseConfig.create(
+            projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            basePath = tempDir.toString()
+            baseDir = tempDir.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -99,10 +101,11 @@ class VectorStoreServiceTest {
     @Test
     fun `test validate parameters - missing id`() {
         // Given: 创建配置
-        val config = VectorDatabaseConfig(
+        val config = VectorDatabaseConfig.create(
+            projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            basePath = tempDir.toString()
+            baseDir = tempDir.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -131,10 +134,11 @@ class VectorStoreServiceTest {
     @Test
     fun `test validate parameters - topK must be positive`() {
         // Given: 创建配置
-        val config = VectorDatabaseConfig(
+        val config = VectorDatabaseConfig.create(
+            projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            basePath = tempDir.toString()
+            baseDir = tempDir.toString()
         )
         val service = MemoryVectorStore(config)
 
