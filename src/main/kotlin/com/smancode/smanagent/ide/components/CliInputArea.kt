@@ -81,42 +81,11 @@ class CliInputArea(
 
                 // 绘制占位符
                 if (showPlaceholder && text.isBlank()) {
-                    val oldColor = g2.color
-                    g2.color = colors.textMuted
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                    val x = insets.left
-                    var y = insets.top + fm.ascent
-
-                    // 按行分割绘制
-                    val lines = placeholderText.split("\n")
-                    for (line in lines) {
-                        g2.drawString(line, x, y)
-                        y += fm.height  // 移动到下一行
-                    }
-
-                    g2.color = oldColor
+                    drawPlaceholder(g2, fm, colors)
                 }
 
                 // 绘制命令建议（灰色提示）
-                if (suggestionText != null) {
-                    val currentText = this.text.trim()
-                    if (currentText.startsWith("/") && !currentText.contains(" ")) {
-                        val oldColor = g2.color
-                        g2.color = colors.textMuted
-                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-                        // 计算当前文本的宽度，在光标位置绘制建议
-                        val currentTextWidth = fm.stringWidth(currentText)
-                        val x = insets.left + currentTextWidth
-                        val y = insets.top + fm.ascent
-
-                        // 绘制建议文本（去掉已输入的部分）
-                        val suggestion = suggestionText!!.substring(currentText.length)
-                        g2.drawString(suggestion as String, x, y)
-
-                        g2.color = oldColor
-                    }
-                }
+                suggestionText?.let { drawSuggestion(g2, fm, colors, it) }
             }
         }
 
@@ -137,11 +106,7 @@ class CliInputArea(
             border = null
             isOpaque = false
             viewport.isOpaque = false
-
-            // 隐藏滚动条但保留滚动功能
-            verticalScrollBar.apply {
-                preferredSize = Dimension(0, 0)
-            }
+            verticalScrollBar.apply { preferredSize = Dimension(0, 0) }
         }
 
         // 添加组件（使用绝对布局）
@@ -169,25 +134,52 @@ class CliInputArea(
 
         // 文本变化监听（用于自动增高和命令建议）
         textArea.document.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: javax.swing.event.DocumentEvent?) {
-                updatePlaceholder()
-                updateHeight()
-                updateSuggestion()
-            }
-            override fun removeUpdate(e: javax.swing.event.DocumentEvent?) {
-                updatePlaceholder()
-                updateHeight()
-                updateSuggestion()
-            }
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent?) {
-                updatePlaceholder()
-                updateHeight()
-                updateSuggestion()
-            }
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent?) = onTextChanged()
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent?) = onTextChanged()
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent?) = onTextChanged()
         })
 
         // 键盘快捷键
         setupActions()
+    }
+
+    private fun drawPlaceholder(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette) {
+        val oldColor = g2.color
+        g2.color = colors.textMuted
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+        val x = insets.left
+        var y = insets.top + fm.ascent
+
+        placeholderText.split("\n").forEach { line ->
+            g2.drawString(line, x, y)
+            y += fm.height
+        }
+
+        g2.color = oldColor
+    }
+
+    private fun drawSuggestion(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette, suggestion: String) {
+        val currentText = textArea.text.trim()
+        if (!currentText.startsWith("/") || currentText.contains(" ")) return
+
+        val oldColor = g2.color
+        g2.color = colors.textMuted
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+        val currentTextWidth = fm.stringWidth(currentText)
+        val x = insets.left + currentTextWidth
+        val y = insets.top + fm.ascent
+
+        g2.drawString(suggestion.substring(currentText.length), x, y)
+
+        g2.color = oldColor
+    }
+
+    private fun onTextChanged() {
+        updatePlaceholder()
+        updateHeight()
+        updateSuggestion()
     }
 
     override fun getPreferredSize(): Dimension {
@@ -224,28 +216,24 @@ class CliInputArea(
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
         val colors = ThemeColors.getCurrentColors()
+
         if (isFocused) {
-            // 焦点状态：完整亮度边框
             g2.color = colors.textSecondary
             g2.stroke = BasicStroke(1.5f)
         } else {
-            // 非焦点状态：一半亮度的边框
-            g2.color = adjustColorBrightness(colors.textSecondary, 0.5f)
+            g2.color = colors.textSecondary.scaleBrightness(0.5f)
             g2.stroke = BasicStroke(1.0f)
         }
+
         g2.drawRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
     }
 
-    /**
-     * 调整颜色亮度
-     * @param factor 亮度系数，0.0 = 黑色，1.0 = 原色，>1.0 = 更亮
-     */
-    private fun adjustColorBrightness(color: java.awt.Color, factor: Float): java.awt.Color {
+    private fun java.awt.Color.scaleBrightness(factor: Float): java.awt.Color {
         return java.awt.Color(
-            (color.red * factor).toInt().coerceIn(0, 255),
-            (color.green * factor).toInt().coerceIn(0, 255),
-            (color.blue * factor).toInt().coerceIn(0, 255),
-            color.alpha
+            (red * factor).toInt().coerceIn(0, 255),
+            (green * factor).toInt().coerceIn(0, 255),
+            (blue * factor).toInt().coerceIn(0, 255),
+            alpha
         )
     }
 

@@ -2,8 +2,12 @@ package com.smancode.smanagent.ide.ui
 
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.config.SmanAgentConfig
+import com.smancode.smanagent.ide.components.AnalysisProgressDialog
 import com.smancode.smanagent.ide.service.SmanAgentService
 import com.smancode.smanagent.ide.service.storageService
+import com.smancode.smanagent.analysis.service.ProjectAnalysisService
+import com.smancode.smanagent.analysis.model.ProjectAnalysisResult
+import com.smancode.smanagent.analysis.model.AnalysisStatus
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.FlowLayout
@@ -11,6 +15,10 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
 import javax.swing.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,6 +40,8 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     private val logger = LoggerFactory.getLogger(SettingsDialog::class.java)
     private val storage = project.storageService()
+    private val analysisService = ProjectAnalysisService(project)
+    private val analysisScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // HTTP 客户端（复用）
     private val httpClient by lazy {
@@ -107,50 +117,44 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val gbc = createGridBagConstraints()
         var row = 0
 
-        // LLM API 配置
+        row = addAnalysisButtonsSection(panel, gbc, row)
         row = addLlmConfigSection(panel, gbc, row)
-
-        // BGE-M3 配置
         row = addBgeM3ConfigSection(panel, gbc, row)
-
-        // BGE-Reranker 配置
         row = addRerankerConfigSection(panel, gbc, row)
-
-        // 其他配置
         addOtherConfigSection(panel, gbc, row)
 
         return panel
     }
 
-    private fun createGridBagConstraints() = GridBagConstraints().apply {
-        insets = Insets(5, 5, 5, 5)
-        anchor = GridBagConstraints.WEST
+    private fun addAnalysisButtonsSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        var row = startRow
+
+        addSeparator(panel, gbc, row++)
+
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+            add(JButton("项目分析").apply { addActionListener { onProjectAnalysisClick() } })
+            add(JButton("定时分析").apply { isEnabled = false })
+        }
+
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        gbc.weightx = 0.0
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        panel.add(buttonPanel, gbc)
+        row++
+
+        return row
     }
 
     private fun addLlmConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
-        // 分隔线
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JSeparator(), gbc)
-        row++
+        addSeparator(panel, gbc, row++)
+        addSectionTitle(panel, gbc, row++, "LLM API 配置")
 
-        // 标题
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JLabel("<html><b>LLM API 配置</b></html>"), gbc)
-        row++
-
-        // API Key
         row = addLabeledField(panel, gbc, row, "API Key:", llmApiKeyField)
-
-        // Base URL
         row = addLabeledField(panel, gbc, row, "Base URL:", llmBaseUrlField)
-
-        // 模型名称
         row = addLabeledField(panel, gbc, row, "模型名称:", llmModelNameField)
 
         return row
@@ -159,24 +163,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
     private fun addBgeM3ConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
-        // 分隔线
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JSeparator(), gbc)
-        row++
+        addSeparator(panel, gbc, row++)
+        addSectionTitle(panel, gbc, row++, "BGE-M3 向量化配置")
 
-        // 标题
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JLabel("<html><b>BGE-M3 向量化配置</b></html>"), gbc)
-        row++
-
-        // 端点
         row = addLabeledField(panel, gbc, row, "端点:", bgeEndpointField)
-
-        // API Key（可选）
         row = addLabeledField(panel, gbc, row, "API Key (可选):", bgeApiKeyField)
 
         return row
@@ -185,24 +175,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
     private fun addRerankerConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
-        // 分隔线
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JSeparator(), gbc)
-        row++
+        addSeparator(panel, gbc, row++)
+        addSectionTitle(panel, gbc, row++, "BGE-Reranker 重排配置")
 
-        // 标题
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JLabel("<html><b>BGE-Reranker 重排配置</b></html>"), gbc)
-        row++
-
-        // 端点
         row = addLabeledField(panel, gbc, row, "端点:", rerankerEndpointField)
-
-        // API Key（可选）
         row = addLabeledField(panel, gbc, row, "API Key (可选):", rerankerApiKeyField)
 
         return row
@@ -211,24 +187,11 @@ class SettingsDialog(private val project: Project) : JDialog() {
     private fun addOtherConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
-        // 分隔线
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JSeparator(), gbc)
-        row++
+        addSeparator(panel, gbc, row++)
+        addSectionTitle(panel, gbc, row++, "其他配置")
 
-        // 标题
-        gbc.gridx = 0
-        gbc.gridy = row
-        gbc.gridwidth = 2
-        panel.add(JLabel("<html><b>其他配置</b></html>"), gbc)
-        row++
-
-        // 项目名称
         row = addLabeledField(panel, gbc, row, "项目名称:", projectKeyField)
 
-        // 保存历史
         gbc.gridx = 0
         gbc.gridy = row
         gbc.gridwidth = 2
@@ -239,17 +202,158 @@ class SettingsDialog(private val project: Project) : JDialog() {
         return row
     }
 
-    private fun addLabeledField(panel: JPanel, gbc: GridBagConstraints, row: Int, label: String, field: JTextField): Int {
+    private fun addSeparator(panel: JPanel, gbc: GridBagConstraints, row: Int) {
         gbc.gridx = 0
         gbc.gridy = row
-        gbc.gridwidth = 1
+        gbc.gridwidth = 2
         gbc.weightx = 0.0
-        gbc.fill = GridBagConstraints.NONE
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        panel.add(JSeparator(), gbc)
+    }
+
+    private fun addSectionTitle(panel: JPanel, gbc: GridBagConstraints, row: Int, title: String) {
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        panel.add(JLabel("<html><b>$title</b></html>"), gbc)
+    }
+
+    private fun addAnalysisButtons(panel: JPanel, gbc: GridBagConstraints): Int {
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+            add(JButton("项目分析").apply { addActionListener { onProjectAnalysisClick() } })
+            add(JButton("定时分析").apply { isEnabled = false })
+        }
+
+        gbc.gridx = 0
+        gbc.gridy = 0
+        gbc.gridwidth = 2
+        gbc.weightx = 0.0
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        panel.add(buttonPanel, gbc)
+
+        return 1
+    }
+
+    /**
+     * 项目分析按钮点击处理
+     */
+    private fun onProjectAnalysisClick() {
+        logger.info("点击项目分析按钮: projectKey={}", project.name)
+
+        // 先保存配置
+        val config = collectConfig()
+        if (config == null) {
+            return
+        }
+
+        saveConfig(config)
+
+        val progressDialog = AnalysisProgressDialog(null, project.name).apply { isVisible = true }
+        val progressCallback = createProgressCallback(progressDialog)
+
+        analysisScope.launch {
+            try {
+                analysisService.init()
+                val result = analysisService.executeAnalysis(progressCallback)
+
+                SwingUtilities.invokeLater {
+                    progressDialog.onAnalysisComplete(result.status == AnalysisStatus.COMPLETED)
+                    showAnalysisSummary(result)
+                    progressDialog.dispose()
+                }
+            } catch (e: Exception) {
+                logger.error("项目分析失败", e)
+                SwingUtilities.invokeLater {
+                    progressDialog.onAnalysisComplete(false)
+                    progressDialog.dispose()
+                    showError("项目分析失败：${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun createProgressCallback(dialog: AnalysisProgressDialog) = object : com.smancode.smanagent.analysis.pipeline.ProjectAnalysisPipeline.ProgressCallback {
+        override fun onStepStart(stepName: String, description: String) {
+            SwingUtilities.invokeLater { dialog.onStepStart(stepName, description) }
+        }
+
+        override fun onStepComplete(stepName: String, result: com.smancode.smanagent.analysis.model.StepResult) {
+            SwingUtilities.invokeLater { dialog.onStepComplete(stepName, result) }
+        }
+
+        override fun onStepFailed(stepName: String, error: String) {
+            SwingUtilities.invokeLater { dialog.onStepFailed(stepName, error) }
+        }
+    }
+
+    /**
+     * 显示分析总结
+     */
+    private fun showAnalysisSummary(result: ProjectAnalysisResult) {
+        val completedSteps = result.steps.values.count { it.status == com.smancode.smanagent.analysis.model.StepStatus.COMPLETED }
+        val duration = result.endTime?.let { (it - result.startTime) / 1000 }?.let { "${it}秒" } ?: "未知"
+
+        val message = buildString {
+            append("项目分析完成！\n\n")
+            append("项目: ${result.projectKey}\n")
+            append("状态: ${result.status.text}\n")
+            append("耗时: $duration\n")
+            append("步骤: $completedSteps/${result.steps.size} 完成\n\n")
+
+            append("步骤详情:\n")
+            result.steps.forEach { (_, stepResult) ->
+                append("  ${stepResult.status.icon} ${stepResult.stepDescription}")
+                stepResult.error?.let { append(" - $it") }
+                append("\n")
+            }
+        }
+
+        JOptionPane.showMessageDialog(this, message, "分析结果", result.status.messageType)
+    }
+
+    private val AnalysisStatus.text: String
+        get() = when (this) {
+            AnalysisStatus.COMPLETED -> "全部完成"
+            AnalysisStatus.PARTIAL -> "部分完成"
+            AnalysisStatus.FAILED -> "分析失败"
+            else -> "未知状态"
+        }
+
+    private val AnalysisStatus.messageType: Int
+        get() = when (this) {
+            AnalysisStatus.COMPLETED -> JOptionPane.INFORMATION_MESSAGE
+            AnalysisStatus.PARTIAL -> JOptionPane.WARNING_MESSAGE
+            else -> JOptionPane.ERROR_MESSAGE
+        }
+
+    private val com.smancode.smanagent.analysis.model.StepStatus.icon: String
+        get() = when (this) {
+            com.smancode.smanagent.analysis.model.StepStatus.COMPLETED -> "✓"
+            com.smancode.smanagent.analysis.model.StepStatus.FAILED -> "✗"
+            com.smancode.smanagent.analysis.model.StepStatus.SKIPPED -> "⊘"
+            else -> "⏸"
+        }
+
+    private fun createGridBagConstraints() = GridBagConstraints().apply {
+        insets = Insets(5, 5, 5, 5)
+        anchor = GridBagConstraints.WEST
+    }
+
+    private fun addLabeledField(panel: JPanel, gbc: GridBagConstraints, row: Int, label: String, field: JTextField): Int {
+        gbc.apply {
+            gridx = 0
+            gridy = row
+            gridwidth = 1
+            weightx = 0.0
+            fill = GridBagConstraints.NONE
+        }
         panel.add(JLabel(label), gbc)
 
-        gbc.gridx = 1
-        gbc.weightx = 1.0
-        gbc.fill = GridBagConstraints.HORIZONTAL
+        gbc.apply {
+            gridx = 1
+            weightx = 1.0
+            fill = GridBagConstraints.HORIZONTAL
+        }
         panel.add(field, gbc)
 
         return row + 1
@@ -415,41 +519,26 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val projectKey = projectKeyField.text.trim()
 
         // 验证必填字段
-        if (llmBaseUrl.isEmpty()) {
-            showError("LLM Base URL 不能为空！")
-            return null
-        }
-
-        if (llmModelName.isEmpty()) {
-            showError("LLM 模型名称不能为空！")
-            return null
-        }
-
-        if (bgeEndpoint.isEmpty()) {
-            showError("BGE-M3 端点不能为空！")
-            return null
-        }
-
-        if (rerankerEndpoint.isEmpty()) {
-            showError("Reranker 端点不能为空！")
-            return null
-        }
-
-        if (projectKey.isEmpty()) {
-            showError("项目名称不能为空！")
+        if (!validateRequiredFields(llmBaseUrl, "LLM Base URL") ||
+            !validateRequiredFields(llmModelName, "LLM 模型名称") ||
+            !validateRequiredFields(bgeEndpoint, "BGE-M3 端点") ||
+            !validateRequiredFields(rerankerEndpoint, "Reranker 端点") ||
+            !validateRequiredFields(projectKey, "项目名称")) {
             return null
         }
 
         return ConfigData(
-            llmApiKey = llmApiKey,
-            llmBaseUrl = llmBaseUrl,
-            llmModelName = llmModelName,
-            bgeEndpoint = bgeEndpoint,
-            bgeApiKey = bgeApiKey,
-            rerankerEndpoint = rerankerEndpoint,
-            rerankerApiKey = rerankerApiKey,
-            projectKey = projectKey
+            llmApiKey, llmBaseUrl, llmModelName,
+            bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey, projectKey
         )
+    }
+
+    private fun validateRequiredFields(value: String, fieldName: String): Boolean {
+        if (value.isEmpty()) {
+            showError("$fieldName 不能为空！")
+            return false
+        }
+        return true
     }
 
     /**

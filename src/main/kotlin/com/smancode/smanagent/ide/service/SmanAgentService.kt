@@ -22,6 +22,10 @@ import com.smancode.smanagent.smancode.prompt.PromptLoaderService
 import com.smancode.smanagent.tools.ToolExecutor
 import com.smancode.smanagent.tools.ToolRegistry
 import com.smancode.smanagent.tools.ide.LocalToolFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Consumer
@@ -126,11 +130,31 @@ class SmanAgentService(private val project: Project) : Disposable {
                 dynamicPromptInjector = dynamicPromptInjector
             )
 
+            // 初始化项目分析服务
+            initializeProjectAnalysisService()
+
             logger.info("SmanAgent 服务初始化完成")
         } catch (e: Exception) {
             logger.error("初始化 SmanAgent 服务失败", e)
             initializationError = formatInitializationError(e)
             throw e
+        }
+    }
+
+    /**
+     * 初始化项目分析服务
+     */
+    private fun initializeProjectAnalysisService() {
+        // 使用 CoroutineScope
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch {
+            try {
+                val analysisService = com.smancode.smanagent.analysis.service.ProjectAnalysisService(project)
+                analysisService.init()
+                logger.info("项目分析服务初始化完成")
+            } catch (e: Exception) {
+                logger.warn("项目分析服务初始化失败（非关键）", e)
+            }
         }
     }
 
