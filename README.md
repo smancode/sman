@@ -253,28 +253,42 @@ open build/reports/tests/test/index.html
 
 ### 数据处理
 - **Jackson**: 2.16.0（JSON 处理）
+- **jackson-module-kotlin**: 2.16.0（Kotlin Jackson 模块）
 - **org.json**: 20231013（JSON 解析）
 
 ### 渲染与日志
-- **Flexmark**: 0.64.8（Markdown 渲染）
+- **Flexmark**: 0.64.8（Markdown 渲染，支持表格、GFM 等）
+- **Flexmark Extensions**: 表格、删除线、自动链接等扩展
 - **Logback**: 1.4.11（日志框架）
 - **SLF4J**: 2.0.9（日志门面）
+
+### 数据库与存储
+- **H2 Database**: 2.2.22（关系数据库，用于 L3 冷数据存储）
+- **JVector**: 3.0.0（向量搜索引擎，用于 L2 温数据索引）
+- **HikariCP**: 5.0.1（JDBC 连接池）
 
 ### 测试框架
 - **JUnit**: 5.10.1（测试框架）
 - **MockK**: 1.13.8（Kotlin Mock 框架）
-- **Mockito**: 5.1.0（Java Mock 框架）
+- **Mockito-Kotlin**: 5.1.0（Kotlin Mockito 包装）
 - **Kotlin Test**: 1.9.20（Kotlin 测试工具）
 - **Kotlin Coroutines Test**: 1.7.3（协程测试）
+- **Spring Boot Test**: 3.2.0（Spring 测试支持，可选）
 
 ### 向量化服务（可选，需自行配置）
 - **BGE-M3**: 文本嵌入模型（通过 HTTP API 调用）
 - **BGE-Reranker**: 结果重排序服务（通过 HTTP API 调用）
 
-### 注意
-- BGE-M3 和 Reranker 服务需要单独部署和配置
-- 不依赖特定的向量数据库（如 JVector），向量数据可存储在任意向量库
-- 不包含 H2 数据库依赖
+### 分层缓存架构
+**三层缓存设计（防止内存爆炸）**：
+- **L1 (Hot)**: 内存 LRU 缓存（默认 100 条）
+- **L2 (Warm)**: JVector 向量索引（持久化磁盘）
+- **L3 (Cold)**: H2 数据库（持久化存储）
+
+**AST 分层缓存**：
+- **L1**: 内存缓存（最新解析的 AST）
+- **L2**: 磁盘文件缓存（序列化对象）
+- **L3**: 实时解析（从源代码）
 
 ## 测试覆盖
 

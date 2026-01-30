@@ -5,11 +5,24 @@ package com.smancode.smanagent.analysis.config
  *
  * @property type 向量数据库类型
  * @property jvector JVector 配置
+ * @property basePath 基础路径
+ * @property storePath 存储路径
+ * @property databasePath H2 数据库路径
+ * @property vectorDimension 向量维度
+ * @property l1CacheSize L1 缓存大小
+ * @property l1AccessThreshold L1 访问阈值（升级到 L1）
+ * @property l2AccessThreshold L2 访问阈值（升级到 L2）
  */
 data class VectorDatabaseConfig(
     val type: VectorDbType,
     val jvector: JVectorConfig,
-    val basePath: String
+    val basePath: String = "${System.getProperty("user.home")}/.smanunion/vector_store",
+    val storePath: String = "${System.getProperty("user.home")}/.smanunion/vector_store",
+    val databasePath: String = "${System.getProperty("user.home")}/.smanunion/analysis.mv.db",
+    val vectorDimension: Int = 1024,
+    val l1CacheSize: Int = 100,
+    val l1AccessThreshold: Int = 10,
+    val l2AccessThreshold: Int = 3
 )
 
 /**
@@ -49,3 +62,4 @@ data class JVectorConfig(
         require(rerankerThreshold in 0.0..1.0) { "rerankerThreshold must be between 0.0 and 1.0" }
     }
 }
+

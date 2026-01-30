@@ -507,15 +507,27 @@ llm.response.max.tokens=4000
 - **Kotlin Coroutines Test**: 1.7.3（协程测试）
 - **Spring Boot Test**: 3.2.0（Spring 测试支持，可选）
 
-### 向量化服务（可选，需自行配置）
-- **BGE-M3**: 文本嵌入模型（通过 HTTP API 调用，不包含在依赖中）
-- **BGE-Reranker**: 结果重排序服务（通过 HTTP API 调用，不包含在依赖中）
+### 数据库与存储（核心组件）
+- **H2 Database**: 2.2.22（关系数据库，用于 L3 冷数据存储和配置管理）
+- **JVector**: 3.0.0（向量搜索引擎，用于 L2 温数据索引和相似度搜索）
+- **HikariCP**: 5.0.1（JDBC 连接池，优化数据库性能）
 
-### 重要说明
-1. **BGE 服务**：不包含在项目依赖中，需要单独部署和配置
-2. **向量数据库**：不依赖特定的向量数据库（如 JVector），向量数据可存储在任意向量库
-3. **数据库**：不包含 H2 或其他数据库依赖
-4. **Spring Boot**：仅在测试中使用，不是插件运行时依赖
+### 向量化服务（可选，需自行配置）
+- **BGE-M3**: 文本嵌入模型（通过 HTTP API 调用）
+- **BGE-Reranker**: 结果重排序服务（通过 HTTP API 调用）
+
+### 三层缓存架构（核心设计）
+**向量存储三层缓存**（防止内存爆炸）：
+- **L1 (Hot)**: 内存 LRU 缓存（`LRUCache.kt`，默认 100 条）
+- **L2 (Warm)**: JVector 向量索引（`SimpleVectorStore.kt` + JVector 集成）
+- **L3 (Cold)**: H2 数据库（`H2DatabaseService.kt`，持久化存储）
+- 实现：`TieredVectorStore.kt`
+
+**AST 分层缓存**（防止内存爆炸）：
+- **L1**: 内存缓存（最新解析的 AST，100 条上限）
+- **L2**: 磁盘文件缓存（序列化对象，`~/.smanunion/ast_cache/`）
+- **L3**: 实时解析（从源代码重新解析）
+- 实现：`AstCacheService.kt`
 
 ## 提交前检查
 

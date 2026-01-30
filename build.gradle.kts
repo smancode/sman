@@ -52,6 +52,15 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.9")
     implementation("ch.qos.logback:logback-classic:1.4.11")
 
+    // H2 数据库
+    implementation("com.h2database:h2:2.2.224")
+
+    // JVector 向量数据库
+    implementation("io.github.jbellis:jvector:3.0.0")
+
+    // JDBC 连接池
+    implementation("com.zaxxer:HikariCP:5.0.1")
+
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.20")
