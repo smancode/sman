@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import javax.swing.SwingUtilities
 
 /**
  * 设置对话框
@@ -278,12 +279,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
         // 保存配置（即使测试失败也保存）
         saveConfig(config)
 
-        // 测试服务可用性
-        val testResults = testServices(config)
+        // 显示进度对话框
+        val progressLabel = JLabel("正在测试服务可用性，请稍候...")
+        val progressPane = JOptionPane(progressLabel, JOptionPane.INFORMATION_MESSAGE)
+        val dialog = progressPane.createDialog(this, "测试中")
+        dialog.isModal = false
+        dialog.isVisible = true
 
-        // 显示结果
-        showResultMessage(config, testResults)
-        dispose()
+        // 在后台线程测试服务
+        Thread {
+            val testResults = testServices(config)
+
+            // 在 EDT 线程更新 UI
+            SwingUtilities.invokeLater {
+                dialog.dispose()
+                showResultMessage(config, testResults)
+                dispose()
+            }
+        }.start()
     }
 
     /**
