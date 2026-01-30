@@ -105,22 +105,42 @@ H2 是纯 Java 实现的嵌入式关系数据库，无需外部安装和配置�
 - **SQL 兼容**：支持 PostgreSQL 语法模式
 - **连接池**：使用 HikariCP 优化性能
 
-**存储位置**：
+**存储位置**（按项目隔离）：
 ```
-~/.smanunion/analysis.mv.db    # 主数据库文件
-~/.smanunion/analysis.mv.db.trace.db  # 追踪日志（可选）
+~/.smanunion/{projectKey}/analysis.mv.db    # 主数据库文件
+~/.smanunion/{projectKey}/analysis.trace.db # 追踪日志（可选）
 ```
 
-**连接方式**：
-```kotlin
-// 应用内使用（通过 H2DatabaseService）
-val h2Service = H2DatabaseService(vectorDbConfig)
-h2Service.init()  // 初始化表结构
+**快速连接方式**：
 
-// 外部连接（用于调试）
-// JDBC URL: jdbc:h2:~/.smanunion/analysis;MODE=PostgreSQL;AUTO_SERVER=TRUE
-// 用户名: sa
-// 密码: (空)
+1. **使用命令行脚本**（推荐）：
+```bash
+# 连接到 H2 Shell（交互式 SQL）
+./h2-shell.sh smanunion
+
+# 常用 SQL 命令
+SHOW TABLES;              # 查看所有表
+SELECT * FROM config;     # 查询配置表
+SELECT COUNT(*) FROM vector_fragments;  # 查询向量片段数量
+exit;                     # 退出
+```
+
+2. **使用 IntelliJ IDEA Database 工具**：
+```
+Database → + → Data Source → H2
+
+JDBC URL: jdbc:h2:/Users/xxx/.smanunion/smanunion/analysis;MODE=PostgreSQL;AUTO_SERVER=TRUE
+User: sa
+Password: (留空)
+```
+
+3. **使用命令行直接执行 SQL**：
+```bash
+# 执行 SQL 查询文件
+./h2-shell.sh smanunion < h2-queries.sql
+
+# 或使用管道
+echo "SELECT * FROM config;" | ./h2-shell.sh smanunion
 ```
 
 **表结构**：
@@ -128,6 +148,34 @@ h2Service.init()  // 初始化表结构
 - `metadata` - 元数据存储
 - `sop` - 标准操作流程
 - `vector_fragments` - 向量片段（L3 冷数据）
+
+**常用 SQL 操作**：
+
+```sql
+-- 查询所有配置
+SELECT * FROM config;
+
+-- 查询冷数据统计
+SELECT cache_level, COUNT(*) as count
+FROM vector_fragments
+GROUP BY cache_level;
+
+-- 更新向量片段缓存级别
+UPDATE vector_fragments
+SET cache_level = 'hot'
+WHERE id = 'some_id';
+
+-- 清理过期冷数据（30天未访问且访问次数<5）
+DELETE FROM vector_fragments
+WHERE cache_level = 'cold'
+  AND last_accessed < DATEADD('DAY', -30, CURRENT_TIMESTAMP)
+  AND access_count < 5;
+
+-- 备份数据库
+SCRIPT TO '/path/to/backup.sql';
+```
+
+更多 SQL 示例请参考 `h2-queries.sql` 文件。
 
 #### BGE-M3 和 Reranker 部署（可选）
 
