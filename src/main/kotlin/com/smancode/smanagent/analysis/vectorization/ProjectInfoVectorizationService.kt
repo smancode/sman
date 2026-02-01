@@ -89,6 +89,13 @@ class ProjectInfoVectorizationService(
             description = "配置文件和映射文件",
             contentPrefix = "XML配置:",
             tags = listOf("xml", "config", "mapper")
+        ),
+        "external_apis" to VectorizationConfig(
+            type = "external_apis",
+            title = "外部API调用",
+            description = "项目对外部服务的API调用",
+            contentPrefix = "外部API调用:",
+            tags = listOf("external", "api", "feign", "retrofit")
         )
     )
 
@@ -133,6 +140,12 @@ class ProjectInfoVectorizationService(
      */
     suspend fun vectorizeXmlCodes(data: String): Int =
         vectorizeData("xml_configs", data)
+
+    /**
+     * 向量化外部 API 调用
+     */
+    suspend fun vectorizeExternalApis(data: String): Int =
+        vectorizeData("external_apis", data)
 
     /**
      * 通用向量化方法

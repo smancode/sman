@@ -79,6 +79,20 @@ com.smancode.smanagent/
 │   └── walkthrough/             # 代码走读
 │       └── CodeWalkthroughGenerator # 代码走读生成器
 │
+├── verification/                # Web 验证服务 (新增)
+│   ├── api/                     # REST API 控制器
+│   │   └── VerificationApiControllers # API 端点
+│   ├── service/                 # 验证服务
+│   │   ├── ExpertConsultService # 专家咨询服务
+│   │   ├── VectorSearchService  # 向量搜索服务
+│   │   ├── AnalysisQueryService # 分析查询服务
+│   │   └── H2QueryService       # H2 数据库查询
+│   ├── model/                   # 数据模型
+│   │   ├── ExpertConsultModels  # 专家咨询模型
+│   │   ├── VectorSearchModels   # 向量搜索模型
+│   │   └── AnalysisQueryModels  # 分析查询模型
+│   └── VerificationWebService   # Web 服务主类
+│
 ├── tools/                        # 工具系统
 │   ├── Tool                    # 工具接口
 │   ├── ToolRegistry            # 工具注册表
@@ -163,6 +177,69 @@ val relativePath = params["relativePath"] as? String ?: "default"
 ```
 
 ## 项目分析模块
+
+### 查看分析结果
+
+#### 方式一：Web 验证服务（推荐）
+
+启动 Web 验证服务后，可通过 REST API 查看分析结果：
+
+```bash
+# 启动验证服务（默认端口 8080）
+./scripts/verification-web.sh
+
+# 自定义端口
+VERIFICATION_PORT=9090 ./scripts/verification-web.sh
+```
+
+**可用 API 端点**：
+
+| API | 功能 | 文件 |
+|-----|------|------|
+| `POST /api/verify/expert_consert` | 专家咨询（直接 LLM 查询） | `ExpertConsultService.kt` |
+| `POST /api/verify/semantic_search` | 语义搜索（BGE 召回 + Reranker） | `VectorSearchService.kt` |
+| `POST /api/verify/analysis_results` | 查询分析模块结果 | `AnalysisQueryService.kt` |
+| `POST /api/verify/query_vectors` | 查询向量数据 | `H2QueryService.kt` |
+| `POST /api/verify/query_projects` | 查询项目列表 | `H2QueryService.kt` |
+| `POST /api/verify/execute_sql` | 执行安全 SQL | `H2QueryService.kt` |
+
+**示例：查询分析结果**
+
+```bash
+# 查询 API 入口
+curl -X POST http://localhost:8080/api/verify/analysis_results \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "module": "api_entries",
+    "projectKey": "smanunion",
+    "page": 0,
+    "size": 20
+  }'
+
+# 专家咨询
+curl -X POST http://localhost:8080/api/verify/expert_consert \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "项目中有哪些 API 入口？",
+    "projectKey": "smanunion",
+    "topK": 10
+  }'
+```
+
+**详细文档**：
+- API 文档：[docs/VERIFICATION_API.md](docs/VERIFICATION_API.md)
+- 使用示例：[docs/VERIFICATION_EXAMPLES.md](docs/VERIFICATION_EXAMPLES.md)
+
+#### 方式二：通过对话询问
+
+在聊天面板中直接提问，LLM 通过工具系统访问分析结果。
+
+#### 方式三：H2 数据库直接查询
+
+```bash
+# 连接到 H2 Shell
+./h2-shell.sh <projectKey>
+```
 
 ### 12 个分析模块
 

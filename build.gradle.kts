@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm") version "1.9.20"
     kotlin("plugin.serialization") version "1.9.20"
     id("org.jetbrains.intellij") version "1.17.3"
+    id("org.springframework.boot") version "3.2.0" apply false
 }
 
 group = "com.smancode.sman"
@@ -33,10 +34,9 @@ dependencies {
     // HTTP 客户端
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Spring Web (用于 LLM 调用)
-    implementation("org.springframework.boot:spring-boot-starter-web:3.2.0") {
-        exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
-    }
+    // Spring Web (用于 LLM 调用和验证服务)
+    implementation("org.springframework.boot:spring-boot-starter-web:3.2.0")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc:3.2.0")
 
     // WebSocket 客户端（纯 Java 实现）
     implementation("org.java-websocket:Java-WebSocket:1.5.4")
@@ -47,6 +47,9 @@ dependencies {
 
     // 备用 JSON 库（向后兼容）
     implementation("org.json:json:20231013")
+
+    // Spring Boot 插件需要的依赖
+    implementation("org.springframework.boot:spring-boot:3.2.0")
 
     // 日志
     implementation("org.slf4j:slf4j-api:2.0.9")
@@ -68,9 +71,9 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("org.springframework.boot:spring-boot-starter-test:3.2.0") {
-        exclude(group = "org.springframework.boot", module = "spring-boot-starter-tomcat")
-    }
+    testImplementation("org.springframework.boot:spring-boot-starter-test:3.2.0")
+    // MockWebServer for HTTP testing
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 // IntelliJ Platform 配置
@@ -154,5 +157,25 @@ tasks {
     // 发布插件到 JetBrains Marketplace（可选）
     publishPlugin {
         token.set(System.getenv("PUBLISH_TOKEN"))
+    }
+
+    // Spring Boot 运行任务（仅运行 VerificationWebService）
+    register("runVerification") {
+        group = "application"
+        description = "运行 VerificationWebService"
+
+        dependsOn("compileKotlin", "processResources")
+
+        doLast {
+            val cp = sourceSets.main.get().runtimeClasspath
+            val mc = "com.smancode.smanagent.verification.VerificationWebServiceKt"
+
+            javaexec {
+                classpath(cp)
+                mainClass.set(mc)
+                jvmArgs("-Dserver.port=${project.findProperty("verification.port") ?: 8080}")
+                jvmArgs("-Dlogging.level.com.smancode.smanagent=INFO")
+            }
+        }
     }
 }

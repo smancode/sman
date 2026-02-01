@@ -1,0 +1,294 @@
+### SmanAgent Web 验证服务 API 测试
+### 服务地址: http://localhost:8080
+### 项目: autoloop
+
+##############################################################################
+# 健康检查
+##############################################################################
+
+### 1. 健康检查
+GET http://localhost:8080/actuator/health
+
+##############################################################################
+# 分析结果查询 API
+##############################################################################
+
+### 2. 查询项目结构 (project_structure)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "project_structure",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 3. 查询技术栈 (tech_stack_detection)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "tech_stack_detection",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 4. 查询 AST 扫描结果 (ast_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "ast_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 5. 查询数据库实体 (db_entity_detection)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "db_entity_detection",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 6. 查询 API 入口 (api_entry_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "api_entry_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 7. 查询外调接口 (external_api_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "external_api_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 8. 查询枚举 (enum_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "enum_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 9. 查询公共类 (common_class_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "common_class_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 10. 查询 XML 代码 (xml_code_scanning)
+POST http://localhost:8080/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "xml_code_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+##############################################################################
+# 专家咨询 API
+##############################################################################
+
+### 11. 专家咨询：查询项目中的 API 入口
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些 API 入口？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+### 12. 专家咨询：查询数据库实体
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些数据库实体？它们之间的关系是什么？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+### 13. 专家咨询：查询项目整体架构
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "这个项目的整体架构是什么？使用了哪些技术栈？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+##############################################################################
+# 语义搜索 API
+##############################################################################
+
+### 14. 语义搜索：还款入口和还款类型
+POST http://localhost:8080/api/verify/semantic_search
+Content-Type: application/json
+
+{
+  "query": "还款入口是哪个，有哪些还款类型",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true,
+  "rerankTopN": 5
+}
+
+### 15. 语义搜索：用户登录
+POST http://localhost:8080/api/verify/semantic_search
+Content-Type: application/json
+
+{
+  "query": "用户登录验证",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true,
+  "rerankTopN": 5
+}
+
+##############################################################################
+# H2 数据库查询 API
+##############################################################################
+
+### 16. 查询向量数据
+POST http://localhost:8080/api/verify/query_vectors
+Content-Type: application/json
+
+{
+  "page": 0,
+  "size": 20
+}
+
+### 17. 查询项目列表
+POST http://localhost:8080/api/verify/query_projects
+Content-Type: application/json
+
+{
+  "page": 0,
+  "size": 20
+}
+
+### 18. 执行安全 SQL：查询分析步骤
+POST http://localhost:8080/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT STEP_NAME, STATUS FROM ANALYSIS_STEP WHERE PROJECT_KEY = ?",
+  "params": {}
+}
+
+### 19. 执行安全 SQL：查询项目分析结果
+POST http://localhost:8080/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM PROJECT_ANALYSIS",
+  "params": {}
+}
+
+##############################################################################
+# 更多专家咨询测试
+##############################################################################
+
+### 20. 专家咨询：外调接口
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目调用了哪些外部接口？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+### 21. 专家咨询：枚举类型
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些枚举类型？分别代表什么含义？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+### 22. 专家咨询：公共类和工具
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些公共类和工具类？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+### 23. 专家咨询：XML 配置
+POST http://localhost:8080/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些 XML 配置文件？",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true
+}
+
+##############################################################################
+# 更多语义搜索测试
+##############################################################################
+
+### 24. 语义搜索：放款相关
+POST http://localhost:8080/api/verify/semantic_search
+Content-Type: application/json
+
+{
+  "query": "放款流程和入口",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true,
+  "rerankTopN": 5
+}
+
+### 25. 语义搜索：用户管理
+POST http://localhost:8080/api/verify/semantic_search
+Content-Type: application/json
+
+{
+  "query": "用户管理和权限控制",
+  "projectKey": "autoloop",
+  "topK": 10,
+  "enableRerank": true,
+  "rerankTopN": 5
+}

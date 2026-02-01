@@ -278,6 +278,82 @@ SmanAgent 提供 12 个项目分析模块，全面理解项目结构：
 >>> 生成用户注册模块的 SOP 文档
 ```
 
+## 查看分析结果
+
+### 方式一：通过 Web 验证服务（推荐）
+
+启动 Web 验证服务后，可通过 REST API 查看分析结果：
+
+```bash
+# 启动验证服务
+./scripts/verification-web.sh
+
+# 服务启动后，可通过以下 API 查看分析结果
+```
+
+**可用 API 端点**：
+
+| API | 功能 |
+|-----|------|
+| `POST /api/verify/expert_consert` | 专家咨询（直接 LLM 查询） |
+| `POST /api/verify/semantic_search` | 语义搜索（BGE 召回 + Reranker） |
+| `POST /api/verify/analysis_results` | 查询分析模块结果 |
+| `POST /api/verify/query_vectors` | 查询向量数据 |
+| `POST /api/verify/query_projects` | 查询项目列表 |
+| `POST /api/verify/execute_sql` | 执行安全 SQL |
+
+**示例：查询分析结果**
+
+```bash
+# 查询 API 入口
+curl -X POST http://localhost:8080/api/verify/analysis_results \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "module": "api_entries",
+    "projectKey": "smanunion",
+    "page": 0,
+    "size": 20
+  }'
+
+# 查询数据库实体
+curl -X POST http://localhost:8080/api/verify/analysis_results \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "module": "db_entities",
+    "projectKey": "smanunion"
+  }'
+
+# 专家咨询
+curl -X POST http://localhost:8080/api/verify/expert_consert \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "项目中有哪些 API 入口？",
+    "projectKey": "smanunion",
+    "topK": 10
+  }'
+```
+
+**详细文档**：[docs/VERIFICATION_API.md](docs/VERIFICATION_API.md)
+
+### 方式二：通过对话询问
+
+在聊天面板中直接提问：
+- "项目结构是什么样的？"
+- "项目使用了哪些技术栈？"
+- "有哪些 API 入口？"
+- "数据库实体有哪些？"
+
+### 方式三：直接查询 H2 数据库
+
+```bash
+# 连接到 H2 Shell
+./h2-shell.sh smanunion
+
+# 查询分析结果
+SELECT * FROM project_analysis WHERE project_key = 'smanunion';
+SELECT * FROM analysis_step WHERE project_key = 'smanunion';
+```
+
 ## 架构
 
 ```
@@ -471,6 +547,28 @@ open build/reports/tests/test/index.html
 ## 许可证
 
 Apache License 2.0
+
+## 脚本工具
+
+### Web 验证服务
+
+```bash
+# 启动 Web 验证服务（默认端口 8080）
+./scripts/verification-web.sh
+
+# 使用自定义端口
+VERIFICATION_PORT=9090 ./scripts/verification-web.sh
+```
+
+### H2 数据库管理
+
+```bash
+# 连接到 H2 Shell（交互式 SQL）
+./h2-shell.sh <projectKey>
+
+# 执行 SQL 查询文件
+./h2-shell.sh smanunion < h2-queries.sql
+```
 
 ## 联系方式
 

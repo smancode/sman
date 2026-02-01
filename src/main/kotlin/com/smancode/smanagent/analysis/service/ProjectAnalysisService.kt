@@ -45,6 +45,12 @@ class ProjectAnalysisService(
         return "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
     }
 
+    private suspend fun shouldSkipAnalysis(): ProjectAnalysisResult? {
+        val currentMd5 = calculateProjectMd5() ?: return null
+        val cached = getAnalysisResult(forceReload = false) ?: return null
+        return cached.takeIf { it.projectMd5 == currentMd5 }
+    }
+
     /**
      * 初始化服务
      */
@@ -83,30 +89,28 @@ class ProjectAnalysisService(
             return cached
         }
 
-        // 执行分析
-        val result = ProjectAnalysisPipeline(
+        // 执行分析并保存结果
+        val result = executeAnalysisPipeline(progressCallback)
+            .also { it ->
+                calculateProjectMd5()?.let { md5 -> it.copy(projectMd5 = md5) } ?: it
+            }
+            .also { updatedResult ->
+                repository.saveAnalysisResult(updatedResult)
+                cacheResult(updatedResult)
+            }
+
+        return result
+    }
+
+    private suspend fun executeAnalysisPipeline(
+        progressCallback: ProjectAnalysisPipeline.ProgressCallback? = null
+    ): ProjectAnalysisResult {
+        return ProjectAnalysisPipeline(
             repository = repository,
             progressCallback = progressCallback,
             projectKey = project.name,
             project = project
         ).execute(project.name, project)
-
-        // 计算并保存 MD5
-        val resultWithMd5 = calculateProjectMd5()?.let { md5 ->
-            result.copy(projectMd5 = md5)
-        } ?: result
-
-        repository.saveAnalysisResult(resultWithMd5)
-        cacheResult(resultWithMd5)
-
-        return resultWithMd5
-    }
-
-    private suspend fun shouldSkipAnalysis(): ProjectAnalysisResult? {
-        val currentMd5 = calculateProjectMd5() ?: return null
-        val cached = getAnalysisResult(forceReload = false) ?: return null
-
-        return if (cached.projectMd5 == currentMd5) cached else null
     }
 
     private fun calculateProjectMd5(): String? {
@@ -130,7 +134,9 @@ class ProjectAnalysisService(
      */
     suspend fun getAnalysisResult(forceReload: Boolean = false): ProjectAnalysisResult? {
         return if (forceReload) {
-            repository.loadAnalysisResult(project.name)?.also { resultCache[project.name] = it }
+            repository.loadAnalysisResult(project.name)?.also { result ->
+                resultCache[project.name] = result
+            }
         } else {
             resultCache[project.name]
         }

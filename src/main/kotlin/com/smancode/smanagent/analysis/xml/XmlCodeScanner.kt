@@ -1,5 +1,6 @@
 package com.smancode.smanagent.analysis.xml
 
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
@@ -23,23 +24,43 @@ class XmlCodeScanner {
     fun scan(projectPath: Path): List<XmlFileInfo> {
         val xmlFiles = mutableListOf<XmlFileInfo>()
 
-        val resourcesDir = projectPath.resolve("src/main/resources")
-        if (!resourcesDir.toFile().exists()) {
+        // 使用通用工具查找所有 XML 文件（包括子模块）
+        val allXmlFiles = mutableListOf<Path>()
+
+        // 查找所有源代码目录
+        val sourceDirs = ProjectSourceFinder.findAllSourceDirectories(projectPath)
+
+        // 收集所有 resources 目录下的 XML 文件
+        for (srcDir in sourceDirs) {
+            val modulePath = java.nio.file.Path.of(srcDir.modulePath)
+            val resourcesDir = modulePath.resolve("src/main/resources")
+            if (resourcesDir.toFile().exists()) {
+                try {
+                    java.nio.file.Files.walk(resourcesDir)
+                        .filter { it.toFile().isFile }
+                        .filter { it.toString().endsWith(".xml") }
+                        .forEach { allXmlFiles.add(it) }
+                } catch (e: Exception) {
+                    logger.debug("扫描 XML 目录失败: $resourcesDir", e)
+                }
+            }
+        }
+
+        if (allXmlFiles.isEmpty()) {
             return xmlFiles
         }
 
+        logger.info("发现 {} 个 XML 文件", allXmlFiles.size)
+
         try {
-            java.nio.file.Files.walk(resourcesDir)
-                .filter { it.toFile().isFile }
-                .filter { it.toString().endsWith(".xml") }
-                .forEach { file ->
-                    try {
-                        val xmlInfo = parseXmlFile(projectPath, file)
-                        xmlFiles.add(xmlInfo)
-                    } catch (e: Exception) {
-                        logger.debug("Failed to parse XML file: $file", e)
-                    }
+            allXmlFiles.forEach { file ->
+                try {
+                    val xmlInfo = parseXmlFile(projectPath, file)
+                    xmlFiles.add(xmlInfo)
+                } catch (e: Exception) {
+                    logger.debug("Failed to parse XML file: $file", e)
                 }
+            }
         } catch (e: Exception) {
             logger.error("Failed to scan XML files", e)
         }

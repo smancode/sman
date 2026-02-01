@@ -1,6 +1,7 @@
 package com.smancode.smanagent.analysis.step
 
 import com.smancode.smanagent.analysis.model.StepResult
+import com.smancode.smanagent.analysis.model.StepStatus
 
 /**
  * 项目分析步骤接口
@@ -35,9 +36,7 @@ interface AnalysisStep {
      * @param context 分析上下文
      * @return true 如果可以执行，false 表示跳过
      */
-    suspend fun canExecute(context: AnalysisContext): Boolean {
-        return true
-    }
+    suspend fun canExecute(context: AnalysisContext): Boolean = true
 }
 
 /**
@@ -49,27 +48,38 @@ interface AnalysisStep {
  * @property project 项目对象（IntelliJ Project）
  * @property config 配置参数
  * @property previousSteps 前面步骤的结果
+ * @property cachedAnalysis 已缓存的分析结果（用于增量分析）
+ * @property currentProjectMd5 当前项目 MD5
  */
 data class AnalysisContext(
     val projectKey: String,
     val project: com.intellij.openapi.project.Project,
     val config: AnalysisConfig = AnalysisConfig(),
-    val previousSteps: Map<String, StepResult> = emptyMap()
+    val previousSteps: Map<String, StepResult> = emptyMap(),
+    val cachedAnalysis: com.smancode.smanagent.analysis.model.ProjectAnalysisResult? = null,
+    val currentProjectMd5: String? = null
 ) {
     /**
      * 获取前面某个步骤的结果
      */
     fun <T> getPreviousStepResult(stepName: String, parser: (String?) -> T?): T? {
-        val stepResult = previousSteps[stepName]
-        return parser(stepResult?.data)
+        return parser(previousSteps[stepName]?.data)
     }
 
     /**
      * 检查前面某个步骤是否成功
      */
     fun isPreviousStepSuccessful(stepName: String): Boolean {
-        val stepResult = previousSteps[stepName]
-        return stepResult?.status == com.smancode.smanagent.analysis.model.StepStatus.COMPLETED
+        return previousSteps[stepName]?.status == StepStatus.COMPLETED
+    }
+
+    /**
+     * 检查项目是否发生变化
+     */
+    fun hasProjectChanged(): Boolean {
+        val cachedMd5 = cachedAnalysis?.projectMd5
+        val currentMd5 = currentProjectMd5
+        return cachedMd5 != null && currentMd5 != null && cachedMd5 != currentMd5
     }
 }
 

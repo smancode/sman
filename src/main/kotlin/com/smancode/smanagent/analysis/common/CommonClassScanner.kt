@@ -1,5 +1,6 @@
 package com.smancode.smanagent.analysis.common
 
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
@@ -23,30 +24,26 @@ class CommonClassScanner {
     fun scan(projectPath: Path): List<CommonClassInfo> {
         val commonClasses = mutableListOf<CommonClassInfo>()
 
-        val srcMain = projectPath.resolve("src/main/kotlin")
-        if (!srcMain.toFile().exists()) {
-            return commonClasses
-        }
-
         try {
-            java.nio.file.Files.walk(srcMain)
-                .filter { it.toFile().isFile }
-                .filter { it.toString().endsWith(".kt") }
-                .forEach { file ->
-                    try {
-                        val classInfo = parseCommonClass(file)
-                        if (classInfo != null && isCommonClass(classInfo)) {
-                            commonClasses.add(classInfo)
-                        }
-                    } catch (e: Exception) {
-                        logger.debug("Failed to parse file: $file")
-                    }
+            val kotlinFiles = ProjectSourceFinder.findAllKotlinFiles(projectPath)
+            val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
+            val allFiles = kotlinFiles + javaFiles
+
+            logger.info("扫描 {} 个源文件检测公共类 (Kotlin: {}, Java: {})",
+                allFiles.size, kotlinFiles.size, javaFiles.size)
+
+            allFiles.forEach { file ->
+                try {
+                    parseCommonClass(file)?.let { if (isCommonClass(it)) commonClasses.add(it) }
+                } catch (e: Exception) {
+                    logger.debug("解析文件失败: $file", e)
                 }
+            }
         } catch (e: Exception) {
-            logger.error("Failed to scan common classes", e)
+            logger.error("公共类扫描失败", e)
         }
 
-        return commonClasses
+        return commonClasses.also { logger.info("检测到 {} 个公共类", it.size) }
     }
 
     /**

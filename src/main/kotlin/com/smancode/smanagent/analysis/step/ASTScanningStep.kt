@@ -3,6 +3,7 @@ package com.smancode.smanagent.analysis.step
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.smancode.smanagent.analysis.model.StepResult
 import com.smancode.smanagent.analysis.scanner.PsiAstScanner
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.file.Paths
@@ -25,47 +26,34 @@ class ASTScanningStep : AnalysisStep {
             val basePath = context.project.basePath
                 ?: throw IllegalArgumentException("项目路径不存在")
 
-            val srcMainKotlin = Paths.get(basePath, "src/main/kotlin")
-            val srcMainJava = Paths.get(basePath, "src/main/java")
-
+            val projectPath = Paths.get(basePath)
             val scanner = PsiAstScanner()
             val classes = mutableListOf<com.smancode.smanagent.analysis.model.ClassAstInfo>()
 
-            // 扫描 Kotlin 文件
-            if (srcMainKotlin.toFile().exists()) {
-                withContext(Dispatchers.IO) {
-                    java.nio.file.Files.walk(srcMainKotlin)
-                        .filter { it.toFile().isFile }
-                        .filter { it.toString().endsWith(".kt") }
-                        .forEach { file ->
-                            try {
-                                scanner.scanFile(file)?.let { classes.add(it) }
-                            } catch (e: Exception) {
-                                logger.debug("扫描文件失败: $file")
-                            }
-                        }
-                }
-            }
+            // 使用通用工具查找所有源文件
+            val kotlinFiles = ProjectSourceFinder.findAllKotlinFiles(projectPath)
+            val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
 
-            // 扫描 Java 文件
-            if (srcMainJava.toFile().exists()) {
-                withContext(Dispatchers.IO) {
-                    java.nio.file.Files.walk(srcMainJava)
-                        .filter { it.toFile().isFile }
-                        .filter { it.toString().endsWith(".java") }
-                        .forEach { file ->
-                            try {
-                                scanner.scanFile(file)?.let { classes.add(it) }
-                            } catch (e: Exception) {
-                                logger.debug("扫描文件失败: $file")
-                            }
-                        }
+            logger.info("AST 扫描: 发现 {} 个 Kotlin 文件, {} 个 Java 文件", kotlinFiles.size, javaFiles.size)
+
+            // 扫描所有文件
+            val allFiles = kotlinFiles + javaFiles
+            allFiles.forEach { file ->
+                try {
+                    scanner.scanFile(file)?.let { classes.add(it) }
+                } catch (e: Exception) {
+                    logger.debug("扫描文件失败: $file", e)
                 }
             }
 
             val astResult = mapOf(
                 "classes" to classes.map { it.className },
-                "methods" to classes.flatMap { cls -> cls.methods.map { "${cls.className}::${it.name}" } }
+                "methods" to classes.flatMap { cls -> cls.methods.map { "${cls.className}::${it.name}" } },
+                "statistics" to mapOf(
+                    "totalClasses" to classes.size,
+                    "totalMethods" to classes.sumOf { it.methods.size },
+                    "totalFields" to classes.sumOf { it.fields.size }
+                )
             )
             val astResultJson = jsonMapper.writeValueAsString(astResult)
             stepResult.markCompleted(astResultJson)

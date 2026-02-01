@@ -1,5 +1,6 @@
 package com.smancode.smanagent.analysis.enum
 
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
@@ -23,50 +24,64 @@ class EnumScanner {
     fun scan(projectPath: Path): List<EnumInfo> {
         val enums = mutableListOf<EnumInfo>()
 
-        val srcMain = projectPath.resolve("src/main/kotlin")
-        if (!srcMain.toFile().exists()) {
-            return enums
-        }
-
         try {
-            java.nio.file.Files.walk(srcMain)
-                .filter { it.toFile().isFile }
-                .filter { it.toString().endsWith(".kt") }
-                .forEach { file ->
-                    try {
-                        val enumInfo = parseEnumFile(file)
-                        if (enumInfo != null) {
-                            enums.add(enumInfo)
-                        }
-                    } catch (e: Exception) {
-                        logger.debug("Failed to parse enum file: $file")
-                    }
+            val kotlinFiles = ProjectSourceFinder.findAllKotlinFiles(projectPath)
+            val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
+            val allFiles = kotlinFiles + javaFiles
+
+            logger.info("扫描 {} 个源文件检测枚举 (Kotlin: {}, Java: {})",
+                allFiles.size, kotlinFiles.size, javaFiles.size)
+
+            allFiles.forEach { file ->
+                try {
+                    parseEnumFile(file)?.let { enums.add(it) }
+                } catch (e: Exception) {
+                    logger.debug("解析枚举文件失败: $file", e)
                 }
+            }
         } catch (e: Exception) {
-            logger.error("Failed to scan enums", e)
+            logger.error("枚举扫描失败", e)
         }
 
-        return enums
+        return enums.also { logger.info("检测到 {} 个枚举", it.size) }
     }
 
     /**
-     * 解析枚举文件
+     * 解析枚举文件（支持 Kotlin 和 Java）
      */
     private fun parseEnumFile(file: Path): EnumInfo? {
         val content = file.readText()
+        val fileName = file.toString()
+
+        val isKotlin = fileName.endsWith(".kt")
+        val isJava = fileName.endsWith(".java")
 
         // 检查是否包含枚举
-        if (!content.contains("enum class")) {
-            return null
+        val hasEnum = if (isKotlin) {
+            content.contains("enum class")
+        } else if (isJava) {
+            content.contains("enum ") && content.contains("{")
+        } else {
+            false
         }
 
+        if (!hasEnum) return null
+
         // 提取包名
-        val packagePattern = Regex("package\\s+([\\w.]+)")
+        val packagePattern = if (isKotlin) {
+            Regex("package\\s+([\\w.]+)")
+        } else {
+            Regex("package\\s+([\\w.]+);")
+        }
         val packageMatch = packagePattern.find(content)
         val packageName = packageMatch?.groupValues?.get(1) ?: ""
 
         // 提取枚举名
-        val enumPattern = Regex("enum\\s+class\\s+(\\w+)")
+        val enumPattern = if (isKotlin) {
+            Regex("enum\\s+class\\s+(\\w+)")
+        } else {
+            Regex("enum\\s+(\\w+)")
+        }
         val enumMatch = enumPattern.find(content) ?: return null
         val enumName = enumMatch.groupValues[1]
         val qualifiedName = if (packageName.isNotEmpty()) {
@@ -76,7 +91,11 @@ class EnumScanner {
         }
 
         // 提取枚举常量
-        val constants = extractEnumConstants(content)
+        val constants = if (isKotlin) {
+            extractKotlinEnumConstants(content)
+        } else {
+            extractJavaEnumConstants(content)
+        }
 
         // 推断业务含义
         val businessMeaning = inferBusinessMeaning(enumName, constants)
@@ -91,9 +110,9 @@ class EnumScanner {
     }
 
     /**
-     * 提取枚举常量
+     * 提取 Kotlin 枚举常量
      */
-    private fun extractEnumConstants(content: String): List<EnumConstant> {
+    private fun extractKotlinEnumConstants(content: String): List<EnumConstant> {
         val constants = mutableListOf<EnumConstant>()
 
         // 匹配枚举常量
@@ -110,6 +129,55 @@ class EnumScanner {
             // 过滤掉关键字
             if (constantName != "enum" && constantName != "class" &&
                 constantName[0].isUpperCase()) {
+                constants.add(EnumConstant(
+                    name = constantName,
+                    description = null
+                ))
+            }
+        }
+
+        return constants
+    }
+
+    /**
+     * 提取 Java 枚举常量
+     */
+    private fun extractJavaEnumConstants(content: String): List<EnumConstant> {
+        val constants = mutableListOf<EnumConstant>()
+
+        // 找到 enum 开始位置
+        val enumStart = content.indexOf("enum")
+        if (enumStart < 0) return constants
+
+        // 找到 enum 块的 { 和 }
+        val braceStart = content.indexOf('{', enumStart)
+        if (braceStart < 0) return constants
+
+        var braceCount = 0
+        var braceEnd = -1
+        for (i in braceStart until content.length) {
+            when (content[i]) {
+                '{' -> braceCount++
+                '}' -> {
+                    braceCount--
+                    if (braceCount == 0) {
+                        braceEnd = i
+                        break
+                    }
+                }
+            }
+        }
+
+        if (braceEnd < 0) return constants
+
+        val enumContent = content.substring(braceStart + 1, braceEnd)
+
+        // 匹配常量名（支持带参数的常量）
+        val constantPattern = Regex("(\\w+)(?:\\s*\\([^)]*\\))?\\s*(?:,|;)")
+        constantPattern.findAll(enumContent).forEach { match ->
+            val constantName = match.groupValues[1]
+            // 过滤掉关键字
+            if (constantName.isNotEmpty() && constantName[0].isUpperCase()) {
                 constants.add(EnumConstant(
                     name = constantName,
                     description = null

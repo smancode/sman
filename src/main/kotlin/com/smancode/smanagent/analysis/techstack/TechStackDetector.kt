@@ -1,30 +1,36 @@
 package com.smancode.smanagent.analysis.techstack
 
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
-import kotlin.io.path.readText
 
 /**
  * 技术栈识别器
  *
  * 从 build.gradle、pom.xml 等构建文件中识别项目使用的技术栈
+ * 支持多模块项目
  */
 class TechStackDetector {
 
     private val logger = LoggerFactory.getLogger(TechStackDetector::class.java)
 
-    /**
-     * 检测技术栈
-     *
-     * @param projectPath 项目路径
-     * @return 技术栈信息
-     */
     fun detect(projectPath: Path): TechStack {
-        val buildType = detectBuildType(projectPath)
-        val frameworks = detectFrameworks(projectPath, buildType)
+        // 使用通用工具查找所有构建文件
+        val allBuildFiles = ProjectSourceFinder.findAllBuildFiles(projectPath)
+        logger.info("发现 {} 个构建文件", allBuildFiles.size)
+
+        // 检测构建类型
+        val buildType = detectBuildType(allBuildFiles)
+
+        // 从所有构建文件中检测框架
+        val frameworks = detectFrameworks(allBuildFiles)
+
+        // 检测编程语言
         val languages = detectLanguages(projectPath)
-        val databases = detectDatabases(projectPath)
+
+        // 检测数据库
+        val databases = detectDatabases(allBuildFiles)
 
         return TechStack(
             buildType = buildType,
@@ -34,234 +40,138 @@ class TechStackDetector {
         )
     }
 
-    /**
-     * 检测构建类型
-     */
-    private fun detectBuildType(projectPath: Path): BuildType {
+    private fun detectBuildType(allBuildFiles: List<Path>): BuildType {
         return when {
-            projectPath.resolve("build.gradle.kts").toFile().exists() -> BuildType.GRADLE_KTS
-            projectPath.resolve("build.gradle").toFile().exists() -> BuildType.GRADLE
-            projectPath.resolve("pom.xml").toFile().exists() -> BuildType.MAVEN
+            allBuildFiles.any { it.fileName.toString() == "pom.xml" } -> BuildType.MAVEN
+            allBuildFiles.any { it.fileName.toString() == "build.gradle.kts" } -> BuildType.GRADLE_KTS
+            allBuildFiles.any { it.fileName.toString() == "build.gradle" } -> BuildType.GRADLE
             else -> BuildType.UNKNOWN
         }
     }
 
-    /**
-     * 检测框架
-     */
-    private fun detectFrameworks(projectPath: Path, buildType: BuildType): List<FrameworkInfo> {
+    private fun detectFrameworks(allBuildFiles: List<Path>): List<FrameworkInfo> {
         val frameworks = mutableListOf<FrameworkInfo>()
+        val seenFrameworks = mutableSetOf<String>()
 
-        // 从 build.gradle.kts 检测
-        if (buildType == BuildType.GRADLE_KTS || buildType == BuildType.GRADLE) {
-            val buildFile = if (buildType == BuildType.GRADLE_KTS) {
-                projectPath.resolve("build.gradle.kts")
-            } else {
-                projectPath.resolve("build.gradle")
-            }
-
-            if (buildFile.toFile().exists()) {
-                val content = buildFile.readText()
+        for (buildFile in allBuildFiles) {
+            try {
+                val content = java.nio.file.Files.readString(buildFile)
 
                 // Spring Boot
-                if (content.contains("org.springframework.boot")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Spring Boot",
-                        version = extractVersion(content, "spring-boot")
-                    ))
+                if (content.contains("org.springframework.boot") || content.contains("spring-boot")) {
+                    if (seenFrameworks.add("Spring Boot")) {
+                        frameworks.add(FrameworkInfo(name = "Spring Boot", version = extractVersion(content, "spring-boot")))
+                    }
                 }
 
                 // Spring Framework
-                if (content.contains("org.springframework")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Spring Framework",
-                        version = extractVersion(content, "spring-framework")
-                    ))
+                if (content.contains("org.springframework") && !content.contains("spring-boot")) {
+                    if (seenFrameworks.add("Spring Framework")) {
+                        frameworks.add(FrameworkInfo(name = "Spring Framework", version = extractVersion(content, "spring-framework")))
+                    }
                 }
 
                 // Kotlin Coroutines
-                if (content.contains("kotlinx-coroutines")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Kotlin Coroutines",
-                        version = extractVersion(content, "kotlinx-coroutines")
-                    ))
-                }
-
-                // Ktor
-                if (content.contains("io.ktor")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Ktor",
-                        version = extractVersion(content, "ktor")
-                    ))
-                }
-
-                // Micronaut
-                if (content.contains("io.micronaut")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Micronaut",
-                        version = extractVersion(content, "micronaut")
-                    ))
-                }
-            }
-        }
-
-        // 从 pom.xml 检测
-        if (buildType == BuildType.MAVEN) {
-            val pomFile = projectPath.resolve("pom.xml")
-            if (pomFile.toFile().exists()) {
-                val content = pomFile.readText()
-
-                // Spring Boot
-                if (content.contains("spring-boot-starter")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Spring Boot",
-                        version = extractVersion(content, "spring-boot-starter-parent")
-                    ))
+                if (content.contains("kotlinx-coroutines") || content.contains("org.jetbrains.kotlinx:kotlinx-coroutines")) {
+                    if (seenFrameworks.add("Kotlin Coroutines")) {
+                        frameworks.add(FrameworkInfo(name = "Kotlin Coroutines", version = extractVersion(content, "kotlinx-coroutines")))
+                    }
                 }
 
                 // MyBatis
-                if (content.contains("mybatis") || content.contains("mybatis-plus")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "MyBatis",
-                        version = extractVersion(content, "mybatis")
-                    ))
+                if (content.contains("mybatis") || content.contains("mybatis-plus") || content.contains("org.mybatis")) {
+                    if (seenFrameworks.add("MyBatis")) {
+                        frameworks.add(FrameworkInfo(name = "MyBatis", version = extractVersion(content, "mybatis")))
+                    }
                 }
 
                 // Hibernate
-                if (content.contains("hibernate")) {
-                    frameworks.add(FrameworkInfo(
-                        name = "Hibernate",
-                        version = extractVersion(content, "hibernate")
-                    ))
+                if (content.contains("hibernate") || content.contains("org.hibernate")) {
+                    if (seenFrameworks.add("Hibernate")) {
+                        frameworks.add(FrameworkInfo(name = "Hibernate", version = extractVersion(content, "hibernate")))
+                    }
                 }
+
+            } catch (e: Exception) {
+                logger.warn("解析构建文件失败: $buildFile", e)
             }
         }
 
         return frameworks
     }
 
-    /**
-     * 检测编程语言
-     */
     private fun detectLanguages(projectPath: Path): List<LanguageInfo> {
         val languages = mutableListOf<LanguageInfo>()
 
-        val srcMain = projectPath.resolve("src/main")
+        // 使用通用工具查找所有源文件
+        val kotlinFiles = ProjectSourceFinder.findAllKotlinFiles(projectPath)
+        val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
 
-        // 检测 Kotlin
-        val kotlinFiles = countFilesByExtension(srcMain, "kt")
-        if (kotlinFiles > 0) {
-            languages.add(LanguageInfo(
-                name = "Kotlin",
-                version = "1.9",
-                fileCount = kotlinFiles
-            ))
+        if (kotlinFiles.isNotEmpty()) {
+            languages.add(LanguageInfo(name = "Kotlin", version = "1.9", fileCount = kotlinFiles.size))
         }
 
-        // 检测 Java
-        val javaFiles = countFilesByExtension(srcMain, "java")
-        if (javaFiles > 0) {
-            languages.add(LanguageInfo(
-                name = "Java",
-                version = "17",
-                fileCount = javaFiles
-            ))
-        }
-
-        // 检测 Groovy
-        val groovyFiles = countFilesByExtension(srcMain, "groovy")
-        if (groovyFiles > 0) {
-            languages.add(LanguageInfo(
-                name = "Groovy",
-                version = "3.0",
-                fileCount = groovyFiles
-            ))
+        if (javaFiles.isNotEmpty()) {
+            languages.add(LanguageInfo(name = "Java", version = "17", fileCount = javaFiles.size))
         }
 
         return languages
     }
 
-    /**
-     * 检测数据库
-     */
-    private fun detectDatabases(projectPath: Path): List<DatabaseInfo> {
+    private fun detectDatabases(allBuildFiles: List<Path>): List<DatabaseInfo> {
         val databases = mutableListOf<DatabaseInfo>()
+        val seenDatabases = mutableSetOf<String>()
 
-        // 从 build.gradle/pom.xml 检测
-        val buildFile = projectPath.resolve("build.gradle.kts")
-        if (buildFile.toFile().exists()) {
-            val content = buildFile.readText()
+        for (buildFile in allBuildFiles) {
+            try {
+                val content = java.nio.file.Files.readString(buildFile)
 
-            // PostgreSQL
-            if (content.contains("postgresql")) {
-                databases.add(DatabaseInfo(
-                    name = "PostgreSQL",
-                    type = DatabaseType.RELATIONAL
-                ))
-            }
+                // H2
+                if (content.contains("com.h2database") || content.contains("h2")) {
+                    if (seenDatabases.add("H2")) {
+                        databases.add(DatabaseInfo(name = "H2", type = DatabaseType.RELATIONAL))
+                    }
+                }
 
-            // MySQL
-            if (content.contains("mysql")) {
-                databases.add(DatabaseInfo(
-                    name = "MySQL",
-                    type = DatabaseType.RELATIONAL
-                ))
-            }
+                // MySQL
+                if (content.contains("mysql") || content.contains("mysql-connector")) {
+                    if (seenDatabases.add("MySQL")) {
+                        databases.add(DatabaseInfo(name = "MySQL", type = DatabaseType.RELATIONAL))
+                    }
+                }
 
-            // MongoDB
-            if (content.contains("mongodb")) {
-                databases.add(DatabaseInfo(
-                    name = "MongoDB",
-                    type = DatabaseType.NOSQL_DOCUMENT
-                ))
-            }
+                // PostgreSQL
+                if (content.contains("postgresql")) {
+                    if (seenDatabases.add("PostgreSQL")) {
+                        databases.add(DatabaseInfo(name = "PostgreSQL", type = DatabaseType.RELATIONAL))
+                    }
+                }
 
-            // Redis
-            if (content.contains("redis") || content.contains("jedis")) {
-                databases.add(DatabaseInfo(
-                    name = "Redis",
-                    type = DatabaseType.NOSQL_KEY_VALUE
-                ))
-            }
-
-            // Elasticsearch
-            if (content.contains("elasticsearch")) {
-                databases.add(DatabaseInfo(
-                    name = "Elasticsearch",
-                    type = DatabaseType.SEARCH_ENGINE
-                ))
+            } catch (e: Exception) {
+                logger.warn("解析构建文件失败: $buildFile", e)
             }
         }
 
         return databases
     }
 
-    /**
-     * 提取版本号
-     */
     private fun extractVersion(content: String, artifact: String): String? {
-        // 匹配版本号模式
-        val versionPattern = Regex("$artifact[^:]*:([\\d.]+)")
-        val match = versionPattern.find(content)
-        return match?.groupValues?.get(1)
-    }
+        val patterns = listOf(
+            Regex("$artifact:([\\d.]+)"),
+            Regex("$artifact[^:]*:([\\d.]+)"),
+            Regex("\"$artifact\":\\s*\"([\\d.]+)\""),
+            Regex("'$artifact':\\s*'([\\d.]+)'"),
+            Regex("[$]artifact:([\\d.]+)")
+        )
 
-    /**
-     * 统计指定扩展名的文件数量
-     */
-    private fun countFilesByExtension(baseDir: Path, extension: String): Int {
-        if (!baseDir.toFile().exists()) return 0
-
-        return try {
-            java.nio.file.Files.walk(baseDir)
-                .filter { it.toFile().isFile }
-                .filter { it.toString().endsWith(".$extension") }
-                .count()
-                .toInt()
-        } catch (e: Exception) {
-            logger.warn("Failed to count files with extension: $extension", e)
-            0
+        for (pattern in patterns) {
+            val match = pattern.find(content)
+            if (match != null) {
+                return match.groupValues[1]
+            }
         }
+
+        return null
     }
 }
 
@@ -317,9 +227,5 @@ data class DatabaseInfo(
  */
 @Serializable
 enum class DatabaseType {
-    RELATIONAL,        // 关系型数据库
-    NOSQL_DOCUMENT,    // 文档型 NoSQL
-    NOSQL_KEY_VALUE,   // 键值型 NoSQL
-    SEARCH_ENGINE,     // 搜索引擎
-    IN_MEMORY          // 内存数据库
+    RELATIONAL, NOSQL_DOCUMENT, NOSQL_KEY_VALUE, SEARCH_ENGINE, IN_MEMORY
 }

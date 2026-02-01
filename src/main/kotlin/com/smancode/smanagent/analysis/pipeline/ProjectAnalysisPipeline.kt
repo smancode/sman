@@ -17,6 +17,7 @@ import com.smancode.smanagent.analysis.step.EnumScanningStep
 import com.smancode.smanagent.analysis.step.ProjectStructureStep
 import com.smancode.smanagent.analysis.step.TechStackDetectionStep
 import com.smancode.smanagent.analysis.step.XmlCodeScanningStep
+import com.smancode.smanagent.analysis.step.ExternalApiScanningStep
 import com.smancode.smanagent.analysis.vectorization.ProjectInfoVectorizationService
 import com.smancode.smanagent.ide.service.storageService
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,7 @@ class ProjectAnalysisPipeline(
         private const val STEP_TECH_STACK = "tech_stack_detection"
         private const val STEP_DB_ENTITIES = "db_entity_detection"
         private const val STEP_API_ENTRIES = "api_entry_scanning"
+        private const val STEP_EXTERNAL_APIS = "external_api_scanning"
         private const val STEP_ENUMS = "enum_scanning"
         private const val STEP_COMMON_CLASSES = "common_class_scanning"
         private const val STEP_XML_CODES = "xml_code_scanning"
@@ -74,6 +76,7 @@ class ProjectAnalysisPipeline(
         ASTScanningStep(),
         DbEntityDetectionStep(),
         ApiEntryScanningStep(),
+        ExternalApiScanningStep(),
         EnumScanningStep(),
         CommonClassScanningStep(),
         XmlCodeScanningStep()
@@ -90,7 +93,24 @@ class ProjectAnalysisPipeline(
         return withContext(Dispatchers.IO) {
             logger.info("开始项目分析: projectKey={}", projectKey)
 
-            val context = AnalysisContext(projectKey, project)
+            // 计算当前项目 MD5
+            val currentMd5 = try {
+                com.smancode.smanagent.analysis.util.ProjectHashCalculator.calculate(project)
+            } catch (e: Exception) {
+                logger.warn("计算项目 MD5 失败", e)
+                null
+            }
+
+            // 加载已缓存的分析结果
+            val cachedAnalysis = repository.loadAnalysisResult(projectKey)
+
+            val context = AnalysisContext(
+                projectKey = projectKey,
+                project = project,
+                cachedAnalysis = cachedAnalysis,
+                currentProjectMd5 = currentMd5
+            )
+
             var result = ProjectAnalysisResult.create(projectKey).markStarted()
 
             repository.saveAnalysisResult(result)
@@ -108,16 +128,14 @@ class ProjectAnalysisPipeline(
     }
 
     private suspend fun executeAllSteps(result: ProjectAnalysisResult, context: AnalysisContext): ProjectAnalysisResult {
-        var currentResult = result
-        for (step in steps) {
-            currentResult = if (step.canExecute(context)) {
+        return steps.fold(result) { currentResult, step ->
+            if (step.canExecute(context)) {
                 executeAndVectorizeStep(currentResult, context, step)
             } else {
                 logger.info("跳过步骤: {}", step.name)
                 currentResult
             }
-        }
-        return currentResult.markCompleted()
+        }.markCompleted()
     }
 
     private suspend fun executeAndVectorizeStep(result: ProjectAnalysisResult, context: AnalysisContext, step: AnalysisStep): ProjectAnalysisResult {
@@ -138,25 +156,30 @@ class ProjectAnalysisPipeline(
     private suspend fun vectorizeStepData(stepName: String, data: String?) {
         if (data == null) return
 
-        try {
-            val service = vectorizationService ?: run {
-                logger.warn("向量化服务未初始化，跳过向量化: step={}", stepName)
-                return
-            }
-
-            when (stepName) {
-                STEP_PROJECT_STRUCTURE -> service.vectorizeProjectStructure(data)
-                STEP_TECH_STACK -> service.vectorizeTechStack(data)
-                STEP_DB_ENTITIES -> service.vectorizeDbEntities(data)
-                STEP_API_ENTRIES -> service.vectorizeApiEntries(data)
-                STEP_ENUMS -> service.vectorizeEnums(data)
-                STEP_COMMON_CLASSES -> service.vectorizeCommonClasses(data)
-                STEP_XML_CODES -> service.vectorizeXmlCodes(data)
-                else -> logger.debug("无需向量化步骤: {}", stepName)
-            }
-        } catch (e: Exception) {
-            logger.warn("向量化步骤数据失败: step={}, error={}", stepName, e.message)
+        val service = vectorizationService ?: run {
+            logger.warn("向量化服务未初始化，跳过向量化: step={}", stepName)
+            return
         }
+
+        val vectorizeAction = when (stepName) {
+            STEP_PROJECT_STRUCTURE -> service::vectorizeProjectStructure
+            STEP_TECH_STACK -> service::vectorizeTechStack
+            STEP_DB_ENTITIES -> service::vectorizeDbEntities
+            STEP_API_ENTRIES -> service::vectorizeApiEntries
+            STEP_EXTERNAL_APIS -> service::vectorizeExternalApis
+            STEP_ENUMS -> service::vectorizeEnums
+            STEP_COMMON_CLASSES -> service::vectorizeCommonClasses
+            STEP_XML_CODES -> service::vectorizeXmlCodes
+            else -> null
+        }
+
+        vectorizeAction?.let {
+            try {
+                it.invoke(data)
+            } catch (e: Exception) {
+                logger.warn("向量化步骤数据失败: step={}, error={}", stepName, e.message)
+            }
+        } ?: logger.debug("无需向量化步骤: {}", stepName)
     }
 
     /**

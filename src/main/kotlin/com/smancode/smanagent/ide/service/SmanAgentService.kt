@@ -95,13 +95,16 @@ class SmanAgentService(private val project: Project) : Disposable {
      * 获取缓存的构建命令（基于检测到的技术栈）
      */
     fun getBuildCommands(): String {
-        val os = System.getProperty("os.name").lowercase()
-        val isWindows = os.contains("win")
-
         return when (cachedTechStack?.buildType) {
-            BuildType.GRADLE_KTS, BuildType.GRADLE -> {
-                val wrapper = if (isWindows) "gradlew.bat" else "./gradlew"
-                """
+            BuildType.GRADLE_KTS, BuildType.GRADLE -> getGradleCommands()
+            BuildType.MAVEN -> getMavenCommands()
+            else -> getUnknownCommands()
+        }
+    }
+
+    private fun getGradleCommands(): String {
+        val wrapper = if (System.getProperty("os.name").lowercase().contains("win")) "gradlew.bat" else "./gradlew"
+        return """
                 ## 可用构建命令（Gradle 项目）
 
                 - 构建: `$wrapper build`
@@ -110,9 +113,10 @@ class SmanAgentService(private val project: Project) : Disposable {
                 - 运行: `$wrapper bootRun`
                 - 打包: `$wrapper bootJar`
                 """.trimIndent()
-            }
-            BuildType.MAVEN -> {
-                """
+    }
+
+    private fun getMavenCommands(): String {
+        return """
                 ## 可用构建命令（Maven 项目）
 
                 - 构建: `mvn clean install`
@@ -121,15 +125,14 @@ class SmanAgentService(private val project: Project) : Disposable {
                 - 运行: `mvn spring-boot:run`
                 - 打包: `mvn package`
                 """.trimIndent()
-            }
-            else -> {
-                """
+    }
+
+    private fun getUnknownCommands(): String {
+        return """
                 ## 构建命令
 
                 未检测到构建工具（Gradle/Maven），请手动指定命令。
                 """.trimIndent()
-            }
-        }
     }
 
     /**
@@ -226,6 +229,8 @@ class SmanAgentService(private val project: Project) : Disposable {
 
     /**
      * 初始化项目分析服务
+     *
+     * 在启动时自动加载已有的分析结果到内存缓存
      */
     private fun initializeProjectAnalysisService() {
         // 使用 CoroutineScope
@@ -233,8 +238,21 @@ class SmanAgentService(private val project: Project) : Disposable {
         scope.launch {
             try {
                 val analysisService = com.smancode.smanagent.analysis.service.ProjectAnalysisService(project)
+
+                // 1. 初始化数据库表
                 analysisService.init()
-                logger.info("项目分析服务初始化完成")
+
+                // 2. 加载已有的分析结果（如果有）
+                val cachedResult = analysisService.getAnalysisResult(forceReload = false)
+                if (cachedResult != null) {
+                    logger.info("已加载分析结果: projectKey={}, status={}, steps={}",
+                        project.name,
+                        cachedResult.status,
+                        cachedResult.steps.size
+                    )
+                } else {
+                    logger.info("暂无分析结果: projectKey={}", project.name)
+                }
             } catch (e: Exception) {
                 logger.warn("项目分析服务初始化失败（非关键）", e)
             }
@@ -244,36 +262,8 @@ class SmanAgentService(private val project: Project) : Disposable {
     /**
      * 格式化初始化错误信息
      */
-    private fun formatInitializationError(e: Exception): String = when {
-        e.message?.contains("LLM_API_KEY") == true -> """
-            ⚠️ 配置错误：缺少 API Key
-
-            请设置 LLM_API_KEY 环境变量：
-
-            1. 打开 Run → Edit Configurations...
-            2. 选择你的插件运行配置
-            3. 在 Environment variables 中添加：
-               LLM_API_KEY=your_api_key_here
-
-            或在终端中执行：
-            export LLM_API_KEY=your_api_key_here
-        """.trimIndent()
-
-        e.message?.contains("Connection") == true ||
-        e.message?.contains("timeout") == true -> """
-            ⚠️ 网络错误：无法连接到 LLM 服务
-
-            请检查：
-            • 网络连接是否正常
-            • API Key 是否有效
-            • LLM 服务是否可用
-        """.trimIndent()
-
-        else -> """
-            ⚠️ 初始化失败：${e.message}
-
-            请查看日志获取详细信息。
-        """.trimIndent()
+    private fun formatInitializationError(e: Exception): String {
+        return InitializationErrorFormatter.format(e)
     }
 
     // ========== 公共 API ==========

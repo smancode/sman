@@ -2,6 +2,7 @@ package com.smancode.smanagent.analysis.database
 
 import com.smancode.smanagent.analysis.database.model.DbEntity
 import com.smancode.smanagent.analysis.database.model.DbField
+import com.smancode.smanagent.analysis.structure.ProjectSourceFinder
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -26,29 +27,26 @@ class DbEntityDetector {
         val result = mutableListOf<DbEntity>()
 
         try {
-            // 扫描所有 Kotlin 文件
-            val kotlinFiles = java.nio.file.Files.walk(projectPath)
-                .filter { it.toString().endsWith(".kt") }
-                .toList()
+            val kotlinFiles = ProjectSourceFinder.findAllKotlinFiles(projectPath)
+            val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
+            val allFiles = kotlinFiles + javaFiles
 
-            kotlinFiles.forEach { file ->
-                    try {
-                        val dbEntity = buildDbEntityFromFile(file)
-                        if (dbEntity != null) {
-                            result.add(dbEntity)
-                        }
-                    } catch (e: Exception) {
-                        logger.debug("Failed to parse file: $file")
-                    }
+            logger.info("扫描 {} 个源文件检测 DbEntity (Kotlin: {}, Java: {})",
+                allFiles.size, kotlinFiles.size, javaFiles.size)
+
+            allFiles.forEach { file ->
+                try {
+                    buildDbEntityFromFile(file)?.let { result.add(it) }
+                } catch (e: Exception) {
+                    logger.debug("解析文件失败: $file", e)
                 }
-
-            logger.info("Detected ${result.size} DbEntity from project")
+            }
 
         } catch (e: Exception) {
-            logger.error("Failed to detect DbEntity", e)
+            logger.error("DbEntity 检测失败", e)
         }
 
-        return result
+        return result.also { logger.info("检测到 {} 个 DbEntity", it.size) }
     }
 
     /**
@@ -59,19 +57,31 @@ class DbEntityDetector {
      */
     fun buildDbEntityFromFile(file: Path): DbEntity? {
         val content = file.readText()
+        val fileName = file.toString()
+        val isJava = fileName.endsWith(".java")
 
         // 检查是否为实体类
-        if (!isEntityClass(content)) {
+        if (!isEntityClass(content, isJava)) {
             return null
         }
 
-        // 提取包名
-        val packagePattern = Regex("package\\s+([\\w.]+)")
+        // 提取包名（支持 Java 和 Kotlin）
+        val packagePattern = if (isJava) {
+            Regex("package\\s+([\\w.]+);")
+        } else {
+            Regex("package\\s+([\\w.]+)")
+        }
         val packageMatch = packagePattern.find(content)
         val packageName = packageMatch?.groupValues?.get(1) ?: ""
 
-        // 提取类名
-        val classPattern = Regex("(?:class|object|interface)\\s+(\\w+)")
+        // 提取类名（支持 Java 和 Kotlin）
+        val classPattern = if (isJava) {
+            // Java: public class Xxx, public interface Xxx, public enum Xxx
+            Regex("(?:public\\s+)?(?:abstract\\s+)?(?:class|interface|enum)\\s+(\\w+)")
+        } else {
+            // Kotlin: class Xxx, object Xxx, interface Xxx
+            Regex("(?:class|object|interface)\\s+(\\w+)")
+        }
         val classMatch = classPattern.find(content) ?: return null
         val className = classMatch.groupValues[1]
         val qualifiedName = if (packageName.isNotEmpty()) {
@@ -110,20 +120,30 @@ class DbEntityDetector {
     }
 
     /**
-     * 判断是否为实体类
+     * 判断是否为实体类（支持 Java 和 Kotlin）
      */
-    private fun isEntityClass(content: String): Boolean {
+    private fun isEntityClass(content: String, isJava: Boolean): Boolean {
         // 检查 @Entity 注解
         val hasEntityAnnotation = content.contains("@Entity") ||
                 content.contains("javax.persistence.Entity") ||
                 content.contains("jakarta.persistence.Entity")
 
-        // 或者检查类名是否以 Entity 结尾
-        val classPattern = Regex("(?:class|object|interface)\\s+(\\w+)")
+        // 检查是否在 entity 包中
+        val hasEntityPackage = content.contains(".entity.") ||
+                content.contains(".model.entity.") ||
+                content.contains("/entity/") ||
+                content.contains("/model/entity/")
+
+        // 提取类名
+        val classPattern = if (isJava) {
+            Regex("(?:public\\s+)?(?:abstract\\s+)?(?:class|interface|enum)\\s+(\\w+)")
+        } else {
+            Regex("(?:class|object|interface)\\s+(\\w+)")
+        }
         val classMatch = classPattern.find(content)
         val classNameEndsWithEntity = classMatch?.groupValues?.get(1)?.endsWith("Entity") == true
 
-        return hasEntityAnnotation || classNameEndsWithEntity
+        return hasEntityAnnotation || classNameEndsWithEntity || hasEntityPackage
     }
 
     /**
@@ -158,9 +178,23 @@ class DbEntityDetector {
     }
 
     /**
-     * 提取字段信息
+     * 提取字段信息（支持 Java 和 Kotlin）
      */
     fun extractFields(content: String): List<DbField> {
+        val fields = mutableListOf<DbField>()
+        val isJava = content.contains(";") && !content.contains("val ") && !content.contains("var ")
+
+        if (isJava) {
+            return extractJavaFields(content)
+        } else {
+            return extractKotlinFields(content)
+        }
+    }
+
+    /**
+     * 提取 Kotlin 字段
+     */
+    private fun extractKotlinFields(content: String): List<DbField> {
         val fields = mutableListOf<DbField>()
 
         // 匹配 val/var 字段
@@ -202,6 +236,49 @@ class DbEntityDetector {
                 nullable = true,
                 isPrimaryKey = isPrimaryKey,
                 hasColumnAnnotation = hasColumnAnnotation
+            ))
+        }
+
+        return fields
+    }
+
+    /**
+     * 提取 Java 字段
+     */
+    private fun extractJavaFields(content: String): List<DbField> {
+        val fields = mutableListOf<DbField>()
+
+        // 匹配 Java 字段：private/public/protected Type name;
+        val fieldPattern = Regex(
+            "(?:private|public|protected)\\s+" +
+            "(?:static\\s+)?" +
+            "(?:final\\s+)?" +
+            "(?:@[^\\s]+\\s+)+" +  // 注解
+            "([\\w<>,\\s]+?)\\s+" +  // 类型（支持泛型）
+            "(\\w+)" +               // 字段名
+            "\\s*;"                  // 分号
+        )
+
+        fieldPattern.findAll(content).forEach { match ->
+            val fieldType = match.groupValues[1].trim()
+            val fieldName = match.groupValues[2]
+
+            // 跳过一些非字段的情况
+            if (fieldName in listOf("class", "interface", "enum", "if", "for", "while")) return@forEach
+
+            // 简单的列名推断
+            val columnName = fieldName.replace(Regex("([a-z])([A-Z])"), "$1_$1").lowercase()
+
+            fields.add(DbField(
+                fieldName = fieldName,
+                columnName = columnName,
+                fieldType = fieldType,
+                columnType = null,
+                nullable = true,
+                isPrimaryKey = fieldName.equals("id", ignoreCase = true) ||
+                              fieldName.endsWith("Id") ||
+                              fieldName.endsWith("ID"),
+                hasColumnAnnotation = false
             ))
         }
 
