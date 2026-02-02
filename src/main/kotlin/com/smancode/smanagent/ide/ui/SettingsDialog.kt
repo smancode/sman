@@ -272,10 +272,41 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         saveConfig(config)
 
+        // 检查是否需要显示配置对话框
+        if (!ProjectAnalysisConfigDialog.shouldSkipDialog(project)) {
+            // 显示配置对话框
+            ProjectAnalysisConfigDialog.show(project) { analysisConfig ->
+                startAnalysisWithConfig(analysisConfig)
+            }
+        } else {
+            // 使用保存的配置或默认配置
+            val savedConfig = ProjectAnalysisConfigDialog.getSavedConfig(project)
+            startAnalysisWithConfig(savedConfig ?: ProjectAnalysisConfigDialog.ProjectAnalysisConfig(
+                frameworkType = ProjectAnalysisConfigDialog.FrameworkType.SPRING_BOOT,
+                entryPackages = emptyList(),
+                customAnnotations = emptyList(),
+                includeDtoScan = true,
+                includeEntityScan = true,
+                exhaustiveScan = false,
+                saveConfig = false
+            ))
+        }
+    }
+
+    /**
+     * 使用指定配置开始分析
+     */
+    private fun startAnalysisWithConfig(analysisConfig: ProjectAnalysisConfigDialog.ProjectAnalysisConfig) {
+        logger.info("开始项目分析: projectKey={}, frameworkType={}, exhaustiveScan={}",
+            project.name, analysisConfig.frameworkType, analysisConfig.exhaustiveScan)
+
         // 后台执行分析
         analysisScope.launch {
             try {
                 analysisService.init()
+
+                // TODO: 将 analysisConfig 传递给分析 Pipeline
+                // 目前先记录日志，后续需要修改 Pipeline 接受配置参数
 
                 // 检查是否需要分析
                 val currentMd5 = com.smancode.smanagent.analysis.util.ProjectHashCalculator.calculate(project)

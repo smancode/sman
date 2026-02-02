@@ -51,14 +51,25 @@ class CommonClassScanner {
      */
     private fun parseCommonClass(file: Path): CommonClassInfo? {
         val content = file.readText()
+        val isJava = file.toString().endsWith(".java")
 
         // 提取包名
-        val packagePattern = Regex("package\\s+([\\w.]+)")
+        val packagePattern = if (isJava) {
+            Regex("package\\s+([\\w.]+);")
+        } else {
+            Regex("package\\s+([\\w.]+)")
+        }
         val packageMatch = packagePattern.find(content)
         val packageName = packageMatch?.groupValues?.get(1) ?: ""
 
-        // 提取类名
-        val classPattern = Regex("(?:class|object|interface)\\s+(\\w+)")
+        // 提取类名（支持 Java 修饰符）
+        val classPattern = if (isJava) {
+            // Java: public class X, private interface Y, enum class Z 等
+            Regex("(?:public|private|protected|static|final|abstract|sealed)\\s+)?(?:class|interface|enum)\\s+(\\w+)")
+        } else {
+            // Kotlin: class X, interface Y, object Z
+            Regex("(?:class|object|interface|data\\s+class)\\s+(\\w+)")
+        }
         val classMatch = classPattern.find(content) ?: return null
         val className = classMatch.groupValues[1]
         val qualifiedName = if (packageName.isNotEmpty()) {
@@ -68,10 +79,10 @@ class CommonClassScanner {
         }
 
         // 提取方法
-        val methods = parseMethods(content)
+        val methods = parseMethods(content, isJava)
 
         // 提取字段
-        val fields = parseFields(content)
+        val fields = parseFields(content, isJava)
 
         return CommonClassInfo(
             className = className,
@@ -89,23 +100,34 @@ class CommonClassScanner {
         val className = classInfo.className.lowercase()
         val packageName = classInfo.packageName.lowercase()
 
-        // 工具类后缀
+        logger.debug("检查公共类: className={}, packageName={}", className, packageName)
+
+        // 工具类后缀（完整匹配，避免部分匹配）
         val utilSuffixes = listOf("util", "utils", "helper", "helpers", "tool", "tools")
-        if (utilSuffixes.any { className.endsWith(it) }) {
+        if (utilSuffixes.any { suffix -> className.endsWith(suffix) || className.endsWith("${suffix}class") || className.endsWith("${suffix}s") }) {
+            logger.debug("  -> 匹配工具类后缀: {}", className)
             return true
         }
 
-        // 工具类包名
+        // 工具类包名（直接包含）
         val utilPackages = listOf(
-            "util", "utils", "helper", "helpers", "tool", "tools",
-            "common", "shared", "core"
+            ".util.", ".utils.", ".helper.", ".helpers.", ".tool.", ".tools.",
+            ".common.", ".shared."
         )
         if (utilPackages.any { packageName.contains(it) }) {
+            logger.debug("  -> 匹配工具类包名: {}", packageName)
+            return true
+        }
+
+        // core.util 等包名
+        if (packageName.contains(".util") || packageName.contains(".helper")) {
+            logger.debug("  -> 匹配 util/helper 包: {}", packageName)
             return true
         }
 
         // 静态方法多
         if (classInfo.methods.count { it.isStatic } > 3) {
+            logger.debug("  -> 静态方法多: {}", classInfo.methods.count { it.isStatic })
             return true
         }
 
@@ -115,20 +137,42 @@ class CommonClassScanner {
     /**
      * 解析方法
      */
-    private fun parseMethods(content: String): List<MethodInfo> {
+    private fun parseMethods(content: String, isJava: Boolean): List<MethodInfo> {
         val methods = mutableListOf<MethodInfo>()
 
-        val funPattern = Regex(
-            "(fun\\s+(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(\\w+))?"
-        )
+        val funPattern = if (isJava) {
+            // Java: public/private/protected/static/final returnType methodName(params)
+            Regex("(?:public|private|protected|static|final|synchronized|native)\\s+)?" +
+                  "(?:[\\w<>\\[\\],\\s]+?)\\s+" +
+                  "(\\w+)\\s*" +
+                  "\\(([^)]*)\\)" +
+                  "(?:\\s+throws\\s+[\\w.,\\s]+)?")
+        } else {
+            // Kotlin: fun methodName(params): returnType
+            Regex("(fun\\s+(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(\\w+))?")
+        }
 
         funPattern.findAll(content).forEach { match ->
-            val name = match.groupValues[1]
-            val parametersStr = match.groupValues[2]
-            val returnType = match.groupValues[3].ifEmpty { "Unit" }
+            val name = match.groupValues[2]
+            val parametersStr = if (isJava) match.groupValues[3] else match.groupValues[1]
+            val returnType = if (isJava) {
+                // Java 返回类型在方法名之前
+                val beforeMethod = match.groupValues[1].trim()
+                if (beforeMethod.contains(" ")) {
+                    beforeMethod.substringBeforeLast(" ").trim()
+                } else {
+                    "void" // 默认返回类型
+                }
+            } else {
+                match.groupValues[3].ifEmpty { "Unit" }
+            }
 
             // 检查是否静态方法
-            val isStatic = false // Kotlin 没有 static，使用 companion object
+            val isStatic = if (isJava) {
+                match.groupValues[1].contains("static")
+            } else {
+                false // Kotlin 没有 static，使用 companion object
+            }
 
             methods.add(MethodInfo(
                 name = name,
@@ -144,21 +188,33 @@ class CommonClassScanner {
     /**
      * 解析字段
      */
-    private fun parseFields(content: String): List<FieldInfo> {
+    private fun parseFields(content: String, isJava: Boolean): List<FieldInfo> {
         val fields = mutableListOf<FieldInfo>()
 
-        val fieldPattern = Regex(
-            "(?:val|var)\\s+(\\w+)\\s*(?::\\s*(\\w+))?"
-        )
+        if (isJava) {
+            // Java: private/public/protected/static/final Type fieldName;
+            val fieldPattern = Regex(
+                "(?:private|public|protected|static|final|transient|volatile)\\s+" +
+                "(?:[\\w<>\\[\\],]+?)\\s+" +
+                "(\\w+)\\s*(?:=.*)?;"
+            )
 
-        fieldPattern.findAll(content).forEach { match ->
-            val name = match.groupValues[1]
-            val type = match.groupValues[2].ifEmpty { "Any" }
+            fieldPattern.findAll(content).forEach { match ->
+                val name = match.groupValues[2]
+                val type = match.groupValues[1].trim().takeLastWhile { it != ' ' }
+                fields.add(FieldInfo(name = name, type = type))
+            }
+        } else {
+            // Kotlin: val/var fieldName: Type
+            val fieldPattern = Regex(
+                "(?:val|var)\\s+(\\w+)\\s*(?::\\s*(\\w+))?"
+            )
 
-            fields.add(FieldInfo(
-                name = name,
-                type = type
-            ))
+            fieldPattern.findAll(content).forEach { match ->
+                val name = match.groupValues[1]
+                val type = match.groupValues[2].ifEmpty { "Any" }
+                fields.add(FieldInfo(name = name, type = type))
+            }
         }
 
         return fields

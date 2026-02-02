@@ -3,7 +3,7 @@ package com.smancode.smanagent.analysis.pipeline
 import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
 import com.smancode.smanagent.analysis.config.VectorDbType
 import com.smancode.smanagent.analysis.config.JVectorConfig
-import com.smancode.smanagent.analysis.database.JVectorStore
+import com.smancode.smanagent.analysis.database.TieredVectorStore
 import com.smancode.smanagent.analysis.model.ProjectAnalysisResult
 import com.smancode.smanagent.analysis.model.StepStatus
 import com.smancode.smanagent.analysis.repository.ProjectAnalysisRepository
@@ -55,17 +55,45 @@ class ProjectAnalysisPipeline(
     private val vectorizationService by lazy {
         project?.let { proj ->
             val storage = proj.storageService()
+            val bgeEndpoint = storage.bgeEndpoint.takeIf { it.isNotBlank() }
+                ?: detectLocalBgeService()?.also { endpoint ->
+                    logger.info("自动检测到 BGE 服务: $endpoint")
+                    storage.bgeEndpoint = endpoint
+                }
+
+            if (bgeEndpoint == null) {
+                logger.warn("BGE 端点未配置且未检测到本地服务，向量化功能将不可用")
+                return@lazy null
+            }
+
             val config = VectorDatabaseConfig.create(
                 projectKey = projectKey,
                 type = VectorDbType.JVECTOR,
                 jvector = JVectorConfig()
             )
-            val vectorStore = JVectorStore(config)
+            val vectorStore = TieredVectorStore(config)
             ProjectInfoVectorizationService(
                 projectKey = projectKey,
                 vectorStore = vectorStore,
-                bgeEndpoint = storage.bgeEndpoint
+                bgeEndpoint = bgeEndpoint
             )
+        }
+    }
+
+    /**
+     * 检测本地 BGE 服务
+     */
+    private fun detectLocalBgeService(): String? {
+        val defaultPorts = listOf(8000, 8001, 5000)
+        return defaultPorts.firstNotNullOfOrNull { port ->
+            try {
+                java.net.Socket("localhost", port).use {
+                    logger.info("检测到 BGE 服务运行在端口 $port")
+                    "http://localhost:$port"
+                }
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
@@ -175,9 +203,11 @@ class ProjectAnalysisPipeline(
 
         vectorizeAction?.let {
             try {
-                it.invoke(data)
+                logger.info("开始向量化: step={}, dataLength={}", stepName, data.length)
+                val result = it.invoke(data)
+                logger.info("向量化完成: step={}, result={}", stepName, result)
             } catch (e: Exception) {
-                logger.warn("向量化步骤数据失败: step={}, error={}", stepName, e.message)
+                logger.error("向量化步骤数据失败: step={}, error={}", stepName, e.message, e)
             }
         } ?: logger.debug("无需向量化步骤: {}", stepName)
     }

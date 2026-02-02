@@ -1,7 +1,7 @@
 package com.smancode.smanagent.analysis.vectorization
 
 import com.smancode.smanagent.analysis.config.BgeM3Config
-import com.smancode.smanagent.analysis.database.JVectorStore
+import com.smancode.smanagent.analysis.database.VectorStoreService
 import com.smancode.smanagent.analysis.model.VectorFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,11 +10,11 @@ import org.slf4j.LoggerFactory
 /**
  * 项目信息向量化服务
  *
- * 将项目分析各步骤的结果向量化并存入 JVector
+ * 将项目分析各步骤的结果向量化并存入 TieredVectorStore（L1内存 + L2 JVector + L3 H2）
  */
 class ProjectInfoVectorizationService(
     private val projectKey: String,
-    private val vectorStore: JVectorStore,
+    private val vectorStore: VectorStoreService,
     bgeEndpoint: String
 ) {
 
@@ -64,10 +64,17 @@ class ProjectInfoVectorizationService(
         ),
         "api_entries" to VectorizationConfig(
             type = "api_entries",
-            title = "外部API接口",
-            description = "外部接口调用和集成点",
-            contentPrefix = "外部API:",
-            tags = listOf("api", "external")
+            title = "API入口",
+            description = "HTTP API接口和入口点",
+            contentPrefix = "API入口:",
+            tags = listOf("api", "entry", "controller")
+        ),
+        "external_apis" to VectorizationConfig(
+            type = "external_apis",
+            title = "外部API调用",
+            description = "项目对外部服务的API调用",
+            contentPrefix = "外部API调用:",
+            tags = listOf("external", "api", "feign", "retrofit")
         ),
         "enums" to VectorizationConfig(
             type = "enums",
@@ -89,13 +96,6 @@ class ProjectInfoVectorizationService(
             description = "配置文件和映射文件",
             contentPrefix = "XML配置:",
             tags = listOf("xml", "config", "mapper")
-        ),
-        "external_apis" to VectorizationConfig(
-            type = "external_apis",
-            title = "外部API调用",
-            description = "项目对外部服务的API调用",
-            contentPrefix = "外部API调用:",
-            tags = listOf("external", "api", "feign", "retrofit")
         )
     )
 
@@ -124,6 +124,12 @@ class ProjectInfoVectorizationService(
         vectorizeData("api_entries", data)
 
     /**
+     * 向量化外部 API 调用
+     */
+    suspend fun vectorizeExternalApis(data: String): Int =
+        vectorizeData("external_apis", data)
+
+    /**
      * 向量化枚举
      */
     suspend fun vectorizeEnums(data: String): Int =
@@ -140,12 +146,6 @@ class ProjectInfoVectorizationService(
      */
     suspend fun vectorizeXmlCodes(data: String): Int =
         vectorizeData("xml_configs", data)
-
-    /**
-     * 向量化外部 API 调用
-     */
-    suspend fun vectorizeExternalApis(data: String): Int =
-        vectorizeData("external_apis", data)
 
     /**
      * 通用向量化方法

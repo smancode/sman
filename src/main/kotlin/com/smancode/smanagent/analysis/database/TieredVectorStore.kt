@@ -40,6 +40,15 @@ class TieredVectorStore(
     private val writeQueue = LinkedBlockingQueue<VectorFragment>()
 
     init {
+        // 初始化 L3 层（H2 数据库表结构）
+        runBlocking {
+            try {
+                l3Store.init()
+            } catch (e: Exception) {
+                logger.error("L3 数据库初始化失败", e)
+            }
+        }
+
         startBackgroundWriter()
         logger.info(
             "分层向量存储初始化完成: L1={}, L2=JVector(M={}, efConstruction={}), L3=H2",

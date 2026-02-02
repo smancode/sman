@@ -56,6 +56,15 @@ class ExternalApiScanner {
             Regex("""\.postForEntity\s*\(\s*["']([^"']+)["']\s*,\s*([^,]+)""")
         )
 
+        // RestClient 调用模式 (Spring 6.1+)
+        private val REST_CLIENT_PATTERNS = listOf(
+            Regex("""\.get\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
+            Regex("""\.post\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
+            Regex("""\.put\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
+            Regex("""\.delete\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
+            Regex("""\.patch\(\)\s*\.uri\(\s*["']([^"']+)["']""")
+        )
+
         // HTTP URL 模式
         private val HTTP_URL_PATTERN = Regex("""["']https?://[^"']+["']""")
 
@@ -65,7 +74,7 @@ class ExternalApiScanner {
         )
 
         // HTTP 指示器
-        private val HTTP_INDICATORS = listOf("OkHttp", "HttpClient", "HttpRequest", "HttpURLConnection")
+        private val HTTP_INDICATORS = listOf("OkHttp", "HttpClient", "HttpRequest", "HttpURLConnection", "RestClient")
 
         // Retrofit 注解列表
         private val RETROFIT_ANNOTATIONS = listOf("@GET", "@POST", "@PUT", "@DELETE", "@PATCH")
@@ -250,6 +259,7 @@ class ExternalApiScanner {
             scanFeignClients(content, packageName, file),
             scanRetrofitInterfaces(content, packageName, file),
             scanRestTemplateCalls(content, packageName, file),
+            scanRestClientCalls(content, packageName, file),
             scanHttpClientCalls(content, packageName, file)
         ).flatten()
     }
@@ -314,6 +324,20 @@ class ExternalApiScanner {
             file = file,
             apiType = LegacyExternalApiType.REST_TEMPLATE,
             methodsExtractor = ::extractRestTemplateMethods
+        )
+    }
+
+    /**
+     * 扫描 RestClient 调用（Spring 6.1+）
+     */
+    private fun scanRestClientCalls(content: String, packageName: String, file: Path): List<LegacyExternalApiInfo> {
+        return scanApiType(
+            content = content,
+            indicator = "RestClient",
+            packageName = packageName,
+            file = file,
+            apiType = LegacyExternalApiType.REST_CLIENT,
+            methodsExtractor = ::extractRestClientMethods
         )
     }
 
@@ -423,6 +447,36 @@ class ExternalApiScanner {
                     path = url,
                     parameters = emptyList(),
                     returnType = "ResponseEntity"
+                )
+            }
+        }
+
+        return methods.distinctBy { it.path }
+    }
+
+    /**
+     * 提取 RestClient 方法（Spring 6.1+）
+     */
+    private fun extractRestClientMethods(content: String): List<LegacyApiMethodInfo> {
+        val methods = REST_CLIENT_PATTERNS.flatMap { pattern ->
+            pattern.findAll(content).map { match ->
+                val url = match.groupValues[1]
+                // 从方法调用推断 HTTP 方法
+                val httpMethod = when {
+                    match.groupValues[0].contains(".get()") -> "GET"
+                    match.groupValues[0].contains(".post()") -> "POST"
+                    match.groupValues[0].contains(".put()") -> "PUT"
+                    match.groupValues[0].contains(".delete()") -> "DELETE"
+                    match.groupValues[0].contains(".patch()") -> "PATCH"
+                    else -> "?"
+                }
+
+                LegacyApiMethodInfo(
+                    name = "httpCall",
+                    httpMethod = httpMethod,
+                    path = url,
+                    parameters = emptyList(),
+                    returnType = "String"
                 )
             }
         }
@@ -579,6 +633,7 @@ enum class LegacyExternalApiType {
     FEIGN,           // OpenFeign 声明式 HTTP 客户端
     RETROFIT,        // Retrofit 接口
     REST_TEMPLATE,   // Spring RestTemplate
+    REST_CLIENT,     // Spring RestClient (6.1+)
     HTTP_CLIENT,     // OkHttp/Apache HttpClient
     GATEWAY,         // API Gateway 路由
     UNKNOWN          // 未知类型

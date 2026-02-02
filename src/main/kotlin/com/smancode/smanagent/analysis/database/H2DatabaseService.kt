@@ -25,6 +25,7 @@ class H2DatabaseService(
 
     private fun createDataSource(): DataSource {
         val hikariConfig = HikariConfig().apply {
+            // 使用 PostgreSQL 兼容模式，但需要用 VARBINARY 替代 BLOB
             jdbcUrl = "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
             driverClassName = "org.h2.Driver"
             username = "sa"
@@ -44,77 +45,103 @@ class H2DatabaseService(
      */
     suspend fun init() = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
-            // 创建配置表
-            connection.createStatement().executeUpdate("""
-                CREATE TABLE IF NOT EXISTS config (
-                    key VARCHAR(255) PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            // 创建配置表（避免使用保留字 key/value）
+            try {
+                connection.createStatement().executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS config (" +
+                    "config_key VARCHAR(255) PRIMARY KEY," +
+                    "config_value TEXT NOT NULL," +
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                    ")"
                 )
-            """.trimIndent())
+                logger.debug("配置表创建成功")
+            } catch (e: Exception) {
+                logger.error("创建配置表失败: ${e.message}", e)
+                throw e
+            }
 
             // 创建元数据表
-            connection.createStatement().executeUpdate("""
-                CREATE TABLE IF NOT EXISTS metadata (
-                    id VARCHAR(255) PRIMARY KEY,
-                    type VARCHAR(50) NOT NULL,
-                    title VARCHAR(255),
-                    content TEXT,
-                    metadata TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            try {
+                connection.createStatement().executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS metadata (" +
+                    "id VARCHAR(255) PRIMARY KEY," +
+                    "type VARCHAR(50) NOT NULL," +
+                    "title VARCHAR(255)," +
+                    "content TEXT," +
+                    "metadata TEXT," +
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                    ")"
                 )
-            """.trimIndent())
+                logger.debug("元数据表创建成功")
+            } catch (e: Exception) {
+                logger.error("创建元数据表失败: ${e.message}", e)
+                throw e
+            }
 
             // 创建 SOP 表
-            connection.createStatement().executeUpdate("""
-                CREATE TABLE IF NOT EXISTS sop (
-                    id VARCHAR(255) PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    category VARCHAR(50),
-                    preconditions TEXT,
-                    steps TEXT,
-                    expected_results TEXT,
-                    related_classes TEXT,
-                    tags TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            try {
+                connection.createStatement().executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS sop (" +
+                    "id VARCHAR(255) PRIMARY KEY," +
+                    "title VARCHAR(255) NOT NULL," +
+                    "description TEXT," +
+                    "category VARCHAR(50)," +
+                    "preconditions TEXT," +
+                    "steps TEXT," +
+                    "expected_results TEXT," +
+                    "related_classes TEXT," +
+                    "tags TEXT," +
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                    ")"
                 )
-            """.trimIndent())
+                logger.debug("SOP 表创建成功")
+            } catch (e: Exception) {
+                logger.error("创建 SOP 表失败: ${e.message}", e)
+                throw e
+            }
 
             // 创建向量片段表（用于冷数据存储）
-            connection.createStatement().executeUpdate("""
-                CREATE TABLE IF NOT EXISTS vector_fragments (
-                    id VARCHAR(255) PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    content TEXT NOT NULL,
-                    full_content TEXT,
-                    tags TEXT,
-                    metadata TEXT,
-                    vector_data BLOB,
-                    cache_level VARCHAR(20) DEFAULT 'cold',
-                    access_count INT DEFAULT 0,
-                    last_accessed TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            try {
+                connection.createStatement().executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS vector_fragments (" +
+                    "id VARCHAR(255) PRIMARY KEY," +
+                    "title VARCHAR(255) NOT NULL," +
+                    "content TEXT NOT NULL," +
+                    "full_content TEXT," +
+                    "tags TEXT," +
+                    "metadata TEXT," +
+                    "vector_data VARBINARY(8192)," +
+                    "cache_level VARCHAR(20) DEFAULT 'cold'," +
+                    "access_count INTEGER DEFAULT 0," +
+                    "last_accessed TIMESTAMP," +
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                    ")"
                 )
-            """.trimIndent())
+                logger.debug("向量片段表创建成功")
+            } catch (e: Exception) {
+                logger.error("创建向量片段表失败: ${e.message}", e)
+                throw e
+            }
 
             // 创建索引
-            connection.createStatement().executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_metadata_type ON metadata(type)
-            """.trimIndent())
-
-            connection.createStatement().executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_sop_category ON sop(category)
-            """.trimIndent())
-
-            connection.createStatement().executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_vector_cache_level ON vector_fragments(cache_level)
-            """.trimIndent())
-
-            connection.createStatement().executeUpdate("""
-                CREATE INDEX IF NOT EXISTS idx_vector_last_accessed ON vector_fragments(last_accessed)
-            """.trimIndent())
+            try {
+                connection.createStatement().executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS idx_metadata_type ON metadata(type)"
+                )
+                connection.createStatement().executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS idx_sop_category ON sop(category)"
+                )
+                connection.createStatement().executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS idx_vector_cache_level ON vector_fragments(cache_level)"
+                )
+                connection.createStatement().executeUpdate(
+                    "CREATE INDEX IF NOT EXISTS idx_vector_last_accessed ON vector_fragments(last_accessed)"
+                )
+                logger.debug("索引创建成功")
+            } catch (e: Exception) {
+                logger.warn("创建索引失败（可能已存在）: ${e.message}")
+            }
 
             logger.info("H2 数据库表结构初始化完成")
         }
@@ -125,10 +152,10 @@ class H2DatabaseService(
      */
     suspend fun saveConfig(key: String, value: String) = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
-            connection.prepareStatement("""
-                MERGE INTO config (key, value, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            """.trimIndent()).use { stmt ->
+            connection.prepareStatement(
+                "MERGE INTO config (config_key, config_value, updated_at) " +
+                "VALUES (?, ?, CURRENT_TIMESTAMP)"
+            ).use { stmt ->
                 stmt.setString(1, key)
                 stmt.setString(2, value)
                 stmt.executeUpdate()
@@ -143,10 +170,10 @@ class H2DatabaseService(
      */
     suspend fun getConfig(key: String): String? = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
-            connection.prepareStatement("SELECT value FROM config WHERE key = ?").use { stmt ->
+            connection.prepareStatement("SELECT config_value FROM config WHERE config_key = ?").use { stmt ->
                 stmt.setString(1, key)
                 val rs = stmt.executeQuery()
-                if (rs.next()) rs.getString("value") else null
+                if (rs.next()) rs.getString("config_value") else null
             }
         }
     }
@@ -156,12 +183,12 @@ class H2DatabaseService(
      */
     suspend fun saveVectorFragment(fragment: VectorFragment) = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
-            connection.prepareStatement("""
-                MERGE INTO vector_fragments (
-                    id, title, content, full_content, tags, metadata,
-                    vector_data, cache_level, access_count, last_accessed
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """.trimIndent()).use { stmt ->
+            connection.prepareStatement(
+                "MERGE INTO vector_fragments (" +
+                "id, title, content, full_content, tags, metadata, " +
+                "vector_data, cache_level, access_count, last_accessed" +
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            ).use { stmt ->
                 stmt.setString(1, fragment.id)
                 stmt.setString(2, fragment.title)
                 stmt.setString(3, fragment.content)
@@ -234,12 +261,12 @@ class H2DatabaseService(
      */
     suspend fun cleanupOldData(beforeDays: Int = 30) = withContext(Dispatchers.IO) {
         dataSource.connection.use { connection ->
-            connection.prepareStatement("""
-                DELETE FROM vector_fragments
-                WHERE cache_level = 'cold'
-                  AND last_accessed < DATEADD('DAY', -?, CURRENT_TIMESTAMP)
-                  AND access_count < 5
-            """.trimIndent()).use { stmt ->
+            connection.prepareStatement(
+                "DELETE FROM vector_fragments " +
+                "WHERE cache_level = 'cold' " +
+                "AND last_accessed < DATEADD('DAY', -?, CURRENT_TIMESTAMP) " +
+                "AND access_count < 5"
+            ).use { stmt ->
                 stmt.setInt(1, beforeDays)
                 val deleted = stmt.executeUpdate()
                 logger.info("清理了 {} 个过期的向量片段", deleted)

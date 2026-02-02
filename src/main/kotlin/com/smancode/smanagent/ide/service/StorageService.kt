@@ -87,6 +87,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var rerankerEndpoint: String = "",            // Reranker 服务端点
         var rerankerApiKey: String = "",               // Reranker API Key（可选）
 
+        // 项目分析配置
+        var skipAnalysisConfigDialog: Boolean = false,  // 跳过项目分析配置对话框
+        var lastEntryPackages: String = "",             // 上次配置的入口包路径
+        var lastCustomAnnotations: String = "",         // 上次配置的自定义注解
+
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
     )
@@ -411,6 +416,19 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var rerankerApiKey: String
         get() = state.rerankerApiKey
         set(value) { state.rerankerApiKey = value }
+
+    // 项目分析配置
+    var skipAnalysisConfigDialog: Boolean
+        get() = state.skipAnalysisConfigDialog
+        set(value) { state.skipAnalysisConfigDialog = value }
+
+    var lastEntryPackages: String
+        get() = state.lastEntryPackages
+        set(value) { state.lastEntryPackages = value }
+
+    var lastCustomAnnotations: String
+        get() = state.lastCustomAnnotations
+        set(value) { state.lastCustomAnnotations = value }
 
     companion object {
         fun getInstance(project: Project): StorageService {
