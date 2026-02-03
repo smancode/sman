@@ -1,20 +1,11 @@
 package com.smancode.smanagent.verification.api
 
-import com.smancode.smanagent.analysis.config.JVectorConfig
-import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
-import com.smancode.smanagent.analysis.config.VectorDbType
-import com.smancode.smanagent.analysis.database.TieredVectorStore
-import com.smancode.smanagent.analysis.vectorization.BgeM3Client
-import com.smancode.smanagent.analysis.vectorization.RerankerClient
 import com.smancode.smanagent.verification.model.AnalysisQueryRequest
 import com.smancode.smanagent.verification.model.ExpertConsultRequest
 import com.smancode.smanagent.verification.model.ExpertConsultResponse
-import com.smancode.smanagent.verification.model.VectorSearchRequest
-import com.smancode.smanagent.verification.model.VectorSearchResponse
 import com.smancode.smanagent.verification.service.AnalysisQueryService
 import com.smancode.smanagent.verification.service.ExpertConsultService
 import com.smancode.smanagent.verification.service.H2QueryService
-import com.smancode.smanagent.verification.service.VectorSearchService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.http.ResponseEntity
@@ -26,7 +17,9 @@ import org.springframework.web.bind.annotation.RestController
 /**
  * 专家咨询 API
  *
- * 直接使用 LLM 查询，不走 ReAct 循环
+ * 这是唯一的对外语义查询接口
+ * 内部实现：BGE 向量召回 + Reranker 重排 + LLM 答案生成
+ *
  * 只在 ExpertConsultService Bean 存在时创建
  */
 @RestController
@@ -38,41 +31,6 @@ open class ExpertConsultApi(@Autowired(required = false) private val expertConsu
     open fun expertConsult(@RequestBody request: ExpertConsultRequest): ResponseEntity<ExpertConsultResponse> {
         val service = expertConsultService ?: throw IllegalStateException("专家咨询服务不可用，请设置 LLM_API_KEY 环境变量")
         return ResponseEntity.ok(service.consult(request))
-    }
-}
-
-/**
- * 向量搜索 API
- *
- * 支持 BGE 召回 + Reranker 重排
- */
-@RestController
-@RequestMapping("/api/verify")
-open class VectorSearchApi(
-    @Autowired private val bgeM3Client: BgeM3Client,
-    @Autowired private val rerankerClient: RerankerClient
-) {
-
-    @PostMapping("/semantic_search")
-    open fun semanticSearch(@RequestBody request: VectorSearchRequest): ResponseEntity<VectorSearchResponse> {
-        // 为每个请求创建特定项目的向量存储
-        val projectKey = request.projectKey ?: "autoloop"
-        val config = VectorDatabaseConfig.create(
-            projectKey = projectKey,
-            type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig(dimension = 1024),
-            vectorDimension = 1024
-        )
-
-        println("========== Semantic Search Debug ==========")
-        println("projectKey: $projectKey")
-        println("databasePath: ${config.databasePath}")
-        println("vectorStorePath: ${config.vectorStorePath}")
-
-        val vectorStore = TieredVectorStore(config)
-        val searchService = VectorSearchService(bgeM3Client, vectorStore, rerankerClient)
-
-        return ResponseEntity.ok(searchService.semanticSearch(request))
     }
 }
 

@@ -1,0 +1,398 @@
+### =============================================================================
+### SmanAgent 验证服务 API 测试
+### =============================================================================
+### 服务地址: http://localhost:8080
+### 项目: autoloop
+###
+### 使用方法：
+### 1. 确保验证服务已启动（./gradlew runVerification）
+### 2. 点击每个请求左侧的 "Run" 按钮执行
+### =============================================================================
+
+@baseUrl = http://localhost:8080
+
+### =============================================================================
+### 一、专家咨询 API（主要入口）
+### =============================================================================
+
+### 1. 专家咨询 - 放款接口
+### 预期：返回 DisburseHandler 相关信息
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "放款是哪个接口？",
+  "projectKey": "autoloop",
+  "topK": 3
+}
+
+### 2. 专家咨询 - 还款接口
+### 预期：返回 RepayHandler 相关信息
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "有哪些还款相关的 Handler？",
+  "projectKey": "autoloop",
+  "topK": 5
+}
+
+### 3. 专家咨询 - Handler 接口列表
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些 Handler 接口？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 4. 专家咨询 - 数据库实体
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些数据库实体？它们之间的关系是什么？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 5. 专家咨询 - 数据库表
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些贷款相关的表？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 6. 专家咨询 - 枚举状态
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "贷款状态有哪些？",
+  "projectKey": "autoloop",
+  "topK": 5
+}
+
+### 7. 专家咨询 - 枚举类型
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些枚举类型？分别代表什么含义？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 8. 专家咨询 - 外调接口
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目调用了哪些外部接口？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 9. 专家咨询 - 公共类和工具
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些公共类和工具类？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 10. 专家咨询 - XML 配置
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目中有哪些 XML 配置文件？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 11. 专家咨询 - 项目结构
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目结构是什么样的？",
+  "projectKey": "autoloop",
+  "topK": 5
+}
+
+### 12. 专家咨询 - 技术栈
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "项目用了什么技术栈？",
+  "projectKey": "autoloop",
+  "topK": 5
+}
+
+### 13. 专家咨询 - 整体架构
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "这个项目的整体架构是什么？使用了哪些技术栈？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### 14. 专家咨询 - 用户登录
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "用户登录验证是怎么实现的？",
+  "projectKey": "autoloop",
+  "topK": 5
+}
+
+### 15. 专家咨询 - 还款流程
+POST {{baseUrl}}/api/verify/expert_consult
+Content-Type: application/json
+
+{
+  "question": "还款流程是怎样的？有哪些还款方式？",
+  "projectKey": "autoloop",
+  "topK": 10
+}
+
+### =============================================================================
+### 二、分析结果查询 API
+### =============================================================================
+
+### 16. 查询项目结构 (project_structure)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "project_structure",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 17. 查询技术栈 (tech_stack_detection)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "tech_stack_detection",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 18. 查询 AST 扫描结果 (ast_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "ast_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 19. 查询数据库实体 (db_entity_detection)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "db_entity_detection",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 20. 查询 API 入口 (api_entry_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "api_entry_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 21. 查询外调接口 (external_api_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "external_api_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 22. 查询枚举 (enum_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "enum_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 23. 查询公共类 (common_class_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "common_class_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### 24. 查询 XML 代码 (xml_code_scanning)
+POST {{baseUrl}}/api/verify/analysis_results
+Content-Type: application/json
+
+{
+  "module": "xml_code_scanning",
+  "projectKey": "autoloop",
+  "page": 0,
+  "size": 20
+}
+
+### =============================================================================
+### 三、H2 数据库查询 API（调试用）
+### =============================================================================
+
+### 25. 查询向量总数
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT COUNT(*) as total FROM vector_fragments"
+}
+
+### 26. 查询细粒度向量分布
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT SUBSTR(id, 1, CASE WHEN LOCATE(':', id, 3) > 0 THEN LOCATE(':', id, 3) - 1 ELSE LENGTH(id) END) as type, COUNT(*) as cnt FROM vector_fragments WHERE project_key = 'autoloop' AND id LIKE '%:%' GROUP BY type ORDER BY cnt DESC"
+}
+
+### 27. 查看 API 入口向量样本
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT id, title, content FROM vector_fragments WHERE id LIKE '%api_entry%' LIMIT 10"
+}
+
+### 28. 查看数据库实体向量样本
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT id, title, content FROM vector_fragments WHERE id LIKE '%db_entity%' LIMIT 10"
+}
+
+### 29. 查看枚举向量样本
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT id, title, content FROM vector_fragments WHERE id LIKE '%enum%' LIMIT 10"
+}
+
+### 30. 查询特定向量（DisburseHandler）
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT id, title, content FROM vector_fragments WHERE id LIKE '%Disburse%'"
+}
+
+### 31. 查询分析步骤状态
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT STEP_NAME, STATUS FROM ANALYSIS_STEP WHERE PROJECT_KEY = 'autoloop'"
+}
+
+### 32. 查询项目分析结果
+POST {{baseUrl}}/api/verify/execute_sql
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM PROJECT_ANALYSIS"
+}
+
+### 33. 查询向量数据（分页）
+POST {{baseUrl}}/api/verify/query_vectors
+Content-Type: application/json
+
+{
+  "page": 0,
+  "size": 20
+}
+
+### 34. 查询项目列表
+POST {{baseUrl}}/api/verify/query_projects
+Content-Type: application/json
+
+{
+  "page": 0,
+  "size": 20
+}
+
+### =============================================================================
+### 预期结果示例
+### =============================================================================
+
+### 请求 1：专家咨询 - 放款接口
+### 预期返回（重新运行项目分析后）：
+{
+  "answer": "放款接口是 DisburseHandler，位于 com.autoloop.loan.handler.DisburseHandler",
+  "sources": [
+    {"fragmentId": "autoloop:api_entry:com.autoloop.loan.handler.DisburseHandler", "score": 0.75}
+  ],
+  "confidence": 0.8
+}
+
+### 请求 3：专家咨询 - Handler 接口列表
+### 预期返回：
+{
+  "answer": "项目中有以下 Handler 接口：\n\n- DisburseHandler\n- RepayHandler\n- BusinessRelationTestHandler",
+  "confidence": 0.8
+}
+
+### =============================================================================
+### 注意事项
+### =============================================================================
+### 1. 如果 expert_consult 返回"未找到相关代码片段"，请：
+###    - 在 IntelliJ IDEA 插件中重新运行"项目分析"
+###    - 等待分析完成后再次测试
+###
+### 2. API 端点说明：
+###    - /api/verify/expert_consult: 唯一的对外语义查询入口
+###    - /api/verify/analysis_results: 查询 12 个分析模块的原始结果
+###    - /api/verify/execute_sql: 执行安全 SQL（调试用）
+###
+### 3. 配置参数（通过环境变量）：
+###    - LLM_API_KEY: LLM API 密钥（必需）
+###    - BGE_ENDPOINT: BGE-M3 向量化服务地址
+###    - RERANKER_BASE_URL: Reranker 重排服务地址
+###    - RERANKER_THRESHOLD: Reranker 相似度阈值（默认 0.1）
+###    - PROJECT_KEY: 项目标识（默认 autoloop）
+### =============================================================================
