@@ -240,6 +240,22 @@ class H2DatabaseService(
     }
 
     /**
+     * 获取所有向量片段
+     */
+    suspend fun getAllVectorFragments(): List<VectorFragment> = withContext(Dispatchers.IO) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement("SELECT * FROM vector_fragments").use { stmt ->
+                val rs = stmt.executeQuery()
+                val fragments = mutableListOf<VectorFragment>()
+                while (rs.next()) {
+                    fragments.add(rs.toVectorFragment(vectorDimension))
+                }
+                fragments
+            }
+        }
+    }
+
+    /**
      * 更新访问信息
      */
     private suspend fun updateAccessInfo(id: String) = withContext(Dispatchers.IO) {

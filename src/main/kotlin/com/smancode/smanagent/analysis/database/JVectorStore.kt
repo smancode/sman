@@ -77,6 +77,50 @@ class JVectorStore(
             "JVectorStore 初始化: dimension={}, M={}, efConstruction={}, rerankerThreshold={}",
             dimension, maxConnections, efConstruction, rerankerThreshold
         )
+
+        // 从 H2 数据库加载已有的向量数据
+        loadFromH2()
+    }
+
+    /**
+     * 从 H2 数据库加载向量数据
+     */
+    private fun loadFromH2() {
+        try {
+            val h2Service = H2DatabaseService(config)
+            val fragments = kotlinx.coroutines.runBlocking {
+                h2Service.getAllVectorFragments()
+            }
+
+            logger.info("从 H2 加载向量数据: 数量={}", fragments.size)
+
+            for (fragment in fragments) {
+                if (fragment.vector != null && fragment.vector.size == dimension) {
+                    addUnsafe(fragment)
+                } else {
+                    logger.warn("跳过无效向量: id={}, vectorDimension={}",
+                        fragment.id, fragment.vector?.size)
+                }
+            }
+
+            logger.info("H2 向量数据加载完成: 已加载={} 条", vectors.size)
+        } catch (e: Exception) {
+            logger.warn("从 H2 加载向量数据失败: {}", e.message)
+        }
+    }
+
+    /**
+     * 不加锁地添加向量（用于初始化加载）
+     */
+    private fun addUnsafe(fragment: VectorFragment) {
+        if (idToOrdinal.containsKey(fragment.id)) {
+            return
+        }
+
+        val ordinal = nextOrdinal++
+        idToOrdinal[fragment.id] = ordinal
+        ordinalToId[ordinal] = fragment.id
+        vectors[fragment.id] = fragment
     }
 
     /**

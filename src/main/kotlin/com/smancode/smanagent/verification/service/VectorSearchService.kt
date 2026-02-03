@@ -1,6 +1,7 @@
 package com.smancode.smanagent.verification.service
 
 import com.smancode.smanagent.analysis.database.TieredVectorStore
+import com.smancode.smanagent.analysis.database.cosineSimilarity
 import com.smancode.smanagent.analysis.model.VectorFragment
 import com.smancode.smanagent.analysis.vectorization.BgeM3Client
 import com.smancode.smanagent.analysis.vectorization.RerankerClient
@@ -46,6 +47,11 @@ class VectorSearchService(
 
         logger.info("向量召回完成: query={}, recallCount={}", request.query, recallResults.size)
 
+        // 计算相似度分数
+        val recallResultsWithScores = recallResults.map { fragment ->
+            fragment to queryVector.cosineSimilarity(fragment.vector!!).toDouble()
+        }
+
         // 可选：重排序
         val rerankResults = if (request.enableRerank && recallResults.isNotEmpty()) {
             performReranking(request.query, recallResults, request.rerankTopN)
@@ -58,7 +64,7 @@ class VectorSearchService(
 
         val response = VectorSearchResponse(
             query = request.query,
-            recallResults = recallResults.toSearchResults(),
+            recallResults = recallResultsWithScores.toSearchResultsWithScores(),
             rerankResults = rerankResults?.toSearchResults(),
             processingTimeMs = processingTime
         )
@@ -94,13 +100,24 @@ class VectorSearchService(
         recallResults.take(rerankTopN)
     }
 
+    private fun List<Pair<VectorFragment, Double>>.toSearchResultsWithScores(): List<SearchResult> =
+        mapIndexed { index, (fragment, score) ->
+            SearchResult(
+                fragmentId = fragment.id,
+                fileName = fragment.getMetadata("fileName") ?: fragment.title,
+                content = fragment.content,
+                score = score,
+                rank = index + 1
+            )
+        }
+
     private fun List<VectorFragment>.toSearchResults(): List<SearchResult> =
         mapIndexed { index, fragment ->
             SearchResult(
                 fragmentId = fragment.id,
                 fileName = fragment.getMetadata("fileName") ?: fragment.title,
                 content = fragment.content,
-                score = fragment.getMetadata("score")?.toDoubleOrNull() ?: 0.0,
+                score = 0.0,
                 rank = index + 1
             )
         }

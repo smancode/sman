@@ -53,18 +53,29 @@ class ProjectAnalysisPipeline(
 
     // 向量化服务（懒加载）
     private val vectorizationService by lazy {
+        logger.info("========== 开始初始化向量化服务 ==========")
+        logger.info("projectKey: {}, project is null: {}", projectKey, project == null)
+
         project?.let { proj ->
+            logger.info("Project 不为空，开始获取 storage...")
             val storage = proj.storageService()
+            logger.info("Storage 获取成功，当前 bgeEndpoint: '{}'", storage.bgeEndpoint)
 
             // 优先级: 用户设置 > 本地检测 > 配置文件
             val bgeEndpoint = storage.bgeEndpoint.takeIf { it.isNotBlank() }
-                ?: detectLocalBgeService()?.also { endpoint ->
-                    logger.info("自动检测到 BGE 服务: $endpoint")
-                    storage.bgeEndpoint = endpoint
+                ?: run {
+                    logger.info("用户设置的 bgeEndpoint 为空，尝试检测本地服务...")
+                    detectLocalBgeService()?.also { endpoint ->
+                        logger.info("自动检测到 BGE 服务: $endpoint")
+                        storage.bgeEndpoint = endpoint
+                    }
                 }
-                ?: com.smancode.smanagent.config.SmanAgentConfig.bgeM3Config?.endpoint?.also { endpoint ->
-                    logger.info("使用配置文件中的 BGE 端点: $endpoint")
-                    storage.bgeEndpoint = endpoint
+                ?: run {
+                    logger.info("本地检测失败，尝试从配置文件读取...")
+                    com.smancode.smanagent.config.SmanAgentConfig.bgeM3Config?.endpoint?.also { endpoint ->
+                        logger.info("使用配置文件中的 BGE 端点: $endpoint")
+                        storage.bgeEndpoint = endpoint
+                    }
                 }
 
             if (bgeEndpoint == null) {
@@ -72,17 +83,31 @@ class ProjectAnalysisPipeline(
                 return@lazy null
             }
 
+            logger.info("BGE 端点确定: {}", bgeEndpoint)
+            logger.info("开始创建 VectorDatabaseConfig...")
+
             val config = VectorDatabaseConfig.create(
                 projectKey = projectKey,
                 type = VectorDbType.JVECTOR,
                 jvector = JVectorConfig()
             )
+            logger.info("VectorDatabaseConfig 创建成功")
+
+            logger.info("开始创建 TieredVectorStore...")
             val vectorStore = TieredVectorStore(config)
-            ProjectInfoVectorizationService(
+            logger.info("TieredVectorStore 创建成功")
+
+            logger.info("开始创建 ProjectInfoVectorizationService...")
+            val service = ProjectInfoVectorizationService(
                 projectKey = projectKey,
                 vectorStore = vectorStore,
                 bgeEndpoint = bgeEndpoint
             )
+            logger.info("========== 向量化服务初始化完成 ==========")
+            service
+        } ?: run {
+            logger.warn("Project 为 null，无法初始化向量化服务")
+            null
         }
     }
 
@@ -177,8 +202,24 @@ class ProjectAnalysisPipeline(
         repository.saveAnalysisResult(updatedResult)
 
         // 向量化步骤结果（AST步骤除外，因为太大）
+        logger.debug("检查向量化条件: stepName={}, isAstScanning={}, status={}, dataIsNull={}",
+            step.name,
+            step.name == STEP_AST_SCANNING,
+            updatedResult.steps[step.name]?.status,
+            updatedResult.steps[step.name]?.data == null
+        )
+
         if (step.name != STEP_AST_SCANNING && updatedResult.steps[step.name]?.status == StepStatus.COMPLETED) {
             vectorizeStepData(step.name, updatedResult.steps[step.name]?.data)
+        } else {
+            logger.debug("跳过向量化: stepName={}, reason={}",
+                step.name,
+                when {
+                    step.name == STEP_AST_SCANNING -> "AST步骤跳过"
+                    updatedResult.steps[step.name]?.status != StepStatus.COMPLETED -> "步骤未完成: ${updatedResult.steps[step.name]?.status}"
+                    else -> "未知原因"
+                }
+            )
         }
 
         return updatedResult
@@ -188,12 +229,20 @@ class ProjectAnalysisPipeline(
      * 向量化步骤数据
      */
     private suspend fun vectorizeStepData(stepName: String, data: String?) {
-        if (data == null) return
+        logger.info("vectorizeStepData 被调用: stepName={}, dataLength={}, dataIsNull={}",
+            stepName, data?.length, data == null)
 
+        if (data == null) {
+            logger.warn("向量化数据为空，跳过: stepName={}", stepName)
+            return
+        }
+
+        logger.info("开始初始化向量化服务...")
         val service = vectorizationService ?: run {
             logger.warn("向量化服务未初始化，跳过向量化: step={}", stepName)
             return
         }
+        logger.info("向量化服务初始化成功")
 
         val vectorizeAction = when (stepName) {
             STEP_PROJECT_STRUCTURE -> service::vectorizeProjectStructure

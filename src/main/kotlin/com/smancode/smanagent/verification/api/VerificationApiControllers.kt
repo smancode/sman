@@ -63,6 +63,12 @@ open class VectorSearchApi(
             jvector = JVectorConfig(dimension = 1024),
             vectorDimension = 1024
         )
+
+        println("========== Semantic Search Debug ==========")
+        println("projectKey: $projectKey")
+        println("databasePath: ${config.databasePath}")
+        println("vectorStorePath: ${config.vectorStorePath}")
+
         val vectorStore = TieredVectorStore(config)
         val searchService = VectorSearchService(bgeM3Client, vectorStore, rerankerClient)
 

@@ -29,7 +29,7 @@ data class VectorDatabaseConfig(
     companion object {
         private const val SMANUNION_DIR = ".smanunion"
         private const val VECTOR_STORE_DIR = "vector_store"
-        private const val DATABASE_FILE = "analysis.mv.db"
+        private const val DATABASE_FILE = "analysis"  // 不带 .mv.db 后缀，H2 会自动添加
 
         /**
          * 创建配置（自动构建 projectKey 隔离路径）
