@@ -206,6 +206,33 @@ class H2DatabaseService(
     }
 
     /**
+     * 删除向量片段（支持前缀匹配）
+     */
+    suspend fun deleteVectorFragment(id: String) = withContext(Dispatchers.IO) {
+        dataSource.connection.use { connection ->
+            val sql = if (id.contains(":")) {
+                // 前缀匹配删除
+                "DELETE FROM vector_fragments WHERE id LIKE ? ESCAPE '\\'"
+            } else {
+                // 精确匹配删除
+                "DELETE FROM vector_fragments WHERE id = ?"
+            }
+
+            val pattern = if (id.contains(":")) {
+                "$id%"
+            } else {
+                id
+            }
+
+            connection.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, pattern)
+                val count = stmt.executeUpdate()
+                logger.info("从 H2 删除向量片段: id={}, count={}", id, count)
+            }
+        }
+    }
+
+    /**
      * 获取向量片段
      */
     suspend fun getVectorFragment(id: String): VectorFragment? = withContext(Dispatchers.IO) {

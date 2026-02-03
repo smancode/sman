@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service
  * 功能：
  * - 使用 BGE-M3 将查询转换为向量
  * - 从 TieredVectorStore 召回 topK 结果
- * - 可选：使用 Reranker 重排序
+ * - 可选：使用 Reranker 重排序（带 threshold 过滤）
  *
  * 白名单机制：参数不满足直接抛异常
  */
@@ -52,9 +52,9 @@ class VectorSearchService(
             fragment to queryVector.cosineSimilarity(fragment.vector!!).toDouble()
         }
 
-        // 可选：重排序
+        // 可选：重排序（带分数过滤）
         val rerankResults = if (request.enableRerank && recallResults.isNotEmpty()) {
-            performReranking(request.query, recallResults, request.rerankTopN)
+            performRerankingWithScores(request.query, recallResults, request.rerankTopN)
         } else {
             null
         }
@@ -65,7 +65,7 @@ class VectorSearchService(
         val response = VectorSearchResponse(
             query = request.query,
             recallResults = recallResultsWithScores.toSearchResultsWithScores(),
-            rerankResults = rerankResults?.toSearchResults(),
+            rerankResults = rerankResults?.toSearchResultsWithScores(),
             processingTimeMs = processingTime
         )
 
@@ -84,20 +84,23 @@ class VectorSearchService(
         }
     }
 
-    private fun performReranking(
+    /**
+     * 重排序（带分数过滤）
+     */
+    private fun performRerankingWithScores(
         query: String,
         recallResults: List<VectorFragment>,
         rerankTopN: Int
-    ): List<VectorFragment> = try {
+    ): List<Pair<VectorFragment, Double>> = try {
         val documents = recallResults.map { it.content }
-        val rerankIndices = rerankerClient.rerank(query, documents, rerankTopN)
+        val rerankResults = rerankerClient.rerankWithScores(query, documents, rerankTopN)
 
-        logger.debug("重排序完成: original={}, reranked={}", recallResults.size, rerankIndices.size)
+        logger.debug("重排序完成: original={}, reranked={}", recallResults.size, rerankResults.size)
 
-        rerankIndices.map { recallResults[it] }
+        rerankResults.map { (index, score) -> recallResults[index] to score }
     } catch (e: Exception) {
         logger.warn("重排序失败，使用原始顺序: {}", e.message)
-        recallResults.take(rerankTopN)
+        recallResults.take(rerankTopN).map { it to 1.0 }
     }
 
     private fun List<Pair<VectorFragment, Double>>.toSearchResultsWithScores(): List<SearchResult> =
@@ -107,17 +110,6 @@ class VectorSearchService(
                 fileName = fragment.getMetadata("fileName") ?: fragment.title,
                 content = fragment.content,
                 score = score,
-                rank = index + 1
-            )
-        }
-
-    private fun List<VectorFragment>.toSearchResults(): List<SearchResult> =
-        mapIndexed { index, fragment ->
-            SearchResult(
-                fragmentId = fragment.id,
-                fileName = fragment.getMetadata("fileName") ?: fragment.title,
-                content = fragment.content,
-                score = 0.0,
                 rank = index + 1
             )
         }

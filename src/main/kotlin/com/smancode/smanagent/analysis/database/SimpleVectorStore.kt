@@ -52,6 +52,16 @@ class SimpleVectorStore(
         return id in vectorMap
     }
 
+    override fun delete(id: String) {
+        val keysToDelete = if (id.contains(":")) {
+            vectorMap.keys.filter { it.startsWith(id) }
+        } else {
+            listOf(id)
+        }
+        keysToDelete.forEach { vectorMap.remove(it) }
+        logger.info("删除向量片段: id={}, count={}", id, keysToDelete.size)
+    }
+
     override fun close() {
         vectorMap.clear()
         logger.info("SimpleVectorStore 已关闭")

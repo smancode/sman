@@ -260,7 +260,8 @@ object SmanAgentConfig {
             timeoutSeconds = getConfigValue("reranker.timeout.seconds", 30),
             retry = getConfigValue("reranker.retry", 2),
             maxRounds = getConfigValue("reranker.max.rounds", 3),
-            topK = getConfigValue("reranker.top.k", 15)
+            topK = getConfigValue("reranker.top.k", 15),
+            threshold = getConfigValue("reranker.threshold", 0.1)
         )
     }
 

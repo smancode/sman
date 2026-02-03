@@ -381,6 +381,35 @@ class RerankerClient(
     }
 
     /**
+     * 重排结果（带分数过滤）
+     *
+     * @param query 查询文本
+     * @param documents 候选文档列表
+     * @param topK 返回 top K
+     * @return 重排序后的索引和分数，分数低于 threshold 的结果被过滤
+     */
+    fun rerankWithScores(query: String, documents: List<String>, topK: Int = config.topK): List<Pair<Int, Double>> {
+        if (!config.enabled) {
+            logger.debug("Reranker 未启用，返回原始顺序")
+            return documents.indices.map { it to 1.0 }
+        }
+
+        require(query.isNotBlank()) { "查询文本不能为空" }
+        require(documents.isNotEmpty()) { "文档列表不能为空" }
+        require(topK > 0) { "topK 必须大于 0" }
+
+        return try {
+            retryStrategy.executeWithRetry(
+                operation = { doRerankWithScores(query, documents, topK) },
+                operationName = "Reranker 调用（带分数）"
+            )
+        } catch (e: Exception) {
+            logger.warn("Reranker 调用失败，使用原始顺序: {}", e.message)
+            documents.indices.map { it to 1.0 }
+        }
+    }
+
+    /**
      * 执行单次重排请求
      */
     private fun doRerank(query: String, documents: List<String>, topK: Int): List<Int> {
@@ -409,6 +438,34 @@ class RerankerClient(
     }
 
     /**
+     * 执行单次重排请求（带分数）
+     */
+    private fun doRerankWithScores(query: String, documents: List<String>, topK: Int): List<Pair<Int, Double>> {
+        val escapedQuery = JsonEscapeUtils.escape(query)
+        val escapedDocs = documents.joinToString(",") { "\"${JsonEscapeUtils.escape(it)}\"" }
+        val requestJson = """
+            {"model":"${config.model}","query":"$escapedQuery","documents":[$escapedDocs],"top_k":$topK}
+        """.trimIndent().replace("\n", "")
+
+        logger.debug("Calling Reranker endpoint: {}", config.baseUrl)
+
+        val request = Request.Builder()
+            .url("${config.baseUrl}$RERANK_ENDPOINT")
+            .post(requestJson.toRequestBody(CONTENT_TYPE_JSON.toMediaType()))
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw RuntimeException("Reranker 调用失败: HTTP ${response.code}")
+            }
+
+            val responseBody = response.body?.string() ?: throw RuntimeException("响应为空")
+            return parseRerankResponseWithScores(responseBody)
+        }
+    }
+
+    /**
      * 解析重排响应
      */
     private fun parseRerankResponse(json: String): List<Int> {
@@ -420,6 +477,30 @@ class RerankerClient(
 
         return indexPattern.findAll(resultsStr)
             .map { it.groupValues[1].toInt() }
+            .toList()
+    }
+
+    /**
+     * 解析重排响应（带分数）
+     *
+     * Reranker 响应格式：{"results": [{"index": 0, "relevance_score": 0.95}, ...]}
+     */
+    private fun parseRerankResponseWithScores(json: String): List<Pair<Int, Double>> {
+        val resultsPattern = Regex("\"results\"\\s*:\\s*\\[(.*?)\\]")
+        val match = resultsPattern.find(json) ?: throw RuntimeException("无法解析重排响应")
+
+        val resultsStr = match.groupValues[1]
+
+        // 解析每个结果的 index 和 relevance_score
+        val resultPattern = Regex("\\{[^}]*\"index\"\\s*:\\s*(\\d+)[^}]*\"relevance_score\"\\s*:\\s*([0-9.]+)[^}]*\\}")
+
+        return resultPattern.findAll(resultsStr)
+            .map { match ->
+                val index = match.groupValues[1].toInt()
+                val score = match.groupValues[2].toDouble()
+                index to score
+            }
+            .filter { (_, score) -> score >= config.threshold }
             .toList()
     }
 

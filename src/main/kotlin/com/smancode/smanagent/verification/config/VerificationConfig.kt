@@ -114,10 +114,12 @@ open class VerificationConfig {
     open fun rerankerClient(): RerankerClient {
         val baseUrl = System.getenv("RERANKER_BASE_URL") ?: "http://localhost:8001/v1"
         val apiKey = System.getenv("RERANKER_API_KEY") ?: ""
+        val threshold = (System.getenv("RERANKER_THRESHOLD") ?: "0.1").toDouble()
         return RerankerClient(RerankerConfig(
             enabled = true,
             baseUrl = baseUrl,
-            apiKey = apiKey
+            apiKey = apiKey,
+            threshold = threshold
         ))
     }
 

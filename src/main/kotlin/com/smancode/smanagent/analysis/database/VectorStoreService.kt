@@ -42,6 +42,13 @@ interface VectorStoreService {
     fun contains(id: String): Boolean
 
     /**
+     * 删除向量片段
+     *
+     * @param id 片段 ID（支持前缀匹配，如 "autoloop:api_entry" 会删除所有以该前缀开头的向量）
+     */
+    fun delete(id: String)
+
+    /**
      * 关闭存储
      */
     fun close()
@@ -101,5 +108,19 @@ class MemoryVectorStore(
     override fun close() {
         store.clear()
         logger.info("MemoryVectorStore closed")
+    }
+
+    override fun delete(id: String) {
+        // 支持前缀匹配删除
+        val keysToDelete = if (id.endsWith(":")) {
+            // 精确匹配
+            listOf(id)
+        } else {
+            // 前缀匹配（如 "autoloop:api_entry" 会删除所有以该前缀开头的向量）
+            store.keys.filter { it.startsWith(id) }
+        }
+
+        keysToDelete.forEach { store.remove(it) }
+        logger.info("Deleted {} vector fragments with prefix: {}", keysToDelete.size, id)
     }
 }

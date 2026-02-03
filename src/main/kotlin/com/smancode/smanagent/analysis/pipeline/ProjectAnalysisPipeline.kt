@@ -247,10 +247,10 @@ class ProjectAnalysisPipeline(
         val vectorizeAction = when (stepName) {
             STEP_PROJECT_STRUCTURE -> service::vectorizeProjectStructure
             STEP_TECH_STACK -> service::vectorizeTechStack
-            STEP_DB_ENTITIES -> service::vectorizeDbEntities
-            STEP_API_ENTRIES -> service::vectorizeApiEntries
+            STEP_DB_ENTITIES -> service::vectorizeDbEntitiesIndividually
+            STEP_API_ENTRIES -> service::vectorizeApiEntriesIndividually
             STEP_EXTERNAL_APIS -> service::vectorizeExternalApis
-            STEP_ENUMS -> service::vectorizeEnums
+            STEP_ENUMS -> service::vectorizeEnumsIndividually
             STEP_COMMON_CLASSES -> service::vectorizeCommonClasses
             STEP_XML_CODES -> service::vectorizeXmlCodes
             else -> null

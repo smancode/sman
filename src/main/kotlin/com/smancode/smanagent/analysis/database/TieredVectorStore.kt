@@ -150,6 +150,32 @@ class TieredVectorStore(
         l1Cache.contains(id) || l2Store.contains(id)
 
     /**
+     * 删除向量片段（支持前缀匹配）
+     */
+    override fun delete(id: String) {
+        // 从 L1 缓存删除
+        val keysToDelete = listOf(id)
+
+        keysToDelete.forEach { l1Cache.remove(it) }
+
+        // 从 L2 (JVector) 删除
+        l2Store.delete(id)
+
+        // 从 L3 (H2) 删除（异步）
+        runBlocking {
+            keysToDelete.forEach { key ->
+                try {
+                    l3Store.deleteVectorFragment(key)
+                } catch (e: Exception) {
+                    logger.warn("从 H2 删除向量失败: id={}", key, e)
+                }
+            }
+        }
+
+        logger.info("删除向量片段: id={}", id)
+    }
+
+    /**
      * 启动后台写入线程
      */
     private fun startBackgroundWriter() {
@@ -224,6 +250,9 @@ class LRUCache<K, V>(
 
     @Synchronized
     fun contains(key: K): Boolean = key in cache
+
+    @Synchronized
+    fun remove(key: K): V? = cache.remove(key)
 
     @Synchronized
     fun values(): Collection<V> = cache.values.toList()

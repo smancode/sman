@@ -35,6 +35,7 @@ data class BgeM3Config(
  * @property retry 重试次数
  * @property maxRounds 最多遍历端点轮数
  * @property topK 返回 top K
+ * @property threshold 相似度阈值 (0.0-1.0)，低于此值的结果将被过滤
  */
 data class RerankerConfig(
     val enabled: Boolean = true,
@@ -44,7 +45,8 @@ data class RerankerConfig(
     val timeoutSeconds: Int = 30,
     val retry: Int = 2,
     val maxRounds: Int = 3,
-    val topK: Int = 15
+    val topK: Int = 15,
+    val threshold: Double = 0.1
 ) {
     init {
         require(baseUrl.isNotBlank()) { "baseUrl must not be blank" }
@@ -52,5 +54,6 @@ data class RerankerConfig(
         require(retry >= 0) { "retry must be non-negative" }
         require(maxRounds > 0) { "maxRounds must be positive" }
         require(topK > 0) { "topK must be positive" }
+        require(threshold in 0.0..1.0) { "threshold must be between 0.0 and 1.0" }
     }
 }
