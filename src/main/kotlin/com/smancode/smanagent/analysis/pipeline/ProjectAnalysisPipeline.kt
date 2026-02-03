@@ -18,7 +18,11 @@ import com.smancode.smanagent.analysis.step.ProjectStructureStep
 import com.smancode.smanagent.analysis.step.TechStackDetectionStep
 import com.smancode.smanagent.analysis.step.XmlCodeScanningStep
 import com.smancode.smanagent.analysis.step.ExternalApiScanningStep
+import com.smancode.smanagent.analysis.step.LlmCodeVectorizationStep
 import com.smancode.smanagent.analysis.vectorization.ProjectInfoVectorizationService
+import com.smancode.smanagent.smancode.llm.config.LlmEndpoint
+import com.smancode.smanagent.smancode.llm.config.LlmPoolConfig
+import com.smancode.smanagent.smancode.llm.LlmService
 import com.smancode.smanagent.ide.service.storageService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -187,7 +191,8 @@ class ProjectAnalysisPipeline(
     }
 
     private suspend fun executeAllSteps(result: ProjectAnalysisResult, context: AnalysisContext): ProjectAnalysisResult {
-        return steps.fold(result) { currentResult, step ->
+        // 首先执行所有标准分析步骤
+        val standardStepsCompleted = steps.fold(result) { currentResult, step ->
             if (step.canExecute(context)) {
                 executeAndVectorizeStep(currentResult, context, step)
             } else {
@@ -195,6 +200,68 @@ class ProjectAnalysisPipeline(
                 currentResult
             }
         }.markCompleted()
+
+        // 最后执行 LLM 驱动的代码向量化（在所有其他步骤完成后）
+        if (shouldExecuteLlmVectorization()) {
+            logger.info("开始执行 LLM 代码向量化步骤")
+            val llmStep = createLlmCodeVectorizationStep(context)
+            val llmResult = executeStep(standardStepsCompleted, context, llmStep)
+            repository.saveAnalysisResult(llmResult)
+        } else {
+            logger.info("跳过 LLM 代码向量化步骤: BGE 端点未配置")
+        }
+
+        return standardStepsCompleted
+    }
+
+    /**
+     * 判断是否应该执行 LLM 向量化步骤
+     */
+    private fun shouldExecuteLlmVectorization(): Boolean {
+        // 检查 BGE 端点是否配置
+        val bgeEndpoint = project?.let { proj ->
+            proj.storageService().bgeEndpoint
+        } ?: return false
+
+        return bgeEndpoint.isNotBlank()
+    }
+
+    /**
+     * 创建 LLM 代码向量化步骤
+     */
+    private fun createLlmCodeVectorizationStep(context: AnalysisContext): LlmCodeVectorizationStep {
+        val llmService = createLlmService()
+        val bgeEndpoint = project?.storageService()?.bgeEndpoint ?: ""
+
+        val basePath = context.project.basePath ?: throw IllegalStateException("项目基础路径为空")
+        val projectPath = java.nio.file.Paths.get(basePath)
+
+        return LlmCodeVectorizationStep(
+            projectPath = projectPath,
+            projectKey = projectKey,
+            llmService = llmService,
+            bgeEndpoint = bgeEndpoint
+        )
+    }
+
+    /**
+     * 创建 LLM 服务
+     */
+    private fun createLlmService(): LlmService {
+        val endpoint = LlmEndpoint().apply {
+            baseUrl = com.smancode.smanagent.config.SmanAgentConfig.llmBaseUrl
+            apiKey = com.smancode.smanagent.config.SmanAgentConfig.llmApiKey
+            model = com.smancode.smanagent.config.SmanAgentConfig.llmModelName
+            maxTokens = com.smancode.smanagent.config.SmanAgentConfig.llmResponseMaxTokens
+        }
+
+        val poolConfig = LlmPoolConfig().apply {
+            endpoints.add(endpoint)
+            retry.maxRetries = com.smancode.smanagent.config.SmanAgentConfig.llmRetryMax
+            retry.baseDelay = com.smancode.smanagent.config.SmanAgentConfig.llmRetryBaseDelay
+        }
+
+        return LlmService(poolConfig)
     }
 
     private suspend fun executeAndVectorizeStep(result: ProjectAnalysisResult, context: AnalysisContext, step: AnalysisStep): ProjectAnalysisResult {

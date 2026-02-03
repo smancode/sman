@@ -41,22 +41,27 @@ class LlmPoolConfig {
             val index = Math.abs(roundRobinIndex.getAndIncrement() % totalEndpoints)
             val endpoint = enabledEndpoints[index]
 
+            // 情况 1：端点可用，直接返回
             if (endpoint.isAvailable) {
                 return endpoint
             }
 
-            // 检查是否已过冷却期（使用重试策略的 base-delay）
-            if (endpoint.isCooldownOver(retry.baseDelay)) {
-                // 冷却期已过，尝试重置可用状态
+            // 情况 2：端点不可用，检查冷却期
+            val cooldownMs = retry.baseDelay
+            if (endpoint.isCooldownOver(cooldownMs)) {
+                // 冷却期已过，重置可用状态并返回
                 endpoint.markSuccess()
                 return endpoint
             }
 
+            // 情况 3：冷却期未过，尝试下一个端点
             attempts++
         }
 
-        // 所有端点都不可用
-        return null
+        // 所有端点都在冷却期，强制重置第一个端点（避免级联失败）
+        val firstEndpoint = enabledEndpoints[0]
+        firstEndpoint.markSuccess()
+        return firstEndpoint
     }
 
     /**

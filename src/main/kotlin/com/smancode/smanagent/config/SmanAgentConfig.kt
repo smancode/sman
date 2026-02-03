@@ -278,6 +278,24 @@ object SmanAgentConfig {
     }
 
     /**
+     * 是否启用 LLM 代码向量化
+     *
+     * 启用后会对每个源文件调用 LLM 进行精读分析，生成业务描述
+     */
+    val analysisLlmVectorizationEnabled: Boolean by lazy {
+        getConfigValue("analysis.llm.vectorization.enabled", false)
+    }
+
+    /**
+     * LLM 代码向量化全量刷新
+     *
+     * 设置为 true 时，会忽略 MD5 缓存，对所有文件重新进行 LLM 分析
+     */
+    val analysisLlmVectorizationFullRefresh: Boolean by lazy {
+        getConfigValue("analysis.llm.vectorization.full.refresh", false)
+    }
+
+    /**
      * 加载配置文件
      */
     private fun loadProperties(): Properties {
