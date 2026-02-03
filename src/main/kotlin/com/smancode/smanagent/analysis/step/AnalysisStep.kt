@@ -2,6 +2,7 @@ package com.smancode.smanagent.analysis.step
 
 import com.smancode.smanagent.analysis.model.StepResult
 import com.smancode.smanagent.analysis.model.StepStatus
+import com.smancode.smanagent.config.SmanAgentConfig
 
 /**
  * 项目分析步骤接口
@@ -33,10 +34,41 @@ interface AnalysisStep {
     /**
      * 检查步骤是否可以执行
      *
+     * 默认逻辑：
+     * 1. 如果配置了强制刷新（analysis.force.refresh=true），总是执行
+     * 2. 如果项目 MD5 发生变化，需要执行
+     * 3. 如果缓存中没有该步骤结果，需要执行
+     * 4. 如果缓存中的步骤失败，重新执行
+     * 5. 其他情况跳过执行（复用缓存）
+     *
      * @param context 分析上下文
      * @return true 如果可以执行，false 表示跳过
      */
-    suspend fun canExecute(context: AnalysisContext): Boolean = true
+    suspend fun canExecute(context: AnalysisContext): Boolean {
+        // 1. 检查是否配置了强制刷新
+        if (SmanAgentConfig.analysisForceRefresh) {
+            return true
+        }
+
+        // 2. 如果项目 MD5 发生变化，需要执行
+        if (context.hasProjectChanged()) {
+            return true
+        }
+
+        // 3. 如果缓存中没有该步骤的结果，需要执行
+        val cachedStep = context.cachedAnalysis?.steps?.get(name)
+        if (cachedStep == null) {
+            return true
+        }
+
+        // 4. 如果缓存中的步骤失败了，重新执行
+        if (cachedStep.status != StepStatus.COMPLETED) {
+            return true
+        }
+
+        // 5. 项目未变化且缓存中有成功的结果，跳过执行
+        return false
+    }
 }
 
 /**
@@ -75,11 +107,25 @@ data class AnalysisContext(
 
     /**
      * 检查项目是否发生变化
+     *
+     * @return true 表示项目变化了（需要重新分析），false 表示项目未变化
      */
     fun hasProjectChanged(): Boolean {
         val cachedMd5 = cachedAnalysis?.projectMd5
         val currentMd5 = currentProjectMd5
-        return cachedMd5 != null && currentMd5 != null && cachedMd5 != currentMd5
+
+        // 如果没有当前 MD5（计算失败），保守起见认为项目变化了
+        if (currentMd5 == null) {
+            return true
+        }
+
+        // 如果没有缓存的 MD5（第一次分析），认为项目变化了
+        if (cachedMd5 == null) {
+            return true
+        }
+
+        // MD5 不同，项目变化了
+        return cachedMd5 != currentMd5
     }
 }
 

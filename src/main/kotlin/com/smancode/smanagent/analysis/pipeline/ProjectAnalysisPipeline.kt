@@ -55,9 +55,15 @@ class ProjectAnalysisPipeline(
     private val vectorizationService by lazy {
         project?.let { proj ->
             val storage = proj.storageService()
+
+            // 优先级: 用户设置 > 本地检测 > 配置文件
             val bgeEndpoint = storage.bgeEndpoint.takeIf { it.isNotBlank() }
                 ?: detectLocalBgeService()?.also { endpoint ->
                     logger.info("自动检测到 BGE 服务: $endpoint")
+                    storage.bgeEndpoint = endpoint
+                }
+                ?: com.smancode.smanagent.config.SmanAgentConfig.bgeM3Config?.endpoint?.also { endpoint ->
+                    logger.info("使用配置文件中的 BGE 端点: $endpoint")
                     storage.bgeEndpoint = endpoint
                 }
 

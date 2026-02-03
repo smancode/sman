@@ -3,13 +3,6 @@
 ### 项目: autoloop
 
 ##############################################################################
-# 健康检查
-##############################################################################
-
-### 1. 健康检查
-GET http://localhost:8080/actuator/health
-
-##############################################################################
 # 分析结果查询 API
 ##############################################################################
 
@@ -69,6 +62,7 @@ Content-Type: application/json
 }
 
 ### 7. 查询外调接口 (external_api_scanning)
+# 预期结果: 应该包含 TransferServiceImpl (RestClient)
 POST http://localhost:8080/api/verify/analysis_results
 Content-Type: application/json
 
@@ -91,6 +85,7 @@ Content-Type: application/json
 }
 
 ### 9. 查询公共类 (common_class_scanning)
+# 预期结果: 应该包含 FileFilterUtil, MarkdownBuilder, TreeBuilder
 POST http://localhost:8080/api/verify/analysis_results
 Content-Type: application/json
 
@@ -102,6 +97,7 @@ Content-Type: application/json
 }
 
 ### 10. 查询 XML 代码 (xml_code_scanning)
+# 预期结果: MyBatis Mapper XML 文件
 POST http://localhost:8080/api/verify/analysis_results
 Content-Type: application/json
 

@@ -139,4 +139,55 @@ open class VerificationConfig {
     open fun vectorStore(config: VectorDatabaseConfig): TieredVectorStore {
         return TieredVectorStore(config)
     }
+
+    /**
+     * 初始化 H2 数据库表
+     * 确保验证服务启动时创建必要的表
+     */
+    @Bean
+    open fun initializeDatabaseTables(dataSource: DataSource): DataSource {
+        dataSource.connection.use { connection ->
+            // 创建 PROJECT_ANALYSIS 表
+            connection.createStatement().executeUpdate("""
+                CREATE TABLE IF NOT EXISTS project_analysis (
+                    project_key VARCHAR(255) PRIMARY KEY,
+                    start_time BIGINT NOT NULL,
+                    end_time BIGINT,
+                    status VARCHAR(20) NOT NULL,
+                    project_md5 VARCHAR(32),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """.trimIndent())
+
+            // 创建 ANALYSIS_STEP 表
+            connection.createStatement().executeUpdate("""
+                CREATE TABLE IF NOT EXISTS analysis_step (
+                    id VARCHAR(255) PRIMARY KEY,
+                    project_key VARCHAR(255) NOT NULL,
+                    step_name VARCHAR(100) NOT NULL,
+                    step_description VARCHAR(255),
+                    status VARCHAR(20) NOT NULL,
+                    start_time BIGINT NOT NULL,
+                    end_time BIGINT,
+                    data TEXT,
+                    error TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """.trimIndent())
+
+            // 创建索引
+            try {
+                connection.createStatement().executeUpdate("""
+                    CREATE INDEX IF NOT EXISTS idx_analysis_step_project
+                    ON analysis_step(project_key)
+                """.trimIndent())
+            } catch (e: Exception) {
+                // 索引可能已存在
+            }
+
+            println("H2 数据库表初始化完成 (PROJECT_ANALYSIS, ANALYSIS_STEP)")
+        }
+        return dataSource
+    }
 }

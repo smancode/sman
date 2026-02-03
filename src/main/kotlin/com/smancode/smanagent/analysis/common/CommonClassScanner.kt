@@ -29,16 +29,32 @@ class CommonClassScanner {
             val javaFiles = ProjectSourceFinder.findAllJavaFiles(projectPath)
             val allFiles = kotlinFiles + javaFiles
 
+            logger.info("========== CommonClassScanner 开始 ==========")
             logger.info("扫描 {} 个源文件检测公共类 (Kotlin: {}, Java: {})",
                 allFiles.size, kotlinFiles.size, javaFiles.size)
 
+            var processedCount = 0
+            var matchedCount = 0
+
             allFiles.forEach { file ->
                 try {
-                    parseCommonClass(file)?.let { if (isCommonClass(it)) commonClasses.add(it) }
+                    processedCount++
+                    val classInfo = parseCommonClass(file)
+                    if (classInfo != null) {
+                        logger.info("[$processedCount/${allFiles.size}] 解析文件: $file -> className=${classInfo.className}, packageName=${classInfo.packageName}")
+                        if (isCommonClass(classInfo)) {
+                            commonClasses.add(classInfo)
+                            matchedCount++
+                            logger.info("  -> ✓ 添加到公共类列表 (当前总数: $matchedCount)")
+                        }
+                    }
                 } catch (e: Exception) {
-                    logger.debug("解析文件失败: $file", e)
+                    logger.warn("解析文件失败: $file, error: ${e.message}")
                 }
             }
+
+            logger.info("========== CommonClassScanner 完成 ==========")
+            logger.info("处理文件数: $processedCount, 检测到公共类: $matchedCount")
         } catch (e: Exception) {
             logger.error("公共类扫描失败", e)
         }
@@ -64,13 +80,19 @@ class CommonClassScanner {
 
         // 提取类名（支持 Java 修饰符）
         val classPattern = if (isJava) {
-            // Java: public class X, private interface Y, enum class Z 等
-            Regex("(?:public|private|protected|static|final|abstract|sealed)\\s+)?(?:class|interface|enum)\\s+(\\w+)")
+            // Java: 简化版 - 直接匹配 class/interface/enum
+            Regex("(?:class|interface|enum)\\s+(\\w+)")
         } else {
             // Kotlin: class X, interface Y, object Z
             Regex("(?:class|object|interface|data\\s+class)\\s+(\\w+)")
         }
-        val classMatch = classPattern.find(content) ?: return null
+        val classMatch = classPattern.find(content)
+
+        if (classMatch == null) {
+            logger.warn("未找到类声明: file=$file, isJava=$isJava")
+            return null
+        }
+
         val className = classMatch.groupValues[1]
         val qualifiedName = if (packageName.isNotEmpty()) {
             "$packageName.$className"
@@ -100,12 +122,12 @@ class CommonClassScanner {
         val className = classInfo.className.lowercase()
         val packageName = classInfo.packageName.lowercase()
 
-        logger.debug("检查公共类: className={}, packageName={}", className, packageName)
+        logger.info("检查公共类: className={}, packageName={}", className, packageName)
 
         // 工具类后缀（完整匹配，避免部分匹配）
         val utilSuffixes = listOf("util", "utils", "helper", "helpers", "tool", "tools")
         if (utilSuffixes.any { suffix -> className.endsWith(suffix) || className.endsWith("${suffix}class") || className.endsWith("${suffix}s") }) {
-            logger.debug("  -> 匹配工具类后缀: {}", className)
+            logger.info("  -> ✓ 匹配工具类后缀: {}", className)
             return true
         }
 
@@ -115,22 +137,23 @@ class CommonClassScanner {
             ".common.", ".shared."
         )
         if (utilPackages.any { packageName.contains(it) }) {
-            logger.debug("  -> 匹配工具类包名: {}", packageName)
+            logger.info("  -> ✓ 匹配工具类包名: {}", packageName)
             return true
         }
 
         // core.util 等包名
         if (packageName.contains(".util") || packageName.contains(".helper")) {
-            logger.debug("  -> 匹配 util/helper 包: {}", packageName)
+            logger.info("  -> ✓ 匹配 util/helper 包: {}", packageName)
             return true
         }
 
         // 静态方法多
         if (classInfo.methods.count { it.isStatic } > 3) {
-            logger.debug("  -> 静态方法多: {}", classInfo.methods.count { it.isStatic })
+            logger.info("  -> ✓ 静态方法多: {}", classInfo.methods.count { it.isStatic })
             return true
         }
 
+        logger.info("  -> ✗ 不匹配工具类条件")
         return false
     }
 
@@ -140,46 +163,53 @@ class CommonClassScanner {
     private fun parseMethods(content: String, isJava: Boolean): List<MethodInfo> {
         val methods = mutableListOf<MethodInfo>()
 
-        val funPattern = if (isJava) {
-            // Java: public/private/protected/static/final returnType methodName(params)
-            Regex("(?:public|private|protected|static|final|synchronized|native)\\s+)?" +
-                  "(?:[\\w<>\\[\\],\\s]+?)\\s+" +
-                  "(\\w+)\\s*" +
-                  "\\(([^)]*)\\)" +
-                  "(?:\\s+throws\\s+[\\w.,\\s]+)?")
+        if (isJava) {
+            // Java: 匹配方法声明（更简单的模式）
+            // 1. 先找到所有 public/private/protected/... 开头的行为
+            // 2. 然后提取方法名和参数
+
+            // 简化版：匹配 (修饰符) 返回类型 方法名(参数)
+            val methodPattern = Regex(
+                "(?:public|private|protected|static|final|synchronized|native|abstract)\\s+" +
+                "(?:[\\w<>\\[\\],\\s]+)\\s+" +  // 返回类型（可能包含泛型）
+                "(\\w+)\\s*" +  // 方法名 - 捕获组1
+                "\\(([^)]*)\\)"  // 参数 - 捕获组2
+            )
+
+            methodPattern.findAll(content).forEach { match ->
+                val name = match.groupValues[1]  // 方法名
+                val parametersStr = match.groupValues[2]  // 参数
+
+                // 简化返回类型检测
+                val returnType = "void"  // 暂时简化
+
+                // 检查是否静态方法（通过检查原始匹配内容）
+                val fullMatch = match.value
+                val isStatic = fullMatch.contains("static")
+
+                methods.add(MethodInfo(
+                    name = name,
+                    returnType = returnType,
+                    parameters = parseParameters(parametersStr),
+                    isStatic = isStatic
+                ))
+            }
         } else {
             // Kotlin: fun methodName(params): returnType
-            Regex("(fun\\s+(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(\\w+))?")
-        }
+            val funPattern = Regex("fun\\s+(\\w+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*(\\w+))?")
 
-        funPattern.findAll(content).forEach { match ->
-            val name = match.groupValues[2]
-            val parametersStr = if (isJava) match.groupValues[3] else match.groupValues[1]
-            val returnType = if (isJava) {
-                // Java 返回类型在方法名之前
-                val beforeMethod = match.groupValues[1].trim()
-                if (beforeMethod.contains(" ")) {
-                    beforeMethod.substringBeforeLast(" ").trim()
-                } else {
-                    "void" // 默认返回类型
-                }
-            } else {
-                match.groupValues[3].ifEmpty { "Unit" }
+            funPattern.findAll(content).forEach { match ->
+                val name = match.groupValues[1]
+                val parametersStr = match.groupValues[2]
+                val returnType = match.groupValues[3].ifEmpty { "Unit" }
+
+                methods.add(MethodInfo(
+                    name = name,
+                    returnType = returnType,
+                    parameters = parseParameters(parametersStr),
+                    isStatic = false
+                ))
             }
-
-            // 检查是否静态方法
-            val isStatic = if (isJava) {
-                match.groupValues[1].contains("static")
-            } else {
-                false // Kotlin 没有 static，使用 companion object
-            }
-
-            methods.add(MethodInfo(
-                name = name,
-                returnType = returnType,
-                parameters = parseParameters(parametersStr),
-                isStatic = isStatic
-            ))
         }
 
         return methods
@@ -192,16 +222,17 @@ class CommonClassScanner {
         val fields = mutableListOf<FieldInfo>()
 
         if (isJava) {
-            // Java: private/public/protected/static/final Type fieldName;
+            // Java: (修饰符) 类型 字段名;
+            // 捕获组1: 类型, 捕获组2: 名称
             val fieldPattern = Regex(
                 "(?:private|public|protected|static|final|transient|volatile)\\s+" +
-                "(?:[\\w<>\\[\\],]+?)\\s+" +
-                "(\\w+)\\s*(?:=.*)?;"
+                "([\\w<>\\[\\]]+)\\s+" +  // 类型 - 捕获组1
+                "(\\w+)\\s*;"  // 名称 - 捕获组2
             )
 
             fieldPattern.findAll(content).forEach { match ->
                 val name = match.groupValues[2]
-                val type = match.groupValues[1].trim().takeLastWhile { it != ' ' }
+                val type = match.groupValues[1].trim()
                 fields.add(FieldInfo(name = name, type = type))
             }
         } else {

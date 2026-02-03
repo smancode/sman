@@ -264,6 +264,18 @@ object SmanAgentConfig {
         )
     }
 
+    // ==================== 项目分析配置 ====================
+
+    /**
+     * 强制刷新项目分析（跳过缓存）
+     *
+     * 开发阶段设置为 true，每次都重新分析
+     * 生产环境设置为 false，利用 MD5 缓存提升性能
+     */
+    val analysisForceRefresh: Boolean by lazy {
+        getConfigValue("analysis.force.refresh", false)
+    }
+
     /**
      * 加载配置文件
      */

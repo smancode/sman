@@ -57,12 +57,14 @@ class ExternalApiScanner {
         )
 
         // RestClient 调用模式 (Spring 6.1+)
+        // 支持 DotALL 模式（多行匹配）
+        // 匹配 .post().uri(变量) 或 .post().uri("字符串") 两种形式
         private val REST_CLIENT_PATTERNS = listOf(
-            Regex("""\.get\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
-            Regex("""\.post\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
-            Regex("""\.put\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
-            Regex("""\.delete\(\)\s*\.uri\(\s*["']([^"']+)["']"""),
-            Regex("""\.patch\(\)\s*\.uri\(\s*["']([^"']+)["']""")
+            Regex("""\.get\(\)\s*\.uri\(([^)]+)\)""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\.post\(\)\s*\.uri\(([^)]+)\)""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\.put\(\)\s*\.uri\(([^)]+)\)""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\.delete\(\)\s*\.uri\(([^)]+)\)""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\.patch\(\)\s*\.uri\(([^)]+)\)""", RegexOption.DOT_MATCHES_ALL)
         )
 
         // HTTP URL 模式
@@ -331,6 +333,20 @@ class ExternalApiScanner {
      * 扫描 RestClient 调用（Spring 6.1+）
      */
     private fun scanRestClientCalls(content: String, packageName: String, file: Path): List<LegacyExternalApiInfo> {
+        if (!content.contains("RestClient")) {
+            return emptyList()
+        }
+
+        logger.info("========== 检测到 RestClient 使用 ==========")
+        logger.info("  文件: {}", file.fileName)
+        logger.info("  包名: {}", packageName)
+
+        val methods = extractRestClientMethods(content)
+        logger.info("  提取到 {} 个方法", methods.size)
+        methods.forEach { method ->
+            logger.info("    - {} {}", method.httpMethod, method.path)
+        }
+
         return scanApiType(
             content = content,
             indicator = "RestClient",
