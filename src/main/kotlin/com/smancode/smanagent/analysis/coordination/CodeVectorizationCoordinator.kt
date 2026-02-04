@@ -313,6 +313,113 @@ class CodeVectorizationCoordinator(
     }
 
     /**
+     * 从已有的 .md 文件重新向量化（跳过 LLM 分析）
+     *
+     * 用于修复持久化问题后的数据恢复。
+     * 直接读取 .smanunion/md/ 目录下的 .md 文件，解析并向量化，不调用 LLM。
+     *
+     * @return 向量化结果
+     */
+    suspend fun vectorizeFromExistingMd(): VectorizationResult = withContext(Dispatchers.IO) {
+        logger.info("开始从已有 .md 文件向量化: projectKey={}", projectKey)
+
+        val startTime = System.currentTimeMillis()
+        val errors = mutableListOf<VectorizationResult.FileError>()
+
+        // 先删除所有旧的 .md 向量（清理历史遗留问题）
+        // 注意：这里暂时跳过，因为需要添加 H2 查询方法
+        // TODO: 添加清理旧向量的逻辑
+
+        // 扫描 .md 文件目录
+        val mdDir = projectPath.resolve(".smanunion/md")
+        if (!mdDir.exists()) {
+            logger.warn(".md 文件目录不存在: {}", mdDir)
+            return@withContext VectorizationResult(
+                totalFiles = 0,
+                processedFiles = 0,
+                skippedFiles = 0,
+                totalVectors = 0,
+                errors = emptyList(),
+                elapsedTimeMs = System.currentTimeMillis() - startTime
+            )
+        }
+
+        // 扫描所有 .md 文件
+        val mdFiles = Files.walk(mdDir)
+            .filter { it.toFile().isFile && it.fileName.toString().endsWith(".md") }
+            .toList()
+
+        logger.info("找到 .md 文件: {} 个", mdFiles.size)
+
+        var processedCount = 0
+        var totalVectors = 0
+
+        for (mdFile in mdFiles) {
+            try {
+                // 读取 .md 文件内容
+                val mdContent = mdFile.toFile().readText()
+
+                // 跳过空文件
+                if (mdContent.isBlank()) {
+                    logger.debug("跳过空 .md 文件: {}", mdFile.fileName)
+                    continue
+                }
+
+                // 解析 .md 文件为向量片段
+                val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(mdFile, mdContent)
+
+                if (vectors.isEmpty()) {
+                    logger.debug(".md 文件没有解析出向量: {}", mdFile.fileName)
+                    continue
+                }
+
+                // 为每个向量生成嵌入并存储
+                for (vector in vectors) {
+                    try {
+                        // 生成向量嵌入
+                        val embedding = bgeClient.embed(vector.content)
+
+                        // 更新向量值
+                        val vectorWithEmbedding = vector.copy(vector = embedding)
+
+                        // 删除旧向量
+                        vectorStore.delete(vector.id)
+
+                        // 存储新向量（会持久化到 H2）
+                        vectorStore.add(vectorWithEmbedding)
+
+                    } catch (e: Exception) {
+                        logger.error("向量化失败: id={}, error={}", vector.id, e.message)
+                        throw e
+                    }
+                }
+
+                processedCount++
+                totalVectors += vectors.size
+
+                logger.debug("文件向量化完成: file={}, vectors={}", mdFile.fileName, vectors.size)
+
+            } catch (e: Exception) {
+                logger.error("向量化 .md 文件失败: file={}, error={}", mdFile.fileName, e.message)
+                errors.add(VectorizationResult.FileError(mdFile, e.message ?: "未知错误"))
+            }
+        }
+
+        val elapsedTime = System.currentTimeMillis() - startTime
+        logger.info("从已有 .md 文件向量化完成: 处理={}, 向量数={}, 耗时={}ms",
+            processedCount, totalVectors, elapsedTime)
+
+        VectorizationResult(
+            totalFiles = mdFiles.size,
+            processedFiles = processedCount,
+            skippedFiles = mdFiles.size - processedCount,
+            totalVectors = totalVectors,
+            errors = errors,
+            elapsedTimeMs = elapsedTime
+        )
+    }
+
+    /**
      * 关闭协调器
      */
     fun close() {

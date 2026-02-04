@@ -494,14 +494,24 @@ class RerankerClient(
         // 解析每个结果的 index 和 relevance_score
         val resultPattern = Regex("\\{[^}]*\"index\"\\s*:\\s*(\\d+)[^}]*\"relevance_score\"\\s*:\\s*([0-9.]+)[^}]*\\}")
 
-        return resultPattern.findAll(resultsStr)
+        val allResults = resultPattern.findAll(resultsStr)
             .map { match ->
                 val index = match.groupValues[1].toInt()
                 val score = match.groupValues[2].toDouble()
                 index to score
             }
-            .filter { (_, score) -> score >= config.threshold }
             .toList()
+
+        // 记录 Reranker 返回的原始分数
+        logger.info("Reranker 原始分数: {}", allResults.map { (idx, score) -> "[$idx]=$score" })
+
+        // 过滤低于阈值的结果
+        val filtered = allResults.filter { (_, score) -> score >= config.threshold }
+        if (filtered.size < allResults.size) {
+            logger.info("Reranker 过滤: 原始={}, 阈值={}, 过滤后={}", allResults.size, config.threshold, filtered.size)
+        }
+
+        return filtered
     }
 
     /**

@@ -120,14 +120,17 @@ class LlmCodeUnderstandingService(
             throw IllegalArgumentException("MD 内容不能为空")
         }
 
+        // 提取类名（从文件名或内容）
+        val className = extractClassName(sourceFile, mdContent)
+
         val vectors = mutableListOf<VectorFragment>()
 
         try {
             // 解析类信息
-            parseClassVector(sourceFile, mdContent)?.let { vectors.add(it) }
+            parseClassVector(sourceFile, mdContent, className)?.let { vectors.add(it) }
 
             // 解析方法信息
-            val methodVectors = parseMethodVectors(sourceFile, mdContent)
+            val methodVectors = parseMethodVectors(sourceFile, mdContent, className)
             vectors.addAll(methodVectors)
 
         } catch (e: Exception) {
@@ -136,6 +139,29 @@ class LlmCodeUnderstandingService(
         }
 
         return vectors
+    }
+
+    /**
+     * 从文件路径或 MD 内容中提取类名
+     */
+    private fun extractClassName(sourceFile: Path, mdContent: String): String {
+        // 优先从 MD 内容的标题中提取
+        val titleMatch = Regex("""#\s+(\S+)""").find(mdContent)
+        if (titleMatch != null) {
+            val className = titleMatch.groupValues[1]
+            logger.info("从 MD 标题提取类名: className={}, sourceFile={}", className, sourceFile.fileName)
+            return className
+        }
+
+        // 从文件名提取
+        val fileName = sourceFile.fileName.toString()
+        val className = when {
+            fileName.endsWith(".md") -> fileName.removeSuffix(".md")
+            fileName.endsWith(".java") -> fileName.removeSuffix(".java")
+            else -> fileName
+        }
+        logger.warn("从文件名提取类名: className={}, sourceFile={}", className, sourceFile.fileName)
+        return className
     }
 
     /**
@@ -330,10 +356,7 @@ class LlmCodeUnderstandingService(
     /**
      * 解析类向量
      */
-    private fun parseClassVector(sourceFile: Path, mdContent: String): VectorFragment? {
-        // 提取类名（第一个 # 标题）
-        val titleMatch = Regex("""#\s+(\S+)""").find(mdContent)
-        val className = titleMatch?.groupValues?.get(1) ?: return null
+    private fun parseClassVector(sourceFile: Path, mdContent: String, className: String): VectorFragment? {
 
         // 提取业务描述
         val descMatch = Regex("""## 业务描述\s*\n\s*(.+?)(?=\n\s*##|\n\s*---|\Z)""", RegexOption.DOT_MATCHES_ALL)
@@ -363,7 +386,7 @@ class LlmCodeUnderstandingService(
     /**
      * 解析方法向量列表
      */
-    private fun parseMethodVectors(sourceFile: Path, mdContent: String): List<VectorFragment> {
+    private fun parseMethodVectors(sourceFile: Path, mdContent: String, className: String): List<VectorFragment> {
         val vectors = mutableListOf<VectorFragment>()
 
         // 匹配所有方法块
@@ -387,7 +410,7 @@ class LlmCodeUnderstandingService(
             val sourceCode = sourceMatch?.groupValues?.get(1)?.trim() ?: ""
 
             vectors.add(VectorFragment(
-                id = "method:${sourceFile.fileName.toString().removeSuffix(".java")}.$methodName",
+                id = "method:$className.$methodName",
                 title = methodName,
                 content = businessDesc.ifEmpty { "方法" },
                 fullContent = sourceCode,

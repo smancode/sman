@@ -46,7 +46,7 @@ data class RerankerConfig(
     val retry: Int = 2,
     val maxRounds: Int = 3,
     val topK: Int = 15,
-    val threshold: Double = 0.1
+    val threshold: Double = 0.0
 ) {
     init {
         require(baseUrl.isNotBlank()) { "baseUrl must not be blank" }

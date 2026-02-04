@@ -153,22 +153,30 @@ class TieredVectorStore(
      * 删除向量片段（支持前缀匹配）
      */
     override fun delete(id: String) {
-        // 从 L1 缓存删除
-        val keysToDelete = listOf(id)
+        // 支持前缀匹配删除（如 "method:" 删除所有 method 开头的向量）
+        // 注意：前缀匹配由 JVectorStore 的 delete 方法处理
+        // 这里只需要从 L1 缓存中删除匹配的项
 
-        keysToDelete.forEach { l1Cache.remove(it) }
+        if (id.contains(":")) {
+            // 前缀匹配：从 L1 缓存中删除所有匹配的 key
+            val keysToRemove = l1Cache.values()
+                .map { it.id }
+                .filter { it.startsWith(id) }
+            keysToRemove.forEach { l1Cache.remove(it) }
+        } else {
+            // 精确匹配
+            l1Cache.remove(id)
+        }
 
-        // 从 L2 (JVector) 删除
+        // 从 L2 (JVector) 删除（它会处理前缀匹配）
         l2Store.delete(id)
 
         // 从 L3 (H2) 删除（异步）
         runBlocking {
-            keysToDelete.forEach { key ->
-                try {
-                    l3Store.deleteVectorFragment(key)
-                } catch (e: Exception) {
-                    logger.warn("从 H2 删除向量失败: id={}", key, e)
-                }
+            try {
+                l3Store.deleteVectorFragment(id)
+            } catch (e: Exception) {
+                logger.warn("从 H2 删除向量失败: id={}", id, e)
             }
         }
 

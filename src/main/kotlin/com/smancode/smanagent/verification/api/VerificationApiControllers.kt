@@ -121,3 +121,58 @@ open class H2QueryApi {
         return ResponseEntity.ok(mapOf("data" to result))
     }
 }
+
+/**
+ * 向量化恢复 API
+ *
+ * 从已有的 .md 文件重新向量化到 H2 数据库
+ */
+@RestController
+@RequestMapping("/api/verify")
+open class VectorRecoveryApi {
+
+    private val logger = org.slf4j.LoggerFactory.getLogger(VectorRecoveryApi::class.java)
+
+    @PostMapping("/vectorize_from_md")
+    open fun vectorizeFromMd(@RequestBody request: Map<String, Any>): ResponseEntity<Map<String, Any>> {
+        val projectKey = request["projectKey"] as? String
+            ?: throw IllegalArgumentException("缺少 projectKey 参数")
+        val projectPath = request["projectPath"] as? String
+            ?: throw IllegalArgumentException("缺少 projectPath 参数")
+
+        logger.info("开始从已有 .md 文件向量化: projectKey={}, path={}", projectKey, projectPath)
+
+        // 创建向量化服务
+        val service = com.smancode.smanagent.analysis.service.VectorizationService(
+            projectKey = projectKey,
+            projectPath = java.nio.file.Paths.get(projectPath),
+            llmService = com.smancode.smanagent.config.SmanAgentConfig.createLlmService(),
+            bgeEndpoint = com.smancode.smanagent.config.SmanAgentConfig.bgeM3Config?.endpoint
+                ?: throw IllegalStateException("BGE 端点未配置")
+        )
+
+        // 执行向量化（自动清理旧向量）
+        val result = kotlinx.coroutines.runBlocking {
+            service.vectorizeFromExistingMd()
+        }
+
+        // 关闭服务
+        service.close()
+
+        logger.info("向量化完成: 处理={}, 向量数={}", result.processedFiles, result.totalVectors)
+
+        return ResponseEntity.ok(mapOf(
+            "success" to result.isSuccess,
+            "totalFiles" to result.totalFiles,
+            "processedFiles" to result.processedFiles,
+            "skippedFiles" to result.skippedFiles,
+            "totalVectors" to result.totalVectors,
+            "errors" to result.errors.map { "${it.file.fileName}: ${it.error}" },
+            "elapsedTimeMs" to result.elapsedTimeMs
+        ))
+    }
+
+    // TODO: 添加清理旧向量的端点（需要添加必要的 import）
+    // @PostMapping("/cleanup_md_vectors")
+    // open fun cleanupMdVectors(...): ResponseEntity<Map<String, Any>> { ... }
+}

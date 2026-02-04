@@ -63,6 +63,11 @@ class JVectorStore(
     private val efConstruction: Int = config.jvector.efConstruction
     private val rerankerThreshold: Double = config.jvector.rerankerThreshold
 
+    // H2 数据库服务（用于持久化）
+    private val h2Service: H2DatabaseService = H2DatabaseService(config).apply {
+        kotlinx.coroutines.runBlocking { init() }
+    }
+
     // 索引构建标志
     @Volatile
     private var indexBuilt: Boolean = false
@@ -152,6 +157,17 @@ class JVectorStore(
             idToOrdinal[fragment.id] = ordinal
             ordinalToId[ordinal] = fragment.id
 
+            // 持久化到 H2 数据库
+            try {
+                kotlinx.coroutines.runBlocking {
+                    h2Service.saveVectorFragment(fragment)
+                }
+                logger.debug("向量片段已持久化到 H2: id={}", fragment.id)
+            } catch (e: Exception) {
+                logger.error("向量片段持久化失败: id={}, error={}", fragment.id, e.message)
+                // 不抛出异常，允许继续使用内存中的数据
+            }
+
             // 标记索引需要重建
             indexBuilt = false
 
@@ -233,6 +249,15 @@ class JVectorStore(
             keysToDelete.forEach { key ->
                 vectors.remove(key)
                 idToOrdinal.remove(key)
+
+                // 从 H2 数据库删除
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        h2Service.deleteVectorFragment(key)
+                    }
+                } catch (e: Exception) {
+                    logger.warn("从 H2 删除向量失败: id={}, error={}", key, e.message)
+                }
             }
 
             // 重建 ordinal 到 ID 的映射
