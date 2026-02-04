@@ -114,13 +114,23 @@ open class VerificationConfig {
     open fun rerankerClient(): RerankerClient {
         val baseUrl = System.getenv("RERANKER_BASE_URL") ?: "http://localhost:8001/v1"
         val apiKey = System.getenv("RERANKER_API_KEY") ?: ""
-        val threshold = (System.getenv("RERANKER_THRESHOLD") ?: "0.0").toDouble()
+        val threshold = (System.getenv("RERANKER_THRESHOLD") ?: "0.1").toDouble()
         return RerankerClient(RerankerConfig(
             enabled = true,
             baseUrl = baseUrl,
             apiKey = apiKey,
             threshold = threshold
         ))
+    }
+
+    /**
+     * Reranker 相似度阈值
+     *
+     * 可通过环境变量 RERANKER_THRESHOLD 配置 (0.0-1.0, 推荐 0.1)
+     */
+    @Bean
+    open fun rerankerThreshold(): Double {
+        return (System.getenv("RERANKER_THRESHOLD") ?: "0.1").toDouble()
     }
 
     /**
