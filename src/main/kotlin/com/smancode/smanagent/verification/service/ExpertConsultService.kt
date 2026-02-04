@@ -100,6 +100,11 @@ class ExpertConsultService(
             return "未找到相关代码片段。"
         }
 
+        // DEBUG: 打印第一个结果的 fragmentId
+        logger.info("DEBUG: 第一个搜索结果: fragmentId={}, fileName={}",
+            results.firstOrNull()?.fragmentId,
+            results.firstOrNull()?.fileName)
+
         return buildString {
             appendLine("找到 ${results.size} 个相关代码片段：\n")
             results.forEachIndexed { index, searchResult ->

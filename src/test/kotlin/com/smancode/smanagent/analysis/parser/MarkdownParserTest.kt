@@ -235,6 +235,118 @@ class MarkdownParserTest {
     }
 
     @Test
+    @DisplayName("测试解析 enum 向量")
+    fun testParseEnumVector() = runTest {
+        // Given: Enum 格式的 MD 内容
+        val mdContent = """
+            # LoanStatus
+
+            ## 业务描述
+            贷款状态枚举，表示贷款在业务流程中的不同状态
+
+            ## 枚举值表格
+
+            | 枚举值 | 代码 | 业务含义 |
+            | --- | --- | --- |
+            | ACTIVE | 1 | 活跃状态，用户正在还款中 |
+            | PAID | 2 | 已还清，贷款已全部还清 |
+            | OVERDUE | 3 | 逾期状态，用户未按时还款 |
+            | CANCELLED | 4 | 已取消，贷款申请被取消 |
+        """.trimIndent()
+
+        val sourceFile = tempDir.resolve("LoanStatus.java").createFile()
+
+        // When: 解析 enum 向量
+        val enumVector = parser.parseEnumVector(sourceFile, mdContent, "LoanStatus")
+
+        // Then: 验证向量内容
+        assertNotNull(enumVector)
+        assertEquals("enum:LoanStatus", enumVector.id)
+        assertEquals("LoanStatus", enumVector.title)
+        assertTrue(enumVector.content.contains("贷款状态"))
+        assertTrue(enumVector.content.contains("ACTIVE") || enumVector.content.contains("枚举值"))
+        assertEquals(listOf("enum", "java"), enumVector.tags)
+        assertEquals("enum", enumVector.getMetadata("type"))
+    }
+
+    @Test
+    @DisplayName("测试从 Enum 表格提取枚举值")
+    fun testExtractEnumValues() = runTest {
+        // Given: 包含多个枚举值的 MD 内容
+        val mdContent = """
+            # PaymentMethod
+
+            ## 业务描述
+            支付方式枚举
+
+            ## 枚举值表格
+
+            | 枚举值 | 代码 | 业务含义 |
+            | --- | --- | --- |
+            | ALIPAY | 1 | 支付宝支付 |
+            | WECHAT | 2 | 微信支付 |
+            | BANK_CARD | 3 | 银行卡支付 |
+        """.trimIndent()
+
+        val sourceFile = tempDir.resolve("PaymentMethod.java").createFile()
+
+        // When: 解析所有向量
+        val allVectors = parser.parseAll(sourceFile, mdContent)
+
+        // Then: 应该只有一个 enum 向量
+        assertEquals(1, allVectors.size)
+        assertEquals("enum:PaymentMethod", allVectors[0].id)
+    }
+
+    @Test
+    @DisplayName("测试判断是否为 Enum MD 格式")
+    fun testIsEnumMarkdown() = runTest {
+        // Given: Enum 格式的 MD
+        val enumMd = """
+            # TestEnum
+            ## 业务描述
+            测试枚举
+            ## 枚举值表格
+            | 枚举值 | 代码 | 业务含义 |
+        """.trimIndent()
+
+        // When: 判断是否为 Enum
+        val isEnum = parser.isEnumMarkdown(enumMd)
+
+        // Then: 应该返回 true
+        assertTrue(isEnum)
+    }
+
+    @Test
+    @DisplayName("测试完整解析流程：enum（而非 class）")
+    fun testParseAllForEnum() = runTest {
+        // Given: Enum 格式的 MD 内容
+        val mdContent = """
+            # LoanStatus
+
+            ## 业务描述
+            贷款状态枚举，表示贷款在业务流程中的不同状态
+
+            ## 枚举值表格
+
+            | 枚举值 | 代码 | 业务含义 |
+            | --- | --- | --- |
+            | ACTIVE | 1 | 活跃状态 |
+            | PAID | 2 | 已还清 |
+        """.trimIndent()
+
+        val sourceFile = tempDir.resolve("LoanStatus.java").createFile()
+
+        // When: 解析所有向量
+        val allVectors = parser.parseAll(sourceFile, mdContent)
+
+        // Then: 应该只有 1 个 enum 向量（不是 class + methods）
+        assertEquals(1, allVectors.size)
+        assertEquals("enum:LoanStatus", allVectors[0].id)
+        assertEquals("enum", allVectors[0].getMetadata("type"))
+    }
+
+    @Test
     @DisplayName("测试边界情况：无方法的 class")
     fun testClassWithoutMethods() = runTest {
         // Given: 只有 class 信息，没有 method

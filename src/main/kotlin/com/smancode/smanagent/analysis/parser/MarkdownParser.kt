@@ -11,7 +11,7 @@ import kotlin.text.Regex
  * 职责：
  * - 解析 .md 文件内容为向量片段
  * - 从 MD 标题或文件名提取类名
- * - 解析 class 向量和 method 向量
+ * - 解析 enum 向量、class 向量和 method 向量
  *
  * 不涉及：向量化、存储、LLM 调用
  */
@@ -29,6 +29,13 @@ class MarkdownParser {
         private val METHOD_SIGNATURE_PATTERN = Regex("""### 签名\s*\n\s*`([^`]+)`""")
         private val SOURCE_CODE_PATTERN = Regex("""### 源码\s*\n```java\s*(.+?)\n```""", RegexOption.DOT_MATCHES_ALL)
         private val PACKAGE_NAME_PATTERN = Regex("""- \*\*包名\*\*:\s*`([^`]+)`""")
+
+        // Enum 相关模式（支持新旧两种格式）
+        // 新格式：## 枚举值表格 | 枚举值 | 代码 | 业务含义 |
+        // 旧格式：## 字典映射 | 枚举值 | 编码 | 业务描述 |
+        private val ENUM_TABLE_PATTERN_NEW = Regex("""\|\s*(\w+)\s*\|\s*\w+\s*\|\s*([^|]+?)\s*\|""")
+        private val ENUM_TABLE_PATTERN_OLD = Regex("""\|\s*(\w+)\s*\|\s*\w+\s*\|\s*([^|]+?)\s*\|""")
+        private val ENUM_VALUES_HEADER_PATTERN = Regex("""##\s*(枚举值表格|字典映射)""")
 
         // 文件扩展名
         private val FILE_EXTENSIONS = listOf(".md", ".java")
@@ -65,6 +72,84 @@ class MarkdownParser {
             }
         }
         return fileName
+    }
+
+    /**
+     * 解析 enum 向量
+     *
+     * 从 MD 内容中提取枚举级别的描述信息
+     */
+    fun parseEnumVector(sourceFile: Path, mdContent: String, enumName: String): VectorFragment {
+        // 提取业务描述（旧格式可能有空行）
+        val businessDesc = extractFirstLine(BUSINESS_DESC_PATTERN.find(mdContent))
+            .ifBlank { extractEnumBusinessDesc(mdContent) }
+
+        val enumValues = extractEnumValues(mdContent)
+
+        // DEBUG: 打印提取的枚举值
+        logger.debug("解析 Enum: {}, 枚举值数量: {}", enumName, enumValues.size)
+        if (enumValues.isNotEmpty()) {
+            logger.debug("枚举值: {}", enumValues.map { it.name }.joinToString(", "))
+        }
+
+        val content = buildVectorContent(businessDesc, listOfNotNull(
+            "枚举值".takeIf { enumValues.isNotEmpty() }?.let { it to enumValues.joinToString(", ") { it.name } }
+        ))
+
+        return VectorFragment(
+            id = "enum:$enumName",
+            title = enumName,
+            content = content.ifEmpty { "枚举" },
+            fullContent = mdContent,
+            tags = listOf("enum", "java"),
+            metadata = buildMetadata("enum", enumName, methodName = null, packageName = null, sourceFile),
+            vector = floatArrayOf()
+        )
+    }
+
+    /**
+     * 从 Enum MD 表格中提取枚举值
+     *
+     * 支持两种格式：
+     * - 新格式：| 枚举值 | 代码 | 业务含义 |
+     * - 旧格式：| 枚举值 | 编码 | 业务描述 |
+     */
+    private fun extractEnumValues(mdContent: String): List<EnumValue> {
+        // 查找表格内容所在的区域（在 ## 枚举值表格 或 ## 字典映射 之后）
+        val tableAreaMatch = Regex("""##\s*(?:枚举值表格|字典映射)\s*\n(.+?)(?=\n\s*##|\Z)""", RegexOption.DOT_MATCHES_ALL)
+            .find(mdContent)
+
+        val tableArea = tableAreaMatch?.groupValues?.get(1) ?: mdContent
+
+        // 提取表格行：| ENUM_VALUE | xxx | 描述 |
+        // 跳过表头（包含 "枚举值"、"编码"、"业务描述" 等字）
+        return ENUM_TABLE_PATTERN_NEW.findAll(tableArea)
+            .map { match ->
+                val enumValueName = match.groupValues[1]
+                val description = match.groupValues[2].trim()
+                EnumValue(enumValueName, description)
+            }
+            .filter { it.name != "枚举值" && it.name != "编码" && it.name != "业务描述" && it.name != "业务含义" }
+            .toList()
+    }
+
+    /**
+     * 提取 Enum 业务描述（旧格式专用）
+     *
+     * 旧格式的业务描述可能在 ## 业务描述 之后有多行空行
+     */
+    private fun extractEnumBusinessDesc(mdContent: String): String {
+        // 查找 ## 业务描述 到下一个 ## 之间的内容
+        val match = Regex("""## 业务描述\s*\n+(.+?)(?=\n\s*##|\Z)""", RegexOption.DOT_MATCHES_ALL)
+            .find(mdContent)
+        return match?.groupValues?.get(1)?.trim()?.lines()?.firstOrNull()?.trim() ?: ""
+    }
+
+    /**
+     * 判断 MD 内容是否为 Enum 格式
+     */
+    fun isEnumMarkdown(mdContent: String): Boolean {
+        return ENUM_VALUES_HEADER_PATTERN.containsMatchIn(mdContent)
     }
 
     /**
@@ -124,7 +209,7 @@ class MarkdownParser {
     }
 
     /**
-     * 解析所有向量（class + methods）
+     * 解析所有向量（enum 或 class + methods）
      *
      * 这是最常用的入口方法
      */
@@ -134,14 +219,22 @@ class MarkdownParser {
         val className = extractClassName(sourceFile, mdContent)
         val vectors = mutableListOf<VectorFragment>()
 
-        // 解析 class 向量
-        parseSafely("class 向量", sourceFile) {
-            vectors.add(parseClassVector(sourceFile, mdContent, className))
-        }
+        // 判断是 enum 还是 class
+        if (isEnumMarkdown(mdContent)) {
+            // 解析 enum 向量
+            parseSafely("enum 向量", sourceFile) {
+                vectors.add(parseEnumVector(sourceFile, mdContent, className))
+            }
+        } else {
+            // 解析 class 向量
+            parseSafely("class 向量", sourceFile) {
+                vectors.add(parseClassVector(sourceFile, mdContent, className))
+            }
 
-        // 解析 method 向量
-        parseSafely("method 向量", sourceFile) {
-            vectors.addAll(parseMethodVectors(sourceFile, mdContent, className))
+            // 解析 method 向量
+            parseSafely("method 向量", sourceFile) {
+                vectors.addAll(parseMethodVectors(sourceFile, mdContent, className))
+            }
         }
 
         logger.debug("解析 MD 完成: file={}, class={}, totalVectors={}", sourceFile.fileName, className, vectors.size)
@@ -212,3 +305,11 @@ class MarkdownParser {
         }
     }
 }
+
+/**
+ * 枚举值
+ */
+data class EnumValue(
+    val name: String,
+    val description: String
+)

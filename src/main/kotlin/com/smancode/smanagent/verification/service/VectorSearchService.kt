@@ -105,9 +105,24 @@ class VectorSearchService(
 
     private fun List<Pair<VectorFragment, Double>>.toSearchResultsWithScores(): List<SearchResult> =
         mapIndexed { index, (fragment, score) ->
+            // DEBUG: 打印第一个 fragment 的 metadata
+            if (index == 0) {
+                logger.info("DEBUG: 第一个向量: id={}, title={}, metadata={}",
+                    fragment.id, fragment.title, fragment.metadata)
+            }
+
+            // 从 metadata 获取文件信息
+            val sourceFile = fragment.getMetadata("sourceFile")
+            val fileName = if (sourceFile != null) {
+                // 从完整路径提取文件名
+                java.nio.file.Paths.get(sourceFile).fileName.toString()
+            } else {
+                fragment.title
+            }
+
             SearchResult(
                 fragmentId = fragment.id,
-                fileName = fragment.getMetadata("fileName") ?: fragment.title,
+                fileName = fileName,
                 content = fragment.content,
                 score = score,
                 rank = index + 1
