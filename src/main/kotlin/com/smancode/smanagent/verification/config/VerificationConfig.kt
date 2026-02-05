@@ -124,16 +124,6 @@ open class VerificationConfig {
     }
 
     /**
-     * Reranker 相似度阈值
-     *
-     * 可通过环境变量 RERANKER_THRESHOLD 配置 (0.0-1.0, 推荐 0.1)
-     */
-    @Bean
-    open fun rerankerThreshold(): Double {
-        return (System.getenv("RERANKER_THRESHOLD") ?: "0.1").toDouble()
-    }
-
-    /**
      * 向量数据库配置 Bean
      * 注意：使用 autoloop 项目，与 H2QueryService 共享数据库
      */

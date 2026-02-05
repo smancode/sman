@@ -1,5 +1,7 @@
 package com.smancode.smanagent.verification.api
 
+import com.smancode.smanagent.analysis.database.TieredVectorStore
+import com.smancode.smanagent.analysis.vectorization.BgeM3Client
 import com.smancode.smanagent.verification.model.AnalysisQueryRequest
 import com.smancode.smanagent.verification.model.ExpertConsultRequest
 import com.smancode.smanagent.verification.model.ExpertConsultResponse
@@ -132,9 +134,9 @@ open class H2QueryApi {
 @RestController
 @RequestMapping("/api/verify")
 open class VectorRecoveryApi(
-    private val vectorStore: com.smancode.smanagent.analysis.database.TieredVectorStore,
-    private val bgeClient: com.smancode.smanagent.analysis.vectorization.BgeM3Client,
-    private val h2QueryService: com.smancode.smanagent.verification.service.H2QueryService
+    private val vectorStore: TieredVectorStore,
+    private val bgeClient: BgeM3Client,
+    private val h2QueryService: H2QueryService
 ) {
 
     private val logger = org.slf4j.LoggerFactory.getLogger(VectorRecoveryApi::class.java)
@@ -200,7 +202,6 @@ open class VectorRecoveryApi(
             var processedCount = 0
             var totalVectors = 0
 
-            // 解析并向量化
             val parser = com.smancode.smanagent.analysis.parser.MarkdownParser()
 
             for (mdFile in mdFiles) {
@@ -208,12 +209,6 @@ open class VectorRecoveryApi(
                     val mdContent = mdFile.toFile().readText()
                     if (mdContent.isBlank()) {
                         continue
-                    }
-
-                    // DEBUG: 检查是否是 Enum 文件
-                    val isEnum = parser.isEnumMarkdown(mdContent)
-                    if (isEnum) {
-                        logger.info("检测到 Enum 文件: {}", mdFile.fileName)
                     }
 
                     val vectors = parser.parseAll(mdFile, mdContent)
@@ -260,10 +255,8 @@ open class VectorRecoveryApi(
      * 清理所有 .md 向量
      */
     private fun cleanupMdVectors(): Int {
-        // 删除所有包含 .md 的向量（通过模式匹配）
         val deleted = mutableSetOf<String>()
 
-        // 从 H2 获取所有向量 ID
         val allVectorIds = kotlinx.coroutines.runBlocking {
             val h2Service = com.smancode.smanagent.analysis.database.H2DatabaseService(
                 com.smancode.smanagent.analysis.config.VectorDatabaseConfig.create(

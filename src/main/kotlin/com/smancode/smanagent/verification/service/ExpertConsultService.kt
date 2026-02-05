@@ -1,8 +1,5 @@
 package com.smancode.smanagent.verification.service
 
-import com.smancode.smanagent.analysis.config.JVectorConfig
-import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
-import com.smancode.smanagent.analysis.config.VectorDbType
 import com.smancode.smanagent.analysis.database.TieredVectorStore
 import com.smancode.smanagent.analysis.vectorization.BgeM3Client
 import com.smancode.smanagent.analysis.vectorization.RerankerClient
@@ -27,7 +24,8 @@ import org.springframework.stereotype.Service
 class ExpertConsultService(
     private val llmService: LlmService,
     private val bgeM3Client: BgeM3Client,
-    private val rerankerClient: RerankerClient
+    private val rerankerClient: RerankerClient,
+    private val vectorStore: TieredVectorStore
 ) {
 
     private val logger = LoggerFactory.getLogger(ExpertConsultService::class.java)
@@ -42,16 +40,7 @@ class ExpertConsultService(
         require(request.projectKey.isNotBlank()) { "projectKey 不能为空" }
         require(request.topK > 0) { "topK 必须大于 0" }
 
-        // 1. 为请求的项目创建 VectorStore
-        val config = VectorDatabaseConfig.create(
-            projectKey = request.projectKey,
-            type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig(dimension = 1024),
-            vectorDimension = 1024
-        )
-        val vectorStore = TieredVectorStore(config)
-
-        // 2. 向量检索相关代码片段
+        // 向量检索相关代码片段
         val searchRequest = com.smancode.smanagent.verification.model.VectorSearchRequest(
             query = request.question,
             projectKey = request.projectKey,
@@ -99,11 +88,6 @@ class ExpertConsultService(
         if (results.isEmpty()) {
             return "未找到相关代码片段。"
         }
-
-        // DEBUG: 打印第一个结果的 fragmentId
-        logger.info("DEBUG: 第一个搜索结果: fragmentId={}, fileName={}",
-            results.firstOrNull()?.fragmentId,
-            results.firstOrNull()?.fileName)
 
         return buildString {
             appendLine("找到 ${results.size} 个相关代码片段：\n")
