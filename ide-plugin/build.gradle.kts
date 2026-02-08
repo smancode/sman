@@ -69,4 +69,11 @@ tasks {
     publishPlugin {
         token.set(System.getenv("PUBLISH_TOKEN"))
     }
+
+    // 将后端 JAR 打包到插件中
+    prepareSandbox {
+        from("../agent/build/libs/smanagent-agent-1.0.0.jar") {
+            into("${project.name}/lib")
+        }
+    }
 }
