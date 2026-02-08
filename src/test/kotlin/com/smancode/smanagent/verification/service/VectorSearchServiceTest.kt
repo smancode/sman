@@ -49,7 +49,7 @@ class VectorSearchServiceTest {
         every { mockVectorStore.search(any(), any()) } returns emptyList()
 
         // 配置 mockRerankerClient 默认行为
-        every { mockRerankerClient.rerank(any(), any(), any()) } returns emptyList()
+        every { mockRerankerClient.rerankWithScores(any(), any(), any()) } returns emptyList()
 
         vectorSearchService = VectorSearchService(
             bgeClient = mockBgeClient,
@@ -92,7 +92,7 @@ class VectorSearchServiceTest {
             )
 
             every { mockVectorStore.search(testQueryVector, 10) } returns testFragments
-            every { mockRerankerClient.rerank(any(), any(), 5) } returns listOf(0)
+            every { mockRerankerClient.rerankWithScores(any(), any(), 5) } returns listOf(0 to 1.0)
 
             // When: 执行搜索
             val response = vectorSearchService.semanticSearch(request)
@@ -105,7 +105,7 @@ class VectorSearchServiceTest {
 
             verify(exactly = 1) { mockBgeClient.embed("如何使用 Spring Boot") }
             verify(exactly = 1) { mockVectorStore.search(testQueryVector, 10) }
-            verify(exactly = 1) { mockRerankerClient.rerank(any(), any(), 5) }
+            verify(exactly = 1) { mockRerankerClient.rerankWithScores(any(), any(), 5) }
         }
 
         @Test
@@ -139,7 +139,7 @@ class VectorSearchServiceTest {
             assertEquals(1, response.recallResults.size)
             assertEquals(null, response.rerankResults)
 
-            verify(exactly = 0) { mockRerankerClient.rerank(any(), any(), any()) }
+            verify(exactly = 0) { mockRerankerClient.rerankWithScores(any(), any(), any()) }
         }
     }
 
@@ -252,7 +252,7 @@ class VectorSearchServiceTest {
             )
 
             every { mockVectorStore.search(any(), any()) } returns testFragments
-            every { mockRerankerClient.rerank(any(), any(), 1) } returns listOf(0)
+            every { mockRerankerClient.rerankWithScores(any(), any(), 1) } returns listOf(0 to 1.0)
 
             // When: 执行搜索
             val response = vectorSearchService.semanticSearch(request)
@@ -260,7 +260,7 @@ class VectorSearchServiceTest {
             // Then: 成功返回
             assertNotNull(response)
             assertNotNull(response.rerankResults)
-            verify(exactly = 1) { mockRerankerClient.rerank(any(), any(), 1) }
+            verify(exactly = 1) { mockRerankerClient.rerankWithScores(any(), any(), 1) }
         }
     }
 
@@ -299,7 +299,7 @@ class VectorSearchServiceTest {
 
             // 重排后顺序：frag2 排第一
             every { mockVectorStore.search(testQueryVector, 10) } returns testFragments
-            every { mockRerankerClient.rerank(any(), any(), 5) } returns listOf(1, 0)
+            every { mockRerankerClient.rerankWithScores(any(), any(), 5) } returns listOf(1 to 0.95, 0 to 0.85)
 
             // When: 执行搜索
             val response = vectorSearchService.semanticSearch(request)

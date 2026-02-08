@@ -19,6 +19,7 @@ import com.smancode.smanagent.smancode.core.SmanAgentLoop
 import com.smancode.smanagent.smancode.core.StreamingNotificationHandler
 import com.smancode.smanagent.smancode.core.SubTaskExecutor
 import com.smancode.smanagent.smancode.llm.LlmService
+import com.smancode.smanagent.smancode.llm.config.LlmPoolConfig
 import com.smancode.smanagent.smancode.prompt.DynamicPromptInjector
 import com.smancode.smanagent.smancode.prompt.PromptDispatcher
 import com.smancode.smanagent.smancode.prompt.PromptLoaderService
@@ -68,6 +69,9 @@ class SmanAgentService(private val project: Project) : Disposable {
     // 项目标识（用于会话隔离）
     private val projectKey: String
         get() = project.name
+
+    // 代码引用回调（用于通知 UI 插入代码引用）
+    var onCodeReferenceCallback: ((com.smancode.smanagent.ide.components.CodeReference) -> Unit)? = null
 
     init {
         loadUserConfig()
@@ -174,23 +178,40 @@ class SmanAgentService(private val project: Project) : Disposable {
 
     /**
      * 初始化所有服务
+     *
+     * 重要：即使 LLM 未配置，也要确保基础服务可用
      */
     private fun initializeServices() {
         try {
-            // 初始化核心服务
+            // 初始化核心服务（不依赖 LLM）
             val promptLoader = PromptLoaderService()
             promptDispatcher = PromptDispatcher(promptLoader)
             toolRegistry = ToolRegistry()
             toolExecutor = ToolExecutor(toolRegistry)
             sessionManager = com.smancode.smanagent.smancode.core.SessionManager()
+            dynamicPromptInjector = DynamicPromptInjector(promptLoader)
 
             // 注册本地工具
             val localTools = LocalToolFactory.createTools(project)
             toolRegistry.registerTools(localTools)
             logger.info("已注册 {} 个本地工具", localTools.size)
 
-            // 创建 LLM 服务（用于其他依赖它的组件）
-            val llmService = SmanAgentConfig.createLlmService()
+            // 尝试创建 LLM 服务（如果配置不可用，不会抛出异常）
+            val llmService = try {
+                SmanAgentConfig.createLlmService()
+            } catch (e: Exception) {
+                logger.warn("LLM 服务初始化失败（非致命），本地工具仍可用: {}", e.message)
+                initializationError = formatInitializationError(e)
+                null
+            }
+
+            // 如果 LLM 服务不可用，只初始化基础功能
+            if (llmService == null) {
+                logger.info("LLM 服务未配置，插件将以有限模式运行（仅本地工具可用）")
+                // 创建一个占位的 smanAgentLoop（实际使用时会提示配置 API Key）
+                smanAgentLoop = createPlaceholderLoop()
+                return
+            }
 
             // 初始化高级服务
             val resultSummarizer = ResultSummarizer(llmService)
@@ -203,7 +224,6 @@ class SmanAgentService(private val project: Project) : Disposable {
                 notificationHandler = notificationHandler
             )
             val contextCompactor = ContextCompactor(llmService)
-            dynamicPromptInjector = DynamicPromptInjector(promptLoader)
 
             // 初始化主循环（不再需要传递 llmService）
             smanAgentLoop = SmanAgentLoop(
@@ -266,6 +286,39 @@ class SmanAgentService(private val project: Project) : Disposable {
         return InitializationErrorFormatter.format(e)
     }
 
+    /**
+     * 创建占位符 SmanAgentLoop（当 LLM 未配置时）
+     * 这个循环会在用户尝试发送消息时提示配置 API Key
+     */
+    private fun createPlaceholderLoop(): SmanAgentLoop {
+        // 创建一个最小配置的 LlmPoolConfig
+        val placeholderConfig = LlmPoolConfig()
+
+        // 创建一个占位符的 LlmService
+        val placeholderLlmService = com.smancode.smanagent.smancode.llm.LlmService(placeholderConfig)
+
+        val resultSummarizer = ResultSummarizer(placeholderLlmService)
+        val notificationHandler = StreamingNotificationHandler(placeholderLlmService)
+        val subTaskExecutor = SubTaskExecutor(
+            sessionManager = sessionManager,
+            toolExecutor = toolExecutor,
+            resultSummarizer = resultSummarizer,
+            llmService = placeholderLlmService,
+            notificationHandler = notificationHandler
+        )
+        val contextCompactor = ContextCompactor(placeholderLlmService)
+
+        return SmanAgentLoop(
+            promptDispatcher = promptDispatcher,
+            toolRegistry = toolRegistry,
+            subTaskExecutor = subTaskExecutor,
+            notificationHandler = notificationHandler,
+            contextCompactor = contextCompactor,
+            smanCodeProperties = SmanCodeProperties(),
+            dynamicPromptInjector = dynamicPromptInjector
+        )
+    }
+
     // ========== 公共 API ==========
 
     /**
@@ -278,6 +331,33 @@ class SmanAgentService(private val project: Project) : Disposable {
     ): Message {
         logger.info("处理消息: sessionId={}, input={}", sessionId, userInput)
         val session = getOrCreateSession(sessionId)
+
+        // 检查 LLM 是否已配置
+        if (initializationError != null) {
+            // 返回一个错误提示消息
+            val errorText = """
+                ⚠️ ${initializationError}
+
+                请先配置 API Key 后再使用。
+                """.trimIndent()
+
+            val errorMessage = TextPart().apply {
+                this.text = errorText
+                this.id = java.util.UUID.randomUUID().toString()
+                this.messageId = "error-${System.currentTimeMillis()}"
+                this.sessionId = sessionId
+            }
+            partPusher.accept(errorMessage)
+
+            // 创建一个失败的消息
+            return Message().apply {
+                id = java.util.UUID.randomUUID().toString()
+                this.sessionId = sessionId
+                role = com.smancode.smanagent.model.message.Role.ASSISTANT
+                this.parts.add(errorMessage)
+                this.content = errorText
+            }
+        }
 
         return try {
             smanAgentLoop.process(session, userInput, partPusher).also {
@@ -354,6 +434,13 @@ class SmanAgentService(private val project: Project) : Disposable {
      * 获取所有会话（只获取缓存的会话）
      */
     fun getAllSessions(): List<Session> = sessionCache.values.toList()
+
+    /**
+     * 通知插入代码引用
+     */
+    fun notifyInsertCodeReference(codeReference: com.smancode.smanagent.ide.components.CodeReference) {
+        onCodeReferenceCallback?.invoke(codeReference)
+    }
 
     // ========== Disposable 实现 ==========
 

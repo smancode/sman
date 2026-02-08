@@ -63,16 +63,16 @@ object StyledMessageRenderer {
                             .replace("<", "&lt;")
                             .replace(">", "&gt;")
                         val html = """
-                            <div style="margin: 5px 0; text-align: left;">
-                                <span style="color: ${toHexString(colors.conclusion)};">$escapedPrefix</span><span style="color: ${toHexString(colors.textPrimary)};">$escapedContent</span>
+                            <div style="${getBaseStyle()}">
+                                <span style="${getBaseStyle(toHexString(colors.conclusion))};">$escapedPrefix</span><span style="${getBaseStyle(toHexString(colors.textPrimary))};">$escapedContent</span>
                             </div>
                         """.trimIndent()
                         appendHtml(textPane, html)
                     } else {
                         // 没有 ":" 的情况，全部紫色
                         val html = """
-                            <div style="margin: 5px 0; text-align: left;">
-                                <span style="color: ${toHexString(colors.conclusion)};">$text</span>
+                            <div style="${getBaseStyle()}">
+                                <span style="${getBaseStyle(toHexString(colors.conclusion))};">$text</span>
                             </div>
                         """.trimIndent()
                         appendHtml(textPane, html)
@@ -342,12 +342,38 @@ object StyledMessageRenderer {
      * 包装 HTML 内容
      */
     private fun wrapHtml(content: String, isReasoning: Boolean = false): String {
+        val fontFamily = FontManager.getEditorFontFamily()
+
         val style = if (isReasoning) {
-            "color: #61AFEF; font-style: italic; margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
+            "color: #61AFEF; font-style: italic; font-family: '$fontFamily'; font-size: 100%; margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         } else {
-            "margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
+            "font-family: '$fontFamily'; font-size: 100%; margin: 5px 0; text-align: left; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all;"
         }
         return "<div style=\"$style\">$content</div>"
+    }
+
+    /**
+     * 生成带字体设置的样式
+     */
+    private fun getBaseStyle(color: String? = null, bold: Boolean = false, italic: Boolean = false): String {
+        val fontFamily = FontManager.getEditorFontFamily()
+
+        val styleParts = mutableListOf(
+            "font-family: '$fontFamily'",
+            "font-size: 100%"
+        )
+
+        if (color != null) {
+            styleParts.add("color: $color")
+        }
+        if (bold) {
+            styleParts.add("font-weight: bold")
+        }
+        if (italic) {
+            styleParts.add("font-style: italic")
+        }
+
+        return styleParts.joinToString("; ")
     }
 
     /**

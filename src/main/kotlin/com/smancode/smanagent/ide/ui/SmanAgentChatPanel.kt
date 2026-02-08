@@ -59,7 +59,26 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         onSettingsCallback = { showSettings() }
     )
 
-    private val inputArea = CliInputArea { text -> sendMessage(text) }
+    private val inputArea = CliInputArea(
+        onSendCallback = { text, codeReferences ->
+            sendMessage(text, codeReferences)
+        },
+        onInsertCodeReferenceCallback = {
+            // 提示用户使用快捷键或显示帮助
+            showCodeReferenceHint()
+        }
+    )
+
+    // 代码引用快捷键提示
+    private val shortcutHintLabel = JLabel().apply {
+        val isMac = System.getProperty("os.name").lowercase().contains("mac")
+        val shortcut = if (isMac) "⌘I" else "Ctrl+I"
+        text = "⌨️ 选中代码后按 $shortcut 添加引用"
+        font = font.deriveFont(10f)
+        foreground = java.awt.Color(130, 130, 130)
+        border = javax.swing.border.EmptyBorder(0, 0, 4, 0)
+    }
+
     private val taskProgressBar = TaskProgressBar()
 
     private val scrollPane = JScrollPane(outputArea).apply {
@@ -80,12 +99,14 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
             initComponents()
             applyTheme()
             setupLinkNavigation()
+            setupCodeReferenceCallback()
 
             // 检查服务初始化状态
             val initError = smanAgentService.initializationError
             if (initError != null) {
-                showErrorPanel(initError)
-                logger.warn("SmanAgent 服务初始化失败，显示错误面板")
+                // 未配置 API Key，显示欢迎面板（包含配置说明）
+                showWelcomePanel()
+                logger.info("LLM API Key 未配置，显示欢迎面板")
             } else {
                 loadLastSession()
             }
@@ -135,12 +156,16 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
      */
     private fun applyTheme() {
         val colors = ThemeColors.getCurrentColors()
+        val editorFont = FontManager.getEditorFont()
 
         background = colors.background
         outputArea.editorKit = com.smancode.smanagent.ide.renderer.MarkdownRenderer.createStyledEditorKit(colors)
-        outputArea.font = FontManager.getEditorFont()
+        outputArea.font = editorFont
         outputArea.background = colors.background
         outputArea.foreground = colors.textPrimary
+
+        // 强制设置 JTextPane 的默认字体到编辑器字体
+        outputArea.putClientProperty("font", editorFont)
 
         scrollPane.verticalScrollBar.apply {
             background = colors.background
@@ -171,9 +196,10 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         val bottomPanel = JPanel(BorderLayout()).apply {
             isOpaque = false
-            border = javax.swing.border.EmptyBorder(10, 0, 0, 0)
+            border = javax.swing.border.EmptyBorder(10, 12, 10, 12)
             add(taskProgressBar, BorderLayout.NORTH)
-            add(inputArea, BorderLayout.CENTER)
+            add(shortcutHintLabel, BorderLayout.CENTER)
+            add(inputArea, BorderLayout.SOUTH)
         }
         add(bottomPanel, BorderLayout.SOUTH)
 
@@ -194,6 +220,15 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     private fun showChat() {
         cardLayout.show(centerPanel, "chat")
         logger.debug("显示聊天区域")
+    }
+
+    /**
+     * 显示欢迎面板（包含配置说明）
+     */
+    private fun showWelcomePanel() {
+        val cardLayout = centerPanel.layout as CardLayout
+        cardLayout.show(centerPanel, "welcome")
+        logger.info("显示欢迎面板（未配置 API Key）")
     }
 
     /**
@@ -360,13 +395,14 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
     // WebSocket 相关方法已移除，改为本地调用
 
-    fun sendMessage(inputText: String? = null) {
+    fun sendMessage(inputText: String? = null, codeReferences: List<com.smancode.smanagent.ide.components.CodeReference> = emptyList()) {
         val text = inputText ?: inputArea.text.trim()
-        if (text.isEmpty()) return
+        if (text.isEmpty() && codeReferences.isEmpty()) return
 
         // 检查服务初始化状态
         smanAgentService.initializationError?.let { error ->
-            showErrorPanel(error)
+            // 未配置 API Key，显示欢迎面板（包含配置说明）
+            showWelcomePanel()
             return
         }
 
@@ -389,14 +425,18 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
 
         showChat()
 
+        // 构建用户输入（包含代码引用上下文）
+        val enhancedInput = buildUserInputWithCodeReferences(text, codeReferences)
+
         // 创建用户消息 Part
-        val userPart = createUserPart(currentSessionId!!, text)
+        val userPart = createUserPart(currentSessionId!!, enhancedInput)
 
         // 立即保存用户消息
         storageService.addPartToSession(currentSessionId!!, userPart)
 
-        // UI 显示用户消息
-        appendPartToUI(userPart)
+        // UI 显示用户消息（显示原始文本，不包含代码上下文）
+        val displayPart = createUserPart(currentSessionId!!, text)
+        appendPartToUI(displayPart)
 
         // 处理内置命令
         if (isCommitCommand) {
@@ -405,8 +445,29 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         }
 
         // 本地调用 SmanAgentLoop
-        logger.info("本地调用 SmanAgentLoop: sessionId={}, input={}", currentSessionId, text)
-        processWithAgentLoop(currentSessionId!!, text)
+        logger.info("本地调用 SmanAgentLoop: sessionId={}, input={}", currentSessionId, enhancedInput)
+        processWithAgentLoop(currentSessionId!!, enhancedInput)
+    }
+
+    /**
+     * 构建包含代码引用的用户输入
+     */
+    private fun buildUserInputWithCodeReferences(userInput: String, codeReferences: List<com.smancode.smanagent.ide.components.CodeReference>): String {
+        if (codeReferences.isEmpty()) return userInput
+
+        val sb = StringBuilder()
+        sb.appendLine(userInput)
+
+        // 添加代码引用上下文
+        codeReferences.forEach { ref ->
+            sb.appendLine()
+            sb.appendLine("```")
+            sb.appendLine("// ${ref.filePath}:${ref.startLine}-${ref.endLine}")
+            sb.appendLine(ref.codeContent)
+            sb.appendLine("```")
+        }
+
+        return sb.toString()
     }
 
     /**
@@ -654,6 +715,24 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
     private fun handleToolCallLocally(toolName: String, params: Map<String, Any?>) {
         logger.info("本地工具调用: toolName={}, params={}", toolName, params)
         // TODO: 使用 LocalToolExecutor 执行工具
+    }
+
+    /**
+     * 显示代码引用提示
+     */
+    private fun showCodeReferenceHint() {
+        appendSystemMessage("""
+            💡 提示：在编辑器中选中代码后，按 Ctrl+L (macOS: Cmd+L) 即可将代码引用插入到输入框。
+        """.trimIndent())
+    }
+
+    /**
+     * 设置代码引用回调
+     */
+    private fun setupCodeReferenceCallback() {
+        smanAgentService.onCodeReferenceCallback = { codeReference ->
+            inputArea.insertCodeReference(codeReference)
+        }
     }
 
     /**

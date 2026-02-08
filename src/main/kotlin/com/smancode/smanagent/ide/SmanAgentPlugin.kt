@@ -1,8 +1,13 @@
 package com.smancode.smanagent.ide
 
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.event.EditorFactoryEvent
+import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.StartupActivity
+import com.smancode.smanagent.ide.listener.CodeSelectionListener
 import com.smancode.smanagent.ide.service.StorageService
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -31,9 +36,61 @@ class SmanAgentPlugin : StartupActivity {
             backendStarted.set(true)
         }
 
-        // 初始化 StorageService
-        val storageService = project.service<StorageService>()
+        // 初始化 StorageService（通过 getService 触发初始化）
+        project.service<StorageService>()
         logger.info("StorageService 已初始化")
+
+        // 设置代码选区监听器（使用 EditorFactoryListener）
+        setupSelectionListener(project)
+    }
+
+    /**
+     * 设置代码选区监听器
+     * 使用 EditorFactoryListener 监听编辑器的创建和释放
+     */
+    private fun setupSelectionListener(project: Project) {
+        try {
+            val editorFactory = EditorFactory.getInstance()
+
+            // 创建 EditorFactoryListener
+            val editorListener = object : EditorFactoryListener {
+                override fun editorCreated(event: EditorFactoryEvent) {
+                    val editor = event.editor
+                    // 只为当前项目的编辑器添加监听器
+                    if (editor.project == project) {
+                        CodeSelectionListener.setupSelectionListener(editor, project)
+                        logger.debug("为编辑器添加选区监听器: {}", editor.virtualFile?.name)
+                    }
+                }
+
+                override fun editorReleased(event: EditorFactoryEvent) {
+                    val editor = event.editor
+                    if (editor.project == project) {
+                        // 编辑器释放时清理资源
+                        com.smancode.smanagent.ide.component.CodeReferenceHintProvider.hideHint()
+                        logger.debug("编辑器已释放: {}", editor.virtualFile?.name)
+                    }
+                }
+            }
+
+            // 注册监听器
+            editorFactory.addEditorFactoryListener(editorListener, project)
+            logger.info("代码选区监听器已注册（EditorFactoryListener 模式）")
+
+            // 为所有已打开的编辑器添加监听器
+            val editors = editorFactory.allEditors
+            var count = 0
+            editors.forEach { editor ->
+                if (editor.project == project) {
+                    CodeSelectionListener.setupSelectionListener(editor, project)
+                    count++
+                }
+            }
+            logger.info("已为 {} 个已打开的编辑器添加选区监听器", count)
+
+        } catch (e: Exception) {
+            logger.error("设置代码选区监听器失败", e)
+        }
     }
 
     /**

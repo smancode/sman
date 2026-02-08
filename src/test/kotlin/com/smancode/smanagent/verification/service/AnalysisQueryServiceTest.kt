@@ -92,7 +92,7 @@ class AnalysisQueryServiceTest {
         fun testWithFilters_Success() {
             // Given: 带 filters 的参数
             val request = AnalysisQueryRequest(
-                module = "tech_stack",
+                module = "tech_stack_detection",
                 projectKey = "test-project",
                 filters = mapOf("category" to "framework"),
                 page = 0,
@@ -101,7 +101,7 @@ class AnalysisQueryServiceTest {
 
             every {
                 mockH2QueryService.queryAnalysisResults(
-                    "tech_stack",
+                    "tech_stack_detection",
                     "test-project",
                     0,
                     10
@@ -113,7 +113,7 @@ class AnalysisQueryServiceTest {
 
             // Then: 验证结果
             assertNotNull(response)
-            assertEquals("tech_stack", response.module)
+            assertEquals("tech_stack_detection", response.module)
         }
     }
 
@@ -220,19 +220,18 @@ class AnalysisQueryServiceTest {
     inner class SupportedModulesTests {
 
         @Test
-        @DisplayName("支持所有 10 个模块")
+        @DisplayName("支持所有 9 个模块")
         fun testAllSupportedModules() {
             val supportedModules = listOf(
                 "project_structure",
-                "tech_stack",
-                "api_entries",
-                "external_apis",
-                "db_entities",
-                "enums",
-                "common_classes",
-                "xml_code",
-                "case_sop",
-                "code_walkthrough"
+                "tech_stack_detection",
+                "ast_scanning",
+                "db_entity_detection",
+                "api_entry_scanning",
+                "external_api_scanning",
+                "enum_scanning",
+                "common_class_scanning",
+                "xml_code_scanning"
             )
 
             supportedModules.forEach { module ->

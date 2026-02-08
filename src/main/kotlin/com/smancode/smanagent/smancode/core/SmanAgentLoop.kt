@@ -459,7 +459,15 @@ class SmanAgentLoop(
         val level7Result = extractWithLlmHelper(response)
         if (level7Result != null && tryParseJson(level7Result)) {
             logger.debug("Level 7 成功: LLM 辅助提取")
+            logger.debug("Level 7 成功: level7Result前200字符={}", level7Result.take(200))
             return level7Result
+        } else {
+            logger.warn("Level 7 失败: level7Result={}, 是否有效={}",
+                if (level7Result != null) "有值" else "null",
+                if (level7Result != null) tryParseJson(level7Result) else false)
+            if (level7Result != null) {
+                logger.warn("Level 7 失败: level7Result前200字符={}", level7Result.take(200))
+            }
         }
 
         // ========== Level 8: 所有策略失败，降级为纯文本 ==========
@@ -495,7 +503,9 @@ class SmanAgentLoop(
             startIndex += jsonStart.length
             val endIndex = response.indexOf(jsonEnd, startIndex)
             if (endIndex != -1) {
-                return response.substring(startIndex, endIndex).trim()
+                val extracted = response.substring(startIndex, endIndex).trim()
+                logger.debug("Level 2: 从 ```json 代码块提取, 长度={}, 前100字符={}", extracted.length, extracted.take(100))
+                return extracted
             }
         }
 
@@ -509,11 +519,14 @@ class SmanAgentLoop(
             if (firstBrace != -1) {
                 val endIndex = response.indexOf(codeStart, firstBrace)
                 if (endIndex != -1) {
-                    return response.substring(firstBrace, endIndex).trim()
+                    val extracted = response.substring(firstBrace, endIndex).trim()
+                    logger.debug("Level 2: 从 ``` 代码块提取, 长度={}, 前100字符={}", extracted.length, extracted.take(100))
+                    return extracted
                 }
             }
         }
 
+        logger.debug("Level 2: 未找到 markdown 代码块")
         return null
     }
 
@@ -883,12 +896,17 @@ class SmanAgentLoop(
         originalValue: String,
         fallbackPrefixLength: Int
     ): String {
+        logger.debug("replaceFieldInJson: fieldName={}, newValue前100字符={}", fieldName, newValue.take(100))
+
         // 尝试正则替换
         val patternStr = "\"$fieldName\"\\s*:\\s*\".*?(?=\"|\\n)"
         var fixedJson = json.replace(Regex(patternStr), "\"$fieldName\": $newValue")
 
+        logger.debug("正则替换后: fixedJson前200字符={}", fixedJson.take(200))
+
         // 如果正则替换失败，回退到简单字符串替换
         if (fixedJson == json) {
+            logger.debug("正则替换失败，回退到简单字符串替换")
             val prefix = if (originalValue.length > fallbackPrefixLength) {
                 originalValue.take(fallbackPrefixLength)
             } else {
@@ -896,6 +914,12 @@ class SmanAgentLoop(
             }
             fixedJson = json.replace(prefix, newValue.replace("\"", ""))
         }
+
+        logger.debug("最终 fixedJson 前200字符: {}", fixedJson.take(200))
+
+        // 验证最终 JSON 是否有效
+        val isValid = tryParseJson(fixedJson)
+        logger.debug("最终 fixedJson 有效性: {}", isValid)
 
         return fixedJson
     }

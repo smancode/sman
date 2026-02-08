@@ -29,6 +29,27 @@
     </extensions>
 
     <actions>
-        <!-- Actions can be added here -->
+        <!-- 插入代码引用 Action -->
+        <action id="SmanAgent.InsertCodeReference"
+                class="com.smancode.smanagent.ide.action.InsertCodeReferenceAction"
+                text="插入代码引用"
+                description="将选中的代码引用插入到 SmanAgent 输入框">
+            <keyboard-shortcut keymap="$default" first-keystroke="control I"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta I"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta I"/>
+        </action>
+
+        <!-- 编辑器右键菜单：添加代码引用 -->
+        <group id="SmanAgent.EditorPopupMenu">
+            <separator/>
+            <action id="SmanAgent.AddCodeReference"
+                    class="com.smancode.smanagent.ide.action.AddCodeReferenceAction"
+                    text="添加到 SmanAgent"
+                    description="将选中的代码添加到 SmanAgent 聊天面板"
+                    icon="/META-INF/pluginIconToolWindow.svg">
+                <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="EditorCopy"/>
+            </action>
+            <separator/>
+        </group>
     </actions>
 </idea-plugin>

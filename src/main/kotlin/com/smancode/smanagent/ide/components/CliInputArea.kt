@@ -5,6 +5,9 @@ import com.smancode.smanagent.ide.theme.ThemeColors
 import com.smancode.smanagent.ide.ui.FontManager
 import java.awt.*
 import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
+import java.awt.event.MouseAdapter
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.*
 import javax.swing.border.EmptyBorder
 import javax.swing.event.DocumentListener
@@ -22,9 +25,11 @@ import javax.swing.event.DocumentListener
  * - 鼠标滚轮支持，隐藏滚动条
  * - 背景色与消息区一致，实现悬浮效果
  * - 命令自动补全：输入 `/` 显示灰色提示，Tab 补全
+ * - 支持代码引用标签（Ctrl+L 插入）
  */
 class CliInputArea(
-    private val onSendCallback: (String) -> Unit
+    private val onSendCallback: (String, List<CodeReference>) -> Unit,
+    private val onInsertCodeReferenceCallback: (() -> Unit)? = null
 ) : JPanel() {
 
     private val maxRows = 10
@@ -39,9 +44,15 @@ class CliInputArea(
     private val commands = listOf<String>()
     private var suggestionText: String? = null
 
-    // 文本区域和滚动面板
-    val textArea: JTextArea
+    // 代码引用标签列表
+    private val codeReferences = CopyOnWriteArrayList<CodeReference>()
+
+    // 布局组件
+    private val tagsPanel: JPanel
     private val scrollPane: JScrollPane
+
+    // 文本区域
+    val textArea: JTextArea
 
     // 计算行高
     private val lineHeight: Int
@@ -61,8 +72,15 @@ class CliInputArea(
 
     init {
         isOpaque = false
-        layout = null  // 使用绝对布局
+        layout = BorderLayout()
         border = null
+
+        // 创建标签面板（用于存放代码引用标签）
+        tagsPanel = JPanel().apply {
+            isOpaque = false
+            layout = FlowLayout(FlowLayout.LEFT, 6, 6)
+            isVisible = false  // 默认隐藏，有标签时才显示
+        }
 
         // 创建文本区域
         textArea = object : JTextArea() {
@@ -93,7 +111,6 @@ class CliInputArea(
 
         // 配置文本区域
         textArea.rows = minRows
-        // 使用编辑器字体，与输出区域保持一致
         textArea.font = FontManager.getEditorFont()
         val colors = ThemeColors.getCurrentColors()
         textArea.foreground = colors.textPrimary
@@ -101,7 +118,7 @@ class CliInputArea(
         val padding = JBUI.scale(12)
         textArea.border = EmptyBorder(padding, padding, padding, padding)
 
-        // 创建滚动面板（显示滚动条但隐藏它）
+        // 创建滚动面板
         scrollPane = JScrollPane(textArea).apply {
             verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
             horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
@@ -111,8 +128,14 @@ class CliInputArea(
             verticalScrollBar.apply { preferredSize = Dimension(0, 0) }
         }
 
-        // 添加组件（使用绝对布局）
-        add(scrollPane)
+        // 主面板（包含标签和输入框）
+        val mainPanel = JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(tagsPanel, BorderLayout.NORTH)
+            add(scrollPane, BorderLayout.CENTER)
+        }
+
+        add(mainPanel, BorderLayout.CENTER)
 
         // 焦点监听
         textArea.addFocusListener(object : java.awt.event.FocusAdapter() {
@@ -134,7 +157,7 @@ class CliInputArea(
             }
         })
 
-        // 文本变化监听（用于自动增高和命令建议）
+        // 文本变化监听
         textArea.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: javax.swing.event.DocumentEvent?) = onTextChanged()
             override fun removeUpdate(e: javax.swing.event.DocumentEvent?) = onTextChanged()
@@ -144,6 +167,67 @@ class CliInputArea(
         // 键盘快捷键
         setupActions()
     }
+
+    /**
+     * 插入代码引用标签
+     */
+    fun insertCodeReference(codeReference: CodeReference) {
+        // 添加到列表
+        codeReferences.add(codeReference)
+
+        // 创建标签组件
+        val tag = CodeReferenceTag(codeReference) {
+            removeCodeReference(codeReference)
+        }
+
+        // 添加到面板
+        tagsPanel.add(tag)
+        tagsPanel.isVisible = true
+
+        // 重新布局
+        tagsPanel.revalidate()
+        tagsPanel.repaint()
+
+        // 聚焦到输入框
+        textArea.requestFocusInWindow()
+    }
+
+    /**
+     * 移除代码引用标签
+     */
+    private fun removeCodeReference(codeReference: CodeReference) {
+        codeReferences.remove(codeReference)
+
+        // 重建标签面板
+        rebuildTagsPanel()
+    }
+
+    /**
+     * 重建标签面板
+     */
+    private fun rebuildTagsPanel() {
+        tagsPanel.removeAll()
+
+        if (codeReferences.isEmpty()) {
+            tagsPanel.isVisible = false
+        } else {
+            codeReferences.forEach { ref ->
+                val tag = CodeReferenceTag(ref) {
+                    removeCodeReference(ref)
+                }
+                tagsPanel.add(tag)
+            }
+            tagsPanel.isVisible = true
+        }
+
+        tagsPanel.revalidate()
+        tagsPanel.repaint()
+    }
+
+    /**
+     * 获取当前所有代码引用
+     */
+    fun getCodeReferences(): List<CodeReference> = codeReferences.toList()
 
     private fun setupGraphics(g2: java.awt.Graphics2D, colors: com.smancode.smanagent.ide.theme.ColorPalette): java.awt.Color {
         val oldColor = g2.color
@@ -155,7 +239,6 @@ class CliInputArea(
     private fun drawPlaceholder(g2: java.awt.Graphics2D, fm: java.awt.FontMetrics, colors: com.smancode.smanagent.ide.theme.ColorPalette) {
         val oldColor = setupGraphics(g2, colors)
 
-        // 偏移位置：向右 5px，向下 5px
         val x = insets.left + JBUI.scale(5)
         var y = insets.top + fm.ascent + JBUI.scale(5)
 
@@ -197,12 +280,6 @@ class CliInputArea(
 
     override fun getMinimumSize(): Dimension {
         return getPreferredSize()
-    }
-
-    override fun doLayout() {
-        val w = width
-        val h = height
-        scrollPane.setBounds(0, 0, w, h)
     }
 
     override fun paintComponent(g: Graphics) {
@@ -258,22 +335,15 @@ class CliInputArea(
         }
     }
 
-    /**
-     * 自动增高输入框（3-10行）
-     * 超过10行时固定高度，可通过滚动查看
-     */
     private fun updateHeight() {
         val lineCount = textArea.lineCount
         val rows = lineCount.coerceIn(minRows, maxRows)
 
-        // 计算新的高度：行高 × 行数 + 上下边框
         val insets = textArea.insets
         val newHeight = rows * lineHeight + insets.top + insets.bottom
 
-        // 获取当前视口高度
         val currentHeight = scrollPane.viewport.height
 
-        // 只在高度真正变化时才更新（避免不必要的重布局）
         if (currentHeight != newHeight) {
             scrollPane.viewport.preferredSize = Dimension(
                 scrollPane.viewport.width,
@@ -283,15 +353,10 @@ class CliInputArea(
         }
     }
 
-    /**
-     * 更新命令建议
-     */
     private fun updateSuggestion() {
         val text = textArea.text.trim()
 
-        // 只有在以 / 开头且不包含空格时才显示建议
         if (text.startsWith("/") && !text.contains(" ")) {
-            // 查找匹配的命令
             suggestionText = commands.find { it.startsWith(text) }
         } else {
             suggestionText = null
@@ -300,9 +365,6 @@ class CliInputArea(
         textArea.repaint()
     }
 
-    /**
-     * 自动补全命令
-     */
     private fun autocomplete() {
         if (suggestionText != null) {
             textArea.text = suggestionText!!
@@ -328,7 +390,6 @@ class CliInputArea(
 
         inputMap.put(shiftEnterKey, "insert-break")
 
-        // Tab 键补全命令
         inputMap.put(tabKey, "autocomplete")
         actionMap.put("autocomplete", object : AbstractAction() {
             override fun actionPerformed(e: java.awt.event.ActionEvent?) {
@@ -339,19 +400,23 @@ class CliInputArea(
 
     private fun triggerSend() {
         val text = textArea.text.trim()
-        if (text.isNotEmpty()) {
-            onSendCallback(text)
+        if (text.isNotEmpty() || codeReferences.isNotEmpty()) {
+            onSendCallback(text, codeReferences.toList())
             textArea.text = ""
-            updateHeight() // 重置高度
+            codeReferences.clear()
+            rebuildTagsPanel()
+            updateHeight()
         }
     }
 
     fun clear() {
         textArea.text = ""
+        codeReferences.clear()
+        rebuildTagsPanel()
         if (!textArea.hasFocus()) {
             showPlaceholder = true
             textArea.repaint()
         }
-        updateHeight() // 重置高度
+        updateHeight()
     }
 }
