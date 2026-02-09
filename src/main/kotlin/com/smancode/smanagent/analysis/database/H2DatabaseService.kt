@@ -331,6 +331,63 @@ class H2DatabaseService(
         }
         logger.info("H2 数据库连接已关闭")
     }
+
+    /**
+     * 执行 SQL 语句（同步）
+     *
+     * @param sql SQL 语句
+     * @param params 参数列表
+     * @return 影响的行数
+     */
+    fun executeSql(sql: String, params: List<Any> = emptyList()): Int {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(sql).use { stmt ->
+                params.forEachIndexed { index, param ->
+                    stmt.setObject(index + 1, param)
+                }
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    /**
+     * 执行 SQL 语句（挂起函数）
+     */
+    suspend fun executeSqlSuspend(sql: String, params: List<Any> = emptyList()): Int =
+        withContext(Dispatchers.IO) {
+            executeSql(sql, params)
+        }
+
+    /**
+     * 查询 SQL 语句（同步）
+     *
+     * @param sql SQL 语句
+     * @param params 参数列表
+     * @param mapper 结果集映射函数
+     * @return 查询结果列表
+     */
+    fun <T> query(sql: String, params: List<Any> = emptyList(), mapper: (ResultSet) -> T): T {
+        return dataSource.connection.use { connection ->
+            connection.prepareStatement(sql).use { stmt ->
+                params.forEachIndexed { index, param ->
+                    stmt.setObject(index + 1, param)
+                }
+                val rs = stmt.executeQuery()
+                mapper(rs)
+            }
+        }
+    }
+
+    /**
+     * 查询 SQL 语句（挂起函数）
+     */
+    suspend fun <T> querySuspend(
+        sql: String,
+        params: List<Any> = emptyList(),
+        mapper: (ResultSet) -> T
+    ): T = withContext(Dispatchers.IO) {
+        query(sql, params, mapper)
+    }
 }
 
 /**

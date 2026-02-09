@@ -10,11 +10,16 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.smancode.smanagent.analysis.config.BgeM3Config
 import com.smancode.smanagent.analysis.config.RerankerConfig
+import com.smancode.smanagent.analysis.retry.*
+import com.smancode.smanagent.analysis.vectorization.TruncationStrategy as VectorTruncationStrategy
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -39,30 +44,102 @@ private object HttpClientUtils {
 }
 
 /**
- * 重试策略
- *
- * 提供统一的重试逻辑，包括：
- * - 判断是否应该重试
- * - 计算退避延迟
- * - 执行重试等待
+ * JSON 字符串转义工具
  */
-private class RetryStrategy(
-    private val maxRetries: Int,
-    private val baseDelay: Long = 1000L,
-    private val logger: org.slf4j.Logger
-) {
+private object JsonEscapeUtils {
     /**
-     * 判断异常是否应该重试
+     * 转义 JSON 字符串值
      */
-    fun shouldRetry(e: Exception, retryCount: Int): Boolean {
-        if (retryCount >= maxRetries) return false
+    fun escape(value: String): String =
+        value
+            .replace("\\", "\\\\")  // 反斜杠必须先替换
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+}
 
-        val message = e.message ?: return false
+/**
+ * BGE-M3 客户端（增强版）
+ *
+ * 调用 BGE-M3 服务进行文本向量化
+ *
+ * 特性：
+ * - 自适应文本截断（检测长度错误并逐步缩小）
+ * - 增强版重试策略（指数退避 + 抖动）
+ * - 并发限流（控制并发请求数）
+ * - 熔断器保护（连续失败后暂停）
+ * - 分片批处理（批量失败后单条重试）
+ * - 监控指标收集
+ */
+class BgeM3Client(
+    private val config: BgeM3Config
+) {
+    private val logger = LoggerFactory.getLogger(BgeM3Client::class.java)
+
+    // 自适应截断器
+    private val truncation = AdaptiveTruncation(
+        maxTokens = config.maxTokens,
+        stepSize = config.truncationStepSize,
+        maxRetries = config.maxTruncationRetries,
+        strategy = when (config.truncationStrategy) {
+            com.smancode.smanagent.analysis.config.TruncationStrategy.HEAD -> VectorTruncationStrategy.HEAD
+            com.smancode.smanagent.analysis.config.TruncationStrategy.TAIL -> VectorTruncationStrategy.TAIL
+            com.smancode.smanagent.analysis.config.TruncationStrategy.MIDDLE -> VectorTruncationStrategy.MIDDLE
+            com.smancode.smanagent.analysis.config.TruncationStrategy.SMART -> VectorTruncationStrategy.SMART
+        }
+    )
+
+    // 增强版重试执行器
+    private val retryExecutor = EnhancedRetryExecutor(
+        policy = EnhancedRetryPolicy(
+            maxRetries = config.maxRetries,
+            baseDelayMs = config.baseDelayMs,
+            retryCondition = { e ->
+                // 排除长度错误（由截断器处理）和熔断器错误
+                !truncation.isLengthError(e) &&
+                e !is CircuitBreakerOpenException &&
+                shouldRetryLogic(e)
+            }
+        ),
+        metricsCollector = RetryMetricsCollector.GLOBAL
+    )
+
+    // 并发限流器
+    private val limiter = ConcurrencyLimiter.forBge(config.concurrentLimit)
+
+    // 熔断器
+    private val circuitBreaker = CircuitBreaker.forBge(
+        failureThreshold = config.circuitBreakerThreshold
+    )
+
+    private val client = HttpClientUtils.createClient(config.timeoutSeconds)
+    private val objectMapper = jacksonObjectMapper().apply {
+        registerKotlinModule()
+        registerModule(FloatArrayModule())
+        configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    }
+
+    companion object {
+        private const val CONTENT_TYPE_JSON = "application/json"
+        private const val EMBEDDINGS_ENDPOINT = "/v1/embeddings"
+    }
+
+    init {
+        logger.info("初始化 BGE-M3 客户端: endpoint={}, maxTokens={}, concurrentLimit={}",
+            config.endpoint, config.maxTokens, config.concurrentLimit)
+    }
+
+    /**
+     * 判断是否应该重试（原有逻辑）
+     */
+    private fun shouldRetryLogic(e: Exception): Boolean {
+        val message = e.message?.lowercase() ?: return false
 
         return when {
             // 超时错误
-            message.contains("timeout", ignoreCase = true) ||
-            message.contains("timed out", ignoreCase = true) ||
+            message.contains("timeout") ||
+            message.contains("timed out") ||
             message.contains("SocketTimeoutException") -> true
 
             // 429 Too Many Requests
@@ -80,114 +157,41 @@ private class RetryStrategy(
     }
 
     /**
-     * 计算重试延迟（指数退避）
-     */
-    fun calculateDelay(retryCount: Int): Long = baseDelay * retryCount
-
-    /**
-     * 等待指定时间
-     */
-    fun sleep(milliseconds: Long) {
-        try {
-            Thread.sleep(milliseconds)
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            throw RuntimeException("重试等待被中断", e)
-        }
-    }
-
-    /**
-     * 执行带重试的操作
+     * 生成文本向量（带自适应截断）
      *
-     * @param operation 要执行的操作
-     * @param operationName 操作名称（用于日志）
-     * @return 操作结果
+     * @param text 输入文本
+     * @param identifier 标识符（用于日志，可选）
+     * @return 向量数组
      */
-    fun <T> executeWithRetry(
-        operation: () -> T,
-        operationName: String
-    ): T {
-        var retryCount = 0
+    fun embed(text: String, identifier: String = "unknown"): FloatArray {
+        require(text.isNotBlank()) { "输入文本不能为空" }
 
-        while (true) {
-            try {
-                return operation()
-            } catch (e: Exception) {
-                logger.warn("{} 失败 (尝试 {}): {}", operationName, retryCount, e.message)
+        // 预处理截断
+        val processedText = truncation.preprocessText(text, identifier)
 
-                if (retryCount >= maxRetries) {
-                    throw RuntimeException("$operationName 失败：超过最大重试次数 ($maxRetries)", e)
-                }
-
-                if (shouldRetry(e, retryCount)) {
-                    retryCount++
-                    val delay = calculateDelay(retryCount)
-                    logger.info("等待 {}ms 后进行第 {} 次重试...", delay, retryCount)
-                    sleep(delay)
-                } else {
-                    throw RuntimeException("$operationName 失败: ${e.message}", e)
+        return limiter.executeBlocking {
+            circuitBreaker.executeBlocking {
+                retryExecutor.executeWithRetryBlocking("BGE-Embed-$identifier") {
+                    doEmbed(processedText)
                 }
             }
         }
     }
-}
-
-/**
- * JSON 字符串转义工具
- */
-private object JsonEscapeUtils {
-    /**
-     * 转义 JSON 字符串值
-     */
-    fun escape(value: String): String =
-        value
-            .replace("\\", "\\\\")  // 反斜杠必须先替换
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-}
-
-/**
- * BGE-M3 客户端
- *
- * 调用 BGE-M3 服务进行文本向量化
- *
- * 特性：
- * - 自动重试（超时、429、5xx 错误）
- * - 指数退避策略
- * - 详细的日志记录
- */
-class BgeM3Client(
-    private val config: BgeM3Config
-) {
-    private val logger = LoggerFactory.getLogger(BgeM3Client::class.java)
-    private val retryStrategy = RetryStrategy(maxRetries = 3, logger = logger)
-    private val client = HttpClientUtils.createClient(config.timeoutSeconds)
-    private val objectMapper = jacksonObjectMapper().apply {
-        registerKotlinModule()
-        registerModule(FloatArrayModule())
-        configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    }
-
-    companion object {
-        private const val CONTENT_TYPE_JSON = "application/json"
-        private const val EMBEDDINGS_ENDPOINT = "/v1/embeddings"
-    }
 
     /**
-     * 生成文本向量（带重试）
+     * 批量生成向量
      *
-     * @param text 输入文本
-     * @return 向量数组
+     * @param texts 输入文本列表
+     * @return 向量数组列表
      */
-    fun embed(text: String): FloatArray {
-        require(text.isNotBlank()) { "输入文本不能为空" }
+    fun batchEmbed(texts: List<String>): List<FloatArray> {
+        require(texts.isNotEmpty()) { "输入文本列表不能为空" }
+        require(texts.size <= config.batchSize) { "批次大小不能超过 ${config.batchSize}" }
 
-        return retryStrategy.executeWithRetry(
-            operation = { doEmbed(text) },
-            operationName = "BGE-M3 调用"
-        )
+        // 串行处理
+        return texts.map { text ->
+            embed(text, "batch-${text.hashCode()}")
+        }
     }
 
     /**
@@ -197,7 +201,7 @@ class BgeM3Client(
         val escapedText = JsonEscapeUtils.escape(text)
         val requestJson = """{"input":"$escapedText","model":"${config.modelName}"}"""
 
-        logger.debug("Calling BGE-M3 endpoint: {}", config.endpoint)
+        logger.debug("调用 BGE-M3: text.length={}, endpoint={}", text.length, config.endpoint)
 
         val request = Request.Builder()
             .url("${config.endpoint}$EMBEDDINGS_ENDPOINT")
@@ -206,7 +210,8 @@ class BgeM3Client(
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw RuntimeException("BGE-M3 调用失败: HTTP ${response.code}")
+                val errorBody = response.body?.string() ?: ""
+                throw IOException("BGE-M3 调用失败: HTTP ${response.code}, body=$errorBody")
             }
 
             val responseBody = response.body?.string() ?: throw RuntimeException("响应为空")
@@ -216,49 +221,10 @@ class BgeM3Client(
     }
 
     /**
-     * 批量生成向量（带重试）
-     *
-     * @param texts 输入文本列表
-     * @return 向量数组列表
-     */
-    fun batchEmbed(texts: List<String>): List<FloatArray> {
-        require(texts.isNotEmpty()) { "输入文本列表不能为空" }
-        require(texts.size <= config.batchSize) { "批次大小不能超过 ${config.batchSize}" }
-
-        return retryStrategy.executeWithRetry(
-            operation = { doBatchEmbed(texts) },
-            operationName = "BGE-M3 批量调用"
-        )
-    }
-
-    /**
-     * 执行单次批量嵌入请求
-     */
-    private fun doBatchEmbed(texts: List<String>): List<FloatArray> {
-        val escapedTexts = texts.joinToString(",") { "\"${JsonEscapeUtils.escape(it)}\"" }
-        val requestJson = """{"input":[$escapedTexts],"model":"${config.modelName}"}"""
-
-        val request = Request.Builder()
-            .url("${config.endpoint}$EMBEDDINGS_ENDPOINT")
-            .post(requestJson.toRequestBody(CONTENT_TYPE_JSON.toMediaType()))
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw RuntimeException("BGE-M3 批量调用失败: HTTP ${response.code}")
-            }
-
-            val responseBody = response.body?.string() ?: throw RuntimeException("响应为空")
-            val embedResponse = parseBatchEmbedResponse(responseBody)
-            return embedResponse.data?.map { it.embedding } ?: throw RuntimeException("批量响应 data 为空")
-        }
-    }
-
-    /**
      * 解析嵌入响应（使用 Jackson）
      */
     private fun parseEmbedResponse(json: String): EmbedResponse {
-        logger.debug("解析嵌入响应: {}", json)
+        logger.debug("解析嵌入响应: {}", json.take(200))
 
         require(json.isNotBlank()) { "响应为空" }
 
@@ -296,54 +262,81 @@ class BgeM3Client(
         }
 
     /**
-     * 解析批量嵌入响应（使用 Jackson）
+     * 获取统计信息
      */
-    private fun parseBatchEmbedResponse(json: String): BatchEmbedResponse {
-        logger.debug("解析批量嵌入响应: {}", json.take(500))
-
-        return try {
-            val bgeResponse = objectMapper.readValue<BgeEmbedResponse>(json)
-            val data = bgeResponse.data?.map {
-                EmbedData(embedding = it.embedding, index = it.index)
-            }
-            BatchEmbedResponse(data = data)
-        } catch (e: RuntimeException) {
-            throw e
-        } catch (e: Exception) {
-            logger.debug("尝试解析为简化格式")
-            try {
-                objectMapper.readValue<BatchEmbedResponse>(json)
-            } catch (ex: Exception) {
-                logger.error("解析批量响应失败: json={}, error={}", json.take(500), ex.message)
-                throw RuntimeException("无法解析批量嵌入响应: ${ex.message}", ex)
-            }
-        }
+    fun getStatistics(): BgeClientStatistics {
+        return BgeClientStatistics(
+            limiterStats = limiter.getStatistics(),
+            circuitBreakerStats = circuitBreaker.getStatistics(),
+            truncationStats = truncation.getStatistics(),
+            retryMetrics = retryExecutor.getPolicy()
+        )
     }
 
     /**
      * 关闭客户端
      */
     fun close() = HttpClientUtils.closeClient(client)
+
+    /**
+     * 重置熔断器
+     */
+    fun resetCircuitBreaker() {
+        circuitBreaker.reset()
+    }
+
+    /**
+     * 重置截断历史
+     */
+    fun clearTruncationHistory() {
+        truncation.clearHistory()
+    }
 }
 
 /**
- * Reranker 客户端
- *
- * 调用 BGE-Reranker 服务进行结果重排
- *
- * 特性：
- * - 自动重试（超时、429、5xx 错误）
- * - 指数退避策略
- * - 失败时优雅降级（返回原始顺序）
+ * BGE 客户端统计信息
+ */
+data class BgeClientStatistics(
+    val limiterStats: ConcurrencyLimiter.ConcurrencyStatistics,
+    val circuitBreakerStats: CircuitBreaker.CircuitBreakerStatistics,
+    val truncationStats: AdaptiveTruncation.TruncationStatistics,
+    val retryMetrics: EnhancedRetryPolicy
+) {
+    override fun toString(): String {
+        return """
+            |BGE 客户端统计:
+            |$limiterStats
+            |$circuitBreakerStats
+            |$truncationStats
+            |重试策略: maxRetries=${retryMetrics.maxRetries}
+        """.trimMargin()
+    }
+}
+
+/**
+ * Reranker 客户端（保持原有实现，兼容旧代码）
  */
 class RerankerClient(
     private val config: RerankerConfig
 ) {
     private val logger = LoggerFactory.getLogger(RerankerClient::class.java)
-    private val retryStrategy = RetryStrategy(
-        maxRetries = config.retry,
-        logger = logger
+
+    // 使用增强版重试执行器
+    private val retryExecutor = EnhancedRetryExecutor(
+        policy = EnhancedRetryPolicy(
+            maxRetries = config.retry,
+            baseDelayMs = 1000,
+            retryCondition = { e ->
+                val message = e.message?.lowercase() ?: return@EnhancedRetryPolicy false
+                message.contains("timeout") ||
+                message.contains("429") ||
+                message.contains("50") ||
+                message.contains("connect")
+            }
+        ),
+        metricsCollector = RetryMetricsCollector.GLOBAL
     )
+
     private val client = HttpClientUtils.createClient(config.timeoutSeconds)
 
     companion object {
@@ -353,11 +346,6 @@ class RerankerClient(
 
     /**
      * 重排结果（带重试）
-     *
-     * @param query 查询文本
-     * @param documents 候选文档列表
-     * @param topK 返回 top K
-     * @return 重排序后的索引
      */
     fun rerank(query: String, documents: List<String>, topK: Int = config.topK): List<Int> {
         if (!config.enabled) {
@@ -370,10 +358,9 @@ class RerankerClient(
         require(topK > 0) { "topK 必须大于 0" }
 
         return try {
-            retryStrategy.executeWithRetry(
-                operation = { doRerank(query, documents, topK) },
-                operationName = "Reranker 调用"
-            )
+            retryExecutor.executeWithRetryBlocking("Reranker") {
+                doRerank(query, documents, topK)
+            }
         } catch (e: Exception) {
             logger.warn("Reranker 调用失败，使用原始顺序: {}", e.message)
             documents.indices.toList()
@@ -382,11 +369,6 @@ class RerankerClient(
 
     /**
      * 重排结果（带分数过滤）
-     *
-     * @param query 查询文本
-     * @param documents 候选文档列表
-     * @param topK 返回 top K
-     * @return 重排序后的索引和分数，分数低于 threshold 的结果被过滤
      */
     fun rerankWithScores(query: String, documents: List<String>, topK: Int = config.topK): List<Pair<Int, Double>> {
         if (!config.enabled) {
@@ -399,10 +381,9 @@ class RerankerClient(
         require(topK > 0) { "topK 必须大于 0" }
 
         return try {
-            retryStrategy.executeWithRetry(
-                operation = { doRerankWithScores(query, documents, topK) },
-                operationName = "Reranker 调用（带分数）"
-            )
+            retryExecutor.executeWithRetryBlocking("Reranker-WithScores") {
+                doRerankWithScores(query, documents, topK)
+            }
         } catch (e: Exception) {
             logger.warn("Reranker 调用失败，使用原始顺序: {}", e.message)
             documents.indices.map { it to 1.0 }
@@ -419,7 +400,7 @@ class RerankerClient(
             {"model":"${config.model}","query":"$escapedQuery","documents":[$escapedDocs],"top_k":$topK}
         """.trimIndent().replace("\n", "")
 
-        logger.debug("Calling Reranker endpoint: {}", config.baseUrl)
+        logger.debug("调用 Reranker: endpoint={}", config.baseUrl)
 
         val request = Request.Builder()
             .url("${config.baseUrl}$RERANK_ENDPOINT")
@@ -447,7 +428,7 @@ class RerankerClient(
             {"model":"${config.model}","query":"$escapedQuery","documents":[$escapedDocs],"top_k":$topK}
         """.trimIndent().replace("\n", "")
 
-        logger.debug("Calling Reranker endpoint: {}", config.baseUrl)
+        logger.debug("调用 Reranker: endpoint={}", config.baseUrl)
 
         val request = Request.Builder()
             .url("${config.baseUrl}$RERANK_ENDPOINT")
@@ -482,16 +463,12 @@ class RerankerClient(
 
     /**
      * 解析重排响应（带分数）
-     *
-     * Reranker 响应格式：{"results": [{"index": 0, "relevance_score": 0.95}, ...]}
      */
     private fun parseRerankResponseWithScores(json: String): List<Pair<Int, Double>> {
         val resultsPattern = Regex("\"results\"\\s*:\\s*\\[(.*?)\\]")
         val match = resultsPattern.find(json) ?: throw RuntimeException("无法解析重排响应")
 
         val resultsStr = match.groupValues[1]
-
-        // 解析每个结果的 index 和 relevance_score
         val resultPattern = Regex("\\{[^}]*\"index\"\\s*:\\s*(\\d+)[^}]*\"relevance_score\"\\s*:\\s*([0-9.]+)[^}]*\\}")
 
         val allResults = resultPattern.findAll(resultsStr)
@@ -502,7 +479,6 @@ class RerankerClient(
             }
             .toList()
 
-        // 记录 Reranker 返回的原始分数
         logger.info("Reranker 原始分数: {}", allResults.map { (idx, score) -> "[$idx]=$score" })
 
         // 过滤低于阈值的结果
@@ -522,8 +498,6 @@ class RerankerClient(
 
 /**
  * FloatArray Jackson 反序列化模块
- *
- * 支持 Jackson 正确反序列化 FloatArray
  */
 private class FloatArrayModule : SimpleModule() {
     init {
@@ -551,8 +525,6 @@ private class FloatArrayModule : SimpleModule() {
 
 /**
  * FloatArray 比较工具
- *
- * 为包含 FloatArray 的数据类提供标准的 equals 和 hashCode 实现
  */
 private object FloatArrayComparator {
     fun equals(a: FloatArray, b: FloatArray): Boolean = a.contentEquals(b)
@@ -594,7 +566,7 @@ private data class BgeUsage(
 )
 
 /**
- * 嵌入响应（简化版，用于向后兼容）
+ * 嵌入响应（简化版）
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class EmbedResponse(
@@ -612,7 +584,7 @@ data class EmbedResponse(
 }
 
 /**
- * 嵌入数据（简化版，用于向后兼容）
+ * 嵌入数据（简化版）
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class EmbedData(
@@ -629,11 +601,3 @@ data class EmbedData(
 
     override fun hashCode(): Int = FloatArrayComparator.hashCode(embedding)
 }
-
-/**
- * 批量嵌入响应（简化版，用于向后兼容）
- */
-@JsonIgnoreProperties(ignoreUnknown = true)
-data class BatchEmbedResponse(
-    val data: List<EmbedData>? = null
-)

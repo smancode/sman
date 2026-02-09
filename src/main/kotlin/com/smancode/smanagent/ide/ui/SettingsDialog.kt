@@ -80,6 +80,18 @@ class SettingsDialog(private val project: Project) : JDialog() {
     private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
+    // 性能配置字段
+    private val bgeMaxTokensField = createTextFieldWithDefault(storage.bgeMaxTokens, "8192")
+    private val bgeTruncationStrategyCombo = JComboBox(arrayOf("HEAD", "TAIL", "MIDDLE", "SMART")).apply {
+        selectedItem = storage.bgeTruncationStrategy.takeIf { it.isNotEmpty() } ?: "TAIL"
+    }
+    private val bgeTruncationStepSizeField = createTextFieldWithDefault(storage.bgeTruncationStepSize, "1000")
+    private val bgeMaxTruncationRetriesField = createTextFieldWithDefault(storage.bgeMaxTruncationRetries, "10")
+    private val bgeRetryMaxField = createTextFieldWithDefault(storage.bgeRetryMax, "3")
+    private val bgeRetryBaseDelayField = createTextFieldWithDefault(storage.bgeRetryBaseDelay, "1000")
+    private val bgeConcurrentLimitField = createTextFieldWithDefault(storage.bgeConcurrentLimit, "3")
+    private val bgeCircuitBreakerThresholdField = createTextFieldWithDefault(storage.bgeCircuitBreakerThreshold, "5")
+
     private fun createTextFieldWithDefault(value: String, default: String): JTextField {
         return JTextField(value.takeIf { it.isNotEmpty() } ?: default, 30)
     }
@@ -131,6 +143,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
         row = addLlmConfigSection(panel, gbc, row)
         row = addBgeM3ConfigSection(panel, gbc, row)
         row = addRerankerConfigSection(panel, gbc, row)
+        row = addPerformanceConfigSection(panel, gbc, row)
         addOtherConfigSection(panel, gbc, row)
 
         return panel
@@ -190,6 +203,59 @@ class SettingsDialog(private val project: Project) : JDialog() {
                 "API Key (可选):" to rerankerApiKeyField
             )
         )
+    }
+
+    private fun addPerformanceConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        var row = startRow
+
+        addSeparator(panel, gbc, row++)
+        addSectionTitle(panel, gbc, row++, "性能配置（并发控制和重试）")
+
+        // Token 配置
+        row = addLabeledField(panel, gbc, row, "Token 限制:", bgeMaxTokensField)
+
+        // 截断配置
+        gbc.apply {
+            gridx = 0
+            gridy = row
+            gridwidth = 1
+            weightx = 0.0
+            fill = GridBagConstraints.NONE
+        }
+        panel.add(JLabel("截断策略:"), gbc)
+
+        gbc.apply {
+            gridx = 1
+            weightx = 1.0
+            fill = GridBagConstraints.HORIZONTAL
+        }
+        panel.add(bgeTruncationStrategyCombo, gbc)
+        row++
+
+        row = addLabeledField(panel, gbc, row, "截断步长:", bgeTruncationStepSizeField)
+        row = addLabeledField(panel, gbc, row, "最大截断重试:", bgeMaxTruncationRetriesField)
+
+        // 重试配置
+        row = addLabeledField(panel, gbc, row, "最大重试次数:", bgeRetryMaxField)
+        row = addLabeledField(panel, gbc, row, "重试基础延迟(ms):", bgeRetryBaseDelayField)
+
+        // 并发和熔断器配置
+        row = addLabeledField(panel, gbc, row, "并发限制:", bgeConcurrentLimitField)
+        row = addLabeledField(panel, gbc, row, "熔断器阈值:", bgeCircuitBreakerThresholdField)
+
+        // 添加提示标签
+        gbc.apply {
+            gridx = 0
+            gridy = row
+            gridwidth = 2
+            weightx = 0.0
+            fill = GridBagConstraints.HORIZONTAL
+        }
+        val hintLabel = JLabel("<html><font color='gray' size='2'>提示：并发限制控制同时处理的请求数，熔断器阈值控制连续失败多少次后暂停请求</font></html>")
+        panel.add(hintLabel, gbc)
+        row++
+
+        return row
     }
 
     private fun addConfigSection(
@@ -745,6 +811,16 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val rerankerApiKey = getPasswordFieldValue(rerankerApiKeyField, storage.rerankerApiKey).trim()
         val projectKey = projectKeyField.text.trim()
 
+        // 性能配置
+        val bgeMaxTokens = bgeMaxTokensField.text.trim()
+        val bgeTruncationStrategy = bgeTruncationStrategyCombo.selectedItem as String
+        val bgeTruncationStepSize = bgeTruncationStepSizeField.text.trim()
+        val bgeMaxTruncationRetries = bgeMaxTruncationRetriesField.text.trim()
+        val bgeRetryMax = bgeRetryMaxField.text.trim()
+        val bgeRetryBaseDelay = bgeRetryBaseDelayField.text.trim()
+        val bgeConcurrentLimit = bgeConcurrentLimitField.text.trim()
+        val bgeCircuitBreakerThreshold = bgeCircuitBreakerThresholdField.text.trim()
+
         // 验证必填字段
         if (!validateRequiredFields(llmBaseUrl, "LLM Base URL") ||
             !validateRequiredFields(llmModelName, "LLM 模型名称") ||
@@ -754,15 +830,41 @@ class SettingsDialog(private val project: Project) : JDialog() {
             return null
         }
 
+        // 验证性能配置数值字段
+        if (!validateNumericField(bgeMaxTokens, "Token 限制", 1, 8192) ||
+            !validateNumericField(bgeTruncationStepSize, "截断步长", 100, 5000) ||
+            !validateNumericField(bgeMaxTruncationRetries, "最大截断重试", 1, 20) ||
+            !validateNumericField(bgeRetryMax, "最大重试次数", 0, 10) ||
+            !validateNumericField(bgeRetryBaseDelay, "重试基础延迟", 100, 60000) ||
+            !validateNumericField(bgeConcurrentLimit, "并发限制", 1, 16) ||
+            !validateNumericField(bgeCircuitBreakerThreshold, "熔断器阈值", 1, 20)) {
+            return null
+        }
+
         return ConfigData(
             llmApiKey, llmBaseUrl, llmModelName,
-            bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey, projectKey
+            bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey, projectKey,
+            bgeMaxTokens, bgeTruncationStrategy, bgeTruncationStepSize, bgeMaxTruncationRetries,
+            bgeRetryMax, bgeRetryBaseDelay, bgeConcurrentLimit, bgeCircuitBreakerThreshold
         )
     }
 
     private fun validateRequiredFields(value: String, fieldName: String): Boolean {
         if (value.isEmpty()) {
             showError("$fieldName 不能为空！")
+            return false
+        }
+        return true
+    }
+
+    private fun validateNumericField(value: String, fieldName: String, min: Int, max: Int): Boolean {
+        val num = value.toIntOrNull()
+        if (num == null) {
+            showError("$fieldName 必须是有效的数字！")
+            return false
+        }
+        if (num < min || num > max) {
+            showError("$fieldName 必须在 $min 到 $max 之间！")
             return false
         }
         return true
@@ -791,11 +893,30 @@ class SettingsDialog(private val project: Project) : JDialog() {
             storage.rerankerApiKey = config.rerankerApiKey
         }
 
-        // 更新配置到 SmanAgentConfig（下次 LLM 调用会使用新配置）
+        // 性能配置
+        storage.bgeMaxTokens = config.bgeMaxTokens
+        storage.bgeTruncationStrategy = config.bgeTruncationStrategy
+        storage.bgeTruncationStepSize = config.bgeTruncationStepSize
+        storage.bgeMaxTruncationRetries = config.bgeMaxTruncationRetries
+        storage.bgeRetryMax = config.bgeRetryMax
+        storage.bgeRetryBaseDelay = config.bgeRetryBaseDelay
+        storage.bgeConcurrentLimit = config.bgeConcurrentLimit
+        storage.bgeCircuitBreakerThreshold = config.bgeCircuitBreakerThreshold
+
+        // 更新配置到 SmanAgentConfig（下次 LLM/BGE 调用会使用新配置）
         val userConfig = SmanAgentConfig.UserConfig(
             llmApiKey = storage.llmApiKey,
             llmBaseUrl = storage.llmBaseUrl,
-            llmModelName = storage.llmModelName
+            llmModelName = storage.llmModelName,
+            // BGE 性能配置
+            bgeMaxTokens = storage.bgeMaxTokens,
+            bgeTruncationStrategy = storage.bgeTruncationStrategy,
+            bgeTruncationStepSize = storage.bgeTruncationStepSize,
+            bgeMaxTruncationRetries = storage.bgeMaxTruncationRetries,
+            bgeRetryMax = storage.bgeRetryMax,
+            bgeRetryBaseDelay = storage.bgeRetryBaseDelay,
+            bgeConcurrentLimit = storage.bgeConcurrentLimit,
+            bgeCircuitBreakerThreshold = storage.bgeCircuitBreakerThreshold
         )
         SmanAgentConfig.setUserConfig(userConfig)
     }
@@ -872,7 +993,16 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val bgeApiKey: String,
         val rerankerEndpoint: String,
         val rerankerApiKey: String,
-        val projectKey: String
+        val projectKey: String,
+        // 性能配置
+        val bgeMaxTokens: String,
+        val bgeTruncationStrategy: String,
+        val bgeTruncationStepSize: String,
+        val bgeMaxTruncationRetries: String,
+        val bgeRetryMax: String,
+        val bgeRetryBaseDelay: String,
+        val bgeConcurrentLimit: String,
+        val bgeCircuitBreakerThreshold: String
     )
 
     /**

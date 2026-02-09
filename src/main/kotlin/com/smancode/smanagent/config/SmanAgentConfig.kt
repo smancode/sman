@@ -32,7 +32,16 @@ object SmanAgentConfig {
     data class UserConfig(
         val llmApiKey: String = "",
         val llmBaseUrl: String = "",
-        val llmModelName: String = ""
+        val llmModelName: String = "",
+        // BGE 性能配置
+        val bgeMaxTokens: String = "",
+        val bgeTruncationStrategy: String = "",
+        val bgeTruncationStepSize: String = "",
+        val bgeMaxTruncationRetries: String = "",
+        val bgeRetryMax: String = "",
+        val bgeRetryBaseDelay: String = "",
+        val bgeConcurrentLimit: String = "",
+        val bgeCircuitBreakerThreshold: String = ""
     )
 
     private val properties: Properties by lazy {
@@ -239,12 +248,44 @@ object SmanAgentConfig {
             logger.warn("BGE-M3 未配置，向量化功能将不可用")
             null
         } else {
+            // 从用户配置或配置文件读取性能参数（用户设置优先）
+            val maxTokens = userConfig?.bgeMaxTokens?.toIntOrNull()
+                ?: getConfigValue("bge.max.tokens", 8192)
+            val truncationStrategyStr = userConfig?.bgeTruncationStrategy?.takeIf { it.isNotEmpty() }
+                ?: getString("bge.truncation.strategy", "TAIL")
+            val truncationStrategy = try {
+                com.smancode.smanagent.analysis.config.TruncationStrategy.valueOf(truncationStrategyStr.uppercase())
+            } catch (e: IllegalArgumentException) {
+                logger.warn("未知的截断策略: $truncationStrategyStr，使用默认值 TAIL")
+                com.smancode.smanagent.analysis.config.TruncationStrategy.TAIL
+            }
+            val truncationStepSize = userConfig?.bgeTruncationStepSize?.toIntOrNull()
+                ?: getConfigValue("bge.truncation.step.size", 1000)
+            val maxTruncationRetries = userConfig?.bgeMaxTruncationRetries?.toIntOrNull()
+                ?: getConfigValue("bge.max.truncation.retries", 10)
+            val maxRetries = userConfig?.bgeRetryMax?.toIntOrNull()
+                ?: getConfigValue("bge.retry.max", 3)
+            val baseDelayMs = userConfig?.bgeRetryBaseDelay?.toLongOrNull()
+                ?: getConfigValue("bge.retry.base.delay", 1000L)
+            val concurrentLimit = userConfig?.bgeConcurrentLimit?.toIntOrNull()
+                ?: getConfigValue("bge.concurrent.limit", 3)
+            val circuitBreakerThreshold = userConfig?.bgeCircuitBreakerThreshold?.toIntOrNull()
+                ?: getConfigValue("bge.circuit.breaker.threshold", 5)
+
             BgeM3Config(
                 endpoint = endpoint,
                 modelName = getString("bge.model.name", "BAAI/bge-m3"),
                 dimension = getConfigValue("bge.dimension", 1024),
                 timeoutSeconds = getConfigValue("bge.timeout.seconds", 30),
-                batchSize = getConfigValue("bge.batch.size", 10)
+                batchSize = getConfigValue("bge.batch.size", 10),
+                maxTokens = maxTokens,
+                truncationStrategy = truncationStrategy,
+                truncationStepSize = truncationStepSize,
+                maxTruncationRetries = maxTruncationRetries,
+                maxRetries = maxRetries,
+                baseDelayMs = baseDelayMs,
+                concurrentLimit = concurrentLimit,
+                circuitBreakerThreshold = circuitBreakerThreshold
             )
         }
     }

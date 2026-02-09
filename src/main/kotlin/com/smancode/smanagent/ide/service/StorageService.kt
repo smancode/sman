@@ -87,6 +87,16 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var rerankerEndpoint: String = "",            // Reranker 服务端点
         var rerankerApiKey: String = "",               // Reranker API Key（可选）
 
+        // 性能配置（并发控制和重试机制）
+        var bgeMaxTokens: String = "8192",             // BGE Token 限制
+        var bgeTruncationStrategy: String = "TAIL",    // 截断策略 (HEAD/TAIL/MIDDLE/SMART)
+        var bgeTruncationStepSize: String = "1000",    // 截断步长
+        var bgeMaxTruncationRetries: String = "10",    // 最大截断重试次数
+        var bgeRetryMax: String = "3",                 // 最大重试次数
+        var bgeRetryBaseDelay: String = "1000",        // 重试基础延迟（毫秒）
+        var bgeConcurrentLimit: String = "3",          // 并发限制
+        var bgeCircuitBreakerThreshold: String = "5",  // 熔断器阈值
+
         // 项目分析配置
         var skipAnalysisConfigDialog: Boolean = false,  // 跳过项目分析配置对话框
         var lastEntryPackages: String = "",             // 上次配置的入口包路径
@@ -429,6 +439,39 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var lastCustomAnnotations: String
         get() = state.lastCustomAnnotations
         set(value) { state.lastCustomAnnotations = value }
+
+    // 性能配置（并发控制和重试机制）
+    var bgeMaxTokens: String
+        get() = state.bgeMaxTokens
+        set(value) { state.bgeMaxTokens = value }
+
+    var bgeTruncationStrategy: String
+        get() = state.bgeTruncationStrategy
+        set(value) { state.bgeTruncationStrategy = value }
+
+    var bgeTruncationStepSize: String
+        get() = state.bgeTruncationStepSize
+        set(value) { state.bgeTruncationStepSize = value }
+
+    var bgeMaxTruncationRetries: String
+        get() = state.bgeMaxTruncationRetries
+        set(value) { state.bgeMaxTruncationRetries = value }
+
+    var bgeRetryMax: String
+        get() = state.bgeRetryMax
+        set(value) { state.bgeRetryMax = value }
+
+    var bgeRetryBaseDelay: String
+        get() = state.bgeRetryBaseDelay
+        set(value) { state.bgeRetryBaseDelay = value }
+
+    var bgeConcurrentLimit: String
+        get() = state.bgeConcurrentLimit
+        set(value) { state.bgeConcurrentLimit = value }
+
+    var bgeCircuitBreakerThreshold: String
+        get() = state.bgeCircuitBreakerThreshold
+        set(value) { state.bgeCircuitBreakerThreshold = value }
 
     companion object {
         fun getInstance(project: Project): StorageService {
