@@ -11,6 +11,7 @@ import com.smancode.smanagent.analysis.model.AnalysisStatus
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.FlowLayout
+import java.awt.Font
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
@@ -101,16 +102,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
         isModal = true
         defaultCloseOperation = DISPOSE_ON_CLOSE
 
-        val panel = createMainPanel()
+        // 创建主内容面板并包裹在滚动面板中
+        val mainContent = createMainPanel()
+        val scrollPane = JScrollPane(mainContent).apply {
+            verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+            horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            border = null
+        }
+
         val buttonPanel = createButtonPanel()
 
-        add(panel, BorderLayout.CENTER)
+        add(scrollPane, BorderLayout.CENTER)
         add(buttonPanel, BorderLayout.SOUTH)
 
         pack()
         setLocationRelativeTo(null)
-        minimumSize = java.awt.Dimension(500, 400)
-        isResizable = false
+        minimumSize = java.awt.Dimension(600, 500)
+        preferredSize = java.awt.Dimension(600, 600)
+        isResizable = true
     }
 
     private fun createPasswordFieldWithStorage(storedValue: String): JPasswordField {
@@ -525,8 +534,39 @@ class SettingsDialog(private val project: Project) : JDialog() {
             }
         }
 
-        JOptionPane.showMessageDialog(this, message, "分析结果详情", result.status.messageType)
+        // 使用带滚动条的文本区域显示分析结果
+        showScrollableTextDialog("分析结果详情", message, result.status.messageType)
     }
+
+    /**
+     * 显示带滚动条的文本对话框
+     */
+    private fun showScrollableTextDialog(title: String, content: String, messageType: Int) {
+        val textArea = JTextArea(content).apply {
+            isEditable = false
+            font = java.awt.Font(Font.MONOSPACED, Font.PLAIN, 12)
+            lineWrap = false
+            wrapStyleWord = true
+            tabSize = 2
+        }
+
+        val scrollPane = JScrollPane(textArea).apply {
+            preferredSize = java.awt.Dimension(700, 500)
+            verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+            horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
+        }
+
+        JOptionPane.showMessageDialog(
+            this,
+            scrollPane,
+            title,
+            messageType
+        )
+    }
+
+    /**
+     * 显示分析总结
+     */
 
     /**
      * 显示分析总结
