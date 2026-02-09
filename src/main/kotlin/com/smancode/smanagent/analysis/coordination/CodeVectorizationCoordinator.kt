@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.exists
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * 代码向量化协调器（核心）
@@ -61,6 +63,9 @@ class CodeVectorizationCoordinator(
             }
         }
     }
+
+    // MD5 保存互斥锁（保护并发更新）
+    private val md5SaveLock = ReentrantLock()
 
     // 向量存储服务
     private val vectorStore: VectorStoreService by lazy {
@@ -113,13 +118,10 @@ class CodeVectorizationCoordinator(
                     continue
                 }
 
-                // 向量化单个文件
-                val vectors = vectorizeFile(sourceFile)
+                // 向量化单个文件（包含：LLM分析 → 保存MD → 向量化 → 更新MD5）
+                val vectors = vectorizeFileWithImmediateMd5Update(sourceFile)
                 processedCount++
                 totalVectors += vectors.size
-
-                // 更新 MD5 缓存
-                md5Tracker.trackFile(sourceFile)
 
             } catch (e: Exception) {
                 logger.error("向量化文件失败: file={}, error={}", sourceFile.fileName, e.message)
@@ -127,7 +129,7 @@ class CodeVectorizationCoordinator(
             }
         }
 
-        // 保存 MD5 缓存
+        // 最终保存一次（确保所有文件都同步）
         saveMd5Cache()
 
         val elapsedTime = System.currentTimeMillis() - startTime
@@ -213,6 +215,78 @@ class CodeVectorizationCoordinator(
         val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent)
 
         // 为每个向量生成嵌入并存储
+        for (vector in vectors) {
+            try {
+                // 生成向量嵌入
+                val embedding = bgeClient.embed(vector.content)
+
+                // 更新向量值
+                val vectorWithEmbedding = vector.copy(vector = embedding)
+
+                // 删除旧向量
+                vectorStore.delete(vector.id)
+
+                // 存储新向量
+                vectorStore.add(vectorWithEmbedding)
+
+            } catch (e: Exception) {
+                logger.error("向量化失败: id={}, error={}", vector.id, e.message)
+                throw e
+            }
+        }
+
+        logger.info("文件向量化完成: file={}, vectors={}", sourceFile.fileName, vectors.size)
+        return vectors
+    }
+
+    /**
+     * 向量化单个文件（带即时 MD5 更新）
+     *
+     * 流程：
+     * 1. LLM 分析 → 生成 MD 文档
+     * 2. 立即更新 MD5（防止 LLM 重做）
+     * 3. 向量化 MD 文档
+     * 4. 立即保存 MD5 缓存（防止进度丢失）
+     *
+     * @param sourceFile 源代码文件
+     * @return 生成的向量片段列表
+     */
+    private suspend fun vectorizeFileWithImmediateMd5Update(sourceFile: Path): List<VectorFragment> {
+        logger.info("开始向量化文件（带即时MD5更新）: {}", sourceFile.fileName)
+
+        // 步骤 1: LLM 分析 → 生成 MD 文档
+        val sourceCode = sourceFile.toFile().readText()
+        val mdContent = when {
+            sourceFile.fileName.toString().endsWith(".java") -> {
+                when {
+                    isEnumFile(sourceCode) -> llmCodeUnderstandingService.analyzeEnumFile(sourceFile, sourceCode)
+                    else -> llmCodeUnderstandingService.analyzeJavaFile(sourceFile, sourceCode)
+                }
+            }
+            sourceFile.fileName.toString().endsWith(".xml") -> {
+                logger.warn("XML 文件分析暂未实现: {}", sourceFile.fileName)
+                return emptyList()
+            }
+            else -> {
+                logger.warn("不支持的文件类型: {}", sourceFile.fileName)
+                return emptyList()
+            }
+        }
+
+        // 保存 .md 文档
+        saveMarkdownDocument(sourceFile, mdContent)
+
+        // 步骤 2: 立即更新 MD5（LLM 完成了，不需要重做）
+        md5SaveLock.withLock {
+            md5Tracker.trackFile(sourceFile)
+            saveMd5Cache()
+        }
+        logger.debug("MD5 已更新（LLM 完成后）: {}", sourceFile.fileName)
+
+        // 步骤 3: 解析 .md 文档为向量片段
+        val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent)
+
+        // 步骤 4: 向量化并存储
         for (vector in vectors) {
             try {
                 // 生成向量嵌入
