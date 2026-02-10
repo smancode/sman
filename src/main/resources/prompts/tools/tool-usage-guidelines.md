@@ -336,22 +336,50 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 **Best for**: Locating files when you know the file name pattern
 
 **When to use**:
-- You know the file name (or partial name)
+- You know the exact file name (e.g., "build.gradle", "pom.xml")
+- You know the file name pattern (e.g., "*.java", "*Controller.java")
 - Finding all implementations of an interface
 - Finding configuration files
 
 **Parameters**:
-- `filePattern` (required): File name regex pattern
-  - Example: `".*Service\\.java"`, `"application.*\\.yml"`, `".*Controller\\.java"`
+- `filePattern` (required): File name pattern (supports **exact name** or **regex pattern**)
+  - **Exact name**: `"build.gradle"`, `"pom.xml"`, `"application.yml"`, `"settings.gradle.kts"`
+  - **Regex pattern**: `".*Service\\.java"`, `"application.*\\.yml"`, `".*Controller\\.java"`
+  - **IMPORTANT**: Supports both exact file names and regex patterns
   - **IMPORTANT**: Enterprise systems use diverse patterns! Don't limit to Controller only.
   - Common patterns: `.*Handler\\.java`, `.*Endpoint\\.java`, `.*Processor\\.java`, `.*Interceptor\\.java`
+  - Build files: `"build.gradle"`, `"pom.xml"`, `"settings.gradle"`, `"gradlew"`
 - `searchPath` (optional): Search path to limit scope
   - Example: `"service/"`, `"handler/"`, `"controller/"`
 
 **Examples**:
 
 ```json
-// Example 1: Find all Service classes
+// Example 1: Find by exact file name (build files)
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": "build.gradle"
+  }
+}
+
+// Example 1.1: Find by exact file name (pom.xml)
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": "pom.xml"
+  }
+}
+
+// Example 1.2: Find by exact file name (settings.gradle.kts)
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": "settings.gradle.kts"
+  }
+}
+
+// Example 1.3: Find all Service classes (regex pattern)
 {
   "toolName": "find_file",
   "parameters": {
@@ -359,7 +387,7 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
   }
 }
 
-// Example 1.5: Find Handler classes (common in enterprise systems)
+// Example 1.4: Find Handler classes (common in enterprise systems)
 {
   "toolName": "find_file",
   "parameters": {
@@ -367,21 +395,27 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
   }
 }
 
-// Example 1.6: Find Endpoint classes
+// Example 1.5: Find Endpoint classes
 {
   "toolName": "find_file",
   "parameters": {
     "filePattern": ".*Endpoint\\.java"
   }
 }
-```
 
-```json
-// Example 2: Find config files
+// Example 1.6: Find config files (regex pattern)
 {
   "toolName": "find_file",
   "parameters": {
     "filePattern": "application.*\\.yml"
+  }
+}
+
+// Example 1.7: Find all XML files
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": ".*\\.xml"
   }
 }
 ```

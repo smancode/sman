@@ -39,9 +39,27 @@ class LocalToolExecutor(private val project: Project) {
          */
         private val SOURCE_FILE_EXTENSIONS = listOf(
             "java", "xml", "yml", "yaml", "html", "vue",
-            "kt", "js", "ts", "jsx", "tsx",
+            "kt", "kts", "js", "ts", "jsx", "tsx",
             "py", "go", "rs", "c", "cpp", "h", "hpp",
-            "md", "json", "properties"
+            "md", "json", "properties",
+            "gradle"  // 添加构建文件扩展名
+        )
+
+        /**
+         * 不需要过滤扩展名的文件名（精确匹配）
+         * 这些文件名可以直接匹配，不需要检查扩展名
+         */
+        private val EXACT_MATCH_FILENAMES = setOf(
+            "build.gradle",
+            "build.gradle.kts",
+            "settings.gradle",
+            "settings.gradle.kts",
+            "gradlew",
+            "gradlew.bat",
+            "pom.xml",
+            "package.json",
+            "tsconfig.json",
+            "webpack.config.js"
         )
 
         /**
@@ -207,14 +225,25 @@ class LocalToolExecutor(private val project: Project) {
             dir.listFiles()?.forEach { file ->
                 if (file.isDirectory) {
                     findFiles(file)
-                } else if (regex.matches(file.name) && SOURCE_FILE_EXTENSIONS.any { file.name.endsWith(".$it") }) {
-                    // 只匹配源码文件，排除 .class 等编译产物
-                    // 使用 PathUtil 确保跨平台路径兼容性
-                    val relativePath = toRelativePath(file.absolutePath, basePath)
-                    matches.add(mapOf(
-                        "path" to relativePath,
-                        "name" to file.name
-                    ))
+                } else {
+                    // 检查是否匹配正则表达式
+                    if (!regex.matches(file.name)) {
+                        return@forEach
+                    }
+
+                    // 如果是精确匹配的文件名（如 build.gradle），直接匹配
+                    // 否则检查扩展名是否在允许列表中
+                    val isExactMatch = EXACT_MATCH_FILENAMES.contains(file.name)
+                    val hasValidExtension = SOURCE_FILE_EXTENSIONS.any { file.name.endsWith(".$it") }
+
+                    if (isExactMatch || hasValidExtension) {
+                        // 使用 PathUtil 确保跨平台路径兼容性
+                        val relativePath = toRelativePath(file.absolutePath, basePath)
+                        matches.add(mapOf(
+                            "path" to relativePath,
+                            "name" to file.name
+                        ))
+                    }
                 }
             }
         }

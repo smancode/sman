@@ -104,13 +104,217 @@ class ProjectInfoVectorizationService(
      * 向量化项目结构
      */
     suspend fun vectorizeProjectStructure(data: String): Int =
-        vectorizeData("project_structure", data)
+        vectorizeProjectStructureAsMarkdown(data)
 
     /**
      * 向量化技术栈
      */
     suspend fun vectorizeTechStack(data: String): Int =
-        vectorizeData("tech_stack", data)
+        vectorizeTechStackAsMarkdown(data)
+
+    /**
+     * 向量化技术栈（Markdown 格式，提升语义搜索效果）
+     */
+    suspend fun vectorizeTechStackAsMarkdown(data: String): Int = withContext(Dispatchers.IO) {
+        try {
+            val jsonData = jacksonObjectMapper().readTree(data)
+
+            // 构建 Markdown 内容
+            val markdownContent = buildString {
+                appendLine("# 技术栈")
+                appendLine()
+                appendLine("## 常见问题")
+                appendLine("- 项目技术栈是什么")
+                appendLine("- 项目使用什么框架")
+                appendLine("- 项目使用什么数据库")
+                appendLine("- 项目使用什么编程语言")
+                appendLine("- 项目使用什么构建工具")
+                appendLine()
+
+                // 构建类型
+                val buildType = jsonData.get("buildType")?.asText() ?: "UNKNOWN"
+                appendLine("## 构建工具")
+                appendLine("- $buildType")
+                appendLine()
+
+                // 框架
+                val frameworks = jsonData.get("frameworks")
+                if (frameworks != null && frameworks.isArray) {
+                    appendLine("## 框架")
+                    frameworks.forEach { fw ->
+                        val name = fw.get("name")?.asText()
+                        val version = fw.get("version")?.asText()
+                        if (name != null) {
+                            val versionStr = if (version != null) " (v$version)" else ""
+                            appendLine("- **$name**$versionStr")
+                        }
+                    }
+                    appendLine()
+                }
+
+                // 编程语言
+                val languages = jsonData.get("languages")
+                if (languages != null && languages.isArray) {
+                    appendLine("## 编程语言")
+                    languages.forEach { lang ->
+                        val name = lang.get("name")?.asText()
+                        val version = lang.get("version")?.asText()
+                        val fileCount = lang.get("fileCount")?.asInt() ?: 0
+                        if (name != null) {
+                            val versionStr = if (version != null) " (v$version)" else ""
+                            appendLine("- **$name**$versionStr ($fileCount 个文件)")
+                        }
+                    }
+                    appendLine()
+                }
+
+                // 数据库
+                val databases = jsonData.get("databases")
+                if (databases != null && databases.isArray) {
+                    appendLine("## 数据库")
+                    databases.forEach { db ->
+                        val name = db.get("name")?.asText()
+                        val type = db.get("type")?.asText()
+                        if (name != null) {
+                            val typeStr = if (type != null) " ($type)" else ""
+                            appendLine("- **$name**$typeStr")
+                        }
+                    }
+                    appendLine()
+                }
+
+                // 中间件（如果有）
+                val middleware = jsonData.get("middleware")
+                if (middleware != null && middleware.isArray && middleware.size() > 0) {
+                    appendLine("## 中间件")
+                    middleware.forEach { mw ->
+                        val name = mw.get("name")?.asText()
+                        if (name != null) {
+                            appendLine("- **$name**")
+                        }
+                    }
+                    appendLine()
+                }
+            }
+
+            // 向量化 Markdown 内容
+            val vector = bgeClient.embed(markdownContent)
+
+            val fragment = VectorFragment(
+                id = "$projectKey:tech_stack",
+                title = "技术栈",
+                content = markdownContent,
+                fullContent = data,  // 保留原始 JSON 数据
+                tags = listOf("project", "tech_stack", "技术栈", "框架", "数据库") + listOf(projectKey),
+                metadata = mapOf(
+                    "type" to "tech_stack",
+                    "projectKey" to projectKey,
+                    "format" to "markdown"
+                ),
+                vector = vector
+            )
+
+            vectorStore.add(fragment)
+            logger.info("已向量化技术栈（Markdown 格式）: projectKey={}", projectKey)
+            1
+        } catch (e: Exception) {
+            logger.error("向量化技术栈失败: projectKey={}", projectKey, e)
+            0
+        }
+    }
+
+    /**
+     * 向量化项目结构（Markdown 格式，提升语义搜索效果）
+     */
+    suspend fun vectorizeProjectStructureAsMarkdown(data: String): Int = withContext(Dispatchers.IO) {
+        try {
+            val jsonData = jacksonObjectMapper().readTree(data)
+
+            // 构建 Markdown 内容
+            val markdownContent = buildString {
+                appendLine("# 项目结构")
+                appendLine()
+                appendLine("## 常见问题")
+                appendLine("- 项目结构是什么")
+                appendLine("- 项目结构怎么样")
+                appendLine("- 介绍下项目结构")
+                appendLine("- 项目有哪些模块")
+                appendLine()
+
+                // 模块列表
+                val modules = jsonData.get("modules")
+                if (modules != null && modules.isArray) {
+                    appendLine("## 项目模块")
+                    modules.forEach { module ->
+                        val name = module.get("name")?.asText()
+                        val description = module.get("description")?.asText()
+                        if (name != null) {
+                            appendLine("### $name")
+                            if (description != null) {
+                                appendLine("$description")
+                            }
+                            appendLine()
+                        }
+                    }
+                }
+
+                // 分层架构
+                val layers = jsonData.get("layers")
+                if (layers != null && layers.isArray) {
+                    appendLine("## 分层架构")
+                    layers.forEach { layer ->
+                        val name = layer.get("name")?.asText()
+                        val description = layer.get("description")?.asText()
+                        if (name != null) {
+                            val descStr = if (description != null) ": $description" else ""
+                            appendLine("- **$name**$descStr")
+                        }
+                    }
+                    appendLine()
+                }
+
+                // 包结构（如果有）
+                val packages = jsonData.get("packages")
+                if (packages != null && packages.isArray && packages.size() > 0) {
+                    appendLine("## 主要包")
+                    packages.take(10).forEach { pkg ->
+                        val name = pkg.get("name")?.asText()
+                        if (name != null) {
+                            appendLine("- `$name`")
+                        }
+                    }
+                    if (packages.size() > 10) {
+                        appendLine("- ... 还有 ${packages.size() - 10} 个包")
+                    }
+                    appendLine()
+                }
+            }
+
+            // 向量化 Markdown 内容
+            val vector = bgeClient.embed(markdownContent)
+
+            val fragment = VectorFragment(
+                id = "$projectKey:project_structure",
+                title = "项目结构",
+                content = markdownContent,
+                fullContent = data,  // 保留原始 JSON 数据
+                tags = listOf("project", "structure", "项目结构", "模块", "架构") + listOf(projectKey),
+                metadata = mapOf(
+                    "type" to "project_structure",
+                    "projectKey" to projectKey,
+                    "format" to "markdown"
+                ),
+                vector = vector
+            )
+
+            vectorStore.add(fragment)
+            logger.info("已向量化项目结构（Markdown 格式）: projectKey={}", projectKey)
+            1
+        } catch (e: Exception) {
+            logger.error("向量化项目结构失败: projectKey={}", projectKey, e)
+            0
+        }
+    }
 
     /**
      * 向量化数据库实体（细粒度：每个表独立存储）
