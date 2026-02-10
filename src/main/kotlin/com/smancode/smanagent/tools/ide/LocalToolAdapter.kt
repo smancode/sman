@@ -1,5 +1,7 @@
 package com.smancode.smanagent.tools.ide
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.ide.service.LocalToolExecutor
 import com.smancode.smanagent.model.part.Part
@@ -7,7 +9,13 @@ import com.smancode.smanagent.tools.AbstractTool
 import com.smancode.smanagent.tools.ParameterDef
 import com.smancode.smanagent.tools.Tool
 import com.smancode.smanagent.tools.ToolResult
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.slf4j.LoggerFactory
 import java.util.function.Consumer
+import java.util.concurrent.TimeUnit
 
 /**
  * 本地工具适配器
@@ -69,18 +77,179 @@ class LocalToolAdapter(
 }
 
 /**
+ * 专家咨询工具
+ *
+ * 通过 HTTP 调用验证服务的 expert_consult API
+ * 提供业务↔代码双向查询能力
+ */
+class ExpertConsultTool(
+    private val project: Project
+) : AbstractTool(), Tool {
+
+    private val logger = LoggerFactory.getLogger(ExpertConsultTool::class.java)
+    private val objectMapper = ObjectMapper()
+
+    // 从环境变量或使用默认端口
+    private val verificationPort = System.getProperty("verification.port", "8080")
+    private val baseUrl = "http://localhost:$verificationPort"
+    private val apiUrl = "$baseUrl/api/verify/expert_consult"
+
+    // OkHttp 客户端
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
+
+    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+    override fun getName() = "expert_consult"
+
+    override fun getDescription() = "Expert consultation tool with bidirectional Business ↔ Code understanding. Use for business/rule/code analysis."
+
+    override fun getParameters() = mapOf(
+        "question" to ParameterDef("question", String::class.java, true, "Question to ask"),
+        "projectKey" to ParameterDef("projectKey", String::class.java, true, "Project key"),
+        "topK" to ParameterDef("topK", Int::class.java, false, "Number of results to retrieve", 10),
+        "enableRerank" to ParameterDef("enableRerank", Boolean::class.java, false, "Enable reranking", true),
+        "rerankTopN" to ParameterDef("rerankTopN", Int::class.java, false, "Number of results after reranking", 5)
+    )
+
+    override fun execute(projectKey: String, params: Map<String, Any>): ToolResult {
+        val startTime = System.currentTimeMillis()
+
+        // 白名单参数校验
+        val question = params["question"]?.toString()
+            ?: return ToolResult.failure("缺少 question 参数")
+
+        val actualProjectKey = params["projectKey"]?.toString() ?: projectKey
+        if (actualProjectKey.isEmpty()) {
+            return ToolResult.failure("缺少 projectKey 参数")
+        }
+
+        val topK = (params["topK"] as? Number)?.toInt() ?: 10
+        val enableRerank = params["enableRerank"] as? Boolean ?: true
+        val rerankTopN = (params["rerankTopN"] as? Number)?.toInt() ?: 5
+
+        // 参数校验
+        if (question.isBlank()) {
+            return ToolResult.failure("question 不能为空")
+        }
+        if (topK <= 0) {
+            return ToolResult.failure("topK 必须大于 0")
+        }
+
+        return try {
+            // 构建请求体
+            val requestBody = mapOf(
+                "question" to question,
+                "projectKey" to actualProjectKey,
+                "topK" to topK,
+                "enableRerank" to enableRerank,
+                "rerankTopN" to rerankTopN
+            )
+
+            val jsonBody = objectMapper.writeValueAsString(requestBody)
+            logger.info("调用专家咨询 API: url={}, request={}", apiUrl, jsonBody)
+
+            val request = Request.Builder()
+                .url(apiUrl)
+                .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                val duration = System.currentTimeMillis() - startTime
+
+                if (!response.isSuccessful) {
+                    logger.error("专家咨询 API 调用失败: code={}, body={}", response.code, responseBody)
+                    return ToolResult.failure(
+                        "专家咨询 API 调用失败: HTTP ${response.code}. " +
+                        "请确保验证服务已启动（端口: $verificationPort）"
+                    ).also { it.executionTimeMs = duration }
+                }
+
+                if (responseBody.isNullOrEmpty()) {
+                    return ToolResult.failure("API 返回空响应").also {
+                        it.executionTimeMs = duration
+                    }
+                }
+
+                // 解析响应
+                val jsonNode = objectMapper.readTree(responseBody)
+                val answer = jsonNode.get("answer")?.asText() ?: "未获取到答案"
+                val sources = jsonNode.get("sources")
+                val confidence = jsonNode.get("confidence")?.asDouble() ?: 0.0
+                val processingTime = jsonNode.get("processingTimeMs")?.asLong() ?: 0
+
+                // 构建结果文本
+                val resultText = buildString {
+                    appendLine("## 专家咨询结果")
+                    appendLine()
+                    appendLine("**置信度**: ${(confidence * 100).toInt()}%")
+                    appendLine("**处理时间**: ${processingTime}ms")
+                    appendLine()
+                    appendLine("### 答案")
+                    appendLine(answer)
+                    appendLine()
+
+                    // 添加来源信息
+                    if (sources != null && sources.isArray && sources.size() > 0) {
+                        appendLine("### 来源代码")
+                        sources.forEach { source ->
+                            val filePath = source.get("filePath")?.asText() ?: ""
+                            val score = source.get("score")?.asDouble() ?: 0.0
+                            if (filePath.isNotEmpty()) {
+                                appendLine("- `$filePath` (相似度: ${"%.2f".format(score)})")
+                            }
+                        }
+                    }
+                }
+
+                logger.info("专家咨询完成: sources={}, confidence={}, time={}ms",
+                    sources?.size() ?: 0, confidence, duration)
+
+                ToolResult.success(resultText, "expert_consult", resultText).also {
+                    it.executionTimeMs = duration
+                    it.metadata = mapOf(
+                        "confidence" to confidence,
+                        "processingTimeMs" to processingTime,
+                        "sourcesCount" to (sources?.size() ?: 0)
+                    )
+                }
+            }
+
+        } catch (e: java.net.ConnectException) {
+            val duration = System.currentTimeMillis() - startTime
+            logger.error("无法连接到验证服务: {}", e.message)
+            ToolResult.failure(
+                "无法连接到验证服务 (http://localhost:$verificationPort). " +
+                "请确保验证服务已启动。\n" +
+                "启动命令: ./scripts/verification-web.sh"
+            ).also { it.executionTimeMs = duration }
+        } catch (e: Exception) {
+            val duration = System.currentTimeMillis() - startTime
+            logger.error("专家咨询执行失败", e)
+            ToolResult.failure("专家咨询执行失败: ${e.message}").also {
+                it.executionTimeMs = duration
+            }
+        }
+    }
+}
+
+/**
  * 本地工具工厂
  */
 object LocalToolFactory {
 
     fun createTools(project: Project): List<Tool> = listOf(
+        ExpertConsultTool(project),  // 核心工具：专家咨询
         readFileTool(project),
         grepFileTool(project),
         findFileTool(project),
         callChainTool(project),
         extractXmlTool(project),
         applyChangeTool(project),
-        runShellCommandTool(project)  // 新增：Shell 命令执行工具
+        runShellCommandTool(project)  // Shell 命令执行工具
     )
 
     private fun readFileTool(project: Project) = LocalToolAdapter(

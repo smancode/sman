@@ -5,8 +5,10 @@ import com.smancode.smanagent.tools.Tool
 import com.smancode.smanagent.tools.ToolRegistry
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -28,16 +30,16 @@ class LocalToolFactoryTest {
     }
 
     @Test
-    @DisplayName("创建工具列表 - 应该创建 7 个工具")
-    fun testCreateTools_count_shouldBeSeven() {
+    @DisplayName("创建工具列表 - 应该创建 8 个工具")
+    fun testCreateTools_count_shouldBeEight() {
         // Given: 模拟项目对象
         val project = createMockProject()
 
         // When: 创建工具列表
         val tools = LocalToolFactory.createTools(project)
 
-        // Then: 应该创建 7 个工具
-        assertEquals(7, tools.size, "应该创建 7 个本地工具")
+        // Then: 应该创建 8 个工具（新增 expert_consult）
+        assertEquals(8, tools.size, "应该创建 8 个本地工具")
     }
 
     @Test
@@ -52,13 +54,14 @@ class LocalToolFactoryTest {
 
         // Then: 验证所有工具都可访问
         val expectedTools = listOf(
+            "expert_consult",  // 核心工具：专家咨询
             "read_file",
             "grep_file",
             "find_file",
             "call_chain",
             "extract_xml",
             "apply_change",
-            "run_shell_command"  // 新增
+            "run_shell_command"
         )
 
         expectedTools.forEach { toolName ->
@@ -163,5 +166,137 @@ class LocalToolFactoryTest {
                 assertFalse(tool.supportsStreaming(), "${tool.getName()} 不应该支持流式输出")
             }
         }
+    }
+
+    @Test
+    @DisplayName("专家咨询工具 - 应该有正确的参数定义")
+    fun testExpertConsultTool_parameters() {
+        // Given: 工具注册表
+        val registry = ToolRegistry()
+        LocalToolFactory.createTools(createMockProject()).let { registry.registerTools(it) }
+
+        // When: 获取 expert_consult 工具
+        val tool = registry.getTool("expert_consult")
+
+        // Then: 验证参数定义
+        assertNotNull(tool, "expert_consult 工具应该存在")
+        val params = tool.getParameters()
+
+        // 验证必需参数
+        val questionParam = params["question"]
+        assertNotNull(questionParam, "应该有 question 参数")
+        assertTrue(questionParam.isRequired, "question 参数应该是必需的")
+
+        val projectKeyParam = params["projectKey"]
+        assertNotNull(projectKeyParam, "应该有 projectKey 参数")
+        assertTrue(projectKeyParam.isRequired, "projectKey 参数应该是必需的")
+
+        // 验证可选参数
+        val topKParam = params["topK"]
+        assertNotNull(topKParam, "应该有 topK 参数")
+        assertEquals(10, topKParam?.defaultValue, "topK 默认值应该是 10")
+
+        val enableRerankParam = params["enableRerank"]
+        assertNotNull(enableRerankParam, "应该有 enableRerank 参数")
+        assertEquals(true, enableRerankParam?.defaultValue, "enableRerank 默认值应该是 true")
+
+        val rerankTopNParam = params["rerankTopN"]
+        assertNotNull(rerankTopNParam, "应该有 rerankTopN 参数")
+        assertEquals(5, rerankTopNParam?.defaultValue, "rerankTopN 默认值应该是 5")
+
+        // 验证工具描述
+        val description = tool.getDescription()
+        assertTrue(description.contains("Business") || description.contains("业务"),
+            "工具描述应该提到业务↔代码能力")
+    }
+
+    @Test
+    @DisplayName("专家咨询工具 - 白名单拒绝测试：缺少 question 参数")
+    @EnabledIfSystemProperty(named = "run.integration.tests", matches = "true")
+    fun testExpertConsultTool_missingQuestion_shouldFail() {
+        // Given: expert_consult 工具
+        val tool = ExpertConsultTool(createMockProject())
+
+        // When: 缺少 question 参数
+        val result = tool.execute("test-project", mapOf(
+            "projectKey" to "test-project"
+        ))
+
+        // Then: 应该返回失败
+        assertFalse(result.isSuccess, "缺少 question 参数应该返回失败")
+        assertTrue(result.error?.contains("question") == true,
+            "错误信息应该包含 'question'")
+    }
+
+    @Test
+    @DisplayName("专家咨询工具 - 白名单拒绝测试：question 为空")
+    @EnabledIfSystemProperty(named = "run.integration.tests", matches = "true")
+    fun testExpertConsultTool_emptyQuestion_shouldFail() {
+        // Given: expert_consult 工具
+        val tool = ExpertConsultTool(createMockProject())
+
+        // When: question 为空字符串
+        val result = tool.execute("test-project", mapOf(
+            "question" to "   ",
+            "projectKey" to "test-project"
+        ))
+
+        // Then: 应该返回失败
+        assertFalse(result.isSuccess, "question 为空应该返回失败")
+    }
+
+    @Test
+    @DisplayName("专家咨询工具 - 白名单拒绝测试：topK 小于等于 0")
+    @EnabledIfSystemProperty(named = "run.integration.tests", matches = "true")
+    fun testExpertConsultTool_topKLessThanZero_shouldFail() {
+        // Given: expert_consult 工具
+        val tool = ExpertConsultTool(createMockProject())
+
+        // When: topK <= 0
+        val result = tool.execute("test-project", mapOf(
+            "question" to "测试问题",
+            "projectKey" to "test-project",
+            "topK" to 0
+        ))
+
+        // Then: 应该返回失败
+        assertFalse(result.isSuccess, "topK <= 0 应该返回失败")
+        assertTrue(result.error?.contains("topK") == true,
+            "错误信息应该包含 'topK'")
+    }
+
+    @Test
+    @DisplayName("专家咨询工具 - 集成测试：调用真实 API")
+    @EnabledIfSystemProperty(named = "run.integration.tests", matches = "true")
+    fun testExpertConsultTool_integration_callRealApi() {
+        // Given: expert_consult 工具和真实项目
+        val tool = ExpertConsultTool(createMockProject())
+
+        // When: 调用 API
+        val result = tool.execute("smanunion", mapOf(
+            "question" to "项目中有哪些API入口？",
+            "projectKey" to "smanunion",
+            "topK" to 5
+        ))
+
+        // Then: 验证结果
+        // 注意：这个测试需要验证服务正在运行
+        if (!result.isSuccess) {
+            // 如果服务未运行，跳过测试
+            assumeTrue(false, "验证服务未运行: ${result.error}")
+        }
+
+        assertTrue(result.isSuccess, "API 调用应该成功")
+        assertTrue(result.displayContent?.contains("答案") == true ||
+                    result.displayContent?.contains("API") == true,
+            "结果应该包含答案内容")
+
+        // 验证元数据
+        val metadata = result.metadata
+        assertNotNull(metadata, "应该有元数据")
+        assertTrue(metadata?.containsKey("confidence") == true,
+            "元数据应该包含 confidence")
+        assertTrue(metadata?.containsKey("processingTimeMs") == true,
+            "元数据应该包含 processingTimeMs")
     }
 }

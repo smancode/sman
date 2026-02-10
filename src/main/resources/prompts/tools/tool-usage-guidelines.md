@@ -15,6 +15,7 @@
 2. **Right Tool, Second**: Use other tools only when `expert_consult` results suggest you need deeper investigation
 3. **Chain Efficiently**: Let `expert_consult` guide you to the right next steps
 4. **Batch When Possible**: Use `batch` for multiple independent operations (2-5x faster)
+5. **Architecture Agnostic**: Enterprise systems use diverse patterns (Controller, Handler, Service, Endpoint, Processor, etc.). Don't assume any specific pattern exists. Let `expert_consult` discover the actual architecture.
 </tool_philosophy>
 
 ## The Golden Rule
@@ -56,7 +57,8 @@ CASE D: `expert_consult` suggests understanding call relationships
 
 CASE E: `expert_consult` suggests finding files
 → Use `find_file` with `filePattern`
-→ Example: `{"filePattern": ".*Controller\\.java"}`
+→ Example: `{"filePattern": ".*Controller\\.java"}` or `{"filePattern": ".*Handler\\.java"}` or `{"filePattern": ".*Service\\.java"}`
+→ IMPORTANT: Enterprise systems use various patterns (Controller, Handler, Service, Endpoint, etc.). Don't assume only Controller pattern exists.
 
 CASE F: User wants to modify code
 → Use `read_file` first to see exact code
@@ -341,8 +343,10 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
 **Parameters**:
 - `filePattern` (required): File name regex pattern
   - Example: `".*Service\\.java"`, `"application.*\\.yml"`, `".*Controller\\.java"`
+  - **IMPORTANT**: Enterprise systems use diverse patterns! Don't limit to Controller only.
+  - Common patterns: `.*Handler\\.java`, `.*Endpoint\\.java`, `.*Processor\\.java`, `.*Interceptor\\.java`
 - `searchPath` (optional): Search path to limit scope
-  - Example: `"service/"`, `"controller/"`
+  - Example: `"service/"`, `"handler/"`, `"controller/"`
 
 **Examples**:
 
@@ -352,6 +356,22 @@ CASE G: User already knows the EXACT class name (skip `expert_consult`)
   "toolName": "find_file",
   "parameters": {
     "filePattern": ".*Service\\.java"
+  }
+}
+
+// Example 1.5: Find Handler classes (common in enterprise systems)
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": ".*Handler\\.java"
+  }
+}
+
+// Example 1.6: Find Endpoint classes
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": ".*Endpoint\\.java"
   }
 }
 ```
@@ -574,6 +594,24 @@ RESULT: Code + domain knowledge
 OPTIONAL: read_file specific classes for details
 ↓
 RESPONSE: Comprehensive explanation
+```
+
+### Workflow 2.5: "Where is the API entry for X?"
+```
+User: "放款接口是哪个" (Which is the disbursement API?)
+↓
+TOOL: expert_consult (query: "放款接口是哪个")
+↓
+RESULT: Returns Handler/Controller/Service/Endpoint depending on actual architecture
+↓
+NOTE: Enterprise systems use diverse patterns:
+  - Spring: @Controller or @RestController
+  - Custom framework: Handler (e.g., DisburseHandler)
+  - gRPC: Service
+  - Message queue: Processor/Consumer
+  - Custom middleware: Interceptor/Filter
+↓
+RESPONSE: Report the actual entry point found (don't assume it's always Controller)
 ```
 
 ### Workflow 3: "Who uses this method?"
