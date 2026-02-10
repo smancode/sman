@@ -1009,6 +1009,16 @@ class SmanAgentLoop(
             }
             // ========== 动态 Prompt 注入结束 ==========
 
+            // ========== 用户配置的 RULES（追加到 system prompt 后面）==========
+            val userRules = session.projectInfo?.rules
+            if (!userRules.isNullOrEmpty()) {
+                logger.info("会话 {} 追加用户配置的 RULES", sessionId)
+                prompt.append("\n\n## 用户配置的工作规则 (User Rules)\n\n")
+                prompt.append(userRules)
+                prompt.append("\n\n---\n")
+            }
+            // ========== 用户配置的 RULES 结束 ==========
+
             prompt.toString()
         }
     }

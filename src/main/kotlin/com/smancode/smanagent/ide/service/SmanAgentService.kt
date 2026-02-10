@@ -379,6 +379,7 @@ class SmanAgentService(private val project: Project) : Disposable {
             ProjectInfo().apply {
                 projectKey = this@SmanAgentService.projectKey
                 projectPath = project.basePath
+                rules = storageService.rules  // 从 StorageService 读取用户配置的 RULES
             }.let { projectInfo ->
                 Session(id, projectInfo).apply {
                     status = SessionStatus.IDLE

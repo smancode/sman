@@ -69,16 +69,6 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         }
     )
 
-    // 代码引用快捷键提示
-    private val shortcutHintLabel = JLabel().apply {
-        val isMac = System.getProperty("os.name").lowercase().contains("mac")
-        val shortcut = if (isMac) "⌘I" else "Ctrl+I"
-        text = "⌨️ 选中代码后按 $shortcut 添加引用"
-        font = font.deriveFont(10f)
-        foreground = java.awt.Color(130, 130, 130)
-        border = javax.swing.border.EmptyBorder(0, 0, 4, 0)
-    }
-
     private val taskProgressBar = TaskProgressBar()
 
     private val scrollPane = JScrollPane(outputArea).apply {
@@ -194,12 +184,12 @@ class SmanAgentChatPanel(private val project: Project) : JPanel(BorderLayout()) 
         add(controlBar, BorderLayout.NORTH)
         add(centerPanel, BorderLayout.CENTER)
 
-        val bottomPanel = JPanel(BorderLayout()).apply {
+        val bottomPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
             isOpaque = false
             border = javax.swing.border.EmptyBorder(10, 12, 10, 12)
-            add(taskProgressBar, BorderLayout.NORTH)
-            add(shortcutHintLabel, BorderLayout.CENTER)
-            add(inputArea, BorderLayout.SOUTH)
+            add(taskProgressBar)
+            add(inputArea)
         }
         add(bottomPanel, BorderLayout.SOUTH)
 

@@ -102,6 +102,9 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var lastEntryPackages: String = "",             // 上次配置的入口包路径
         var lastCustomAnnotations: String = "",         // 上次配置的自定义注解
 
+        // RULES 配置（用户自定义规则，会追加到 system prompt 后面）
+        var rules: String = "",                         // 用户自定义规则
+
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
     )
@@ -473,7 +476,114 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         get() = state.bgeCircuitBreakerThreshold
         set(value) { state.bgeCircuitBreakerThreshold = value }
 
+    // RULES 配置（当值为空时返回默认 RULES）
+    var rules: String
+        get() = state.rules.takeIf { it.isNotEmpty() } ?: DEFAULT_RULES
+        set(value) { state.rules = value }
+
+    // 获取原始的 rules 值（不使用默认值）
+    fun getRawRules(): String = state.rules
+
     companion object {
+        // 默认的 RULES（三阶段工作流）
+        private const val DEFAULT_RULES = """## 🔄 三阶段工作流 (The Workflow)
+
+### 1️⃣ 阶段一：深度分析 (Analyze)
+**回答声明**：`【分析问题】`
+
+**目标**：在动手之前，先确保"做正确的事"。
+
+**必须执行的动作**：
+1.  **全景扫描**：搜索并阅读所有相关文件，建立上下文。
+2.  **领域对齐 (DDD Lite)**：
+    *   确认本次修改涉及的核心业务名词（Ubiquitous Language）定义是否一致。
+    *   检查是否破坏了现有的业务不变量（Invariants）。
+3.  **根因分析**：从底层逻辑推导问题本质，而非仅修复表面报错。
+4.  **方案构思**：提供 1~3 个解决方案。
+    *   每个方案需评估：复杂度、副作用、技术债务风险。
+    *   如果方案与用户目标冲突，必须直言相告。
+
+**🚫 禁止**：写任何实现代码、急于给出最终方案。
+---
+
+### 2️⃣ 阶段二：方案蓝图 (Plan)
+**回答声明**：`【制定方案】`
+
+**前置条件**：用户已明确选择或确认了一个方案。
+
+**目标**：将模糊的需求转化为精确的施工图纸 (SDD + TDD)。
+
+**必须执行的动作**：
+1.  **契约定义 (Spec-First)**：
+    *   如果涉及数据结构变更，**必须**先列出修改后的 Interface/Type 定义。
+    *   如果涉及 API 变更，**必须**先列出函数签名。
+2.  **验证策略 (Test Plan)**：
+    *   列出 3-5 个关键测试场景（包含 Happy Path 和 边缘情况）。
+    *   *示例：* "验证当库存不足时，抛出 `InsufficientStockError` 而不是返回 false。"
+3.  **文件变更清单**：
+    *   列出所有受影响的文件及简要修改逻辑。
+
+**🚫 禁止**：使用硬编码、模糊的描述。
+
+---
+
+### 3️⃣ 阶段三：稳健执行 (Execute)
+**回答声明**：`【执行方案】`
+
+**前置条件**：用户已确认方案蓝图。
+
+**目标**：高质量、无坏味道地实现代码。
+
+**必须执行的动作**：
+1.  **分步实现**：严格按照既定方案编码，不要夹带私货。
+2.  **代码优化**：使用 Task 工具调用 code-simplifier agent 优化代码。
+    *   调用格式：`Use the Task tool to launch the code-simplifier agent to refine the implementation`
+    *   等待 code-simplifier 完成后再继续
+3.  **自我审查 (Self-Review)**：
+    *   检查是否引入了新的"坏味道"（见下文）。
+    *   检查是否破坏了单一职责原则。
+4.  **验证闭环**：
+    *   自动运行或编写对应的测试代码，证明代码是工作的。
+    *   如果无法运行测试，请提供手动验证的步骤。
+
+**🚫 禁止**：提交未经验证的代码、随意添加非给定内容。
+
+---
+
+## 📏 代码质量公约 (Code Quality Covenant)
+
+### 🧱 物理约束 (必须遵守)
+1.  **单一职责**：一个文件只做一件事。如果一个文件既做 UI 又做逻辑，必须拆分。
+2.  **行数熔断**：
+    *   动态语言 (JS/TS/Py)：单文件上限 **300 行**。
+    *   静态语言 (Java/Go)：单文件上限 **500 行**。
+    *   *超过限制必须重构拆分，无例外。*
+3.  **目录结构**：单文件夹内文件不超过 **8 个**，超过则建立子目录归档。
+
+### ☠️ 必须根除的"坏味道" (Bad Smells)
+一旦发现以下迹象，必须在【阶段一】或【阶段二】提出重构建议：
+
+1.  **僵化 (Rigidity)**：改一个地方需要改动很多关联文件。（解法：依赖倒置）
+2.  **脆弱 (Fragility)**：改动这里导致无关的地方报错。（解法：解耦、高内聚）
+3.  **重复 (DRY Violation)**：同样的逻辑复制粘贴。（解法：提取公共函数/组合模式）
+4.  **数据泥团 (Data Clumps)**：总是结伴出现的参数列表。（解法：封装为 Value Object）
+5.  **基本类型偏执 (Primitive Obsession)**：用字符串/数字代表复杂的业务概念。（解法：使用 Enum 或专用类型）
+
+---
+
+## ⚠️ 每次回复前的自我检查清单
+
+```text
+[ ] 我是否声明了当前所处的阶段？
+[ ] (如果是阶段一) 我是否检查了业务名词和领域边界？
+[ ] (如果是阶段二) 我是否列出了 Interface 定义和测试用例？
+[ ] (如果是阶段三) 我是否遵守了 300/500 行限制？
+[ ] 我是否在等待用户的确认指令？
+```
+
+---
+"""
+
         fun getInstance(project: Project): StorageService {
             return project.service()
         }

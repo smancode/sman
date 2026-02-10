@@ -20,11 +20,23 @@ class ProjectInfo {
      */
     var description: String? = null
 
+    /**
+     * 用户配置的 RULES（会追加到 system prompt 后面）
+     */
+    var rules: String? = null
+
     constructor()
 
     constructor(projectKey: String, projectPath: String, description: String?) {
         this.projectKey = projectKey
         this.projectPath = projectPath
         this.description = description
+    }
+
+    constructor(projectKey: String, projectPath: String, description: String?, rules: String?) {
+        this.projectKey = projectKey
+        this.projectPath = projectPath
+        this.description = description
+        this.rules = rules
     }
 }
