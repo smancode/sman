@@ -1178,10 +1178,14 @@ class SmanAgentLoop(
         prompt.append("   - If sufficient information → Provide answer directly (no more tool calls)\n")
         prompt.append("   - If need more information → Continue calling tools (explain why)\n")
         prompt.append("   - If tool failed → Try a different approach (don't repeat failed methods)\n\n")
+        prompt.append("**CRITICAL - Cost Optimization Rule**:\n")
+        prompt.append("- When you need more information, you MUST include BOTH text AND tool parts in ONE response\n")
+        prompt.append("- Format: {\"parts\": [{\"text\": \"I'll search...\"}, {\"tool\": ...}]}\n")
+        prompt.append("- DO NOT return only {\"text\": \"I'll search...\"} - this wastes an LLM call\n\n")
         prompt.append("**Example**:\n")
         prompt.append("If you just executed read_file (no summary), file path is agent/src/main/java/CallChainTool.java, now you want to call apply_change,\n")
         prompt.append("the returned JSON should include:\n")
-        prompt.append("{\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(path: agent/src/main/java/CallChainTool.java): Found CallChainTool class with callChain method...\"}\n\n")
+        prompt.append("{\"parts\": [{\"text\": \"I'll apply the changes...\"}, {\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(path: agent/src/main/java/CallChainTool.java): Found CallChainTool class with callChain method...\"}]}\n\n")
 
         // 如果是最后一步，添加最大步数警告
         if (isLastStep) {
