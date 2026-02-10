@@ -1,6 +1,11 @@
 package com.smancode.smanagent.smancode.prompt
 
+import com.smancode.smanagent.analysis.service.ProjectContextInjector
+import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
+import com.smancode.smanagent.analysis.config.VectorDbType
+import com.smancode.smanagent.analysis.config.JVectorConfig
 import com.smancode.smanagent.util.StackTraceUtils
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
@@ -23,6 +28,42 @@ class DynamicPromptInjector(
 ) {
     private val logger = LoggerFactory.getLogger(DynamicPromptInjector::class.java)
 
+    // ProjectContextInjector 实例（懒加载）
+    private var projectContextInjector: ProjectContextInjector? = null
+    private val injectorLock = Any()
+
+    /**
+     * 获取或创建 ProjectContextInjector
+     */
+    private fun getProjectContextInjector(projectKey: String): ProjectContextInjector? {
+        if (projectContextInjector == null) {
+            synchronized(injectorLock) {
+                if (projectContextInjector == null) {
+                    try {
+                        val jdbcUrl = buildJdbcUrl(projectKey)
+                        projectContextInjector = ProjectContextInjector(jdbcUrl)
+                    } catch (e: Exception) {
+                        logger.warn("创建 ProjectContextInjector 失败: projectKey={}", projectKey, e)
+                        return null
+                    }
+                }
+            }
+        }
+        return projectContextInjector
+    }
+
+    /**
+     * 构建 H2 JDBC URL
+     */
+    private fun buildJdbcUrl(projectKey: String): String {
+        val config = VectorDatabaseConfig.create(
+            projectKey = projectKey,
+            type = VectorDbType.JVECTOR,
+            jvector = JVectorConfig()
+        )
+        return "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
+    }
+
     /**
      * 记录已加载过 Prompt 的会话
      * key: sessionKey, value: true 表示已加载
@@ -43,9 +84,10 @@ class DynamicPromptInjector(
      * - LLM 显式请求
      *
      * @param sessionKey 会话标识
+     * @param projectKey 项目标识符（可选，用于注入项目上下文）
      * @return 需要注入的额外 Prompt 内容
      */
-    fun detectAndInject(sessionKey: String): InjectResult {
+    fun detectAndInject(sessionKey: String, projectKey: String? = null): InjectResult {
         val result = InjectResult()
 
         // 检查该会话是否已加载过
@@ -68,6 +110,16 @@ class DynamicPromptInjector(
             result.codingBestPractices = practicesPrompt
             result.needCodingBestPractices = true
 
+            // 如果提供了 projectKey，尝试注入项目上下文
+            if (!projectKey.isNullOrEmpty()) {
+                val projectContext = loadProjectContext(projectKey)
+                if (projectContext.isNotEmpty()) {
+                    result.projectContext = projectContext
+                    result.needProjectContext = true
+                    logger.info("会话 {} 已加载项目上下文: projectKey={}", sessionKey, projectKey)
+                }
+            }
+
             // 标记该会话已加载
             loadedSessions[sessionKey] = true
 
@@ -76,6 +128,24 @@ class DynamicPromptInjector(
         } catch (e: Exception) {
             logger.error("加载 Prompt 失败, sessionKey={}, {}", sessionKey, StackTraceUtils.formatStackTrace(e))
             result
+        }
+    }
+
+    /**
+     * 加载项目上下文
+     *
+     * @param projectKey 项目标识符
+     * @return 格式化的项目上下文文本，如果分析未完成返回空字符串
+     */
+    private fun loadProjectContext(projectKey: String): String {
+        return try {
+            val injector = getProjectContextInjector(projectKey) ?: return ""
+            runBlocking {
+                injector.getProjectContextSummary(projectKey)
+            }
+        } catch (e: Exception) {
+            logger.warn("加载项目上下文失败: projectKey={}", projectKey, e)
+            ""
         }
     }
 
@@ -95,8 +165,10 @@ class DynamicPromptInjector(
     class InjectResult {
         var needComplexTaskWorkflow: Boolean = false
         var needCodingBestPractices: Boolean = false
+        var needProjectContext: Boolean = false
         var complexTaskWorkflow: String? = null
         var codingBestPractices: String? = null
+        var projectContext: String? = null
 
         /**
          * 获取需要注入的完整内容
@@ -104,6 +176,11 @@ class DynamicPromptInjector(
         val injectedContent: String
             get() {
                 val sb = StringBuilder()
+
+                if (needProjectContext && projectContext != null) {
+                    sb.append("\n\n## 项目上下文 (Project Context)\n\n")
+                    sb.append(projectContext)
+                }
 
                 if (needComplexTaskWorkflow && complexTaskWorkflow != null) {
                     sb.append("\n\n## Loaded: Complex Task Workflow\n\n")
@@ -124,6 +201,7 @@ class DynamicPromptInjector(
         fun hasContent(): Boolean {
             return (needComplexTaskWorkflow && complexTaskWorkflow != null)
                 || (needCodingBestPractices && codingBestPractices != null)
+                || (needProjectContext && projectContext != null)
         }
 
         // ========== 属性访问方式（兼容 Java 风格调用） ==========
@@ -139,5 +217,11 @@ class DynamicPromptInjector(
          */
         val isNeedCodingBestPractices: Boolean
             get() = needCodingBestPractices
+
+        /**
+         * 是否需要项目上下文（属性访问方式）
+         */
+        val isNeedProjectContext: Boolean
+            get() = needProjectContext
     }
 }

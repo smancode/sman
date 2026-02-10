@@ -998,13 +998,15 @@ class SmanAgentLoop(
             prompt.append("\n\n").append(promptDispatcher.toolSummary)
 
             // ========== 动态 Prompt 注入（只注入一次）==========
-            val injectResult = dynamicPromptInjector.detectAndInject(sessionId)
+            val projectKey = session.projectInfo?.projectKey
+            val injectResult = dynamicPromptInjector.detectAndInject(sessionId, projectKey)
 
             if (injectResult.hasContent()) {
-                logger.info("会话 {} 首次加载 Prompt: complexTaskWorkflow={}, codingBestPractices={}",
+                logger.info("会话 {} 首次加载 Prompt: complexTaskWorkflow={}, codingBestPractices={}, projectContext={}",
                     sessionId,
                     injectResult.isNeedComplexTaskWorkflow,
-                    injectResult.isNeedCodingBestPractices)
+                    injectResult.isNeedCodingBestPractices,
+                    injectResult.isNeedProjectContext)
                 prompt.append(injectResult.injectedContent)
             }
             // ========== 动态 Prompt 注入结束 ==========

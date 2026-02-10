@@ -90,7 +90,7 @@ class ProjectAnalysisService(
         }
 
         // 执行分析并保存结果
-        val result = executeAnalysisPipeline(progressCallback)
+        val result = executeAnalysisPipeline(progressCallback, coreOnly = false)
             .also { it ->
                 calculateProjectMd5()?.let { md5 -> it.copy(projectMd5 = md5) } ?: it
             }
@@ -102,14 +102,52 @@ class ProjectAnalysisService(
         return result
     }
 
-    private suspend fun executeAnalysisPipeline(
+    /**
+     * 执行核心步骤分析（仅 project_structure + tech_stack_detection）
+     *
+     * 用于首次配置后的快速初始化
+     *
+     * @param progressCallback 进度回调
+     * @return 核心步骤的分析结果
+     */
+    suspend fun executeCoreSteps(
         progressCallback: ProjectAnalysisPipeline.ProgressCallback? = null
+    ): ProjectAnalysisResult {
+        logger.info("开始核心步骤分析: projectKey={}", project.name)
+
+        // 检查核心步骤是否已完成
+        val cached = getAnalysisResult(forceReload = false)
+        val coreStepsCompleted = cached?.steps?.all { (stepName, stepResult) ->
+            // 核心步骤：project_structure, tech_stack_detection
+            val isCoreStep = stepName == "project_structure" || stepName == "tech_stack_detection"
+            !isCoreStep || stepResult.status == com.smancode.smanagent.analysis.model.StepStatus.COMPLETED
+        } ?: false
+
+        if (coreStepsCompleted) {
+            logger.info("核心步骤已完成，跳过分析: projectKey={}", project.name)
+            return cached!!
+        }
+
+        // 执行核心步骤分析
+        val result = executeAnalysisPipeline(progressCallback, coreOnly = true)
+
+        // 保存结果（不标记为完成，因为还有其他步骤未执行）
+        repository.saveAnalysisResult(result)
+        cacheResult(result)
+
+        return result
+    }
+
+    private suspend fun executeAnalysisPipeline(
+        progressCallback: ProjectAnalysisPipeline.ProgressCallback? = null,
+        coreOnly: Boolean = false
     ): ProjectAnalysisResult {
         return ProjectAnalysisPipeline(
             repository = repository,
             progressCallback = progressCallback,
             projectKey = project.name,
-            project = project
+            project = project,
+            coreOnly = coreOnly
         ).execute(project.name, project)
     }
 

@@ -3,7 +3,9 @@ package com.smancode.smanagent.ide.ui
 import com.intellij.openapi.project.Project
 import com.smancode.smanagent.config.SmanAgentConfig
 import com.smancode.smanagent.ide.components.AnalysisProgressDialog
+import com.smancode.smanagent.ide.components.ProjectInitializingProgressDialog
 import com.smancode.smanagent.ide.service.SmanAgentService
+import com.smancode.smanagent.analysis.pipeline.ProjectAnalysisPipeline
 import com.smancode.smanagent.ide.service.storageService
 import com.smancode.smanagent.analysis.service.ProjectAnalysisService
 import com.smancode.smanagent.analysis.model.ProjectAnalysisResult
@@ -789,10 +791,87 @@ class SettingsDialog(private val project: Project) : JDialog() {
             // 在 EDT 线程更新 UI
             SwingUtilities.invokeLater {
                 dialog.dispose()
-                showResultMessage(config, testResults)
-                dispose()
+
+                // 检查 LLM 和 BGE 服务是否都可用
+                val llmOk = testResults.llmResult.success
+                val bgeOk = testResults.bgeM3Result.success
+
+                if (llmOk && bgeOk) {
+                    // 服务测试通过，启动项目初始化
+                    logger.info("服务测试通过，开始项目初始化")
+                    startProjectInitialization(config)
+                } else {
+                    // 服务测试失败，显示错误并关闭对话框
+                    showResultMessage(config, testResults)
+                    dispose()
+                }
             }
         }.start()
+    }
+
+    /**
+     * 启动项目初始化（核心步骤分析）
+     */
+    private fun startProjectInitialization(config: ConfigData) {
+        // 初始化项目分析服务
+        analysisScope.launch {
+            try {
+                analysisService.init()
+
+                // 创建初始化进度对话框
+                val initDialog = ProjectInitializingProgressDialog(this@SettingsDialog, config.projectKey)
+
+                // 显示初始化对话框
+                SwingUtilities.invokeLater {
+                    initDialog.isVisible = true
+                }
+
+                // 创建进度回调
+                val progressCallback = object : ProjectAnalysisPipeline.ProgressCallback {
+                    override fun onStepStart(stepName: String, description: String) {
+                        SwingUtilities.invokeLater {
+                            initDialog.onStepStart(stepName, description)
+                        }
+                    }
+
+                    override fun onStepComplete(stepName: String, result: com.smancode.smanagent.analysis.model.StepResult) {
+                        SwingUtilities.invokeLater {
+                            initDialog.onStepComplete(stepName, result)
+                        }
+                    }
+
+                    override fun onStepFailed(stepName: String, error: String) {
+                        SwingUtilities.invokeLater {
+                            initDialog.onStepFailed(stepName, error)
+                        }
+                    }
+                }
+
+                // 执行核心步骤分析
+                val result = analysisService.executeCoreSteps(progressCallback)
+
+                // 核心步骤完成后，关闭设置对话框
+                SwingUtilities.invokeLater {
+                    logger.info("项目初始化完成: projectKey={}, status={}", config.projectKey, result.status)
+                    dispose()
+                }
+
+                // 异步执行剩余的分析步骤
+                analysisService.executeAnalysisAsync(null)
+
+            } catch (e: Exception) {
+                logger.error("项目初始化失败", e)
+                SwingUtilities.invokeLater {
+                    JOptionPane.showMessageDialog(
+                        this@SettingsDialog,
+                        "项目初始化失败: ${e.message}",
+                        "错误",
+                        JOptionPane.ERROR_MESSAGE
+                    )
+                    dispose()
+                }
+            }
+        }
     }
 
     /**

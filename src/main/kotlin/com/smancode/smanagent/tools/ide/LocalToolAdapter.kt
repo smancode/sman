@@ -107,7 +107,7 @@ class ExpertConsultTool(
     override fun getDescription() = "Expert consultation tool with bidirectional Business ↔ Code understanding. Use for business/rule/code analysis."
 
     override fun getParameters() = mapOf(
-        "question" to ParameterDef("question", String::class.java, true, "Question to ask"),
+        "query" to ParameterDef("query", String::class.java, true, "Query/question to ask"),
         "projectKey" to ParameterDef("projectKey", String::class.java, true, "Project key"),
         "topK" to ParameterDef("topK", Int::class.java, false, "Number of results to retrieve", 10),
         "enableRerank" to ParameterDef("enableRerank", Boolean::class.java, false, "Enable reranking", true),
@@ -118,8 +118,8 @@ class ExpertConsultTool(
         val startTime = System.currentTimeMillis()
 
         // 白名单参数校验
-        val question = params["question"]?.toString()
-            ?: return ToolResult.failure("缺少 question 参数")
+        val query = params["query"]?.toString()
+            ?: return ToolResult.failure("缺少 query 参数")
 
         val actualProjectKey = params["projectKey"]?.toString() ?: projectKey
         if (actualProjectKey.isEmpty()) {
@@ -131,8 +131,8 @@ class ExpertConsultTool(
         val rerankTopN = (params["rerankTopN"] as? Number)?.toInt() ?: 5
 
         // 参数校验
-        if (question.isBlank()) {
-            return ToolResult.failure("question 不能为空")
+        if (query.isBlank()) {
+            return ToolResult.failure("query 不能为空")
         }
         if (topK <= 0) {
             return ToolResult.failure("topK 必须大于 0")
@@ -141,7 +141,7 @@ class ExpertConsultTool(
         return try {
             // 构建请求体
             val requestBody = mapOf(
-                "question" to question,
+                "question" to query,
                 "projectKey" to actualProjectKey,
                 "topK" to topK,
                 "enableRerank" to enableRerank,

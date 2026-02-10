@@ -32,12 +32,15 @@ import org.slf4j.LoggerFactory
  * 项目分析 Pipeline
  *
  * 负责编排各个分析步骤的执行，并向量化结果
+ *
+ * @param coreOnly 是否仅执行核心步骤（project_structure + tech_stack_detection）
  */
 class ProjectAnalysisPipeline(
     private val repository: ProjectAnalysisRepository,
     private val progressCallback: ProgressCallback? = null,
     private val projectKey: String = "",
-    private val project: com.intellij.openapi.project.Project? = null
+    private val project: com.intellij.openapi.project.Project? = null,
+    private val coreOnly: Boolean = false
 ) {
 
     private val logger = LoggerFactory.getLogger(ProjectAnalysisPipeline::class.java)
@@ -53,6 +56,9 @@ class ProjectAnalysisPipeline(
         private const val STEP_ENUMS = "enum_scanning"
         private const val STEP_COMMON_CLASSES = "common_class_scanning"
         private const val STEP_XML_CODES = "xml_code_scanning"
+
+        // 核心步骤名称（阻塞步骤）
+        private val CORE_STEPS = setOf(STEP_PROJECT_STRUCTURE, STEP_TECH_STACK)
     }
 
     // 向量化服务（懒加载）
@@ -170,8 +176,17 @@ class ProjectAnalysisPipeline(
     }
 
     private suspend fun executeAllSteps(result: ProjectAnalysisResult, context: AnalysisContext): ProjectAnalysisResult {
-        // 首先执行所有标准分析步骤
-        val standardStepsCompleted = steps.fold(result) { currentResult, step ->
+        // 根据模式选择要执行的步骤
+        val stepsToExecute = if (coreOnly) {
+            // 核心模式：仅执行前 2 个核心步骤
+            steps.filter { it.name in CORE_STEPS }
+        } else {
+            // 完整模式：执行所有标准分析步骤
+            steps
+        }
+
+        // 执行选定的步骤
+        val standardStepsCompleted = stepsToExecute.fold(result) { currentResult, step ->
             if (step.canExecute(context)) {
                 executeAndVectorizeStep(currentResult, context, step)
             } else {
@@ -180,12 +195,14 @@ class ProjectAnalysisPipeline(
             }
         }.markCompleted()
 
-        // 最后执行 LLM 驱动的代码向量化（在所有其他步骤完成后）
-        if (shouldExecuteLlmVectorization()) {
+        // 完整模式下，最后执行 LLM 驱动的代码向量化
+        if (!coreOnly && shouldExecuteLlmVectorization()) {
             logger.info("开始执行 LLM 代码向量化步骤")
             val llmStep = createLlmCodeVectorizationStep(context)
             val llmResult = executeStep(standardStepsCompleted, context, llmStep)
             repository.saveAnalysisResult(llmResult)
+        } else if (coreOnly) {
+            logger.info("核心模式：跳过 LLM 代码向量化步骤")
         } else {
             logger.info("跳过 LLM 代码向量化步骤: BGE 端点未配置")
         }
