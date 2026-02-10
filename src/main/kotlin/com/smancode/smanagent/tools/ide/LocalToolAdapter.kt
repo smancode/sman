@@ -67,6 +67,13 @@ class LocalToolAdapter(
                 it.relatedFilePaths = result.relatedFilePaths
                 it.relativePath = result.relativePath
                 it.metadata = result.metadata
+                // batch 工具的子结果
+                if (toolName == "batch" && result.batchSubResults != null) {
+                    it.metadata = (it.metadata ?: mutableMapOf()).also { meta ->
+                        @Suppress("UNCHECKED_CAST")
+                        (meta as MutableMap<String, Any>)["batchSubResults"] = result.batchSubResults
+                    }
+                }
             }
         } else {
             ToolResult.failure(resultText).also {
@@ -249,7 +256,8 @@ object LocalToolFactory {
         callChainTool(project),
         extractXmlTool(project),
         applyChangeTool(project),
-        runShellCommandTool(project)  // Shell 命令执行工具
+        runShellCommandTool(project),  // Shell 命令执行工具
+        batchTool(project)  // 批量工具执行
     )
 
     private fun readFileTool(project: Project) = LocalToolAdapter(
@@ -332,5 +340,34 @@ object LocalToolFactory {
             "command" to ParameterDef("command", String::class.java, true, "Shell command to execute")
         ),
         supportsStreaming = true  // 启用流式输出
+    )
+
+    /**
+     * 批量工具执行工具
+     *
+     * 用于批量执行多个工具调用，主要用于批量修改代码。
+     *
+     * 使用场景：
+     * - 批量读取多个文件
+     * - 批量修改同一文件的多个位置（推荐）
+     * - 批量执行多个独立的工具调用
+     *
+     * 注意：
+     * - 最多支持 10 个工具调用
+     * - 顺序执行（用于确保 apply_change 按顺序执行）
+     * - 不支持嵌套 batch
+     */
+    private fun batchTool(project: Project) = LocalToolAdapter(
+        project,
+        "batch",
+        "Execute multiple tool calls in batch. Use for batch edits or multiple independent operations.",
+        mapOf(
+            "tool_calls" to ParameterDef(
+                "tool_calls",
+                List::class.java,
+                true,
+                "Array of tool calls to execute. Each item: {tool: string, parameters: object}"
+            )
+        )
     )
 }

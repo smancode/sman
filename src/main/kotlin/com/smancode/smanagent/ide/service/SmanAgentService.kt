@@ -5,6 +5,10 @@ import com.intellij.openapi.project.Project
 import com.smancode.smanagent.analysis.techstack.BuildType
 import com.smancode.smanagent.analysis.techstack.TechStack
 import com.smancode.smanagent.analysis.techstack.TechStackDetector
+import com.smancode.smanagent.analysis.service.ProjectContextInjector
+import com.smancode.smanagent.analysis.config.VectorDatabaseConfig
+import com.smancode.smanagent.analysis.config.VectorDbType
+import com.smancode.smanagent.analysis.config.JVectorConfig
 import com.smancode.smanagent.config.SmanAgentConfig
 import com.smancode.smanagent.config.SmanCodeProperties
 import com.smancode.smanagent.model.part.Part
@@ -30,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import java.nio.file.Paths.get
@@ -141,19 +146,63 @@ class SmanAgentService(private val project: Project) : Disposable {
 
     /**
      * 获取项目上下文信息（用于注入到 User Prompt）
+     *
+     * 包含：
+     * - 项目结构（模块、分层）
+     * - 技术栈（框架、数据库、语言）
+     * - 构建工具信息
      */
     fun getProjectContext(): String {
         val os = System.getProperty("os.name")
         val buildType = cachedTechStack?.buildType ?: BuildType.UNKNOWN
 
-        return """
-        ## 项目环境信息
+        // 尝试从 H2 数据库加载详细的项目上下文
+        val detailedContext = try {
+            val jdbcUrl = buildJdbcUrl()
+            val injector = ProjectContextInjector(jdbcUrl)
+            runBlocking {
+                injector.getProjectContextSummary(projectKey)
+            }
+        } catch (e: Exception) {
+            logger.debug("获取详细项目上下文失败（可能项目分析未完成）: {}", e.message)
+            ""
+        }
 
-        - 操作系统: $os
-        - 构建工具: $buildType
+        return if (detailedContext.isNotEmpty()) {
+            // 有详细分析数据，返回完整上下文
+            """
+            ## 项目环境信息
 
-        ${getBuildCommands()}
-        """.trimIndent()
+            - 操作系统: $os
+            - 构建工具: $buildType
+
+            ${getBuildCommands()}
+
+            $detailedContext
+            """.trimIndent()
+        } else {
+            // 没有详细分析数据，只返回基础信息
+            """
+            ## 项目环境信息
+
+            - 操作系统: $os
+            - 构建工具: $buildType
+
+            ${getBuildCommands()}
+            """.trimIndent()
+        }
+    }
+
+    /**
+     * 构建 H2 JDBC URL
+     */
+    private fun buildJdbcUrl(): String {
+        val config = VectorDatabaseConfig.create(
+            projectKey = projectKey,
+            type = VectorDbType.JVECTOR,
+            jvector = JVectorConfig()
+        )
+        return "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
     }
 
     /**

@@ -91,7 +91,8 @@ class LocalToolExecutor(private val project: Project) {
         val executionTime: Long = 0,
         val relativePath: String? = null,  // 新增：相对路径
         val relatedFilePaths: List<String>? = null,  // 新增：相关文件列表
-        val metadata: Map<String, Any>? = null  // 新增：元数据
+        val metadata: Map<String, Any>? = null,  // 新增：元数据
+        val batchSubResults: List<ToolResult>? = null  // batch 工具的子结果
     )
     
     fun execute(toolName: String, parameters: Map<String, Any?>, projectPath: String?): ToolResult {
@@ -109,6 +110,7 @@ class LocalToolExecutor(private val project: Project) {
                 "extract_xml" -> executeExtractXml(parameters, projectPath)
                 "apply_change" -> executeApplyChange(parameters, projectPath)
                 "run_shell_command" -> executeShellCommand(parameters, projectPath, null)
+                "batch" -> executeBatch(parameters, projectPath)
                 else -> ToolResult(false, "不支持的工具: $toolName")
             }
 
@@ -1122,6 +1124,162 @@ class LocalToolExecutor(private val project: Project) {
         return TextPart().apply {
             this.text = text
             sessionId = DEFAULT_SESSION_ID
+        }
+    }
+
+    /**
+     * 执行批量工具
+     *
+     * batch 工具用于批量执行多个工具调用，主要用于批量修改代码。
+     * 关键特性：
+     * - 顺序执行：确保多个 apply_change 按顺序执行
+     * - 上下文传递：前一个工具的输出不会影响后一个工具
+     * - 结果汇总：返回所有子工具的执行结果
+     *
+     * @param parameters 参数，必须包含 tool_calls（工具调用列表）
+     * @param projectPath 项目路径
+     * @return 批量执行结果
+     */
+    private fun executeBatch(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        val toolCallsParam = parameters["tool_calls"]
+        val toolCalls = when (toolCallsParam) {
+            is List<*> -> toolCallsParam
+            is Map<*, *> -> {
+                // 处理 JSON 解析后的 Map 格式
+                @Suppress("UNCHECKED_CAST")
+                (toolCallsParam as? Map<String, List<Map<String, Any>>>)
+                    ?.get("tool_calls")
+                    ?: toolCallsParam.values
+                    .firstOrNull() as? List<*>
+            }
+            else -> null
+        }
+
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return ToolResult(
+                success = false,
+                result = "batch 工具缺少 tool_calls 参数或为空",
+                executionTime = 0
+            )
+        }
+
+        if (toolCalls.size > 10) {
+            return ToolResult(
+                success = false,
+                result = "batch 工具最多支持 10 个工具调用，当前提供了 ${toolCalls.size} 个",
+                executionTime = 0
+            )
+        }
+
+        logger.info("开始执行 batch 工具，包含 ${toolCalls.size} 个子工具调用")
+
+        val startTime = System.currentTimeMillis()
+        val subResults = mutableListOf<ToolResult>()
+        val successResults = mutableListOf<String>()
+        val failureResults = mutableListOf<String>()
+
+        // 顺序执行每个工具调用
+        for ((index, toolCall) in toolCalls.withIndex()) {
+            if (toolCall !is Map<*, *>) {
+                subResults.add(
+                    ToolResult(
+                        success = false,
+                        result = "无效的工具调用格式（第 ${index + 1} 个）",
+                        executionTime = 0
+                    )
+                )
+                failureResults.add("第 ${index + 1} 个：格式错误")
+                continue
+            }
+
+            val toolName = toolCall["tool"]?.toString()
+            val callParams = when (val params = toolCall["parameters"]) {
+                is Map<*, *> -> {
+                    // 转换为 String -> Any? 格式
+                    @Suppress("UNCHECKED_CAST")
+                    (params as? Map<String, Any?>) ?: emptyMap()
+                }
+                else -> emptyMap()
+            }
+
+            if (toolName == null) {
+                subResults.add(
+                    ToolResult(
+                        success = false,
+                        result = "缺少 tool 参数（第 ${index + 1} 个）",
+                        executionTime = 0
+                    )
+                )
+                failureResults.add("第 ${index + 1} 个：缺少 tool 参数")
+                continue
+            }
+
+            logger.info("batch [${index + 1}/${toolCalls.size}] 执行工具: $toolName")
+
+            // 递归调用 execute（不能直接调用 execute，否则会陷入递归）
+            val subResult = executeTool(toolName, callParams, projectPath)
+            subResults.add(subResult)
+
+            if (subResult.success) {
+                successResults.add("$toolName: 成功")
+            } else {
+                failureResults.add("$toolName: ${subResult.result}")
+            }
+
+            // 如果某个工具失败，可以选择继续或中断
+            // 这里选择继续执行所有工具
+        }
+
+        val elapsed = System.currentTimeMillis() - startTime
+
+        // 构建结果摘要
+        val summary = buildString {
+            appendLine("batch 执行完成，共 ${toolCalls.size} 个工具调用")
+            appendLine("成功: ${successResults.size}, 失败: ${failureResults.size}")
+
+            if (successResults.isNotEmpty()) {
+                appendLine("\n成功:")
+                successResults.take(5).forEach { appendLine("  ✅ $it") }
+                if (successResults.size > 5) {
+                    appendLine("  ... 还有 ${successResults.size - 5} 个成功")
+                }
+            }
+
+            if (failureResults.isNotEmpty()) {
+                appendLine("\n失败:")
+                failureResults.forEach { appendLine("  ❌ $it") }
+            }
+        }
+
+        val overallSuccess = failureResults.isEmpty()
+
+        return ToolResult(
+            success = overallSuccess,
+            result = summary,
+            executionTime = elapsed,
+            batchSubResults = subResults,
+            metadata = mapOf(
+                "total" to toolCalls.size,
+                "successCount" to successResults.size,
+                "failureCount" to failureResults.size
+            )
+        )
+    }
+
+    /**
+     * 执行单个工具（内部方法，避免递归调用 execute）
+     */
+    private fun executeTool(toolName: String, parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        return when (toolName) {
+            "find_file" -> executeFindFile(parameters, projectPath)
+            "read_file" -> executeReadFile(parameters, projectPath)
+            "grep_file" -> executeGrepFile(parameters, projectPath)
+            "call_chain" -> executeCallChain(parameters)
+            "extract_xml" -> executeExtractXml(parameters, projectPath)
+            "apply_change" -> executeApplyChange(parameters, projectPath)
+            "run_shell_command" -> executeShellCommand(parameters, projectPath, null)
+            // batch 不支持嵌套
+            else -> ToolResult(false, "不支持的工具: $toolName")
         }
     }
 
