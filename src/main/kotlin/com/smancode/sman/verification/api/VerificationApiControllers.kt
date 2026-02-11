@@ -188,7 +188,7 @@ open class VectorRecoveryApi(
             }
 
             // 扫描 .md 文件
-            val mdDir = projectPath.resolve(".smanunion/md")
+            val mdDir = projectPath.resolve(".sman/md")
             if (!java.nio.file.Files.exists(mdDir)) {
                 return@withContext createEmptyResult(startTime)
             }

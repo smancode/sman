@@ -72,14 +72,14 @@ open class VerificationConfig {
     /**
      * H2 数据源 Bean
      *
-     * 连接到 ~/.smanunion/{projectKey}/analysis.mv.db 的 H2 数据库
+     * 连接到 ~/.sman/{projectKey}/analysis.mv.db 的 H2 数据库
      * 注意：路径不含 .mv.db 后缀，H2 会自动添加
      */
     @Bean
     open fun dataSource(): DataSource {
         // 连接到项目的数据库
         val projectKey = System.getenv("PROJECT_KEY") ?: "autoloop"
-        val dbPath = System.getProperty("user.home") + "/.smanunion/" + projectKey + "/analysis"
+        val dbPath = System.getProperty("user.home") + "/.sman/" + projectKey + "/analysis"
 
         return DataSourceBuilder.create()
             .url("jdbc:h2:$dbPath;MODE=PostgreSQL;AUTO_SERVER=TRUE")

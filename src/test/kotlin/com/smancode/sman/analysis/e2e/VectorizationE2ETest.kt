@@ -34,7 +34,7 @@ class VectorizationE2ETest : VectorTestBase() {
 
     override fun setup() = runTest {
         super.setup()
-        mdDir = projectPath.resolve(".smanunion/md")
+        mdDir = projectPath.resolve(".sman/md")
         Files.createDirectories(mdDir)
         parser = MarkdownParser()
     }

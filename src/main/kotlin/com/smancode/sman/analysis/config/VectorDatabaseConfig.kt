@@ -5,14 +5,12 @@ import java.io.File
 /**
  * 向量数据库配置
  *
- * 所有存储路径都按 projectKey 隔离：
- * - vector_store: ~/.smanunion/{projectKey}/vector_store/
- * - H2 database: ~/.smanunion/{projectKey}/analysis.mv.db
+ * 所有数据存储路径按 projectKey 隔离：
+ * - H2 database: ~/.sman/{projectKey}/analysis.mv.db
  *
  * @property projectKey 项目标识符（用于隔离不同项目的数据）
  * @property type 向量数据库类型
  * @property jvector JVector 配置
- * @property vectorStorePath 向量存储路径（已包含 projectKey）
  * @property databasePath H2 数据库路径（已包含 projectKey）
  * @property vectorDimension 向量维度
  * @property l1CacheSize L1 缓存大小（内存 LRU）
@@ -21,14 +19,12 @@ data class VectorDatabaseConfig(
     val projectKey: String,
     val type: VectorDbType,
     val jvector: JVectorConfig,
-    val vectorStorePath: String,
     val databasePath: String,
     val vectorDimension: Int = 1024,
     val l1CacheSize: Int = 500
 ) {
     companion object {
-        private const val SMANUNION_DIR = ".smanunion"
-        private const val VECTOR_STORE_DIR = "vector_store"
+        private const val SMAN_DIR = ".sman"
         private const val DATABASE_FILE = "analysis"  // 不带 .mv.db 后缀，H2 会自动添加
 
         /**
@@ -42,12 +38,11 @@ data class VectorDatabaseConfig(
             vectorDimension: Int = 1024,
             l1CacheSize: Int = 500
         ): VectorDatabaseConfig {
-            val projectDir = File(baseDir, SMANUNION_DIR).resolve(projectKey)
+            val projectDir = File(baseDir, SMAN_DIR).resolve(projectKey)
             return VectorDatabaseConfig(
                 projectKey = projectKey,
                 type = type,
                 jvector = jvector,
-                vectorStorePath = File(projectDir, VECTOR_STORE_DIR).absolutePath,
                 databasePath = File(projectDir, DATABASE_FILE).absolutePath,
                 vectorDimension = vectorDimension,
                 l1CacheSize = l1CacheSize
@@ -74,7 +69,6 @@ enum class VectorDbType {
  * @property M HNSW 图连接数 (8-32)
  * @property efConstruction HNSW 构建参数 (50-200)
  * @property efSearch HNSW 搜索参数 (20-100)
- * @property enablePersist 是否启用磁盘持久化
  * @property rerankerThreshold Reranker 相似度阈值 (0.0-1.0)
  */
 data class JVectorConfig(
@@ -82,7 +76,6 @@ data class JVectorConfig(
     val M: Int = 16,
     val efConstruction: Int = 100,
     val efSearch: Int = 50,
-    val enablePersist: Boolean = true,
     val rerankerThreshold: Double = 0.1
 ) {
     init {

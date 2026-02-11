@@ -15,7 +15,7 @@ import java.nio.file.Paths
  * 会话文件服务
  *
  * 负责将会话数据持久化到文件系统。
- * 会话按 projectKey 隔离存储：~/.smanunion/sessions/{projectKey}/{sessionId}.json
+ * 会话按 projectKey 隔离存储：~/.sman/sessions/{projectKey}/{sessionId}.json
  */
 object SessionFileService {
 
@@ -37,7 +37,7 @@ object SessionFileService {
      */
     private fun getSessionDir(projectKey: String): String {
         val baseDir = System.getProperty("user.home") +
-            File.separator + ".smanunion" +
+            File.separator + ".sman" +
             File.separator + "sessions"
 
         // 按 projectKey 创建子目录

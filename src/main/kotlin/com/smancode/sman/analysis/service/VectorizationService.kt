@@ -40,7 +40,7 @@ class VectorizationService(
 
     companion object {
         // 路径常量
-        private const val MD_DIR_RELATIVE = ".smanunion/md"
+        private const val MD_DIR_RELATIVE = ".sman/md"
         private const val MD_FILE_EXTENSION = ".md"
     }
 

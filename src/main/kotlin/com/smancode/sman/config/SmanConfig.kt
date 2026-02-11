@@ -221,7 +221,6 @@ object SmanConfig {
                 M = getConfigValue("vector.db.jvector.M", 16),
                 efConstruction = getConfigValue("vector.db.jvector.efConstruction", 100),
                 efSearch = getConfigValue("vector.db.jvector.efSearch", 50),
-                enablePersist = getConfigValue("vector.db.jvector.enablePersist", true),
                 rerankerThreshold = getConfigValue("vector.db.jvector.rerankerThreshold", 0.1)
             ),
             baseDir = userHome,

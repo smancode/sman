@@ -6,7 +6,7 @@ import java.sql.DriverManager
  * 清空 H2 数据库中的旧分析数据
  */
 fun main() {
-    val url = "jdbc:h2:/Users/liuchao/.smanunion/autoloop/analysis"
+    val url = "jdbc:h2:/Users/liuchao/.sman/autoloop/analysis"
     val user = "sa"
     val password = ""
 

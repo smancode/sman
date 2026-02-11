@@ -437,7 +437,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
                     } else {
                         "项目未变化，使用已有分析结果"
                     }
-                    showTemporaryMessage(message, delayMs = 3000)
+                    // 改为等待用户关闭的消息框
+                    JOptionPane.showMessageDialog(
+                        this@SettingsDialog,
+                        message,
+                        "提示",
+                        JOptionPane.INFORMATION_MESSAGE
+                    )
                 }
 
                 if (shouldAnalyze) {
@@ -810,8 +816,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
                     logger.info("服务测试通过，开始项目初始化")
                     startProjectInitialization(config)
                 } else {
-                    // 服务测试失败，显示错误并关闭对话框
+                    // 服务测试失败，显示错误，等待用户关闭结果窗口后再关闭设置对话框
                     showResultMessage(config, testResults)
+                    // 用户关闭结果窗口后，再关闭设置对话框
                     dispose()
                 }
             }
@@ -1096,11 +1103,12 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     /**
      * 显示结果消息（包含测试结果）
+     * @return 用户点击的按钮选项
      */
-    private fun showResultMessage(config: ConfigData, testResults: ServiceTestResults) {
+    private fun showResultMessage(config: ConfigData, testResults: ServiceTestResults): Int {
         val message = buildResultMessage(config, testResults)
         val messageType = if (testResults.allSuccess()) JOptionPane.INFORMATION_MESSAGE else JOptionPane.WARNING_MESSAGE
-        JOptionPane.showMessageDialog(this, message, "保存结果", messageType)
+        return JOptionPane.showConfirmDialog(this, message, "保存结果", JOptionPane.DEFAULT_OPTION, messageType)
     }
 
     private fun buildResultMessage(config: ConfigData, testResults: ServiceTestResults) = """

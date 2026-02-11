@@ -54,7 +54,7 @@ class CodeVectorizationCoordinator(
 
     // MD5 文件追踪器
     private val md5Tracker: Md5FileTracker by lazy {
-        val cacheDir = projectPath.resolve(".smanunion/cache")
+        val cacheDir = projectPath.resolve(".sman/cache")
         Files.createDirectories(cacheDir)
         Md5FileTracker(projectPath).apply {
             val cacheFile = cacheDir.resolve("md5_cache.json")
@@ -358,7 +358,7 @@ class CodeVectorizationCoordinator(
      * 保存 Markdown 文档
      */
     private fun saveMarkdownDocument(sourceFile: Path, mdContent: String): Path {
-        val mdDir = projectPath.resolve(".smanunion/md")
+        val mdDir = projectPath.resolve(".sman/md")
         Files.createDirectories(mdDir)
 
         val mdFileName = sourceFile.fileName.toString()
@@ -377,7 +377,7 @@ class CodeVectorizationCoordinator(
      */
     private fun saveMd5Cache() {
         try {
-            val cacheDir = projectPath.resolve(".smanunion/cache")
+            val cacheDir = projectPath.resolve(".sman/cache")
             Files.createDirectories(cacheDir)
             val cacheFile = cacheDir.resolve("md5_cache.json")
             md5Tracker.saveCache(cacheFile)
@@ -390,7 +390,7 @@ class CodeVectorizationCoordinator(
      * 从已有的 .md 文件重新向量化（跳过 LLM 分析）
      *
      * 用于修复持久化问题后的数据恢复。
-     * 直接读取 .smanunion/md/ 目录下的 .md 文件，解析并向量化，不调用 LLM。
+     * 直接读取 .sman/md/ 目录下的 .md 文件，解析并向量化，不调用 LLM。
      *
      * @return 向量化结果
      */
@@ -405,7 +405,7 @@ class CodeVectorizationCoordinator(
         // TODO: 添加清理旧向量的逻辑
 
         // 扫描 .md 文件目录
-        val mdDir = projectPath.resolve(".smanunion/md")
+        val mdDir = projectPath.resolve(".sman/md")
         if (!mdDir.exists()) {
             logger.warn(".md 文件目录不存在: {}", mdDir)
             return@withContext VectorizationResult(
