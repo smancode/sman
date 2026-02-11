@@ -228,10 +228,29 @@ class ExpertConsultTool(
         } catch (e: java.net.ConnectException) {
             val duration = System.currentTimeMillis() - startTime
             logger.error("无法连接到验证服务: {}", e.message)
+
+            // 根据操作系统提供对应的启动命令
+            val os = System.getProperty("os.name").lowercase()
+            val startCommand = if (os.contains("win")) {
+                """
+                |Windows 启动方式：
+                |  1. 双击运行: scripts\verification-web.bat
+                |  2. 或命令行: .\scripts\verification-web.bat
+                |  3. 自定义端口: set VERIFICATION_PORT=9090 && .\scripts\verification-web.bat
+                """.trimMargin()
+            } else {
+                """
+                |Linux/Mac 启动方式：
+                |  1. 命令行: ./scripts/verification-web.sh
+                |  2. 自定义端口: VERIFICATION_PORT=9090 ./scripts/verification-web.sh
+                """.trimMargin()
+            }
+
             ToolResult.failure(
-                "无法连接到验证服务 (http://localhost:$verificationPort). " +
-                "请确保验证服务已启动。\n" +
-                "启动命令: ./scripts/verification-web.sh"
+                "无法连接到验证服务 (http://localhost:$verificationPort)。\n\n" +
+                "**请确保验证服务已启动**\n\n" +
+                startCommand +
+                "\n\n启动成功后，请重试您的查询。"
             ).also { it.executionTimeMs = duration }
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime

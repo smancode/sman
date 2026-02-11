@@ -102,6 +102,7 @@ class LocalToolExecutor(private val project: Project) {
         logger.info("参数详细信息: ${parameters.entries.joinToString { "${it.key}=${it.value}" }}")
 
         return try {
+            // 检测常见拼写错误并提供友好提示
             val result = when (toolName) {
                 "find_file" -> executeFindFile(parameters, projectPath)
                 "read_file" -> executeReadFile(parameters, projectPath)
@@ -111,7 +112,7 @@ class LocalToolExecutor(private val project: Project) {
                 "apply_change" -> executeApplyChange(parameters, projectPath)
                 "run_shell_command" -> executeShellCommand(parameters, projectPath, null)
                 "batch" -> executeBatch(parameters, projectPath)
-                else -> ToolResult(false, "不支持的工具: $toolName")
+                else -> return buildUnknownToolError(toolName)
             }
 
             val elapsed = System.currentTimeMillis() - startTime
@@ -1279,8 +1280,64 @@ class LocalToolExecutor(private val project: Project) {
             "apply_change" -> executeApplyChange(parameters, projectPath)
             "run_shell_command" -> executeShellCommand(parameters, projectPath, null)
             // batch 不支持嵌套
-            else -> ToolResult(false, "不支持的工具: $toolName")
+            else -> buildUnknownToolError(toolName)
         }
+    }
+
+    /**
+     * 构建未知工具错误信息
+     * 检测常见拼写错误并提供友好提示
+     */
+    private fun buildUnknownToolError(toolName: String): ToolResult {
+        val suggestions = mutableListOf<String>()
+
+        // 检测常见拼写错误
+        when {
+            // expert_consert -> expert_consult
+            toolName.equals("expert_consert", ignoreCase = true) -> {
+                suggestions.add("检测到拼写错误：expert_consert 应为 expert_consult")
+                suggestions.add("\n**expert_consult** 是专家咨询工具，需要验证服务已启动。")
+                suggestions.add("\n启动验证服务：")
+                suggestions.add("  - Linux/Mac:  ./scripts/verification-web.sh")
+                suggestions.add("  - Windows:   .\\scripts\\verification-web.bat")
+                suggestions.add("  - 或自定义端口: VERIFICATION_PORT=9090 ./scripts/verification-web.sh")
+            }
+            // 其他相似工具名建议
+            toolName.contains("file", ignoreCase = true) -> {
+                suggestions.add("可用的文件工具：find_file, read_file, grep_file")
+            }
+            toolName.contains("call", ignoreCase = true) -> {
+                suggestions.add("可用的调用分析工具：call_chain")
+            }
+            toolName.contains("xml", ignoreCase = true) -> {
+                suggestions.add("可用的 XML 工具：extract_xml")
+            }
+            toolName.contains("change", ignoreCase = true) || toolName.contains("modify", ignoreCase = true) -> {
+                suggestions.add("可用的修改工具：apply_change")
+            }
+            toolName.contains("shell", ignoreCase = true) || toolName.contains("command", ignoreCase = true) -> {
+                suggestions.add("可用的命令工具：run_shell_command")
+            }
+            toolName.contains("expert", ignoreCase = true) -> {
+                suggestions.add("**expert_consult** 工具需要验证服务已启动。")
+                suggestions.add("\n启动验证服务：")
+                suggestions.add("  - Linux/Mac:  ./scripts/verification-web.sh")
+                suggestions.add("  - Windows:   .\\scripts\\verification-web.bat")
+            }
+            else -> {
+                suggestions.add("可用的工具：expert_consult, read_file, grep_file, find_file, call_chain, extract_xml, apply_change, run_shell_command, batch")
+            }
+        }
+
+        val errorMsg = buildString {
+            appendLine("不支持的工具: $toolName")
+            if (suggestions.isNotEmpty()) {
+                append(suggestions.joinToString(""))
+            }
+        }
+
+        logger.warn("未知工具调用: $toolName")
+        return ToolResult(false, errorMsg)
     }
 
     /**

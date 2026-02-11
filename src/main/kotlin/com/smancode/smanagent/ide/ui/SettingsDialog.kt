@@ -55,7 +55,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     // LLM 配置字段
-    private val llmApiKeyField = createPasswordFieldWithStorage(storage.llmApiKey)
+    private val llmApiKeyField = createTextFieldWithStorage(storage.llmApiKey)
     private val llmBaseUrlField = createTextFieldWithDefault(
         storage.llmBaseUrl,
         "https://open.bigmodel.cn/api/coding/paas/v4"
@@ -70,14 +70,14 @@ class SettingsDialog(private val project: Project) : JDialog() {
         storage.bgeEndpoint,
         "http://localhost:8000"
     )
-    private val bgeApiKeyField = createPasswordFieldWithStorage(storage.bgeApiKey)
+    private val bgeApiKeyField = createTextFieldWithStorage(storage.bgeApiKey)
 
     // BGE-Reranker 配置字段
     private val rerankerEndpointField = createTextFieldWithDefault(
         storage.rerankerEndpoint,
         "http://localhost:8001"
     )
-    private val rerankerApiKeyField = createPasswordFieldWithStorage(storage.rerankerApiKey)
+    private val rerankerApiKeyField = createTextFieldWithStorage(storage.rerankerApiKey)
 
     // 其他配置字段
     private val projectKeyField = JTextField(project.name, 30)
@@ -131,25 +131,18 @@ class SettingsDialog(private val project: Project) : JDialog() {
         isResizable = true
     }
 
-    private fun createPasswordFieldWithStorage(storedValue: String): JPasswordField {
-        return JPasswordField(
-            if (storedValue.isNotEmpty()) API_KEY_MASK else "",
-            30
-        )
+    /**
+     * 创建 API Key 文本框（明文存储和显示）
+     */
+    private fun createTextFieldWithStorage(storedValue: String): JTextField {
+        return JTextField(storedValue, 30)
     }
 
     /**
-     * 获取密码字段的值
-     * 如果字段显示的是掩码，则返回存储的真实值；否则返回字段输入的值
+     * 获取 API Key 字段的值（明文）
      */
-    private fun getPasswordFieldValue(field: JPasswordField, storedValue: String): String {
-        val fieldValue = String(field.password)
-        // 如果字段值是掩码，使用存储的真实值
-        return if (fieldValue == API_KEY_MASK) {
-            storedValue
-        } else {
-            fieldValue
-        }
+    private fun getApiKeyFieldValue(field: JTextField): String {
+        return field.text.trim()
     }
 
     private fun createMainPanel(): JPanel {
@@ -522,7 +515,23 @@ class SettingsDialog(private val project: Project) : JDialog() {
             append("\n")
 
             append("───────────────────────────────────────\n")
-            append("步骤状态 (${result.steps.size}/${result.steps.size})\n")
+
+            // 计算已完成步骤数和总步骤数
+            val completedSteps = result.steps.values.count { it.status == com.smancode.smanagent.analysis.model.StepStatus.COMPLETED }
+
+            // 判断总步骤数：有 llm_code_vectorization 说明是完整模式且有 BGE 配置
+            val totalSteps = if (result.steps.containsKey("llm_code_vectorization")) {
+                10  // 9 个标准步骤 + 1 个 LLM 步骤
+            } else if (result.steps.containsKey("ast_scanning") ||
+                       result.steps.containsKey("db_entity_detection") ||
+                       result.steps.containsKey("api_entry_scanning")) {
+                9   // 完整模式但无 LLM
+            } else {
+                // 只有 project_structure 和 tech_stack_detection，可能是核心模式
+                result.steps.size
+            }
+
+            append("步骤状态 ($completedSteps/$totalSteps)\n")
             append("───────────────────────────────────────\n\n")
 
             result.steps.forEach { (stepName, stepResult) ->
@@ -810,7 +819,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     /**
-     * 启动项目初始化（核心步骤分析）
+     * 启动项目初始化（所有步骤异步执行）
      */
     private fun startProjectInitialization(config: ConfigData) {
         // 初始化项目分析服务
@@ -847,17 +856,14 @@ class SettingsDialog(private val project: Project) : JDialog() {
                     }
                 }
 
-                // 执行核心步骤分析
-                val result = analysisService.executeCoreSteps(progressCallback)
+                // 异步执行所有分析步骤（包括核心步骤）
+                analysisService.executeAnalysisAsync(progressCallback)
 
-                // 核心步骤完成后，关闭设置对话框
+                // 立即关闭设置对话框（不等待分析完成）
                 SwingUtilities.invokeLater {
-                    logger.info("项目初始化完成: projectKey={}, status={}", config.projectKey, result.status)
+                    logger.info("项目分析已启动（后台异步执行）: projectKey={}", config.projectKey)
                     dispose()
                 }
-
-                // 异步执行剩余的分析步骤
-                analysisService.executeAnalysisAsync(null)
 
             } catch (e: Exception) {
                 logger.error("项目初始化失败", e)
@@ -968,13 +974,13 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * @return 配置对象，验证失败返回 null
      */
     private fun collectConfig(): ConfigData? {
-        val llmApiKey = getPasswordFieldValue(llmApiKeyField, storage.llmApiKey).trim()
+        val llmApiKey = getApiKeyFieldValue(llmApiKeyField)
         val llmBaseUrl = llmBaseUrlField.text.trim()
         val llmModelName = llmModelNameField.text.trim()
         val bgeEndpoint = bgeEndpointField.text.trim()
-        val bgeApiKey = getPasswordFieldValue(bgeApiKeyField, storage.bgeApiKey).trim()
+        val bgeApiKey = getApiKeyFieldValue(bgeApiKeyField)
         val rerankerEndpoint = rerankerEndpointField.text.trim()
-        val rerankerApiKey = getPasswordFieldValue(rerankerApiKeyField, storage.rerankerApiKey).trim()
+        val rerankerApiKey = getApiKeyFieldValue(rerankerApiKeyField)
         val projectKey = projectKeyField.text.trim()
 
         // 性能配置
@@ -1044,24 +1050,18 @@ class SettingsDialog(private val project: Project) : JDialog() {
      * 保存配置到存储服务
      */
     private fun saveConfig(config: ConfigData) {
-        // LLM 配置：只有用户输入了新值才覆盖
-        if (config.llmApiKey.isNotEmpty()) {
-            storage.llmApiKey = config.llmApiKey
-        }
+        // LLM 配置：明文保存
+        storage.llmApiKey = config.llmApiKey
         storage.llmBaseUrl = config.llmBaseUrl
         storage.llmModelName = config.llmModelName
 
-        // BGE-M3 配置：只有用户输入了新值才覆盖
+        // BGE-M3 配置：明文保存
         storage.bgeEndpoint = config.bgeEndpoint
-        if (config.bgeApiKey.isNotEmpty()) {
-            storage.bgeApiKey = config.bgeApiKey
-        }
+        storage.bgeApiKey = config.bgeApiKey
 
-        // BGE-Reranker 配置：只有用户输入了新值才覆盖
+        // BGE-Reranker 配置：明文保存
         storage.rerankerEndpoint = config.rerankerEndpoint
-        if (config.rerankerApiKey.isNotEmpty()) {
-            storage.rerankerApiKey = config.rerankerApiKey
-        }
+        storage.rerankerApiKey = config.rerankerApiKey
 
         // 性能配置
         storage.bgeMaxTokens = config.bgeMaxTokens
@@ -1217,7 +1217,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
         private const val RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 
         // UI 消息常量
-        private const val API_KEY_MASK = "****"
         private const val SUCCESS_MESSAGE = "✓ 连接成功"
         private const val ERROR_HTTP_PREFIX = "✗ HTTP"
         private const val ERROR_PREFIX = "✗"

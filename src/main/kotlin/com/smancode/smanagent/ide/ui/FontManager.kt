@@ -35,7 +35,7 @@ object FontManager {
     }
 
     /**
-     * 创建字体对象（包含回退逻辑）
+     * 创建字体对象（包含中文字体回退逻辑）
      */
     private fun createEditorFont(): Font {
         val fontName = editorScheme.editorFontName
@@ -44,13 +44,81 @@ object FontManager {
         logger.debug("创建编辑器字体: name={}, size={}", fontName, fontSize)
 
         return try {
-            Font(fontName, Font.PLAIN, fontSize).also { font ->
-                logger.debug("字体创建成功: name={}, family={}, size={}", font.name, font.family, font.size)
+            val font = Font(fontName, Font.PLAIN, fontSize)
+            logger.debug("字体创建成功: name={}, family={}, size={}", font.name, font.family, font.size)
+
+            // 检查字体是否支持中文，如果不支持则使用回退字体
+            if (!supportsChinese(font)) {
+                logger.warn("字体 {} 不支持中文，尝试使用回退字体", font.name)
+                return createChineseFallbackFont(fontSize)
             }
+
+            font
         } catch (e: Exception) {
             logger.warn("字体创建失败，使用回退字体: {}", e.message)
-            // 使用回退字体
-            Font(Font.SANS_SERIF, Font.PLAIN, fontSize)
+            createChineseFallbackFont(fontSize)
+        }
+    }
+
+    /**
+     * 创建支持中文的回退字体
+     * 按平台优先级选择字体
+     */
+    private fun createChineseFallbackFont(size: Int): Font {
+        val osName = System.getProperty("os.name", "").lowercase()
+        val fallbackFonts = when {
+            osName.contains("win") -> {
+                // Windows 平台优先使用微软雅黑或宋体
+                listOf("Microsoft YaHei", "SimSun", "Dialog")
+            }
+            osName.contains("mac") || osName.contains("darwin") -> {
+                // macOS 平台优先使用苹方或黑体
+                listOf("PingFang SC", "STHeiti", "Dialog")
+            }
+            else -> {
+                // Linux 平台优先使用文泉驿正黑
+                listOf("WenQuanYi Zen Hei", "Dialog")
+            }
+        }
+
+        logger.debug("尝试中文字体回退: os={}, candidates={}", osName, fallbackFonts)
+
+        for (fontName in fallbackFonts) {
+            try {
+                val font = Font(fontName, Font.PLAIN, size)
+                if (supportsChinese(font)) {
+                    logger.info("使用中文字体回退: {} (支持中文)", fontName)
+                    return font
+                }
+                logger.debug("字体 {} 不支持中文，继续尝试下一个", fontName)
+            } catch (e: Exception) {
+                logger.debug("字体 {} 创建失败: {}", fontName, e.message)
+                continue
+            }
+        }
+
+        // 最后的兜底：使用系统默认字体
+        logger.warn("所有中文字体回退失败，使用系统默认字体")
+        return Font(Font.SANS_SERIF, Font.PLAIN, size)
+    }
+
+    /**
+     * 检查字体是否支持中文
+     */
+    private fun supportsChinese(font: Font): Boolean {
+        return try {
+            // 使用字体的 canDisplay 方法检查是否能显示中文字符
+            val testChar = '中'
+            val canDisplay = font.canDisplay(testChar.code)
+
+            // Dialog 是 Java 的回退字体，通常不支持所有字符
+            val isGenericFont = font.name.equals("Dialog", ignoreCase = true) ||
+                               font.name.equals("SansSerif", ignoreCase = true)
+
+            canDisplay && !isGenericFont
+        } catch (e: Exception) {
+            logger.debug("检查中文支持时出错: {}", e.message)
+            false
         }
     }
 

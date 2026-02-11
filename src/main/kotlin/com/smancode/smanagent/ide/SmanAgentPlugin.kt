@@ -25,6 +25,9 @@ class SmanAgentPlugin : StartupActivity {
     private val backendStarted = AtomicBoolean(false)
 
     override fun runActivity(project: Project) {
+        // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
+        ensureUtf8Encoding()
+
         logger.info("SmanAgent Plugin started for project: {}", project.name)
 
         // 检查后端是否已运行
@@ -42,6 +45,44 @@ class SmanAgentPlugin : StartupActivity {
 
         // 设置代码选区监听器（使用 EditorFactoryListener）
         setupSelectionListener(project)
+    }
+
+    /**
+     * 确保 UTF-8 编码（解决 Windows 中文乱码问题）
+     */
+    private fun ensureUtf8Encoding() {
+        try {
+            // 设置系统属性
+            System.setProperty("file.encoding", "UTF-8")
+            System.setProperty("sun.jnu.encoding", "UTF-8")
+
+            // 设置 Swing 默认字体为支持中文的字体
+            val currentOs = System.getProperty("os.name", "").lowercase()
+            val fallbackFont = when {
+                currentOs.contains("win") -> "Microsoft YaHei"
+                currentOs.contains("mac") || currentOs.contains("darwin") -> "PingFang SC"
+                else -> "WenQuanYi Zen Hei"
+            }
+
+            // 尝试设置 Swing 全局字体
+            try {
+                val uiDefaults = javax.swing.UIManager.getDefaults()
+                val font = java.awt.Font(fallbackFont, java.awt.Font.PLAIN, 12)
+                uiDefaults.put("TextField.font", font)
+                uiDefaults.put("TextArea.font", font)
+                uiDefaults.put("TextPane.font", font)
+                uiDefaults.put("EditorPane.font", font)
+                logger.info("已设置 Swing 默认字体: {}", fallbackFont)
+            } catch (e: Exception) {
+                logger.debug("设置 Swing 字体失败: {}", e.message)
+            }
+
+            logger.info("编码设置完成: file.encoding={}, sun.jnu.encoding={}",
+                System.getProperty("file.encoding"),
+                System.getProperty("sun.jnu.encoding"))
+        } catch (e: Exception) {
+            logger.warn("设置 UTF-8 编码失败: {}", e.message)
+        }
     }
 
     /**
