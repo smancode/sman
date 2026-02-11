@@ -1,6 +1,5 @@
 package com.smancode.sman.analysis.retry
 
-import com.smancode.sman.analysis.vectorization.CodeVectorizationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

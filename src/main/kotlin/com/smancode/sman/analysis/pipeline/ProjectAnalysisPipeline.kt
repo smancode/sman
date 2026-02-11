@@ -10,7 +10,6 @@ import com.smancode.sman.analysis.repository.ProjectAnalysisRepository
 import com.smancode.sman.analysis.step.AnalysisContext
 import com.smancode.sman.analysis.step.AnalysisStep
 import com.smancode.sman.analysis.step.ApiEntryScanningStep
-import com.smancode.sman.analysis.step.ASTScanningStep
 import com.smancode.sman.analysis.step.CommonClassScanningStep
 import com.smancode.sman.analysis.step.DbEntityDetectionStep
 import com.smancode.sman.analysis.step.EnumScanningStep
@@ -47,7 +46,6 @@ class ProjectAnalysisPipeline(
 
     companion object {
         // 步骤名称常量
-        private const val STEP_AST_SCANNING = "ast_scanning"
         private const val STEP_PROJECT_STRUCTURE = "project_structure"
         private const val STEP_TECH_STACK = "tech_stack_detection"
         private const val STEP_DB_ENTITIES = "db_entity_detection"
@@ -121,13 +119,13 @@ class ProjectAnalysisPipeline(
     private val steps: List<AnalysisStep> = listOf(
         ProjectStructureStep(),
         TechStackDetectionStep(),
-        ASTScanningStep(),
         DbEntityDetectionStep(),
         ApiEntryScanningStep(),
         ExternalApiScanningStep(),
         EnumScanningStep(),
         CommonClassScanningStep(),
         XmlCodeScanningStep()
+        // 注意：LlmCodeVectorizationStep 不在此列表中，它在完整模式下单独执行（见 executeAllSteps）
     )
 
     /**
@@ -264,8 +262,8 @@ class ProjectAnalysisPipeline(
         val updatedResult = executeStep(result, context, step)
         repository.saveAnalysisResult(updatedResult)
 
-        // 向量化步骤结果（AST步骤除外，因为太大）
-        if (step.name != STEP_AST_SCANNING && updatedResult.steps[step.name]?.status == StepStatus.COMPLETED) {
+        // 向量化步骤结果
+        if (updatedResult.steps[step.name]?.status == StepStatus.COMPLETED) {
             vectorizeStepData(step.name, updatedResult.steps[step.name]?.data)
         }
 

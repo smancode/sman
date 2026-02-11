@@ -9,13 +9,8 @@ import com.smancode.sman.tools.AbstractTool
 import com.smancode.sman.tools.ParameterDef
 import com.smancode.sman.tools.Tool
 import com.smancode.sman.tools.ToolResult
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import java.util.function.Consumer
-import java.util.concurrent.TimeUnit
 
 /**
  * 本地工具适配器
@@ -84,30 +79,26 @@ class LocalToolAdapter(
 }
 
 /**
- * 专家咨询工具
+ * 专家咨询工具（本地版本）
  *
- * 通过 HTTP 调用验证服务的 expert_consult API
- * 提供业务↔代码双向查询能力
+ * 直接在插件进程中调用，不再依赖外部验证服务
+ * 复用 ReAct Loop 中的服务：LlmService、BgeM3Client、RerankerClient、TieredVectorStore
  */
 class ExpertConsultTool(
     private val project: Project
 ) : AbstractTool(), Tool {
 
     private val logger = LoggerFactory.getLogger(ExpertConsultTool::class.java)
-    private val objectMapper = ObjectMapper()
 
-    // 从环境变量或使用默认端口
-    private val verificationPort = System.getProperty("verification.port", "8080")
-    private val baseUrl = "http://localhost:$verificationPort"
-    private val apiUrl = "$baseUrl/api/verify/expert_consult"
-
-    // OkHttp 客户端
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
-
-    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+    // 懒加载本地服务
+    private val consultService by lazy {
+        try {
+            LocalExpertConsultService(project)
+        } catch (e: Exception) {
+            logger.warn("本地专家服务初始化失败: ${e.message}")
+            null
+        }
+    }
 
     override fun getName() = "expert_consult"
 
@@ -115,7 +106,7 @@ class ExpertConsultTool(
 
     override fun getParameters() = mapOf(
         "query" to ParameterDef("query", String::class.java, true, "Query/question to ask"),
-        "projectKey" to ParameterDef("projectKey", String::class.java, true, "Project key"),
+        "projectKey" to ParameterDef("projectKey", String::class.java, false, "Project key (auto-detected from current project if empty)"),
         "topK" to ParameterDef("topK", Int::class.java, false, "Number of results to retrieve", 10),
         "enableRerank" to ParameterDef("enableRerank", Boolean::class.java, false, "Enable reranking", true),
         "rerankTopN" to ParameterDef("rerankTopN", Int::class.java, false, "Number of results after reranking", 5)
@@ -128,10 +119,8 @@ class ExpertConsultTool(
         val query = params["query"]?.toString()
             ?: return ToolResult.failure("缺少 query 参数")
 
-        val actualProjectKey = params["projectKey"]?.toString() ?: projectKey
-        if (actualProjectKey.isEmpty()) {
-            return ToolResult.failure("缺少 projectKey 参数")
-        }
+        // 自动检测 projectKey（如果未提供，使用当前项目名）
+        val actualProjectKey = params["projectKey"]?.toString() ?: project.name
 
         val topK = (params["topK"] as? Number)?.toInt() ?: 10
         val enableRerank = params["enableRerank"] as? Boolean ?: true
@@ -145,113 +134,49 @@ class ExpertConsultTool(
             return ToolResult.failure("topK 必须大于 0")
         }
 
+        // 检查服务是否可用
+        val service = consultService
+        if (service == null) {
+            val duration = System.currentTimeMillis() - startTime
+            return ToolResult.failure(buildServiceUnavailableMessage()).also {
+                it.executionTimeMs = duration
+            }
+        }
+
         return try {
-            // 构建请求体
-            val requestBody = mapOf(
-                "question" to query,
-                "projectKey" to actualProjectKey,
-                "topK" to topK,
-                "enableRerank" to enableRerank,
-                "rerankTopN" to rerankTopN
+            // 调用本地服务
+            val request = LocalExpertConsultService.ConsultRequest(
+                question = query,
+                projectKey = actualProjectKey,
+                topK = topK,
+                enableRerank = enableRerank,
+                rerankTopN = rerankTopN
             )
 
-            val jsonBody = objectMapper.writeValueAsString(requestBody)
-            logger.info("调用专家咨询 API: url={}, request={}", apiUrl, jsonBody)
+            val response = service.consult(request)
 
-            val request = Request.Builder()
-                .url(apiUrl)
-                .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
-                .build()
+            // 构建结果文本
+            val resultText = buildResultText(response, query)
 
-            httpClient.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string()
-                val duration = System.currentTimeMillis() - startTime
+            logger.info("本地专家咨询完成: sources={}, confidence={}, time={}ms",
+                response.sources.size, response.confidence,
+                System.currentTimeMillis() - startTime)
 
-                if (!response.isSuccessful) {
-                    logger.error("专家咨询 API 调用失败: code={}, body={}", response.code, responseBody)
-                    return ToolResult.failure(
-                        "专家咨询 API 调用失败: HTTP ${response.code}. " +
-                        "请确保验证服务已启动（端口: $verificationPort）"
-                    ).also { it.executionTimeMs = duration }
-                }
-
-                if (responseBody.isNullOrEmpty()) {
-                    return ToolResult.failure("API 返回空响应").also {
-                        it.executionTimeMs = duration
-                    }
-                }
-
-                // 解析响应
-                val jsonNode = objectMapper.readTree(responseBody)
-                val answer = jsonNode.get("answer")?.asText() ?: "未获取到答案"
-                val sources = jsonNode.get("sources")
-                val confidence = jsonNode.get("confidence")?.asDouble() ?: 0.0
-                val processingTime = jsonNode.get("processingTimeMs")?.asLong() ?: 0
-
-                // 构建结果文本
-                val resultText = buildString {
-                    appendLine("## 专家咨询结果")
-                    appendLine()
-                    appendLine("**置信度**: ${(confidence * 100).toInt()}%")
-                    appendLine("**处理时间**: ${processingTime}ms")
-                    appendLine()
-                    appendLine("### 答案")
-                    appendLine(answer)
-                    appendLine()
-
-                    // 添加来源信息
-                    if (sources != null && sources.isArray && sources.size() > 0) {
-                        appendLine("### 来源代码")
-                        sources.forEach { source ->
-                            val filePath = source.get("filePath")?.asText() ?: ""
-                            val score = source.get("score")?.asDouble() ?: 0.0
-                            if (filePath.isNotEmpty()) {
-                                appendLine("- `$filePath` (相似度: ${"%.2f".format(score)})")
-                            }
-                        }
-                    }
-                }
-
-                logger.info("专家咨询完成: sources={}, confidence={}, time={}ms",
-                    sources?.size() ?: 0, confidence, duration)
-
-                ToolResult.success(resultText, "expert_consult", resultText).also {
-                    it.executionTimeMs = duration
-                    it.metadata = mapOf(
-                        "confidence" to confidence,
-                        "processingTimeMs" to processingTime,
-                        "sourcesCount" to (sources?.size() ?: 0)
-                    )
-                }
+            ToolResult.success(resultText, "expert_consult", resultText).also {
+                it.executionTimeMs = System.currentTimeMillis() - startTime
+                it.metadata = mapOf(
+                    "confidence" to response.confidence,
+                    "processingTimeMs" to response.processingTimeMs,
+                    "sourcesCount" to response.sources.size
+                )
             }
 
-        } catch (e: java.net.ConnectException) {
+        } catch (e: IllegalStateException) {
             val duration = System.currentTimeMillis() - startTime
-            logger.error("无法连接到验证服务: {}", e.message)
-
-            // 根据操作系统提供对应的启动命令
-            val os = System.getProperty("os.name").lowercase()
-            val startCommand = if (os.contains("win")) {
-                """
-                |Windows 启动方式：
-                |  1. 双击运行: scripts\verification-web.bat
-                |  2. 或命令行: .\scripts\verification-web.bat
-                |  3. 自定义端口: set VERIFICATION_PORT=9090 && .\scripts\verification-web.bat
-                """.trimMargin()
-            } else {
-                """
-                |Linux/Mac 启动方式：
-                |  1. 命令行: ./scripts/verification-web.sh
-                |  2. 自定义端口: VERIFICATION_PORT=9090 ./scripts/verification-web.sh
-                """.trimMargin()
+            logger.error("专家咨询执行失败: {}", e.message)
+            ToolResult.failure("专家咨询服务未就绪: ${e.message}\n\n${buildServiceUnavailableMessage()}").also {
+                it.executionTimeMs = duration
             }
-
-            ToolResult.failure(
-                "无法连接到验证服务 (http://localhost:$verificationPort)。\n\n" +
-                "**请确保验证服务已启动**\n\n" +
-                startCommand +
-                "\n\n启动成功后，请重试您的查询。"
-            ).also { it.executionTimeMs = duration }
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
             logger.error("专家咨询执行失败", e)
@@ -260,6 +185,54 @@ class ExpertConsultTool(
             }
         }
     }
+
+    /**
+     * 构建服务不可用的错误消息
+     */
+    private fun buildServiceUnavailableMessage(): String =
+        """**专家咨询服务不可用**
+          |
+          |本地专家服务需要以下配置：
+          |
+          |### 必需配置
+          |- **BGE-M3 端点**: 在设置中配置 bge.endpoint
+          |
+          |### 使用说明
+          |1. 确保项目已完成向量化分析
+          |2. 检查 BGE 端点配置是否正确
+          |3. 如需更高精度，可启用 Reranker（可选）
+          |
+          |配置方式：Settings → Sman Configuration → BGE Configuration
+        """.trimMargin()
+
+    /**
+     * 构建结果文本
+     */
+    private fun buildResultText(response: LocalExpertConsultService.ConsultResponse, query: String): String =
+        buildString {
+            appendLine("## 专家咨询结果")
+            appendLine()
+            appendLine("**查询**: $query")
+            appendLine("**置信度**: ${(response.confidence * 100).toInt()}%")
+            appendLine("**处理时间**: ${response.processingTimeMs}ms")
+            appendLine()
+            appendLine("### 答案")
+            appendLine(response.answer)
+            appendLine()
+
+            // 添加来源信息
+            if (response.sources.isNotEmpty()) {
+                appendLine("### 来源代码")
+                response.sources.take(10).forEach { source ->
+                    if (source.filePath.isNotEmpty()) {
+                        appendLine("- `${source.filePath}` (相似度: ${"%.2f".format(source.score)})")
+                    }
+                }
+                if (response.sources.size > 10) {
+                    appendLine("... 还有 ${response.sources.size - 10} 条结果未显示")
+                }
+            }
+        }
 }
 
 /**

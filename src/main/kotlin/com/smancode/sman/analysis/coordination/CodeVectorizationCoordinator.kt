@@ -8,7 +8,6 @@ import com.smancode.sman.analysis.database.TieredVectorStore
 import com.smancode.sman.analysis.database.VectorStoreService
 import com.smancode.sman.analysis.llm.LlmCodeUnderstandingService
 import com.smancode.sman.analysis.model.VectorFragment
-import com.smancode.sman.analysis.scanner.PsiAstScanner
 import com.smancode.sman.analysis.util.Md5FileTracker
 import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.smancode.llm.LlmService
@@ -48,9 +47,6 @@ class CodeVectorizationCoordinator(
 
     // LLM 代码理解服务
     private val llmCodeUnderstandingService = LlmCodeUnderstandingService(llmService)
-
-    // PSI 扫描器（用于读取源代码）
-    private val psiScanner = PsiAstScanner()
 
     // MD5 文件追踪器
     private val md5Tracker: Md5FileTracker by lazy {
@@ -131,6 +127,21 @@ class CodeVectorizationCoordinator(
 
         // 最终保存一次（确保所有文件都同步）
         saveMd5Cache()
+        // 处理已有的 .sman/md 知识库文件（不依赖源代码变化）
+        try {
+            logger.info("开始向量化已有的 .sman/md 知识库文件")
+            val mdResult = vectorizeFromExistingMd()
+            processedCount += mdResult.processedFiles
+            skippedCount += mdResult.skippedFiles
+            totalVectors += mdResult.totalVectors
+            errors.addAll(mdResult.errors)
+            logger.info("向量化 .sman/md 完成: 处理={}, 向量数={}",
+                mdResult.processedFiles, mdResult.totalVectors)
+        } catch (e: Exception) {
+            logger.error("向量化 .sman/md 文件失败", e)
+            // 不中断整个流程，继续执行
+        }
+
 
         val elapsedTime = System.currentTimeMillis() - startTime
         logger.info("项目向量化完成: 处理={}, 跳过={}, 向量数={}, 耗时={}ms",
