@@ -28,7 +28,7 @@ class SmanPlugin : StartupActivity {
         // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
         ensureUtf8Encoding()
 
-        logger.info("SmanAgent Plugin started for project: {}", project.name)
+        logger.info("Sman Plugin started for project: {}", project.name)
 
         // 检查后端是否已运行
         if (isPortAvailable(8080)) {
@@ -220,7 +220,7 @@ class SmanPlugin : StartupActivity {
     }
 
     companion object {
-        const val PLUGIN_NAME = "SmanAgent"
+        const val PLUGIN_NAME = "Sman"
         const val VERSION = "1.1.0"
         const val DEFAULT_WS_URL = "ws://localhost:8080/ws/agent"
     }

@@ -20,7 +20,7 @@ import javax.swing.border.EmptyBorder
 /**
  * 历史会话弹窗
  * <p>
- * 复用自 bank-core-analysis-agent 项目，适配 SmanAgent 的数据模型
+ * 复用自 bank-core-analysis-agent 项目，适配 Sman 的数据模型
  */
 class HistoryPopup(
     private val history: List<SessionInfo>,

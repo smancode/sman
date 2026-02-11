@@ -107,7 +107,7 @@ class SettingsDialog(private val project: Project) : JDialog() {
     }
 
     init {
-        title = "SmanAgent 设置"
+        title = "Sman 设置"
         isModal = true
         defaultCloseOperation = DISPOSE_ON_CLOSE
 

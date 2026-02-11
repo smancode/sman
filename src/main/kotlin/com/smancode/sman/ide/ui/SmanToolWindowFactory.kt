@@ -17,7 +17,7 @@ class SmanToolWindowFactory : ToolWindowFactory {
     private val logger = LoggerFactory.getLogger(SmanToolWindowFactory::class.java)
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        logger.info("Creating SmanAgent tool window for project: {}", project.name)
+        logger.info("Creating Sman tool window for project: {}", project.name)
 
         try {
             val chatPanel = SmanChatPanel(project)
@@ -27,13 +27,13 @@ class SmanToolWindowFactory : ToolWindowFactory {
 
             toolWindow.contentManager.addContent(content)
             // 移除 setTitle，让工具窗口只显示一个标题
-            // toolWindow.setTitle("SmanAgent")
+            // toolWindow.setTitle("Sman")
             toolWindow.show(null)
 
-            logger.info("SmanAgent tool window created successfully")
+            logger.info("Sman tool window created successfully")
 
         } catch (e: Exception) {
-            logger.error("Failed to create SmanAgent tool window", e)
+            logger.error("Failed to create Sman tool window", e)
 
             // 添加 fallback UI，避免显示 "Nothing to show"
             val errorPanel = JPanel(BorderLayout()).apply {
@@ -41,11 +41,11 @@ class SmanToolWindowFactory : ToolWindowFactory {
 
                 val errorMessage = StringBuilder()
                 errorMessage.append("<html><center>")
-                errorMessage.append("<h2>SmanAgent 初始化失败</h2>")
+                errorMessage.append("<h2>Sman 初始化失败</h2>")
                 errorMessage.append("<p style='color:red;'><b>${e.message}</b></p>")
                 errorMessage.append("<p>可能的原因：</p>")
                 errorMessage.append("<ul style='text-align:left;'>")
-                errorMessage.append("<li>后端服务未启动（请先启动 smanagent 后端）</li>")
+                errorMessage.append("<li>后端服务未启动（请先启动 sman 后端）</li>")
                 errorMessage.append("<li>插件配置错误</li>")
                 errorMessage.append("<li>IDE 版本不兼容</li>")
                 errorMessage.append("</ul>")

@@ -60,7 +60,7 @@ data class SessionInfo(
  * 管理插件的持久化数据，包括会话历史和当前活动会话状态。
  */
 @Service(Service.Level.APP)
-@State(name = "SmanAgentSettings", storages = [com.intellij.openapi.components.Storage("SmanAgentSettings.xml")], reportStatistic = false)
+@State(name = "SmanSettings", storages = [com.intellij.openapi.components.Storage("SmanSettings.xml")], reportStatistic = false)
 class StorageService : PersistentStateComponent<StorageService.SettingsState> {
 
     private val logger: Logger = LoggerFactory.getLogger(StorageService::class.java)

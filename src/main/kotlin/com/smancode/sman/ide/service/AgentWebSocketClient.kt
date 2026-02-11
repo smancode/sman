@@ -48,13 +48,13 @@ class AgentWebSocketClient(
         val future = CompletableFuture<Void>()
 
         try {
-            println("[SmanAgent] 连接到 WebSocket 服务器: $serverUrl")
+            println("[Sman] 连接到 WebSocket 服务器: $serverUrl")
             logger.info("连接到 WebSocket 服务器: $serverUrl")
 
             client = object : WebSocketClient(URI(serverUrl)) {
 
                 override fun onOpen(handshake: ServerHandshake) {
-                    println("[SmanAgent] WebSocket 连接成功")
+                    println("[Sman] WebSocket 连接成功")
                     logger.info("WebSocket 连接成功")
                     javax.swing.SwingUtilities.invokeLater {
                         onConnected?.invoke(mapOf("status" to "connected"))
@@ -68,12 +68,12 @@ class AgentWebSocketClient(
                 }
 
                 override fun onClose(code: Int, reason: String, remote: Boolean) {
-                    println("[SmanAgent] WebSocket 连接关闭: code=$code, reason=$reason")
+                    println("[Sman] WebSocket 连接关闭: code=$code, reason=$reason")
                     logger.info("WebSocket 连接关闭: code={}, reason={}", code, reason)
                 }
 
                 override fun onError(ex: Exception) {
-                    println("[SmanAgent] WebSocket 错误: ${ex.message}")
+                    println("[Sman] WebSocket 错误: ${ex.message}")
                     logger.error("WebSocket 错误", ex)
                     if (!future.isDone) {
                         future.completeExceptionally(ex)
@@ -84,7 +84,7 @@ class AgentWebSocketClient(
             client?.connect()
 
         } catch (e: Exception) {
-            println("[SmanAgent] WebSocket 连接失败: ${e.message}")
+            println("[Sman] WebSocket 连接失败: ${e.message}")
             e.printStackTrace()
             logger.error("WebSocket 连接失败", e)
             future.completeExceptionally(e)
@@ -100,7 +100,7 @@ class AgentWebSocketClient(
         try {
             client?.close()
             client = null
-            println("[SmanAgent] WebSocket 已断开")
+            println("[Sman] WebSocket 已断开")
             logger.info("WebSocket 已断开")
         } catch (e: Exception) {
             logger.error("断开 WebSocket 失败", e)

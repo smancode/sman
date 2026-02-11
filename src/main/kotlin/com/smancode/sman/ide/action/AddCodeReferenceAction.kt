@@ -9,14 +9,14 @@ import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.ide.service.PathUtil
 
 /**
- * 右键菜单：添加代码引用到 SmanAgent
+ * 右键菜单：添加代码引用到 Sman
  *
- * 触发方式：编辑器中右键 → "添加到 SmanAgent"
+ * 触发方式：编辑器中右键 → "添加到 Sman"
  *
  * 功能：
  * - 获取当前编辑器选中的代码
  * - 提取文件路径、行号范围、代码内容
- * - 将代码引用插入到 SmanAgent 输入框
+ * - 将代码引用插入到 Sman 输入框
  */
 class AddCodeReferenceAction : AnAction() {
 

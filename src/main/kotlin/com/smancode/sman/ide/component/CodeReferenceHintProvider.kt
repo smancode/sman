@@ -50,7 +50,7 @@ object CodeReferenceHintProvider {
             add(Box.createHorizontalStrut(8))
 
             // 添加文本
-            val textLabel = JLabel("添加到 SmanAgent ($shortcut)").apply {
+            val textLabel = JLabel("添加到 Sman ($shortcut)").apply {
                 foreground = java.awt.Color.WHITE
                 font = font.deriveFont(11f)
             }
