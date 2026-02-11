@@ -38,8 +38,34 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val logger = LoggerFactory.getLogger(SmanChatPanel::class.java)
 
+    /**
+     * 设置控制栏的分析结果回调
+     */
+    fun setOnAnalysisResultsCallback(callback: () -> Unit) {
+        onAnalysisResultsCallback = callback
+
+        // 重新创建控制栏以更新按钮
+        removeAll()
+        reinit()
+    }
+
     // 服务引用
     private val smanService get() = SmanService.getInstance(project)
+
+    /**
+     * 设置分析结果回调
+     */
+    var onAnalysisResultsCallback: (() -> Unit)? = null
+
+    /**
+     * 设置控制栏的分析结果回调
+     */
+    fun setOnAnalysisResultsCallback(callback: () -> Unit) {
+        onAnalysisResultsCallback = callback
+
+        // 更新控制栏
+        controlBar?.setOnAnalysisResultsCallback(callback)
+    }
 
     // UI 组件
     private val centerPanel = JPanel(CardLayout())
@@ -182,6 +208,11 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         showWelcome()
 
         add(controlBar, BorderLayout.NORTH)
+
+        // 设置分析结果回调（如果有）
+        if (onAnalysisResultsCallback != null) {
+            controlBar?.setOnAnalysisResultsCallback(onAnalysisResultsCallback!!)
+        }
         add(centerPanel, BorderLayout.CENTER)
 
         val bottomPanel = JPanel().apply {

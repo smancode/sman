@@ -2,14 +2,7 @@ package com.smancode.sman.ide.ui
 
 import com.intellij.openapi.project.Project
 import com.smancode.sman.config.SmanConfig
-import com.smancode.sman.ide.components.AnalysisProgressDialog
-import com.smancode.sman.ide.components.ProjectInitializingProgressDialog
-import com.smancode.sman.ide.service.SmanService
-import com.smancode.sman.analysis.pipeline.ProjectAnalysisPipeline
 import com.smancode.sman.ide.service.storageService
-import com.smancode.sman.analysis.service.ProjectAnalysisService
-import com.smancode.sman.analysis.model.ProjectAnalysisResult
-import com.smancode.sman.analysis.model.AnalysisStatus
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.FlowLayout
@@ -18,10 +11,6 @@ import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
 import javax.swing.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -36,6 +25,7 @@ import javax.swing.SwingUtilities
  * - LLM API 配置（API Key、Base URL、模型名称）
  * - BGE-M3 配置（端点、API Key）
  * - BGE-Reranker 配置（端点、API Key）
+ * - 自动分析开关
  * - 项目名称
  * - 保存对话历史
  */
@@ -43,8 +33,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
     private val logger = LoggerFactory.getLogger(SettingsDialog::class.java)
     private val storage = project.storageService()
-    private val analysisService = ProjectAnalysisService(project)
-    private val analysisScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // HTTP 客户端（复用）
     private val httpClient by lazy {
@@ -82,6 +70,11 @@ class SettingsDialog(private val project: Project) : JDialog() {
     // 其他配置字段
     private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
+
+    // 自动分析开关
+    private val autoAnalysisSwitch = JToggleButton("自动分析", storage.autoAnalysisEnabled).apply {
+        toolTipText = "启用后台自动分析（每 5 分钟扫描一次）"
+    }
 
     // 性能配置字段
     private val bgeMaxTokensField = createTextFieldWithDefault(storage.bgeMaxTokens, "8192")
@@ -167,9 +160,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         addSeparator(panel, gbc, row++)
 
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-            add(JButton("项目分析").apply { addActionListener { onProjectAnalysisClick() } })
-            add(JButton("定时分析").apply { isEnabled = false })
-            add(JButton("查看分析结果").apply { addActionListener { onShowAnalysisResultsClick() } })
+            add(JLabel("自动分析:"))
+            add(autoAnalysisSwitch)
+            add(JLabel("(后台每 5 分钟扫描)"))
         }
 
         gbc.gridx = 0
@@ -359,382 +352,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
         panel.add(JLabel("<html><b>$title</b></html>"), gbc)
     }
 
-    private fun addAnalysisButtons(panel: JPanel, gbc: GridBagConstraints): Int {
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-            add(JButton("项目分析").apply { addActionListener { onProjectAnalysisClick() } })
-            add(JButton("定时分析").apply { isEnabled = false })
-        }
-
-        gbc.gridx = 0
-        gbc.gridy = 0
-        gbc.gridwidth = 2
-        gbc.weightx = 0.0
-        gbc.fill = GridBagConstraints.HORIZONTAL
-        panel.add(buttonPanel, gbc)
-
-        return 1
-    }
-
-    /**
-     * 项目分析按钮点击处理 - 后台运行
-     */
-    private fun onProjectAnalysisClick() {
-        logger.info("点击项目分析按钮: projectKey={}", project.name)
-
-        // 先保存配置
-        val config = collectConfig()
-        if (config == null) {
-            return
-        }
-
-        saveConfig(config)
-
-        // 直接使用默认配置开始分析
-        val defaultConfig = ProjectAnalysisConfigDialog.ProjectAnalysisConfig(
-            frameworkType = ProjectAnalysisConfigDialog.FrameworkType.SPRING_BOOT,
-            entryPackages = emptyList(),
-            customAnnotations = emptyList(),
-            includeDtoScan = true,
-            includeEntityScan = true,
-            exhaustiveScan = false,
-            saveConfig = false
-        )
-        startAnalysisWithConfig(defaultConfig)
-    }
-
-    /**
-     * 使用指定配置开始分析
-     */
-    private fun startAnalysisWithConfig(analysisConfig: ProjectAnalysisConfigDialog.ProjectAnalysisConfig) {
-        logger.info("开始项目分析: projectKey={}, frameworkType={}, exhaustiveScan={}",
-            project.name, analysisConfig.frameworkType, analysisConfig.exhaustiveScan)
-
-        // 后台执行分析
-        analysisScope.launch {
-            try {
-                analysisService.init()
-
-                // TODO: 将 analysisConfig 传递给分析 Pipeline
-                // 目前先记录日志，后续需要修改 Pipeline 接受配置参数
-
-                // 检查是否需要分析
-                val currentMd5 = com.smancode.sman.analysis.util.ProjectHashCalculator.calculate(project)
-                val cached = analysisService.getAnalysisResult(forceReload = false)
-
-                val shouldAnalyze = cached == null || cached.projectMd5 != currentMd5
-
-                SwingUtilities.invokeLater {
-                    val message = if (shouldAnalyze) {
-                        "开始项目分析，将在后台执行"
-                    } else {
-                        "项目未变化，使用已有分析结果"
-                    }
-                    // 改为等待用户关闭的消息框
-                    JOptionPane.showMessageDialog(
-                        this@SettingsDialog,
-                        message,
-                        "提示",
-                        JOptionPane.INFORMATION_MESSAGE
-                    )
-                }
-
-                if (shouldAnalyze) {
-                    analysisService.executeAnalysis(null)
-                    logger.info("项目分析完成: projectKey={}", project.name)
-                } else {
-                    logger.info("跳过分析，使用缓存结果: projectKey={}", project.name)
-                }
-            } catch (e: Exception) {
-                logger.error("项目分析失败", e)
-            }
-        }
-    }
-
-    /**
-     * 查看分析结果按钮点击处理
-     */
-    private fun onShowAnalysisResultsClick() {
-        logger.info("点击查看分析结果按钮: projectKey={}", project.name)
-
-        analysisScope.launch {
-            try {
-                val result = analysisService.getAnalysisResult(forceReload = true)
-
-                SwingUtilities.invokeLater {
-                    if (result == null) {
-                        JOptionPane.showMessageDialog(
-                            this@SettingsDialog,
-                            "暂无分析结果，请先执行项目分析",
-                            "提示",
-                            JOptionPane.INFORMATION_MESSAGE
-                        )
-                    } else {
-                        showAnalysisResultsDetail(result)
-                    }
-                }
-            } catch (e: Exception) {
-                logger.error("获取分析结果失败", e)
-                SwingUtilities.invokeLater {
-                    showError("获取分析结果失败：${e.message}")
-                }
-            }
-        }
-    }
-
-    private fun createProgressCallback(dialog: AnalysisProgressDialog) = object : com.smancode.sman.analysis.pipeline.ProjectAnalysisPipeline.ProgressCallback {
-        override fun onStepStart(stepName: String, description: String) {
-            SwingUtilities.invokeLater { dialog.onStepStart(stepName, description) }
-        }
-
-        override fun onStepComplete(stepName: String, result: com.smancode.sman.analysis.model.StepResult) {
-            SwingUtilities.invokeLater { dialog.onStepComplete(stepName, result) }
-        }
-
-        override fun onStepFailed(stepName: String, error: String) {
-            SwingUtilities.invokeLater { dialog.onStepFailed(stepName, error) }
-        }
-    }
-
-    /**
-     * 显示分析结果详情
-     */
-    private fun showAnalysisResultsDetail(result: ProjectAnalysisResult) {
-        val duration = result.endTime?.let { (it - result.startTime) / 1000 }?.let { "${it}秒" } ?: "进行中"
-
-        val message = buildString {
-            append("═══════════════════════════════════════\n")
-            append("          项目分析结果详情\n")
-            append("═══════════════════════════════════════\n\n")
-            append("项目: ${result.projectKey}\n")
-            append("状态: ${result.status.text}\n")
-            append("耗时: $duration\n")
-            append("开始时间: ${java.util.Date(result.startTime)}\n")
-            result.endTime?.let { append("结束时间: ${java.util.Date(it)}\n") }
-            append("\n")
-
-            append("───────────────────────────────────────\n")
-
-            // 计算已完成步骤数和总步骤数
-            val completedSteps = result.steps.values.count { it.status == com.smancode.sman.analysis.model.StepStatus.COMPLETED }
-
-            // 判断总步骤数：有 llm_code_vectorization 说明是完整模式且有 BGE 配置
-            val totalSteps = if (result.steps.containsKey("llm_code_vectorization")) {
-                10  // 9 个标准步骤 + 1 个 LLM 步骤
-            } else if (result.steps.containsKey("ast_scanning") ||
-                       result.steps.containsKey("db_entity_detection") ||
-                       result.steps.containsKey("api_entry_scanning")) {
-                9   // 完整模式但无 LLM
-            } else {
-                // 只有 project_structure 和 tech_stack_detection，可能是核心模式
-                result.steps.size
-            }
-
-            append("步骤状态 ($completedSteps/$totalSteps)\n")
-            append("───────────────────────────────────────\n\n")
-
-            result.steps.forEach { (stepName, stepResult) ->
-                val statusIcon = when (stepResult.status) {
-                    com.smancode.sman.analysis.model.StepStatus.COMPLETED -> "✅"
-                    com.smancode.sman.analysis.model.StepStatus.RUNNING -> "⏳"
-                    com.smancode.sman.analysis.model.StepStatus.FAILED -> "❌"
-                    com.smancode.sman.analysis.model.StepStatus.SKIPPED -> "⏭️"
-                    else -> "⏸️"
-                }
-
-                append("$statusIcon ${stepResult.stepDescription}\n")
-
-                // 显示耗时
-                stepResult.getDuration()?.let { append("   耗时: ${it}ms\n") }
-
-                // 显示数据量
-                stepResult.data?.let { data ->
-                    try {
-                        val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
-
-                        // 尝试解析为 Map
-                        try {
-                            val map = mapper.readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {})
-                            displayMapData(map, this)
-                        } catch (e: Exception) {
-                            // 尝试解析为 List
-                            try {
-                                val list = mapper.readValue(data, object : com.fasterxml.jackson.core.type.TypeReference<List<Any>>() {})
-                                append("   数据项: ${list.size} 个\n")
-                                // 显示前几个条目
-                                list.take(3).forEach { item ->
-                                    when (item) {
-                                        is Map<*, *> -> {
-                                            val name = item["name"] ?: item["qualifiedName"] ?: item["className"]
-                                            append("   - $name\n")
-                                        }
-                                        else -> append("   - $item\n")
-                                    }
-                                }
-                                if (list.size > 3) {
-                                    append("   - ... (共 ${list.size} 项)\n")
-                                }
-                            } catch (e2: Exception) {
-                                // 解析失败，显示原始数据
-                                showDataPreview(data, this)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        showDataPreview(data, this)
-                    }
-                }
-
-                // 显示错误
-                stepResult.error?.let { append("   ❌ 错误: $it\n") }
-
-                append("\n")
-            }
-        }
-
-        // 使用带滚动条的文本区域显示分析结果
-        showScrollableTextDialog("分析结果详情", message, result.status.messageType)
-    }
-
-    /**
-     * 显示带滚动条的文本对话框
-     */
-    private fun showScrollableTextDialog(title: String, content: String, messageType: Int) {
-        val textArea = JTextArea(content).apply {
-            isEditable = false
-            font = java.awt.Font(Font.MONOSPACED, Font.PLAIN, 12)
-            lineWrap = false
-            wrapStyleWord = true
-            tabSize = 2
-        }
-
-        val scrollPane = JScrollPane(textArea).apply {
-            preferredSize = java.awt.Dimension(700, 500)
-            verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
-            horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
-        }
-
-        JOptionPane.showMessageDialog(
-            this,
-            scrollPane,
-            title,
-            messageType
-        )
-    }
-
-    /**
-     * 显示分析总结
-     */
-
-    /**
-     * 显示分析总结
-     */
-    private fun showAnalysisSummary(result: ProjectAnalysisResult) {
-        val completedSteps = result.steps.values.count { it.status == com.smancode.sman.analysis.model.StepStatus.COMPLETED }
-        val duration = result.endTime?.let { (it - result.startTime) / 1000 }?.let { "${it}秒" } ?: "未知"
-
-        val message = buildString {
-            append("项目分析完成！\n\n")
-            append("项目: ${result.projectKey}\n")
-            append("状态: ${result.status.text}\n")
-            append("耗时: $duration\n")
-            append("步骤: $completedSteps/${result.steps.size} 完成\n\n")
-
-            append("步骤详情:\n")
-            result.steps.forEach { (_, stepResult) ->
-                append("  ${stepResult.status.icon} ${stepResult.stepDescription}")
-                stepResult.error?.let { append(" - $it") }
-                append("\n")
-            }
-        }
-
-        JOptionPane.showMessageDialog(this, message, "分析结果", result.status.messageType)
-    }
-
-    /**
-     * 显示 Map 类型的数据
-     */
-    private fun displayMapData(map: Map<String, Any>, sb: StringBuilder) {
-        map.forEach { (key, value) ->
-            when (value) {
-                is List<*> -> {
-                    val size = value.size
-                    sb.append("   $key: $size 项\n")
-                    // 显示前几个条目
-                    if (key == "enums" || key == "entities" || key == "externalApis" || key == "classes") {
-                        value.take(3).forEach { item ->
-                            when (item) {
-                                is Map<*, *> -> {
-                                    val name = item["name"] ?: item["qualifiedName"]
-                                    sb.append("     - $name\n")
-                                }
-                                is String -> sb.append("     - $item\n")
-                            }
-                        }
-                        if (size > 3) {
-                            sb.append("     - ... (共 $size 项)\n")
-                        }
-                    }
-                }
-                is Map<*, *> -> {
-                    // 处理嵌套 Map
-                    val nestedMap = value as Map<*, *>
-                    nestedMap.forEach { (nestedKey, nestedValue) ->
-                        when (nestedValue) {
-                            is List<*> -> {
-                                val size = nestedValue.size
-                                sb.append("   $key.$nestedKey: $size 项\n")
-                            }
-                            is Number -> sb.append("   $key.$nestedKey: $nestedValue\n")
-                            is String -> sb.append("   $key.$nestedKey: $nestedValue\n")
-                            else -> sb.append("   $key.$nestedKey: $nestedValue\n")
-                        }
-                    }
-                }
-                is Number -> sb.append("   $key: $value\n")
-                is String -> sb.append("   $key: $value\n")
-                else -> sb.append("   $key: $value\n")
-            }
-        }
-    }
-
-    /**
-     * 显示数据预览（当解析失败时）
-     */
-    private fun showDataPreview(data: String, sb: StringBuilder) {
-        val lines = data.lines().take(10)
-        sb.append("   数据预览:\n")
-        lines.forEach { line ->
-            if (line.isNotEmpty()) {
-                sb.append("   $line\n")
-            }
-        }
-        if (data.lines().size > 10) {
-            sb.append("   ...\n")
-        }
-    }
-
-    private val AnalysisStatus.text: String
-        get() = when (this) {
-            AnalysisStatus.COMPLETED -> "全部完成"
-            AnalysisStatus.PARTIAL -> "部分完成"
-            AnalysisStatus.FAILED -> "分析失败"
-            else -> "未知状态"
-        }
-
-    private val AnalysisStatus.messageType: Int
-        get() = when (this) {
-            AnalysisStatus.COMPLETED -> JOptionPane.INFORMATION_MESSAGE
-            AnalysisStatus.PARTIAL -> JOptionPane.WARNING_MESSAGE
-            else -> JOptionPane.ERROR_MESSAGE
-        }
-
-    private val com.smancode.sman.analysis.model.StepStatus.icon: String
-        get() = when (this) {
-            com.smancode.sman.analysis.model.StepStatus.COMPLETED -> "✓"
-            com.smancode.sman.analysis.model.StepStatus.FAILED -> "✗"
-            com.smancode.sman.analysis.model.StepStatus.SKIPPED -> "⊘"
-            else -> "⏸"
-        }
-
     private fun createGridBagConstraints() = GridBagConstraints().apply {
         insets = Insets(5, 5, 5, 5)
         anchor = GridBagConstraints.WEST
@@ -798,85 +415,10 @@ class SettingsDialog(private val project: Project) : JDialog() {
             // 在 EDT 线程更新 UI
             SwingUtilities.invokeLater {
                 dialog.dispose()
-
-                // 检查 LLM 和 BGE 服务是否都可用
-                val llmOk = testResults.llmResult.success
-                val bgeOk = testResults.bgeM3Result.success
-
-                if (llmOk && bgeOk) {
-                    // 服务测试通过，启动项目初始化
-                    logger.info("服务测试通过，开始项目初始化")
-                    startProjectInitialization(config)
-                } else {
-                    // 服务测试失败，显示错误，等待用户关闭结果窗口后再关闭设置对话框
-                    showResultMessage(config, testResults)
-                    // 用户关闭结果窗口后，再关闭设置对话框
-                    dispose()
-                }
+                showResultMessage(config, testResults)
+                dispose()
             }
         }.start()
-    }
-
-    /**
-     * 启动项目初始化（所有步骤异步执行）
-     */
-    private fun startProjectInitialization(config: ConfigData) {
-        // 初始化项目分析服务
-        analysisScope.launch {
-            try {
-                analysisService.init()
-
-                // 创建初始化进度对话框
-                val initDialog = ProjectInitializingProgressDialog(this@SettingsDialog, config.projectKey)
-
-                // 显示初始化对话框
-                SwingUtilities.invokeLater {
-                    initDialog.isVisible = true
-                }
-
-                // 创建进度回调
-                val progressCallback = object : ProjectAnalysisPipeline.ProgressCallback {
-                    override fun onStepStart(stepName: String, description: String) {
-                        SwingUtilities.invokeLater {
-                            initDialog.onStepStart(stepName, description)
-                        }
-                    }
-
-                    override fun onStepComplete(stepName: String, result: com.smancode.sman.analysis.model.StepResult) {
-                        SwingUtilities.invokeLater {
-                            initDialog.onStepComplete(stepName, result)
-                        }
-                    }
-
-                    override fun onStepFailed(stepName: String, error: String) {
-                        SwingUtilities.invokeLater {
-                            initDialog.onStepFailed(stepName, error)
-                        }
-                    }
-                }
-
-                // 异步执行所有分析步骤（包括核心步骤）
-                analysisService.executeAnalysisAsync(progressCallback)
-
-                // 立即关闭设置对话框（不等待分析完成）
-                SwingUtilities.invokeLater {
-                    logger.info("项目分析已启动（后台异步执行）: projectKey={}", config.projectKey)
-                    dispose()
-                }
-
-            } catch (e: Exception) {
-                logger.error("项目初始化失败", e)
-                SwingUtilities.invokeLater {
-                    JOptionPane.showMessageDialog(
-                        this@SettingsDialog,
-                        "项目初始化失败: ${e.message}",
-                        "错误",
-                        JOptionPane.ERROR_MESSAGE
-                    )
-                    dispose()
-                }
-            }
-        }
     }
 
     /**
@@ -1020,7 +562,8 @@ class SettingsDialog(private val project: Project) : JDialog() {
             bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey, projectKey,
             bgeMaxTokens, bgeTruncationStrategy, bgeTruncationStepSize, bgeMaxTruncationRetries,
             bgeRetryMax, bgeRetryBaseDelay, bgeConcurrentLimit, bgeCircuitBreakerThreshold,
-            rules
+            rules,
+            autoAnalysisEnabled = autoAnalysisSwitch.isSelected
         )
     }
 
@@ -1075,6 +618,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         // RULES 配置
         storage.rules = config.rules
 
+        // 自动分析配置
+        storage.autoAnalysisEnabled = config.autoAnalysisEnabled
+
         // 更新配置到 SmanConfig（下次 LLM/BGE 调用会使用新配置）
         val userConfig = SmanConfig.UserConfig(
             llmApiKey = storage.llmApiKey,
@@ -1091,16 +637,17 @@ class SettingsDialog(private val project: Project) : JDialog() {
             bgeCircuitBreakerThreshold = storage.bgeCircuitBreakerThreshold
         )
         SmanConfig.setUserConfig(userConfig)
+
+        logger.info("设置已保存: autoAnalysisEnabled={}", config.autoAnalysisEnabled)
     }
 
     /**
      * 显示结果消息（包含测试结果）
-     * @return 用户点击的按钮选项
      */
-    private fun showResultMessage(config: ConfigData, testResults: ServiceTestResults): Int {
+    private fun showResultMessage(config: ConfigData, testResults: ServiceTestResults) {
         val message = buildResultMessage(config, testResults)
         val messageType = if (testResults.allSuccess()) JOptionPane.INFORMATION_MESSAGE else JOptionPane.WARNING_MESSAGE
-        return JOptionPane.showConfirmDialog(this, message, "保存结果", JOptionPane.DEFAULT_OPTION, messageType)
+        JOptionPane.showConfirmDialog(this, message, "保存结果", JOptionPane.DEFAULT_OPTION, messageType)
     }
 
     private fun buildResultMessage(config: ConfigData, testResults: ServiceTestResults) = """
@@ -1127,7 +674,8 @@ class SettingsDialog(private val project: Project) : JDialog() {
         提示：
         - ✓ 表示服务可用
         - ✗ 表示服务不可用，请检查端点是否正确
-        - 配置已保存，即使服务不可用也会保存
+        - 自动分析已${if (config.autoAnalysisEnabled) "启用" else "禁用"}
+
     """.trimIndent()
 
     /**
@@ -1135,24 +683,6 @@ class SettingsDialog(private val project: Project) : JDialog() {
      */
     private fun showError(message: String) {
         JOptionPane.showMessageDialog(this, message, "错误", JOptionPane.ERROR_MESSAGE)
-    }
-
-    /**
-     * 显示临时提示消息（自动关闭）
-     */
-    private fun showTemporaryMessage(message: String, delayMs: Int = 3000) {
-        val dialog = JDialog(this@SettingsDialog, "提示", false)
-        val label = JLabel(message, SwingConstants.CENTER)
-        label.border = javax.swing.BorderFactory.createEmptyBorder(20, 20, 20, 20)
-        dialog.contentPane.add(label)
-        dialog.pack()
-        dialog.setLocationRelativeTo(this@SettingsDialog)
-
-        javax.swing.Timer(delayMs) { _ ->
-            dialog.dispose()
-        }.apply { isRepeats = false }.start()
-
-        dialog.isVisible = true
     }
 
     /**
@@ -1177,7 +707,9 @@ class SettingsDialog(private val project: Project) : JDialog() {
         val bgeConcurrentLimit: String,
         val bgeCircuitBreakerThreshold: String,
         // RULES 配置
-        val rules: String
+        val rules: String,
+        // 自动分析配置
+        val autoAnalysisEnabled: Boolean
     )
 
     /**

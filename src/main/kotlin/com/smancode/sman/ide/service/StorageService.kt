@@ -105,6 +105,9 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         // RULES 配置（用户自定义规则，会追加到 system prompt 后面）
         var rules: String = "",                         // 用户自定义规则
 
+        // 自动分析配置
+        var autoAnalysisEnabled: Boolean = true,        // 自动分析开关（默认开启）
+
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
     )
@@ -480,6 +483,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var rules: String
         get() = state.rules.takeIf { it.isNotEmpty() } ?: DEFAULT_RULES
         set(value) { state.rules = value }
+
+    // 自动分析配置
+    var autoAnalysisEnabled: Boolean
+        get() = state.autoAnalysisEnabled
+        set(value) { state.autoAnalysisEnabled = value }
 
     // 获取原始的 rules 值（不使用默认值）
     fun getRawRules(): String = state.rules

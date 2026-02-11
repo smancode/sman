@@ -285,8 +285,8 @@ class SmanService(private val project: Project) : Disposable {
                 dynamicPromptInjector = dynamicPromptInjector
             )
 
-            // 初始化项目分析服务
-            initializeProjectAnalysisService()
+            // 项目分析已由 ProjectAnalysisScheduler 后台自动执行
+            logger.info("Sman 服务初始化完成（项目分析由后台调度器处理）")
 
             logger.info("Sman 服务初始化完成")
         } catch (e: Exception) {
@@ -299,33 +299,12 @@ class SmanService(private val project: Project) : Disposable {
     /**
      * 初始化项目分析服务
      *
-     * 在启动时自动加载已有的分析结果到内存缓存
+     * 注意：项目分析已由 ProjectAnalysisScheduler 后台自动处理
+     * 此函数已废弃，保留仅为兼容性
      */
     private fun initializeProjectAnalysisService() {
-        // 使用 CoroutineScope
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        scope.launch {
-            try {
-                val analysisService = com.smancode.sman.analysis.service.ProjectAnalysisService(project)
-
-                // 1. 初始化数据库表
-                analysisService.init()
-
-                // 2. 加载已有的分析结果（如果有）
-                val cachedResult = analysisService.getAnalysisResult(forceReload = false)
-                if (cachedResult != null) {
-                    logger.info("已加载分析结果: projectKey={}, status={}, steps={}",
-                        project.name,
-                        cachedResult.status,
-                        cachedResult.steps.size
-                    )
-                } else {
-                    logger.info("暂无分析结果: projectKey={}", project.name)
-                }
-            } catch (e: Exception) {
-                logger.warn("项目分析服务初始化失败（非关键）", e)
-            }
-        }
+        // 项目分析已由 ProjectAnalysisScheduler 后台自动执行
+        logger.info("项目分析由后台调度器处理，此初始化已废弃")
     }
 
     /**

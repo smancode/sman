@@ -7,6 +7,7 @@ import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.StartupActivity
+import com.smancode.sman.analysis.scheduler.ProjectAnalysisScheduler
 import com.smancode.sman.ide.listener.CodeSelectionListener
 import com.smancode.sman.ide.service.StorageService
 import org.slf4j.Logger
@@ -17,12 +18,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Sman 插件主入口
- * 负责启动后端 Agent 进程并初始化 WebSocket 连接
+ * 负责启动后端 Agent 进程并初始化项目分析调度器
  */
 class SmanPlugin : StartupActivity {
 
     private val logger: Logger = LoggerFactory.getLogger(SmanPlugin::class.java)
     private val backendStarted = AtomicBoolean(false)
+
+    // 后台分析调度器引用
+    private var analysisScheduler: ProjectAnalysisScheduler? = null
 
     override fun runActivity(project: Project) {
         // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
@@ -40,11 +44,14 @@ class SmanPlugin : StartupActivity {
         }
 
         // 初始化 StorageService（通过 getService 触发初始化）
-        project.service<StorageService>()
+        val storage = project.service<StorageService>()
         logger.info("StorageService 已初始化")
 
         // 设置代码选区监听器（使用 EditorFactoryListener）
         setupSelectionListener(project)
+
+        // 启动后台分析调度器
+        startAnalysisSchedulerIfNeeded(project, storage)
     }
 
     /**
@@ -131,6 +138,37 @@ class SmanPlugin : StartupActivity {
 
         } catch (e: Exception) {
             logger.error("设置代码选区监听器失败", e)
+        }
+    }
+
+    /**
+     * 启动后台分析调度器
+     */
+    private fun startAnalysisSchedulerIfNeeded(project: Project, storage: StorageService) {
+        // 检查 API Key 是否配置
+        if (storage.llmApiKey.isBlank()) {
+            logger.info("LLM API Key 未配置，跳过启动后台分析调度器")
+            return
+        }
+
+        // 检查自动分析是否启用
+        if (!storage.autoAnalysisEnabled) {
+            logger.info("自动分析已禁用，跳过启动后台分析调度器")
+            return
+        }
+
+        try {
+            // 创建并启动后台分析调度器
+            analysisScheduler = ProjectAnalysisScheduler.create(
+                project = project,
+                intervalMs = 300_000  // 5 分钟
+            )
+
+            analysisScheduler?.start()
+            logger.info("后台分析调度器已启动: project={}", project.name)
+
+        } catch (e: Exception) {
+            logger.error("启动后台分析调度器失败", e)
         }
     }
 
