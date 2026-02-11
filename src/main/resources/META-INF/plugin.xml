@@ -1,7 +1,7 @@
 <!-- Plugin Configuration File -->
 <idea-plugin>
-    <id>com.smancode.smanagent</id>
-    <name>SmanAgent</name>
+    <id>com.smancode.sman</id>
+    <name>Sman</name>
     <vendor email="support@smancode.com" url="https://smancode.com">SmanCode AI</vendor>
 
     <description><![CDATA[
@@ -15,37 +15,37 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Tool Window -->
-        <toolWindow id="SmanAgent"
-                    factoryClass="com.smancode.smanagent.ide.ui.SmanAgentToolWindowFactory"
+        <toolWindow id="Sman"
+                    factoryClass="com.smancode.sman.ide.ui.SmanToolWindowFactory"
                     anchor="right"
                     icon="/META-INF/pluginIconToolWindow.svg"
                     secondary="false"/>
 
         <!-- Project Service -->
-        <projectService serviceImplementation="com.smancode.smanagent.ide.service.StorageService"/>
+        <projectService serviceImplementation="com.smancode.sman.ide.service.StorageService"/>
 
         <!-- Startup Activity -->
-        <startupActivity class="com.smancode.smanagent.ide.SmanAgentPlugin"/>
+        <startupActivity class="com.smancode.sman.ide.SmanPlugin"/>
     </extensions>
 
     <actions>
         <!-- 插入代码引用 Action -->
-        <action id="SmanAgent.InsertCodeReference"
-                class="com.smancode.smanagent.ide.action.InsertCodeReferenceAction"
+        <action id="Sman.InsertCodeReference"
+                class="com.smancode.sman.ide.action.InsertCodeReferenceAction"
                 text="插入代码引用"
-                description="将选中的代码引用插入到 SmanAgent 输入框">
+                description="将选中的代码引用插入到 Sman 输入框">
             <keyboard-shortcut keymap="$default" first-keystroke="control I"/>
             <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta I"/>
             <keyboard-shortcut keymap="Mac OS X 10.5+" first-keystroke="meta I"/>
         </action>
 
         <!-- 编辑器右键菜单：添加代码引用 -->
-        <group id="SmanAgent.EditorPopupMenu">
+        <group id="Sman.EditorPopupMenu">
             <separator/>
-            <action id="SmanAgent.AddCodeReference"
-                    class="com.smancode.smanagent.ide.action.AddCodeReferenceAction"
-                    text="添加到 SmanAgent"
-                    description="将选中的代码添加到 SmanAgent 聊天面板"
+            <action id="Sman.AddCodeReference"
+                    class="com.smancode.sman.ide.action.AddCodeReferenceAction"
+                    text="添加到 Sman"
+                    description="将选中的代码添加到 Sman 聊天面板"
                     icon="/META-INF/pluginIconToolWindow.svg">
                 <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="EditorCopy"/>
             </action>

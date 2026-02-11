@@ -126,7 +126,7 @@ tasks {
 
         // 更新插件描述
         pluginDescription.set("""
-            SmanAgent 统一插件 - 整合了智能代码分析、AI 对话、代码编辑等功能。
+            Sman 统一插件 - 整合了智能代码分析、AI 对话、代码编辑等功能。
 
             核心功能：
             - 🤖 AI 驱动的代码分析和需求理解
@@ -168,13 +168,13 @@ tasks {
 
         doLast {
             val cp = sourceSets.main.get().runtimeClasspath
-            val mc = "com.smancode.smanagent.verification.VerificationWebServiceKt"
+            val mc = "com.smancode.sman.verification.VerificationWebServiceKt"
 
             javaexec {
                 classpath(cp)
                 mainClass.set(mc)
                 jvmArgs("-Dserver.port=${project.findProperty("verification.port") ?: 8080}")
-                jvmArgs("-Dlogging.level.com.smancode.smanagent=INFO")
+                jvmArgs("-Dlogging.level.com.smancode.sman=INFO")
             }
         }
     }
