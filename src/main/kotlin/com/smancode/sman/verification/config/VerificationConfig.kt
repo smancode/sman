@@ -72,17 +72,21 @@ open class VerificationConfig {
     /**
      * H2 数据源 Bean
      *
-     * 连接到 ~/.sman/{projectKey}/analysis.mv.db 的 H2 数据库
+     * 连接到 {projectRoot}/.sman/analysis.mv.db 的 H2 数据库
      * 注意：路径不含 .mv.db 后缀，H2 会自动添加
      */
     @Bean
     open fun dataSource(): DataSource {
-        // 连接到项目的数据库
+        // 从环境变量读取项目配置
+        val projectRoot = System.getenv("PROJECT_ROOT") ?: System.getProperty("user.dir")
+            ?: throw IllegalStateException("未设置 PROJECT_ROOT 环境变量，且无法获取项目目录")
         val projectKey = System.getenv("PROJECT_KEY") ?: "autoloop"
-        val dbPath = System.getProperty("user.home") + "/.sman/" + projectKey + "/analysis"
+
+        // 构建数据库路径
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(java.nio.file.Paths.get(projectRoot))
 
         return DataSourceBuilder.create()
-            .url("jdbc:h2:$dbPath;MODE=PostgreSQL;AUTO_SERVER=TRUE")
+            .url(paths.getDatabaseJdbcUrl())
             .driverClassName("org.h2.Driver")
             .username("sa")
             .build()
@@ -125,15 +129,21 @@ open class VerificationConfig {
 
     /**
      * 向量数据库配置 Bean
-     * 注意：使用 autoloop 项目，与 H2QueryService 共享数据库
+     * 注意：使用项目目录，与 H2QueryService 共享数据库
      */
     @Bean
     open fun vectorDatabaseConfig(): VectorDatabaseConfig {
         val dimension = (System.getenv("BGE_DIMENSION") ?: "1024").toInt()
-        return VectorDatabaseConfig.create(
-            projectKey = "autoloop",
+        val projectRoot = System.getenv("PROJECT_ROOT") ?: System.getProperty("user.dir")
+            ?: throw IllegalStateException("未设置 PROJECT_ROOT 环境变量，且无法获取项目目录")
+        val projectKey = System.getenv("PROJECT_KEY") ?: "autoloop"
+
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(java.nio.file.Paths.get(projectRoot))
+        return VectorDatabaseConfig(
+            projectKey = projectKey,
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(dimension = dimension),
+            databasePath = paths.databaseFile.toString(),
             vectorDimension = dimension
         )
     }

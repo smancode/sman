@@ -274,7 +274,7 @@ class LocalToolFactoryTest {
         val tool = ExpertConsultTool(createMockProject())
 
         // When: 调用 API
-        val result = tool.execute("smanunion", mapOf(
+        val result = tool.execute("sman", mapOf(
             "question" to "项目中有哪些API入口？",
             "projectKey" to "smanunion",
             "topK" to 5

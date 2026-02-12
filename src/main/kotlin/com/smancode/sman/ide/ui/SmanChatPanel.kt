@@ -17,6 +17,10 @@ import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.ide.service.storageService
 import com.smancode.sman.ide.util.SessionIdGenerator
 import com.smancode.sman.ide.theme.ThemeColors
+import com.smancode.sman.analysis.model.ProjectMapManager
+import com.smancode.sman.analysis.model.AnalysisType
+import com.smancode.sman.analysis.model.StepState
+import com.smancode.sman.analysis.model.ProjectEntry
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
@@ -38,34 +42,8 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val logger = LoggerFactory.getLogger(SmanChatPanel::class.java)
 
-    /**
-     * 设置控制栏的分析结果回调
-     */
-    fun setOnAnalysisResultsCallback(callback: () -> Unit) {
-        onAnalysisResultsCallback = callback
-
-        // 重新创建控制栏以更新按钮
-        removeAll()
-        reinit()
-    }
-
     // 服务引用
     private val smanService get() = SmanService.getInstance(project)
-
-    /**
-     * 设置分析结果回调
-     */
-    var onAnalysisResultsCallback: (() -> Unit)? = null
-
-    /**
-     * 设置控制栏的分析结果回调
-     */
-    fun setOnAnalysisResultsCallback(callback: () -> Unit) {
-        onAnalysisResultsCallback = callback
-
-        // 更新控制栏
-        controlBar?.setOnAnalysisResultsCallback(callback)
-    }
 
     // UI 组件
     private val centerPanel = JPanel(CardLayout())
@@ -139,6 +117,98 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     /**
+     * 显示分析结果
+     */
+    private fun showAnalysisResults() {
+        logger.info("显示分析结果: projectKey={}", projectKey)
+
+        // 获取项目分析状态
+        val entry = ProjectMapManager.getProjectEntry(projectKey)
+
+        if (entry == null) {
+            appendSystemMessage("""
+                📊 项目分析结果
+                ════════════════════════════
+                项目尚未注册到分析系统。
+                请确保项目已打开，并等待后台自动分析完成。
+            """.trimIndent())
+            return
+        }
+
+        // 构建分析结果报告
+        val report = buildAnalysisReport(entry)
+
+        // 显示到聊天区域
+        appendSystemMessage(report)
+    }
+
+    /**
+     * 构建分析报告
+     */
+    private fun buildAnalysisReport(entry: ProjectEntry): String {
+        val sb = StringBuilder()
+        sb.appendLine("📊 项目分析结果")
+        sb.appendLine("═════════════════════════════")
+        sb.appendLine()
+        sb.appendLine("**项目**: ${projectKey}")
+        sb.appendLine("**路径**: ${entry.path}")
+        sb.appendLine()
+
+        // 分析状态
+        sb.appendLine("📋 分析状态:")
+        sb.appendLine("  • 项目结构: ${statusIcon(entry.analysisStatus.projectStructure)}")
+        sb.appendLine("  • 技术栈: ${statusIcon(entry.analysisStatus.techStack)}")
+        sb.appendLine("  • API 入口: ${statusIcon(entry.analysisStatus.apiEntries)}")
+        sb.appendLine("  • DB 实体: ${statusIcon(entry.analysisStatus.dbEntities)}")
+        sb.appendLine("  • 枚举: ${statusIcon(entry.analysisStatus.enums)}")
+        sb.appendLine("  • 配置文件: ${statusIcon(entry.analysisStatus.configFiles)}")
+        sb.appendLine()
+
+        // 最后分析时间
+        val lastAnalyzed = entry.lastAnalyzed
+        if (lastAnalyzed != null) {
+            sb.appendLine("🕐 最后分析: ${lastAnalyzed}")
+        } else {
+            sb.appendLine("🕐 最后分析: 尚未分析")
+        }
+        sb.appendLine()
+
+        // 统计信息
+        sb.appendLine("📈 统计:")
+        val completedCount = countCompleted(entry)
+        sb.appendLine("  • 已完成: $completedCount / 6 项")
+        sb.appendLine()
+
+        return sb.toString()
+    }
+
+    /**
+     * 获取状态图标
+     */
+    private fun statusIcon(state: StepState): String {
+        return when (state) {
+            StepState.COMPLETED -> "✅ 已完成"
+            StepState.RUNNING -> "🔄 进行中"
+            StepState.PENDING -> "⏳ 待处理"
+            else -> "❓ 未知"
+        }
+    }
+
+    /**
+     * 统计已完成的分析项
+     */
+    private fun countCompleted(entry: ProjectEntry): Int {
+        var count = 0
+        if (entry.analysisStatus.projectStructure == StepState.COMPLETED) count++
+        if (entry.analysisStatus.techStack == StepState.COMPLETED) count++
+        if (entry.analysisStatus.apiEntries == StepState.COMPLETED) count++
+        if (entry.analysisStatus.dbEntities == StepState.COMPLETED) count++
+        if (entry.analysisStatus.enums == StepState.COMPLETED) count++
+        if (entry.analysisStatus.configFiles == StepState.COMPLETED) count++
+        return count
+    }
+
+    /**
      * 显示错误面板
      */
     private fun showErrorPanel(errorMessage: String) {
@@ -208,11 +278,6 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         showWelcome()
 
         add(controlBar, BorderLayout.NORTH)
-
-        // 设置分析结果回调（如果有）
-        if (onAnalysisResultsCallback != null) {
-            controlBar?.setOnAnalysisResultsCallback(onAnalysisResultsCallback!!)
-        }
         add(centerPanel, BorderLayout.CENTER)
 
         val bottomPanel = JPanel().apply {
@@ -309,7 +374,7 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             history = history,
             onSelect = { sessionInfo -> loadSession(sessionInfo.id) },
             onDelete = { sessionInfo -> deleteSession(sessionInfo.id) }
-        ).show(controlBar.historyButton)
+        ).show(controlBar.getHistoryButton() ?: return)
     }
 
     /**
@@ -408,7 +473,7 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun showSettings() {
         try {
-            SettingsDialog.show(project)
+            SettingsDialog.show(project, onAnalysisResultsCallback = { showAnalysisResults() })
         } catch (e: Exception) {
             logger.error("打开设置失败", e)
         }

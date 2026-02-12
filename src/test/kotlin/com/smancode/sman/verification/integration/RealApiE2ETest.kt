@@ -10,6 +10,7 @@ import com.smancode.sman.analysis.database.VectorStoreService
 import com.smancode.sman.analysis.model.VectorFragment
 import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.analysis.vectorization.RerankerClient
+import com.smancode.sman.analysis.paths.ProjectPaths
 import com.smancode.sman.verification.service.VectorSearchService
 import com.smancode.sman.verification.model.VectorSearchRequest
 import org.junit.jupiter.api.Assumptions
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -47,6 +50,9 @@ import kotlin.test.assertTrue
 @DisplayName("SmanAgent E2E 测试（端到端）")
 class RealApiE2ETest {
 
+    @TempDir
+    lateinit var tempDir: Path
+
     private lateinit var bgeClient: BgeM3Client
     private lateinit var vectorStore: VectorStoreService
     private lateinit var vectorSearchService: VectorSearchService
@@ -71,10 +77,12 @@ class RealApiE2ETest {
         bgeClient = BgeM3Client(bgeConfig)
 
         // 真实的向量存储配置
-        val vectorDbConfig = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val vectorDbConfig = VectorDatabaseConfig(
             projectKey = projectKey,
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(),
+            databasePath = paths.databaseFile.toString(),
             vectorDimension = 1024,
             l1CacheSize = 100
         )

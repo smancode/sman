@@ -24,7 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
  * - 简单、透明、高效
  */
 class DynamicPromptInjector(
-    private val promptLoader: PromptLoaderService
+    private val promptLoader: PromptLoaderService,
+    private val projectPath: java.nio.file.Path
 ) {
     private val logger = LoggerFactory.getLogger(DynamicPromptInjector::class.java)
 
@@ -56,12 +57,8 @@ class DynamicPromptInjector(
      * 构建 H2 JDBC URL
      */
     private fun buildJdbcUrl(projectKey: String): String {
-        val config = VectorDatabaseConfig.create(
-            projectKey = projectKey,
-            type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig()
-        )
-        return "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectPath)
+        return paths.getDatabaseJdbcUrl()
     }
 
     /**

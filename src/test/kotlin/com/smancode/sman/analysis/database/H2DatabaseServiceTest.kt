@@ -3,6 +3,7 @@ package com.smancode.sman.analysis.database
 import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
+import com.smancode.sman.analysis.paths.ProjectPaths
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -26,11 +27,12 @@ class H2DatabaseServiceTest {
     @Test
     fun `test H2 create table syntax`() = runBlocking {
         // Given: 创建配置
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
 
         // When: 初始化数据库
@@ -51,11 +53,12 @@ class H2DatabaseServiceTest {
     @Test
     fun `test H2 create table idempotent`() = runBlocking {
         // Given: 创建配置
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
 
         val h2Service = H2DatabaseService(config)
@@ -78,11 +81,12 @@ class H2DatabaseServiceTest {
     @Test
     fun `test H2 vector fragments CRUD`() = runBlocking {
         // Given: 初始化数据库
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
 
         val h2Service = H2DatabaseService(config)

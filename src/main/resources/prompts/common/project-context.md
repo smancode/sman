@@ -34,7 +34,7 @@ expert_consult(question="PaymentService.executePayment是干什么的？")
 #### 分析结果数据存储
 
 所有分析结果存储在 H2 数据库中：
-- **路径**: `~/.smanunion/vector/{projectKey}/data.mv.db`
+- **路径**: `~/.sman/vector/{projectKey}/data.mv.db`
 - **表**: `analysis_step`
 
 可用数据模块：

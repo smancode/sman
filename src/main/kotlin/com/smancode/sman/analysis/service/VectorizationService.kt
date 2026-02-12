@@ -9,6 +9,8 @@ import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.BgeM3Config
 import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.config.JVectorConfig
+import com.smancode.sman.analysis.paths.ProjectPaths
+import com.smancode.sman.analysis.paths.ProjectStoragePaths
 import com.smancode.sman.smancode.llm.LlmService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +21,7 @@ import java.nio.file.Path
 /**
  * 向量化服务
  *
- * 职责：
+ * 负责：
  * - 编排向量化流程
  * - 清理旧向量
  * - 扫描和解析 .md 文件
@@ -31,17 +33,20 @@ class VectorizationService(
     private val llmService: LlmService,
     bgeEndpoint: String
 ) {
-
     private val logger = LoggerFactory.getLogger(VectorizationService::class.java)
 
     private val parser = MarkdownParser()
     private val bgeClient = BgeM3Client(BgeM3Config(endpoint = bgeEndpoint))
     private lateinit var repository: VectorRepository
 
-    companion object {
-        // 路径常量
-        private const val MD_DIR_RELATIVE = ".sman/md"
-        private const val MD_FILE_EXTENSION = ".md"
+    // 缓存项目路径，避免重复创建
+    private val paths: ProjectStoragePaths by lazy {
+        ProjectPaths.forProject(projectPath)
+    }
+
+    private companion object {
+        // Markdown 文件扩展名
+        const val MD_FILE_EXTENSION = ".md"
     }
 
     /**
@@ -69,18 +74,20 @@ class VectorizationService(
 
         // 2. 扫描 .md 文件目录
         val mdFiles = scanMdFiles()
+
+        // 检查是否有文件
         if (mdFiles.isEmpty()) {
             logger.warn("未找到 .md 文件")
             return@withContext createEmptyResult(startTime)
         }
 
-        logger.info("找到 .md 文件: {} 个", mdFiles.size)
-
         // 3-6. 处理每个文件
         val (processedCount, totalVectors) = processFiles(mdFiles, errors)
 
+        // 构造结果
         val elapsedTime = System.currentTimeMillis() - startTime
-        logger.info("向量化完成: files={}, vectors={}, time={}ms", processedCount, totalVectors, elapsedTime)
+        logger.info("向量化完成: files={}, vectors={}, time={}ms",
+            processedCount, totalVectors, elapsedTime)
 
         VectorizationResult(
             totalFiles = mdFiles.size,
@@ -93,29 +100,19 @@ class VectorizationService(
     }
 
     /**
-     * 关闭服务
-     */
-    fun close() {
-        closeQuietly(bgeClient, "BGE 客户端")
-        if (::repository.isInitialized) {
-            closeQuietly(repository, "存储仓库")
-        }
-    }
-
-    // ========== 辅助方法 ==========
-
-    /**
      * 创建存储仓库
      */
     private fun createRepository(): VectorRepository {
+        val config = VectorDatabaseConfig(
+            projectKey = projectKey,
+            type = VectorDbType.JVECTOR,
+            jvector = JVectorConfig(),
+            databasePath = paths.databaseFile.toString()
+        )
         return TieredVectorRepository(
             projectKey = projectKey,
             projectPath = projectPath,
-            config = VectorDatabaseConfig.create(
-                projectKey = projectKey,
-                type = VectorDbType.JVECTOR,
-                jvector = JVectorConfig()
-            )
+            config = config
         )
     }
 
@@ -135,7 +132,8 @@ class VectorizationService(
      * 扫描 MD 文件
      */
     private fun scanMdFiles(): List<Path> {
-        val mdDir = projectPath.resolve(MD_DIR_RELATIVE)
+        val mdDir = paths.mdDir
+
         if (!Files.exists(mdDir)) {
             logger.warn(".md 文件目录不存在: {}", mdDir)
             return emptyList()
@@ -175,7 +173,7 @@ class VectorizationService(
      */
     private fun processFile(mdFile: Path): List<com.smancode.sman.analysis.model.VectorFragment>? {
         // 读取文件
-        val mdContent = mdFile.toFile().readText()
+        val mdContent = Files.readString(mdFile)
         if (mdContent.isBlank()) {
             logger.debug("跳过空文件: {}", mdFile.fileName)
             return null
@@ -200,19 +198,14 @@ class VectorizationService(
      * 向量化并存储单个向量
      */
     private fun vectorizeAndStore(vector: com.smancode.sman.analysis.model.VectorFragment) {
-        try {
-            val embedding = bgeClient.embed(vector.content)
-            val vectorWithEmbedding = vector.copy(vector = embedding)
+        val embedding = bgeClient.embed(vector.content)
+        val vectorWithEmbedding = vector.copy(vector = embedding)
 
-            // 删除旧向量（如果有）
-            repository.delete(vector.id)
+        // 删除旧向量（如果有）
+        repository.delete(vector.id)
 
-            // 添加新向量
-            repository.add(vectorWithEmbedding)
-        } catch (e: Exception) {
-            logger.error("向量化失败: id={}, error={}", vector.id, e.message)
-            throw e
-        }
+        // 添加新向量
+        repository.add(vectorWithEmbedding)
     }
 
     /**
@@ -230,16 +223,21 @@ class VectorizationService(
     }
 
     /**
-     * 安静地关闭资源
+     * 关闭服务
      */
-    private fun closeQuietly(closeable: Any, name: String) {
+    fun close() {
         try {
-            when (closeable) {
-                is AutoCloseable -> closeable.close()
-                is java.io.Closeable -> closeable.close()
-            }
+            bgeClient.close()
         } catch (e: Exception) {
-            logger.warn("关闭 {} 失败: {}", name, e.message)
+            logger.warn("关闭 BGE 客户端失败: {}", e.message)
+        }
+
+        if (::repository.isInitialized) {
+            try {
+                (repository as? AutoCloseable)?.close()
+            } catch (e: Exception) {
+                logger.warn("关闭存储仓库失败: {}", e.message)
+            }
         }
     }
 }

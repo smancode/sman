@@ -4,6 +4,7 @@ import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.model.VectorFragment
+import com.smancode.sman.analysis.paths.ProjectPaths
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
@@ -26,11 +27,12 @@ class VectorStoreServiceTest {
     @Test
     fun `test add vector fragment`() {
         // Given: 创建配置和服务
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -59,11 +61,12 @@ class VectorStoreServiceTest {
     @Test
     fun `test search vectors`() {
         // Given: 创建配置和服务
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -101,11 +104,12 @@ class VectorStoreServiceTest {
     @Test
     fun `test validate parameters - missing id`() {
         // Given: 创建配置
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
         val service = MemoryVectorStore(config)
 
@@ -134,11 +138,12 @@ class VectorStoreServiceTest {
     @Test
     fun `test validate parameters - topK must be positive`() {
         // Given: 创建配置
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = "test_project",
             type = VectorDbType.MEMORY,
             jvector = JVectorConfig(),
-            baseDir = tempDir.toString()
+            databasePath = paths.databaseFile.toString()
         )
         val service = MemoryVectorStore(config)
 

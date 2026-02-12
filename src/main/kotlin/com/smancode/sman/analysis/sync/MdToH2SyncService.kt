@@ -28,10 +28,12 @@ class MdToH2SyncService(
 
     // 向量存储（懒加载）
     private val vectorStore: TieredVectorStore by lazy {
-        val config = VectorDatabaseConfig.create(
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectBasePath)
+        val config = VectorDatabaseConfig(
             projectKey = projectKey,
             type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig()
+            jvector = JVectorConfig(),
+            databasePath = paths.databaseFile.toString()
         )
         TieredVectorStore(config)
     }

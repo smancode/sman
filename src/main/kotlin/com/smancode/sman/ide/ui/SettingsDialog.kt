@@ -7,9 +7,16 @@ import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.awt.Font
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
+import java.awt.Color
+import java.awt.Dimension
+import java.awt.Cursor
+import java.awt.event.ActionEvent
 import javax.swing.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -28,8 +35,12 @@ import javax.swing.SwingUtilities
  * - 自动分析开关
  * - 项目名称
  * - 保存对话历史
+ * - 分析结果
  */
-class SettingsDialog(private val project: Project) : JDialog() {
+class SettingsDialog(
+    private val project: Project,
+    private val onAnalysisResultsCallback: (() -> Unit)? = null
+) : JDialog() {
 
     private val logger = LoggerFactory.getLogger(SettingsDialog::class.java)
     private val storage = project.storageService()
@@ -71,9 +82,45 @@ class SettingsDialog(private val project: Project) : JDialog() {
     private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
-    // 自动分析开关
-    private val autoAnalysisSwitch = JToggleButton("自动分析", storage.autoAnalysisEnabled).apply {
-        toolTipText = "启用后台自动分析（每 5 分钟扫描一次）"
+    // 自动分析开关（微信风格）
+    private val autoAnalysisSwitch = object : JToggleButton() {
+        init {
+            isSelected = storage.autoAnalysisEnabled
+            isContentAreaFilled = false
+            isOpaque = false
+            isBorderPainted = false
+            isFocusPainted = false
+            border = null
+            preferredSize = Dimension(50, 26)
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+            addItemListener { e ->
+                storage.autoAnalysisEnabled = (e.source as JToggleButton).isSelected
+                logger.debug("自动分析开关状态已更新: {}", storage.autoAnalysisEnabled)
+            }
+        }
+
+        override fun paintComponent(g: Graphics) {
+            val g2 = g as Graphics2D
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+            val switchWidth = 44
+            val switchHeight = 22
+            val switchX = 0
+            val switchY = (height - switchHeight) / 2
+
+            // 绘制背景轨道（圆角矩形）
+            val trackColor = if (isSelected) Color(76, 217, 100) else Color(200, 200, 200)
+            g2.color = trackColor
+            g2.fillRoundRect(switchX, switchY, switchWidth, switchHeight, 11, 11)
+
+            // 绘制滑块（圆形）
+            val sliderSize = 18
+            val sliderX = if (isSelected) switchX + switchWidth - sliderSize - 3 else switchX + 3
+            val sliderColor = Color.WHITE
+            g2.color = sliderColor
+            g2.fillOval(sliderX, switchY + 2, sliderSize, sliderSize - 4)
+        }
     }
 
     // 性能配置字段
@@ -159,10 +206,24 @@ class SettingsDialog(private val project: Project) : JDialog() {
 
         addSeparator(panel, gbc, row++)
 
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+        // 自动分析区域：标签 + 开关 + 分析结果按钮（同一行）
+        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
             add(JLabel("自动分析:"))
             add(autoAnalysisSwitch)
             add(JLabel("(后台每 5 分钟扫描)"))
+
+            // 添加水平间距
+            add(Box.createHorizontalStrut(30))
+
+            // 分析结果按钮（如果有回调）
+            if (onAnalysisResultsCallback != null) {
+                add(JButton("分析结果").apply {
+                    toolTipText = "查看项目分析结果状态"
+                    addActionListener {
+                        onAnalysisResultsCallback?.invoke()
+                    }
+                })
+            }
         }
 
         gbc.gridx = 0
@@ -174,6 +235,51 @@ class SettingsDialog(private val project: Project) : JDialog() {
         row++
 
         return row
+    }
+
+    /**
+     * 创建微信风格开关按钮
+     */
+    private fun createSwitchButton(): JToggleButton {
+        return object : JToggleButton() {
+            init {
+                isSelected = storage.autoAnalysisEnabled
+                isContentAreaFilled = false
+                isOpaque = false
+                isBorderPainted = false
+                isFocusPainted = false
+                border = null
+                preferredSize = Dimension(50, 26)
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+                addItemListener { e ->
+                    storage.autoAnalysisEnabled = (e.source as JToggleButton).isSelected
+                    logger.debug("自动分析开关状态已更新: {}", storage.autoAnalysisEnabled)
+                }
+            }
+
+            override fun paintComponent(g: Graphics) {
+                val g2 = g as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+                val switchWidth = 44
+                val switchHeight = 22
+                val switchX = 0
+                val switchY = (height - switchHeight) / 2
+
+                // 绘制背景轨道（圆角矩形）
+                val trackColor = if (isSelected) Color(76, 217, 100) else Color(200, 200, 200)
+                g2.color = trackColor
+                g2.fillRoundRect(switchX, switchY, switchWidth, switchHeight, 11, 11)
+
+                // 绘制滑块（圆形）
+                val sliderSize = 18
+                val sliderX = if (isSelected) switchX + switchWidth - sliderSize - 3 else switchX + 3
+                val sliderColor = Color.WHITE
+                g2.color = sliderColor
+                g2.fillOval(sliderX, switchY + 2, sliderSize, sliderSize - 4)
+            }
+        }
     }
 
     private fun addLlmConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
@@ -857,8 +963,8 @@ class SettingsDialog(private val project: Project) : JDialog() {
         // JSON 媒体类型（复用）
         private val JSON_MEDIA_TYPE = "application/json".toMediaTypeOrNull()
 
-        fun show(project: Project) {
-            val dialog = SettingsDialog(project)
+        fun show(project: Project, onAnalysisResultsCallback: (() -> Unit)? = null) {
+            val dialog = SettingsDialog(project, onAnalysisResultsCallback)
             dialog.isVisible = true
         }
     }

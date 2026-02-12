@@ -195,14 +195,15 @@ class SmanService(private val project: Project) : Disposable {
 
     /**
      * 构建 H2 JDBC URL
+     * 数据库存储在项目目录下的 .sman 文件夹中
      */
     private fun buildJdbcUrl(): String {
-        val config = VectorDatabaseConfig.create(
-            projectKey = projectKey,
-            type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig()
-        )
-        return "jdbc:h2:${config.databasePath};MODE=PostgreSQL;AUTO_SERVER=TRUE"
+        // 获取项目基础路径
+        val projectBasePath = project.basePath?.let { java.nio.file.Paths.get(it) }
+            ?: throw IllegalStateException("项目基础路径为空，无法创建向量数据库配置")
+
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectBasePath)
+        return paths.getDatabaseJdbcUrl()
     }
 
     /**
@@ -238,7 +239,8 @@ class SmanService(private val project: Project) : Disposable {
             toolRegistry = ToolRegistry()
             toolExecutor = ToolExecutor(toolRegistry)
             sessionManager = com.smancode.sman.smancode.core.SessionManager()
-            dynamicPromptInjector = DynamicPromptInjector(promptLoader)
+            dynamicPromptInjector = DynamicPromptInjector(promptLoader, project.basePath?.let { java.nio.file.Paths.get(it) }
+                ?: throw IllegalStateException("项目基础路径为空，无法创建 DynamicPromptInjector"))
 
             // 注册本地工具
             val localTools = LocalToolFactory.createTools(project)

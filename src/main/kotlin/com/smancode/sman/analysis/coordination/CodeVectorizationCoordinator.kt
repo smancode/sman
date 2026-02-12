@@ -65,10 +65,12 @@ class CodeVectorizationCoordinator(
 
     // 向量存储服务
     private val vectorStore: VectorStoreService by lazy {
-        val config = VectorDatabaseConfig.create(
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectPath)
+        val config = VectorDatabaseConfig(
             projectKey = projectKey,
             type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig()
+            jvector = JVectorConfig(),
+            databasePath = paths.databaseFile.toString()
         )
         TieredVectorStore(config)
     }

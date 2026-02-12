@@ -3,6 +3,7 @@ package com.smancode.sman.analysis.database
 import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
+import com.smancode.sman.analysis.paths.ProjectPaths
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -35,7 +36,8 @@ class JVectorStorePersistenceTest {
     @BeforeEach
     fun setUp() {
         // 创建临时目录的配置
-        config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir.toAbsolutePath())
+        config = VectorDatabaseConfig(
             projectKey = "test_persistence",
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(
@@ -44,7 +46,7 @@ class JVectorStorePersistenceTest {
                 efConstruction = 100,
                 efSearch = 50
             ),
-            baseDir = tempDir.toAbsolutePath().toString(),
+            databasePath = paths.databaseFile.toString(),
             vectorDimension = 128
         )
 

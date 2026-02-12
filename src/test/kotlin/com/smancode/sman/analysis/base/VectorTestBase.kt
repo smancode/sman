@@ -61,10 +61,12 @@ abstract class VectorTestBase {
      * 创建向量配置
      */
     protected fun createVectorConfig(): VectorDatabaseConfig {
-        return VectorDatabaseConfig.create(
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectPath)
+        return VectorDatabaseConfig(
             projectKey = projectKey,
             type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig()
+            jvector = JVectorConfig(),
+            databasePath = paths.databaseFile.toString()
         )
     }
 

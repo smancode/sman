@@ -209,11 +209,12 @@ object SmanConfig {
      * 每个项目应该调用此方法创建独立的配置
      *
      * @param projectKey 项目标识符
-     * @return 向量数据库配置（路径已包含 projectKey）
+     * @param projectPath 项目根目录的绝对路径
+     * @return 向量数据库配置（路径为 {projectPath}/.sman/analysis.mv.db）
      */
-    fun createVectorDbConfig(projectKey: String): VectorDatabaseConfig {
-        val userHome = System.getProperty("user.home")
-        return VectorDatabaseConfig.create(
+    fun createVectorDbConfig(projectKey: String, projectPath: String): VectorDatabaseConfig {
+        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectPath)
+        return VectorDatabaseConfig(
             projectKey = projectKey,
             type = vectorDbType,
             jvector = com.smancode.sman.analysis.config.JVectorConfig(
@@ -223,20 +224,46 @@ object SmanConfig {
                 efSearch = getConfigValue("vector.db.jvector.efSearch", 50),
                 rerankerThreshold = getConfigValue("vector.db.jvector.rerankerThreshold", 0.1)
             ),
-            baseDir = userHome,
+            databasePath = paths.databaseFile.toString(),
             vectorDimension = getConfigValue("vector.db.dimension", 1024),
             l1CacheSize = getConfigValue("vector.db.l1.cache.size", 500)
         )
     }
 
     /**
-     * @deprecated 使用 createVectorDbConfig(projectKey) 代替
+     * 创建向量数据库配置（按项目隔离 - 使用用户主目录）
+     *
+     * @deprecated 使用 createVectorDbConfig(projectKey, projectPath) 代替，将数据存储在项目目录下
+     */
+    @Deprecated("使用 createVectorDbConfig(projectKey, projectPath) 代替")
+    fun createVectorDbConfigLegacy(projectKey: String): VectorDatabaseConfig {
+        val userHome = System.getProperty("user.home")
+        val databasePath = java.io.File(userHome, ".sman").resolve(projectKey).resolve("analysis.mv.db").absolutePath
+        return VectorDatabaseConfig(
+            projectKey = projectKey,
+            type = vectorDbType,
+            jvector = com.smancode.sman.analysis.config.JVectorConfig(
+                dimension = getConfigValue("vector.db.jvector.dimension", 1024),
+                M = getConfigValue("vector.db.jvector.M", 16),
+                efConstruction = getConfigValue("vector.db.jvector.efConstruction", 100),
+                efSearch = getConfigValue("vector.db.jvector.efSearch", 50),
+                rerankerThreshold = getConfigValue("vector.db.jvector.rerankerThreshold", 0.1)
+            ),
+            databasePath = databasePath,
+            vectorDimension = getConfigValue("vector.db.dimension", 1024),
+            l1CacheSize = getConfigValue("vector.db.l1.cache.size", 500)
+        )
+    }
+
+    /**
+     * @deprecated 使用 createVectorDbConfig(projectKey, projectPath) 代替
      * 此方法仅用于向后兼容，不应在新代码中使用
      */
-    @Deprecated("使用 createVectorDbConfig(projectKey) 代替")
+    @Deprecated("使用 createVectorDbConfig(projectKey, projectPath) 代替，将数据存储在项目目录下")
     val vectorDbConfig: VectorDatabaseConfig by lazy {
-        // 使用默认 projectKey = "default"（不推荐）
-        createVectorDbConfig("default")
+        // 使用默认 projectKey 和用户主目录路径（不推荐）
+        // 此属性仅用于向后兼容，新代码应使用 createVectorDbConfig(projectKey, projectPath)
+        createVectorDbConfigLegacy("default")
     }
 
     // ==================== BGE-M3 配置 ====================

@@ -1,17 +1,15 @@
 package com.smancode.sman.analysis.config
 
-import java.io.File
-
 /**
  * 向量数据库配置
  *
- * 所有数据存储路径按 projectKey 隔离：
- * - H2 database: ~/.sman/{projectKey}/analysis.mv.db
+ * 所有数据存储路径按 projectKey 隔离。
+ * 注意：databasePath 应为完整路径（包含 .mv.db 后缀的完整文件路径）
  *
  * @property projectKey 项目标识符（用于隔离不同项目的数据）
  * @property type 向量数据库类型
  * @property jvector JVector 配置
- * @property databasePath H2 数据库路径（已包含 projectKey）
+ * @property databasePath H2 数据库完整文件路径（包含 .mv.db 后缀）
  * @property vectorDimension 向量维度
  * @property l1CacheSize L1 缓存大小（内存 LRU）
  */
@@ -22,34 +20,7 @@ data class VectorDatabaseConfig(
     val databasePath: String,
     val vectorDimension: Int = 1024,
     val l1CacheSize: Int = 500
-) {
-    companion object {
-        private const val SMAN_DIR = ".sman"
-        private const val DATABASE_FILE = "analysis"  // 不带 .mv.db 后缀，H2 会自动添加
-
-        /**
-         * 创建配置（自动构建 projectKey 隔离路径）
-         */
-        fun create(
-            projectKey: String,
-            type: VectorDbType,
-            jvector: JVectorConfig,
-            baseDir: String = System.getProperty("user.home"),
-            vectorDimension: Int = 1024,
-            l1CacheSize: Int = 500
-        ): VectorDatabaseConfig {
-            val projectDir = File(baseDir, SMAN_DIR).resolve(projectKey)
-            return VectorDatabaseConfig(
-                projectKey = projectKey,
-                type = type,
-                jvector = jvector,
-                databasePath = File(projectDir, DATABASE_FILE).absolutePath,
-                vectorDimension = vectorDimension,
-                l1CacheSize = l1CacheSize
-            )
-        }
-    }
-}
+)
 
 /**
  * 向量数据库类型

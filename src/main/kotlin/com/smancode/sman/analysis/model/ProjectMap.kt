@@ -127,7 +127,8 @@ data class ProjectMap(
 @Serializable
 data class ProjectEntry(
     @SerialName("path")
-    val path: String,
+    val path: String, // 项目根目录（绝对路径）
+
 
     @SerialName("lastAnalyzed")
     val lastAnalyzed: Long,

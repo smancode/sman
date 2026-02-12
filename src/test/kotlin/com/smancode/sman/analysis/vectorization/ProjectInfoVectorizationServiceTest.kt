@@ -5,11 +5,14 @@ import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.analysis.database.TieredVectorStore
 import com.smancode.sman.analysis.database.VectorStoreService
+import com.smancode.sman.analysis.paths.ProjectPaths
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -26,16 +29,21 @@ import kotlin.test.assertTrue
 @DisplayName("项目信息向量化服务测试")
 class ProjectInfoVectorizationServiceTest {
 
+    @TempDir
+    lateinit var tempDir: Path
+
     private lateinit var vectorStore: VectorStoreService
     private lateinit var service: ProjectInfoVectorizationService
     private val projectKey = "test_project"
 
     @BeforeEach
     fun setup() {
-        val config = VectorDatabaseConfig.create(
+        val paths = ProjectPaths.forProject(tempDir)
+        val config = VectorDatabaseConfig(
             projectKey = projectKey,
             type = VectorDbType.JVECTOR,
             jvector = JVectorConfig(dimension = 1024),
+            databasePath = paths.databaseFile.toString(),
             vectorDimension = 1024
         )
         vectorStore = TieredVectorStore(config)

@@ -39,7 +39,9 @@ class LocalExpertConsultService(
 
     private val vectorStore by lazy {
         val projectKey = project.name // 使用项目名作为 key
-        val dbConfig = SmanConfig.createVectorDbConfig(projectKey)
+        val projectPath = project.basePath?.toString()
+            ?: throw IllegalStateException("项目基础路径为空，无法创建向量数据库配置")
+        val dbConfig = SmanConfig.createVectorDbConfig(projectKey, projectPath)
         TieredVectorStore(dbConfig)
     }
 
