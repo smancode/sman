@@ -32,6 +32,7 @@ class SmanPlugin : StartupActivity {
         // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
         ensureUtf8Encoding()
 
+        println("[SmanPlugin] runActivity called for project: ${project.name}")
         logger.info("Sman Plugin started for project: {}", project.name)
 
         // 检查后端是否已运行
@@ -145,14 +146,18 @@ class SmanPlugin : StartupActivity {
      * 启动后台分析调度器
      */
     private fun startAnalysisSchedulerIfNeeded(project: Project, storage: StorageService) {
+        println("[SmanPlugin] startAnalysisSchedulerIfNeeded called, apiKey=${storage.llmApiKey.take(8)}..., autoAnalysis=${storage.autoAnalysisEnabled}")
+
         // 检查 API Key 是否配置
         if (storage.llmApiKey.isBlank()) {
+            println("[SmanPlugin] LLM API Key 未配置，跳过启动后台分析调度器")
             logger.info("LLM API Key 未配置，跳过启动后台分析调度器")
             return
         }
 
         // 检查自动分析是否启用
         if (!storage.autoAnalysisEnabled) {
+            println("[SmanPlugin] 自动分析已禁用，跳过启动后台分析调度器")
             logger.info("自动分析已禁用，跳过启动后台分析调度器")
             return
         }
@@ -165,9 +170,11 @@ class SmanPlugin : StartupActivity {
             )
 
             analysisScheduler?.start()
+            println("[SmanPlugin] 后台分析调度器已启动: project=${project.name}")
             logger.info("后台分析调度器已启动: project={}", project.name)
 
         } catch (e: Exception) {
+            println("[SmanPlugin] 启动后台分析调度器失败: ${e.message}")
             logger.error("启动后台分析调度器失败", e)
         }
     }

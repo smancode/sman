@@ -14,7 +14,9 @@ import kotlin.io.path.exists
  * @property projectRoot 项目根目录（绝对路径）
  * @property smanDir 项目 .sman 目录
  * @property databaseFile H2 数据库文件
- * @property mdDir Markdown 分析结果目录
+ * @property mdDir Markdown 分析结果目录（根目录，保留兼容）
+ * @property reportsDir 项目级分析报告目录（project-structure.md, tech-stack.md 等）
+ * @property classesDir 类级分析报告目录（每个类的 *.md 文件）
  * @property astAnalysisDir AST 分析结果目录
  * @property caseSopDir 案例 SOP 目录
  * @property codeVectorizationDir 代码向量化目录
@@ -27,6 +29,8 @@ data class ProjectStoragePaths(
     val smanDir: Path,
     val databaseFile: Path,
     val mdDir: Path,
+    val reportsDir: Path,
+    val classesDir: Path,
     val astAnalysisDir: Path,
     val caseSopDir: Path,
     val codeVectorizationDir: Path,
@@ -41,6 +45,8 @@ data class ProjectStoragePaths(
         val directories = listOf(
             smanDir,
             mdDir,
+            reportsDir,
+            classesDir,
             astAnalysisDir,
             caseSopDir,
             codeVectorizationDir,
@@ -93,6 +99,8 @@ object ProjectPaths {
     private const val SMAN_DIR = ".sman"
     private const val DATABASE_FILE = "analysis"
     private const val MD_DIR = "md"
+    private const val REPORTS_DIR = "reports"       // 项目级分析报告
+    private const val CLASSES_DIR = "classes"       // 类级分析报告
     private const val AST_ANALYSIS_DIR = "astAnalysis"
     private const val CASE_SOP_DIR = "caseSop"
     private const val CODE_VECTORIZATION_DIR = "codeVectorization"
@@ -109,12 +117,15 @@ object ProjectPaths {
      */
     fun forProject(projectRoot: Path): ProjectStoragePaths {
         val smanDir = projectRoot.resolve(SMAN_DIR)
+        val mdDir = smanDir.resolve(MD_DIR)
 
         return ProjectStoragePaths(
             projectRoot = projectRoot,
             smanDir = smanDir,
             databaseFile = smanDir.resolve("$DATABASE_FILE.mv.db"),
-            mdDir = smanDir.resolve(MD_DIR),
+            mdDir = mdDir,
+            reportsDir = mdDir.resolve(REPORTS_DIR),
+            classesDir = mdDir.resolve(CLASSES_DIR),
             astAnalysisDir = smanDir.resolve(AST_ANALYSIS_DIR),
             caseSopDir = smanDir.resolve(CASE_SOP_DIR),
             codeVectorizationDir = smanDir.resolve(CODE_VECTORIZATION_DIR),

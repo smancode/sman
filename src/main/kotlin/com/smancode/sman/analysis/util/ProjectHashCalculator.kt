@@ -70,6 +70,30 @@ object ProjectHashCalculator {
     }
 
     /**
+     * 计算目录哈希值（不依赖 IntelliJ 平台）
+     *
+     * @param projectPath 项目路径
+     * @return MD5 哈希值
+     */
+    fun calculateDirectoryHash(projectPath: Path): String {
+        logger.debug("开始计算目录哈希: path={}", projectPath)
+
+        val digest = MessageDigest.getInstance("MD5")
+
+        // 1. 扫描源代码文件
+        scanSourceFiles(projectPath, digest)
+
+        // 2. 扫描构建文件
+        scanBuildFiles(projectPath, digest)
+
+        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+
+        logger.debug("目录哈希计算完成: md5={}", hash)
+
+        return hash
+    }
+
+    /**
      * 扫描源代码文件
      */
     private fun scanSourceFiles(projectPath: Path, digest: MessageDigest) {

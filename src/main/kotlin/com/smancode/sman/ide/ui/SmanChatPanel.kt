@@ -25,6 +25,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.nio.file.Paths
 import java.time.Instant
 import java.util.*
 import java.util.function.Consumer
@@ -122,8 +123,19 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun showAnalysisResults() {
         logger.info("显示分析结果: projectKey={}", projectKey)
 
-        // 获取项目分析状态
-        val entry = ProjectMapManager.getProjectEntry(projectKey)
+        // 获取项目根目录
+        val projectRoot = project.basePath?.let { Paths.get(it) }
+        if (projectRoot == null) {
+            appendSystemMessage("""
+                📊 项目分析结果
+                ════════════════════════════
+                无法获取项目路径。
+            """.trimIndent())
+            return
+        }
+
+        // 获取项目分析状态（使用正确的 API）
+        val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey)
 
         if (entry == null) {
             appendSystemMessage("""

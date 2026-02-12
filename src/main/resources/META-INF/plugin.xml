@@ -24,8 +24,8 @@
         <!-- Project Service -->
         <projectService serviceImplementation="com.smancode.sman.ide.service.StorageService"/>
 
-        <!-- Startup Activity -->
-        <startupActivity class="com.smancode.sman.ide.SmanPlugin"/>
+        <!-- Startup Activity (项目启动后执行) -->
+        <postStartupActivity implementation="com.smancode.sman.ide.SmanPlugin"/>
     </extensions>
 
     <actions>

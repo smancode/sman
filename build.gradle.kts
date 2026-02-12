@@ -13,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    // Kotlin Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    // Kotlin Coroutines - 使用 IntelliJ 平台内置版本，不要显式添加
+    // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 
     // Kotlin Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")

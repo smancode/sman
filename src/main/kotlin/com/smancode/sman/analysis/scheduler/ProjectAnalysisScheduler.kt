@@ -110,21 +110,21 @@ class ProjectAnalysisScheduler(
                 return
             }
 
-            if (!ProjectMapManager.isProjectRegistered(projectKey)) {
+            if (!ProjectMapManager.isProjectRegistered(projectBasePath, projectKey)) {
                 logger.info("首次发现项目，注册并开始分析: {}", projectKey)
-                ProjectMapManager.registerProject(projectKey, projectBasePath.toString(), currentMd5)
+                ProjectMapManager.registerProject(projectBasePath, projectKey, projectBasePath.toString(), currentMd5)
                 executeFullAnalysis(projectKey, projectBasePath)
                 return
             }
 
-            val entry = ProjectMapManager.getProjectEntry(projectKey)
+            val entry = ProjectMapManager.getProjectEntry(projectBasePath, projectKey)
             if (entry != null && entry.projectMd5 != currentMd5) {
                 logger.info("项目内容已变化，更新 MD5: {}", projectKey)
-                ProjectMapManager.updateProjectMd5(projectKey, currentMd5)
-                resetAllAnalysisStatus(projectKey)
+                ProjectMapManager.updateProjectMd5(projectBasePath, projectKey, currentMd5)
+                resetAllAnalysisStatus(projectBasePath, projectKey)
             }
 
-            val pendingTypes = findPendingAnalysisTypes(projectKey)
+            val pendingTypes = findPendingAnalysisTypes(projectBasePath, projectKey)
 
             if (pendingTypes.isNotEmpty()) {
                 logger.info("发现 {} 个待执行的分析任务: {}", pendingTypes.size, pendingTypes.map { it.key })
@@ -152,8 +152,8 @@ class ProjectAnalysisScheduler(
         }
     }
 
-    private fun findPendingAnalysisTypes(projectKey: String): List<AnalysisType> {
-        val entry = ProjectMapManager.getProjectEntry(projectKey)
+    private fun findPendingAnalysisTypes(projectRoot: Path, projectKey: String): List<AnalysisType> {
+        val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey)
             ?: return AnalysisType.values().toList()
 
         val pendingTypes = mutableListOf<AnalysisType>()
@@ -167,8 +167,8 @@ class ProjectAnalysisScheduler(
         return pendingTypes
     }
 
-    private fun resetAllAnalysisStatus(projectKey: String) {
-        val entry = ProjectMapManager.getProjectEntry(projectKey) ?: return
+    private fun resetAllAnalysisStatus(projectRoot: Path, projectKey: String) {
+        val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey) ?: return
 
         val newStatus = com.smancode.sman.analysis.model.AnalysisStatus(
             projectStructure = if (entry.analysisStatus.projectStructure == StepState.COMPLETED) StepState.COMPLETED else StepState.PENDING,
@@ -181,12 +181,12 @@ class ProjectAnalysisScheduler(
 
         val updatedEntry = entry.copy(analysisStatus = newStatus)
 
-        val map = com.smancode.sman.analysis.model.ProjectMapManager.loadProjectMap()
+        val map = com.smancode.sman.analysis.model.ProjectMapManager.loadProjectMap(projectRoot)
         val updatedMap = map.copy(
             projects = map.projects + (projectKey to updatedEntry)
         )
 
-        com.smancode.sman.analysis.model.ProjectMapManager.saveProjectMap(updatedMap)
+        com.smancode.sman.analysis.model.ProjectMapManager.saveProjectMap(projectRoot, updatedMap)
         logger.info("已重置分析状态: {}", projectKey)
     }
 
