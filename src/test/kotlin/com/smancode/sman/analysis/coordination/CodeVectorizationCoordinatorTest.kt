@@ -153,7 +153,7 @@ class CodeVectorizationCoordinatorTest {
             val javaFile = projectPath.resolve("src/main/java/TestHandler.java")
 
             // When: 首次处理
-            val firstResult = coordinator.vectorizeFileIfChanged(javaFile)
+            coordinator.vectorizeFileIfChanged(javaFile)
 
             // Then: 第二次处理（文件未变化）应该跳过
             val secondResult = coordinator.vectorizeFileIfChanged(javaFile)
@@ -187,7 +187,7 @@ class CodeVectorizationCoordinatorTest {
 
             // When: 首次处理
             val firstCallCountBefore = callCount
-            val firstResult = coordinator.vectorizeFileIfChanged(javaFile)
+            coordinator.vectorizeFileIfChanged(javaFile)
             val firstCallCountAfter = callCount
 
             // 修改文件

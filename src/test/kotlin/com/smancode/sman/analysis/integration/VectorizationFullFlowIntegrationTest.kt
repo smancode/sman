@@ -122,9 +122,6 @@ class VectorizationFullFlowIntegrationTest {
         @Test
         @DisplayName("BGE-Reranker 服务 (8001) - 可用")
         fun testBgeRerankerServiceAvailable() {
-            // When: 调用 Reranker 服务（通过 HTTP）
-            val rerankerUrl = "http://localhost:8001/v1/rerank"
-
             // Then: 服务应该可达
             // 注意：这里只验证服务可达性，具体 rerank 逻辑在 RerankerClientTest 中测试
             assertTrue(true) // 如果前置检查通过，说明服务可用
@@ -210,9 +207,6 @@ class VectorizationFullFlowIntegrationTest {
             // Given: 新项目
             val cacheDir = tempDir.resolve(".sman/cache")
             cacheDir.createDirectories()
-
-            // When: 处理后
-            val cacheFile = cacheDir.resolve("md5_cache.json")
 
             // Then: 应该创建缓存文件
             // 实际测试需要完整流程
