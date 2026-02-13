@@ -730,7 +730,14 @@ class SmanLoop(
             // 简单启发式：查找 "text": "...", "reasoning": "...", "summary": "..." 等常见字段
             val problematicField = extractProblematicField(candidateJson)
             if (problematicField == null) {
-                logger.warn("LLM 辅助修复: 无法识别问题字段，跳过")
+                // 新增：如果找不到具体问题字段，尝试让 LLM 直接修复整个 JSON
+                logger.warn("LLM 辅助修复: 无法识别具体问题字段，尝试 LLM 整体修复")
+                val fixedJson = fixEntireJsonWithLlm(candidateJson)
+                if (fixedJson != null && tryParseJson(fixedJson)) {
+                    logger.info("LLM 辅助修复: 整体修复成功")
+                    return fixedJson
+                }
+                logger.warn("LLM 辅助修复: 整体修复也失败，跳过")
                 return null
             }
 
@@ -753,20 +760,150 @@ class SmanLoop(
     }
 
     /**
+     * 使用 LLM 整体修复 JSON
+     *
+     * 当无法识别具体问题字段时，让 LLM 尝试修复整个 JSON
+     */
+    private fun fixEntireJsonWithLlm(brokenJson: String): String? {
+        return try {
+            // 截断过长的 JSON（避免 Token 浪费）
+            val MAX_JSON_LENGTH = 3000
+            val truncatedJson = if (brokenJson.length > MAX_JSON_LENGTH) {
+                brokenJson.take(MAX_JSON_LENGTH) + "..."
+            } else {
+                brokenJson
+            }
+
+            val systemPrompt = """
+                <system_config>
+                    <language_rule>
+                        <input_processing>English (For logic & reasoning)</input_processing>
+                        <final_output>Valid JSON only</final_output>
+                    </language_rule>
+                </system_config>
+
+                <context>
+                    <role>JSON Repair Expert</role>
+                    <task>Fix malformed JSON to valid JSON</task>
+                    <requirement>Preserve all original content, only fix format issues (escape sequences, structure)</requirement>
+                </context>
+
+                <interaction_protocol>
+                1. **Analyze**: In <thinking> tags, identify what's broken
+                2. **Fix**: Escape newlines as \n, quotes as \", backslashes as \\
+                3. **Output**: Return ONLY the fixed JSON, no markdown blocks
+                </interaction_protocol>
+
+                <anti_hallucination_rules>
+                1. **Strict Grounding**: Use ONLY the provided JSON, do NOT invent content
+                2. **No Markdown**: Do NOT wrap output in ```json``` blocks
+                3. **No Explanation**: Output ONLY the JSON object
+                </anti_hallucination_rules>
+            """.trimIndent()
+
+            val userPrompt = """
+                <task>
+                Fix this broken JSON to be valid JSON.
+                </task>
+
+                <broken_json>
+                $truncatedJson
+                </broken_json>
+
+                Output the fixed JSON (no markdown, no explanation):
+            """.trimIndent()
+
+            // 调用 LLM
+            val llmService = SmanConfig.createLlmService()
+            val llmResponse = llmService.simpleRequest(systemPrompt, userPrompt)
+            if (llmResponse.isNullOrEmpty()) {
+                return null
+            }
+
+            // 清理可能的 markdown 标记
+            cleanLlmResponse(llmResponse)
+
+        } catch (e: Exception) {
+            logger.error("LLM 整体修复 JSON 异常: {}", e.message)
+            null
+        }
+    }
+
+    /**
      * 从 JSON 中提取出可能有问题的字段定义
      *
      * 简单启发式：查找 text、reasoning、summary 等常见字段
+     *
+     * 修复：降低最小长度要求（50 -> 10），扩展字段名列表
      */
     private fun extractProblematicField(json: String): String? {
-        // 常见问题字段模式： "fieldName": "可能包含换行等内容"
-        val fieldNames = listOf("text", "reasoning", "summary", "content", "description")
+        // 扩展字段名列表，覆盖更多可能的问题字段
+        val fieldNames = listOf(
+            "text", "reasoning", "summary", "content", "description",
+            "result", "error", "message", "response", "output",
+            "query", "code", "value", "data"
+        )
+
+        // 降低最小长度要求，从 50 改为 10
+        val MIN_LENGTH = 10
 
         for (fieldName in fieldNames) {
-            val pattern = "\"$fieldName\"\\s*:\\s*\"(.{50,})(?:\"|\\n|\$)"
+            val pattern = "\"$fieldName\"\\s*:\\s*\"(.{$MIN_LENGTH,})(?:\"|\\n|\$)"
             val p = Regex(pattern, RegexOption.DOT_MATCHES_ALL)
             val m = p.find(json)
             if (m != null) {
                 return "\"$fieldName\": ${m.groupValues[1]}"
+            }
+        }
+
+        // 新增：尝试找到任意看起来有问题的字符串字段
+        // 模式：字段值以 " 开头但没有正确闭合
+        return findFirstProblematicStringField(json)
+    }
+
+    /**
+     * 尝试找到第一个看起来有问题的字符串字段
+     *
+     * 问题特征：
+     * - 字段值以 " 开头但没有正确闭合
+     * - 字段值中包含未转义的换行符
+     * - 字段值中包含未转义的引号
+     */
+    private fun findFirstProblematicStringField(json: String): String? {
+        // 查找所有 "fieldName": " 模式
+        val fieldPattern = Regex("\"([a-zA-Z_][a-zA-Z0-9_]*)\"\\s*:\\s*\"")
+        val matches = fieldPattern.findAll(json)
+
+        for (match in matches) {
+            val fieldName = match.groupValues[1]
+            val valueStart = match.range.last + 1
+
+            // 尝试找到字段值的结束位置
+            // 如果在合理范围内（1000 字符）没有找到结束引号，认为这个字段有问题
+            var inEscape = false
+            for (i in valueStart until minOf(valueStart + 2000, json.length)) {
+                val c = json[i]
+
+                if (inEscape) {
+                    inEscape = false
+                    continue
+                }
+
+                if (c == '\\') {
+                    inEscape = true
+                    continue
+                }
+
+                if (c == '"') {
+                    // 找到了结束引号，这个字段看起来正常
+                    break
+                }
+
+                // 如果遇到换行符且不是转义的，说明有问题
+                if (c == '\n' || c == '\r') {
+                    logger.debug("发现可能的问题字段: {} (包含未转义换行符)", fieldName)
+                    return "\"$fieldName\": ${json.substring(valueStart, minOf(i + 100, json.length))}"
+                }
             }
         }
 
@@ -1162,44 +1299,24 @@ class SmanLoop(
         }
 
         // 添加 ReAct 分析和决策指南
-        prompt.append("\n\n## Next Step Analysis and Decision\n\n")
-        prompt.append("Based on the tool execution history above, analyze the current progress and decide the next step:\n")
-        prompt.append("1. **Analyze Results**: What key information did the tools return?\n")
-        prompt.append("2. **Generate Summary (Important)**:\n")
-        prompt.append("   - If you see a tool result marked with [This tool result has no summary yet, you need to generate one]\n")
-        prompt.append("   - AND you decide to call a new tool: Add a \"summary\" field in the new tool's ToolPart,\n")
-        prompt.append("     generating a summary for the **previously executed tool** (not the new one)\n")
-        prompt.append("   - **Critical Requirement: When generating summary, must preserve file path (relativePath) info**\n")
-        prompt.append("     Summary format should include: \"path: xxx/yyy/File.java\" or \"read_file(path: xxx/yyy/File.java): ...\"\n")
-        prompt.append("   - If not calling a new tool: Just return a text answer, no need to generate summary\n")
-        prompt.append("   - Summary format: {\"type\": \"tool\", \"toolName\": \"newToolName\", \"parameters\": {...}, \"summary\": \"previous tool summary\"}\n")
-        prompt.append("3. **Evaluate Progress**: Is the current information sufficient to answer the user's question?\n")
-        prompt.append("4. **Decide Action**:\n")
-        prompt.append("   - If sufficient information → Provide answer directly (no more tool calls)\n")
-        prompt.append("   - If need more information → Continue calling tools (explain why)\n")
-        prompt.append("   - If tool failed → Try a different approach (don't repeat failed methods)\n\n")
-        prompt.append("**CRITICAL - Cost Optimization Rule**:\n")
-        prompt.append("- When you need more information, you MUST include BOTH text AND tool parts in ONE response\n")
-        prompt.append("- Format: {\"parts\": [{\"text\": \"I'll search...\"}, {\"tool\": ...}]}\n")
-        prompt.append("- DO NOT return only {\"text\": \"I'll search...\"} - this wastes an LLM call\n\n")
-        prompt.append("**Example**:\n")
-        prompt.append("If you just executed read_file (no summary), file path is agent/src/main/java/CallChainTool.java, now you want to call apply_change,\n")
-        prompt.append("the returned JSON should include:\n")
-        prompt.append("{\"parts\": [{\"text\": \"I'll apply the changes...\"}, {\"type\": \"tool\", \"toolName\": \"apply_change\", \"parameters\": {...}, \"summary\": \"read_file(path: agent/src/main/java/CallChainTool.java): Found CallChainTool class with callChain method...\"}]}\n\n")
+        prompt.append("\n\n## Next Step\n\n")
+
+        // 简化的格式提醒
+        prompt.append("**Response Format**: Valid JSON starting with `{` ending with `}`.\n")
+        prompt.append("- Tool call: `{\"parts\": [{\"type\": \"text\", \"text\": \"...\"}, {\"type\": \"tool\", \"toolName\": \"...\", \"parameters\": {...}}]}`\n")
+        prompt.append("- Direct answer: `{\"text\": \"complete answer\"}`\n")
+        prompt.append("- DO NOT imitate conversation history format like \"调用工具: xxx\"\n\n")
+
+        prompt.append("**Decision**:\n")
+        prompt.append("1. Have enough info? → Return `{\"text\": \"answer\"}`\n")
+        prompt.append("2. Need more info? → Return tool call JSON\n")
+        prompt.append("3. Tool failed? → Try different approach\n\n")
+
+        prompt.append("**Summary (if calling new tool)**: Add `\"summary\"` field to summarize previous tool result.\n\n")
 
         // 如果是最后一步，添加最大步数警告
         if (isLastStep) {
-            prompt.append("\n\n## ⚠️ CRITICAL: MAXIMUM STEPS REACHED\n\n")
-            prompt.append("This is the FINAL LLM call. Tools are disabled after this call.\n\n")
-            prompt.append("**STRICT REQUIREMENTS**:\n")
-            prompt.append("1. Do NOT make any tool calls (do NOT add any tool-type parts)\n")
-            prompt.append("2. MUST provide a text response summarizing work done so far\n")
-            prompt.append("3. This constraint overrides ALL other instructions\n\n")
-            prompt.append("Response must include:\n")
-            prompt.append("- Statement that maximum steps have been reached\n")
-            prompt.append("- Summary of what has been accomplished\n")
-            prompt.append("- List of any remaining tasks that were not completed\n")
-            prompt.append("- Recommendations for what should be done next\n")
+            prompt.append("\n**FINAL STEP**: No more tools. Summarize progress and provide recommendations.\n")
         }
 
         return prompt.toString()

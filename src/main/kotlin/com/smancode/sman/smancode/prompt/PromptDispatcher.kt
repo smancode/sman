@@ -1,6 +1,10 @@
 package com.smancode.sman.smancode.prompt
 
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * 提示词分发器（极简架构版）
@@ -9,31 +13,132 @@ import org.slf4j.LoggerFactory
  * - 无意图识别：完全由 LLM 决定行为
  * - 无阶段划分：一个主循环处理所有
  * - system-reminder 支持：允许用户随时打断
+ * - 支持从外部文件加载用户规则（类似 opencode 的 InstructionPrompt）
  */
 class PromptDispatcher(
     private val promptLoader: PromptLoaderService
 ) {
     private val logger = LoggerFactory.getLogger(PromptDispatcher::class.java)
 
+    companion object {
+        // 用户规则文件列表（按优先级排序，后面的会覆盖前面的）
+        private val USER_RULES_FILES = listOf(
+            ".sman/RULES.md",           // 项目级规则
+            ".smanrules",               // 项目级规则（简化名称）
+            "SMAN_RULES.md"             // 项目根目录规则
+        )
+
+        // 全局用户规则文件
+        private val GLOBAL_RULES_PATHS = listOf(
+            System.getProperty("user.home") + "/.sman/RULES.md",
+            System.getProperty("user.home") + "/.config/sman/RULES.md"
+        )
+    }
+
     /**
      * 构建系统提示词（包含工具介绍）
      *
-     * 新架构下只需要这一个基础系统提示词
+     * 注意：用户规则现在由 SmanLoop 从 session.projectInfo?.rules 加载
+     * 这样可以支持 IDE 配置界面动态修改规则
      *
      * @return 完整系统提示词
      */
     fun buildSystemPrompt(): String {
         val systemPrompt = promptLoader.loadPrompt("common/system-header.md")
         val toolIntroduction = promptLoader.loadPrompt("tools/tool-introduction.md")
-        val toolUsageGuidelines = promptLoader.loadPrompt("tools/tool-usage-guidelines.md")
 
         return """
             $systemPrompt
 
             $toolIntroduction
-
-            $toolUsageGuidelines
         """.trimIndent()
+    }
+
+    /**
+     * 构建系统提示词（包含工具介绍 + 从文件系统加载用户规则）
+     *
+     * 此方法用于没有 session 上下文时，直接从文件系统加载规则
+     *
+     * @param projectPath 项目路径（用于加载项目级规则）
+     * @return 完整系统提示词
+     */
+    fun buildSystemPromptWithFileRules(projectPath: String? = null): String {
+        val systemPrompt = promptLoader.loadPrompt("common/system-header.md")
+        val toolIntroduction = promptLoader.loadPrompt("tools/tool-introduction.md")
+        val userRules = loadUserRules(projectPath)
+
+        return buildString {
+            append(systemPrompt)
+            append("\n\n")
+            append(toolIntroduction)
+            if (userRules.isNotBlank()) {
+                append("\n\n")
+                append("## User Instructions\n\n")
+                append("Instructions from: user rules files\n")
+                append("<user_rules>\n")
+                append(userRules)
+                append("\n</user_rules>")
+            }
+        }.trimIndent()
+    }
+
+    /**
+     * 加载用户自定义规则
+     *
+     * 加载顺序（后加载的会追加到前面）：
+     * 1. 全局规则（~/.sman/RULES.md 或 ~/.config/sman/RULES.md）
+     * 2. 项目规则（.sman/RULES.md, .smanrules, SMAN_RULES.md）
+     *
+     * @param projectPath 项目路径
+     * @return 合并后的用户规则
+     */
+    private fun loadUserRules(projectPath: String?): String {
+        val rules = mutableListOf<String>()
+
+        // 1. 加载全局规则
+        for (globalPath in GLOBAL_RULES_PATHS) {
+            val content = loadFileContent(globalPath)
+            if (content != null) {
+                logger.debug("加载全局规则: {}", globalPath)
+                rules.add(content)
+                break  // 只加载第一个存在的全局规则
+            }
+        }
+
+        // 2. 加载项目规则
+        if (projectPath != null) {
+            for (rulesFile in USER_RULES_FILES) {
+                val filePath = Paths.get(projectPath, rulesFile).toString()
+                val content = loadFileContent(filePath)
+                if (content != null) {
+                    logger.debug("加载项目规则: {}", filePath)
+                    rules.add(content)
+                    break  // 只加载第一个存在的项目规则
+                }
+            }
+        }
+
+        return rules.joinToString("\n\n---\n\n")
+    }
+
+    /**
+     * 加载文件内容
+     *
+     * @param filePath 文件路径
+     * @return 文件内容，如果文件不存在则返回 null
+     */
+    private fun loadFileContent(filePath: String): String? {
+        return try {
+            val path = Paths.get(filePath)
+            if (Files.exists(path) && Files.isRegularFile(path)) {
+                Files.readString(path).trim().takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            logger.debug("无法加载规则文件 {}: {}", filePath, e.message)
+            null
+        }
     }
 
     /**

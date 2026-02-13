@@ -14,6 +14,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -32,7 +33,6 @@ class SmanPlugin : StartupActivity {
         // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
         ensureUtf8Encoding()
 
-        println("[SmanPlugin] runActivity called for project: ${project.name}")
         logger.info("Sman Plugin started for project: {}", project.name)
 
         // 检查后端是否已运行
@@ -146,18 +146,14 @@ class SmanPlugin : StartupActivity {
      * 启动后台分析调度器
      */
     private fun startAnalysisSchedulerIfNeeded(project: Project, storage: StorageService) {
-        println("[SmanPlugin] startAnalysisSchedulerIfNeeded called, apiKey=${storage.llmApiKey.take(8)}..., autoAnalysis=${storage.autoAnalysisEnabled}")
-
         // 检查 API Key 是否配置
         if (storage.llmApiKey.isBlank()) {
-            println("[SmanPlugin] LLM API Key 未配置，跳过启动后台分析调度器")
             logger.info("LLM API Key 未配置，跳过启动后台分析调度器")
             return
         }
 
         // 检查自动分析是否启用
         if (!storage.autoAnalysisEnabled) {
-            println("[SmanPlugin] 自动分析已禁用，跳过启动后台分析调度器")
             logger.info("自动分析已禁用，跳过启动后台分析调度器")
             return
         }
@@ -168,13 +164,13 @@ class SmanPlugin : StartupActivity {
                 project = project,
                 intervalMs = 300_000  // 5 分钟
             )
-
             analysisScheduler?.start()
-            println("[SmanPlugin] 后台分析调度器已启动: project=${project.name}")
+
+            // 注册到静态 Map，供外部获取
+            registerScheduler(project.name, analysisScheduler!!)
             logger.info("后台分析调度器已启动: project={}", project.name)
 
         } catch (e: Exception) {
-            println("[SmanPlugin] 启动后台分析调度器失败: ${e.message}")
             logger.error("启动后台分析调度器失败", e)
         }
     }
@@ -268,5 +264,29 @@ class SmanPlugin : StartupActivity {
         const val PLUGIN_NAME = "Sman"
         const val VERSION = "1.1.0"
         const val DEFAULT_WS_URL = "ws://localhost:8080/ws/agent"
+
+        // 存储每个项目的调度器实例（线程安全）
+        private val schedulers = ConcurrentHashMap<String, ProjectAnalysisScheduler>()
+
+        /**
+         * 注册调度器实例
+         */
+        fun registerScheduler(projectName: String, scheduler: ProjectAnalysisScheduler) {
+            schedulers[projectName] = scheduler
+        }
+
+        /**
+         * 获取项目的调度器实例
+         */
+        fun getAnalysisScheduler(project: Project): ProjectAnalysisScheduler? {
+            return schedulers[project.name]
+        }
+
+        /**
+         * 移除调度器实例
+         */
+        fun unregisterScheduler(projectName: String) {
+            schedulers.remove(projectName)
+        }
     }
 }

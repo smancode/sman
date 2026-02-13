@@ -1,617 +1,153 @@
-# SmanAgent - Claude 开发指南
+# CLAUDE.md
 
-> 本文档为 Claude AI 助手提供项目上下文和开发指南。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 项目概述
-
-SmanAgent 是一个 IntelliJ IDEA 插件，集成 ReAct Loop 架构的 AI 代码分析助手，提供 12 个项目分析模块。
-
-**核心特性**：
-- 基于 LLM 的智能代码分析
-- 本地工具执行（无后端依赖）
-- 会话持久化（按项目隔离）
-- 流式响应渲染
-- **项目分析能力**：12 个分析模块，全面理解项目结构
-
-## 项目结构
-
-```
-com.smancode.smanagent/
-├── ide/                          # IntelliJ 平台集成
-│   ├── components/              # UI 组件
-│   │   ├── CliControlBar       # 控制栏
-│   │   ├── CliInputArea        # 输入区域
-│   │   ├── HistoryPopup        # 历史记录弹窗
-│   │   ├── TaskProgressBar     # 任务进度条
-│   │   └── WelcomePanel        # 欢迎面板
-│   ├── renderer/                # 消息渲染器
-│   │   ├── CliMessageRenderer  # CLI 风格渲染
-│   │   ├── StyledMessageRenderer # 样式化渲染
-│   │   ├── MarkdownRenderer    # Markdown 渲染
-│   │   └── TodoRenderer        # Todo 列表渲染
-│   ├── service/                 # IDE 服务
-│   │   ├── SmanAgentService    # 主服务（单例）
-│   │   ├── SessionFileService  # 会话文件服务
-│   │   ├── LocalToolExecutor   # 本地工具执行器
-│   │   └── PathUtil            # 路径工具
-│   └── ui/                      # UI 面板
-│       ├── SmanAgentChatPanel  # 聊天面板
-│       └── SmanAgentToolWindowFactory # 工具窗口
-│
-├── smancode/                     # 核心业务逻辑
-│   ├── core/                    # ReAct 循环核心
-│   │   ├── SmanAgentLoop       # 主循环
-│   │   ├── SessionManager      # 会话管理
-│   │   ├── SubTaskExecutor     # 子任务执行
-│   │   ├── ContextCompactor    # 上下文压缩
-│   │   └── StreamingNotificationHandler # 流式通知
-│   ├── llm/                     # LLM 服务
-│   │   ├── LlmService          # LLM 调用
-│   │   └── config/             # LLM 配置
-│   └── prompt/                  # 提示词系统
-│       ├── PromptDispatcher    # 提示词分发
-│       └── DynamicPromptInjector # 动态注入
-│
-├── analysis/                     # 项目分析模块 (新增)
-│   ├── structure/               # 结构分析
-│   │   └── ProjectStructureScanner # 项目结构扫描
-│   ├── techstack/               # 技术栈识别
-│   │   └── TechStackDetector   # 技术栈检测
-│   ├── scanner/                 # 代码扫描
-│   │   └── PsiAstScanner       # AST 扫描器
-│   ├── entity/                  # 实体分析
-│   │   └── DbEntityScanner     # 数据库实体扫描
-│   ├── entry/                   # 入口分析
-│   │   └── ApiEntryScanner     # API 入口扫描
-│   ├── external/                # 外调接口
-│   │   └── ExternalApiScanner  # 外调接口扫描
-│   ├── `enum`/                  # 枚举分析
-│   │   └── EnumScanner         # 枚举扫描
-│   ├── common/                  # 公共类
-│   │   └── CommonClassScanner  # 公共类扫描
-│   ├── xml/                     # XML 分析
-│   │   └── XmlCodeScanner      # XML 代码扫描
-│   ├── sop/                     # SOP 生成
-│   │   └── CaseSopGenerator    # 案例 SOP 生成器
-│   ├── vectorization/           # 向量化
-│   │   ├── CodeVectorizationService # 代码向量化服务
-│   │   └── BgeClient           # BGE-M3 客户端
-│   └── walkthrough/             # 代码走读
-│       └── CodeWalkthroughGenerator # 代码走读生成器
-│
-├── verification/                # Web 验证服务 (新增)
-│   ├── api/                     # REST API 控制器
-│   │   └── VerificationApiControllers # API 端点
-│   ├── service/                 # 验证服务
-│   │   ├── ExpertConsultService # 专家咨询服务
-│   │   ├── VectorSearchService  # 向量搜索服务
-│   │   ├── AnalysisQueryService # 分析查询服务
-│   │   └── H2QueryService       # H2 数据库查询
-│   ├── model/                   # 数据模型
-│   │   ├── ExpertConsultModels  # 专家咨询模型
-│   │   ├── VectorSearchModels   # 向量搜索模型
-│   │   └── AnalysisQueryModels  # 分析查询模型
-│   └── VerificationWebService   # Web 服务主类
-│
-├── tools/                        # 工具系统
-│   ├── Tool                    # 工具接口
-│   ├── ToolRegistry            # 工具注册表
-│   ├── ToolExecutor            # 工具执行器
-│   └── ide/                     # 本地工具
-│       └── LocalToolAdapter    # 本地工具适配器
-│
-└── model/                        # 数据模型
-    ├── message/                 # 消息模型
-    │   ├── Message             # 消息实体
-    │   ├── Role                # 角色（USER/ASSISTANT/SYSTEM）
-    │   └── TokenUsage          # Token 使用
-    ├── part/                    # Part 模型
-    │   ├── Part                # Part 基类
-    │   ├── TextPart            # 文本 Part
-    │   ├── ToolPart            # 工具调用 Part
-    │   ├── ReasoningPart       # 推理 Part
-    │   ├── TodoPart            # Todo Part
-    │   └── ProgressPart        # 进度 Part
-    ├── session/                 # 会话模型
-    │   ├── Session             # 会话实体
-    │   ├── ProjectInfo         # 项目信息
-    │   └── SessionStatus       # 会话状态
-    └── analysis/                # 分析模型 (新增)
-        ├── ClassAstInfo        # 类 AST 信息
-        ├── MethodInfo          # 方法信息
-        ├── FieldInfo           # 字段信息
-        └── VectorFragment      # 向量片段
-```
-
-## 核心设计原则
-
-### 1. 一体化架构
-
-**无后端依赖**：所有逻辑在插件内完成
-
-```kotlin
-// ✅ 正确：本地调用
-val response = smanAgentLoop.process(session, userInput) { part ->
-    // 处理流式 Part
-}
-
-// ❌ 错误：WebSocket 通讯
-webSocketClient.send(message)
-```
-
-### 2. 本地工具执行
-
-所有工具在 IntelliJ 中本地执行，通过 PSI 访问代码结构
-
-```kotlin
-interface Tool {
-    fun getName(): String
-    fun getDescription(): String
-    fun getParameters(): Map<String, ParameterDef>
-    fun execute(projectKey: String, params: Map<String, Any>): ToolResult
-}
-```
-
-### 3. 会话隔离
-
-**按项目隔离存储**：
-```
-~/.smanunion/sessions/{projectKey}/{sessionId}.json
-```
-
-**内存 + 文件双层缓存**：
-- 内存：`ConcurrentHashMap<sessionId, Session>`
-- 文件：JSON 持久化
-
-### 4. 白名单机制
-
-**严格参数校验**：参数不满足直接抛异常
-
-```kotlin
-// ✅ 正确：严格校验
-val relativePath = params["relativePath"] as? String
-    ?: throw IllegalArgumentException("缺少 relativePath 参数")
-
-// ❌ 错误：兜底处理
-val relativePath = params["relativePath"] as? String ?: "default"
-```
-
-## 项目分析模块
-
-### 查看分析结果
-
-#### 方式一：Web 验证服务（推荐）
-
-启动 Web 验证服务后，可通过 REST API 查看分析结果：
+## Build Commands
 
 ```bash
-# 启动验证服务（默认端口 8080）
-./scripts/verification-web.sh
+# Build the plugin
+./gradlew buildPlugin
 
-# 自定义端口
-VERIFICATION_PORT=9090 ./scripts/verification-web.sh
-```
+# Run the IDE with plugin (for development)
+./gradlew runIde
 
-**可用 API 端点**：
-
-| API | 功能 | 文件 |
-|-----|------|------|
-| `POST /api/verify/expert_consert` | 专家咨询（直接 LLM 查询） | `ExpertConsultService.kt` |
-| `POST /api/verify/semantic_search` | 语义搜索（BGE 召回 + Reranker） | `VectorSearchService.kt` |
-| `POST /api/verify/analysis_results` | 查询分析模块结果 | `AnalysisQueryService.kt` |
-| `POST /api/verify/query_vectors` | 查询向量数据 | `H2QueryService.kt` |
-| `POST /api/verify/query_projects` | 查询项目列表 | `H2QueryService.kt` |
-| `POST /api/verify/execute_sql` | 执行安全 SQL | `H2QueryService.kt` |
-
-**示例：查询分析结果**
-
-```bash
-# 查询 API 入口
-curl -X POST http://localhost:8080/api/verify/analysis_results \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "module": "api_entries",
-    "projectKey": "smanunion",
-    "page": 0,
-    "size": 20
-  }'
-
-# 专家咨询
-curl -X POST http://localhost:8080/api/verify/expert_consert \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "question": "项目中有哪些 API 入口？",
-    "projectKey": "smanunion",
-    "topK": 10
-  }'
-```
-
-**详细文档**：
-- API 文档：[docs/VERIFICATION_API.md](docs/VERIFICATION_API.md)
-- 使用示例：[docs/VERIFICATION_EXAMPLES.md](docs/VERIFICATION_EXAMPLES.md)
-
-#### 方式二：通过对话询问
-
-在聊天面板中直接提问，LLM 通过工具系统访问分析结果。
-
-#### 方式三：H2 数据库直接查询
-
-```bash
-# 连接到 H2 Shell
-./h2-shell.sh <projectKey>
-```
-
-### 12 个分析模块
-
-| # | 模块 | 功能 | 文件 |
-|---|------|------|------|
-| 01 | 项目结构扫描 | 识别模块、包、分层架构 | `ProjectStructureScanner.kt` |
-| 02 | 技术栈识别 | 检测框架、数据库、中间件 | `TechStackDetector.kt` |
-| 03 | AST 扫描 | 提取类、方法、字段信息 | `PsiAstScanner.kt` |
-| 04 | DB 实体扫描 | 识别数据库实体和关系 | `DbEntityScanner.kt` |
-| 05 | 入口扫描 | 识别 HTTP/API 入口 | `ApiEntryScanner.kt` |
-| 06 | 外调接口扫描 | 识别 Feign/Retrofit/HTTP 客户端 | `ExternalApiScanner.kt` |
-| 07 | Enum 扫描 | 提取枚举类和常量 | `EnumScanner.kt` |
-| 08 | 公共类扫描 | 识别工具类和帮助类 | `CommonClassScanner.kt` |
-| 09 | XML 代码扫描 | 解析 MyBatis Mapper 和配置 | `XmlCodeScanner.kt` |
-| 10 | 案例 SOP | 生成标准操作流程文档 | `CaseSopGenerator.kt` |
-| 11 | 语义化向量化 | 代码向量化，支持语义搜索 | `CodeVectorizationService.kt` |
-| 12 | 代码走读 | 生成架构分析和核心逻辑报告 | `CodeWalkthroughGenerator.kt` |
-
-详细设计文档：[docs/design/](docs/design/)
-
-### 分析模块使用示例
-
-```kotlin
-// 项目结构扫描
-val structureScanner = ProjectStructureScanner()
-val structure = structureScanner.scan(projectPath)
-
-// 技术栈识别
-val techStackDetector = TechStackDetector()
-val techStack = techStackDetector.detect(projectPath)
-
-// AST 扫描
-val psiScanner = PsiAstScanner()
-val astInfo = psiScanner.scanFile(kotlinFile)
-
-// 代码走读生成
-val walkthroughGenerator = CodeWalkthroughGenerator(psiScanner)
-val report = walkthroughGenerator.generateForClass(kotlinFile)
-
-// 案例SOP生成
-val sopGenerator = CaseSopGenerator(psiScanner)
-val sop = sopGenerator.generateFromClass(kotlinFile)
-```
-
-## 关键流程
-
-### 消息处理流程
-
-```
-用户输入
-   ↓
-SmanAgentService.processMessage()
-   ↓
-SmanAgentLoop.process()
-   ├─ 添加用户消息到会话
-   ├─ 构建 System Prompt
-   ├─ LLM 调用
-   ├─ 解析响应为 Part 列表
-   ├─ 处理工具调用
-   └─ 保存会话
-   ↓
-返回响应消息
-```
-
-### 工具执行流程
-
-```
-LLM 返回工具调用
-   ↓
-ToolExecutor.execute()
-   ├─ 参数校验（白名单）
-   ├─ 从 ToolRegistry 获取工具
-   ├─ 调用 Tool.execute()
-   └─ 返回 ToolResult
-   ↓
-格式化为 Part
-   ↓
-追加到响应消息
-```
-
-### 会话生命周期
-
-```
-创建会话
-   ├─ 生成 SessionId
-   ├─ 创建 Session 对象
-   ├─ 注册到 SessionManager
-   └─ 添加到内存缓存
-   ↓
-处理消息
-   ├─ 加载会话（如果未缓存）
-   ├─ 执行业务逻辑
-   └─ 保存到文件
-   ↓
-卸载会话
-   ├─ 从内存移除
-   └─ 保留文件
-```
-
-## 本地工具
-
-### 工具列表
-
-| 工具名 | 功能 | 参数 |
-|--------|------|------|
-| `read_file` | 读取文件 | `simpleName`, `relativePath`, `startLine`, `endLine` |
-| `grep_file` | 正则搜索 | `pattern`, `relativePath`, `filePattern` |
-| `find_file` | 查找文件 | `pattern`, `filePattern` |
-| `call_chain` | 调用链分析 | `method`, `direction`, `depth`, `includeSource` |
-| `extract_xml` | 提取 XML | `relativePath`, `tagPattern`, `tagName` |
-| `apply_change` | 应用修改 | `relativePath`, `newContent`, `mode`, `description` |
-
-### 添加新工具
-
-1. 在 `LocalToolExecutor.kt` 中添加工具逻辑
-2. 在 `LocalToolFactory.kt` 中注册工具
-3. 更新 `tool-introduction.md` 提示词
-
-## 开发规范
-
-### Kotlin 规范
-
-1. **不可变优先**：使用 `val` 而非 `var`
-2. **数据类**：使用 `data class` 定义模型
-3. **Elvis 操作符**：`?:` 处理空值
-4. **表达式体**：单行函数使用 `=`
-
-```kotlin
-// ✅ 正确
-data class Message(val id: String, val content: String)
-
-fun getName(): String = name
-
-val result = value ?: defaultValue
-
-// ❌ 错误
-class Message {
-    var id: String = ""
-    var content: String = ""
-}
-
-fun getName(): String {
-    return name
-}
-```
-
-### 异常处理
-
-```kotlin
-// ✅ 正确：具体异常
-throw IllegalArgumentException("缺少 relativePath 参数")
-
-// ❌ 错误：通用异常
-throw Exception("参数错误")
-```
-
-### 日志规范
-
-```kotlin
-// ✅ 正确：结构化日志
-logger.info("处理消息: sessionId={}, input={}", sessionId, userInput)
-
-// ❌ 错误：字符串拼接
-logger.info("处理消息: " + sessionId + ", " + userInput)
-```
-
-## 测试策略
-
-### 单元测试
-
-- **测试基类**：`MockKTestBase`, `CoroutinesTestBase`
-- **Mock 对象**：`MockLlmService`, `DummyTool`
-- **测试工厂**：`TestDataFactory`
-
-### 运行测试
-
-```bash
-# 所有测试
+# Run all tests
 ./gradlew test
 
-# 特定测试
+# Run specific test
 ./gradlew test --tests "*LocalToolFactoryTest*"
 
-# 测试报告
-open build/reports/tests/test/index.html
+# Compile only
+./gradlew compileKotlin
+
+# Plugin verification
+./gradlew verifyPluginConfiguration
+
+# Run verification web service
+./gradlew runVerification -Pverification.port=8080
 ```
 
-### 测试覆盖
+## Environment Setup
 
-| 模块 | 测试数量 | 覆盖率 |
-|------|---------|--------|
-| LLM 服务 | 3 | ~80% |
-| ReAct 循环 | 4 | ~70% |
-| 工具系统 | 6 | ~75% |
-| 会话管理 | 5 | ~85% |
-| 数据模型 | 3 | ~80% |
-| 项目分析 | 175 | ~75% |
-| **总计** | **196** | **~76%** |
-
-## 性能优化
-
-### LLM 调用优化
-
-- **端点池轮询**：负载均衡
-- **指数退避重试**：避免频繁重试
-- **System Prompt 缓存**：每个会话缓存一次
-
-### 工具执行优化
-
-- **PSI 缓存**：利用 IntelliJ 的 PSI 缓存
-- **并发执行**：独立工具可并发
-
-### 向量化优化
-
-- **批量处理**：支持批量向量化（batch size 10）
-- **LRU 缓存**：向量片段缓存（max size 1000）
-- **分级缓存**：L1 (热/LRU) + L2 (温) + L3 (冷/磁盘)
-
-## 配置说明
-
-### LLM 配置
-
-```properties
-# 基础配置
-llm.api.key=your_api_key_here
-llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
-llm.model.name=glm-4-flash
-llm.response.max.tokens=4000
-
-# 重试配置
-llm.retry.max=3
-llm.retry.base.delay=1000
+Set API key before development:
+```bash
+export LLM_API_KEY=your_api_key_here
 ```
 
-### BGE-M3 向量化配置
+## Architecture Overview
 
-```properties
-# 启用向量化
-bge.enabled=true
-bge.endpoint=your_bge_endpoint
-bge.model.name=bge-m3
+### ReAct Loop Pattern
+The core `SmanLoop` implements a Reasoning + Acting loop:
+1. Receive user message
+2. Check context compaction needs
+3. Call LLM streaming
+4. Execute tools in isolated sub-sessions
+5. Push Parts to frontend
 
-# 批处理配置
-bge.batch.size=10
-bge.timeout.seconds=30
+Key implementation: `src/main/kotlin/com/smancode/sman/smancode/core/SmanLoop.kt`
+
+### Three-Tier Cache Architecture
+```
+L1 (Hot): Memory LRU cache (~500 entries)
+L2 (Warm): JVector vector index (disk-persisted)
+L3 (Cold): H2 database (persistent storage)
 ```
 
-### Reranker 配置
+### Tool System
+- **Tool Interface**: Common interface for all tools
+- **ToolRegistry**: Manual registration (no Spring DI)
+- **Execution Modes**: LOCAL (backend) / INTELLIJ (IDE)
 
-```properties
-# 启用重排
-reranker.enabled=true
-reranker.base.url=your_reranker_endpoint
-reranker.api.key=your_reranker_api_key
-reranker.model=bge-reranker-v2-m3
-reranker.top.k=5
+**Available Tools**:
+- `read_file`: Read file content
+- `grep_file`: Regex search
+- `find_file`: File pattern search
+- `call_chain`: Call chain analysis
+- `extract_xml`: Extract XML tag content
+- `apply_change`: Code modification
+- `expert_consult`: Semantic search via BGE + Reranker
+
+### Project Analysis Pipeline
+12 analysis modules with Pipeline pattern:
+1. Project structure scanning
+2. Tech stack detection
+3. AST scanning
+4. DB entity scanning
+5. API entry scanning
+6. External API scanning
+7. Enum scanning
+8. Common class scanning
+9. XML code scanning
+10. Case SOP generation
+11. Semantic vectorization
+12. Code walkthrough
+
+## Key Design Decisions
+
+1. **No Spring Dependency Injection**: Manual registration pattern for tools
+2. **Three-Tier Cache**: Prevents memory overflow with large projects
+3. **Incremental Updates**: MD5-based file change detection
+4. **Context Isolation**: Sub-sessions for tool execution prevent token explosion
+5. **Streaming First**: Real-time output display
+6. **Semantic Search-Only**: `expert_consult` returns BGE results directly without LLM processing
+
+## Project Structure
+
+```
+src/main/kotlin/com/smancode/sman/
+├── analysis/           # Project analysis modules (12 modules)
+├── config/             # Configuration management (SmanConfig)
+├── ide/                # IntelliJ IDEA integration
+├── model/              # Data models (message, part, session)
+├── smancode/           # Core ReAct Loop implementation
+├── tools/              # Tool system (interface, registry, executor)
+├── util/               # Utilities
+└── verification/       # Verification web service
+
+src/main/resources/
+├── META-INF/plugin.xml    # Plugin descriptor
+├── sman.properties        # Configuration file
+└── prompts/               # Prompt templates
 ```
 
-## 故障排查
+## Data Storage (Per-Project Isolation)
 
-### 常见问题
-
-**1. LLM 调用失败**
-- 检查 `LLM_API_KEY` 环境变量
-- 检查网络连接
-- 查看日志：`Help → Show Log in Explorer`
-
-**2. 工具执行失败**
-- 确认项目已打开
-- 检查文件路径
-- 查看 `LocalToolExecutor` 日志
-
-**3. 会话丢失**
-- 检查 `~/.smanunion/sessions/` 目录
-- 查看文件权限
-
-**4. 父会话不存在**
-- 确保会话已注册到 `SessionManager`
-- 检查 `SmanAgentService.getOrCreateSession()`
-
-**5. 向量化服务不可用**
-- 检查 BGE 配置是否正确
-- 验证 BGE 端点是否可访问
-- 查看日志中的详细错误信息
-
-## 扩展指南
-
-### 添加新 Part 类型
-
-1. 在 `PartModels.kt` 中定义 Part 类
-2. 更新 `PartType` 枚举
-3. 添加解析逻辑到 `parsePart()`
-4. 添加渲染器到 `StyledMessageRenderer`
-
-### 添加新的分析模块
-
-1. 在 `analysis/` 下创建新的子包
-2. 实现扫描器/生成器类
-3. 添加对应的模型类到 `model/analysis/`
-4. 编写单元测试
-5. 更新设计文档
-
-### 修改 LLM 配置
-
-编辑 `src/main/resources/smanagent.properties`：
-
-```properties
-llm.api.key=your_key
-llm.base.url=https://open.bigmodel.cn/api/paas/v4/chat/completions
-llm.model.name=glm-4-flash
-llm.response.max.tokens=4000
+```
+{projectPath}/.sman/
+├── analysis.mv.db      # H2 database
+├── md/                 # Markdown analysis results
+├── md5/                # File MD5 cache
+├── vector/             # Vector data
+└── ast/                # AST cache
 ```
 
-## 技术栈
+## Configuration
 
-### 核心技术栈
-- **Kotlin**: 1.9.20
-- **IntelliJ Platform SDK**: 2023.2
-- **Kotlin Coroutines**: 1.7.3（协程支持）
-- **kotlinx.serialization**: 1.6.0（JSON 序列化）
+Configuration file: `src/main/resources/sman.properties`
 
-### 网络与 HTTP
-- **OkHttp**: 4.12.0（HTTP 客户端，用于 LLM/BGE API 调用）
-- **Java-WebSocket**: 1.5.4（WebSocket 支持，可选）
+Key configuration categories:
+- LLM API (key, URL, model, retry)
+- ReAct loop (max steps, streaming)
+- Context compaction (threshold, max tokens)
+- Vector database (JVector, H2)
+- BGE-M3 embedding service
+- BGE-Reranker service
+- Project analysis settings
 
-### 数据处理
-- **Jackson**: 2.16.0（JSON 处理）
-- **jackson-module-kotlin**: 2.16.0（Kotlin Jackson 模块）
-- **org.json**: 20231013（JSON 解析）
+Configuration priority: User settings > Environment variables > Config file > Default
 
-### 渲染与日志
-- **Flexmark**: 0.64.8（Markdown 渲染，支持表格、GFM 等）
-- **Flexmark Extensions**: 表格、删除线、自动链接等扩展
-- **Logback**: 1.4.11（日志框架）
-- **SLF4J**: 2.0.9（日志门面）
+## Technology Stack
 
-### 测试框架
-- **JUnit**: 5.10.1（测试框架）
-- **MockK**: 1.13.8（Kotlin Mock 框架）
-- **Mockito-Kotlin**: 5.1.0（Kotlin Mockito 包装）
-- **Kotlin Test**: 1.9.20（Kotlin 测试工具）
-- **Kotlin Coroutines Test**: 1.7.3（协程测试）
-- **Spring Boot Test**: 3.2.0（Spring 测试支持，可选）
+- **Language**: Kotlin 1.9.20 (JDK 17+)
+- **Platform**: IntelliJ IDEA 2024.1+
+- **HTTP Client**: OkHttp 4.12.0
+- **JSON**: Jackson 2.16.0 + kotlinx.serialization 1.6.0
+- **Database**: H2 2.2.224 + JVector 3.0.0 + HikariCP
+- **Testing**: JUnit 5.10.1 + MockK 1.13.8
 
-### 数据库与存储（核心组件）
-- **H2 Database**: 2.2.22（关系数据库，用于 L3 冷数据存储和配置管理）
-- **JVector**: 3.0.0（向量搜索引擎，用于 L2 温数据索引和相似度搜索）
-- **HikariCP**: 5.0.1（JDBC 连接池，优化数据库性能）
+## Test Reports
 
-### 向量化服务（可选，需自行配置）
-- **BGE-M3**: 文本嵌入模型（通过 HTTP API 调用）
-- **BGE-Reranker**: 结果重排序服务（通过 HTTP API 调用）
-
-### 三层缓存架构（核心设计）
-**向量存储三层缓存**（防止内存爆炸）：
-- **L1 (Hot)**: 内存 LRU 缓存（`LRUCache.kt`，默认 100 条）
-- **L2 (Warm)**: JVector 向量索引（`SimpleVectorStore.kt` + JVector 集成）
-- **L3 (Cold)**: H2 数据库（`H2DatabaseService.kt`，持久化存储）
-- 实现：`TieredVectorStore.kt`
-
-**AST 分层缓存**（防止内存爆炸）：
-- **L1**: 内存缓存（最新解析的 AST，100 条上限）
-- **L2**: 磁盘文件缓存（序列化对象，`~/.smanunion/ast_cache/`）
-- **L3**: 实时解析（从源代码重新解析）
-- 实现：`AstCacheService.kt`
-
-## 提交前检查
-
-- [ ] 所有测试通过：`./gradlew test`
-- [ ] 代码编译无警告：`./gradlew compileKotlin`
-- [ ] 插件验证通过：`./gradlew verifyPluginConfiguration`
-- [ ] 更新相关文档
-- [ ] 遵循 Kotlin 编码规范
-- [ ] 检查白名单机制是否正确实现
-- [ ] 确认无兜底处理和默认值
+After running tests, view reports at:
+```
+build/reports/tests/test/index.html
+```

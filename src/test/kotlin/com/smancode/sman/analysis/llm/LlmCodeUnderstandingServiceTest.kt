@@ -154,7 +154,7 @@ class LlmCodeUnderstandingServiceTest {
             every { mockLlmService.simpleRequest(any(), any()) } returns expectedMd
 
             // When: 调用 analyzeJavaFile
-            val result = service.analyzeJavaFile(javaFile, javaSource)
+            val result = service.analyzeJavaFile(javaFile, javaSource, "src/main/java/DisburseHandler.java")
 
             // Then: 验证返回的 Markdown 格式正确
             assertTrue(result.contains("# DisburseHandler"))
@@ -214,7 +214,7 @@ class LlmCodeUnderstandingServiceTest {
             every { mockLlmService.simpleRequest(any(), any()) } returns expectedMd
 
             // When: 调用 analyzeEnumFile
-            val result = service.analyzeEnumFile(enumFile, enumSource)
+            val result = service.analyzeEnumFile(enumFile, enumSource, "src/main/java/LoanStatus.java")
 
             // Then: 验证枚举分析结果
             assertTrue(result.contains("# LoanStatus"))
@@ -233,7 +233,7 @@ class LlmCodeUnderstandingServiceTest {
         fun testAnalyzeJavaFile_空文件路径_抛异常() = runTest {
             // Given & Then: 空文件路径必须抛异常
             val exception = assertThrows<IllegalArgumentException> {
-                service.analyzeJavaFile(Path.of(""), "source")
+                service.analyzeJavaFile(Path.of(""), "source", "test/Test.java")
             }
 
             assertTrue(exception.message!!.contains("文件路径不能为空"))
@@ -244,7 +244,7 @@ class LlmCodeUnderstandingServiceTest {
         fun testAnalyzeJavaFile_空源代码_抛异常() = runTest {
             // Given & Then: 空源代码必须抛异常
             val exception = assertThrows<IllegalArgumentException> {
-                service.analyzeJavaFile(Path.of("/tmp/Test.java"), "")
+                service.analyzeJavaFile(Path.of("/tmp/Test.java"), "", "test/Test.java")
             }
 
             assertTrue(exception.message!!.contains("源代码不能为空"))
@@ -255,7 +255,7 @@ class LlmCodeUnderstandingServiceTest {
         fun testAnalyzeEnumFile_空源代码_抛异常() = runTest {
             // Given & Then: 空源代码必须抛异常
             val exception = assertThrows<IllegalArgumentException> {
-                service.analyzeEnumFile(Path.of("/tmp/Status.java"), "")
+                service.analyzeEnumFile(Path.of("/tmp/Status.java"), "", "test/Status.java")
             }
 
             assertTrue(exception.message!!.contains("源代码不能为空"))
@@ -266,7 +266,7 @@ class LlmCodeUnderstandingServiceTest {
         fun testParseMarkdownToVectors_空MD内容_抛异常() {
             // Given & Then: 空 MD 内容必须抛异常
             val exception = assertThrows<IllegalArgumentException> {
-                service.parseMarkdownToVectors(Path.of("/tmp/Test.java"), "")
+                service.parseMarkdownToVectors(Path.of("/tmp/Test.java"), "", "test/Test.java")
             }
 
             assertTrue(exception.message!!.contains("MD 内容不能为空"))
@@ -293,7 +293,7 @@ class LlmCodeUnderstandingServiceTest {
             """.trimIndent()
 
             // When: 解析 MD
-            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent)
+            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent, "test/TestClass.java")
 
             // Then: 应该返回1个向量（类向量）
             assertEquals(1, vectors.size)
@@ -341,7 +341,7 @@ class LlmCodeUnderstandingServiceTest {
             """.trimIndent()
 
             // When: 解析 MD
-            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent)
+            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent, "test/TestClass.java")
 
             // Then: 应该返回3个向量（1个类 + 2个方法）
             assertEquals(3, vectors.size)
@@ -362,7 +362,7 @@ class LlmCodeUnderstandingServiceTest {
 
             // When & Then: 应该抛出明确异常
             val exception = assertThrows<RuntimeException> {
-                service.analyzeJavaFile(javaFile, javaSource)
+                service.analyzeJavaFile(javaFile, javaSource, "test/Test.java")
             }
 
             assertTrue(exception.message!!.contains("LLM 返回格式错误") ||
@@ -387,7 +387,7 @@ class LlmCodeUnderstandingServiceTest {
 
             // When & Then: 应该抛出明确异常（不静默失败）
             assertThrows<RuntimeException> {
-                service.analyzeJavaFile(javaFile, javaSource)
+                service.analyzeJavaFile(javaFile, javaSource, "test/Test.java")
             }
         }
 
@@ -424,7 +424,7 @@ class LlmCodeUnderstandingServiceTest {
             """.trimIndent()
 
             // When: 解析 MD
-            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent)
+            val vectors = service.parseMarkdownToVectors(Path.of("/tmp/TestClass.java"), mdContent, "test/TestClass.java")
 
             // Then: 应该返回至少类向量和有效方法向量
             assertTrue(vectors.size >= 2)
@@ -449,7 +449,7 @@ class LlmCodeUnderstandingServiceTest {
             every { mockLlmService.simpleRequest(any(), any()) } returns expectedMd
 
             // When: 调用 analyzeJavaFile
-            service.analyzeJavaFile(javaFile, javaSource)
+            service.analyzeJavaFile(javaFile, javaSource, "test/Test.java")
 
             // Then: 验证 LLM 被调用，且 prompt 包含必要信息
             // 这里验证调用发生，具体 prompt 内容通过集成测试验证

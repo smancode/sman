@@ -118,7 +118,7 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     /**
-     * 显示分析结果
+     * 显示分析结果（弹窗方式）
      */
     private fun showAnalysisResults() {
         logger.info("显示分析结果: projectKey={}", projectKey)
@@ -126,11 +126,7 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         // 获取项目根目录
         val projectRoot = project.basePath?.let { Paths.get(it) }
         if (projectRoot == null) {
-            appendSystemMessage("""
-                📊 项目分析结果
-                ════════════════════════════
-                无法获取项目路径。
-            """.trimIndent())
+            showAnalysisDialog("项目分析结果", "无法获取项目路径。")
             return
         }
 
@@ -138,20 +134,66 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey)
 
         if (entry == null) {
-            appendSystemMessage("""
-                📊 项目分析结果
-                ════════════════════════════
+            showAnalysisDialog("项目分析结果", """
                 项目尚未注册到分析系统。
-                请确保项目已打开，并等待后台自动分析完成。
+
+                可能的原因：
+                1. 插件刚启动，后台分析尚未开始
+                2. 自动分析已禁用（可在设置中开启）
+                3. LLM API Key 未配置
+
+                请检查设置并等待后台自动分析完成。
             """.trimIndent())
             return
         }
 
-        // 构建分析结果报告
+        // 构建分析结果报告并显示弹窗
         val report = buildAnalysisReport(entry)
+        showAnalysisDialog("项目分析结果 - $projectKey", report)
+    }
 
-        // 显示到聊天区域
-        appendSystemMessage(report)
+    /**
+     * 显示分析结果弹窗（自定义大小）
+     */
+    private fun showAnalysisDialog(title: String, message: String) {
+        javax.swing.SwingUtilities.invokeLater {
+            // 创建文本区域显示内容
+            val textArea = javax.swing.JTextArea(message).apply {
+                isEditable = false
+                lineWrap = true
+                wrapStyleWord = true
+                font = java.awt.Font("JetBrains Mono", java.awt.Font.PLAIN, 13)
+                margin = java.awt.Insets(10, 10, 10, 10)
+            }
+
+            // 放入滚动面板
+            val scrollPane = javax.swing.JScrollPane(textArea).apply {
+                preferredSize = java.awt.Dimension(500, 400)  // 增加高度
+                verticalScrollBarPolicy = javax.swing.JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                horizontalScrollBarPolicy = javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+            }
+
+            // 创建对话框
+            val dialog = javax.swing.JDialog().apply {
+                setTitle(title)
+                isModal = true
+                contentPane.add(scrollPane, java.awt.BorderLayout.CENTER)
+
+                // 添加关闭按钮
+                val closeButton = javax.swing.JButton("关闭").apply {
+                    addActionListener { dispose() }
+                }
+                val buttonPanel = javax.swing.JPanel().apply {
+                    add(closeButton)
+                }
+                contentPane.add(buttonPanel, java.awt.BorderLayout.SOUTH)
+
+                pack()
+                setLocationRelativeTo(null)  // 居中显示
+            }
+
+            dialog.isVisible = true
+        }
     }
 
     /**
@@ -176,22 +218,35 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         sb.appendLine("  • 配置文件: ${statusIcon(entry.analysisStatus.configFiles)}")
         sb.appendLine()
 
-        // 最后分析时间
-        val lastAnalyzed = entry.lastAnalyzed
-        if (lastAnalyzed != null) {
-            sb.appendLine("🕐 最后分析: ${lastAnalyzed}")
-        } else {
-            sb.appendLine("🕐 最后分析: 尚未分析")
-        }
+        // 最后分析时间（格式化显示）
+        sb.appendLine("🕐 最后分析: ${formatTimestamp(entry.lastAnalyzed)}")
         sb.appendLine()
 
         // 统计信息
         sb.appendLine("📈 统计:")
         val completedCount = countCompleted(entry)
+        val failedCount = countFailed(entry)
         sb.appendLine("  • 已完成: $completedCount / 6 项")
+        if (failedCount > 0) {
+            sb.appendLine("  • 失败: $failedCount 项（将在下次循环重试）")
+        }
         sb.appendLine()
 
         return sb.toString()
+    }
+
+    /**
+     * 格式化时间戳为可读格式
+     */
+    private fun formatTimestamp(timestamp: Long?): String {
+        if (timestamp == null || timestamp <= 0) return "尚未分析"
+        return try {
+            java.time.Instant.ofEpochMilli(timestamp)
+                .atZone(java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        } catch (e: Exception) {
+            "时间格式错误"
+        }
     }
 
     /**
@@ -202,8 +257,23 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             StepState.COMPLETED -> "✅ 已完成"
             StepState.RUNNING -> "🔄 进行中"
             StepState.PENDING -> "⏳ 待处理"
-            else -> "❓ 未知"
+            StepState.FAILED -> "❌ 失败"
+            StepState.SKIPPED -> "⏭️ 跳过"
         }
+    }
+
+    /**
+     * 统计失败的分析项
+     */
+    private fun countFailed(entry: ProjectEntry): Int {
+        var count = 0
+        if (entry.analysisStatus.projectStructure == StepState.FAILED) count++
+        if (entry.analysisStatus.techStack == StepState.FAILED) count++
+        if (entry.analysisStatus.apiEntries == StepState.FAILED) count++
+        if (entry.analysisStatus.dbEntities == StepState.FAILED) count++
+        if (entry.analysisStatus.enums == StepState.FAILED) count++
+        if (entry.analysisStatus.configFiles == StepState.FAILED) count++
+        return count
     }
 
     /**

@@ -34,19 +34,21 @@ class CliControlBar(
             this.border = EmptyBorder(0, JBUI.scale(4), 0, JBUI.scale(4))
         }
 
+        // 统一按钮高度
+        val buttonHeight = JBUI.scale(28)
+
         // 左侧：新建会话、历史记录
-        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
             isOpaque = false
+            preferredSize = Dimension(Short.MAX_VALUE.toInt(), buttonHeight)
+            maximumSize = Dimension(Short.MAX_VALUE.toInt(), buttonHeight)
 
             // 新建会话按钮
-            val newChatButton = createTextButton("+", "新建会话") {
-                onNewChatCallback()
-            }
+            val newChatButton = createNewChatButton(buttonHeight)
             add(newChatButton)
-            add(Box.createHorizontalStrut(JBUI.scale(4)))
 
             // 历史记录按钮
-            val historyBtn = createHistoryButton()
+            val historyBtn = createHistoryButton(buttonHeight)
             _historyButtonRef.set(historyBtn)
             add(historyBtn)
         }
@@ -54,8 +56,10 @@ class CliControlBar(
         // 右侧：设置
         val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
             isOpaque = false
+            preferredSize = Dimension(Short.MAX_VALUE.toInt(), buttonHeight)
+            maximumSize = Dimension(Short.MAX_VALUE.toInt(), buttonHeight)
 
-            val settingsButton = createSettingsButton()
+            val settingsButton = createSettingsButton(buttonHeight)
             add(settingsButton)
         }
 
@@ -65,17 +69,10 @@ class CliControlBar(
     }
 
     fun getHistoryButton(): JButton? {
-        val leftPanel = (getComponent(0) as? JPanel)?.getComponent(0) as? JPanel
-
-        // 从左侧面板的第3个组件获取历史按钮（索引2）
-        if (leftPanel != null && leftPanel.componentCount > 1) {
-            return leftPanel.getComponent(1) as? JButton
-        }
-
-        return null
+        return _historyButtonRef.get()
     }
 
-    private fun createSettingsButton(): JButton {
+    private fun createSettingsButton(height: Int): JButton {
         val icon = object : Icon {
             override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
                 val g2 = g.create() as Graphics2D
@@ -98,16 +95,58 @@ class CliControlBar(
             override fun getIconHeight() = JBUI.scale(16)
         }
 
-        return createIconButton(icon, "设置") {
+        return createIconButton(icon, "设置", height) {
             onSettingsCallback()
         }
     }
 
-    private fun createHistoryButton(): JButton {
+    private fun createHistoryButton(height: Int): JButton {
         val icon = AllIcons.Vcs.History
 
-        return createIconButton(icon, "历史记录") {
+        return createIconButton(icon, "历史记录", height) {
             onHistoryCallback()
+        }
+    }
+
+    /**
+     * 创建新建会话按钮（与历史按钮相同的绘制方式）
+     */
+    private fun createNewChatButton(height: Int): JButton {
+        return object : JButton() {
+            override fun paintComponent(g: Graphics) {
+                val g2 = g as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
+
+                val colors = com.smancode.sman.ide.theme.ThemeColors.getCurrentColors()
+
+                // 背景
+                if (model.isRollover) {
+                    g2.color = colors.surface
+                    g2.fillRoundRect(0, 0, width, height, JBUI.scale(6), JBUI.scale(6))
+                }
+
+                // 绘制 + 符号（居中）
+                g2.color = colors.textPrimary
+                g2.font = Font(g2.font.name, Font.BOLD, 18)
+                val fm = g2.fontMetrics
+                val text = "+"
+                val textWidth = fm.stringWidth(text)
+                val textHeight = fm.ascent
+                val x = (width - textWidth) / 2
+                val y = (height + textHeight) / 2 - 2  // 微调垂直位置
+                g2.drawString(text, x, y)
+            }
+        }.apply {
+            toolTipText = "新建会话"
+            isContentAreaFilled = false
+            isOpaque = false
+            isFocusPainted = false
+            isBorderPainted = false
+            border = null
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            preferredSize = Dimension(JBUI.scale(30), height)
+            addActionListener { onNewChatCallback() }
         }
     }
 
@@ -125,7 +164,7 @@ class CliControlBar(
         }
     }
 
-    private fun createIconButton(icon: Icon, tooltip: String, action: () -> Unit): JButton {
+    private fun createIconButton(icon: Icon, tooltip: String, height: Int, action: () -> Unit): JButton {
         return object : JButton(icon) {
             override fun paintBorder(g: Graphics?) {
             }
@@ -153,7 +192,7 @@ class CliControlBar(
             isBorderPainted = false
             border = null
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            preferredSize = Dimension(JBUI.scale(30), JBUI.scale(26))
+            preferredSize = Dimension(JBUI.scale(30), height)
             addActionListener { action() }
         }
     }

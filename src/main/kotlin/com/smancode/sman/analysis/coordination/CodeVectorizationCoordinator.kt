@@ -1,10 +1,6 @@
 package com.smancode.sman.analysis.coordination
 
 import com.smancode.sman.analysis.config.BgeM3Config
-import com.smancode.sman.analysis.config.VectorDatabaseConfig
-import com.smancode.sman.analysis.config.VectorDbType
-import com.smancode.sman.analysis.config.JVectorConfig
-import com.smancode.sman.analysis.database.TieredVectorStore
 import com.smancode.sman.analysis.database.VectorStoreService
 import com.smancode.sman.analysis.llm.LlmCodeUnderstandingService
 import com.smancode.sman.analysis.model.VectorFragment
@@ -63,16 +59,9 @@ class CodeVectorizationCoordinator(
     // MD5 保存互斥锁（保护并发更新）
     private val md5SaveLock = ReentrantLock()
 
-    // 向量存储服务
+    // 向量存储服务（通过 VectorStoreManager 单例管理，避免 H2 连接池冲突）
     private val vectorStore: VectorStoreService by lazy {
-        val paths = com.smancode.sman.analysis.paths.ProjectPaths.forProject(projectPath)
-        val config = VectorDatabaseConfig(
-            projectKey = projectKey,
-            type = VectorDbType.JVECTOR,
-            jvector = JVectorConfig(),
-            databasePath = paths.databaseFile.toString()
-        )
-        TieredVectorStore(config)
+        com.smancode.sman.analysis.database.VectorStoreManager.getOrCreate(projectKey, projectPath)
     }
 
     // BGE-M3 向量化客户端
@@ -129,20 +118,11 @@ class CodeVectorizationCoordinator(
 
         // 最终保存一次（确保所有文件都同步）
         saveMd5Cache()
-        // 处理已有的 .sman/md 知识库文件（不依赖源代码变化）
-        try {
-            logger.info("开始向量化已有的 .sman/md 知识库文件")
-            val mdResult = vectorizeFromExistingMd()
-            processedCount += mdResult.processedFiles
-            skippedCount += mdResult.skippedFiles
-            totalVectors += mdResult.totalVectors
-            errors.addAll(mdResult.errors)
-            logger.info("向量化 .sman/md 完成: 处理={}, 向量数={}",
-                mdResult.processedFiles, mdResult.totalVectors)
-        } catch (e: Exception) {
-            logger.error("向量化 .sman/md 文件失败", e)
-            // 不中断整个流程，继续执行
-        }
+
+        // 注意：不再自动调用 vectorizeFromExistingMd()
+        // 原因：每次都重新向量化所有 MD 文件会导致不必要的重复处理
+        // vectorizeFromExistingMd() 只用于数据恢复场景，应显式调用
+        logger.info("项目向量化完成，跳过已有 MD 文件的重复处理（如需恢复数据，请显式调用 vectorizeFromExistingMd）")
 
 
         val elapsedTime = System.currentTimeMillis() - startTime
@@ -202,12 +182,15 @@ class CodeVectorizationCoordinator(
         // 读取源代码
         val sourceCode = sourceFile.toFile().readText()
 
+        // 计算相对路径（核心！用于 LLM 定位文件）
+        val relativePath = calculateRelativePath(sourceFile)
+
         // 根据文件类型调用不同的分析方法
         val mdContent = when {
             sourceFile.fileName.toString().endsWith(".java") -> {
                 when {
-                    isEnumFile(sourceCode) -> llmCodeUnderstandingService.analyzeEnumFile(sourceFile, sourceCode)
-                    else -> llmCodeUnderstandingService.analyzeJavaFile(sourceFile, sourceCode)
+                    isEnumFile(sourceCode) -> llmCodeUnderstandingService.analyzeEnumFile(sourceFile, sourceCode, relativePath)
+                    else -> llmCodeUnderstandingService.analyzeJavaFile(sourceFile, sourceCode, relativePath)
                 }
             }
             sourceFile.fileName.toString().endsWith(".xml") -> {
@@ -224,8 +207,8 @@ class CodeVectorizationCoordinator(
         // 保存 .md 文档
         saveMarkdownDocument(sourceFile, mdContent)
 
-        // 解析 .md 文档为向量片段
-        val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent)
+        // 解析 .md 文档为向量片段（传入相对路径）
+        val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent, relativePath)
 
         // 为每个向量生成嵌入并存储
         for (vector in vectors) {
@@ -248,8 +231,20 @@ class CodeVectorizationCoordinator(
             }
         }
 
-        logger.info("文件向量化完成: file={}, vectors={}", sourceFile.fileName, vectors.size)
+        logger.info("文件向量化完成: file={}, vectors={}, relativePath={}", sourceFile.fileName, vectors.size, relativePath)
         return vectors
+    }
+
+    /**
+     * 计算相对路径（相对于项目根目录）
+     */
+    private fun calculateRelativePath(sourceFile: Path): String {
+        return try {
+            projectPath.relativize(sourceFile).toString().replace("\\", "/")
+        } catch (e: Exception) {
+            logger.warn("计算相对路径失败: sourceFile={}, error={}", sourceFile, e.message)
+            sourceFile.fileName.toString()
+        }
     }
 
     /**
@@ -267,13 +262,16 @@ class CodeVectorizationCoordinator(
     private suspend fun vectorizeFileWithImmediateMd5Update(sourceFile: Path): List<VectorFragment> {
         logger.info("开始向量化文件（带即时MD5更新）: {}", sourceFile.fileName)
 
+        // 计算相对路径（核心！用于 LLM 定位文件）
+        val relativePath = calculateRelativePath(sourceFile)
+
         // 步骤 1: LLM 分析 → 生成 MD 文档
         val sourceCode = sourceFile.toFile().readText()
         val mdContent = when {
             sourceFile.fileName.toString().endsWith(".java") -> {
                 when {
-                    isEnumFile(sourceCode) -> llmCodeUnderstandingService.analyzeEnumFile(sourceFile, sourceCode)
-                    else -> llmCodeUnderstandingService.analyzeJavaFile(sourceFile, sourceCode)
+                    isEnumFile(sourceCode) -> llmCodeUnderstandingService.analyzeEnumFile(sourceFile, sourceCode, relativePath)
+                    else -> llmCodeUnderstandingService.analyzeJavaFile(sourceFile, sourceCode, relativePath)
                 }
             }
             sourceFile.fileName.toString().endsWith(".xml") -> {
@@ -296,8 +294,8 @@ class CodeVectorizationCoordinator(
         }
         logger.debug("MD5 已更新（LLM 完成后）: {}", sourceFile.fileName)
 
-        // 步骤 3: 解析 .md 文档为向量片段
-        val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent)
+        // 步骤 3: 解析 .md 文档为向量片段（传入相对路径）
+        val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(sourceFile, mdContent, relativePath)
 
         // 步骤 4: 向量化并存储
         for (vector in vectors) {
@@ -320,7 +318,7 @@ class CodeVectorizationCoordinator(
             }
         }
 
-        logger.info("文件向量化完成: file={}, vectors={}", sourceFile.fileName, vectors.size)
+        logger.info("文件向量化完成: file={}, vectors={}, relativePath={}", sourceFile.fileName, vectors.size, relativePath)
         return vectors
     }
 
@@ -369,9 +367,11 @@ class CodeVectorizationCoordinator(
 
     /**
      * 保存 Markdown 文档
+     *
+     * 保存到 .sman/md/classes/ 目录（类级分析结果）
      */
     private fun saveMarkdownDocument(sourceFile: Path, mdContent: String): Path {
-        val mdDir = projectPath.resolve(".sman/md")
+        val mdDir = projectPath.resolve(".sman/md/classes")
         Files.createDirectories(mdDir)
 
         val mdFileName = sourceFile.fileName.toString()
@@ -383,6 +383,39 @@ class CodeVectorizationCoordinator(
         logger.debug("保存 Markdown 文档: {}", mdFile.fileName)
 
         return mdFile
+    }
+
+    /**
+     * 从 MD 文件中提取相对路径
+     *
+     * 优先从 MD 内容中解析相对路径，如果没有则从包名推断
+     */
+    private fun extractRelativePathFromMd(mdFile: Path, mdContent: String): String {
+        // 1. 尝试从 MD 内容中提取相对路径
+        val relativePathMatch = Regex("""[-*]\s*\*\*相对路径\*\*:\s*`?([^`\n]+)`?""").find(mdContent)
+        if (relativePathMatch != null) {
+            val path = relativePathMatch.groupValues[1].trim()
+            if (path.isNotEmpty()) {
+                return path
+            }
+        }
+
+        // 2. 尝试从包名推断
+        val packageMatch = Regex("""[-*]\s*\*\*包名\*\*:\s*`?([^`\n]+)`?""").find(mdContent)
+        val className = mdFile.fileName.toString().removeSuffix(".md")
+
+        if (packageMatch != null) {
+            val packageName = packageMatch.groupValues[1].trim()
+            if (packageName.isNotEmpty()) {
+                // 将包名转换为路径
+                val packagePath = packageName.replace(".", "/")
+                return "src/main/java/$packagePath/$className.java"
+            }
+        }
+
+        // 3. 默认返回类名（兜底）
+        logger.warn("无法从 MD 文件提取相对路径: {}, 使用默认值", mdFile.fileName)
+        return "src/main/java/$className.java"
     }
 
     /**
@@ -403,7 +436,7 @@ class CodeVectorizationCoordinator(
      * 从已有的 .md 文件重新向量化（跳过 LLM 分析）
      *
      * 用于修复持久化问题后的数据恢复。
-     * 直接读取 .sman/md/ 目录下的 .md 文件，解析并向量化，不调用 LLM。
+     * 直接读取 .sman/md/classes/ 目录下的 .md 文件，解析并向量化，不调用 LLM。
      *
      * @return 向量化结果
      */
@@ -417,8 +450,8 @@ class CodeVectorizationCoordinator(
         // 注意：这里暂时跳过，因为需要添加 H2 查询方法
         // TODO: 添加清理旧向量的逻辑
 
-        // 扫描 .md 文件目录
-        val mdDir = projectPath.resolve(".sman/md")
+        // 扫描 .md 文件目录（classes 目录）
+        val mdDir = projectPath.resolve(".sman/md/classes")
         if (!mdDir.exists()) {
             logger.warn(".md 文件目录不存在: {}", mdDir)
             return@withContext VectorizationResult(
@@ -452,8 +485,13 @@ class CodeVectorizationCoordinator(
                     continue
                 }
 
-                // 解析 .md 文件为向量片段
-                val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(mdFile, mdContent)
+                // 从 MD 文件名推断对应的 Java 文件路径，计算相对路径
+                // MD 文件在 .sman/md/classes/ 目录，文件名如 RepayHandler.md
+                // 对应的 Java 文件需要从 MD 内容中提取包名，或从 MD 文件名推断
+                val relativePath = extractRelativePathFromMd(mdFile, mdContent)
+
+                // 解析 .md 文件为向量片段（传入相对路径）
+                val vectors = llmCodeUnderstandingService.parseMarkdownToVectors(mdFile, mdContent, relativePath)
 
                 if (vectors.isEmpty()) {
                     logger.debug(".md 文件没有解析出向量: {}", mdFile.fileName)
@@ -514,6 +552,13 @@ class CodeVectorizationCoordinator(
             bgeClient.close()
         } catch (e: Exception) {
             logger.error("关闭 BGE 客户端失败", e)
+        }
+
+        // 释放向量存储引用（不直接关闭，由 VectorStoreManager 管理）
+        try {
+            com.smancode.sman.analysis.database.VectorStoreManager.release(projectPath)
+        } catch (e: Exception) {
+            logger.error("释放向量存储引用失败", e)
         }
     }
 }

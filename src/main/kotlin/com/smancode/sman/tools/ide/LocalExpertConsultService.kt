@@ -7,22 +7,24 @@ import com.smancode.sman.analysis.model.VectorFragment
 import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.analysis.vectorization.RerankerClient
 import com.smancode.sman.config.SmanConfig
-import com.smancode.sman.smancode.llm.LlmService
 import org.slf4j.LoggerFactory
 
 /**
  * 本地专家咨询服务（插件环境直接调用）
  *
- * 不再依赖 HTTP 验证服务，直接在插件进程内完成
- * 复用 ReAct Loop 中已有的服务：LlmService、BgeM3Client、RerankerClient、TieredVectorStore
+ * 核心逻辑：
+ * 1. BGE-M3 向量召回
+ * 2. Reranker 重排序
+ * 3. 直接返回召回结果（不调用 LLM）
+ *
+ * 设计原则：
+ * - 语义搜索交给 BGE + Reranker，不做 LLM 二次处理
+ * - 返回原始搜索结果，让调用方决定如何使用
  */
 class LocalExpertConsultService(
     private val project: Project
 ) {
     private val logger = LoggerFactory.getLogger(LocalExpertConsultService::class.java)
-
-    // 懒加载依赖服务（按需创建）
-    private val llmService by lazy { SmanConfig.createLlmService() }
 
     private val bgeClient by lazy {
         val config = SmanConfig.bgeM3Config
@@ -73,11 +75,14 @@ class LocalExpertConsultService(
         val filePath: String,
         val className: String = "",
         val methodName: String = "",
+        val content: String = "",
         val score: Double
     )
 
     /**
      * 执行专家咨询
+     *
+     * 只做 BGE 召回 + Reranker 重排，不调用 LLM
      */
     fun consult(request: ConsultRequest): ConsultResponse {
         val startTime = System.currentTimeMillis()
@@ -91,7 +96,7 @@ class LocalExpertConsultService(
         require(request.question.isNotBlank()) { "question 不能为空" }
         require(request.topK > 0) { "topK 必须大于 0" }
 
-        // 1. 向量检索相关代码片段
+        // 1. 向量检索相关代码片段（BGE 召回 + Reranker 重排）
         val searchResults = semanticSearch(
             query = request.question,
             topK = request.topK,
@@ -99,34 +104,20 @@ class LocalExpertConsultService(
             rerankTopN = request.rerankTopN
         )
 
-        if (searchResults.isEmpty()) {
-            // 没有搜索到任何结果，仍然调用 LLM
-            val context = "未找到相关代码片段。"
-            val answer = callLlm(request.question, context)
-            val processingTime = System.currentTimeMillis() - startTime
-
-            return ConsultResponse(
-                answer = answer,
-                sources = emptyList(),
-                confidence = 0.3,
-                processingTimeMs = processingTime
-            )
-        }
-
-        // 2. 构建上下文
-        val context = buildContext(searchResults)
-
-        // 3. 调用 LLM
-        val answer = callLlm(request.question, context)
-
-        // 4. 构造响应
+        // 2. 构造响应（不调用 LLM，直接返回搜索结果）
         val processingTime = System.currentTimeMillis() - startTime
-        val sources = searchResults.map {
+        val sources = searchResults.map { result ->
             SourceInfo(
-                filePath = it.fileName,
-                score = it.score
+                filePath = result.fileName,
+                className = result.className,
+                methodName = result.methodName,
+                content = result.content,
+                score = result.score
             )
         }
+
+        // 3. 构建答案（直接展示搜索结果）
+        val answer = buildAnswer(request.question, searchResults)
 
         logger.info("本地专家咨询完成: sources={}, time={}ms",
             sources.size, processingTime)
@@ -140,45 +131,58 @@ class LocalExpertConsultService(
     }
 
     /**
-     * 调用 LLM 获取答案
+     * 构建答案（直接展示搜索结果，不做 LLM 处理）
      */
-    private fun callLlm(question: String, context: String): String {
-        val systemPrompt = """你是一个代码专家。请根据以下代码片段回答问题。
-            |代码片段来自项目的语义搜索结果。
-            |请引用相关代码位置，给出准确、简洁的答案。""".trimMargin().replace("\n", " ")
-
-        val userPrompt = buildString {
-            appendLine("你是一个代码专家。请根据以下上下文回答问题。")
-            appendLine()
-            append(context)
-            appendLine()
-            appendLine("问题：$question")
-            appendLine()
-            appendLine("请给出准确、简洁的答案，并引用相关代码位置（使用【片段 X】的形式）。")
-            appendLine("如果上下文不足，请明确说明。")
+    private fun buildAnswer(@Suppress("UNUSED_PARAMETER") question: String, results: List<SearchResultWithMetadata>): String {
+        if (results.isEmpty()) {
+            return "未找到相关代码片段。"
         }
 
-        return llmService.simpleRequest(systemPrompt, userPrompt)
+        return buildString {
+            appendLine("找到 ${results.size} 个相关代码片段：\n")
+            results.forEachIndexed { index, result ->
+                appendLine("【片段 ${index + 1}】 ${result.fileName}")
+                if (result.className.isNotEmpty() && result.className != result.fileName) {
+                    appendLine("类名: ${result.className}")
+                }
+                if (result.methodName.isNotEmpty()) {
+                    appendLine("方法: ${result.methodName}")
+                }
+                appendLine("相似度: ${"%.2f".format(result.score)}")
+                appendLine()
+                // 限制内容长度
+                val maxLength = 800
+                if (result.content.length > maxLength) {
+                    appendLine(result.content.take(maxLength))
+                    appendLine("...(内容已截断)")
+                } else {
+                    appendLine(result.content)
+                }
+                appendLine()
+            }
+        }
     }
 
     /**
-     * 搜索结果
+     * 带元数据的搜索结果
      */
-    private data class SearchResult(
+    private data class SearchResultWithMetadata(
         val fileName: String,
+        val className: String,
+        val methodName: String,
         val content: String,
         val score: Double
     )
 
     /**
-     * 语义搜索
+     * 语义搜索（BGE 召回 + Reranker 重排）
      */
     private fun semanticSearch(
         query: String,
         topK: Int,
         enableRerank: Boolean,
         rerankTopN: Int
-    ): List<SearchResult> {
+    ): List<SearchResultWithMetadata> {
         return try {
             // 1. 将查询转换为向量
             val queryVector = bgeClient.embed(query)
@@ -208,9 +212,14 @@ class LocalExpertConsultService(
                 recallResultsWithScores.take(topK)
             }
 
+            // 5. 转换为带元数据的结果
             finalResults.map { (fragment, score) ->
-                SearchResult(
-                    fileName = fragment.title,  // VectorFragment.title 存储文件路径
+                SearchResultWithMetadata(
+                    fileName = fragment.getMetadata("sourceFile")
+                        ?.let { java.nio.file.Paths.get(it).fileName.toString() }
+                        ?: fragment.title,
+                    className = fragment.getMetadata("className") ?: "",
+                    methodName = fragment.getMetadata("methodName") ?: "",
                     content = fragment.content,
                     score = score
                 )
@@ -226,7 +235,6 @@ class LocalExpertConsultService(
 
     /**
      * 执行重排序
-     * rerankerClient.rerankWithScores 返回 List<Pair<Int, Double>>，其中 Int 是文档索引
      */
     private fun performReranking(
         query: String,
@@ -250,32 +258,4 @@ class LocalExpertConsultService(
             emptyList()
         }
     }
-
-    /**
-     * 构建上下文
-     */
-    private fun buildContext(results: List<SearchResult>): String =
-        buildString {
-            if (results.isEmpty()) {
-                appendLine("未找到相关代码片段。")
-                return@buildString
-            }
-
-            appendLine("找到 ${results.size} 个相关代码片段：\n")
-            results.forEachIndexed { index, result ->
-                appendLine("【片段 ${index + 1}】")
-                appendLine("文件: ${result.fileName}")
-                appendLine("相似度: ${"%.2f".format(result.score)}")
-                appendLine("内容:")
-                // 限制内容长度，避免 token 过多
-                val maxLength = 1000
-                if (result.content.length > maxLength) {
-                    appendLine(result.content.take(maxLength))
-                    appendLine("...(内容已截断，共 ${result.content.length} 字符)")
-                } else {
-                    appendLine(result.content)
-                }
-                appendLine()
-            }
-        }
 }

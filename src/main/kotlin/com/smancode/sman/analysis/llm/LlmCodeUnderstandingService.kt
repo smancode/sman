@@ -27,12 +27,13 @@ class LlmCodeUnderstandingService(
     /**
      * 分析 Java 文件并生成 .md 文档
      *
-     * @param javaFile Java 文件路径
+     * @param javaFile Java 文件路径（绝对路径）
      * @param javaSource Java 源代码内容
+     * @param relativePath 相对路径（相对于项目根目录）
      * @return Markdown 格式的文档内容
      * @throws IllegalArgumentException 如果文件路径或源代码为空
      */
-    suspend fun analyzeJavaFile(javaFile: Path, javaSource: String): String {
+    suspend fun analyzeJavaFile(javaFile: Path, javaSource: String, relativePath: String): String {
         // 白名单校验：文件路径不能为空
         if (javaFile.toString().isEmpty()) {
             throw IllegalArgumentException("文件路径不能为空")
@@ -47,7 +48,7 @@ class LlmCodeUnderstandingService(
 
         // 构建符合 prompt_rules.md 规则的 Prompt
         val systemPrompt = buildJavaAnalysisSystemPrompt()
-        val userPrompt = buildJavaAnalysisUserPrompt(className, javaSource)
+        val userPrompt = buildJavaAnalysisUserPrompt(className, javaSource, relativePath)
 
         // 调用 LLM 分析
         val llmResponse = try {
@@ -68,12 +69,13 @@ class LlmCodeUnderstandingService(
     /**
      * 分析 Enum 文件并生成 .md 文档
      *
-     * @param enumFile Enum 文件路径
+     * @param enumFile Enum 文件路径（绝对路径）
      * @param enumSource Enum 源代码内容
+     * @param relativePath 相对路径（相对于项目根目录）
      * @return Markdown 格式的文档内容
      * @throws IllegalArgumentException 如果文件路径或源代码为空
      */
-    suspend fun analyzeEnumFile(enumFile: Path, enumSource: String): String {
+    suspend fun analyzeEnumFile(enumFile: Path, enumSource: String, relativePath: String): String {
         // 白名单校验：文件路径不能为空
         if (enumFile.toString().isEmpty()) {
             throw IllegalArgumentException("文件路径不能为空")
@@ -88,7 +90,7 @@ class LlmCodeUnderstandingService(
 
         // 构建符合 prompt_rules.md 规则的 Prompt
         val systemPrompt = buildEnumAnalysisSystemPrompt()
-        val userPrompt = buildEnumAnalysisUserPrompt(enumName, enumSource)
+        val userPrompt = buildEnumAnalysisUserPrompt(enumName, enumSource, relativePath)
 
         // 调用 LLM 分析
         val llmResponse = try {
@@ -109,36 +111,138 @@ class LlmCodeUnderstandingService(
     /**
      * 从 .md 文档解析向量化数据
      *
-     * @param sourceFile 源文件路径（用于提取类名）
+     * 核心逻辑：按 --- 分割 MD 内容，每个分割块作为独立的向量片段
+     * - content = 整个分割块内容 + 相对路径（包含类名、注解、签名、方法名等完整语义信息）
+     * - 没有 --- 分割时，整个 MD 内容作为一个向量片段
+     *
+     * @param sourceFile 源文件路径（绝对路径，用于提取类名）
      * @param mdContent Markdown 文档内容
+     * @param relativePath 相对路径（核心！用于 LLM 定位文件）
      * @return 向量片段列表
      * @throws IllegalArgumentException 如果 MD 内容为空
      */
-    fun parseMarkdownToVectors(sourceFile: Path, mdContent: String): List<VectorFragment> {
+    fun parseMarkdownToVectors(sourceFile: Path, mdContent: String, relativePath: String): List<VectorFragment> {
         // 白名单校验：MD 内容不能为空
         if (mdContent.isBlank()) {
             throw IllegalArgumentException("MD 内容不能为空")
         }
 
+        // 白名单校验：相对路径不能为空
+        if (relativePath.isBlank()) {
+            throw IllegalArgumentException("相对路径不能为空")
+        }
+
         // 提取类名（从文件名或内容）
         val className = extractClassName(sourceFile, mdContent)
 
-        val vectors = mutableListOf<VectorFragment>()
+        // 判断是否为 Enum 类型
+        val isEnum = mdContent.contains("## 枚举定义") || mdContent.contains("## 字典映射")
 
-        try {
-            // 解析类信息
-            parseClassVector(sourceFile, mdContent, className)?.let { vectors.add(it) }
-
-            // 解析方法信息
-            val methodVectors = parseMethodVectors(sourceFile, mdContent, className)
-            vectors.addAll(methodVectors)
-
-        } catch (e: Exception) {
-            logger.warn("解析 MD 部分失败: file={}, error={}", sourceFile.fileName, e.message)
-            // 优雅降级：返回已解析的向量
+        // 按 --- 分割 MD 内容
+        val fragments = if (mdContent.contains("---")) {
+            // 有 --- 分割，按分割块处理
+            mdContent.split("---")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        } else {
+            // 没有 --- 分割，整个内容作为一个片段
+            listOf(mdContent.trim())
         }
 
+        val vectors = mutableListOf<VectorFragment>()
+
+        fragments.forEachIndexed { index, fragmentContent ->
+            if (fragmentContent.isBlank()) return@forEachIndexed
+
+            // 从片段中提取标题（## 方法：xxx 或 ## 类信息 等）
+            val fragmentTitle = extractFragmentTitle(fragmentContent, className, index, fragments.size)
+
+            // 确定片段类型
+            val fragmentType = when {
+                fragmentContent.contains("## 方法：") -> "method"
+                isEnum -> "enum"
+                else -> "class"
+            }
+
+            // 从片段中提取方法名（如果是方法片段）
+            val methodName = if (fragmentType == "method") {
+                extractMethodName(fragmentContent)
+            } else {
+                null
+            }
+
+            // 生成片段 ID
+            val fragmentId = when (fragmentType) {
+                "method" -> "method:$className.$methodName"
+                "enum" -> "enum:$className"
+                else -> if (fragments.size == 1) "class:$className" else "class:$className.part$index"
+            }
+
+            // 核心：在 content 中注入相对路径（确保每个片段都有相对路径信息）
+            val contentWithRelativePath = buildContentWithRelativePath(fragmentContent, relativePath, fragmentType)
+
+            vectors.add(VectorFragment(
+                id = fragmentId,
+                title = fragmentTitle,
+                // 核心：content = 相对路径 + 分割块内容，保留完整语义
+                content = contentWithRelativePath,
+                fullContent = fragmentContent,
+                tags = listOf(fragmentType, "java"),
+                metadata = buildMap {
+                    put("type", fragmentType)
+                    put("className", className)
+                    put("relativePath", relativePath)
+                    methodName?.let { put("methodName", it) }
+                    put("sourceFile", sourceFile.toString())
+                },
+                vector = floatArrayOf() // 向量在后续生成
+            ))
+        }
+
+        logger.info("解析 MD 完成: file={}, class={}, fragments={}, relativePath={}",
+            sourceFile.fileName, className, vectors.size, relativePath)
         return vectors
+    }
+
+    /**
+     * 构建带相对路径的 content
+     *
+     * 在 content 开头注入相对路径信息，确保向量搜索结果中包含文件定位信息
+     */
+    private fun buildContentWithRelativePath(fragmentContent: String, relativePath: String, @Suppress("UNUSED_PARAMETER") fragmentType: String): String {
+        return buildString {
+            // 在开头添加相对路径（关键！用于 LLM 定位文件）
+            appendLine("文件路径: $relativePath")
+            appendLine()
+            append(fragmentContent)
+        }
+    }
+
+    /**
+     * 从片段内容中提取标题
+     */
+    private fun extractFragmentTitle(fragmentContent: String, className: String, index: Int, total: Int): String {
+        // 尝试提取方法名
+        val methodMatch = Regex("""## 方法：(\S+)""").find(fragmentContent)
+        if (methodMatch != null) {
+            return methodMatch.groupValues[1]
+        }
+
+        // 如果是类信息片段，使用类名
+        if (fragmentContent.contains("## 类信息") || fragmentContent.contains("## 枚举定义")) {
+            return className
+        }
+
+        // 其他情况，使用类名 + 序号
+        return if (total == 1) className else "$className-part$index"
+    }
+
+    /**
+     * 从方法片段中提取方法名
+     */
+    private fun extractMethodName(fragmentContent: String): String? {
+        val methodMatch = Regex("""## 方法：(\S+)""").find(fragmentContent)
+        return methodMatch?.groupValues?.get(1)
     }
 
     /**
@@ -207,6 +311,7 @@ class LlmCodeUnderstandingService(
             ## 类信息
 
             - **完整签名**: `{FullSignature}`
+            - **相对路径**: `{RelativePath}`
             - **包名**: `{PackageName}`
             - **注解**: `{Annotations}`
 
@@ -228,6 +333,9 @@ class LlmCodeUnderstandingService(
 
             ### 签名
             `{MethodSignature}`
+
+            ### 相对路径
+            `{RelativePath}`
 
             ### 参数
             {列出参数，格式：- `paramName`: 参数说明}
@@ -257,11 +365,12 @@ class LlmCodeUnderstandingService(
             <anti_hallucination_rules>
             1. **Strict Grounding**: Only analyze code that exists in the input
             2. **No Invention**: Do not invent methods or fields not present in the source
-            3. **Language Decoupling**:
+            3. **Relative Path**: MUST include the relative path in class info and each method section
+            4. **Language Decoupling**:
                - Business descriptions MUST be in Simplified Chinese
                - Keep technical terms (class names, method names, annotations) in English
-            4. **Source Code**: MUST preserve complete source code for each method
-            5. **Separator**: Use "---" to separate class and method sections
+            5. **Source Code**: MUST preserve complete source code for each method
+            6. **Separator**: Use "---" to separate class and method sections
             </anti_hallucination_rules>
         """.trimIndent()
     }
@@ -269,10 +378,11 @@ class LlmCodeUnderstandingService(
     /**
      * 构建 Java 分析的用户 Prompt
      */
-    private fun buildJavaAnalysisUserPrompt(className: String, javaSource: String): String {
+    private fun buildJavaAnalysisUserPrompt(className: String, javaSource: String, relativePath: String): String {
         return """
             ## 类信息
             类名: $className
+            相对路径: $relativePath
 
             ## 源代码
             ```java
@@ -280,6 +390,7 @@ class LlmCodeUnderstandingService(
             ```
 
             请严格按照系统 Prompt 中的模板格式生成 Markdown 文档。
+            注意：相对路径必须原样保留在输出的类信息和方法信息中。
         """.trimIndent()
     }
 
@@ -309,6 +420,7 @@ class LlmCodeUnderstandingService(
 
             ## 枚举定义
             - **完整签名**: `{FullSignature}`
+            - **相对路径**: `{RelativePath}`
             - **包名**: `{PackageName}`
 
             ## 业务描述
@@ -329,7 +441,8 @@ class LlmCodeUnderstandingService(
             <anti_hallucination_rules>
             1. **Strict Grounding**: Only analyze enum values that exist in the input
             2. **No Invention**: Do not invent enum values not present in the source
-            3. **Language Decoupling**:
+            3. **Relative Path**: MUST include the relative path in enum definition section
+            4. **Language Decoupling**:
                - Business descriptions MUST be in Simplified Chinese
                - Keep enum values and codes in their original format
             </anti_hallucination_rules>
@@ -339,10 +452,11 @@ class LlmCodeUnderstandingService(
     /**
      * 构建 Enum 分析的用户 Prompt
      */
-    private fun buildEnumAnalysisUserPrompt(enumName: String, enumSource: String): String {
+    private fun buildEnumAnalysisUserPrompt(enumName: String, enumSource: String, relativePath: String): String {
         return """
             ## 枚举信息
             枚举名: $enumName
+            相对路径: $relativePath
 
             ## 源代码
             ```java
@@ -350,80 +464,7 @@ class LlmCodeUnderstandingService(
             ```
 
             请严格按照系统 Prompt 中的模板格式生成 Markdown 文档。
+            注意：相对路径必须原样保留在输出的枚举定义中。
         """.trimIndent()
-    }
-
-    /**
-     * 解析类向量
-     */
-    private fun parseClassVector(sourceFile: Path, mdContent: String, className: String): VectorFragment? {
-
-        // 提取业务描述
-        val descMatch = Regex("""## 业务描述\s*\n\s*(.+?)(?=\n\s*##|\n\s*---|\Z)""", RegexOption.DOT_MATCHES_ALL)
-            .find(mdContent)
-        val businessDesc = descMatch?.groupValues?.get(1)?.trim() ?: ""
-
-        // 提取类信息
-        val classInfoMatch = Regex("""## 类信息\s*\n(.*?)(?=##\s*(?:业务描述|核心数据模型|包含功能)|---)""", RegexOption.DOT_MATCHES_ALL)
-            .find(mdContent)
-        val classInfo = classInfoMatch?.groupValues?.get(1)?.trim() ?: ""
-
-        return VectorFragment(
-            id = "class:${className}",
-            title = className,
-            content = businessDesc.ifEmpty { "Java 类" },
-            fullContent = classInfo,
-            tags = listOf("class", "java"),
-            metadata = mapOf(
-                "type" to "class",
-                "className" to className,
-                "sourceFile" to sourceFile.toString()
-            ),
-            vector = floatArrayOf() // 向量在后续生成
-        )
-    }
-
-    /**
-     * 解析方法向量列表
-     */
-    private fun parseMethodVectors(sourceFile: Path, mdContent: String, className: String): List<VectorFragment> {
-        val vectors = mutableListOf<VectorFragment>()
-
-        // 匹配所有方法块
-        val methodPattern = Regex(
-            """## 方法：(\S+)\s*\n(.*?)(?=##\s*(?:方法：|类信息)|---|\Z)""",
-            RegexOption.DOT_MATCHES_ALL
-        )
-
-        methodPattern.findAll(mdContent).forEach { match ->
-            val methodName = match.groupValues[1]
-            val methodBlock = match.groupValues[2]
-
-            // 提取业务描述
-            val descMatch = Regex("""### 业务描述\s*\n\s*(.+?)(?=\n\s*###|\n\s*##|\Z)""", RegexOption.DOT_MATCHES_ALL)
-                .find(methodBlock)
-            val businessDesc = descMatch?.groupValues?.get(1)?.trim() ?: ""
-
-            // 提取源码
-            val sourceMatch = Regex("""### 源码\s*\n```java\s*(.+?)\n```""", RegexOption.DOT_MATCHES_ALL)
-                .find(methodBlock)
-            val sourceCode = sourceMatch?.groupValues?.get(1)?.trim() ?: ""
-
-            vectors.add(VectorFragment(
-                id = "method:$className.$methodName",
-                title = methodName,
-                content = businessDesc.ifEmpty { "方法" },
-                fullContent = sourceCode,
-                tags = listOf("method", "java"),
-                metadata = mapOf(
-                    "type" to "method",
-                    "methodName" to methodName,
-                    "sourceFile" to sourceFile.toString()
-                ),
-                vector = floatArrayOf() // 向量在后续生成
-            ))
-        }
-
-        return vectors
     }
 }

@@ -2,6 +2,7 @@ package com.smancode.sman.ide.ui
 
 import com.intellij.openapi.project.Project
 import com.smancode.sman.config.SmanConfig
+import com.smancode.sman.ide.SmanPlugin
 import com.smancode.sman.ide.service.storageService
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
@@ -79,11 +80,14 @@ class SettingsDialog(
     private val rerankerApiKeyField = createTextFieldWithStorage(storage.rerankerApiKey)
 
     // 其他配置字段
-    private val projectKeyField = JTextField(project.name, 30)
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
-    // 自动分析开关（微信风格）
+    // 自动分析开关（现代扁平化风格）
     private val autoAnalysisSwitch = object : JToggleButton() {
+        // 动画相关
+        private var animationProgress = if (storage.autoAnalysisEnabled) 1.0 else 0.0
+        private val animationTimer = javax.swing.Timer(15, null)
+
         init {
             isSelected = storage.autoAnalysisEnabled
             isContentAreaFilled = false
@@ -91,55 +95,78 @@ class SettingsDialog(
             isBorderPainted = false
             isFocusPainted = false
             border = null
-            preferredSize = Dimension(50, 26)
+            preferredSize = Dimension(48, 26)
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+            // 动画计时器
+            animationTimer.addActionListener {
+                val target = if (isSelected) 1.0 else 0.0
+                val diff = target - animationProgress
+                if (kotlin.math.abs(diff) < 0.05) {
+                    animationProgress = target
+                    animationTimer.stop()
+                } else {
+                    animationProgress += diff * 0.25
+                }
+                repaint()
+            }
 
             addItemListener { e ->
                 storage.autoAnalysisEnabled = (e.source as JToggleButton).isSelected
                 logger.debug("自动分析开关状态已更新: {}", storage.autoAnalysisEnabled)
+                animationTimer.start()
             }
         }
 
         override fun paintComponent(g: Graphics) {
             val g2 = g as Graphics2D
+
+            // 高质量渲染设置
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
 
             val switchWidth = 44
-            val switchHeight = 22
-            val switchX = 0
+            val switchHeight = 24
+            val switchX = (width - switchWidth) / 2
             val switchY = (height - switchHeight) / 2
+            val cornerRadius = switchHeight / 2
 
-            // 绘制背景轨道（圆角矩形）
-            val trackColor = if (isSelected) Color(76, 217, 100) else Color(200, 200, 200)
+            // 计算颜色插值
+            val onColor = Color(52, 199, 89)      // iOS 绿色
+            val offColor = Color(229, 229, 234)  // 浅灰色
+            val trackColor = interpolateColor(offColor, onColor, animationProgress)
+
+            // 绘制阴影（增加立体感）
+            g2.color = Color(0, 0, 0, 15)
+            g2.fillRoundRect(switchX + 1, switchY + 2, switchWidth, switchHeight, cornerRadius, cornerRadius)
+
+            // 绘制背景轨道
             g2.color = trackColor
-            g2.fillRoundRect(switchX, switchY, switchWidth, switchHeight, 11, 11)
+            g2.fillRoundRect(switchX, switchY, switchWidth, switchHeight, cornerRadius, cornerRadius)
 
-            // 绘制滑块（圆形）
-            val sliderSize = 18
-            val sliderX = if (isSelected) switchX + switchWidth - sliderSize - 3 else switchX + 3
-            val sliderColor = Color.WHITE
-            g2.color = sliderColor
-            g2.fillOval(sliderX, switchY + 2, sliderSize, sliderSize - 4)
+            // 绘制滑块
+            val sliderSize = 20
+            val sliderPadding = 2
+            val sliderRange = switchWidth - sliderSize - sliderPadding * 2
+            val sliderX = switchX + sliderPadding + (sliderRange * animationProgress).toInt()
+            val sliderY = switchY + (switchHeight - sliderSize) / 2
+
+            // 滑块阴影
+            g2.color = Color(0, 0, 0, 30)
+            g2.fillOval(sliderX + 1, sliderY + 1, sliderSize, sliderSize)
+
+            // 滑块本体
+            g2.color = Color.WHITE
+            g2.fillOval(sliderX, sliderY, sliderSize, sliderSize)
         }
-    }
 
-    // 性能配置字段
-    private val bgeMaxTokensField = createTextFieldWithDefault(storage.bgeMaxTokens, "8192")
-    private val bgeTruncationStrategyCombo = JComboBox(arrayOf("HEAD", "TAIL", "MIDDLE", "SMART")).apply {
-        selectedItem = storage.bgeTruncationStrategy.takeIf { it.isNotEmpty() } ?: "TAIL"
-    }
-    private val bgeTruncationStepSizeField = createTextFieldWithDefault(storage.bgeTruncationStepSize, "1000")
-    private val bgeMaxTruncationRetriesField = createTextFieldWithDefault(storage.bgeMaxTruncationRetries, "10")
-    private val bgeRetryMaxField = createTextFieldWithDefault(storage.bgeRetryMax, "3")
-    private val bgeRetryBaseDelayField = createTextFieldWithDefault(storage.bgeRetryBaseDelay, "1000")
-    private val bgeConcurrentLimitField = createTextFieldWithDefault(storage.bgeConcurrentLimit, "3")
-    private val bgeCircuitBreakerThresholdField = createTextFieldWithDefault(storage.bgeCircuitBreakerThreshold, "5")
-
-    // RULES 配置字段（多行文本框）
-    private val rulesTextArea = JTextArea(storage.rules.takeIf { it.isNotEmpty() } ?: DEFAULT_RULES, 15, 50).apply {
-        font = Font(Font.MONOSPACED, Font.PLAIN, 12)
-        lineWrap = true
-        wrapStyleWord = true
+        private fun interpolateColor(c1: Color, c2: Color, fraction: Double): Color {
+            val r = (c1.red + (c2.red - c1.red) * fraction).toInt()
+            val g = (c1.green + (c2.green - c1.green) * fraction).toInt()
+            val b = (c1.blue + (c2.blue - c1.blue) * fraction).toInt()
+            return Color(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+        }
     }
 
     private fun createTextFieldWithDefault(value: String, default: String): JTextField {
@@ -166,8 +193,8 @@ class SettingsDialog(
 
         pack()
         setLocationRelativeTo(null)
-        minimumSize = java.awt.Dimension(600, 500)
-        preferredSize = java.awt.Dimension(600, 600)
+        minimumSize = java.awt.Dimension(480, 500)
+        preferredSize = java.awt.Dimension(480, 550)
         isResizable = true
     }
 
@@ -194,8 +221,6 @@ class SettingsDialog(
         row = addLlmConfigSection(panel, gbc, row)
         row = addBgeM3ConfigSection(panel, gbc, row)
         row = addRerankerConfigSection(panel, gbc, row)
-        row = addPerformanceConfigSection(panel, gbc, row)
-        row = addRulesConfigSection(panel, gbc, row)
         addOtherConfigSection(panel, gbc, row)
 
         return panel
@@ -316,59 +341,6 @@ class SettingsDialog(
         )
     }
 
-    private fun addPerformanceConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
-        var row = startRow
-
-        addSeparator(panel, gbc, row++)
-        addSectionTitle(panel, gbc, row++, "性能配置（并发控制和重试）")
-
-        // Token 配置
-        row = addLabeledField(panel, gbc, row, "Token 限制:", bgeMaxTokensField)
-
-        // 截断配置
-        gbc.apply {
-            gridx = 0
-            gridy = row
-            gridwidth = 1
-            weightx = 0.0
-            fill = GridBagConstraints.NONE
-        }
-        panel.add(JLabel("截断策略:"), gbc)
-
-        gbc.apply {
-            gridx = 1
-            weightx = 1.0
-            fill = GridBagConstraints.HORIZONTAL
-        }
-        panel.add(bgeTruncationStrategyCombo, gbc)
-        row++
-
-        row = addLabeledField(panel, gbc, row, "截断步长:", bgeTruncationStepSizeField)
-        row = addLabeledField(panel, gbc, row, "最大截断重试:", bgeMaxTruncationRetriesField)
-
-        // 重试配置
-        row = addLabeledField(panel, gbc, row, "最大重试次数:", bgeRetryMaxField)
-        row = addLabeledField(panel, gbc, row, "重试基础延迟(ms):", bgeRetryBaseDelayField)
-
-        // 并发和熔断器配置
-        row = addLabeledField(panel, gbc, row, "并发限制:", bgeConcurrentLimitField)
-        row = addLabeledField(panel, gbc, row, "熔断器阈值:", bgeCircuitBreakerThresholdField)
-
-        // 添加提示标签
-        gbc.apply {
-            gridx = 0
-            gridy = row
-            gridwidth = 2
-            weightx = 0.0
-            fill = GridBagConstraints.HORIZONTAL
-        }
-        val hintLabel = JLabel("<html><font color='gray' size='2'>提示：并发限制控制同时处理的请求数，熔断器阈值控制连续失败多少次后暂停请求</font></html>")
-        panel.add(hintLabel, gbc)
-        row++
-
-        return row
-    }
-
     private fun addConfigSection(
         panel: JPanel,
         gbc: GridBagConstraints,
@@ -385,52 +357,11 @@ class SettingsDialog(
         return row
     }
 
-    private fun addRulesConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
-        var row = startRow
-
-        addSeparator(panel, gbc, row++)
-        addSectionTitle(panel, gbc, row++, "RULES 配置（追加到 System Prompt 后面）")
-
-        // 添加多行文本框（带滚动条）
-        gbc.apply {
-            gridx = 0
-            gridy = row
-            gridwidth = 2
-            weightx = 1.0
-            weighty = 0.0
-            fill = GridBagConstraints.HORIZONTAL
-        }
-        val scrollPane = JScrollPane(rulesTextArea).apply {
-            verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
-            horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
-            preferredSize = java.awt.Dimension(500, 300)
-        }
-        panel.add(scrollPane, gbc)
-        row++
-
-        // 添加提示标签
-        gbc.apply {
-            gridx = 0
-            gridy = row
-            gridwidth = 2
-            weightx = 0.0
-            weighty = 0.0
-            fill = GridBagConstraints.HORIZONTAL
-        }
-        val hintLabel = JLabel("<html><font color='gray' size='2'>提示：这里配置的规则将追加到 System Prompt 后面，用于指导 LLM 的行为模式</font></html>")
-        panel.add(hintLabel, gbc)
-        row++
-
-        return row
-    }
-
     private fun addOtherConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
         var row = startRow
 
         addSeparator(panel, gbc, row++)
         addSectionTitle(panel, gbc, row++, "其他配置")
-
-        row = addLabeledField(panel, gbc, row, "项目名称:", projectKeyField)
 
         gbc.gridx = 0
         gbc.gridy = row
@@ -496,7 +427,15 @@ class SettingsDialog(
             add(cancelButton)
         }
 
+        // RULES 配置提示
+        val rulesHintLabel = JLabel("""<html><body style='width: 280px; font-size: 11px; color: #666;'>
+            <b>自定义规则 (RULES):</b><br>
+            项目级: <code>.sman/RULES.md</code><br>
+            全局级: <code>~/.sman/RULES.md</code>
+        </body></html>""".trimIndent())
+
         return JPanel(BorderLayout()).apply {
+            add(rulesHintLabel, BorderLayout.WEST)
             add(buttonWrapper, BorderLayout.EAST)
         }
     }
@@ -628,47 +567,18 @@ class SettingsDialog(
         val bgeApiKey = getApiKeyFieldValue(bgeApiKeyField)
         val rerankerEndpoint = rerankerEndpointField.text.trim()
         val rerankerApiKey = getApiKeyFieldValue(rerankerApiKeyField)
-        val projectKey = projectKeyField.text.trim()
-
-        // 性能配置
-        val bgeMaxTokens = bgeMaxTokensField.text.trim()
-        val bgeTruncationStrategy = bgeTruncationStrategyCombo.selectedItem as String
-        val bgeTruncationStepSize = bgeTruncationStepSizeField.text.trim()
-        val bgeMaxTruncationRetries = bgeMaxTruncationRetriesField.text.trim()
-        val bgeRetryMax = bgeRetryMaxField.text.trim()
-        val bgeRetryBaseDelay = bgeRetryBaseDelayField.text.trim()
-        val bgeConcurrentLimit = bgeConcurrentLimitField.text.trim()
-        val bgeCircuitBreakerThreshold = bgeCircuitBreakerThresholdField.text.trim()
-
-        // RULES 配置
-        val rules = rulesTextArea.text.trim()
 
         // 验证必填字段
         if (!validateRequiredFields(llmBaseUrl, "LLM Base URL") ||
             !validateRequiredFields(llmModelName, "LLM 模型名称") ||
             !validateRequiredFields(bgeEndpoint, "BGE-M3 端点") ||
-            !validateRequiredFields(rerankerEndpoint, "Reranker 端点") ||
-            !validateRequiredFields(projectKey, "项目名称")) {
-            return null
-        }
-
-        // 验证性能配置数值字段
-        if (!validateNumericField(bgeMaxTokens, "Token 限制", 1, 8192) ||
-            !validateNumericField(bgeTruncationStepSize, "截断步长", 100, 5000) ||
-            !validateNumericField(bgeMaxTruncationRetries, "最大截断重试", 1, 20) ||
-            !validateNumericField(bgeRetryMax, "最大重试次数", 0, 10) ||
-            !validateNumericField(bgeRetryBaseDelay, "重试基础延迟", 100, 60000) ||
-            !validateNumericField(bgeConcurrentLimit, "并发限制", 1, 16) ||
-            !validateNumericField(bgeCircuitBreakerThreshold, "熔断器阈值", 1, 20)) {
+            !validateRequiredFields(rerankerEndpoint, "Reranker 端点")) {
             return null
         }
 
         return ConfigData(
             llmApiKey, llmBaseUrl, llmModelName,
-            bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey, projectKey,
-            bgeMaxTokens, bgeTruncationStrategy, bgeTruncationStepSize, bgeMaxTruncationRetries,
-            bgeRetryMax, bgeRetryBaseDelay, bgeConcurrentLimit, bgeCircuitBreakerThreshold,
-            rules,
+            bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey,
             autoAnalysisEnabled = autoAnalysisSwitch.isSelected
         )
     }
@@ -676,19 +586,6 @@ class SettingsDialog(
     private fun validateRequiredFields(value: String, fieldName: String): Boolean {
         if (value.isEmpty()) {
             showError("$fieldName 不能为空！")
-            return false
-        }
-        return true
-    }
-
-    private fun validateNumericField(value: String, fieldName: String, min: Int, max: Int): Boolean {
-        val num = value.toIntOrNull()
-        if (num == null) {
-            showError("$fieldName 必须是有效的数字！")
-            return false
-        }
-        if (num < min || num > max) {
-            showError("$fieldName 必须在 $min 到 $max 之间！")
             return false
         }
         return true
@@ -711,19 +608,6 @@ class SettingsDialog(
         storage.rerankerEndpoint = config.rerankerEndpoint
         storage.rerankerApiKey = config.rerankerApiKey
 
-        // 性能配置
-        storage.bgeMaxTokens = config.bgeMaxTokens
-        storage.bgeTruncationStrategy = config.bgeTruncationStrategy
-        storage.bgeTruncationStepSize = config.bgeTruncationStepSize
-        storage.bgeMaxTruncationRetries = config.bgeMaxTruncationRetries
-        storage.bgeRetryMax = config.bgeRetryMax
-        storage.bgeRetryBaseDelay = config.bgeRetryBaseDelay
-        storage.bgeConcurrentLimit = config.bgeConcurrentLimit
-        storage.bgeCircuitBreakerThreshold = config.bgeCircuitBreakerThreshold
-
-        // RULES 配置
-        storage.rules = config.rules
-
         // 自动分析配置
         storage.autoAnalysisEnabled = config.autoAnalysisEnabled
 
@@ -731,20 +615,21 @@ class SettingsDialog(
         val userConfig = SmanConfig.UserConfig(
             llmApiKey = storage.llmApiKey,
             llmBaseUrl = storage.llmBaseUrl,
-            llmModelName = storage.llmModelName,
-            // BGE 性能配置
-            bgeMaxTokens = storage.bgeMaxTokens,
-            bgeTruncationStrategy = storage.bgeTruncationStrategy,
-            bgeTruncationStepSize = storage.bgeTruncationStepSize,
-            bgeMaxTruncationRetries = storage.bgeMaxTruncationRetries,
-            bgeRetryMax = storage.bgeRetryMax,
-            bgeRetryBaseDelay = storage.bgeRetryBaseDelay,
-            bgeConcurrentLimit = storage.bgeConcurrentLimit,
-            bgeCircuitBreakerThreshold = storage.bgeCircuitBreakerThreshold
+            llmModelName = storage.llmModelName
         )
         SmanConfig.setUserConfig(userConfig)
 
         logger.info("设置已保存: autoAnalysisEnabled={}", config.autoAnalysisEnabled)
+
+        // 核心优化：如果自动分析启用且 API Key 已配置，立即触发分析
+        if (config.autoAnalysisEnabled && config.llmApiKey.isNotBlank()) {
+            logger.info("配置保存完成，立即触发项目分析")
+            try {
+                SmanPlugin.getAnalysisScheduler(project)?.triggerImmediateAnalysis()
+            } catch (e: Exception) {
+                logger.warn("触发立即分析失败: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -802,18 +687,6 @@ class SettingsDialog(
         val bgeApiKey: String,
         val rerankerEndpoint: String,
         val rerankerApiKey: String,
-        val projectKey: String,
-        // 性能配置
-        val bgeMaxTokens: String,
-        val bgeTruncationStrategy: String,
-        val bgeTruncationStepSize: String,
-        val bgeMaxTruncationRetries: String,
-        val bgeRetryMax: String,
-        val bgeRetryBaseDelay: String,
-        val bgeConcurrentLimit: String,
-        val bgeCircuitBreakerThreshold: String,
-        // RULES 配置
-        val rules: String,
         // 自动分析配置
         val autoAnalysisEnabled: Boolean
     )
@@ -859,106 +732,6 @@ class SettingsDialog(
         private const val ERROR_HTTP_PREFIX = "✗ HTTP"
         private const val ERROR_PREFIX = "✗"
         private const val CONNECTION_FAILED_MESSAGE = "连接失败"
-
-        // 默认 RULES
-        private const val DEFAULT_RULES = """## 🔄 三阶段工作流 (The Workflow)
-
-### 1️⃣ 阶段一：深度分析 (Analyze)
-**回答声明**：`【分析问题】`
-
-**目标**：在动手之前，先确保"做正确的事"。
-
-**必须执行的动作**：
-1.  **全景扫描**：搜索并阅读所有相关文件，建立上下文。
-2.  **领域对齐 (DDD Lite)**：
-    *   确认本次修改涉及的核心业务名词（Ubiquitous Language）定义是否一致。
-    *   检查是否破坏了现有的业务不变量（Invariants）。
-3.  **根因分析**：从底层逻辑推导问题本质，而非仅修复表面报错。
-4.  **方案构思**：提供 1~3 个解决方案。
-    *   每个方案需评估：复杂度、副作用、技术债务风险。
-    *   如果方案与用户目标冲突，必须直言相告。
-
-**🚫 禁止**：写任何实现代码、急于给出最终方案。
----
-
-### 2️⃣ 阶段二：方案蓝图 (Plan)
-**回答声明**：`【制定方案】`
-
-**前置条件**：用户已明确选择或确认了一个方案。
-
-**目标**：将模糊的需求转化为精确的施工图纸 (SDD + TDD)。
-
-**必须执行的动作**：
-1.  **契约定义 (Spec-First)**：
-    *   如果涉及数据结构变更，**必须**先列出修改后的 Interface/Type 定义。
-    *   如果涉及 API 变更，**必须**先列出函数签名。
-2.  **验证策略 (Test Plan)**：
-    *   列出 3-5 个关键测试场景（包含 Happy Path 和 边缘情况）。
-    *   *示例：* "验证当库存不足时，抛出 `InsufficientStockError` 而不是返回 false。"
-3.  **文件变更清单**：
-    *   列出所有受影响的文件及简要修改逻辑。
-
-**🚫 禁止**：使用硬编码、模糊的描述。
-
----
-
-### 3️⃣ 阶段三：稳健执行 (Execute)
-**回答声明**：`【执行方案】`
-
-**前置条件**：用户已确认方案蓝图。
-
-**目标**：高质量、无坏味道地实现代码。
-
-**必须执行的动作**：
-1.  **分步实现**：严格按照既定方案编码，不要夹带私货。
-2.  **代码优化**：使用 Task 工具调用 code-simplifier agent 优化代码。
-    *   调用格式：`Use the Task tool to launch the code-simplifier agent to refine the implementation`
-    *   等待 code-simplifier 完成后再继续
-3.  **自我审查 (Self-Review)**：
-    *   检查是否引入了新的"坏味道"（见下文）。
-    *   检查是否破坏了单一职责原则。
-4.  **验证闭环**：
-    *   自动运行或编写对应的测试代码，证明代码是工作的。
-    *   如果无法运行测试，请提供手动验证的步骤。
-
-**🚫 禁止**：提交未经验证的代码、随意添加非给定内容。
-
----
-
-## 📏 代码质量公约 (Code Quality Covenant)
-
-### 🧱 物理约束 (必须遵守)
-1.  **单一职责**：一个文件只做一件事。如果一个文件既做 UI 又做逻辑，必须拆分。
-2.  **行数熔断**：
-    *   动态语言 (JS/TS/Py)：单文件上限 **300 行**。
-    *   静态语言 (Java/Go)：单文件上限 **500 行**。
-    *   *超过限制必须重构拆分，无例外。*
-3.  **目录结构**：单文件夹内文件不超过 **8 个**，超过则建立子目录归档。
-
-### ☠️ 必须根除的"坏味道" (Bad Smells)
-一旦发现以下迹象，必须在【阶段一】或【阶段二】提出重构建议：
-
-1.  **僵化 (Rigidity)**：改一个地方需要改动很多关联文件。（解法：依赖倒置）
-2.  **脆弱 (Fragility)**：改动这里导致无关的地方报错。（解法：解耦、高内聚）
-3.  **重复 (DRY Violation)**：同样的逻辑复制粘贴。（解法：提取公共函数/组合模式）
-4.  **数据泥团 (Data Clumps)**：总是结伴出现的参数列表。（解法：封装为 Value Object）
-5.  **基本类型偏执 (Primitive Obsession)**：用字符串/数字代表复杂的业务概念。（解法：使用 Enum 或专用类型）
-
----
-
-## ⚠️ 每次回复前的自我检查清单
-
-```text
-[ ] 我是否声明了当前所处的阶段？
-[ ] (如果是阶段一) 我是否检查了业务名词和领域边界？
-[ ] (如果是阶段二) 我是否列出了 Interface 定义和测试用例？
-[ ] (如果是阶段三) 我是否遵守了 300/500 行限制？
-[ ] 我是否在等待用户的确认指令？
-```
-
----
-
-"""
 
         // JSON 媒体类型（复用）
         private val JSON_MEDIA_TYPE = "application/json".toMediaTypeOrNull()

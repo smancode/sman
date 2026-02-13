@@ -1,14 +1,13 @@
 package com.smancode.sman.analysis.executor
 
-import com.smancode.sman.analysis.model.AnalysisStatus
 import com.smancode.sman.analysis.model.AnalysisType
 import com.smancode.sman.analysis.model.ProjectMapManager
 import com.smancode.sman.analysis.model.StepState
 import com.smancode.sman.analysis.sync.MdToH2SyncService
 import com.smancode.sman.ide.service.SmanService
-import com.smancode.sman.model.message.Role
 import com.smancode.sman.model.part.TextPart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
@@ -46,7 +45,7 @@ class AnalysisTaskExecutor(
             logger.info("开始执行分析: type={}, projectKey={}", type.key, projectKey)
 
             // 更新状态为 RUNNING
-            ProjectMapManager.updateAnalysisStepState(projectKey, type, StepState.RUNNING)
+            ProjectMapManager.updateAnalysisStepState(projectBasePath, projectKey, type, StepState.RUNNING)
 
             val result = try {
                 // 1. 加载分析提示词
@@ -54,7 +53,7 @@ class AnalysisTaskExecutor(
 
                 // 2. 创建临时会话
                 val sessionId = "analysis-${type.key}-${UUID.randomUUID()}"
-                val session = smanService.getOrCreateSession(sessionId)
+                smanService.getOrCreateSession(sessionId)
 
                 // 3. 构建用户输入（包含提示词）
                 val userInput = """
@@ -71,13 +70,8 @@ class AnalysisTaskExecutor(
                     请将分析结果以 Markdown 格式输出，包含完整的分析内容。
                 """.trimIndent()
 
-                // 4. 收集响应 Part
-                val parts = mutableListOf<com.smancode.sman.model.part.Part>()
-                val partPusher = Consumer<com.smancode.sman.model.part.Part> { part ->
-                    parts.add(part)
-                }
-
-                // 5. 执行分析
+                // 4. 执行分析（Part 收集器暂时不使用，保留回调接口）
+                val partPusher = Consumer<com.smancode.sman.model.part.Part> { /* 预留扩展 */ }
                 val response = smanService.processMessage(sessionId, userInput, partPusher)
 
                 // 6. 提取 Markdown 内容
@@ -90,7 +84,7 @@ class AnalysisTaskExecutor(
                 val fragmentsCount = syncService.syncAnalysisResult(type)
 
                 // 9. 更新状态为 COMPLETED
-                ProjectMapManager.updateAnalysisStepState(projectKey, type, StepState.COMPLETED)
+                ProjectMapManager.updateAnalysisStepState(projectBasePath, projectKey, type, StepState.COMPLETED)
 
                 AnalysisResult.Success(
                     type = type,
@@ -100,7 +94,7 @@ class AnalysisTaskExecutor(
 
             } catch (e: Exception) {
                 logger.error("分析执行失败: type={}", type.key, e)
-                ProjectMapManager.updateAnalysisStepState(projectKey, type, StepState.FAILED)
+                ProjectMapManager.updateAnalysisStepState(projectBasePath, projectKey, type, StepState.FAILED)
 
                 AnalysisResult.Failure(
                     type = type,
@@ -110,6 +104,53 @@ class AnalysisTaskExecutor(
 
             result
         }
+    }
+
+    /**
+     * 带重试机制的分析任务执行
+     *
+     * 核心方法：支持指数退避重试，确保分析任务健壮性
+     *
+     * @param type 分析类型
+     * @param maxRetries 最大重试次数（默认 3 次）
+     * @param baseDelayMs 基础延迟毫秒（默认 2000ms，指数退避）
+     * @return AnalysisResult
+     */
+    suspend fun executeWithRetry(
+        type: AnalysisType,
+        maxRetries: Int = 3,
+        baseDelayMs: Long = 2000
+    ): AnalysisResult {
+        var lastError: String? = null
+
+        repeat(maxRetries + 1) { attempt ->
+            val result = execute(type)
+
+            when (result) {
+                is AnalysisResult.Success -> {
+                    if (attempt > 0) {
+                        logger.info("分析任务重试成功: type={}, attempt={}/{}", type.key, attempt + 1, maxRetries + 1)
+                    }
+                    return result
+                }
+                is AnalysisResult.Failure -> {
+                    lastError = result.error
+                    if (attempt < maxRetries) {
+                        // 指数退避：2s, 4s, 8s
+                        val delayMs = baseDelayMs * (1L shl attempt)
+                        logger.warn("分析任务失败，准备重试: type={}, attempt={}/{}, delay={}ms, error={}",
+                            type.key, attempt + 1, maxRetries + 1, delayMs, lastError)
+                        ProjectMapManager.updateAnalysisStepState(projectBasePath, projectKey, type, StepState.PENDING)
+                        delay(delayMs)
+                    } else {
+                        logger.error("分析任务最终失败: type={}, attempts={}, error={}", type.key, maxRetries + 1, lastError)
+                    }
+                }
+                is AnalysisResult.Skipped -> return result
+            }
+        }
+
+        return AnalysisResult.Failure(type, "重试 $maxRetries 次后仍失败: $lastError")
     }
 
     /**
@@ -252,7 +293,7 @@ class AnalysisTaskExecutor(
      * @return true 如果需要执行
      */
     fun needsExecution(type: AnalysisType): Boolean {
-        val entry = ProjectMapManager.getProjectEntry(projectKey)
+        val entry = ProjectMapManager.getProjectEntry(projectBasePath, projectKey)
 
         if (entry == null) {
             logger.debug("项目未注册，需要执行所有分析")
