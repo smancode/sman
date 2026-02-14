@@ -3,6 +3,7 @@ package com.smancode.sman.analysis.executor
 import com.smancode.sman.analysis.model.AnalysisType
 import com.smancode.sman.analysis.model.ProjectMapManager
 import com.smancode.sman.analysis.model.StepState
+import com.smancode.sman.analysis.service.ProjectContextInjector
 import com.smancode.sman.analysis.sync.MdToH2SyncService
 import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.model.part.TextPart
@@ -25,13 +26,52 @@ class AnalysisTaskExecutor(
     private val projectKey: String,
     private val projectBasePath: Path,
     private val smanService: SmanService,
-    private val bgeEndpoint: String
+    private val bgeEndpoint: String,
+    private val contextInjector: ProjectContextInjector? = null
 ) {
     private val logger = LoggerFactory.getLogger(AnalysisTaskExecutor::class.java)
 
     // H2 同步服务
     private val syncService: MdToH2SyncService by lazy {
         MdToH2SyncService(projectKey, bgeEndpoint, projectBasePath)
+    }
+
+    /**
+     * 获取当前分析任务的前置分析结果（用于渐进式理解）
+     */
+    private suspend fun getPriorAnalysisContext(type: AnalysisType): String {
+        if (contextInjector == null) return ""
+
+        return try {
+            val sb = StringBuilder()
+
+            // 项目结构分析：注入已有的基础信息（如 Gradle 模块名）
+            if (type == AnalysisType.TECH_STACK || type == AnalysisType.API_ENTRIES ||
+                type == AnalysisType.DB_ENTITIES || type == AnalysisType.ENUMS) {
+                val structureContent = contextInjector.getProjectContextSummary(projectKey)
+                if (structureContent.isNotEmpty()) {
+                    sb.append("\n## 已有的项目分析结果\n\n")
+                    sb.append(structureContent)
+                    sb.append("\n")
+                }
+            }
+
+            // 技术栈分析完成后，后续分析可以注入技术栈信息
+            if (type == AnalysisType.API_ENTRIES || type == AnalysisType.DB_ENTITIES ||
+                type == AnalysisType.ENUMS || type == AnalysisType.CONFIG_FILES) {
+                val techStackContent = contextInjector.getTechStackSummary(projectKey)
+                if (techStackContent.isNotEmpty()) {
+                    sb.append("\n## 技术栈信息\n\n")
+                    sb.append(techStackContent)
+                    sb.append("\n")
+                }
+            }
+
+            sb.toString()
+        } catch (e: Exception) {
+            logger.warn("获取前置分析上下文失败: type={}", type.key, e)
+            ""
+        }
     }
 
     /**
@@ -51,16 +91,26 @@ class AnalysisTaskExecutor(
                 // 1. 加载分析提示词
                 val prompt = loadAnalysisPrompt(type)
 
-                // 2. 创建临时会话
+                // 2. 获取前置分析上下文（渐进式理解）
+                val priorContext = getPriorAnalysisContext(type)
+
+                // 3. 创建临时会话
                 val sessionId = "analysis-${type.key}-${UUID.randomUUID()}"
                 smanService.getOrCreateSession(sessionId)
 
-                // 3. 构建用户输入（包含提示词）
+                // 4. 构建用户输入（包含提示词和前置上下文）
+                val priorContextSection = if (priorContext.isNotEmpty()) {
+                    "\n# 已有的分析结果\n\n$priorContext\n"
+                } else {
+                    ""
+                }
+
                 val userInput = """
                     # 任务目标
 
                     请执行 ${type.displayName} 分析。
 
+                    $priorContextSection
                     # 提示词
 
                     $prompt
@@ -211,7 +261,80 @@ class AnalysisTaskExecutor(
             }
         }
 
-        return mdContent.toString().trim()
+        // 【关键】清理 Markdown 内容（过滤 thinking 标签、工具调用格式等）
+        return cleanMarkdownContent(mdContent.toString().trim())
+    }
+
+    /**
+     * 清理 Markdown 内容
+     *
+     * 过滤以下内容：
+     * 1. thinking 标签：`<thinking>...</thinking>`、`<thinkData>...</thinkData>`、`THINKING...THINKING_END`
+     * 2. 工具调用格式：`[TOOL_CALL]...[/TOOL_CALL]`、`<minimax:tool_call>...</minimax:tool_call>`
+     * 3. JSON 格式的工具调用：`{"tool": "...", "parameters": {...}}`
+     * 4. LLM 的思考过程：`## 第一步`、`## Step`、`我将...` 等元语言
+     * 5. 多余的空行
+     *
+     * @param content 原始 Markdown 内容
+     * @return 清理后的 Markdown 内容
+     */
+    private fun cleanMarkdownContent(content: String): String {
+        var cleaned = content
+
+        // 1. 过滤 thinking 标签（标准格式）
+        // 匹配 <thinking>...</thinking>
+        cleaned = cleaned.replace(Regex("""<thinking>[\s\S]*?</thinking>""", RegexOption.IGNORE_CASE), "")
+        // 匹配 <thinkData>...</thinkData>
+        cleaned = cleaned.replace(Regex("""<thinkData>[\s\S]*?</thinkData>""", RegexOption.IGNORE_CASE), "")
+        // 匹配 <think...</think（通用格式）
+        cleaned = cleaned.replace(Regex("""<think(?:ing|Data)?>[\s\S]*?</think(?:ing|Data)?>""", RegexOption.IGNORE_CASE), "")
+
+        // 2. 过滤备用 thinking 格式
+        cleaned = cleaned.replace(Regex("""THINKING[\s\S]*?THINKING_END""", RegexOption.IGNORE_CASE), "")
+        cleaned = cleaned.replace(Regex("""<reasoning>[\s\S]*?</reasoning>""", RegexOption.IGNORE_CASE), "")
+
+        // 3. 过滤工具调用格式
+        // 匹配 [TOOL_CALL]...[/TOOL_CALL]
+        cleaned = cleaned.replace(Regex("""\[TOOL_CALL\][\s\S]*?\[/TOOL_CALL\]""", RegexOption.IGNORE_CASE), "")
+        // 匹配 <minimax:tool_call>...</minimax:tool_call>
+        cleaned = cleaned.replace(Regex("""<minimax:tool_call>[\s\S]*?</minimax:tool_call>""", RegexOption.IGNORE_CASE), "")
+        // 匹配 {tool => "..."} 格式
+        cleaned = cleaned.replace(Regex("""\{tool\s*=>[^}]+\}""", RegexOption.IGNORE_CASE), "")
+        // 匹配 {parameter => "..."} 格式
+        cleaned = cleaned.replace(Regex("""\{parameter[^}]+\}""", RegexOption.IGNORE_CASE), "")
+        // 匹配 --filePattern "xxx" 格式
+        cleaned = cleaned.replace(Regex("""--\w+\s+["'][^"']+["']""", RegexOption.IGNORE_CASE), "")
+        // 匹配 <invoke name="..."> 格式
+        cleaned = cleaned.replace(Regex("""<invoke[\s\S]*?</invoke>""", RegexOption.IGNORE_CASE), "")
+        // 匹配 <parameter name="..."> 格式
+        cleaned = cleaned.replace(Regex("""<parameter[\s\S]*?</parameter>""", RegexOption.IGNORE_CASE), "")
+
+        // 4. 过滤 LLM 的思考过程标记（元语言）
+        // 移除包含"第X步"或"Step X"的标题行（X可以是数字或中文数字）
+        cleaned = cleaned.replace(Regex("""##\s*第[一二三四五六七八九十\d]+\s*步[^\n]*\n?"""), "")
+        cleaned = cleaned.replace(Regex("""##\s*Step\s*\d+[^\n]*\n?""", RegexOption.IGNORE_CASE), "")
+        // 移除思考语句
+        cleaned = cleaned.replace(Regex("""我将按照[^。\n]*[。\n]?"""), "")
+        cleaned = cleaned.replace(Regex("""让我[^。\n]*[。\n]?"""), "")
+        cleaned = cleaned.replace(Regex("""我来[^。\n]*[。\n]?"""), "")
+        cleaned = cleaned.replace(Regex("""首先[^。\n]*[。\n]?"""), "")
+
+        // 5. 过滤 JSON 格式的工具调用（单独一行）
+        cleaned = cleaned.lines().filter { line ->
+            val trimmedLine = line.trim()
+            // 过滤单独一行的 JSON 对象（可能是工具调用）
+            !(trimmedLine.startsWith("{") && trimmedLine.endsWith("}") &&
+              (trimmedLine.contains("\"tool\"") || trimmedLine.contains("\"parameters\"") ||
+               trimmedLine.contains("\"invoke\"") || trimmedLine.contains("\"name\"")))
+        }.joinToString("\n")
+
+        // 6. 清理多余的空行（3个以上连续空行 -> 2个）
+        cleaned = cleaned.replace(Regex("""\n{3,}"""), "\n\n")
+
+        // 7. 清理行首行尾空白
+        cleaned = cleaned.trim()
+
+        return cleaned
     }
 
     /**

@@ -634,6 +634,7 @@ class LlmService(
         body["model"] = endpoint.model!!
         body["max_tokens"] = endpoint.maxTokens
         body["temperature"] = 0.0  // 设置为 0，确保输出稳定，避免幻觉
+        body["thinking"] = mapOf("type" to "disabled")  // 禁用 thinking，减少无效输出
 
         // 构建消息列表
         val messages = mutableListOf<Map<String, String>>()

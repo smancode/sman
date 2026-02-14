@@ -80,6 +80,28 @@ class ProjectContextInjector(
     }
 
     /**
+     * 获取技术栈摘要（用于后续分析的上下文注入）
+     */
+    suspend fun getTechStackSummary(projectKey: String): String = withContext(Dispatchers.IO) {
+        try {
+            val entry = ProjectMapManager.getProjectEntry(projectKey)
+            if (entry == null || entry.analysisStatus.techStack != StepState.COMPLETED) {
+                return@withContext ""
+            }
+
+            val techStackContent = readMdFileContent(entry.path, AnalysisType.TECH_STACK.mdFileName)
+            if (techStackContent != null) {
+                extractSummary(techStackContent, 300)
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            logger.warn("获取技术栈摘要失败: projectKey={}", projectKey, e)
+            ""
+        }
+    }
+
+    /**
      * 检查项目分析是否完成（核心步骤完成即可）
      */
     suspend fun isAnalysisComplete(projectKey: String): Boolean = withContext(Dispatchers.IO) {

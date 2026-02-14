@@ -392,9 +392,10 @@ class SmanLoop(
     }
 
     /**
-     * 从响应中提取 JSON（8级递进式解析策略）
+     * 从响应中提取 JSON（9级递进式解析策略）
      *
      * 解析策略从简单到复杂，逐级尝试，确保最大容错能力：
+     * Level 0: 解析非标准格式（minimax:tool_call、调用工具: xxx 等）【新增】
      * Level 1: 直接解析（最快）
      * Level 2: 清理后解析（去除 markdown 代码块）
      * Level 3: 修复转义后解析（修复常见转义问题）
@@ -413,6 +414,14 @@ class SmanLoop(
         }
 
         val trimmedResponse = response.trim()
+
+        // ========== Level 0: 解析非标准格式（新增）==========
+        // 支持 minimax 原生格式、模仿历史格式等
+        val level0Result = extractNonStandardToolCall(trimmedResponse)
+        if (level0Result != null && tryParseJson(level0Result)) {
+            logger.info("Level 0 成功: 解析非标准工具调用格式")
+            return level0Result
+        }
 
         // ========== Level 1: 直接解析 ==========
         if (tryParseJson(trimmedResponse)) {
@@ -473,6 +482,221 @@ class SmanLoop(
         // ========== Level 8: 所有策略失败，降级为纯文本 ==========
         logger.warn("所有 JSON 提取策略失败，将降级为纯文本处理")
         return null
+    }
+
+    /**
+     * Level 0: 解析非标准工具调用格式
+     *
+     * 支持以下格式：
+     * 1. minimax 原生格式：<minimax:tool_call><invoke name="xxx">...</invoke></minimax:tool_call>
+     * 2. 模仿历史格式：调用工具: xxx\n参数: {...}
+     * 3. 伪代码格式：[TOOL_CALL]{tool => "xxx", parameters => {...}}[/TOOL_CALL]
+     *
+     * @param response LLM 响应
+     * @return 转换后的标准 JSON 字符串，如果无法解析则返回 null
+     */
+    private fun extractNonStandardToolCall(response: String): String? {
+        // 1. 尝试解析 minimax 原生格式
+        val minimaxResult = extractMinimaxToolCall(response)
+        if (minimaxResult != null) {
+            logger.info("Level 0: 解析到 minimax 工具调用格式")
+            return minimaxResult
+        }
+
+        // 2. 尝试解析"调用工具: xxx\n参数: {...}"格式
+        val historyStyleResult = extractHistoryStyleToolCall(response)
+        if (historyStyleResult != null) {
+            logger.info("Level 0: 解析到历史风格工具调用格式")
+            return historyStyleResult
+        }
+
+        // 3. 尝试解析 [TOOL_CALL]...[/TOOL_CALL] 格式
+        val toolCallTagResult = extractToolCallTagFormat(response)
+        if (toolCallTagResult != null) {
+            logger.info("Level 0: 解析到 [TOOL_CALL] 标签格式")
+            return toolCallTagResult
+        }
+
+        return null
+    }
+
+    /**
+     * 解析 minimax 原生工具调用格式
+     *
+     * 格式示例：
+     * <minimax:tool_call>
+     * <invoke name="read_file">
+     * <parameter name="simpleName">Application</parameter>
+     * </invoke>
+     * </minimax:tool_call>
+     */
+    private fun extractMinimaxToolCall(response: String): String? {
+        // 检查是否包含 minimax:tool_call 标签
+        if (!response.contains("<minimax:tool_call>", ignoreCase = true)) {
+            return null
+        }
+
+        val toolCalls = mutableListOf<Map<String, Any>>()
+
+        // 解析 <invoke name="xxx"> 标签
+        val invokePattern = Regex("""<invoke\s+name=["'](\w+)["']>([\s\S]*?)</invoke>""", RegexOption.IGNORE_CASE)
+        val matches = invokePattern.findAll(response)
+
+        for (match in matches) {
+            val toolName = match.groupValues[1]
+            val parameterContent = match.groupValues[2]
+
+            // 解析参数
+            val parameters = mutableMapOf<String, Any>()
+            val paramPattern = Regex("""<parameter\s+name=["'](\w+)["']>([\s\S]*?)</parameter>""", RegexOption.IGNORE_CASE)
+            paramPattern.findAll(parameterContent).forEach { paramMatch ->
+                val paramName = paramMatch.groupValues[1]
+                val paramValue = paramMatch.groupValues[2].trim()
+                parameters[paramName] = paramValue
+            }
+
+            toolCalls.add(mapOf(
+                "type" to "tool",
+                "toolName" to toolName,
+                "parameters" to parameters
+            ))
+        }
+
+        if (toolCalls.isEmpty()) {
+            return null
+        }
+
+        // 转换为标准 JSON 格式
+        return try {
+            objectMapper.writeValueAsString(mapOf("parts" to toolCalls))
+        } catch (e: Exception) {
+            logger.warn("转换 minimax 工具调用为 JSON 失败: {}", e.message)
+            null
+        }
+    }
+
+    /**
+     * 解析"调用工具: xxx\n参数: {...}"格式
+     *
+     * 格式示例：
+     * 调用工具: read_file
+     * 参数: {simpleName: "settings", startLine: 1, endLine: 100}
+     */
+    private fun extractHistoryStyleToolCall(response: String): String? {
+        // 检查是否包含"调用工具:"模式
+        val toolCallPattern = Regex("""调用工具[:：]\s*(\w+)""")
+        val toolMatch = toolCallPattern.find(response) ?: return null
+
+        val toolName = toolMatch.groupValues[1]
+
+        // 解析参数
+        val parameters = mutableMapOf<String, Any>()
+
+        // 尝试解析"参数: {...}"格式
+        val paramPattern = Regex("""参数[:：]\s*\{([^}]*)\}""")
+        val paramMatch = paramPattern.find(response)
+        if (paramMatch != null) {
+            val paramContent = paramMatch.groupValues[1]
+            // 解析 key: value 或 key: "value" 格式
+            val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
+            keyValuePattern.findAll(paramContent).forEach { kvMatch ->
+                val key = kvMatch.groupValues[1]
+                val value = kvMatch.groupValues[2].trim()
+                // 尝试解析为数字
+                parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
+            }
+        }
+
+        // 转换为标准 JSON 格式
+        return try {
+            val parts = mutableListOf<Map<String, Any>>(
+                mapOf(
+                    "type" to "tool",
+                    "toolName" to toolName,
+                    "parameters" to parameters
+                )
+            )
+            objectMapper.writeValueAsString(mapOf("parts" to parts))
+        } catch (e: Exception) {
+            logger.warn("转换历史风格工具调用为 JSON 失败: {}", e.message)
+            null
+        }
+    }
+
+    /**
+     * 解析 [TOOL_CALL]...[/TOOL_CALL] 格式
+     *
+     * 格式示例：
+     * [TOOL_CALL]
+     * {tool => "find_file", parameters => {
+     *   --filePattern "*.gradle"
+     * }}
+     * [/TOOL_CALL]
+     */
+    private fun extractToolCallTagFormat(response: String): String? {
+        // 检查是否包含 [TOOL_CALL] 标签
+        if (!response.contains("[TOOL_CALL]", ignoreCase = true)) {
+            return null
+        }
+
+        val toolCalls = mutableListOf<Map<String, Any>>()
+
+        // 解析 [TOOL_CALL]...[/TOOL_CALL] 内容
+        val toolCallPattern = Regex("""\[TOOL_CALL\]([\s\S]*?)\[/TOOL_CALL\]""", RegexOption.IGNORE_CASE)
+        val matches = toolCallPattern.findAll(response)
+
+        for (match in matches) {
+            val content = match.groupValues[1].trim()
+
+            // 尝试解析 {tool => "xxx", parameters => {...}} 格式
+            val toolNamePattern = Regex("""tool\s*=>\s*["'](\w+)["']""")
+            val toolNameMatch = toolNamePattern.find(content) ?: continue
+            val toolName = toolNameMatch.groupValues[1]
+
+            // 解析参数
+            val parameters = mutableMapOf<String, Any>()
+
+            // 解析 --key "value" 格式
+            val dashParamPattern = Regex("""--(\w+)\s+["']([^"']+)["']""")
+            dashParamPattern.findAll(content).forEach { paramMatch ->
+                val key = paramMatch.groupValues[1]
+                val value = paramMatch.groupValues[2]
+                parameters[key] = value
+            }
+
+            // 解析 parameters => { key: "value" } 格式
+            val paramsBlockPattern = Regex("""parameters\s*=>\s*\{([^}]+)\}""")
+            val paramsBlockMatch = paramsBlockPattern.find(content)
+            if (paramsBlockMatch != null) {
+                val paramsContent = paramsBlockMatch.groupValues[1]
+                val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
+                keyValuePattern.findAll(paramsContent).forEach { kvMatch ->
+                    val key = kvMatch.groupValues[1]
+                    val value = kvMatch.groupValues[2].trim()
+                    if (!parameters.containsKey(key)) {
+                        parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
+                    }
+                }
+            }
+
+            toolCalls.add(mapOf(
+                "type" to "tool",
+                "toolName" to toolName,
+                "parameters" to parameters
+            ))
+        }
+
+        if (toolCalls.isEmpty()) {
+            return null
+        }
+
+        // 转换为标准 JSON 格式
+        return try {
+            objectMapper.writeValueAsString(mapOf("parts" to toolCalls))
+        } catch (e: Exception) {
+            logger.warn("转换 [TOOL_CALL] 工具调用为 JSON 失败: {}", e.message)
+            null
+        }
     }
 
     /**

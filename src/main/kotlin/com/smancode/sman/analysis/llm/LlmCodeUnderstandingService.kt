@@ -63,7 +63,10 @@ class LlmCodeUnderstandingService(
             throw RuntimeException("LLM 返回格式错误: 缺少标题 '# $className'")
         }
 
-        return llmResponse
+        // 【修复】过滤掉 LLM thinking 标签内容（保存到 md 文件时也需要过滤）
+        val cleanedResponse = removeThinkingTags(llmResponse)
+
+        return cleanedResponse
     }
 
     /**
@@ -105,7 +108,10 @@ class LlmCodeUnderstandingService(
             throw RuntimeException("LLM 返回格式错误: 缺少标题 '# $enumName'")
         }
 
-        return llmResponse
+        // 【修复】过滤掉 LLM thinking 标签内容（保存到 md 文件时也需要过滤）
+        val cleanedResponse = removeThinkingTags(llmResponse)
+
+        return cleanedResponse
     }
 
     /**

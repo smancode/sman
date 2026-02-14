@@ -1,6 +1,10 @@
 package com.smancode.sman.analysis.model
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 文件快照
@@ -8,7 +12,7 @@ import kotlinx.serialization.Serializable
  * @property relativePath 相对路径
  * @property fileName 文件名
  * @property size 文件大小
- * @property lastModified 最后修改时间
+ * @property lastModified 最后修改时间（时间戳）
  * @property md5 MD5 哈希值
  */
 @Serializable
@@ -17,7 +21,10 @@ data class FileSnapshot(
     val fileName: String,
     val size: Long,
     val lastModified: Long,
-    val md5: String
+    val md5: String,
+    // 人类可读的最后修改时间
+    @EncodeDefault
+    val lastModifiedReadable: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).format(Date(lastModified))
 ) {
     companion object {
         private const val serialVersionUID: Long = 1L
