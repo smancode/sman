@@ -132,16 +132,19 @@ class LlmCodeUnderstandingService(
             throw IllegalArgumentException("相对路径不能为空")
         }
 
+        // 【修复】过滤掉 LLM thinking 标签内容（存储时不需要这些中间推理过程）
+        val cleanedContent = removeThinkingTags(mdContent)
+
         // 提取类名（从文件名或内容）
-        val className = extractClassName(sourceFile, mdContent)
+        val className = extractClassName(sourceFile, cleanedContent)
 
         // 判断是否为 Enum 类型
-        val isEnum = mdContent.contains("## 枚举定义") || mdContent.contains("## 字典映射")
+        val isEnum = cleanedContent.contains("## 枚举定义") || cleanedContent.contains("## 字典映射")
 
         // 按 --- 分割 MD 内容
-        val fragments = if (mdContent.contains("---")) {
+        val fragments = if (cleanedContent.contains("---")) {
             // 有 --- 分割，按分割块处理
-            mdContent.split("---")
+            cleanedContent.split("---")
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
         } else {
@@ -202,6 +205,26 @@ class LlmCodeUnderstandingService(
         logger.info("解析 MD 完成: file={}, class={}, fragments={}, relativePath={}",
             sourceFile.fileName, className, vectors.size, relativePath)
         return vectors
+    }
+
+    /**
+     * 过滤掉 LLM thinking 标签内容
+     *
+     * 移除模式：
+     * - `<think>` ... `</think>` （标准格式）
+     * - `THINKING` ... `THINKING_END` （备用格式）
+     */
+    private fun removeThinkingTags(content: String): String {
+        // 移除标准格式：<think> ... ```
+        var result = content.replace(Regex("""<think>[\s\S]*?</think>"""), "")
+
+        // 移除备用格式：THINKING ... THINKING_END
+        result = result.replace(Regex("""THINKING[\s\S]*?THINKING_END"""), "")
+
+        // 清理多余的空行
+        result = result.replace(Regex("""\n{3,}"""), "\n\n")
+
+        return result.trim()
     }
 
     /**

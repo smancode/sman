@@ -1592,7 +1592,29 @@ class SmanLoop(
         val part = ToolPart(partId, messageId, sessionId, toolName)
 
         // 解析 parameters 对象
-        val params = parseJsonNodeToMap(partJson.path("parameters"))
+        var params = parseJsonNodeToMap(partJson.path("parameters"))
+
+        // Fallback: 如果 parameters 为空，尝试从根级别提取参数（兼容扁平格式）
+        if (params.isEmpty()) {
+            logger.info("检测到扁平格式参数，尝试从根级别提取: toolName={}", toolName)
+            val rootParams = mutableMapOf<String, Any>()
+            val fields = partJson.fields()
+            while (fields.hasNext()) {
+                val entry = fields.next()
+                val key = entry.key
+                if (key != "type" && key != "summary" && key != "toolName") {
+                    val value = convertJsonNodeToObject(entry.value)
+                    if (value != null) {
+                        rootParams[key] = value
+                    }
+                }
+            }
+            if (rootParams.isNotEmpty()) {
+                params = rootParams
+                logger.info("从根级别提取参数成功: toolName={}, 参数={}", toolName, params.keys)
+            }
+        }
+
         part.parameters = params
 
         // 提取 LLM 生成的摘要

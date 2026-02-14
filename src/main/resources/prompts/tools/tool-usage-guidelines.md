@@ -45,19 +45,19 @@ CASE A: `expert_consult` returned enough information
 
 CASE B: `expert_consult` suggests specific class to read
 → Use `read_file` with `simpleName`
-→ Example: `{"simpleName": "PaymentService"}`
+→ Example: `{"toolName": "read_file", "parameters": {"simpleName": "PaymentService"}}`
 
 CASE C: `expert_consult` suggests finding method usage
 → Use `grep_file` to find all usages
-→ Example: `{"pattern": "executePayment", "filePattern": ".*Service\\.java"}`
+→ Example: `{"toolName": "grep_file", "parameters": {"pattern": "executePayment", "filePattern": ".*Service\\.java"}}`
 
 CASE D: `expert_consult` suggests understanding call relationships
 → Use `call_chain` with `methodRef`
-→ Example: `{"methodRef": "PaymentService.executePayment", "direction": "callers"}`
+→ Example: `{"toolName": "call_chain", "parameters": {"methodRef": "PaymentService.executePayment", "direction": "callers"}}`
 
 CASE E: `expert_consult` suggests finding files
 → Use `find_file` with `filePattern`
-→ Example: `{"filePattern": ".*Controller\\.java"}` or `{"filePattern": ".*Handler\\.java"}` or `{"filePattern": ".*Service\\.java"}`
+→ Example: `{"toolName": "find_file", "parameters": {"filePattern": ".*Controller\\.java"}}` or `{"toolName": "find_file", "parameters": {"filePattern": ".*Handler\\.java"}}`
 → IMPORTANT: Enterprise systems use various patterns (Controller, Handler, Service, Endpoint, etc.). Don't assume only Controller pattern exists.
 
 CASE F: User wants to modify code
