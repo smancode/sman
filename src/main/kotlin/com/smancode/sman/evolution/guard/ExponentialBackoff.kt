@@ -156,4 +156,15 @@ class BackoffStateManager(
     fun clearAllStates() {
         states.clear()
     }
+
+    /**
+     * 恢复状态（从数据库加载）
+     */
+    fun restoreState(projectKey: String, state: com.smancode.sman.evolution.persistence.BackoffStateEntity) {
+        states[projectKey] = BackoffState(
+            consecutiveErrors = state.consecutiveErrors,
+            lastErrorTime = state.lastErrorTime,
+            backoffUntil = state.backoffUntil
+        )
+    }
 }

@@ -156,6 +156,35 @@ class DailyQuotaManager(
         return tomorrow.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
+    /**
+     * 获取配额对象（内部使用）
+     */
+    internal fun getQuota(projectKey: String): DailyQuota? {
+        return quotas[projectKey]
+    }
+
+    /**
+     * 恢复配额（从数据库加载）
+     */
+    fun restoreQuota(projectKey: String, quota: com.smancode.sman.evolution.persistence.DailyQuotaEntity) {
+        // 检查是否需要跨天重置
+        val today = LocalDate.now().toString()
+        if (quota.lastResetDate != today) {
+            // 跨天了，重置配额
+            quotas[projectKey] = DailyQuota(
+                questionsToday = 0,
+                explorationsToday = 0,
+                lastResetDate = today
+            )
+        } else {
+            quotas[projectKey] = DailyQuota(
+                questionsToday = quota.questionsToday,
+                explorationsToday = quota.explorationsToday,
+                lastResetDate = quota.lastResetDate
+            )
+        }
+    }
+
     companion object {
         const val DEFAULT_MAX_QUESTIONS_PER_DAY = 50
         const val DEFAULT_MAX_EXPLORATIONS_PER_DAY = 100

@@ -15,6 +15,9 @@ data class EvolutionConfig(
     /** 是否启用自进化功能 */
     val enabled: Boolean = true,
 
+    /** 是否启用深度分析（更多问题、更深探索） */
+    val deepAnalysisEnabled: Boolean = false,
+
     /** 每次迭代间隔 (毫秒)，默认 60000ms (1 分钟) */
     val intervalMs: Long = 60000L,
 
@@ -53,7 +56,18 @@ data class EvolutionConfig(
     // ==================== Token 预算 ====================
 
     /** 每次迭代最大 Token 消耗 */
-    val maxTokensPerIteration: Int = 8000
+    val maxTokensPerIteration: Int = 8000,
+
+    // ==================== 智能控制配置 ====================
+
+    /** 连续重复问题阈值，超过此数量则停止学习 */
+    val maxConsecutiveDuplicateQuestions: Int = 5,
+
+    /** 项目学完阈值，学习记录数量超过此值认为项目已学完 */
+    val projectFullyLearnedThreshold: Int = 100,
+
+    /** 项目无变化时的跳过间隔（毫秒），默认 5 分钟 */
+    val projectUnchangedSkipIntervalMs: Long = 300000L
 ) {
     companion object {
         /** 默认配置实例 */
@@ -62,6 +76,14 @@ data class EvolutionConfig(
         /** 禁用自进化的配置实例 */
         val DISABLED = EvolutionConfig(enabled = false)
 
+        /** 深度分析配置（更多问题、更深探索） */
+        val DEEP_ANALYSIS = EvolutionConfig(
+            enabled = true,
+            deepAnalysisEnabled = true,
+            questionsPerIteration = 5,
+            maxExplorationSteps = 15
+        )
+
         /** 快速测试配置 (短间隔、少问题、小配额) */
         val FAST_TEST = EvolutionConfig(
             enabled = true,
@@ -69,7 +91,9 @@ data class EvolutionConfig(
             questionsPerIteration = 1,
             maxExplorationSteps = 3,
             maxDailyQuestions = 5,
-            maxTokensPerIteration = 2000
+            maxTokensPerIteration = 2000,
+            maxConsecutiveDuplicateQuestions = 2,
+            projectFullyLearnedThreshold = 10
         )
     }
 }

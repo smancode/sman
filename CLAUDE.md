@@ -10,9 +10,10 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 
 - **ReAct 循环**：Reasoning + Acting 交替进行，支持多步工具调用
 - **自进化学习**：后台自动生成问题、探索学习、积累知识（evolution 模块）
+- **断点续传**：IDEA 重启后自动恢复自进化循环状态
 - **三层缓存架构**：L1 内存 + L2 JVector + L3 H2，高效处理大型项目
 - **语义搜索**：BGE-M3 向量化 + BGE-Reranker 重排，实现代码语义检索
-- **提示词驱动**：12 个项目分析模块自动运行，生成项目知识库
+- **提示词驱动**：项目分析模块自动运行，生成项目知识库
 
 ---
 
@@ -62,21 +63,28 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 
 ```
 src/main/kotlin/com/smancode/sman/
-├── analysis/           # 项目分析模块（12 个 Scanner + 调度器）
-│   ├── coordination/   # 代码向量化协调器
+├── analysis/           # 项目分析模块
+│   ├── coordination/  # 代码向量化协调器
 │   ├── database/       # 向量存储（JVector + H2）
 │   ├── executor/       # 分析任务执行器
 │   ├── llm/            # LLM 代码理解服务
+│   ├── paths/          # 项目路径管理
 │   ├── scheduler/      # 后台分析调度器
 │   └── vectorization/  # BGE-M3 向量化客户端
 ├── config/             # 配置管理（SmanConfig, SmanCodeProperties）
 ├── evolution/          # 【核心】自迭代进化模块
+│   ├── context/        # 上下文注入器
+│   ├── explorer/       # 工具探索器
 │   ├── generator/      # 问题生成器（QuestionGenerator）
 │   ├── guard/          # 死循环防护（DoomLoopGuard, 配额管理）
+│   ├── knowledge/      # 知识范围定义
+│   ├── learning/       # 学习记录
 │   ├── loop/           # 自进化主循环（SelfEvolutionLoop）
-│   ├── memory/         # 学习记录仓储（LearningRecordRepository）
+│   ├── memory/         # 学习记录仓储
 │   ├── model/          # 进化模型（LearningRecord, EvolutionStatus）
-│   └── recorder/       # 学习记录器（LearningRecorder）
+│   ├── persistence/    # 状态持久化（断点续传）
+│   ├── recall/         # 多路径召回器
+│   └── recorder/       # 学习记录器
 ├── ide/                # IntelliJ 集成
 │   ├── action/         # IDE 动作
 │   ├── components/     # UI 组件
@@ -89,14 +97,13 @@ src/main/kotlin/com/smancode/sman/
 │   ├── llm/            # LLM 服务
 │   └── prompt/         # 提示词管理
 ├── tools/              # 工具系统
-│   ├── ToolRegistry    # 工具注册中心
-│   ├── ToolExecutor    # 工具执行器
 │   └── ide/            # 工具实现（expert_consult 等）
 ├── util/               # 工具类
 └── verification/       # 验证 Web 服务
 
 src/main/resources/
 ├── META-INF/plugin.xml    # 插件描述符
+├── db/evolution-schema.sql # 进化数据库表结构
 ├── sman.properties        # 配置文件
 ├── prompts/               # 提示词模板
 │   ├── analysis/          # 分析相关提示词
@@ -117,14 +124,14 @@ src/main/resources/
 1. 接收用户消息
 2. 检查上下文压缩需求
 3. 调用 LLM 流式处理
-4. 解析工具调用（JSON 提取支持 7 级降级）
+4. 解析工具调用（JSON 提取支持多级降级）
 5. 在子会话中执行工具（上下文隔离）
 6. 推送 Part 到前端
 
 特性：
 - **Doom Loop 检测**：自动检测重复工具调用，防止无限循环
 - **智能摘要**：历史工具只发送摘要，新工具发送完整结果并要求 LLM 生成摘要
-- **8 级 JSON 提取**：从直接解析到 LLM 辅助修复，确保最大容错
+- **多级 JSON 提取**：从直接解析到 LLM 辅助修复，确保最大容错
 
 ### 2. 自进化模块（Evolution）
 
@@ -139,11 +146,27 @@ src/main/resources/
 | `DoomLoopGuard` | 死循环防护 + 指数退避 + 每日配额 |
 | `LearningRecorder` | 总结学习成果并持久化 |
 | `LearningRecordRepository` | 学习记录的增删改查 |
+| `EvolutionStateRepository` | 状态持久化（断点续传） |
 
 进化阶段（EvolutionPhase）：
 ```
 IDLE → CHECKING_BACKOFF → GENERATING_QUESTION → EXPLORING → SUMMARIZING → PERSISTING
 ```
+
+#### 断点续传机制
+
+IDEA 重启后自动恢复：
+
+| 恢复内容 | 说明 |
+|---------|------|
+| 统计信息 | totalIterations, successfulIterations 等 |
+| ING 状态 | 当前正在处理的问题和探索进度 |
+| 退避状态 | 指数退避状态 |
+| 每日配额 | 问题生成和探索配额 |
+
+启动时检测：
+- 如果 `currentPhase != IDLE` 且 `!= CHECKING_BACKOFF`，则从中断处恢复
+- 否则正常启动
 
 配置项（sman.properties）：
 ```properties
@@ -180,22 +203,6 @@ vector.db.l1.cache.size=500
 
 工具注册：手动注册，无 Spring DI
 
-### 5. 项目分析 Pipeline
-
-12 个分析模块（AnalysisType）：
-1. 项目结构扫描
-2. 技术栈检测
-3. AST 扫描
-4. DB 实体扫描
-5. API 入口扫描
-6. 外部 API 扫描
-7. 枚举扫描
-8. 通用类扫描
-9. XML 代码扫描
-10. Case SOP 生成
-11. 语义向量化
-12. 代码走读
-
 ---
 
 ## 配置说明
@@ -229,6 +236,14 @@ reranker.enabled=true
 reranker.base.url=http://localhost:8001/v1
 ```
 
+### 自进化配置
+```properties
+self.evolution.enabled=false
+self.evolution.deep.analysis.enabled=false
+self.evolution.questions.per.iteration=3
+self.evolution.max.exploration.steps=5
+```
+
 配置优先级：用户设置 > 环境变量 > 配置文件 > 默认值
 
 ---
@@ -239,12 +254,21 @@ reranker.base.url=http://localhost:8001/v1
 
 ```
 {projectPath}/.sman/
-├── analysis.mv.db      # H2 数据库
-├── md/                 # Markdown 分析结果
-├── md5/                # 文件 MD5 缓存
-├── vector/             # 向量数据
-└── ast/                # AST 缓存
+├── analysis.mv.db.mv.db # H2 数据库（含进化状态表）
+├── base/                 # 基础分析结果
+├── cache/                # MD5 缓存
+└── md/
+    ├── classes/          # 类级分析结果
+    └── reports/          # 项目级分析结果
 ```
+
+### 数据库表
+
+- `learning_records` - 学习记录
+- `failure_records` - 失败记录
+- `evolution_loop_state` - 进化循环运行状态（含 ING）
+- `backoff_state` - 退避状态
+- `daily_quota` - 每日配额
 
 ---
 
@@ -258,6 +282,7 @@ reranker.base.url=http://localhost:8001/v1
 4. **上下文隔离**：子会话执行工具，防止 Token 爆炸
 5. **流式优先**：实时输出显示
 6. **语义搜索直接返回**：`expert_consult` 返回 BGE 结果，不经过 LLM 处理
+7. **断点续传**：状态持久化到 H2，IDEA 重启后自动恢复
 
 ### 代码风格
 

@@ -14,13 +14,9 @@ import kotlin.io.path.exists
  * @property projectRoot 项目根目录（绝对路径）
  * @property smanDir 项目 .sman 目录
  * @property databaseFile H2 数据库文件
- * @property mdDir Markdown 分析结果目录（根目录，保留兼容）
- * @property reportsDir 项目级分析报告目录（project-structure.md, tech-stack.md 等）
- * @property classesDir 类级分析报告目录（每个类的 *.md 文件）
- * @property astAnalysisDir AST 分析结果目录
- * @property caseSopDir 案例 SOP 目录
- * @property codeVectorizationDir 代码向量化目录
- * @property codeWalkthroughDir 代码走读目录
+ * @property mdDir Markdown 分析结果目录
+ * @property reportsDir 项目级分析报告目录
+ * @property classesDir 类级分析报告目录
  * @property cacheDir 缓存目录
  * @property baseDir 基础分析目录
  */
@@ -31,10 +27,6 @@ data class ProjectStoragePaths(
     val mdDir: Path,
     val reportsDir: Path,
     val classesDir: Path,
-    val astAnalysisDir: Path,
-    val caseSopDir: Path,
-    val codeVectorizationDir: Path,
-    val codeWalkthroughDir: Path,
     val cacheDir: Path,
     val baseDir: Path
 ) {
@@ -47,10 +39,6 @@ data class ProjectStoragePaths(
             mdDir,
             reportsDir,
             classesDir,
-            astAnalysisDir,
-            caseSopDir,
-            codeVectorizationDir,
-            codeWalkthroughDir,
             cacheDir,
             baseDir
         )
@@ -99,12 +87,8 @@ object ProjectPaths {
     private const val SMAN_DIR = ".sman"
     private const val DATABASE_FILE = "analysis"
     private const val MD_DIR = "md"
-    private const val REPORTS_DIR = "reports"       // 项目级分析报告
-    private const val CLASSES_DIR = "classes"       // 类级分析报告
-    private const val AST_ANALYSIS_DIR = "astAnalysis"
-    private const val CASE_SOP_DIR = "caseSop"
-    private const val CODE_VECTORIZATION_DIR = "codeVectorization"
-    private const val CODE_WALKTHROUGH_DIR = "codeWalkthrough"
+    private const val REPORTS_DIR = "reports"
+    private const val CLASSES_DIR = "classes"
     private const val CACHE_DIR = "cache"
     private const val BASE_DIR = "base"
     private const val PROJECT_MAP_FILE = "project_map.json"
@@ -126,10 +110,6 @@ object ProjectPaths {
             mdDir = mdDir,
             reportsDir = mdDir.resolve(REPORTS_DIR),
             classesDir = mdDir.resolve(CLASSES_DIR),
-            astAnalysisDir = smanDir.resolve(AST_ANALYSIS_DIR),
-            caseSopDir = smanDir.resolve(CASE_SOP_DIR),
-            codeVectorizationDir = smanDir.resolve(CODE_VECTORIZATION_DIR),
-            codeWalkthroughDir = smanDir.resolve(CODE_WALKTHROUGH_DIR),
             cacheDir = smanDir.resolve(CACHE_DIR),
             baseDir = smanDir.resolve(BASE_DIR)
         )

@@ -163,18 +163,11 @@ class LlmService(
                 val cacheHitRatio = if (promptTokens > 0) cachedTokens * 100.0 / promptTokens else 0.0
                 val costSavingsYuan = cachedTokens * CACHE_COST_PER_1K_TOKENS / 1000.0
 
-                // 基础日志
-                logger.info("LLM 响应: 发送tokens={}, 接收tokens={}, 总tokens={}, 耗时{}s",
+                // 基础日志（含缓存命中率）
+                logger.info("LLM 响应: 发送tokens={}, 接收tokens={}, 总tokens={}, 缓存命中率={}%, 耗时{}s",
                     promptTokens, completionTokens, totalTokens,
+                    String.format("%.1f", cacheHitRatio),
                     String.format("%.1f", elapsedSeconds))
-
-                // 缓存统计（如果有缓存命中）
-                if (cachedTokens > 0) {
-                    logger.info("缓存命中: {} tokens ({}%), 节省约 ¥{}",
-                        cachedTokens,
-                        String.format("%.1f", cacheHitRatio),
-                        String.format("%.4f", costSavingsYuan))
-                }
             }
         } catch (e: Exception) {
             // 忽略 tokens 解析错误

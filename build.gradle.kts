@@ -159,23 +159,4 @@ tasks {
         token.set(System.getenv("PUBLISH_TOKEN"))
     }
 
-    // Spring Boot 运行任务（仅运行 VerificationWebService）
-    register("runVerification") {
-        group = "application"
-        description = "运行 VerificationWebService"
-
-        dependsOn("compileKotlin", "processResources")
-
-        doLast {
-            val cp = sourceSets.main.get().runtimeClasspath
-            val mc = "com.smancode.sman.verification.VerificationWebServiceKt"
-
-            javaexec {
-                classpath(cp)
-                mainClass.set(mc)
-                jvmArgs("-Dserver.port=${project.findProperty("verification.port") ?: 8080}")
-                jvmArgs("-Dlogging.level.com.smancode.sman=INFO")
-            }
-        }
-    }
 }

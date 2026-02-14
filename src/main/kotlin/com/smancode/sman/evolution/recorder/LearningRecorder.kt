@@ -2,6 +2,9 @@ package com.smancode.sman.evolution.recorder
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.smancode.sman.analysis.database.TieredVectorStore
+import com.smancode.sman.analysis.model.VectorFragment
+import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.evolution.memory.LearningRecordRepository
 import com.smancode.sman.evolution.model.LearningRecord
 import com.smancode.sman.evolution.model.QuestionType
@@ -82,14 +85,19 @@ private data class SummaryResult(
  * 职责：
  * 1. 调用 LLM 总结探索过程中学到的内容
  * 2. 将学习记录持久化到数据库
+ * 3. 将问题和答案向量化存储到 TieredVectorStore
  *
  * @property llmService LLM 调用服务
  * @property repository 学习记录仓储
+ * @property bgeM3Client 向量化客户端
+ * @property vectorStore 向量存储服务
  * @property projectKey 当前项目 key
  */
 class LearningRecorder(
     private val llmService: LlmService,
     private val repository: LearningRecordRepository,
+    private val bgeM3Client: BgeM3Client,
+    private val vectorStore: TieredVectorStore,
     private val projectKey: String
 ) {
     private val logger = LoggerFactory.getLogger(LearningRecorder::class.java)
@@ -149,7 +157,7 @@ class LearningRecorder(
     /**
      * 持久化学习记录
      *
-     * 将学习记录保存到数据库。
+     * 将学习记录保存到数据库，并将问题和答案向量化存储到 TieredVectorStore。
      *
      * @param record 学习记录
      * @throws IllegalArgumentException 如果 record 无效
@@ -157,9 +165,81 @@ class LearningRecorder(
     suspend fun save(record: LearningRecord) {
         require(record.id.isNotBlank()) { "学习记录 id 不能为空" }
         require(record.projectKey.isNotBlank()) { "学习记录 projectKey 不能为空" }
+        require(record.question.isNotBlank()) { "学习记录 question 不能为空" }
+        require(record.answer.isNotBlank()) { "学习记录 answer 不能为空" }
 
+        // 1. 保存到数据库
         repository.save(record)
         logger.info("学习记录已保存: id={}, question={}", record.id, record.question)
+
+        // 2. 向量化并存储
+        vectorizeAndStore(record)
+    }
+
+    /**
+     * 向量化问题和答案，并存入 TieredVectorStore
+     *
+     * @param record 学习记录
+     */
+    private fun vectorizeAndStore(record: LearningRecord) {
+        try {
+            // 向量化问题
+            val questionVector = bgeM3Client.embed(record.question, "learning-${record.id}-question")
+            val questionFragment = VectorFragment(
+                id = "learning:${record.id}:question",
+                title = record.question.take(100),
+                content = record.question,
+                fullContent = record.question,
+                tags = buildList {
+                    add("learning")
+                    add("question")
+                    record.domain?.let { add(it) }
+                    addAll(record.tags)
+                },
+                metadata = mapOf(
+                    "recordId" to record.id,
+                    "projectKey" to record.projectKey,
+                    "type" to "question",
+                    "questionType" to record.questionType.name,
+                    "createdAt" to record.createdAt.toString()
+                ),
+                vector = questionVector
+            )
+            vectorStore.add(questionFragment)
+            logger.debug("问题向量已存储: id={}", questionFragment.id)
+
+            // 向量化答案
+            val answerVector = bgeM3Client.embed(record.answer, "learning-${record.id}-answer")
+            val answerFragment = VectorFragment(
+                id = "learning:${record.id}:answer",
+                title = record.answer.take(100),
+                content = record.answer,
+                fullContent = record.answer,
+                tags = buildList {
+                    add("learning")
+                    add("answer")
+                    record.domain?.let { add(it) }
+                    addAll(record.tags)
+                },
+                metadata = mapOf(
+                    "recordId" to record.id,
+                    "projectKey" to record.projectKey,
+                    "type" to "answer",
+                    "questionType" to record.questionType.name,
+                    "confidence" to record.confidence.toString(),
+                    "createdAt" to record.createdAt.toString()
+                ),
+                vector = answerVector
+            )
+            vectorStore.add(answerFragment)
+            logger.debug("答案向量已存储: id={}", answerFragment.id)
+
+            logger.info("学习记录向量化完成: id={}, questionId={}, answerId={}",
+                record.id, questionFragment.id, answerFragment.id)
+        } catch (e: Exception) {
+            logger.error("学习记录向量化失败: id={}, error={}", record.id, e.message, e)
+            // 向量化失败不影响主流程，记录已保存到数据库
+        }
     }
 
     /**

@@ -108,6 +108,9 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         // 自动分析配置
         var autoAnalysisEnabled: Boolean = true,        // 自动分析开关（默认开启）
 
+        // 深度分析配置
+        var deepAnalysisEnabled: Boolean = false,       // 深度分析开关（默认关闭）
+
         // 历史会话列表（仅 SessionInfo，不含 parts）
         var sessionInfos: MutableList<SessionInfo> = mutableListOf()
     )
@@ -488,6 +491,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var autoAnalysisEnabled: Boolean
         get() = state.autoAnalysisEnabled
         set(value) { state.autoAnalysisEnabled = value }
+
+    // 深度分析配置
+    var deepAnalysisEnabled: Boolean
+        get() = state.deepAnalysisEnabled
+        set(value) { state.deepAnalysisEnabled = value }
 
     // 获取原始的 rules 值（不使用默认值）
     fun getRawRules(): String = state.rules

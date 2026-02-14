@@ -1,5 +1,13 @@
 package com.smancode.sman.evolution.guard
 
+import com.smancode.sman.evolution.persistence.BackoffStateEntity
+import com.smancode.sman.evolution.persistence.DailyQuotaEntity
+import com.smancode.sman.evolution.persistence.EvolutionStateRepository
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
+
 /**
  * 死循环检查结果
  *
@@ -47,12 +55,52 @@ data class DoomLoopCheckResult(
  * @param toolCallDeduplicator 工具调用去重器
  * @param backoffStateManager 退避状态管理器
  * @param dailyQuotaManager 每日配额管理器
+ * @param stateRepository 状态仓储（可选，用于断点续传）
  */
 class DoomLoopGuard(
     private val toolCallDeduplicator: ToolCallDeduplicator,
     private val backoffStateManager: BackoffStateManager,
-    private val dailyQuotaManager: DailyQuotaManager
+    private val dailyQuotaManager: DailyQuotaManager,
+    private val stateRepository: EvolutionStateRepository? = null
 ) {
+    private val logger = LoggerFactory.getLogger(DoomLoopGuard::class.java)
+
+    /**
+     * 从数据库恢复状态
+     *
+     * 初始化时调用，从数据库加载退避状态和配额状态
+     */
+    fun restoreState(projectKey: String) {
+        if (stateRepository == null) {
+            logger.debug("stateRepository 未配置，跳过状态恢复")
+            return
+        }
+
+        try {
+            // 恢复退避状态（使用 runBlocking 因为这是同步初始化）
+            val backoffState = runBlocking {
+                stateRepository.getBackoffState(projectKey)
+            }
+            if (backoffState != null) {
+                backoffStateManager.restoreState(projectKey, backoffState)
+                logger.info("恢复退避状态: projectKey={}, errors={}, backoffUntil={}",
+                    projectKey, backoffState.consecutiveErrors, backoffState.backoffUntil)
+            }
+
+            // 恢复配额状态
+            val dailyQuota = runBlocking {
+                stateRepository.getDailyQuota(projectKey)
+            }
+            if (dailyQuota != null) {
+                dailyQuotaManager.restoreQuota(projectKey, dailyQuota)
+                logger.info("恢复配额状态: projectKey={}, questions={}, explorations={}",
+                    projectKey, dailyQuota.questionsToday, dailyQuota.explorationsToday)
+            }
+        } catch (e: Exception) {
+            logger.error("恢复状态失败: projectKey={}", projectKey, e)
+        }
+    }
+
     /**
      * 检查是否应该跳过问题处理
      *
@@ -127,6 +175,9 @@ class DoomLoopGuard(
 
         backoffStateManager.recordSuccess(projectKey)
         dailyQuotaManager.recordQuestionGenerated(projectKey)
+
+        // 持久化状态
+        persistState(projectKey)
     }
 
     /**
@@ -143,6 +194,9 @@ class DoomLoopGuard(
         }
 
         backoffStateManager.recordError(projectKey)
+
+        // 持久化状态
+        persistState(projectKey)
     }
 
     /**
@@ -193,6 +247,51 @@ class DoomLoopGuard(
         return backoffStateManager.getState(projectKey)
     }
 
+    /**
+     * 持久化状态到数据库
+     */
+    private fun persistState(projectKey: String) {
+        if (stateRepository == null) {
+            return
+        }
+
+        try {
+            // 持久化退避状态
+            val backoffState = backoffStateManager.getState(projectKey)
+            val backoffEntity = BackoffStateEntity(
+                projectKey = projectKey,
+                consecutiveErrors = backoffState.consecutiveErrors,
+                lastErrorTime = backoffState.lastErrorTime,
+                backoffUntil = backoffState.backoffUntil
+            )
+
+            // 持久化配额状态
+            val quota = dailyQuotaManager.getQuota(projectKey)
+            val quotaEntity = if (quota != null) {
+                DailyQuotaEntity(
+                    projectKey = projectKey,
+                    questionsToday = quota.questionsToday,
+                    explorationsToday = quota.explorationsToday,
+                    lastResetDate = quota.lastResetDate
+                )
+            } else {
+                null
+            }
+
+            // 异步持久化（不阻塞主流程）
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    stateRepository.saveBackoffState(backoffEntity)
+                    quotaEntity?.let { stateRepository.saveDailyQuota(it) }
+                } catch (e: Exception) {
+                    logger.error("持久化状态失败: projectKey={}", projectKey, e)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("持久化状态失败: projectKey={}", projectKey, e)
+        }
+    }
+
     companion object {
         /**
          * 创建默认配置的 DoomLoopGuard 实例
@@ -202,6 +301,20 @@ class DoomLoopGuard(
                 toolCallDeduplicator = ToolCallDeduplicator(),
                 backoffStateManager = BackoffStateManager(),
                 dailyQuotaManager = DailyQuotaManager()
+            )
+        }
+
+        /**
+         * 创建带状态仓储的 DoomLoopGuard 实例
+         */
+        fun createWithStateRepository(
+            stateRepository: EvolutionStateRepository
+        ): DoomLoopGuard {
+            return DoomLoopGuard(
+                toolCallDeduplicator = ToolCallDeduplicator(),
+                backoffStateManager = BackoffStateManager(),
+                dailyQuotaManager = DailyQuotaManager(),
+                stateRepository = stateRepository
             )
         }
     }

@@ -118,11 +118,11 @@ object DarkColors : ColorPalette {
  * 适合：日间编码、明亮环境、打印友好
  */
 object LightColors : ColorPalette {
-    // 背景色系
-    override val background = Color(0xFFFFFF)      // #FFFFFF - 纯白背景
-    override val surface = Color(0xF7F7F7)         // #F7F7F7 - 卡片/面板背景
-    override val border = Color(0xE0E0E0)          // #E0E0E0 - 边框
-    override val divider = Color(0xD0D0D0)         // #D0D0D0 - 分隔线
+    // 背景色系（淡雅配色，不过于抢眼）
+    override val background = Color(0xFAFAFA)      // #FAFAFA - 淡灰白背景
+    override val surface = Color(0xF5F5F5)         // #F5F5F5 - 卡片/面板背景
+    override val border = Color(0xEBEBEB)          // #EBEBEB - 边框
+    override val divider = Color(0xE5E5E5)         // #E5E5E5 - 分隔线
 
     // 文字颜色 (高对比度，WCAG AAA)
     override val textPrimary = Color(0x1E1E1E)     // #1E1E1E - 主要文字 (接近黑)

@@ -1,5 +1,6 @@
 package com.smancode.sman.evolution.model
 
+import com.smancode.sman.evolution.knowledge.KnowledgeScope
 import kotlinx.serialization.Serializable
 
 // ==================== 学习记录 (核心) ====================
@@ -9,6 +10,11 @@ import kotlinx.serialization.Serializable
  *
  * 这是最重要的数据结构，前台通过语义搜索找到它。
  * 记录了智能体在后台探索项目时发现的有价值知识。
+ *
+ * 支持三种知识作用域：
+ * - GLOBAL：全局知识（跨项目通用）
+ * - TEAM：团队知识（项目内共享）
+ * - PERSONAL：个人知识（用户私有）
  *
  * @property id 唯一标识
  * @property projectKey 所属项目
@@ -23,6 +29,9 @@ import kotlinx.serialization.Serializable
  * @property tags 标签列表
  * @property domain 领域 (如: 还款、订单、支付)
  * @property metadata 扩展元数据
+ * @property scope 知识作用域，默认 PERSONAL
+ * @property createdBy 创建者标识（用户ID或设备ID）
+ * @property sharedAt 共享时间戳，null 表示未共享
  */
 @Serializable
 data class LearningRecord(
@@ -47,7 +56,12 @@ data class LearningRecord(
     // 标签和分类
     val tags: List<String> = emptyList(),
     val domain: String? = null,
-    val metadata: Map<String, String> = emptyMap()
+    val metadata: Map<String, String> = emptyMap(),
+
+    // 知识共享
+    val scope: KnowledgeScope = KnowledgeScope.DEFAULT,
+    val createdBy: String = "",
+    val sharedAt: Long? = null
 ) {
     /**
      * 向量字段不参与序列化，运行时通过 VectorStoreManager 单独存储和检索
@@ -78,7 +92,10 @@ data class LearningRecord(
                 relatedRecords == other.relatedRecords &&
                 tags == other.tags &&
                 domain == other.domain &&
-                metadata == other.metadata
+                metadata == other.metadata &&
+                scope == other.scope &&
+                createdBy == other.createdBy &&
+                sharedAt == other.sharedAt
     }
 
     override fun hashCode(): Int {
@@ -95,6 +112,9 @@ data class LearningRecord(
         result = 31 * result + tags.hashCode()
         result = 31 * result + (domain?.hashCode() ?: 0)
         result = 31 * result + metadata.hashCode()
+        result = 31 * result + scope.hashCode()
+        result = 31 * result + createdBy.hashCode()
+        result = 31 * result + (sharedAt?.hashCode() ?: 0)
         return result
     }
 }

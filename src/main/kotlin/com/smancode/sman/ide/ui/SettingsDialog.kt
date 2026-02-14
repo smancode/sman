@@ -169,6 +169,93 @@ class SettingsDialog(
         }
     }
 
+    // 深度分析开关（现代扁平化风格，与自动分析开关一致）
+    private val deepAnalysisSwitch = object : JToggleButton() {
+        // 动画相关
+        private var animationProgress = if (storage.deepAnalysisEnabled) 1.0 else 0.0
+        private val animationTimer = javax.swing.Timer(15, null)
+
+        init {
+            isSelected = storage.deepAnalysisEnabled
+            isContentAreaFilled = false
+            isOpaque = false
+            isBorderPainted = false
+            isFocusPainted = false
+            border = null
+            preferredSize = Dimension(48, 26)
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+            // 动画计时器
+            animationTimer.addActionListener {
+                val target = if (isSelected) 1.0 else 0.0
+                val diff = target - animationProgress
+                if (kotlin.math.abs(diff) < 0.05) {
+                    animationProgress = target
+                    animationTimer.stop()
+                } else {
+                    animationProgress += diff * 0.25
+                }
+                repaint()
+            }
+
+            addItemListener { e ->
+                storage.deepAnalysisEnabled = (e.source as JToggleButton).isSelected
+                logger.debug("深度分析开关状态已更新: {}", storage.deepAnalysisEnabled)
+                animationTimer.start()
+            }
+        }
+
+        override fun paintComponent(g: Graphics) {
+            val g2 = g as Graphics2D
+
+            // 高质量渲染设置
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+
+            val switchWidth = 44
+            val switchHeight = 24
+            val switchX = (width - switchWidth) / 2
+            val switchY = (height - switchHeight) / 2
+            val cornerRadius = switchHeight / 2
+
+            // 计算颜色插值
+            val onColor = Color(52, 199, 89)      // iOS 绿色
+            val offColor = Color(229, 229, 234)  // 浅灰色
+            val trackColor = interpolateColor(offColor, onColor, animationProgress)
+
+            // 绘制阴影（增加立体感）
+            g2.color = Color(0, 0, 0, 15)
+            g2.fillRoundRect(switchX + 1, switchY + 2, switchWidth, switchHeight, cornerRadius, cornerRadius)
+
+            // 绘制背景轨道
+            g2.color = trackColor
+            g2.fillRoundRect(switchX, switchY, switchWidth, switchHeight, cornerRadius, cornerRadius)
+
+            // 绘制滑块
+            val sliderSize = 20
+            val sliderPadding = 2
+            val sliderRange = switchWidth - sliderSize - sliderPadding * 2
+            val sliderX = switchX + sliderPadding + (sliderRange * animationProgress).toInt()
+            val sliderY = switchY + (switchHeight - sliderSize) / 2
+
+            // 滑块阴影
+            g2.color = Color(0, 0, 0, 30)
+            g2.fillOval(sliderX + 1, sliderY + 1, sliderSize, sliderSize)
+
+            // 滑块本体
+            g2.color = Color.WHITE
+            g2.fillOval(sliderX, sliderY, sliderSize, sliderSize)
+        }
+
+        private fun interpolateColor(c1: Color, c2: Color, fraction: Double): Color {
+            val r = (c1.red + (c2.red - c1.red) * fraction).toInt()
+            val g = (c1.green + (c2.green - c1.green) * fraction).toInt()
+            val b = (c1.blue + (c2.blue - c1.blue) * fraction).toInt()
+            return Color(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+        }
+    }
+
     private fun createTextFieldWithDefault(value: String, default: String): JTextField {
         return JTextField(value.takeIf { it.isNotEmpty() } ?: default, 30)
     }
@@ -232,7 +319,7 @@ class SettingsDialog(
         addSeparator(panel, gbc, row++)
 
         // 自动分析区域：标签 + 开关 + 分析结果按钮（同一行）
-        val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+        val autoAnalysisPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
             add(JLabel("自动分析:"))
             add(autoAnalysisSwitch)
             add(JLabel("(后台每 5 分钟扫描)"))
@@ -256,7 +343,24 @@ class SettingsDialog(
         gbc.gridwidth = 2
         gbc.weightx = 0.0
         gbc.fill = GridBagConstraints.HORIZONTAL
-        panel.add(buttonPanel, gbc)
+        panel.add(autoAnalysisPanel, gbc)
+        row++
+
+        // 深度分析区域：标签 + 开关 + 提示文字（同一行）
+        val deepAnalysisPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+            add(JLabel("深度分析:"))
+            add(deepAnalysisSwitch)
+            add(JLabel("(每轮多处理问题，Token 消耗更大)").apply {
+                foreground = Color(120, 120, 120)
+            })
+        }
+
+        gbc.gridx = 0
+        gbc.gridy = row
+        gbc.gridwidth = 2
+        gbc.weightx = 0.0
+        gbc.fill = GridBagConstraints.HORIZONTAL
+        panel.add(deepAnalysisPanel, gbc)
         row++
 
         return row
@@ -579,7 +683,8 @@ class SettingsDialog(
         return ConfigData(
             llmApiKey, llmBaseUrl, llmModelName,
             bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey,
-            autoAnalysisEnabled = autoAnalysisSwitch.isSelected
+            autoAnalysisEnabled = autoAnalysisSwitch.isSelected,
+            deepAnalysisEnabled = deepAnalysisSwitch.isSelected
         )
     }
 
@@ -611,6 +716,9 @@ class SettingsDialog(
         // 自动分析配置
         storage.autoAnalysisEnabled = config.autoAnalysisEnabled
 
+        // 深度分析配置
+        storage.deepAnalysisEnabled = config.deepAnalysisEnabled
+
         // 更新配置到 SmanConfig（下次 LLM/BGE 调用会使用新配置）
         val userConfig = SmanConfig.UserConfig(
             llmApiKey = storage.llmApiKey,
@@ -619,7 +727,8 @@ class SettingsDialog(
         )
         SmanConfig.setUserConfig(userConfig)
 
-        logger.info("设置已保存: autoAnalysisEnabled={}", config.autoAnalysisEnabled)
+        logger.info("设置已保存: autoAnalysisEnabled={}, deepAnalysisEnabled={}",
+            config.autoAnalysisEnabled, config.deepAnalysisEnabled)
 
         // 核心优化：如果自动分析启用且 API Key 已配置，立即触发分析
         if (config.autoAnalysisEnabled && config.llmApiKey.isNotBlank()) {
@@ -688,7 +797,9 @@ class SettingsDialog(
         val rerankerEndpoint: String,
         val rerankerApiKey: String,
         // 自动分析配置
-        val autoAnalysisEnabled: Boolean
+        val autoAnalysisEnabled: Boolean,
+        // 深度分析配置
+        val deepAnalysisEnabled: Boolean
     )
 
     /**

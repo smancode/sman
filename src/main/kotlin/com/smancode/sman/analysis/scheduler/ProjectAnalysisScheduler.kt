@@ -3,17 +3,20 @@ package com.smancode.sman.analysis.scheduler
 import com.intellij.openapi.project.Project
 import com.smancode.sman.analysis.coordination.CodeVectorizationCoordinator
 import com.smancode.sman.analysis.coordination.VectorizationResult
+import com.smancode.sman.analysis.database.TieredVectorStore
 import com.smancode.sman.analysis.executor.AnalysisTaskExecutor
 import com.smancode.sman.analysis.model.AnalysisType
 import com.smancode.sman.analysis.model.ProjectMapManager
 import com.smancode.sman.analysis.model.StepState
 import com.smancode.sman.analysis.util.ProjectHashCalculator
+import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.config.SmanConfig
 import com.smancode.sman.evolution.generator.QuestionGenerator
 import com.smancode.sman.evolution.guard.DoomLoopGuard
 import com.smancode.sman.evolution.loop.EvolutionConfig
 import com.smancode.sman.evolution.loop.SelfEvolutionLoop
 import com.smancode.sman.evolution.memory.LearningRecordRepository
+import com.smancode.sman.evolution.persistence.EvolutionStateRepository
 import com.smancode.sman.evolution.recorder.LearningRecorder
 import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.ide.service.storageService
@@ -413,8 +416,27 @@ class ProjectAnalysisScheduler(
             // 创建依赖组件
             val questionGenerator = QuestionGenerator(llmService, evolutionConfig)
             val repository = LearningRecordRepository(vectorDbConfig)
-            val learningRecorder = LearningRecorder(llmService, repository, projectKey)
-            val doomLoopGuard = DoomLoopGuard.createDefault()
+
+            // 创建状态仓储（用于断点续传）
+            val stateRepository = EvolutionStateRepository(vectorDbConfig)
+
+            // 创建向量化相关组件
+            val bgeM3Config = SmanConfig.bgeM3Config
+                ?: throw IllegalStateException("BGE-M3 未配置，无法启动自进化循环。请在设置中配置 bge.endpoint")
+            val bgeM3Client = BgeM3Client(bgeM3Config)
+            val vectorStore = TieredVectorStore(vectorDbConfig)
+
+            val learningRecorder = LearningRecorder(
+                llmService = llmService,
+                repository = repository,
+                bgeM3Client = bgeM3Client,
+                vectorStore = vectorStore,
+                projectKey = projectKey
+            )
+
+            // 创建 DoomLoopGuard 并恢复状态
+            val doomLoopGuard = DoomLoopGuard.createWithStateRepository(stateRepository)
+            doomLoopGuard.restoreState(projectKey)
 
             // 创建并启动自进化循环
             selfEvolutionLoop = SelfEvolutionLoop(
@@ -424,6 +446,7 @@ class ProjectAnalysisScheduler(
                 learningRecorder = learningRecorder,
                 doomLoopGuard = doomLoopGuard,
                 repository = repository,
+                stateRepository = stateRepository,
                 config = evolutionConfig
             )
 
