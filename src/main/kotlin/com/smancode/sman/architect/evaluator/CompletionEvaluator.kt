@@ -116,13 +116,20 @@ class CompletionEvaluator(
         }
 
         // 2. 检测是否是等待用户输入的问候语
+        // 【增强】覆盖更多变体：请问你想...、请问您想...、请告诉我...
         val greetingPatterns = listOf(
             "请告诉我你的需求",
             "请描述你的需求",
             "我可以帮你",
             "请问有什么可以帮您",
             "请先配置",
-            "你好！我是"
+            "你好！我是",
+            "请问您想做什么",      // 新增：01_project_structure.md 的问题
+            "请问你想做什么",      // 新增：变体
+            "请问你想让我做什么",  // 新增：02_tech_stack.md 的问题
+            "请问您想让我做什么",  // 新增：变体
+            "请问你想了解",        // 新增：03_api_entries.md 的问题
+            "还是有其他需求"       // 新增：变体
         )
 
         for (pattern in greetingPatterns) {
@@ -249,6 +256,12 @@ STRICTLY return valid JSON in this format:
         responseContent: String,
         threshold: Double
     ): String {
+        val previousTodos = if (goal.followUpQuestions.isNotEmpty()) {
+            "\n<previous_todos>\nThese were the TODOs from last iteration. Check if they are completed:\n" +
+            goal.followUpQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n") +
+            "\n</previous_todos>\n"
+        } else ""
+
         return """
 <task>
 Evaluate the following analysis result for completeness and quality.
@@ -260,9 +273,7 @@ Description: ${goal.type.key}
 Target Completeness Threshold: ${(threshold * 100).toInt()}%
 </goal>
 
-${if (goal.followUpQuestions.isNotEmpty()) {
-    "<follow_up_questions>\n" + goal.followUpQuestions.mapIndexed { i, q -> "${i + 1}. $q" }.joinToString("\n") + "\n</follow_up_questions>\n"
-} else ""}
+$previousTodos
 
 <analysis_result>
 $responseContent
@@ -271,7 +282,11 @@ $responseContent
 <instructions>
 1. Analyze the completeness (0.0 - 1.0) based on evaluation criteria
 2. Determine if it meets the threshold ($threshold)
-3. If incomplete, list remaining TODOs with priority
+3. **Update TODO list dynamically**:
+   - REMOVE completed items from previous TODOs
+   - ADD newly discovered items that need analysis
+   - KEEP items that are still pending
+   - Return EMPTY array if everything is complete
 4. If more exploration needed, list follow-up questions
 5. Provide a brief summary in Chinese
 

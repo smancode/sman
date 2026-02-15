@@ -184,13 +184,24 @@ class MdFileService(
     /**
      * 获取所有未完成的分析类型
      *
+     * 【修复】同时考虑完成度和 TODO：
+     * - MD 不存在
+     * - 完成度低于阈值
+     * - 有未完成的 TODO
+     *
      * @param threshold 完成度阈值
      * @return 未完成的分析类型列表
      */
     fun getIncompleteTypes(threshold: Double = 0.8): List<AnalysisType> {
         return AnalysisType.allTypes().filter { type ->
             val metadata = readMetadata(type)
-            metadata == null || metadata.completeness < threshold
+            // 以下情况需要继续分析：
+            // 1. MD 不存在
+            // 2. 完成度低于阈值
+            // 3. 有未完成的 TODO
+            metadata == null ||
+            metadata.completeness < threshold ||
+            metadata.todos.isNotEmpty()
         }
     }
 

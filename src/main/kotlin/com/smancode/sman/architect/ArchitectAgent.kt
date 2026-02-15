@@ -715,7 +715,10 @@ class ArchitectAgent(
         evaluation: EvaluationResult
     ) {
         // 提取内容
-        val content = extractResponseContent(response)
+        val rawContent = extractResponseContent(response)
+
+        // 【防呆】清理内容（去除末尾问候语等）
+        val content = cleanContent(rawContent)
 
         // 读取之前的元信息
         val previousMetadata = mdFileService.readMetadata(goal.type)
@@ -724,6 +727,40 @@ class ArchitectAgent(
         mdFileService.saveWithMetadata(goal.type, content, evaluation, previousMetadata)
 
         logger.info("保存分析结果: type={}, completeness={}", goal.type.key, evaluation.completeness)
+    }
+
+    /**
+     * 【防呆】清理内容
+     *
+     * 去除末尾的问候语、等待用户输入的提示等
+     */
+    private fun cleanContent(content: String): String {
+        var cleaned = content.trim()
+
+        // 问候语模式（通常是 LLM 在等待用户输入）
+        // 注意：顺序很重要，分隔线模式要先匹配
+        val greetingPatterns = listOf(
+            // 分隔线后的问候语（优先匹配）
+            Regex("""\n*---+\s*\n+\*\*请问.*$""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\n*---+\s*\n+请问.*$""", RegexOption.DOT_MATCHES_ALL),
+            // 分隔线后的列表选项（如：- 构建项目: ./gradlew build）
+            Regex("""\n*---+\s*\n+(- [^\n]+\n?)+$"""),
+            // 中文问候语
+            Regex("""\n*\*\*请问[您你]想[做什么了解]*[^*]*\*\*.*$""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\n*\*\*请告诉我[你的]*需求\*\*.*$""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\n*请问[您你]想[做什么让我做什么了解]*.*$""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""\n*还是有其他需求.*$""", RegexOption.DOT_MATCHES_ALL)
+        )
+
+        for (pattern in greetingPatterns) {
+            val newContent = pattern.replace(cleaned, "")
+            if (newContent != cleaned) {
+                logger.debug("清理问候语模式: {}", pattern)
+                cleaned = newContent
+            }
+        }
+
+        return cleaned.trim()
     }
 
     /**
