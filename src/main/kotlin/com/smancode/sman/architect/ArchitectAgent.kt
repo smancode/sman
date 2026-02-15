@@ -193,6 +193,8 @@ class ArchitectAgent(
             }
 
             // 恢复已处理目标集合
+            // 【关键】只恢复那些 MD 文件实际存在且完成度达标的类型
+            // 如果 MD 文件被删除了，不应该跳过重新分析
             if (!stateEntity.processedGoals.isNullOrBlank()) {
                 try {
                     val goalKeys = json.decodeFromString<List<String>>(stateEntity.processedGoals)
@@ -200,7 +202,14 @@ class ArchitectAgent(
                         try {
                             val analysisType = AnalysisType.fromKey(key)
                             if (analysisType != null) {
-                                processedGoalsInCurrentRound.add(analysisType)
+                                // 检查 MD 文件是否存在且完成度达标
+                                val metadata = mdFileService.readMetadata(analysisType)
+                                if (metadata != null && metadata.completeness >= config.getCompletionThreshold()) {
+                                    processedGoalsInCurrentRound.add(analysisType)
+                                    logger.debug("恢复已处理目标: {} (完成度: {})", key, metadata.completeness)
+                                } else {
+                                    logger.info("跳过恢复已处理目标: {} (MD不存在或未完成，需要重新分析)", key)
+                                }
                             }
                         } catch (e: Exception) {
                             logger.warn("无法解析已处理目标: $key")
@@ -528,6 +537,24 @@ class ArchitectAgent(
                         // 【断点续传】目标完成，清除持久化状态
                         clearPersistedState()
                         return
+                    }
+                    evaluation.confidence < 0.5 && currentIterationCount < maxIterations -> {
+                        // 【防呆】低置信度 = 内容质量差，继续迭代
+                        logger.warn("评估置信度过低 ({})，内容质量可能有问题，继续迭代", evaluation.confidence)
+
+                        // 提取追问作为下一次迭代的提示
+                        val followUp = if (evaluation.followUpQuestions.isNotEmpty()) {
+                            evaluation.followUpQuestions
+                        } else {
+                            listOf("上一次分析结果质量不佳，请重新执行${goal.type.displayName}任务。确保：1) 使用工具扫描代码 2) 输出结构化的 Markdown 报告 3) 不要等待用户输入")
+                        }
+
+                        currentGoal = currentGoal.withFollowUp(followUp)
+
+                        // 【断点续传】更新追问列表后持久化
+                        persistState()
+
+                        // 不保存质量差的结果，继续迭代
                     }
                     evaluation.needsFollowUp && currentIterationCount < maxIterations -> {
                         // 需要追问，继续迭代

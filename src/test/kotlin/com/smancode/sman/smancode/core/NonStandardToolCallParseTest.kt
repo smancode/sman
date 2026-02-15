@@ -39,6 +39,12 @@ class NonStandardToolCallParseTest {
             return toolCallTagResult
         }
 
+        // 4. 尝试解析 GLM-5 的 {"parts": [...]} 格式（即使 JSON 有错误）
+        val glmResult = extractGlmPartsFormat(response)
+        if (glmResult != null) {
+            return glmResult
+        }
+
         return null
     }
 
@@ -188,6 +194,120 @@ class NonStandardToolCallParseTest {
             objectMapper.writeValueAsString(mapOf("parts" to toolCalls))
         } catch (e: Exception) {
             null
+        }
+    }
+
+    /**
+     * 解析 GLM-5 的 {"parts": [...]} 格式
+     */
+    private fun extractGlmPartsFormat(response: String): String? {
+        if (!response.contains("\"parts\"") && !response.contains("\"toolName\"")) {
+            return null
+        }
+
+        var jsonContent = extractFromMarkdownBlock(response) ?: response
+
+        return try {
+            val toolCalls = mutableListOf<Map<String, Any>>()
+
+            val toolStartPattern = Regex("""\{\s*"type"\s*:\s*"tool"\s*,\s*"toolName"\s*:\s*"(\w+)"""")
+
+            for (match in toolStartPattern.findAll(jsonContent)) {
+                val startIndex = match.range.first
+                val toolName = match.groupValues[1]
+
+                val objectContent = extractBalancedBraces(jsonContent, startIndex)
+
+                if (objectContent != null) {
+                    val parameters = mutableMapOf<String, Any>()
+
+                    val paramsMatch = Regex(""""parameters"\s*:\s*\{([^}]*)\}""").find(objectContent)
+                    if (paramsMatch != null) {
+                        extractKeyValuePairs(paramsMatch.groupValues[1], parameters)
+                    }
+
+                    extractKeyValuePairs(objectContent, parameters)
+
+                    parameters.remove("type")
+                    parameters.remove("toolName")
+                    parameters.remove("parameters")
+
+                    toolCalls.add(mapOf(
+                        "type" to "tool",
+                        "toolName" to toolName,
+                        "parameters" to parameters
+                    ))
+                }
+            }
+
+            if (toolCalls.isEmpty()) {
+                null
+            } else {
+                objectMapper.writeValueAsString(mapOf("parts" to toolCalls))
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun extractFromMarkdownBlock(response: String): String? {
+        val jsonStart = "```json"
+        val jsonEnd = "```"
+
+        var startIndex = response.indexOf(jsonStart)
+        if (startIndex != -1) {
+            startIndex += jsonStart.length
+            val endIndex = response.indexOf(jsonEnd, startIndex)
+            if (endIndex != -1) {
+                return response.substring(startIndex, endIndex).trim()
+            }
+        }
+        return null
+    }
+
+    private fun extractBalancedBraces(content: String, startIndex: Int): String? {
+        var depth = 0
+        var inString = false
+        var escapeNext = false
+
+        for (i in startIndex until content.length) {
+            val c = content[i]
+
+            if (escapeNext) {
+                escapeNext = false
+                continue
+            }
+
+            when (c) {
+                '\\' -> escapeNext = true
+                '"' -> inString = !inString
+                '{' -> if (!inString) depth++
+                '}' -> {
+                    if (!inString) {
+                        depth--
+                        if (depth == 0) {
+                            return content.substring(startIndex, i + 1)
+                        }
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun extractKeyValuePairs(content: String, parameters: MutableMap<String, Any>) {
+        val stringPattern = Regex(""""(\w+)"\s*:\s*"([^"]*)"""")
+        stringPattern.findAll(content).forEach { match ->
+            val key = match.groupValues[1]
+            parameters[key] = match.groupValues[2]
+        }
+
+        val numPattern = Regex(""""(\w+)"\s*:\s*(\d+)""")
+        numPattern.findAll(content).forEach { match ->
+            val key = match.groupValues[1]
+            if (!parameters.containsKey(key)) {
+                parameters[key] = match.groupValues[2].toIntOrNull() ?: match.groupValues[2]
+            }
         }
     }
 
@@ -366,5 +486,70 @@ class NonStandardToolCallParseTest {
         // 只会匹配第一个
         assertEquals(1, parts.size())
         assertEquals("read_file", parts[0].path("toolName").asText())
+    }
+
+    @Test
+    @DisplayName("应该解析 GLM-5 不规范的 parts JSON 格式")
+    fun shouldParseGlm5MalformedPartsJson() {
+        // 这是实际从 autoloop 项目的 01_project_structure.md 中提取的内容
+        // GLM-5 有时会输出参数直接放在对象里（没有 parameters 包装）的不规范 JSON
+        val input = """
+            <think&gt;
+            用户要求我作为架构师分析项目结构...
+            &lt;/think&gt;
+
+
+            ```json
+            {
+              "parts": [
+                {
+                  "type": "text",
+                  "text": "【分析问题】开始执行项目结构分析任务。"
+                },
+                {
+                  "type": "tool",
+                  "toolName": "find_file",
+                  "parameters": {
+                    "filePattern": "build.gradle"
+                  }
+                },
+                {
+                  "type": "tool",
+                  "toolName": "find_file",
+                  "filePattern": "settings.gradle"
+                  }
+                },
+                {
+                  "type": "tool",
+                  "toolName": "find_file",
+                  "filePattern": "pom.xml"
+                  }
+                }
+              ]
+            }
+            ```
+        """.trimIndent()
+
+        val result = extractNonStandardToolCall(input)
+
+        assertNotNull(result)
+        val json = objectMapper.readTree(result)
+        assertTrue(json.has("parts"))
+        val parts = json.path("parts")
+        // 应该解析出 3 个工具调用
+        assertTrue(parts.size() >= 3, "应该解析出至少 3 个工具调用，实际: ${parts.size()}")
+
+        // 验证第一个工具调用（规范的）
+        val toolPart1 = parts[0]
+        assertEquals("tool", toolPart1.path("type").asText())
+        assertEquals("find_file", toolPart1.path("toolName").asText())
+
+        // 验证第二个工具调用（不规范的，缺少 parameters 包装）
+        val toolPart2 = parts[1]
+        assertEquals("tool", toolPart2.path("type").asText())
+        assertEquals("find_file", toolPart2.path("toolName").asText())
+        // 参数应该被包装进 parameters
+        val params2 = toolPart2.path("parameters")
+        assertTrue(params2.has("filePattern"), "filePattern 应该被包装进 parameters")
     }
 }

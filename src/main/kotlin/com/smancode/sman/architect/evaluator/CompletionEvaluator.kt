@@ -45,11 +45,25 @@ class CompletionEvaluator(
                 return EvaluationResult.failure("响应内容为空")
             }
 
-            // 2. 构建评估提示词
+            // 2. 【防呆】检测内容质量
+            val qualityCheck = checkContentQuality(responseContent, goal)
+            if (!qualityCheck.isAcceptable) {
+                logger.warn("内容质量检测失败: {}, 追问: {}", qualityCheck.reason, qualityCheck.followUpQuestion)
+                return EvaluationResult(
+                    completeness = 0.0,
+                    isComplete = false,
+                    summary = qualityCheck.reason,
+                    todos = emptyList(),
+                    followUpQuestions = listOf(qualityCheck.followUpQuestion),
+                    confidence = 0.3
+                )
+            }
+
+            // 3. 构建评估提示词
             val systemPrompt = buildSystemPrompt()
             val userPrompt = buildUserPrompt(goal, responseContent, threshold)
 
-            // 3. 调用 LLM 评估
+            // 4. 调用 LLM 评估
             logger.info("开始评估分析结果: goal={}, threshold={}", goal.type.key, threshold)
             val llmResponse = llmService.simpleRequest(systemPrompt, userPrompt)
 
@@ -58,13 +72,98 @@ class CompletionEvaluator(
                 return EvaluationResult.failure("LLM 评估响应为空")
             }
 
-            // 4. 解析评估结果
+            // 5. 解析评估结果
             parseEvaluationResult(llmResponse, threshold)
 
         } catch (e: Exception) {
             logger.error("评估失败", e)
             EvaluationResult.failure("评估异常: ${e.message}")
         }
+    }
+
+    /**
+     * 内容质量检测结果
+     */
+    private data class QualityCheckResult(
+        val isAcceptable: Boolean,
+        val reason: String = "",
+        val followUpQuestion: String = ""
+    )
+
+    /**
+     * 【防呆】检测内容质量
+     *
+     * 检测 LLM 返回的内容是否是有效的分析结果，而不是：
+     * - 只有思考块没有实际内容
+     * - 等待用户输入的问候语
+     * - 空洞的占位内容
+     */
+    private fun checkContentQuality(content: String, goal: ArchitectGoal): QualityCheckResult {
+        val cleanContent = content.trim()
+
+        // 1. 检测是否只有思考块
+        val withoutThink = cleanContent
+            .replace(Regex("<think[^>]*>[\\s\\S]*?</think&gt;", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("&lt;think[^&]*&gt;[\\s\\S]*?&lt;/think&gt;"), "")
+            .trim()
+
+        if (withoutThink.length < 100) {
+            return QualityCheckResult(
+                isAcceptable = false,
+                reason = "内容过短或只有思考块",
+                followUpQuestion = "请直接执行${goal.type.displayName}任务，使用工具扫描项目代码后输出分析报告。不要等待用户输入，不要只输出思考过程。"
+            )
+        }
+
+        // 2. 检测是否是等待用户输入的问候语
+        val greetingPatterns = listOf(
+            "请告诉我你的需求",
+            "请描述你的需求",
+            "我可以帮你",
+            "请问有什么可以帮您",
+            "请先配置",
+            "你好！我是"
+        )
+
+        for (pattern in greetingPatterns) {
+            if (cleanContent.contains(pattern)) {
+                return QualityCheckResult(
+                    isAcceptable = false,
+                    reason = "内容是问候语而非分析结果",
+                    followUpQuestion = "你是架构师，需要执行${goal.type.displayName}任务。请使用 read_file、find_file、grep_file 等工具扫描项目，然后输出 Markdown 格式的分析报告。"
+                )
+            }
+        }
+
+        // 3. 检测是否有实际的分析内容（至少要有标题或表格）
+        val hasStructure = cleanContent.contains("#") ||
+                          cleanContent.contains("|") ||
+                          cleanContent.contains("- ") ||
+                          cleanContent.contains("* ")
+
+        if (!hasStructure && withoutThink.length < 300) {
+            return QualityCheckResult(
+                isAcceptable = false,
+                reason = "内容缺乏结构化格式",
+                followUpQuestion = "分析结果应该使用 Markdown 格式，包含标题（#）、列表（-）或表格（|）。请重新执行${goal.type.displayName}任务。"
+            )
+        }
+
+        // 4. 检测是否有工具调用记录（好的分析应该有）
+        val hasToolCalls = cleanContent.contains("工具调用") ||
+                          cleanContent.contains("read_file") ||
+                          cleanContent.contains("find_file") ||
+                          cleanContent.contains("grep_file")
+
+        if (!hasToolCalls && !hasStructure) {
+            return QualityCheckResult(
+                isAcceptable = false,
+                reason = "没有工具调用记录且没有结构化内容",
+                followUpQuestion = "请使用 read_file、find_file、grep_file 等工具扫描项目代码，然后输出${goal.type.displayName}的分析报告。"
+            )
+        }
+
+        return QualityCheckResult(isAcceptable = true)
     }
 
     /**

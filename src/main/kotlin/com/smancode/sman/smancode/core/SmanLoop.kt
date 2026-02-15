@@ -517,7 +517,153 @@ class SmanLoop(
             return toolCallTagResult
         }
 
+        // 4. 尝试解析 GLM-5 的 {"parts": [...]} 格式（即使 JSON 有错误）
+        val glmResult = extractGlmPartsFormat(response)
+        if (glmResult != null) {
+            logger.info("Level 0: 解析到 GLM-5 parts 格式")
+            return glmResult
+        }
+
         return null
+    }
+
+    /**
+     * 解析 GLM-5 的 {"parts": [...]} 格式
+     *
+     * GLM-5 有时会输出不规范的 JSON，例如：
+     * - 参数直接放在对象里，没有 parameters 包装
+     * - JSON 语法错误（缺少逗号等）
+     *
+     * 此方法尝试容错解析
+     */
+    private fun extractGlmPartsFormat(response: String): String? {
+        // 检查是否包含 "parts" 或 "toolName" 关键字
+        if (!response.contains("\"parts\"") && !response.contains("\"toolName\"")) {
+            return null
+        }
+
+        // 尝试提取 ```json 代码块中的内容
+        var jsonContent = extractFromMarkdownBlock(response)
+        if (jsonContent == null) {
+            // 如果没有代码块，直接使用原始内容
+            jsonContent = response
+        }
+
+        logger.debug("GLM-5 解析: jsonContent 长度={}", jsonContent.length)
+
+        // 尝试解析并修复 JSON
+        return try {
+            val toolCalls = mutableListOf<Map<String, Any>>()
+
+            // 策略1: 匹配完整的 tool 对象（包括嵌套的 parameters）
+            // 使用更宽松的正则，匹配到对象的末尾（通过计算大括号）
+            val toolStartPattern = Regex("""\{\s*"type"\s*:\s*"tool"\s*,\s*"toolName"\s*:\s*"(\w+)"""")
+
+            val matches = toolStartPattern.findAll(jsonContent).toList()
+            logger.debug("GLM-5 解析: 找到 {} 个工具调用模式", matches.size)
+
+            for (match in matches) {
+                val startIndex = match.range.first
+                val toolName = match.groupValues[1]
+
+                // 从 match 位置开始，找到对应的闭合大括号
+                val objectContent = extractBalancedBraces(jsonContent, startIndex)
+
+                logger.debug("GLM-5 解析: toolName={}, objectContent={}", toolName, objectContent?.take(100))
+
+                if (objectContent != null) {
+                    // 解析参数
+                    val parameters = mutableMapOf<String, Any>()
+
+                    // 首先尝试提取 parameters 对象
+                    val paramsMatch = Regex(""""parameters"\s*:\s*\{([^}]*)\}""").find(objectContent)
+                    if (paramsMatch != null) {
+                        // 解析 parameters 对象内的字段
+                        extractKeyValuePairs(paramsMatch.groupValues[1], parameters)
+                    }
+
+                    // 提取直接放在对象里的参数（GLM-5 的不规范格式）
+                    extractKeyValuePairs(objectContent, parameters)
+
+                    // 移除 type、toolName、parameters 这些非参数字段
+                    parameters.remove("type")
+                    parameters.remove("toolName")
+                    parameters.remove("parameters")
+
+                    toolCalls.add(mapOf(
+                        "type" to "tool",
+                        "toolName" to toolName,
+                        "parameters" to parameters
+                    ))
+                }
+            }
+
+            if (toolCalls.isEmpty()) {
+                logger.debug("GLM-5 解析: 未找到任何工具调用")
+                null
+            } else {
+                logger.debug("GLM-5 解析: 成功解析 {} 个工具调用", toolCalls.size)
+                objectMapper.writeValueAsString(mapOf("parts" to toolCalls))
+            }
+        } catch (e: Exception) {
+            logger.warn("解析 GLM-5 parts 格式失败: {}", e.message)
+            null
+        }
+    }
+
+    /**
+     * 提取平衡的大括号内容
+     */
+    private fun extractBalancedBraces(content: String, startIndex: Int): String? {
+        var depth = 0
+        var inString = false
+        var escapeNext = false
+
+        for (i in startIndex until content.length) {
+            val c = content[i]
+
+            if (escapeNext) {
+                escapeNext = false
+                continue
+            }
+
+            when (c) {
+                '\\' -> escapeNext = true
+                '"' -> inString = !inString
+                '{' -> if (!inString) depth++
+                '}' -> {
+                    if (!inString) {
+                        depth--
+                        if (depth == 0) {
+                            return content.substring(startIndex, i + 1)
+                        }
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * 从 JSON 片段中提取键值对
+     */
+    private fun extractKeyValuePairs(content: String, parameters: MutableMap<String, Any>) {
+        // 匹配 "key": "value" 格式
+        val stringPattern = Regex(""""(\w+)"\s*:\s*"([^"]*)"""")
+        stringPattern.findAll(content).forEach { match ->
+            val key = match.groupValues[1]
+            parameters[key] = match.groupValues[2]
+        }
+
+        // 匹配 "key": number 格式
+        val numPattern = Regex(""""(\w+)"\s*:\s*(\d+)""")
+        numPattern.findAll(content).forEach { match ->
+            val key = match.groupValues[1]
+            if (!parameters.containsKey(key)) {  // 不覆盖已有的
+                parameters[key] = match.groupValues[2].toIntOrNull() ?: match.groupValues[2]
+            }
+        }
     }
 
     /**
