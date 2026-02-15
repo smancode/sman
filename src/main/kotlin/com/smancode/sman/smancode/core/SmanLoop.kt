@@ -632,6 +632,13 @@ class SmanLoop(
      *   --filePattern "*.gradle"
      * }}
      * [/TOOL_CALL]
+     *
+     * 或：
+     * [TOOL_CALL]
+     * {tool => "read_file", args => {
+     *   --relativePath "settings.gradle"
+     * }}
+     * [/TOOL_CALL]
      */
     private fun extractToolCallTagFormat(response: String): String? {
         // 检查是否包含 [TOOL_CALL] 标签
@@ -648,7 +655,7 @@ class SmanLoop(
         for (match in matches) {
             val content = match.groupValues[1].trim()
 
-            // 尝试解析 {tool => "xxx", parameters => {...}} 格式
+            // 尝试解析 {tool => "xxx", ...} 格式
             val toolNamePattern = Regex("""tool\s*=>\s*["'](\w+)["']""")
             val toolNameMatch = toolNamePattern.find(content) ?: continue
             val toolName = toolNameMatch.groupValues[1]
@@ -656,12 +663,12 @@ class SmanLoop(
             // 解析参数
             val parameters = mutableMapOf<String, Any>()
 
-            // 解析 --key "value" 格式
-            val dashParamPattern = Regex("""--(\w+)\s+["']([^"']+)["']""")
+            // 解析 --key "value" 或 --key value 格式（最常见）
+            val dashParamPattern = Regex("""--(\w+)\s+["']?([^"'\n]+)["']?""")
             dashParamPattern.findAll(content).forEach { paramMatch ->
                 val key = paramMatch.groupValues[1]
-                val value = paramMatch.groupValues[2]
-                parameters[key] = value
+                val value = paramMatch.groupValues[2].trim()
+                parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
             }
 
             // 解析 parameters => { key: "value" } 格式
@@ -671,6 +678,22 @@ class SmanLoop(
                 val paramsContent = paramsBlockMatch.groupValues[1]
                 val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
                 keyValuePattern.findAll(paramsContent).forEach { kvMatch ->
+                    val key = kvMatch.groupValues[1]
+                    val value = kvMatch.groupValues[2].trim()
+                    if (!parameters.containsKey(key)) {
+                        parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
+                    }
+                }
+            }
+
+            // 解析 args => { key: "value" } 格式（minimax 常用）
+            // 注意：使用 [\s\S] 匹配多行内容
+            val argsBlockPattern = Regex("""args\s*=>\s*\{([\s\S]*?)\}""")
+            val argsBlockMatch = argsBlockPattern.find(content)
+            if (argsBlockMatch != null) {
+                val argsContent = argsBlockMatch.groupValues[1]
+                val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
+                keyValuePattern.findAll(argsContent).forEach { kvMatch ->
                     val key = kvMatch.groupValues[1]
                     val value = kvMatch.groupValues[2].trim()
                     if (!parameters.containsKey(key)) {

@@ -135,11 +135,12 @@ class NonStandardToolCallParseTest {
 
             val parameters = mutableMapOf<String, Any>()
 
-            val dashParamPattern = Regex("""--(\w+)\s+["']([^"']+)["']""")
+            // 解析 --key "value" 或 --key value 格式（最常见）
+            val dashParamPattern = Regex("""--(\w+)\s+["']?([^"'\n]+)["']?""")
             dashParamPattern.findAll(content).forEach { paramMatch ->
                 val key = paramMatch.groupValues[1]
-                val value = paramMatch.groupValues[2]
-                parameters[key] = value
+                val value = paramMatch.groupValues[2].trim()
+                parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
             }
 
             val paramsBlockPattern = Regex("""parameters\s*=>\s*\{([^}]+)\}""")
@@ -148,6 +149,22 @@ class NonStandardToolCallParseTest {
                 val paramsContent = paramsBlockMatch.groupValues[1]
                 val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
                 keyValuePattern.findAll(paramsContent).forEach { kvMatch ->
+                    val key = kvMatch.groupValues[1]
+                    val value = kvMatch.groupValues[2].trim()
+                    if (!parameters.containsKey(key)) {
+                        parameters[key] = value.toIntOrNull() ?: value.toLongOrNull() ?: value
+                    }
+                }
+            }
+
+            // 解析 args => { key: "value" } 格式（minimax 常用）
+            // 注意：使用 [\s\S] 匹配多行内容
+            val argsBlockPattern = Regex("""args\s*=>\s*\{([\s\S]*?)\}""")
+            val argsBlockMatch = argsBlockPattern.find(content)
+            if (argsBlockMatch != null) {
+                val argsContent = argsBlockMatch.groupValues[1]
+                val keyValuePattern = Regex("""(\w+)[:：]\s*["']?([^,"'}\n]+)["']?""")
+                keyValuePattern.findAll(argsContent).forEach { kvMatch ->
                     val key = kvMatch.groupValues[1]
                     val value = kvMatch.groupValues[2].trim()
                     if (!parameters.containsKey(key)) {
@@ -172,6 +189,37 @@ class NonStandardToolCallParseTest {
         } catch (e: Exception) {
             null
         }
+    }
+
+    @Test
+    @DisplayName("应该解析 [TOOL_CALL] args 格式（minimax 常用）")
+    fun shouldParseToolCallArgsFormat() {
+        val input = """
+            [TOOL_CALL]
+            {tool => "read_file", args => {
+              --relativePath "settings.gradle"
+              --startLine 1
+              --endLine 50
+            }}
+            [/TOOL_CALL]
+        """.trimIndent()
+
+        val result = extractNonStandardToolCall(input)
+
+        assertNotNull(result)
+        val json = objectMapper.readTree(result)
+        assertTrue(json.has("parts"))
+        val parts = json.path("parts")
+        assertEquals(1, parts.size())
+
+        val toolPart = parts[0]
+        assertEquals("tool", toolPart.path("type").asText())
+        assertEquals("read_file", toolPart.path("toolName").asText())
+
+        val params = toolPart.path("parameters")
+        assertEquals("settings.gradle", params.path("relativePath").asText())
+        assertEquals(1, params.path("startLine").asInt())
+        assertEquals(50, params.path("endLine").asInt())
     }
 
     @Test

@@ -4,12 +4,10 @@ import com.intellij.openapi.project.Project
 import com.smancode.sman.analysis.coordination.CodeVectorizationCoordinator
 import com.smancode.sman.analysis.coordination.VectorizationResult
 import com.smancode.sman.analysis.database.TieredVectorStore
-import com.smancode.sman.analysis.executor.AnalysisTaskExecutor
 import com.smancode.sman.analysis.model.AnalysisType
-import com.smancode.sman.analysis.model.ProjectMapManager
-import com.smancode.sman.analysis.model.StepState
-import com.smancode.sman.analysis.util.ProjectHashCalculator
 import com.smancode.sman.analysis.vectorization.BgeM3Client
+import com.smancode.sman.architect.ArchitectAgent
+import com.smancode.sman.architect.model.ArchitectStopReason
 import com.smancode.sman.config.SmanConfig
 import com.smancode.sman.evolution.generator.QuestionGenerator
 import com.smancode.sman.evolution.guard.DoomLoopGuard
@@ -29,7 +27,6 @@ import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 项目分析调度器
@@ -37,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 后台定期检查项目状态并执行分析任务
  *
  * 核心职责：
- * 1. 基础分析（项目结构、技术栈等）- 通过 AnalysisTaskExecutor
+ * 1. 基础分析（项目结构、技术栈等）- 通过 ArchitectAgent
  * 2. 代码向量化（扫描 .java → 生成 MD → 向量化）- 通过 CodeVectorizationCoordinator
  */
 class ProjectAnalysisScheduler(
@@ -59,10 +56,11 @@ class ProjectAnalysisScheduler(
     @Volatile
     private var enabled: Boolean = true
 
-    private val isExecuting = AtomicBoolean(false)
-
     // 自进化循环（可选功能）
     private var selfEvolutionLoop: SelfEvolutionLoop? = null
+
+    // 架构师 Agent（分析引擎）
+    private var architectAgent: ArchitectAgent? = null
 
     fun start() {
         logger.info("启动项目分析调度器: project={}, interval={}ms", project.name, intervalMs)
@@ -82,6 +80,9 @@ class ProjectAnalysisScheduler(
         // 启动自进化循环（如果启用）
         startSelfEvolutionLoop()
 
+        // 启动架构师 Agent（如果启用）
+        startArchitectAgent()
+
         logger.info("项目分析调度器已启动")
     }
 
@@ -93,6 +94,9 @@ class ProjectAnalysisScheduler(
 
         // 停止自进化循环
         stopSelfEvolutionLoop()
+
+        // 停止架构师 Agent
+        stopArchitectAgent()
     }
 
     fun toggle() {
@@ -107,72 +111,13 @@ class ProjectAnalysisScheduler(
     }
 
     private suspend fun checkAndExecuteAnalysis() {
-        if (!isExecuting.compareAndSet(false, true)) {
-            logger.debug("已有分析任务在执行，跳过本次检查")
-            return
-        }
-
-        try {
+        // 执行代码向量化（核心！扫描 .java → 生成 MD → 向量化）
+        if (enabled) {
             val projectKey = project.name
             val projectBasePath = project.basePath?.let { Paths.get(it) }
-                ?: run {
-                    logger.warn("项目基础路径为空")
-                    return
-                }
-
-            val currentMd5 = try {
-                ProjectHashCalculator.calculate(project)
-            } catch (e: Exception) {
-                logger.warn("计算项目 MD5 失败", e)
-                return
-            }
-
-            if (!ProjectMapManager.isProjectRegistered(projectBasePath, projectKey)) {
-                logger.info("首次发现项目，注册并开始分析: {}", projectKey)
-                ProjectMapManager.registerProject(projectBasePath, projectKey, projectBasePath.toString(), currentMd5)
-                executeFullAnalysis(projectKey, projectBasePath)
-                return
-            }
-
-            val entry = ProjectMapManager.getProjectEntry(projectBasePath, projectKey)
-            if (entry != null && entry.projectMd5 != currentMd5) {
-                logger.info("项目内容已变化，更新 MD5: {}", projectKey)
-                ProjectMapManager.updateProjectMd5(projectBasePath, projectKey, currentMd5)
-                resetAllAnalysisStatus(projectBasePath, projectKey)
-            }
-
-            // 1. 执行基础分析（项目结构、技术栈等）
-            val pendingTypes = findPendingAnalysisTypes(projectBasePath, projectKey)
-
-            if (pendingTypes.isNotEmpty()) {
-                logger.info("发现 {} 个待执行的基础分析任务: {}", pendingTypes.size, pendingTypes.map { it.key })
-                val executor = AnalysisTaskExecutor(
-                    projectKey = projectKey,
-                    projectBasePath = projectBasePath,
-                    smanService = smanService,
-                    bgeEndpoint = bgeEndpoint
-                )
-
-                for (type in pendingTypes) {
-                    if (!enabled) break
-                    try {
-                        executor.executeWithRetry(type)
-                    } catch (e: Exception) {
-                        logger.error("执行分析失败: type={}", type.key, e)
-                    }
-                    delay(1000)
-                }
-            } else {
-                logger.debug("没有待执行的基础分析任务")
-            }
-
-            // 2. 执行代码向量化（核心！扫描 .java → 生成 MD → 向量化）
-            if (enabled) {
+            if (projectBasePath != null) {
                 executeCodeVectorization(projectKey, projectBasePath)
             }
-
-        } finally {
-            isExecuting.set(false)
         }
     }
 
@@ -221,80 +166,6 @@ class ProjectAnalysisScheduler(
         }
     }
 
-    private fun findPendingAnalysisTypes(projectRoot: Path, projectKey: String): List<AnalysisType> {
-        val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey)
-            ?: return AnalysisType.values().toList()
-
-        // 核心逻辑：只要不是 COMPLETED，就需要执行（包括 PENDING/RUNNING/FAILED）
-        return AnalysisType.values().filter { !entry.isAnalysisComplete(it) }
-    }
-
-    private fun resetAllAnalysisStatus(projectRoot: Path, projectKey: String) {
-        val entry = ProjectMapManager.getProjectEntry(projectRoot, projectKey) ?: return
-
-        // 保留 COMPLETED 状态，其他重置为 PENDING
-        fun reset(state: StepState) = if (state == StepState.COMPLETED) state else StepState.PENDING
-
-        val newStatus = com.smancode.sman.analysis.model.AnalysisStatus(
-            projectStructure = reset(entry.analysisStatus.projectStructure),
-            techStack = reset(entry.analysisStatus.techStack),
-            apiEntries = reset(entry.analysisStatus.apiEntries),
-            dbEntities = reset(entry.analysisStatus.dbEntities),
-            enums = reset(entry.analysisStatus.enums),
-            configFiles = reset(entry.analysisStatus.configFiles)
-        )
-
-        val map = com.smancode.sman.analysis.model.ProjectMapManager.loadProjectMap(projectRoot)
-        val updatedMap = map.copy(projects = map.projects + (projectKey to entry.copy(analysisStatus = newStatus)))
-        com.smancode.sman.analysis.model.ProjectMapManager.saveProjectMap(projectRoot, updatedMap)
-        logger.info("已重置分析状态: {}", projectKey)
-    }
-
-    private suspend fun executeFullAnalysis(projectKey: String, projectBasePath: Path) {
-        val executor = AnalysisTaskExecutor(
-            projectKey = projectKey,
-            projectBasePath = projectBasePath,
-            smanService = smanService,
-            bgeEndpoint = bgeEndpoint
-        )
-
-        try {
-            executor.executeCoreAnalysis()
-            executor.executeStandardAnalysis()
-            logger.info("基础分析已完成: {}", projectKey)
-
-            // 基础分析完成后，执行代码向量化
-            executeCodeVectorization(projectKey, projectBasePath)
-
-        } catch (e: Exception) {
-            logger.error("执行完整分析失败: {}", projectKey, e)
-        }
-    }
-
-    suspend fun triggerAnalysis(type: AnalysisType? = null) {
-        logger.info("手动触发分析: type={}", type?.key ?: "ALL")
-
-        if (type != null) {
-            val projectKey = project.name
-            val projectBasePath = project.basePath?.let { Paths.get(it) }
-                ?: run {
-                    logger.warn("项目基础路径为空")
-                    return
-                }
-
-            val executor = AnalysisTaskExecutor(
-                projectKey = projectKey,
-                projectBasePath = projectBasePath,
-                smanService = smanService,
-                bgeEndpoint = bgeEndpoint
-            )
-
-            executor.execute(type)
-        } else {
-            checkAndExecuteAnalysis()
-        }
-    }
-
     /**
      * 立即触发分析（供外部调用）
      *
@@ -302,6 +173,11 @@ class ProjectAnalysisScheduler(
      */
     fun triggerImmediateAnalysis() {
         logger.info("立即触发项目分析: project={}", project.name)
+
+        // 触发架构师 Agent 重新检查
+        if (SmanConfig.architectAgentEnabled && architectAgent == null) {
+            startArchitectAgent()
+        }
 
         scope.launch {
             try {
@@ -468,6 +344,76 @@ class ProjectAnalysisScheduler(
         }
         selfEvolutionLoop = null
     }
+
+    // ==================== 架构师 Agent 集成 ====================
+
+    /**
+     * 启动架构师 Agent
+     *
+     * 根据配置决定是否启用，作为分析引擎
+     */
+    private fun startArchitectAgent() {
+        if (!SmanConfig.architectAgentEnabled) {
+            logger.info("架构师 Agent 未启用 (architect.agent.enabled=false)")
+            return
+        }
+
+        val projectKey = project.name
+        val projectPath = project.basePath?.let { Paths.get(it) }
+        if (projectPath == null) {
+            logger.warn("项目路径为空，无法启动架构师 Agent")
+            return
+        }
+
+        try {
+            architectAgent = ArchitectAgent(
+                projectKey = projectKey,
+                projectPath = projectPath,
+                smanService = smanService
+            )
+
+            architectAgent?.start()
+            logger.info("架构师 Agent 已启动: projectKey={}", projectKey)
+
+        } catch (e: Exception) {
+            logger.error("启动架构师 Agent 失败", e)
+        }
+    }
+
+    /**
+     * 停止架构师 Agent
+     */
+    private fun stopArchitectAgent() {
+        architectAgent?.let { agent ->
+            agent.stop(ArchitectStopReason.USER_STOPPED)
+            logger.info("架构师 Agent 已停止")
+        }
+        architectAgent = null
+    }
+
+    /**
+     * 手动触发架构师 Agent 执行指定类型的分析
+     */
+    fun triggerArchitectAnalysis(type: AnalysisType) {
+        if (!SmanConfig.architectAgentEnabled) {
+            logger.warn("架构师 Agent 未启用，无法触发分析")
+            return
+        }
+
+        scope.launch {
+            try {
+                val result = architectAgent?.executeOnce(type)
+                logger.info("架构师 Agent 分析完成: type={}, result={}", type.key, result?.summary)
+            } catch (e: Exception) {
+                logger.error("架构师 Agent 分析失败: type={}", type.key, e)
+            }
+        }
+    }
+
+    /**
+     * 获取架构师 Agent 状态
+     */
+    fun getArchitectStatus() = architectAgent?.getStatus()
 
     companion object {
         fun create(
