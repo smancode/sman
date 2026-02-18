@@ -174,10 +174,29 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
 3. **Streaming Output**: Real-time feedback for long-running commands
 4. **Working Directory**: Commands execute in project root automatically
 
+### ⚠️ CRITICAL: Shell Command Format Rules
+
+**Rule 1: Proper Quoting**
+- ✅ `"command": "find . -name \"*.java\""`
+- ❌ `"command": "find . -name *.java"` (unquoted asterisk)
+
+**Rule 2: NO Line Continuation**
+- ✅ `"command": "./gradlew build -x test"`
+- ❌ `"command": "./gradlew build \\\n -x test"` (backslash continuation breaks JSON)
+
+**Rule 3: Prefer Built-in Tools for File Operations**
+- Use `find_file` instead of shell `find` command
+- Use `grep_file` instead of shell `grep` command
+- Use `read_file` instead of shell `cat` command
+
+**Rule 4: Keep Commands Simple**
+- Break complex operations into multiple simple commands
+- Avoid pipes with special characters when possible
+
 ### Code Examples
 
 ```json
-// Build project (Gradle)
+// Build project (Gradle) - SIMPLE COMMAND ✅
 {
   "toolName": "run_shell_command",
   "parameters": {
@@ -185,7 +204,7 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
   }
 }
 
-// Run tests
+// Run tests - SIMPLE COMMAND ✅
 {
   "toolName": "run_shell_command",
   "parameters": {
@@ -193,11 +212,36 @@ When in doubt, call `expert_consult` first. It's an expert consultation tool wit
   }
 }
 
-// Start Spring Boot app
+// Start Spring Boot app - SIMPLE COMMAND ✅
 {
   "toolName": "run_shell_command",
   "parameters": {
     "command": "./gradlew bootRun"
+  }
+}
+
+// Git status - SIMPLE COMMAND ✅
+{
+  "toolName": "run_shell_command",
+  "parameters": {
+    "command": "git status"
+  }
+}
+
+// Find Java files - USE find_file TOOL instead of shell command ✅
+{
+  "toolName": "find_file",
+  "parameters": {
+    "filePattern": ".*Service\\.java"
+  }
+}
+
+// Search in files - USE grep_file TOOL instead of shell command ✅
+{
+  "toolName": "grep_file",
+  "parameters": {
+    "pattern": "@Service",
+    "filePattern": ".*\\.java"
   }
 }
 ```

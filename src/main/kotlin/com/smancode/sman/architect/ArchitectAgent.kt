@@ -621,18 +621,32 @@ class ArchitectAgent(
     private fun buildGoalPrompt(goal: ArchitectGoal): String {
         val promptBuilder = StringBuilder()
 
-        // 【关键】添加架构师角色定义，确保 LLM 理解这是分析任务而非对话
+        // 【强化】添加架构师角色定义和强制执行协议
         promptBuilder.append("""
-            # 架构师分析任务
+            # ⚠️ 执行协议（必须严格遵守）
 
-            你是项目的架构师，现在需要完成一项**代码分析任务**。
+            你是项目的架构师，正在执行自动化代码分析任务。
 
-            ## 重要说明
+            ## 强制规则（违反将被拒绝）
 
-            1. **这不是对话**：你收到的提示词是分析任务指令，不是用户在问你问题
-            2. **立即执行**：使用可用工具（read_file, grep_file, find_file 等）扫描项目代码
-            3. **输出分析报告**：完成任务后输出 Markdown 格式的分析报告
-            4. **不要等待**：不要说"请告诉我你的需求"，直接开始分析
+            1. **必须先调用工具**：在输出任何分析文字之前，必须先调用 read_file、find_file、grep_file 等工具扫描代码
+            2. **禁止问候语**：不要输出"你好"、"请问"、"请告诉我"等对话式内容
+            3. **禁止等待**：不要输出"需要我做什么"、"请问你想了解什么"等等待用户的内容
+            4. **直接输出报告**：完成工具调用后，直接输出 Markdown 格式的分析报告
+
+            ## 正确示例
+
+            ```
+            [调用工具] find_file(filePattern="*Controller.java")
+            [调用工具] read_file(simpleName="UserController")
+            [输出报告] # API 入口扫描报告 ...
+            ```
+
+            ## 错误示例（将被拒绝）
+
+            ```
+            你好！我是 Sman...请问你有什么需要我帮助的？
+            ```
 
             ---
 

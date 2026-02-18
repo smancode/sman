@@ -429,6 +429,13 @@ class SmanLoop(
             return trimmedResponse
         }
 
+        // ========== Level 1.5: 修复常见 JSON 语法错误（GLM-5/M2.5）==========
+        val level15Result = fixCommonJsonErrors(trimmedResponse)
+        if (level15Result != null && tryParseJson(level15Result)) {
+            logger.info("Level 1.5 成功: 修复 JSON 语法错误")
+            return level15Result
+        }
+
         // ========== Level 2: 清理 markdown 代码块 ==========
         val level2Result = extractFromMarkdownBlock(trimmedResponse)
         if (level2Result != null && tryParseJson(level2Result)) {
@@ -881,6 +888,39 @@ class SmanLoop(
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * Level 1.5: 修复常见 JSON 语法错误
+     *
+     * GLM-5/M2.5 常见的 JSON 错误：
+     * 1. 数组元素之间格式错误：`{"parts":[{"type":"text"},"{"type":"tool"}]}`
+     *    应该是：`{"parts":[{"type":"text"},{"type":"tool"}]}`
+     * 2. 对象之间缺少逗号
+     */
+    private fun fixCommonJsonErrors(response: String): String? {
+        if (!response.contains("{") || !response.contains("}")) {
+            return null
+        }
+
+        // 首先尝试提取 JSON 部分（跳过可能的前缀内容如思考块）
+        val jsonStart = response.indexOf("{")
+        if (jsonStart < 0) return null
+
+        var fixed = if (jsonStart > 0) response.substring(jsonStart) else response
+
+        // 修复 1: `},"{"` 应该是 `},{"` （GLM-5 常见错误）
+        // 模式：数组中的对象结束，下一个对象开始，但中间格式错误
+        fixed = fixed.replace(Regex("""\}\s*,\s*"\s*\{"""), """},{""")
+        fixed = fixed.replace(Regex("""\}\s*"\s*\{"""), """},{""")
+
+        // 修复 2: `}{"` 应该是 `},{"` （缺少逗号和引号处理）
+        fixed = fixed.replace(Regex("""\}\s*\{"type"""), """},{"type""")
+
+        // 修复 3: 数组内元素之间 `} {` 变成 `},{`
+        fixed = fixed.replace(Regex("""\}\s+\{"""), """},{""")
+
+        return fixed
     }
 
     /**

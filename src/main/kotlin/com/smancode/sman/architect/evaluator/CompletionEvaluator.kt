@@ -37,7 +37,25 @@ class CompletionEvaluator(
         threshold: Double = SmanConfig.getArchitectCompletionThreshold()
     ): EvaluationResult {
         return try {
-            // 1. 提取响应内容
+            // 1. 【新增】检测是否有工具调用记录
+            val toolParts = response.parts.filterIsInstance<ToolPart>()
+            val hasToolCalls = toolParts.isNotEmpty()
+
+            if (!hasToolCalls) {
+                logger.warn("没有工具调用记录，拒绝分析结果")
+                return EvaluationResult(
+                    completeness = 0.0,
+                    isComplete = false,
+                    summary = "没有执行代码扫描",
+                    todos = emptyList(),
+                    followUpQuestions = listOf(
+                        "你必须先使用 read_file、find_file、grep_file 等工具扫描项目代码，然后才能输出分析报告。不要直接输出文字，必须先调用工具。"
+                    ),
+                    confidence = 0.2
+                )
+            }
+
+            // 2. 提取响应内容
             val responseContent = extractResponseContent(response)
 
             if (responseContent.isBlank()) {
@@ -45,7 +63,7 @@ class CompletionEvaluator(
                 return EvaluationResult.failure("响应内容为空")
             }
 
-            // 2. 【防呆】检测内容质量
+            // 3. 【防呆】检测内容质量
             val qualityCheck = checkContentQuality(responseContent, goal)
             if (!qualityCheck.isAcceptable) {
                 logger.warn("内容质量检测失败: {}, 追问: {}", qualityCheck.reason, qualityCheck.followUpQuestion)
@@ -59,11 +77,11 @@ class CompletionEvaluator(
                 )
             }
 
-            // 3. 构建评估提示词
+            // 4. 构建评估提示词
             val systemPrompt = buildSystemPrompt()
             val userPrompt = buildUserPrompt(goal, responseContent, threshold)
 
-            // 4. 调用 LLM 评估
+            // 5. 调用 LLM 评估
             logger.info("开始评估分析结果: goal={}, threshold={}", goal.type.key, threshold)
             val llmResponse = llmService.simpleRequest(systemPrompt, userPrompt)
 
@@ -72,7 +90,7 @@ class CompletionEvaluator(
                 return EvaluationResult.failure("LLM 评估响应为空")
             }
 
-            // 5. 解析评估结果
+            // 6. 解析评估结果
             parseEvaluationResult(llmResponse, threshold)
 
         } catch (e: Exception) {

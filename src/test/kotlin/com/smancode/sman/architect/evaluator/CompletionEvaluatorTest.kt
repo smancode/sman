@@ -5,6 +5,7 @@ import com.smancode.sman.architect.model.ArchitectGoal
 import com.smancode.sman.architect.model.EvaluationResult
 import com.smancode.sman.model.message.Message
 import com.smancode.sman.model.part.TextPart
+import com.smancode.sman.model.part.ToolPart
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.*
@@ -45,7 +46,8 @@ class CompletionEvaluatorTest {
                 &lt;/think&gt;
             """.trimIndent()
 
-            val response = createMockResponse(content)
+            // 创建带工具调用的响应（内容质量检测需要工具调用）
+            val response = createMockResponse(content, hasToolCalls = true)
             val goal = ArchitectGoal.fromType(AnalysisType.PROJECT_STRUCTURE)
 
             // When
@@ -69,7 +71,8 @@ class CompletionEvaluatorTest {
                 - "查找放款相关的代码在哪里"
             """.trimIndent()
 
-            val response = createMockResponse(content)
+            // 创建带工具调用的响应（内容质量检测需要工具调用）
+            val response = createMockResponse(content, hasToolCalls = true)
             val goal = ArchitectGoal.fromType(AnalysisType.TECH_STACK)
 
             // When
@@ -99,7 +102,8 @@ class CompletionEvaluatorTest {
                 - **read_file**: 读取 settings.gradle
             """.trimIndent()
 
-            val response = createMockResponse(content)
+            // 创建带工具调用的响应
+            val response = createMockResponse(content, hasToolCalls = true)
             val goal = ArchitectGoal.fromType(AnalysisType.PROJECT_STRUCTURE)
 
             // Mock LLM 评估响应
@@ -128,7 +132,8 @@ class CompletionEvaluatorTest {
             // Given: 过短的内容
             val content = "【分析问题】开始识别项目技术栈。"
 
-            val response = createMockResponse(content)
+            // 创建带工具调用的响应（内容质量检测需要工具调用）
+            val response = createMockResponse(content, hasToolCalls = true)
             val goal = ArchitectGoal.fromType(AnalysisType.TECH_STACK)
 
             // When
@@ -145,7 +150,8 @@ class CompletionEvaluatorTest {
             // Given: 没有结构的短内容
             val content = "这是一个 Java 项目，使用了 Spring Boot 框架。"
 
-            val response = createMockResponse(content)
+            // 创建带工具调用的响应（内容质量检测需要工具调用）
+            val response = createMockResponse(content, hasToolCalls = true)
             val goal = ArchitectGoal.fromType(AnalysisType.CONFIG_FILES)
 
             // When
@@ -159,8 +165,8 @@ class CompletionEvaluatorTest {
         @Test
         @DisplayName("空内容应该返回失败")
         fun `should return failure for empty content`() {
-            // Given: 空内容
-            val response = createMockResponse("")
+            // Given: 空内容（没有工具调用）
+            val response = createMockResponse("", hasToolCalls = false)
             val goal = ArchitectGoal.fromType(AnalysisType.API_ENTRIES)
 
             // When
@@ -169,13 +175,55 @@ class CompletionEvaluatorTest {
             // Then
             assertFalse(result.isComplete)
             assertEquals(0.0, result.completeness)
-            assertTrue(result.summary.contains("空"))
+            // 没有工具调用时会被拒绝
+            assertTrue(result.summary.contains("代码扫描") || result.summary.contains("工具"))
+        }
+
+        @Test
+        @DisplayName("只有工具调用没有分析文字应该被拒绝")
+        fun `should reject response with only tool calls but no analysis`() {
+            // Given: 只有工具调用，没有分析文字
+            val response = createMockResponse("", hasToolCalls = true)
+            val goal = ArchitectGoal.fromType(AnalysisType.API_ENTRIES)
+
+            // When
+            val result = evaluator.evaluate(goal, response)
+
+            // Then
+            assertFalse(result.isComplete)
+            // 工具调用会被转换为文本，所以实际上是"只有工具调用记录"的短内容
+            assertTrue(result.confidence < 0.5)
+        }
+
+        @Test
+        @DisplayName("没有工具调用的响应应该被拒绝")
+        fun `should reject response without tool calls`() {
+            // Given: 内容有效但没有工具调用
+            val content = """
+                ## 项目模块概览
+
+                | 模块 | 业务含义 | 主要组件 |
+                |------|----------|----------|
+                | **common** | 通用模块 | DTO、Config |
+            """.trimIndent()
+
+            // 创建没有工具调用的响应
+            val response = createMockResponse(content, hasToolCalls = false)
+            val goal = ArchitectGoal.fromType(AnalysisType.PROJECT_STRUCTURE)
+
+            // When
+            val result = evaluator.evaluate(goal, response)
+
+            // Then
+            assertFalse(result.isComplete)
+            assertEquals(0.0, result.completeness)
+            assertTrue(result.summary.contains("代码扫描") || result.summary.contains("工具"))
         }
     }
 
     // ==================== 辅助方法 ====================
 
-    private fun createMockResponse(content: String): Message {
+    private fun createMockResponse(content: String, hasToolCalls: Boolean = false): Message {
         val message = Message()
         message.id = java.util.UUID.randomUUID().toString()
         message.sessionId = "test-session"
@@ -185,6 +233,15 @@ class CompletionEvaluatorTest {
                 this.text = content
             }
             message.parts.add(textPart)
+        }
+
+        // 如果需要工具调用，添加 ToolPart
+        if (hasToolCalls) {
+            val toolPart = ToolPart().apply {
+                toolName = "find_file"
+                summary = "查找到配置文件"
+            }
+            message.parts.add(toolPart)
         }
 
         return message

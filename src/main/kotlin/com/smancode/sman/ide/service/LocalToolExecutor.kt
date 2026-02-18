@@ -1005,6 +1005,13 @@ class LocalToolExecutor(private val project: Project) {
         val command = parameters["command"]?.toString()
             ?: return ToolResult(false, "缺少 command 参数")
 
+        // 【新增】命令格式验证
+        val validationResult = validateShellCommand(command)
+        if (validationResult != null) {
+            logger.warn("命令格式验证失败: $validationResult")
+            return ToolResult(false, validationResult)
+        }
+
         val basePath = projectPath ?: project.basePath ?: ""
         val workingDir = File(basePath)
 
@@ -1344,4 +1351,68 @@ class LocalToolExecutor(private val project: Project) {
      * 命令可用性缓存
      */
     private val commandCache = mutableMapOf<String, Boolean>()
+
+    /**
+     * 验证 Shell 命令格式
+     *
+     * 检测常见的命令格式问题：
+     * 1. 命令末尾的反斜杠续行符（JSON 中不支持）
+     * 2. 建议使用内置工具替代某些 shell 命令
+     *
+     * @param command 要验证的命令
+     * @return 如果有问题返回错误消息，无问题返回 null
+     */
+    private fun validateShellCommand(command: String): String? {
+        val trimmedCommand = command.trim()
+
+        // 1. 检测末尾的反斜杠续行符
+        if (trimmedCommand.endsWith("\\") || trimmedCommand.endsWith(" \\")) {
+            return buildString {
+                appendLine("❌ 命令格式错误：末尾的反斜杠续行符 `\\` 在 JSON 中会导致命令截断")
+                appendLine()
+                appendLine("错误示例：`\"command\": \"find . -name \\\"*.java\\\" \\\"`")
+                appendLine("正确做法：将命令写成单行，不要使用续行符")
+                appendLine()
+                appendLine("建议：使用内置工具替代 shell 命令")
+                appendLine("- `find_file` 替代 `find` 命令")
+                appendLine("- `grep_file` 替代 `grep` 命令")
+            }
+        }
+
+        // 2. 检测孤立的 -name 参数（find 命令常见问题）
+        // 例如：find . -name \ (后面没有参数值)
+        if (trimmedCommand.contains(Regex("""\s-name\s*\\?\s*$"""))) {
+            return buildString {
+                appendLine("❌ 命令格式错误：`-name` 参数后缺少值")
+                appendLine()
+                appendLine("错误示例：`find . -name \\`")
+                appendLine("正确做法：`find . -name \"*.java\"`")
+                appendLine()
+                appendLine("建议：使用 `find_file` 工具替代 shell `find` 命令")
+                appendLine("示例：`{\"toolName\": \"find_file\", \"parameters\": {\"filePattern\": \".*Service\\\\.java\"}}`")
+            }
+        }
+
+        // 3. 建议：检测可以使用内置工具替代的命令
+        val suggestions = mutableListOf<String>()
+
+        if (trimmedCommand.startsWith("find ") || trimmedCommand.contains(" | find ")) {
+            suggestions.add("- 建议使用 `find_file` 工具替代 `find` 命令，更可靠且跨平台兼容")
+        }
+
+        if (trimmedCommand.startsWith("grep ") || trimmedCommand.contains(" | grep ")) {
+            suggestions.add("- 建议使用 `grep_file` 工具替代 `grep` 命令，更可靠且跨平台兼容")
+        }
+
+        if (trimmedCommand.startsWith("cat ")) {
+            suggestions.add("- 建议使用 `read_file` 工具替代 `cat` 命令，支持行号和分页")
+        }
+
+        // 只输出建议，不阻止执行
+        if (suggestions.isNotEmpty()) {
+            logger.info("Shell 命令优化建议:\n${suggestions.joinToString("\n")}")
+        }
+
+        return null // 验证通过
+    }
 }
