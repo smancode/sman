@@ -6,6 +6,23 @@ import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/**
+ * 时间戳格式化为人类可读的字符串
+ */
+private fun formatTimestamp(timestamp: Long): String {
+    return try {
+        val instant = Instant.ofEpochMilli(timestamp)
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(ZoneId.systemDefault())
+        formatter.format(instant)
+    } catch (e: Exception) {
+        "Invalid timestamp"
+    }
+}
 
 // ========== 类型别名（用于兼容旧代码） ==========
 /**
@@ -70,6 +87,9 @@ data class ProjectMap(
     @SerialName("lastUpdate")
     val lastUpdate: Long = System.currentTimeMillis(),
 
+    @SerialName("lastUpdateReadable")
+    val lastUpdateReadable: String = formatTimestamp(System.currentTimeMillis()),
+
     @SerialName("projects")
     val projects: Map<String, ProjectEntry> = emptyMap()
 ) {
@@ -111,7 +131,7 @@ data class ProjectMap(
      * 更新最后更新时间
      */
     fun withTimestamp(timestamp: Long = System.currentTimeMillis()): ProjectMap {
-        return copy(lastUpdate = timestamp)
+        return copy(lastUpdate = timestamp, lastUpdateReadable = formatTimestamp(timestamp))
     }
 }
 
@@ -132,6 +152,9 @@ data class ProjectEntry(
 
     @SerialName("lastAnalyzed")
     val lastAnalyzed: Long,
+
+    @SerialName("lastAnalyzedReadable")
+    val lastAnalyzedReadable: String = formatTimestamp(lastAnalyzed),
 
     @SerialName("projectMd5")
     val projectMd5: String,
@@ -175,7 +198,7 @@ data class ProjectEntry(
      * 更新最后分析时间
      */
     fun withAnalyzedTime(timestamp: Long = System.currentTimeMillis()): ProjectEntry {
-        return copy(lastAnalyzed = timestamp)
+        return copy(lastAnalyzed = timestamp, lastAnalyzedReadable = formatTimestamp(timestamp))
     }
 
     /**
