@@ -65,6 +65,10 @@ class SmanService(private val project: Project) : Disposable {
     private lateinit var dynamicPromptInjector: DynamicPromptInjector
     private lateinit var smanAgentLoop: SmanLoop
 
+    // 暴露给 ArchitectAgent 使用
+    fun getToolRegistry(): ToolRegistry = toolRegistry
+    fun getToolExecutor(): ToolExecutor = toolExecutor
+
     // 会话缓存
     private val sessionCache = ConcurrentHashMap<String, Session>()
 

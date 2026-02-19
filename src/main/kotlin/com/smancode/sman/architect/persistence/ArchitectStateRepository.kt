@@ -110,6 +110,8 @@ class ArchitectStateRepository(
             // 使用 databasePath 作为 H2 数据库路径
             jdbcUrl = "jdbc:h2:${config.databasePath};AUTO_SERVER=TRUE"
             driverClassName = "org.h2.Driver"
+            username = "sa"
+            password = ""
             maximumPoolSize = 3
             minimumIdle = 1
             isAutoCommit = true

@@ -1,6 +1,10 @@
 package com.smancode.sman.architect
 
+import com.smancode.sman.analysis.executor.AnalysisLoopExecutor
+import com.smancode.sman.analysis.executor.AnalysisLoopResult
+import com.smancode.sman.analysis.executor.AnalysisOutputValidator
 import com.smancode.sman.analysis.model.AnalysisType
+import com.smancode.sman.analysis.persistence.AnalysisStateRepository
 import com.smancode.sman.architect.evaluator.CompletionEvaluator
 import com.smancode.sman.architect.evaluator.ImpactAnalyzer
 import com.smancode.sman.architect.model.*
@@ -8,11 +12,14 @@ import com.smancode.sman.architect.persistence.ArchitectStateEntity
 import com.smancode.sman.architect.persistence.ArchitectStateRepository
 import com.smancode.sman.architect.storage.MdFileService
 import com.smancode.sman.config.SmanConfig
+import com.smancode.sman.evolution.guard.DoomLoopGuard
 import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.model.part.Part
 import com.smancode.sman.model.part.TextPart
 import com.smancode.sman.model.part.ToolPart
 import com.smancode.sman.smancode.llm.LlmService
+import com.smancode.sman.tools.ToolExecutor
+import com.smancode.sman.tools.ToolRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +99,20 @@ class ArchitectAgent(
     private val llmService: LlmService by lazy { SmanConfig.createLlmService() }
     private val completionEvaluator by lazy { CompletionEvaluator(llmService) }
     private val impactAnalyzer by lazy { ImpactAnalyzer(projectPath, llmService) }
+
+    // 【修复】复用 smanService 的工具注册，而不是创建空的 ToolRegistry
+    private val analysisValidator by lazy { AnalysisOutputValidator() }
+    private val analysisDoomLoopGuard by lazy { DoomLoopGuard.createDefault() }
+    private val analysisLoopExecutor: AnalysisLoopExecutor by lazy {
+        AnalysisLoopExecutor(
+            toolRegistry = smanService.getToolRegistry(),
+            toolExecutor = smanService.getToolExecutor(),
+            doomLoopGuard = analysisDoomLoopGuard,
+            llmService = llmService,
+            validator = analysisValidator,
+            maxSteps = 15
+        )
+    }
 
     // 状态持久化（断点续传）
     private val stateRepository: ArchitectStateRepository by lazy {
@@ -500,6 +521,12 @@ class ArchitectAgent(
 
     /**
      * 执行目标（多轮迭代）
+     *
+     * 【重构】使用 AnalysisLoopExecutor 替代 SmanService.processMessage()
+     * 优势：
+     * 1. 强制结构化输出
+     * 2. 完整度验证
+     * 3. 自动 TODO 生成
      */
     private suspend fun executeGoalWithIterations(goal: ArchitectGoal) {
         var currentGoal = goal
@@ -515,78 +542,129 @@ class ArchitectAgent(
             persistState()
 
             try {
-                // 1. 执行单次分析
+                // 1. 使用独立分析执行器执行分析
                 currentPhase = ArchitectPhase.EXECUTING
-                val response = executeSingleIteration(currentGoal)
+                val result = executeWithAnalysisLoopExecutor(currentGoal)
 
-                // 2. 评估结果
+                // 2. 使用验证器验证结果
                 currentPhase = ArchitectPhase.EVALUATING
-                val evaluation = completionEvaluator.evaluate(currentGoal, response, config.getCompletionThreshold())
+                val validation = analysisValidator.validate(result.content, goal.type)
 
-                logger.info("评估结果: completeness={}, isComplete={}", evaluation.completeness, evaluation.isComplete)
+                logger.info("验证结果: completeness={}, isValid={}, missing={}",
+                    validation.completeness, validation.isValid, validation.missingSections)
 
-                // 3. 根据评估结果处理
+                // 3. 转换为 EvaluationResult（兼容现有流程）
+                val evaluation = EvaluationResult(
+                    completeness = validation.completeness,
+                    isComplete = validation.isValid,
+                    summary = if (validation.isValid) "分析完成" else "分析未完成，缺少章节：${validation.missingSections.joinToString(", ")}",
+                    todos = validation.missingSections.map { missing ->
+                        TodoItem(content = "补充分析：$missing", priority = TodoPriority.HIGH)
+                    },
+                    followUpQuestions = validation.missingSections.map { "补充分析：$it" },
+                    confidence = if (validation.completeness > 0) 0.8 else 0.3
+                )
+
+                // 4. 根据评估结果处理
                 currentPhase = ArchitectPhase.PERSISTING
 
                 when {
                     evaluation.isComplete -> {
-                        // 完成，写入 MD
-                        saveResult(currentGoal, response, evaluation)
+                        // 完成，写入 MD（带自动生成的 TODO）
+                        saveResultFromLoopResult(currentGoal, result, evaluation)
                         successfulIterations++
-                        logger.info("目标已完成: {}", goal.type.key)
-                        // 【断点续传】目标完成，清除持久化状态
+                        logger.info("目标已完成: {}, completeness={}", goal.type.key, validation.completeness)
                         clearPersistedState()
                         return
                     }
                     evaluation.confidence < 0.5 && currentIterationCount < maxIterations -> {
-                        // 【防呆】低置信度 = 内容质量差，继续迭代
+                        // 低置信度 = 内容质量差，继续迭代
                         logger.warn("评估置信度过低 ({})，内容质量可能有问题，继续迭代", evaluation.confidence)
-
-                        // 提取追问作为下一次迭代的提示
-                        val followUp = if (evaluation.followUpQuestions.isNotEmpty()) {
-                            evaluation.followUpQuestions
-                        } else {
-                            listOf("上一次分析结果质量不佳，请重新执行${goal.type.displayName}任务。确保：1) 使用工具扫描代码 2) 输出结构化的 Markdown 报告 3) 不要等待用户输入")
-                        }
-
-                        currentGoal = currentGoal.withFollowUp(followUp)
-
-                        // 【断点续传】更新追问列表后持久化
+                        currentGoal = currentGoal.withFollowUp(
+                            listOf("上一次分析结果质量不佳，请重新执行${goal.type.displayName}任务。" +
+                                   "确保：1) 使用工具扫描代码 2) 输出结构化的 Markdown 报告")
+                        )
                         persistState()
-
-                        // 不保存质量差的结果，继续迭代
                     }
                     evaluation.needsFollowUp && currentIterationCount < maxIterations -> {
                         // 需要追问，继续迭代
-                        logger.info("需要追问: {} 个问题", evaluation.followUpQuestions.size)
+                        logger.info("需要补充: {} 个章节", evaluation.followUpQuestions.size)
                         currentGoal = currentGoal.withFollowUp(evaluation.followUpQuestions)
-
-                        // 保存阶段性结果
-                        saveResult(currentGoal, response, evaluation)
-
-                        // 【断点续传】更新追问列表后持久化
+                        saveResultFromLoopResult(currentGoal, result, evaluation)
                         persistState()
                     }
                     else -> {
                         // 未完成，记录 TODO 并保存
-                        saveResult(currentGoal, response, evaluation)
-
+                        saveResultFromLoopResult(currentGoal, result, evaluation)
                         if (currentIterationCount >= maxIterations) {
                             logger.warn("达到最大迭代次数: {}, 目标: {}", maxIterations, goal.type.key)
                         }
-                        // 【断点续传】目标结束（未完成但达到限制），清除持久化状态
                         clearPersistedState()
                         return
                     }
                 }
             } catch (e: Exception) {
                 logger.error("执行迭代失败: {}, 迭代 {}", goal.type.key, currentIterationCount, e)
-                // 【断点续传】异常时也要持久化状态，下次恢复
                 persistState()
-                // 记录失败但继续下一个目标
                 return
             }
         }
+    }
+
+    /**
+     * 使用 AnalysisLoopExecutor 执行分析
+     *
+     * 【核心修改】不再使用 SmanService.processMessage()
+     * LLM 通过工具调用来探索项目，不需要提前注入文件内容
+     */
+    private suspend fun executeWithAnalysisLoopExecutor(goal: ArchitectGoal): AnalysisLoopResult {
+        logger.info("使用独立分析执行器: type={}", goal.type.key)
+
+        // 构建前置上下文
+        val priorContext = buildString {
+            if (goal.context.isNotEmpty()) {
+                append("## 已有的分析结果\n\n")
+                goal.context.forEach { (key, value) ->
+                    append("### $key\n$value\n\n")
+                }
+            }
+        }
+
+        // 转换 TODO 为 AnalysisTodo 格式
+        val existingTodos = goal.followUpQuestions.mapIndexed { index, question ->
+            com.smancode.sman.analysis.model.AnalysisTodo(
+                id = "todo-${goal.type.key}-$index",
+                content = question,
+                status = com.smancode.sman.analysis.model.TodoStatus.PENDING,
+                priority = index + 1
+            )
+        }
+
+        // 执行分析（LLM 会通过工具调用来探索项目）
+        return analysisLoopExecutor.execute(
+            type = goal.type,
+            projectKey = projectKey,
+            priorContext = priorContext,
+            existingTodos = existingTodos
+        )
+    }
+
+    /**
+     * 从 AnalysisLoopResult 保存分析结果
+     */
+    private fun saveResultFromLoopResult(
+        goal: ArchitectGoal,
+        result: AnalysisLoopResult,
+        evaluation: EvaluationResult
+    ) {
+        // 读取之前的元信息
+        val previousMetadata = mdFileService.readMetadata(goal.type)
+
+        // 保存 MD 文件（使用新验证器的内容）
+        mdFileService.saveWithMetadata(goal.type, result.content, evaluation, previousMetadata)
+
+        logger.info("保存分析结果: type={}, completeness={}, todos={}",
+            goal.type.key, evaluation.completeness, result.todos.size)
     }
 
     /**
