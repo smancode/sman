@@ -152,6 +152,26 @@ class CompletionEvaluator(
             }
         }
 
+        // 【新增】检测是否是基于假设的编造内容
+        val hallucinationPatterns = listOf(
+            // 假设项目名称（常见的开源项目名）
+            Regex("""RuoYi[\-\s]?Vue[\-\s]?Pro""", RegexOption.IGNORE_CASE),
+            Regex("""若依"""),
+            // 假设模块名（常见于模板内容）
+            Regex("""ruoyi-admin|ruoyi-file|ruoyi-monitor|ruoyi-gateway"""),
+            // 假设类名（常见于编造内容）
+            Regex("""SysUserController|SysRoleController|SysMenuController|SysDeptController""")
+        )
+
+        val foundHallucinations = hallucinationPatterns.filter { it.containsMatchIn(cleanContent) }
+        if (foundHallucinations.isNotEmpty()) {
+            return QualityCheckResult(
+                isAcceptable = false,
+                reason = "内容包含假设/编造的元素（如假设项目名、假设类名等），必须基于实际扫描的代码生成报告",
+                followUpQuestion = buildStrictFollowUp(goal) + "\n\n**重要**：你必须基于实际扫描到的文件和代码生成报告，禁止假设项目名、类名或技术栈。如果信息不足，请说明'信息不足'。"
+            )
+        }
+
         // 1. 检测是否只有思考块
         val withoutThink = cleanContent
             .replace(Regex("<think[^>]*>[\\s\\S]*?</think&gt;", RegexOption.IGNORE_CASE), "")

@@ -105,6 +105,9 @@ class LocalToolExecutor(private val project: Project) {
             // 检测常见拼写错误并提供友好提示
             val result = when (toolName) {
                 "find_file" -> executeFindFile(parameters, projectPath)
+                "list_directory", "ls" -> executeListDirectory(
+                    parameters["path"]?.toString() ?: ".", projectPath
+                )
                 "read_file" -> executeReadFile(parameters, projectPath)
                 "grep_file" -> executeGrepFile(parameters, projectPath)
                 "call_chain" -> executeCallChain(parameters)
@@ -197,17 +200,33 @@ class LocalToolExecutor(private val project: Project) {
 
     /**
      * 查找文件
+     *
+     * 支持两种模式：
+     * 1. pattern/filePattern 模式：按正则表达式搜索文件
+     * 2. path 模式：列出指定目录下的文件（用于 ls/list_directory 工具调用）
      */
     private fun executeFindFile(parameters: Map<String, Any?>, projectPath: String?): ToolResult {
+        // 检查是否有 path 参数（ls/list_directory 工具调用）
+        val pathParam = parameters["path"]?.toString()
+
         // 兼容两种参数名：pattern 和 filePattern
         val pattern = parameters["pattern"]?.toString()
             ?: parameters["filePattern"]?.toString()
-            ?: run {
-                logger.error("缺少 pattern/filePattern 参数，可用参数: ${parameters.keys.joinToString()}")
-                return ToolResult(false, "缺少 pattern/filePattern 参数")
-            }
 
-        logger.info("使用 pattern: $pattern")
+        // 如果既没有 pattern 也没有 path，报错
+        if (pattern == null && pathParam == null) {
+            logger.error("缺少 pattern/filePattern 或 path 参数，可用参数: ${parameters.keys.joinToString()}")
+            return ToolResult(false, "缺少 pattern/filePattern 或 path 参数")
+        }
+
+        // 如果有 path 参数但没有 pattern，使用 path 作为目录路径列出文件
+        if (pathParam != null && pattern == null) {
+            return executeListDirectory(pathParam, projectPath)
+        }
+
+        // 到这里 pattern 一定不为 null（前面已检查）
+        val actualPattern = pattern!!
+        logger.info("使用 pattern: $actualPattern")
 
         val basePath = projectPath ?: project.basePath ?: ""
         val baseDir = File(basePath)
@@ -217,7 +236,7 @@ class LocalToolExecutor(private val project: Project) {
         }
 
         val regex = try {
-            Regex(pattern)
+            Regex(actualPattern)
         } catch (e: Exception) {
             return ToolResult(false, "无效的正则表达式: ${e.message}")
         }
@@ -275,7 +294,80 @@ class LocalToolExecutor(private val project: Project) {
             relatedFilePaths = filePaths  // 新增：存储所有匹配的文件路径
         )
     }
-    
+
+    /**
+     * 列出目录内容（支持 ls/list_directory 工具调用）
+     *
+     * @param path 目录路径（相对项目根目录或绝对路径）
+     * @param projectPath 项目根目录
+     */
+    private fun executeListDirectory(path: String, projectPath: String?): ToolResult {
+        logger.info("列出目录内容: path=$path")
+
+        val basePath = projectPath ?: project.basePath ?: ""
+
+        // 解析目标路径
+        val targetDir = when {
+            // 绝对路径
+            path.startsWith("/") || path.startsWith("\\") -> File(path)
+            // 相对路径，基于项目根目录
+            else -> File(basePath, path)
+        }
+
+        if (!targetDir.exists()) {
+            return ToolResult(false, "目录不存在: $path")
+        }
+
+        if (!targetDir.isDirectory) {
+            return ToolResult(false, "路径不是目录: $path")
+        }
+
+        val files = targetDir.listFiles()?.toList() ?: emptyList()
+
+        val sb = StringBuilder()
+        sb.append("目录: ${toRelativePath(targetDir.absolutePath, basePath)}\n\n")
+
+        if (files.isEmpty()) {
+            sb.append("（空目录）\n")
+        } else {
+            // 先显示子目录
+            val dirs = files.filter { it.isDirectory }.sortedBy { it.name }
+            val regularFiles = files.filter { it.isFile }.sortedBy { it.name }
+
+            if (dirs.isNotEmpty()) {
+                sb.append("[子目录]:\n")
+                dirs.forEach { dir ->
+                    sb.append("  📁 ${dir.name}/\n")
+                }
+                sb.append("\n")
+            }
+
+            if (regularFiles.isNotEmpty()) {
+                sb.append("[文件]:\n")
+                regularFiles.forEach { file ->
+                    val size = if (file.length() < 1024) {
+                        "${file.length()}B"
+                    } else if (file.length() < 1024 * 1024) {
+                        "${file.length() / 1024}KB"
+                    } else {
+                        "${file.length() / (1024 * 1024)}MB"
+                    }
+                    sb.append("  📄 ${file.name} ($size)\n")
+                }
+            }
+        }
+
+        val filePaths = files.filter { it.isFile }.map {
+            toRelativePath(it.absolutePath, basePath)
+        }
+
+        return ToolResult(
+            success = true,
+            result = sb.toString(),
+            relatedFilePaths = filePaths
+        )
+    }
+
     /**
      * 读取文件
      */

@@ -245,6 +245,7 @@ object LocalToolFactory {
         readFileTool(project),
         grepFileTool(project),
         findFileTool(project),
+        listDirectoryTool(project),  // 列出目录工具（ls/list_directory）
         callChainTool(project),
         extractXmlTool(project),
         applyChangeTool(project),
@@ -280,8 +281,22 @@ object LocalToolFactory {
         "find_file",
         "Find files by name pattern (regex).",
         mapOf(
-            "pattern" to ParameterDef("pattern", String::class.java, true, "File name pattern"),
-            "filePattern" to ParameterDef("filePattern", String::class.java, false, "Alias for 'pattern'")
+            "pattern" to ParameterDef("pattern", String::class.java, false, "File name pattern (regex)"),
+            "filePattern" to ParameterDef("filePattern", String::class.java, false, "Alias for 'pattern'"),
+            "path" to ParameterDef("path", String::class.java, false, "Directory path to list (for ls/list_directory)")
+        )
+    )
+
+    /**
+     * 列出目录工具（ls/list_directory 的别名）
+     * 实际执行会映射到 find_file，但参数使用 path 而不是 pattern
+     */
+    private fun listDirectoryTool(project: Project) = LocalToolAdapter(
+        project,
+        "list_directory",
+        "List directory contents. Lists files and subdirectories in the specified path.",
+        mapOf(
+            "path" to ParameterDef("path", String::class.java, true, "Directory path to list")
         )
     )
 

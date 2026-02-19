@@ -115,11 +115,11 @@ class AnalysisLoopExecutor(
                     hasCompleteReport = true
                     logger.info("分析完成: type={}, completeness={}", type, finalCompleteness)
                 } else {
-                    // 清空 toolResults，避免累积重复的补充请求
-                    toolResults.clear()
+                    // 【修复】不清空 toolResults，保留实际的工具执行结果
+                    // 只添加补充请求到 toolResults 末尾
                     val supplementRequest = buildSupplementRequest(finalMissingSections)
                     toolResults.add(supplementRequest)
-                    logger.debug("报告不完整，继续补充: missing={}", finalMissingSections)
+                    logger.debug("报告不完整，继续补充: missing={}, toolResults数量={}", finalMissingSections, toolResults.size)
                 }
             }
         }
@@ -206,6 +206,45 @@ class AnalysisLoopExecutor(
         currentContent: String
     ): String {
         return buildString {
+            // 【关键】添加强制执行协议
+            appendLine("# ⚠️ 强制执行协议（CRITICAL - 必须严格遵守）")
+            appendLine()
+            appendLine("## 🚫 禁止行为（违反将导致任务失败）")
+            appendLine()
+            appendLine("```")
+            appendLine("❌ 你好，我是...")
+            appendLine("❌ 请问你想了解什么？")
+            appendLine("❌ 我可以帮你分析...")
+            appendLine("❌ 让我来为你...")
+            appendLine("❌ 我将按照以下步骤...")
+            appendLine("❌ 需要我做什么？")
+            appendLine("❌ 任何等待用户输入的内容")
+            appendLine("```")
+            appendLine()
+            appendLine("## ✅ 必须行为")
+            appendLine()
+            appendLine("```")
+            appendLine("步骤 1: 调用工具（read_file / find_file / grep_file / list_directory）")
+            appendLine("步骤 2: 调用工具（继续扫描）")
+            appendLine("步骤 3: 调用工具（继续扫描）")
+            appendLine("...")
+            appendLine("步骤 N: 直接输出 Markdown 格式的分析报告（不要输出工具调用说明）")
+            appendLine("```")
+            appendLine()
+            appendLine("## 📝 输出要求")
+            appendLine()
+            appendLine("1. **必须先调用工具**获取项目信息")
+            appendLine("2. **然后直接输出 Markdown 报告**，报告必须包含：")
+            appendLine("   - 项目概述")
+            appendLine("   - 目录结构")
+            appendLine("   - 模块划分")
+            appendLine("   - 依赖管理")
+            appendLine("3. **禁止输出工具调用说明文字**（如'步骤1:调用find_file'）")
+            appendLine("4. **禁止输出 <think> 标签内容**")
+            appendLine()
+            appendLine("---")
+            appendLine()
+
             // 使用提示词模板
             appendLine(promptTemplate)
             appendLine()
@@ -236,6 +275,47 @@ class AnalysisLoopExecutor(
                 appendLine("## 当前分析内容")
                 appendLine(currentContent)
                 appendLine()
+            }
+
+            // 【关键】根据状态给出明确的行动指令
+            appendLine()
+            appendLine("---")
+            appendLine()
+
+            if (toolResults.isEmpty()) {
+                // 还没有工具结果，要求调用工具
+                appendLine("⚠️ **行动指令 [STEP 1: 收集信息]**")
+                appendLine()
+                appendLine("你还没有获取项目信息。请立即调用工具：")
+                appendLine("- `list_directory` - 列出目录结构")
+                appendLine("- `find_file` - 查找特定文件")
+                appendLine("- `read_file` - 读取文件内容")
+                appendLine()
+                appendLine("**注意**：只输出工具调用，不要输出任何说明文字！")
+            } else {
+                // 已有工具结果，要求输出报告
+                appendLine("⚠️ **行动指令 [STEP 2: 输出报告]**")
+                appendLine()
+                appendLine("🚨 **绝对禁止编造内容！**")
+                appendLine()
+                appendLine("你必须严格基于上面的【工具调用结果】生成报告。**禁止**基于假设或模板生成内容！")
+                appendLine()
+                appendLine("如果工具结果不足以生成完整报告，请说明'信息不足'，而不是编造内容。")
+                appendLine()
+                appendLine("✅ 你已经获取了项目信息（见上面的'工具调用结果'）")
+                appendLine()
+                appendLine("📝 **现在必须直接输出 Markdown 格式的分析报告！**")
+                appendLine()
+                appendLine("**禁止**：")
+                appendLine("- ❌ 再调用任何工具")
+                appendLine("- ❌ 输出工具调用说明")
+                appendLine("- ❌ 输出 <think> 标签")
+                appendLine("- ❌ 询问用户问题")
+                appendLine()
+                appendLine("**必须**：")
+                appendLine("- ✅ 直接输出完整的 Markdown 报告")
+                appendLine("- ✅ 使用中文")
+                appendLine("- ✅ 包含所有要求的章节")
             }
         }
     }
@@ -430,8 +510,8 @@ class AnalysisLoopExecutor(
      */
     private fun mapToolName(toolName: String): String {
         return when (toolName.lowercase()) {
-            "bash", "shell", "cmd", "command" -> "run_shell"  // 我们有 run_shell_command
-            "list_directory", "ls", "dir" -> "find_file"
+            "bash", "shell", "cmd", "command" -> "run_shell_command"  // 修正：使用正确的工具名
+            "list_directory", "ls", "dir" -> "list_directory"  // 现在我们有 list_directory 工具
             "read_multiple_files" -> "read_file"
             "glob", "find" -> "find_file"
             else -> toolName
@@ -479,7 +559,9 @@ class AnalysisLoopExecutor(
                 }
             }
 
-            toolCalls.add(ToolCallInfo(toolName, params))
+            // 工具名映射
+            val mappedToolName = mapToolName(toolName)
+            toolCalls.add(ToolCallInfo(mappedToolName, params))
         }
 
         return toolCalls
@@ -509,7 +591,9 @@ class AnalysisLoopExecutor(
                                 }
                             }
 
-                            toolCalls.add(ToolCallInfo(toolName, params))
+                            // 工具名映射
+                            val mappedToolName = mapToolName(toolName)
+                            toolCalls.add(ToolCallInfo(mappedToolName, params))
                         }
                     }
                 }
@@ -541,7 +625,9 @@ class AnalysisLoopExecutor(
                 params[paramMatch.groupValues[1]] = paramMatch.groupValues[2].trim()
             }
 
-            toolCalls.add(ToolCallInfo(toolName, params))
+            // 工具名映射
+            val mappedToolName = mapToolName(toolName)
+            toolCalls.add(ToolCallInfo(mappedToolName, params))
         }
 
         return toolCalls
@@ -566,7 +652,9 @@ class AnalysisLoopExecutor(
             }
         }
 
-        toolCalls.add(ToolCallInfo(toolName, params))
+        // 工具名映射
+        val mappedToolName = mapToolName(toolName)
+        toolCalls.add(ToolCallInfo(mappedToolName, params))
         return toolCalls
     }
 
