@@ -115,26 +115,60 @@ class CompletionEvaluator(
      * - 只有思考块没有实际内容
      * - 等待用户输入的问候语
      * - 空洞的占位内容
+     * - 只有"我将"没有实际结果
+     *
+     * 【增强】更严格的检测规则
      */
     private fun checkContentQuality(content: String, goal: ArchitectGoal): QualityCheckResult {
         val cleanContent = content.trim()
+
+        // 0. 【新增】检测是否是纯对话式回复（最常见的问题）
+        val conversationalPatterns = listOf(
+            // 等待用户输入的问候语
+            Regex("""请问[您你][想做想让我做了解]*.*[？?]",?"""),
+            Regex("""请告诉我[你的]*需求"""),
+            Regex("""我可以帮你"""),
+            Regex("""请问有什么可以帮[您你]"""),
+            Regex("""还是有其他需求"""),
+            Regex("""你好[！!]我是"""),
+            // 【关键】"我将/让我/我来"开头但没有实际内容
+            Regex("""^[\s]*[让我我将我来][^。]*[。]?$""", RegexOption.MULTILINE),
+            Regex("""我将按照.*执行"""),
+            Regex("""让我[为帮]?[您你]?分析"""),
+            Regex("""我来[为帮]?[您你]?.*分析""")
+        )
+
+        for (pattern in conversationalPatterns) {
+            if (pattern.containsMatchIn(cleanContent)) {
+                // 额外检查：如果内容主要是这种模式，拒绝
+                val nonConversational = pattern.replace(cleanContent, "").trim()
+                if (nonConversational.length < 200) {
+                    return QualityCheckResult(
+                        isAcceptable = false,
+                        reason = "内容是对话式回复而非分析报告",
+                        followUpQuestion = buildStrictFollowUp(goal)
+                    )
+                }
+            }
+        }
 
         // 1. 检测是否只有思考块
         val withoutThink = cleanContent
             .replace(Regex("<think[^>]*>[\\s\\S]*?</think&gt;", RegexOption.IGNORE_CASE), "")
             .replace(Regex("&lt;think[^&]*&gt;[\\s\\S]*?&lt;/think&gt;"), "")
+            .replace(Regex("<think[^>]*>[\\s\\S]*?</think[^>]*>", RegexOption.IGNORE_CASE), "")
             .trim()
 
-        if (withoutThink.length < 100) {
+        // 【增强】提高阈值：从 100 提高到 300
+        if (withoutThink.length < 300) {
             return QualityCheckResult(
                 isAcceptable = false,
-                reason = "内容过短或只有思考块",
-                followUpQuestion = "请直接执行${goal.type.displayName}任务，使用工具扫描项目代码后输出分析报告。不要等待用户输入，不要只输出思考过程。"
+                reason = "内容过短（<300字符）或只有思考块",
+                followUpQuestion = buildStrictFollowUp(goal)
             )
         }
 
-        // 2. 检测是否是等待用户输入的问候语
-        // 【增强】覆盖更多变体：请问你想...、请问您想...、请告诉我...
+        // 2. 检测是否是等待用户输入的问候语（增强版）
         val greetingPatterns = listOf(
             "请告诉我你的需求",
             "请描述你的需求",
@@ -142,12 +176,14 @@ class CompletionEvaluator(
             "请问有什么可以帮您",
             "请先配置",
             "你好！我是",
-            "请问您想做什么",      // 新增：01_project_structure.md 的问题
-            "请问你想做什么",      // 新增：变体
-            "请问你想让我做什么",  // 新增：02_tech_stack.md 的问题
-            "请问您想让我做什么",  // 新增：变体
-            "请问你想了解",        // 新增：03_api_entries.md 的问题
-            "还是有其他需求"       // 新增：变体
+            "请问您想做什么",
+            "请问你想做什么",
+            "请问你想让我做什么",
+            "请问您想让我做什么",
+            "请问你想了解",
+            "还是有其他需求",
+            "请问您需要我做什么",
+            "请问有什么需要我帮助"
         )
 
         for (pattern in greetingPatterns) {
@@ -155,40 +191,88 @@ class CompletionEvaluator(
                 return QualityCheckResult(
                     isAcceptable = false,
                     reason = "内容是问候语而非分析结果",
-                    followUpQuestion = "你是架构师，需要执行${goal.type.displayName}任务。请使用 read_file、find_file、grep_file 等工具扫描项目，然后输出 Markdown 格式的分析报告。"
+                    followUpQuestion = buildStrictFollowUp(goal)
                 )
             }
         }
 
-        // 3. 检测是否有实际的分析内容（至少要有标题或表格）
-        val hasStructure = cleanContent.contains("#") ||
-                          cleanContent.contains("|") ||
-                          cleanContent.contains("- ") ||
-                          cleanContent.contains("* ")
+        // 3. 【增强】检测是否有实际的分析内容
+        // 必须有 Markdown 标题（## 或 ###）才算有效
+        val hasMarkdownTitle = cleanContent.contains(Regex("""^#{1,3}\s+.+""", RegexOption.MULTILINE))
+        val hasTable = cleanContent.contains("|") && cleanContent.contains("---")
+        val hasList = cleanContent.contains(Regex("""^[\-\*]\s+.+""", RegexOption.MULTILINE))
 
-        if (!hasStructure && withoutThink.length < 300) {
+        if (!hasMarkdownTitle && !hasTable && !hasList) {
             return QualityCheckResult(
                 isAcceptable = false,
-                reason = "内容缺乏结构化格式",
-                followUpQuestion = "分析结果应该使用 Markdown 格式，包含标题（#）、列表（-）或表格（|）。请重新执行${goal.type.displayName}任务。"
+                reason = "内容缺乏 Markdown 结构化格式（没有标题、表格或列表）",
+                followUpQuestion = buildStrictFollowUp(goal)
             )
         }
 
-        // 4. 检测是否有工具调用记录（好的分析应该有）
-        val hasToolCalls = cleanContent.contains("工具调用") ||
-                          cleanContent.contains("read_file") ||
-                          cleanContent.contains("find_file") ||
-                          cleanContent.contains("grep_file")
+        // 4. 【新增】检测是否有报告的关键部分
+        // 好的分析报告应该有"概述"、"总结"或类似结构
+        val reportKeywords = listOf("概述", "总结", "分析", "模块", "结构", "配置", "入口", "实体", "枚举")
+        val hasReportContent = reportKeywords.any { cleanContent.contains(it) }
 
-        if (!hasToolCalls && !hasStructure) {
+        if (!hasReportContent && withoutThink.length < 500) {
             return QualityCheckResult(
                 isAcceptable = false,
-                reason = "没有工具调用记录且没有结构化内容",
-                followUpQuestion = "请使用 read_file、find_file、grep_file 等工具扫描项目代码，然后输出${goal.type.displayName}的分析报告。"
+                reason = "内容不包含分析报告的关键字",
+                followUpQuestion = buildStrictFollowUp(goal)
             )
+        }
+
+        // 5. 【新增】检测是否有"未完成"标记但内容很少（LLM 可能放弃分析）
+        if (cleanContent.contains("TODO") || cleanContent.contains("待分析")) {
+            // 如果有 TODO，检查实际内容是否足够
+            val actualContent = cleanContent
+                .replace(Regex("TODO[：:].*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("待分析[：:].*"), "")
+                .trim()
+
+            if (actualContent.length < 200) {
+                return QualityCheckResult(
+                    isAcceptable = false,
+                    reason = "内容主要是 TODO 标记，缺乏实际分析",
+                    followUpQuestion = buildStrictFollowUp(goal)
+                )
+            }
         }
 
         return QualityCheckResult(isAcceptable = true)
+    }
+
+    /**
+     * 构建严格的追问（强制工具调用）
+     */
+    private fun buildStrictFollowUp(goal: ArchitectGoal): String {
+        return """
+你是自动化分析架构师，正在后台执行分析任务。**这是无人值守的自动化流程**。
+
+## 强制规则（必须严格遵守）
+
+1. **必须先调用工具**：在输出任何文字之前，必须先调用 `read_file`、`find_file`、`grep_file` 等工具扫描项目代码
+2. **禁止对话式回复**：不要说"你好"、"请问"、"我可以帮你"等对话内容
+3. **禁止等待用户**：不要说"请问你想了解什么"等等待用户输入的内容
+4. **禁止思考陈述**：不要说"我将按照"、"让我来分析"等思考过程
+5. **直接输出报告**：完成工具调用后，直接输出 Markdown 格式的分析报告
+
+## 正确流程
+
+```
+步骤 1: 调用 find_file 查找相关文件
+步骤 2: 调用 read_file 读取文件内容
+步骤 3: 调用 grep_file 搜索关键模式（如需要）
+步骤 4: 直接输出 Markdown 格式的分析报告
+```
+
+## 你的任务
+
+执行 **${goal.type.displayName}** 分析任务。
+
+如果你再次输出对话式内容而不是分析报告，任务将失败并重试。
+        """.trimIndent()
     }
 
     /**

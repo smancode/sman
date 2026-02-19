@@ -87,19 +87,23 @@ class CompletionEvaluatorTest {
         @Test
         @DisplayName("有效的分析内容应该被接受")
         fun `should accept valid analysis content`() {
-            // Given: 有效的分析内容
+            // Given: 有效的分析内容（长度需要超过 300 字符）
             val content = """
                 ## 项目模块概览
 
+                本项目是一个基于 Kotlin 的 IntelliJ IDEA 插件，提供 AI 驱动的代码分析功能。
+
                 | 模块 | 业务含义 | 主要组件 |
                 |------|----------|----------|
-                | **common** | 通用模块 | DTO、Config |
-                | **core** | 核心服务层 | 目录扫描、报告生成 |
+                | **common** | 通用模块 | DTO、Config、工具类 |
+                | **core** | 核心服务层 | 目录扫描、报告生成、分析引擎 |
+                | **analysis** | 分析模块 | 代码向量化、语义搜索、依赖分析 |
 
                 ## 工具调用记录
 
                 - **find_file**: 找到 3 个配置文件
                 - **read_file**: 读取 settings.gradle
+                - **grep_file**: 搜索 @Entity 注解
             """.trimIndent()
 
             // 创建带工具调用的响应

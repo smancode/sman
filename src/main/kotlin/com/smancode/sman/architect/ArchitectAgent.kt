@@ -617,38 +617,48 @@ class ArchitectAgent(
 
     /**
      * 构建目标提示词
+     *
+     * 【重构】使用更强制性的执行协议，确保 LLM 必须先调用工具
      */
     private fun buildGoalPrompt(goal: ArchitectGoal): String {
         val promptBuilder = StringBuilder()
 
-        // 【强化】添加架构师角色定义和强制执行协议
+        // 【关键】在最开始添加强制执行协议（优先级最高）
         promptBuilder.append("""
-            # ⚠️ 执行协议（必须严格遵守）
+# ⚠️ 强制执行协议（CRITICAL - 必须严格遵守）
 
-            你是项目的架构师，正在执行自动化代码分析任务。
+**你是自动化分析架构师，这是无人值守的后台任务，没有用户交互。**
 
-            ## 强制规则（违反将被拒绝）
+## 🚫 禁止行为（违反将导致任务失败）
 
-            1. **必须先调用工具**：在输出任何分析文字之前，必须先调用 read_file、find_file、grep_file 等工具扫描代码
-            2. **禁止问候语**：不要输出"你好"、"请问"、"请告诉我"等对话式内容
-            3. **禁止等待**：不要输出"需要我做什么"、"请问你想了解什么"等等待用户的内容
-            4. **直接输出报告**：完成工具调用后，直接输出 Markdown 格式的分析报告
+```
+❌ 你好，我是...
+❌ 请问你想了解什么？
+❌ 我可以帮你分析...
+❌ 让我来为你...
+❌ 我将按照以下步骤...
+❌ 需要我做什么？
+❌ 请告诉我你的需求
+❌ 任何等待用户输入的内容
+```
 
-            ## 正确示例
+## ✅ 必须行为
 
-            ```
-            [调用工具] find_file(filePattern="*Controller.java")
-            [调用工具] read_file(simpleName="UserController")
-            [输出报告] # API 入口扫描报告 ...
-            ```
+```
+步骤 1: 调用工具（read_file / find_file / grep_file）
+步骤 2: 调用工具（继续扫描）
+步骤 3: 调用工具（继续扫描）
+...
+步骤 N: 输出 Markdown 格式的分析报告
+```
 
-            ## 错误示例（将被拒绝）
+## 执行流程
 
-            ```
-            你好！我是 Sman...请问你有什么需要我帮助的？
-            ```
+**在输出任何文字之前，必须先完成工具调用！**
 
-            ---
+如果你现在还没有调用任何工具，请立即停止输出文字，先调用工具。
+
+---
 
         """.trimIndent())
 
@@ -664,25 +674,32 @@ class ArchitectAgent(
             }
         }
 
-        // 添加追问
+        // 添加追问（如果有）
         if (goal.followUpQuestions.isNotEmpty()) {
-            promptBuilder.append("## 需要特别关注的问题\n\n")
+            promptBuilder.append("## ⚠️ 上一轮分析的问题（必须解决）\n\n")
+            promptBuilder.append("上一轮分析存在以下问题，本轮必须解决：\n\n")
             goal.followUpQuestions.forEachIndexed { index, q ->
                 promptBuilder.append("${index + 1}. $q\n")
             }
-            promptBuilder.append("\n")
+            promptBuilder.append("\n**注意**：不要重复上一轮的错误！\n\n")
         }
 
-        // 添加输出要求
+        // 添加输出要求（强化版）
         promptBuilder.append("""
 ## 输出要求
 
-请将分析结果以 Markdown 格式输出。确保：
-1. 结构清晰，使用标准的 Markdown 标题层级
-2. 关键信息使用表格或列表展示
-3. 如有未完成的分析，在末尾标注为 TODO
+分析结果必须以 **Markdown 格式** 输出，必须包含：
+
+1. **标题**：使用 `##` 标题层级
+2. **概述**：简要总结分析结果
+3. **详细内容**：使用表格或列表展示关键信息
+4. **如未完成**：在末尾标注 `TODO: 待完成事项`
 
 当前时间: ${MdFileService.currentTimestamp()}
+
+---
+
+**再次提醒**：如果你现在还没有调用任何工具，请立即调用 `read_file` 或 `find_file` 扫描项目代码！
         """.trimIndent())
 
         return promptBuilder.toString()
