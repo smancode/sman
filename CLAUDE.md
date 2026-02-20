@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-SmanCode - AI 驱动的自迭代编程智能体插件
+SmanCode - AI 驱动的智能编程助手插件
 
 ---
 
@@ -9,11 +9,12 @@ SmanCode - AI 驱动的自迭代编程智能体插件
 SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编程智能体。核心特性：
 
 - **ReAct 循环**：Reasoning + Acting 交替进行，支持多步工具调用
-- **自进化学习**：后台自动生成问题、探索学习、积累知识（evolution 模块）
-- **断点续传**：IDEA 重启后自动恢复自进化循环状态
+- **架构师 Agent**：通过调用 SmanLoop 实现项目分析，小步快跑、阶段性评估
+- **技能系统**：支持加载领域特定技能，扩展 AI 能力
 - **三层缓存架构**：L1 内存 + L2 JVector + L3 H2，高效处理大型项目
 - **语义搜索**：BGE-M3 向量化 + BGE-Reranker 重排，实现代码语义检索
-- **提示词驱动**：项目分析模块自动运行，生成项目知识库
+- **Web 搜索**：集成 Exa AI MCP 服务，支持实时网络搜索
+- **断点续传**：IDEA 重启后自动恢复分析状态
 
 ---
 
@@ -28,6 +29,7 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 | 数据库 | H2 2.2.224 + JVector 3.0.0 + HikariCP |
 | 向量化 | BGE-M3 (外部服务) |
 | 重排序 | BGE-Reranker-v2-m3 (外部服务) |
+| Web 搜索 | Exa AI MCP 服务 |
 | 测试 | JUnit 5 + MockK |
 
 ---
@@ -64,49 +66,61 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 ```
 src/main/kotlin/com/smancode/sman/
 ├── analysis/           # 项目分析模块
-│   ├── coordination/  # 代码向量化协调器
-│   ├── database/       # 向量存储（JVector + H2）
-│   ├── executor/       # 分析任务执行器
+│   ├── coordination/   # 代码向量化协调器
+│   ├── database/       # 向量存储（JVector + H2 + 三层缓存）
+│   ├── executor/       # 分析任务执行器（AnalysisLoopExecutor）
+│   ├── guard/          # 死循环防护（DoomLoopGuard, 指数退避, 去重）
 │   ├── llm/            # LLM 代码理解服务
+│   ├── loop/           # 项目分析主循环（ProjectAnalysisLoop）
+│   ├── model/          # 分析模型（AnalysisType, AnalysisState, ProjectMap）
 │   ├── paths/          # 项目路径管理
+│   ├── persistence/    # 分析状态持久化
+│   ├── retry/          # 重试机制（熔断器, 并发限制, 失败记录）
 │   ├── scheduler/      # 后台分析调度器
+│   ├── service/        # 向量化和上下文注入服务
+│   ├── storage/        # 向量仓储
 │   └── vectorization/  # BGE-M3 向量化客户端
+├── architect/          # 架构师 Agent 模块
+│   ├── evaluator/      # 影响分析器、完成度评估器
+│   ├── model/          # 架构师模型
+│   ├── persistence/    # 架构师状态持久化
+│   └── storage/        # MD 文件服务
 ├── config/             # 配置管理（SmanConfig, SmanCodeProperties）
-├── evolution/          # 【核心】自迭代进化模块
-│   ├── context/        # 上下文注入器
-│   ├── explorer/       # 工具探索器
-│   ├── generator/      # 问题生成器（QuestionGenerator）
-│   ├── guard/          # 死循环防护（DoomLoopGuard, 配额管理）
-│   ├── knowledge/      # 知识范围定义
-│   ├── learning/       # 学习记录
-│   ├── loop/           # 自进化主循环（SelfEvolutionLoop）
-│   ├── memory/         # 学习记录仓储
-│   ├── model/          # 进化模型（LearningRecord, EvolutionStatus）
-│   ├── persistence/    # 状态持久化（断点续传）
-│   ├── recall/         # 多路径召回器
-│   └── recorder/       # 学习记录器
 ├── ide/                # IntelliJ 集成
 │   ├── action/         # IDE 动作
-│   ├── components/     # UI 组件
+│   ├── component/      # UI 组件
 │   ├── renderer/       # 消息渲染器
-│   ├── service/        # IDE 服务
+│   ├── service/        # IDE 服务（WebSocket, 代码编辑, Git 提交）
 │   └── ui/             # 设置对话框、聊天面板
 ├── model/              # 数据模型（Message, Part, Session）
+│   ├── context/        # 上下文模型
+│   ├── message/        # 消息模型
+│   ├── part/           # Part 类型（Goal, Progress, Reasoning, SubTask, Text, Todo, Tool）
+│   └── session/        # 会话模型
+├── skill/              # 技能系统
+│   ├── SkillInfo.kt    # 技能信息模型
+│   ├── SkillLoader.kt  # 技能加载器（从文件系统加载 SKILL.md）
+│   ├── SkillRegistry.kt# 技能注册中心
+│   └── SkillTool.kt    # 技能工具（允许 LLM 加载专业化技能）
 ├── smancode/           # ReAct 循环核心
-│   ├── core/           # SmanLoop（主循环）
+│   ├── core/           # SmanLoop（主循环）、上下文压缩、子任务执行
 │   ├── llm/            # LLM 服务
-│   └── prompt/         # 提示词管理
+│   └── prompt/         # 提示词管理（动态注入、分发器、加载器）
 ├── tools/              # 工具系统
-│   └── ide/            # 工具实现（expert_consult 等）
+│   ├── ide/            # 工具实现
+│   │   ├── LocalToolAdapter.kt       # 本地工具适配器
+│   │   ├── LocalExpertConsultService.kt # 本地专家咨询服务
+│   │   └── WebSearchTool.kt          # Web 搜索工具（Exa AI）
+│   └── *.kt            # 工具基类、注册表、执行器
 ├── util/               # 工具类
 └── verification/       # 验证 Web 服务
 
 src/main/resources/
 ├── META-INF/plugin.xml    # 插件描述符
-├── db/evolution-schema.sql # 进化数据库表结构
+├── db/analysis-schema.sql # 分析数据库表结构
 ├── sman.properties        # 配置文件
 ├── prompts/               # 提示词模板
-│   ├── analysis/          # 分析相关提示词
+│   ├── analysis/          # 分析相关提示词（6 种分析类型）
 │   ├── common/            # 通用提示词
 │   └── tools/             # 工具提示词
 └── templates/             # 模板文件
@@ -133,47 +147,52 @@ src/main/resources/
 - **智能摘要**：历史工具只发送摘要，新工具发送完整结果并要求 LLM 生成摘要
 - **多级 JSON 提取**：从直接解析到 LLM 辅助修复，确保最大容错
 
-### 2. 自进化模块（Evolution）
+### 2. 架构师 Agent（Architect）
 
-位置：`evolution/`
+位置：`architect/`
 
-这是项目的核心特性，实现了自迭代学习智能体：
+通过调用 SmanLoop 实现项目分析，核心特性：
 
-| 组件 | 职责 |
+| 特性 | 说明 |
 |------|------|
-| `SelfEvolutionLoop` | 后台主循环，持续生成问题并探索学习 |
-| `QuestionGenerator` | 基于项目上下文生成好问题 |
-| `DoomLoopGuard` | 死循环防护 + 指数退避 + 每日配额 |
-| `LearningRecorder` | 总结学习成果并持久化 |
-| `LearningRecordRepository` | 学习记录的增删改查 |
-| `EvolutionStateRepository` | 状态持久化（断点续传） |
+| 小步快跑 | 每轮调用 LLM → 收集回答 → 评估完成度 |
+| 阶段性评估 | 完成时写入 MD 文件（带时间戳） |
+| 增量更新 | 检测文件变更，判断是否需要更新 MD |
+| 断点续传 | 状态持久化到 H2，IDEA 重启后自动恢复 |
 
-进化阶段（EvolutionPhase）：
-```
-IDLE → CHECKING_BACKOFF → GENERATING_QUESTION → EXPLORING → SUMMARIZING → PERSISTING
-```
-
-#### 断点续传机制
-
-IDEA 重启后自动恢复：
-
-| 恢复内容 | 说明 |
-|---------|------|
-| 统计信息 | totalIterations, successfulIterations 等 |
-| ING 状态 | 当前正在处理的问题和探索进度 |
-| 退避状态 | 指数退避状态 |
-| 每日配额 | 问题生成和探索配额 |
-
-启动时检测：
-- 如果 `currentPhase != IDLE` 且 `!= CHECKING_BACKOFF`，则从中断处恢复
-- 否则正常启动
+分析类型（6 种）：
+1. `PROJECT_STRUCTURE` - 项目结构分析
+2. `TECH_STACK` - 技术栈识别
+3. `API_ENTRIES` - API 入口扫描
+4. `DB_ENTITIES` - 数据库实体分析
+5. `ENUMS` - 枚举分析
+6. `CONFIG_FILES` - 配置文件分析
 
 配置项（sman.properties）：
 ```properties
-self.evolution.enabled=false  # 启用自进化
+architect.agent.enabled=true
+architect.agent.max.iterations.per.md=5
+architect.agent.completion.threshold.normal=0.7
 ```
 
-### 3. 三层缓存架构
+### 3. 技能系统（Skill）
+
+位置：`skill/`
+
+允许加载领域特定技能，扩展 AI 能力：
+
+| 组件 | 职责 |
+|------|------|
+| `SkillLoader` | 从文件系统加载 SKILL.md |
+| `SkillRegistry` | 管理所有已加载技能 |
+| `SkillTool` | 允许 LLM 加载专业化技能 |
+
+Skill 加载路径（优先级从高到低）：
+1. `<project>/.sman/skills/<name>/SKILL.md`
+2. `<project>/.claude/skills/<name>/SKILL.md`
+3. `~/.claude/skills/<name>/SKILL.md`
+
+### 4. 三层缓存架构
 
 ```
 L1 (Hot):  内存 LRU 缓存（~500 entries）
@@ -187,7 +206,7 @@ vector.db.type=JVECTOR
 vector.db.l1.cache.size=500
 ```
 
-### 4. 工具系统
+### 5. 工具系统
 
 可用工具：
 | 工具名 | 描述 |
@@ -199,6 +218,8 @@ vector.db.l1.cache.size=500
 | `extract_xml` | 提取 XML 标签内容 |
 | `apply_change` | 代码修改 |
 | `expert_consult` | 语义搜索（BGE + Reranker） |
+| `web_search` | Web 搜索（Exa AI） |
+| `skill` | 加载技能 |
 | `batch` | 批量执行工具 |
 
 工具注册：手动注册，无 Spring DI
@@ -236,12 +257,17 @@ reranker.enabled=true
 reranker.base.url=http://localhost:8001/v1
 ```
 
-### 自进化配置
+### 架构师 Agent
 ```properties
-self.evolution.enabled=false
-self.evolution.deep.analysis.enabled=false
-self.evolution.questions.per.iteration=3
-self.evolution.max.exploration.steps=5
+architect.agent.enabled=true
+architect.agent.max.iterations.per.md=5
+architect.agent.interval.ms=300000
+```
+
+### WebSearch
+```properties
+websearch.enabled=true
+websearch.timeout.seconds=25
 ```
 
 配置优先级：用户设置 > 环境变量 > 配置文件 > 默认值
@@ -254,21 +280,18 @@ self.evolution.max.exploration.steps=5
 
 ```
 {projectPath}/.sman/
-├── analysis.mv.db.mv.db # H2 数据库（含进化状态表）
-├── base/                 # 基础分析结果
-├── cache/                # MD5 缓存
+├── analysis.mv.db       # H2 数据库
+├── base/                # 基础分析结果
+├── cache/               # MD5 缓存
 └── md/
-    ├── classes/          # 类级分析结果
-    └── reports/          # 项目级分析结果
+    ├── classes/         # 类级分析结果
+    └── reports/         # 项目级分析结果
 ```
 
 ### 数据库表
 
-- `learning_records` - 学习记录
-- `failure_records` - 失败记录
-- `evolution_loop_state` - 进化循环运行状态（含 ING）
-- `backoff_state` - 退避状态
-- `daily_quota` - 每日配额
+- `analysis_loop_state` - 分析循环状态（断点续传）
+- `analysis_result` - 分析结果存储
 
 ---
 

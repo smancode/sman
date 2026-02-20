@@ -30,7 +30,7 @@ class LocalToolFactoryTest {
     }
 
     @Test
-    @DisplayName("创建工具列表 - 应该创建 9 个工具")
+    @DisplayName("创建工具列表 - 应该创建 11 个工具")
     fun testCreateTools_count_shouldBeEight() {
         // Given: 模拟项目对象
         val project = createMockProject()
@@ -38,8 +38,8 @@ class LocalToolFactoryTest {
         // When: 创建工具列表
         val tools = LocalToolFactory.createTools(project)
 
-        // Then: 应该创建 9 个工具（expert_consult + 7 个基础工具 + batch）
-        assertEquals(9, tools.size, "应该创建 9 个本地工具")
+        // Then: 应该创建 11 个工具（expert_consult + 8 个基础工具 + batch + web_search）
+        assertEquals(11, tools.size, "应该创建 11 个本地工具")
     }
 
     @Test
@@ -58,11 +58,13 @@ class LocalToolFactoryTest {
             "read_file",
             "grep_file",
             "find_file",
+            "list_directory",
             "call_chain",
             "extract_xml",
             "apply_change",
             "run_shell_command",
-            "batch"
+            "batch",
+            "web_search"
         )
 
         expectedTools.forEach { toolName ->
@@ -190,7 +192,7 @@ class LocalToolFactoryTest {
 
         val projectKeyParam = params["projectKey"]
         assertNotNull(projectKeyParam, "应该有 projectKey 参数")
-        assertTrue(projectKeyParam.isRequired, "projectKey 参数应该是必需的")
+        assertFalse(projectKeyParam.isRequired, "projectKey 参数应该是可选的（自动检测）")
 
         // 验证可选参数
         val topKParam = params["topK"]

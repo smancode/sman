@@ -30,6 +30,8 @@ import com.smancode.sman.smancode.prompt.PromptLoaderService
 import com.smancode.sman.tools.ToolExecutor
 import com.smancode.sman.tools.ToolRegistry
 import com.smancode.sman.tools.ide.LocalToolFactory
+import com.smancode.sman.skill.SkillRegistry
+import com.smancode.sman.skill.SkillTool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,6 +66,7 @@ class SmanService(private val project: Project) : Disposable {
     private lateinit var promptDispatcher: PromptDispatcher
     private lateinit var dynamicPromptInjector: DynamicPromptInjector
     private lateinit var smanAgentLoop: SmanLoop
+    private lateinit var skillRegistry: SkillRegistry
 
     // 暴露给 ArchitectAgent 使用
     fun getToolRegistry(): ToolRegistry = toolRegistry
@@ -251,6 +254,9 @@ class SmanService(private val project: Project) : Disposable {
             toolRegistry.registerTools(localTools)
             logger.info("已注册 {} 个本地工具", localTools.size)
 
+            // 初始化 Skill 系统
+            initializeSkillSystem()
+
             // 尝试创建 LLM 服务（如果配置不可用，不会抛出异常）
             val llmService = try {
                 SmanConfig.createLlmService()
@@ -311,6 +317,31 @@ class SmanService(private val project: Project) : Disposable {
     private fun initializeProjectAnalysisService() {
         // 项目分析已由 ProjectAnalysisScheduler 后台自动执行
         logger.info("项目分析由后台调度器处理，此初始化已废弃")
+    }
+
+    /**
+     * 初始化 Skill 系统
+     *
+     * 扫描多个目录加载 Skill，并注册 SkillTool
+     */
+    private fun initializeSkillSystem() {
+        try {
+            val projectPath = project.basePath
+                ?: throw IllegalStateException("项目路径为空")
+
+            // 初始化 SkillRegistry
+            skillRegistry = SkillRegistry()
+            skillRegistry.initialize(projectPath)
+
+            // 注册 SkillTool
+            val skillTool = SkillTool(skillRegistry)
+            toolRegistry.registerTool(skillTool)
+
+            logger.info("Skill 系统初始化完成，共加载 {} 个 Skill", skillRegistry.size())
+        } catch (e: Exception) {
+            logger.error("Skill 系统初始化失败: {}", e.message)
+            // 不抛出异常，允许其他功能正常工作
+        }
     }
 
     /**

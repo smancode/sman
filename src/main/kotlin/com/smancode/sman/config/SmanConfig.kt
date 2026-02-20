@@ -191,6 +191,23 @@ object SmanConfig {
     val llmTemperature: Double by lazy { getConfigValue("llm.temperature", 0.7) }
     val llmDefaultMaxTokens: Int by lazy { getConfigValue("llm.default.max.tokens", 4096) }
 
+    // ==================== WebSearch 配置 ====================
+
+    /**
+     * 是否启用 WebSearch 功能
+     */
+    val webSearchEnabled: Boolean by lazy { getConfigValue("websearch.enabled", true) }
+
+    /**
+     * WebSearch 请求超时时间（秒）
+     */
+    val webSearchTimeout: Long by lazy { getConfigValue("websearch.timeout.seconds", 25L) }
+
+    /**
+     * WebSearch 默认返回结果数
+     */
+    val webSearchDefaultNumResults: Int by lazy { getConfigValue("websearch.default.num.results", 8) }
+
     // ==================== 向量数据库配置 ====================
 
     val vectorDbType: VectorDbType by lazy {

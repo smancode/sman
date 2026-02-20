@@ -250,7 +250,8 @@ object LocalToolFactory {
         extractXmlTool(project),
         applyChangeTool(project),
         runShellCommandTool(project),  // Shell 命令执行工具
-        batchTool(project)  // 批量工具执行
+        batchTool(project),  // 批量工具执行
+        WebSearchTool()  // Web 搜索工具
     )
 
     private fun readFileTool(project: Project) = LocalToolAdapter(
