@@ -1,4 +1,4 @@
-package com.smancode.sman.evolution.guard
+package com.smancode.sman.analysis.guard
 
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.pow
@@ -155,16 +155,5 @@ class BackoffStateManager(
      */
     fun clearAllStates() {
         states.clear()
-    }
-
-    /**
-     * 恢复状态（从数据库加载）
-     */
-    fun restoreState(projectKey: String, state: com.smancode.sman.evolution.persistence.BackoffStateEntity) {
-        states[projectKey] = BackoffState(
-            consecutiveErrors = state.consecutiveErrors,
-            lastErrorTime = state.lastErrorTime,
-            backoffUntil = state.backoffUntil
-        )
     }
 }

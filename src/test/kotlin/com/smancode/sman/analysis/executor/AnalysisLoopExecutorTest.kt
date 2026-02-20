@@ -1,7 +1,7 @@
 package com.smancode.sman.analysis.executor
 
 import com.smancode.sman.analysis.model.*
-import com.smancode.sman.evolution.guard.DoomLoopGuard
+import com.smancode.sman.analysis.guard.DoomLoopGuard
 import com.smancode.sman.smancode.llm.LlmService
 import com.smancode.sman.tools.ToolExecutor
 import com.smancode.sman.tools.ToolRegistry

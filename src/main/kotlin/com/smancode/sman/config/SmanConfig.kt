@@ -362,17 +362,6 @@ object SmanConfig {
         getConfigValue("analysis.llm.vectorization.full.refresh", false)
     }
 
-    // ==================== 自进化配置 ====================
-
-    /**
-     * 是否启用自进化学习循环
-     *
-     * 启用后会在后台自动生成问题并探索学习
-     */
-    val selfEvolutionEnabled: Boolean by lazy {
-        getConfigValue("self.evolution.enabled", false)
-    }
-
     // ==================== 架构师 Agent 配置 ====================
 
     /**

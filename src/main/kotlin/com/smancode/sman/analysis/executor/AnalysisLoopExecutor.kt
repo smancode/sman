@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.smancode.sman.analysis.model.AnalysisTodo
 import com.smancode.sman.analysis.model.AnalysisType
 import com.smancode.sman.analysis.model.TodoStatus
-import com.smancode.sman.evolution.guard.DoomLoopGuard
+import com.smancode.sman.analysis.guard.DoomLoopGuard
 import com.smancode.sman.smancode.llm.LlmService
 import com.smancode.sman.tools.ToolExecutor
 import com.smancode.sman.tools.ToolRegistry
@@ -106,7 +106,16 @@ class AnalysisLoopExecutor(
             if (toolCalls.isNotEmpty()) {
                 logger.info("检测到 {} 个工具调用", toolCalls.size)
                 executeToolCalls(toolCalls, toolResults, projectKey)
+                // 【关键修复】执行工具后，清空 currentContent，强制 LLM 基于工具结果重新生成
+                currentContent = ""
             } else {
+                // 【关键修复】【绝对禁止瞎编】没有工具调用时的处理
+                if (toolResults.isEmpty()) {
+                    // 还没有执行任何工具调用，LLM 就直接输出报告 - 直接抛异常
+                    logger.error("LLM 未调用工具就直接输出报告，这是严重的瞎编行为：type={}", type)
+                    throw IllegalStateException("分析失败：LLM 未调用工具获取项目信息就编造报告。类型：${type.key}")
+                }
+
                 val validationResult = validator.validate(cleanedContent, type)
                 finalCompleteness = validationResult.completeness
                 finalMissingSections = validationResult.missingSections
@@ -115,8 +124,6 @@ class AnalysisLoopExecutor(
                     hasCompleteReport = true
                     logger.info("分析完成: type={}, completeness={}", type, finalCompleteness)
                 } else {
-                    // 【修复】不清空 toolResults，保留实际的工具执行结果
-                    // 只添加补充请求到 toolResults 末尾
                     val supplementRequest = buildSupplementRequest(finalMissingSections)
                     toolResults.add(supplementRequest)
                     logger.debug("报告不完整，继续补充: missing={}, toolResults数量={}", finalMissingSections, toolResults.size)
@@ -428,7 +435,14 @@ class AnalysisLoopExecutor(
                 return toolCallTagCalls
             }
 
-            // 5. 尝试解析简单格式
+            // 5. 尝试解析 Markdown 代码块格式 (MiniMax-M2.5)
+            val markdownCodeBlockCalls = extractMarkdownCodeBlockToolCalls(response)
+            if (markdownCodeBlockCalls.isNotEmpty()) {
+                logger.debug("使用 Markdown 代码块格式解析到 {} 个工具调用", markdownCodeBlockCalls.size)
+                return markdownCodeBlockCalls
+            }
+
+            // 6. 尝试解析简单格式
             val simpleToolCalls = extractSimpleToolCalls(response)
             if (simpleToolCalls.isNotEmpty()) {
                 logger.debug("使用简单格式解析到 {} 个工具调用", simpleToolCalls.size)
@@ -627,6 +641,57 @@ class AnalysisLoopExecutor(
 
             // 工具名映射
             val mappedToolName = mapToolName(toolName)
+            toolCalls.add(ToolCallInfo(mappedToolName, params))
+        }
+
+        return toolCalls
+    }
+
+    /**
+     * 解析 Markdown 代码块格式的工具调用
+     * 例如：```list_directory``` 或 ```find_file pattern="*.java"```
+     */
+    private fun extractMarkdownCodeBlockToolCalls(response: String): List<ToolCallInfo> {
+        val toolCalls = mutableListOf<ToolCallInfo>()
+
+        // 匹配 ```tool_name``` 或 ```tool_name params``` 格式
+        val codeBlockPattern = Regex("```\\s*(\\w+)([\\s\\S]*?)```")
+        val matches = codeBlockPattern.findAll(response)
+
+        for (match in matches) {
+            val toolName = match.groupValues[1].trim()
+            val paramsContent = match.groupValues[2].trim()
+
+            // 跳过 thinking 等非工具标签
+            if (toolName.lowercase() in listOf("thinking", "thinkable", "thought", "reasoning")) {
+                continue
+            }
+
+            // 工具名映射
+            val mappedToolName = mapToolName(toolName)
+
+            // 检查是否是已知工具
+            val knownTools = listOf("read_file", "find_file", "grep_file", "list_directory",
+                                    "call_chain", "extract_xml", "apply_change", "run_shell_command", "batch")
+            if (mappedToolName !in knownTools) {
+                continue
+            }
+
+            val params = mutableMapOf<String, Any>()
+
+            // 解析参数：pattern="xxx" 或 key="value" 格式
+            val paramPattern = Regex("""(\w+)\s*=\s*"[^"]*"""")
+            paramPattern.findAll(paramsContent).forEach { paramMatch ->
+                val key = paramMatch.groupValues[1]
+                val value = paramMatch.groupValues[0].substringAfter('=').trim('"')
+                params[key] = value
+            }
+
+            // 如果是 list_directory，将内容作为 path 参数
+            if (mappedToolName == "list_directory" && params.isEmpty() && paramsContent.isNotBlank()) {
+                params["path"] = paramsContent.trim()
+            }
+
             toolCalls.add(ToolCallInfo(mappedToolName, params))
         }
 

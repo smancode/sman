@@ -165,6 +165,7 @@ class AnalysisOutputValidator {
         var cleaned = content
             .replace(THINKING_TAG_REGEX, "")
             .replace(THINKABLE_TAG_REGEX, "")
+            .replace(THINKING_CODE_BLOCK_REGEX, "")
 
         // 移除对话式内容（整行）
         val filteredLines = cleaned.lines().filter { line ->
@@ -186,6 +187,9 @@ class AnalysisOutputValidator {
 
         // 匹配 <thinkable>...</thinkable> 标签及其内容（支持多行）
         private val THINKABLE_TAG_REGEX = Regex("""<thinkable>[\s\S]*?</thinkable>""", RegexOption.MULTILINE)
+
+        // 匹配 ```<think>...</think>...</think> 代码块及其内容（支持多行）
+        private val THINKING_CODE_BLOCK_REGEX = Regex("""```[\s\S]*?</think>[\s\S]*?```""", RegexOption.MULTILINE)
 
         // 匹配多个连续空行
         private val MULTIPLE_BLANK_LINES_REGEX = Regex("""\n{3,}""")

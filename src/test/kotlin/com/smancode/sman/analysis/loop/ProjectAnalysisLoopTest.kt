@@ -8,7 +8,7 @@ import com.smancode.sman.analysis.executor.AnalysisOutputValidator
 import com.smancode.sman.analysis.model.*
 import com.smancode.sman.analysis.persistence.AnalysisStateRepository
 import com.smancode.sman.analysis.util.Md5FileTracker
-import com.smancode.sman.evolution.guard.DoomLoopGuard
+import com.smancode.sman.analysis.guard.DoomLoopGuard
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach

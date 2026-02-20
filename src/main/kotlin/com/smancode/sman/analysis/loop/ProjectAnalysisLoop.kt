@@ -5,7 +5,7 @@ import com.smancode.sman.analysis.executor.AnalysisLoopResult
 import com.smancode.sman.analysis.model.*
 import com.smancode.sman.analysis.persistence.AnalysisStateRepository
 import com.smancode.sman.analysis.util.Md5FileTracker
-import com.smancode.sman.evolution.guard.DoomLoopGuard
+import com.smancode.sman.analysis.guard.DoomLoopGuard
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import java.nio.file.Files

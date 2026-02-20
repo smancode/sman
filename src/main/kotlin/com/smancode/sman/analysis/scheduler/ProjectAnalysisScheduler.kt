@@ -9,13 +9,6 @@ import com.smancode.sman.analysis.vectorization.BgeM3Client
 import com.smancode.sman.architect.ArchitectAgent
 import com.smancode.sman.architect.model.ArchitectStopReason
 import com.smancode.sman.config.SmanConfig
-import com.smancode.sman.evolution.generator.QuestionGenerator
-import com.smancode.sman.evolution.guard.DoomLoopGuard
-import com.smancode.sman.evolution.loop.EvolutionConfig
-import com.smancode.sman.evolution.loop.SelfEvolutionLoop
-import com.smancode.sman.evolution.memory.LearningRecordRepository
-import com.smancode.sman.evolution.persistence.EvolutionStateRepository
-import com.smancode.sman.evolution.recorder.LearningRecorder
 import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.ide.service.storageService
 import kotlinx.coroutines.CoroutineScope
@@ -56,9 +49,6 @@ class ProjectAnalysisScheduler(
     @Volatile
     private var enabled: Boolean = true
 
-    // 自进化循环（可选功能）
-    private var selfEvolutionLoop: SelfEvolutionLoop? = null
-
     // 架构师 Agent（分析引擎）
     private var architectAgent: ArchitectAgent? = null
 
@@ -77,9 +67,6 @@ class ProjectAnalysisScheduler(
             }
         }
 
-        // 启动自进化循环（如果启用）
-        startSelfEvolutionLoop()
-
         // 启动架构师 Agent（如果启用）
         startArchitectAgent()
 
@@ -91,9 +78,6 @@ class ProjectAnalysisScheduler(
         enabled = false
         currentJob?.cancel()
         currentJob = null
-
-        // 停止自进化循环
-        stopSelfEvolutionLoop()
 
         // 停止架构师 Agent
         stopArchitectAgent()
@@ -262,87 +246,6 @@ class ProjectAnalysisScheduler(
                 logger.error("从 MD 文件向量化失败", e)
             }
         }
-    }
-
-    // ==================== 自进化循环集成 ====================
-
-    /**
-     * 启动自进化循环
-     *
-     * 根据配置决定是否启用，作为可选后台功能
-     */
-    private fun startSelfEvolutionLoop() {
-        if (!SmanConfig.selfEvolutionEnabled) {
-            logger.info("自进化循环未启用 (self.evolution.enabled=false)")
-            return
-        }
-
-        val projectKey = project.name
-        val projectPath = project.basePath?.let { Paths.get(it) }
-        if (projectPath == null) {
-            logger.warn("项目路径为空，无法启动自进化循环")
-            return
-        }
-
-        try {
-            val evolutionConfig = EvolutionConfig.DEFAULT
-            val llmService = SmanConfig.createLlmService()
-            val vectorDbConfig = SmanConfig.createVectorDbConfig(projectKey, projectPath.toString())
-
-            // 创建依赖组件
-            val questionGenerator = QuestionGenerator(llmService, evolutionConfig)
-            val repository = LearningRecordRepository(vectorDbConfig)
-
-            // 创建状态仓储（用于断点续传）
-            val stateRepository = EvolutionStateRepository(vectorDbConfig)
-
-            // 创建向量化相关组件
-            val bgeM3Config = SmanConfig.bgeM3Config
-                ?: throw IllegalStateException("BGE-M3 未配置，无法启动自进化循环。请在设置中配置 bge.endpoint")
-            val bgeM3Client = BgeM3Client(bgeM3Config)
-            val vectorStore = TieredVectorStore(vectorDbConfig)
-
-            val learningRecorder = LearningRecorder(
-                llmService = llmService,
-                repository = repository,
-                bgeM3Client = bgeM3Client,
-                vectorStore = vectorStore,
-                projectKey = projectKey
-            )
-
-            // 创建 DoomLoopGuard 并恢复状态
-            val doomLoopGuard = DoomLoopGuard.createWithStateRepository(stateRepository)
-            doomLoopGuard.restoreState(projectKey)
-
-            // 创建并启动自进化循环
-            selfEvolutionLoop = SelfEvolutionLoop(
-                projectKey = projectKey,
-                projectPath = projectPath,
-                questionGenerator = questionGenerator,
-                learningRecorder = learningRecorder,
-                doomLoopGuard = doomLoopGuard,
-                repository = repository,
-                stateRepository = stateRepository,
-                config = evolutionConfig
-            )
-
-            selfEvolutionLoop?.start()
-            logger.info("自进化循环已启动: projectKey={}", projectKey)
-
-        } catch (e: Exception) {
-            logger.error("启动自进化循环失败", e)
-        }
-    }
-
-    /**
-     * 停止自进化循环
-     */
-    private fun stopSelfEvolutionLoop() {
-        selfEvolutionLoop?.let { loop ->
-            loop.stop()
-            logger.info("自进化循环已停止")
-        }
-        selfEvolutionLoop = null
     }
 
     // ==================== 架构师 Agent 集成 ====================

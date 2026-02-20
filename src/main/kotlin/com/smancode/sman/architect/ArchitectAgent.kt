@@ -12,7 +12,7 @@ import com.smancode.sman.architect.persistence.ArchitectStateEntity
 import com.smancode.sman.architect.persistence.ArchitectStateRepository
 import com.smancode.sman.architect.storage.MdFileService
 import com.smancode.sman.config.SmanConfig
-import com.smancode.sman.evolution.guard.DoomLoopGuard
+import com.smancode.sman.analysis.guard.DoomLoopGuard
 import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.model.part.Part
 import com.smancode.sman.model.part.TextPart
