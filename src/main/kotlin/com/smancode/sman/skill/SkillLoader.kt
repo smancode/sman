@@ -2,6 +2,8 @@ package com.smancode.sman.skill
 
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.io.InputStream
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -12,6 +14,7 @@ import java.nio.file.Paths
  * 负责扫描多个目录，解析 SKILL.md 文件，加载 Skill 信息。
  *
  * 扫描目录优先级（从低到高，后者覆盖前者）：
+ * 0. classpath:/skills/（内置 skills，如 java-scanner）
  * 1. ~/.claude/skills/<name>/SKILL.md（全局 Claude 兼容）
  * 2. ~/.agents/skills/<name>/SKILL.md（全局 Agent 兼容）
  * 3. <project>/.claude/skills/<name>/SKILL.md（项目 Claude 兼容）
@@ -33,6 +36,11 @@ class SkillLoader {
     private val skillFileName = "SKILL.md"
 
     /**
+     * 内置 skills 根目录（classpath）
+     */
+    private val builtinSkillsPath = "/skills"
+
+    /**
      * 加载所有 Skill
      *
      * @param projectPath 项目路径
@@ -40,6 +48,9 @@ class SkillLoader {
      */
     fun loadAll(projectPath: String): List<SkillInfo> {
         val skills = mutableMapOf<String, SkillInfo>()
+
+        // 0. 加载内置 skills（从 classpath）
+        loadBuiltinSkills(skills)
 
         // 1. 扫描全局目录
         val homeDir = System.getProperty("user.home")
@@ -58,8 +69,83 @@ class SkillLoader {
         val smanSkillPath = Paths.get(projectPath, ".sman", "skills")
         loadFromDirectory(smanSkillPath, skills, "project")
 
-        logger.info("Skill 加载完成: 共加载 {} 个 Skill", skills.size)
+        logger.info("Skill 加载完成: 共加载 {} 个 Skill (内置: {}, 项目: {})",
+            skills.size, skills.values.count { it.location.contains("classpath:") },
+            skills.values.count { !it.location.contains("classpath:") })
         return skills.values.toList()
+    }
+
+    /**
+     * 加载内置 skills（从 classpath）
+     *
+     * 内置 skills 存放在 resources/skills/ 目录下
+     */
+    private fun loadBuiltinSkills(skills: MutableMap<String, SkillInfo>) {
+        try {
+            // 获取 skills 目录下的所有子目录
+            val skillsDirUrl = javaClass.getResource(builtinSkillsPath)
+            if (skillsDirUrl == null) {
+                logger.warn("内置 skills 目录不存在: {}", builtinSkillsPath)
+                return
+            }
+
+            // 对于 JAR 内的资源，需要特殊处理
+            // 这里我们直接枚举已知的内置 skill 目录
+            val builtinSkillDirs = listOf(
+                "java-scanner/java-api-scanner",
+                "java-scanner/java-arch-scanner",
+                "java-scanner/java-common-class-scanner",
+                "java-scanner/java-config-scanner",
+                "java-scanner/java-entity-scanner",
+                "java-scanner/java-enum-scanner",
+                "java-scanner/java-external-call-scanner",
+                "java-scanner/java-flow-analyzer"
+            )
+
+            for (skillDir in builtinSkillDirs) {
+                val skillFilePath = "$builtinSkillsPath/$skillDir/$skillFileName"
+                loadBuiltinSkillFile(skillFilePath, skills)
+            }
+
+        } catch (e: Exception) {
+            logger.error("加载内置 skills 失败", e)
+        }
+    }
+
+    /**
+     * 加载单个内置 skill 文件
+     */
+    private fun loadBuiltinSkillFile(
+        skillFilePath: String,
+        skills: MutableMap<String, SkillInfo>
+    ) {
+        try {
+            val inputStream: InputStream? = javaClass.getResourceAsStream(skillFilePath)
+            if (inputStream == null) {
+                logger.debug("内置 skill 文件不存在: {}", skillFilePath)
+                return
+            }
+
+            val content = inputStream.bufferedReader().use { it.readText() }
+            val skillInfo = parseSkillMarkdown(content, "classpath:$skillFilePath")
+
+            if (skillInfo == null || !skillInfo.isValid()) {
+                logger.warn("解析内置 skill 失败: {}", skillFilePath)
+                return
+            }
+
+            // 检查名称格式
+            if (!SkillInfo.NAME_PATTERN.matches(skillInfo.name)) {
+                logger.warn("内置 skill 名称格式无效: name={}, path={}", skillInfo.name, skillFilePath)
+                return
+            }
+
+            skills[skillInfo.name] = skillInfo
+            logger.debug("加载内置 skill: name={}, path={}", skillInfo.name, skillFilePath)
+
+        } catch (e: Exception) {
+            logger.error("读取内置 skill 文件失败: {}, error={}", skillFilePath, e.message)
+        }
     }
 
     /**
@@ -243,6 +329,11 @@ class SkillLoader {
      * @return 文件路径列表
      */
     fun getSkillFiles(skillInfo: SkillInfo, limit: Int = 10): List<String> {
+        // 对于 classpath 资源，返回空列表（内置 skill 通常不需要关联文件）
+        if (skillInfo.location.startsWith("classpath:")) {
+            return emptyList()
+        }
+
         val baseDir = File(skillInfo.baseDirectory)
         if (!baseDir.exists() || !baseDir.isDirectory) {
             return emptyList()

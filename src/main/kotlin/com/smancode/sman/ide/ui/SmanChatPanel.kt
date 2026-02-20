@@ -61,7 +61,8 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val controlBar = CliControlBar(
         onNewChatCallback = { startNewSession() },
         onHistoryCallback = { showHistory() },
-        onSettingsCallback = { showSettings() }
+        onSettingsCallback = { showSettings() },
+        onProjectAnalysisCallback = { triggerProjectAnalysis() }
     )
 
     private val inputArea = CliInputArea(
@@ -924,6 +925,68 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         logger.info("【/commit命令】开始处理: sessionId={}", currentSessionId)
         appendSystemMessage("⚠️ /commit 命令在本地模式下正在开发中...", saveToHistory = true)
+    }
+
+    /**
+     * 触发项目分析（使用 java-scanner 元 Skill）
+     *
+     * 通过 LLM 执行 java-scanner skills，生成项目专属 Skill 文件
+     */
+    private fun triggerProjectAnalysis() {
+        logger.info("触发项目分析")
+
+        // 检查服务初始化状态
+        smanService.initializationError?.let { error ->
+            appendSystemMessage("❌ 请先配置 LLM API Key")
+            showWelcomePanel()
+            return
+        }
+
+        // 确保有 sessionId
+        if (currentSessionId == null) {
+            currentSessionId = SessionIdGenerator.generate()
+            storageService.setCurrentSessionId(currentSessionId)
+            storageService.createOrGetSession(currentSessionId!!, projectKey)
+            logger.info("创建新会话: sessionId={}", currentSessionId)
+        }
+
+        showChat()
+
+        // 显示提示消息
+        appendSystemMessage("""
+            🔍 开始项目分析
+
+            将使用内置的 java-scanner skills 分析项目：
+            1. 项目架构扫描
+            2. API 接口扫描
+            3. 数据实体扫描
+            4. 枚举类扫描
+            5. 配置文件扫描
+            6. 外调接口扫描
+            7. 公共类扫描
+
+            分析结果将保存为项目专属 Skill 文件，后续对话可直接使用。
+        """.trimIndent())
+
+        // 构建分析提示词
+        val analysisPrompt = """
+请帮我分析这个 Java 项目，使用以下 skills：
+
+1. 首先加载 java-arch-scanner skill 分析项目架构
+2. 然后加载 java-api-scanner skill 扫描 API 接口
+3. 加载 java-entity-scanner skill 扫描数据实体
+4. 加载 java-enum-scanner skill 扫描枚举类
+5. 加载 java-config-scanner skill 扫描配置文件
+6. 加载 java-external-call-scanner skill 扫描外调接口
+7. 加载 java-common-class-scanner skill 扫描公共类
+
+每个 skill 扫描完成后，将结果保存到 `.sman/skills/` 目录下对应的项目 Skill 文件中。
+
+请按顺序执行，每个 skill 分批处理以避免 token 超限。
+        """.trimIndent()
+
+        // 复用现有的消息处理逻辑
+        processWithAgentLoop(currentSessionId!!, analysisPrompt)
     }
 
     fun dispose() {

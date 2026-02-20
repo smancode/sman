@@ -10,15 +10,16 @@ import javax.swing.border.EmptyBorder
 /**
  * CLI 风格控制栏
  *
- * 包含：新建会话、历史记录、设置按钮
- * 布局：左侧（新建会话、历史记录），右侧（设置）
+ * 包含：新建会话、历史记录、项目分析、设置按钮
+ * 布局：左侧（新建会话、历史记录、项目分析），右侧（设置）
  */
 class CliControlBar(
     private val onNewChatCallback: () -> Unit,
     private val onHistoryCallback: () -> Unit,
-    private val onSettingsCallback: () -> Unit
+    private val onSettingsCallback: () -> Unit,
+    private val onProjectAnalysisCallback: () -> Unit = {}
 ) : JPanel(BorderLayout()) {
-    
+
     private val logger = org.slf4j.LoggerFactory.getLogger(CliControlBar::class.java)
 
     // 历史按钮引用（供外部使用）
@@ -37,7 +38,7 @@ class CliControlBar(
         // 统一按钮高度
         val buttonHeight = JBUI.scale(28)
 
-        // 左侧：新建会话、历史记录
+        // 左侧：新建会话、历史记录、项目分析
         val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
             isOpaque = false
             preferredSize = Dimension(Short.MAX_VALUE.toInt(), buttonHeight)
@@ -51,6 +52,10 @@ class CliControlBar(
             val historyBtn = createHistoryButton(buttonHeight)
             _historyButtonRef.set(historyBtn)
             add(historyBtn)
+
+            // 项目分析按钮
+            val analysisButton = createProjectAnalysisButton(buttonHeight)
+            add(analysisButton)
         }
 
         // 右侧：设置
@@ -70,6 +75,39 @@ class CliControlBar(
 
     fun getHistoryButton(): JButton? {
         return _historyButtonRef.get()
+    }
+
+    /**
+     * 创建项目分析按钮
+     */
+    private fun createProjectAnalysisButton(height: Int): JButton {
+        val icon = object : Icon {
+            override fun paintIcon(c: Component?, g: Graphics, x: Int, y: Int) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+                // 绘制简单的放大镜图标
+                val size = JBUI.scale(10)
+                val cx = x + iconWidth / 2 - JBUI.scale(2)
+                val cy = y + iconHeight / 2 - JBUI.scale(2)
+
+                // 放大镜圆圈
+                g2.drawOval(cx - size/2, cy - size/2, size, size)
+
+                // 放大镜手柄
+                g2.stroke = BasicStroke(JBUI.scale(1.5f))
+                g2.drawLine(cx + size/2 - 1, cy + size/2 - 1, cx + size/2 + JBUI.scale(3), cy + size/2 + JBUI.scale(3))
+
+                g2.dispose()
+            }
+
+            override fun getIconWidth() = JBUI.scale(16)
+            override fun getIconHeight() = JBUI.scale(16)
+        }
+
+        return createIconButton(icon, "项目分析 (生成项目 Skill)", height) {
+            onProjectAnalysisCallback()
+        }
     }
 
     private fun createSettingsButton(height: Int): JButton {
