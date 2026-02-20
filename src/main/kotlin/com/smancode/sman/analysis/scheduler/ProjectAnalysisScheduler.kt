@@ -3,13 +3,7 @@ package com.smancode.sman.analysis.scheduler
 import com.intellij.openapi.project.Project
 import com.smancode.sman.analysis.coordination.CodeVectorizationCoordinator
 import com.smancode.sman.analysis.coordination.VectorizationResult
-import com.smancode.sman.analysis.database.TieredVectorStore
-import com.smancode.sman.analysis.model.AnalysisType
-import com.smancode.sman.analysis.vectorization.BgeM3Client
-import com.smancode.sman.architect.ArchitectAgent
-import com.smancode.sman.architect.model.ArchitectStopReason
 import com.smancode.sman.config.SmanConfig
-import com.smancode.sman.ide.service.SmanService
 import com.smancode.sman.ide.service.storageService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,8 +21,7 @@ import java.nio.file.Paths
  * 后台定期检查项目状态并执行分析任务
  *
  * 核心职责：
- * 1. 基础分析（项目结构、技术栈等）- 通过 ArchitectAgent
- * 2. 代码向量化（扫描 .java → 生成 MD → 向量化）- 通过 CodeVectorizationCoordinator
+ * 代码向量化（扫描 .java → 生成 MD → 向量化）- 通过 CodeVectorizationCoordinator
  */
 class ProjectAnalysisScheduler(
     private val project: Project,
@@ -40,17 +33,11 @@ class ProjectAnalysisScheduler(
 
     private var currentJob: Job? = null
 
-    // Sman 服务实例（用于执行分析任务）
-    private val smanService: SmanService = SmanService.getInstance(project)
-
     // BGE 端点配置
     private val bgeEndpoint: String = project.storageService().bgeEndpoint
 
     @Volatile
     private var enabled: Boolean = true
-
-    // 架构师 Agent（分析引擎）
-    private var architectAgent: ArchitectAgent? = null
 
     fun start() {
         logger.info("启动项目分析调度器: project={}, interval={}ms", project.name, intervalMs)
@@ -67,9 +54,6 @@ class ProjectAnalysisScheduler(
             }
         }
 
-        // 启动架构师 Agent（如果启用）
-        startArchitectAgent()
-
         logger.info("项目分析调度器已启动")
     }
 
@@ -78,9 +62,6 @@ class ProjectAnalysisScheduler(
         enabled = false
         currentJob?.cancel()
         currentJob = null
-
-        // 停止架构师 Agent
-        stopArchitectAgent()
     }
 
     fun toggle() {
@@ -157,11 +138,6 @@ class ProjectAnalysisScheduler(
      */
     fun triggerImmediateAnalysis() {
         logger.info("立即触发项目分析: project={}", project.name)
-
-        // 触发架构师 Agent 重新检查
-        if (SmanConfig.architectAgentEnabled && architectAgent == null) {
-            startArchitectAgent()
-        }
 
         scope.launch {
             try {
@@ -247,76 +223,6 @@ class ProjectAnalysisScheduler(
             }
         }
     }
-
-    // ==================== 架构师 Agent 集成 ====================
-
-    /**
-     * 启动架构师 Agent
-     *
-     * 根据配置决定是否启用，作为分析引擎
-     */
-    private fun startArchitectAgent() {
-        if (!SmanConfig.architectAgentEnabled) {
-            logger.info("架构师 Agent 未启用 (architect.agent.enabled=false)")
-            return
-        }
-
-        val projectKey = project.name
-        val projectPath = project.basePath?.let { Paths.get(it) }
-        if (projectPath == null) {
-            logger.warn("项目路径为空，无法启动架构师 Agent")
-            return
-        }
-
-        try {
-            architectAgent = ArchitectAgent(
-                projectKey = projectKey,
-                projectPath = projectPath,
-                smanService = smanService
-            )
-
-            architectAgent?.start()
-            logger.info("架构师 Agent 已启动: projectKey={}", projectKey)
-
-        } catch (e: Exception) {
-            logger.error("启动架构师 Agent 失败", e)
-        }
-    }
-
-    /**
-     * 停止架构师 Agent
-     */
-    private fun stopArchitectAgent() {
-        architectAgent?.let { agent ->
-            agent.stop(ArchitectStopReason.USER_STOPPED)
-            logger.info("架构师 Agent 已停止")
-        }
-        architectAgent = null
-    }
-
-    /**
-     * 手动触发架构师 Agent 执行指定类型的分析
-     */
-    fun triggerArchitectAnalysis(type: AnalysisType) {
-        if (!SmanConfig.architectAgentEnabled) {
-            logger.warn("架构师 Agent 未启用，无法触发分析")
-            return
-        }
-
-        scope.launch {
-            try {
-                val result = architectAgent?.executeOnce(type)
-                logger.info("架构师 Agent 分析完成: type={}, result={}", type.key, result?.summary)
-            } catch (e: Exception) {
-                logger.error("架构师 Agent 分析失败: type={}", type.key, e)
-            }
-        }
-    }
-
-    /**
-     * 获取架构师 Agent 状态
-     */
-    fun getArchitectStatus() = architectAgent?.getStatus()
 
     companion object {
         fun create(

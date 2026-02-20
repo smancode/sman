@@ -379,70 +379,6 @@ object SmanConfig {
         getConfigValue("analysis.llm.vectorization.full.refresh", false)
     }
 
-    // ==================== 架构师 Agent 配置 ====================
-
-    /**
-     * 是否启用架构师 Agent
-     *
-     * 架构师 Agent 是一个独立的分析代理，通过调用 ReAct 循环实现项目分析
-     */
-    val architectAgentEnabled: Boolean by lazy {
-        getConfigValue("architect.agent.enabled", false)
-    }
-
-    /**
-     * 每个分析目标（MD 文件）的最大迭代轮次
-     */
-    val architectMaxIterationsPerMd: Int by lazy {
-        getConfigValue("architect.agent.max.iterations.per.md", 5)
-    }
-
-    /**
-     * 深度分析模式开关
-     */
-    val architectDeepModeEnabled: Boolean by lazy {
-        getConfigValue("architect.agent.deep.mode.enabled", false)
-    }
-
-    /**
-     * 完成度阈值 - 深度模式
-     */
-    val architectCompletionThresholdDeep: Double by lazy {
-        getConfigValue("architect.agent.completion.threshold.deep", 0.9)
-    }
-
-    /**
-     * 完成度阈值 - 普通模式
-     */
-    val architectCompletionThresholdNormal: Double by lazy {
-        getConfigValue("architect.agent.completion.threshold.normal", 0.7)
-    }
-
-    /**
-     * 增量更新检测开关
-     */
-    val architectIncrementalCheckEnabled: Boolean by lazy {
-        getConfigValue("architect.agent.incremental.check.enabled", true)
-    }
-
-    /**
-     * 架构师分析间隔（毫秒）
-     */
-    val architectIntervalMs: Long by lazy {
-        getConfigValue("architect.agent.interval.ms", 300000L)
-    }
-
-    /**
-     * 获取当前完成度阈值（根据深度模式）
-     */
-    fun getArchitectCompletionThreshold(): Double {
-        return if (architectDeepModeEnabled) {
-            architectCompletionThresholdDeep
-        } else {
-            architectCompletionThresholdNormal
-        }
-    }
-
     /**
      * 加载配置文件
      */
@@ -526,14 +462,6 @@ object SmanConfig {
         - 启用: ${rerankerConfig.enabled}
         - 端点: ${rerankerConfig.baseUrl}
         - 模型: ${rerankerConfig.model}
-
-        架构师 Agent 配置:
-        - 启用: $architectAgentEnabled
-        - 最大迭代/MD: $architectMaxIterationsPerMd
-        - 深度模式: $architectDeepModeEnabled
-        - 完成度阈值: ${getArchitectCompletionThreshold()}
-        - 增量检测: $architectIncrementalCheckEnabled
-        - 分析间隔: ${architectIntervalMs}ms
     """.trimIndent()
 
     /**

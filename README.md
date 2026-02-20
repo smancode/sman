@@ -10,7 +10,6 @@
 - **会话持久化**: 按项目隔离存储会话历史
 - **流式响应渲染**: 实时显示 AI 思考过程和执行结果
 - **三阶段工作流**: Analyze → Plan → Execute
-- **架构师 Agent**: 小步快跑、阶段性评估、增量更新、断点续传
 - **技能系统**: 支持加载领域特定技能，扩展 AI 能力
 - **Web 搜索**: 集成 Exa AI MCP 服务，支持实时网络搜索
 
@@ -75,10 +74,6 @@ bge.model.name=BAAI/bge-m3
 reranker.enabled=true
 reranker.base.url=http://localhost:8001/v1
 reranker.model=BAAI/bge-reranker-v2-m3
-
-# 架构师 Agent 配置
-architect.agent.enabled=true
-architect.agent.max.iterations.per.md=5
 
 # WebSearch 配置
 websearch.enabled=true
@@ -170,25 +165,6 @@ python -m FlagEmbedding.reranker serve --port 8001
 >>> 搜索 Spring Boot 3.0 的新特性
 ```
 
-## 架构师 Agent
-
-架构师 Agent 通过调用 SmanLoop 实现项目分析，核心特性：
-
-| 特性 | 说明 |
-|------|------|
-| 小步快跑 | 每轮调用 LLM → 收集回答 → 评估完成度 |
-| 阶段性评估 | 完成时写入 MD 文件（带时间戳） |
-| 增量更新 | 检测文件变更，判断是否需要更新 MD |
-| 断点续传 | 状态持久化到 H2，IDEA 重启后自动恢复 |
-
-分析类型（6 种）：
-1. `PROJECT_STRUCTURE` - 项目结构分析
-2. `TECH_STACK` - 技术栈识别
-3. `API_ENTRIES` - API 入口扫描
-4. `DB_ENTITIES` - 数据库实体分析
-5. `ENUMS` - 枚举分析
-6. `CONFIG_FILES` - 配置文件分析
-
 ## 技能系统
 
 支持加载领域特定技能，扩展 AI 能力。
@@ -234,8 +210,8 @@ Skill 加载路径（优先级从高到低）：
 │                            ┌──────────────────────┴──────┐ │
 │                            │                             │ │
 │                     ┌──────┴─────┐              ┌────────┴┐│
-│                     │ LocalTools │              │Architect││
-│                     └────────────┘              │Agent    ││
+│                     │ LocalTools │              │  Skill  ││
+│                     └────────────┘              │ System  ││
 │                                                 └─────────┘│
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -247,7 +223,6 @@ Skill 加载路径（优先级从高到低）：
 - **LlmService**: LLM 调用服务，支持端点池、重试和缓存
 - **ToolRegistry**: 工具注册表，管理所有可用工具
 - **LocalToolExecutor**: 本地工具执行器，在 IntelliJ 中执行工具
-- **ArchitectAgent**: 架构师 Agent，通过调用 SmanLoop 实现项目分析
 - **SkillRegistry**: 技能注册中心，管理所有已加载技能
 
 ## 开发

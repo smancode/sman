@@ -68,7 +68,7 @@ class SmanService(private val project: Project) : Disposable {
     private lateinit var smanAgentLoop: SmanLoop
     private lateinit var skillRegistry: SkillRegistry
 
-    // 暴露给 ArchitectAgent 使用
+    // 暴露给外部使用
     fun getToolRegistry(): ToolRegistry = toolRegistry
     fun getToolExecutor(): ToolExecutor = toolExecutor
 
@@ -479,40 +479,6 @@ class SmanService(private val project: Project) : Disposable {
      * 获取会话
      */
     fun getSession(sessionId: String): Session? = sessionCache[sessionId]
-
-    /**
-     * 创建架构师专用 Session
-     *
-     * 与普通 Session 的区别：
-     * 1. 独立的 sessionId 前缀（architect-{type}-{uuid}）
-     * 2. 注入架构师专用的上下文
-     * 3. 不使用用户规则
-     *
-     * @param analysisType 分析类型
-     * @return 架构师 Session
-     */
-    fun createArchitectSession(analysisType: com.smancode.sman.analysis.model.AnalysisType): Session {
-        val sessionId = "architect-${analysisType.key}-${java.util.UUID.randomUUID()}"
-
-        val projectInfo = ProjectInfo().apply {
-            projectKey = this@SmanService.projectKey
-            projectPath = project.basePath
-            rules = ""  // 架构师不使用用户规则
-        }
-
-        return Session(sessionId, projectInfo).apply {
-            status = SessionStatus.IDLE
-            // 注入项目上下文
-            metadata["projectContext"] = getProjectContext()
-            // 标记为架构师 Session
-            metadata["isArchitectSession"] = true
-            metadata["analysisType"] = analysisType.key
-        }.also { session ->
-            // 注册到 SessionManager
-            sessionManager.registerSession(session)
-            logger.info("创建架构师 Session: sessionId={}, analysisType={}", sessionId, analysisType.key)
-        }
-    }
 
     /**
      * 从缓存移除会话（不删除文件）

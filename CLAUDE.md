@@ -9,7 +9,6 @@ SmanCode - AI 驱动的智能编程助手插件
 SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编程智能体。核心特性：
 
 - **ReAct 循环**：Reasoning + Acting 交替进行，支持多步工具调用
-- **架构师 Agent**：通过调用 SmanLoop 实现项目分析，小步快跑、阶段性评估
 - **技能系统**：支持加载领域特定技能，扩展 AI 能力
 - **三层缓存架构**：L1 内存 + L2 JVector + L3 H2，高效处理大型项目
 - **语义搜索**：BGE-M3 向量化 + BGE-Reranker 重排，实现代码语义检索
@@ -80,11 +79,6 @@ src/main/kotlin/com/smancode/sman/
 │   ├── service/        # 向量化和上下文注入服务
 │   ├── storage/        # 向量仓储
 │   └── vectorization/  # BGE-M3 向量化客户端
-├── architect/          # 架构师 Agent 模块
-│   ├── evaluator/      # 影响分析器、完成度评估器
-│   ├── model/          # 架构师模型
-│   ├── persistence/    # 架构师状态持久化
-│   └── storage/        # MD 文件服务
 ├── config/             # 配置管理（SmanConfig, SmanCodeProperties）
 ├── ide/                # IntelliJ 集成
 │   ├── action/         # IDE 动作
@@ -147,35 +141,7 @@ src/main/resources/
 - **智能摘要**：历史工具只发送摘要，新工具发送完整结果并要求 LLM 生成摘要
 - **多级 JSON 提取**：从直接解析到 LLM 辅助修复，确保最大容错
 
-### 2. 架构师 Agent（Architect）
-
-位置：`architect/`
-
-通过调用 SmanLoop 实现项目分析，核心特性：
-
-| 特性 | 说明 |
-|------|------|
-| 小步快跑 | 每轮调用 LLM → 收集回答 → 评估完成度 |
-| 阶段性评估 | 完成时写入 MD 文件（带时间戳） |
-| 增量更新 | 检测文件变更，判断是否需要更新 MD |
-| 断点续传 | 状态持久化到 H2，IDEA 重启后自动恢复 |
-
-分析类型（6 种）：
-1. `PROJECT_STRUCTURE` - 项目结构分析
-2. `TECH_STACK` - 技术栈识别
-3. `API_ENTRIES` - API 入口扫描
-4. `DB_ENTITIES` - 数据库实体分析
-5. `ENUMS` - 枚举分析
-6. `CONFIG_FILES` - 配置文件分析
-
-配置项（sman.properties）：
-```properties
-architect.agent.enabled=true
-architect.agent.max.iterations.per.md=5
-architect.agent.completion.threshold.normal=0.7
-```
-
-### 3. 技能系统（Skill）
+### 2. 技能系统（Skill）
 
 位置：`skill/`
 
@@ -192,7 +158,7 @@ Skill 加载路径（优先级从高到低）：
 2. `<project>/.claude/skills/<name>/SKILL.md`
 3. `~/.claude/skills/<name>/SKILL.md`
 
-### 4. 三层缓存架构
+### 3. 三层缓存架构
 
 ```
 L1 (Hot):  内存 LRU 缓存（~500 entries）
@@ -206,7 +172,7 @@ vector.db.type=JVECTOR
 vector.db.l1.cache.size=500
 ```
 
-### 5. 工具系统
+### 4. 工具系统
 
 可用工具：
 | 工具名 | 描述 |
@@ -255,13 +221,6 @@ compaction.threshold=128000
 bge.endpoint=http://localhost:8000
 reranker.enabled=true
 reranker.base.url=http://localhost:8001/v1
-```
-
-### 架构师 Agent
-```properties
-architect.agent.enabled=true
-architect.agent.max.iterations.per.md=5
-architect.agent.interval.ms=300000
 ```
 
 ### WebSearch
