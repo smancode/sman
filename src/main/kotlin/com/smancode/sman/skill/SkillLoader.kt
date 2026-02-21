@@ -14,7 +14,7 @@ import java.nio.file.Paths
  * 负责扫描多个目录，解析 SKILL.md 文件，加载 Skill 信息。
  *
  * 扫描目录优先级（从低到高，后者覆盖前者）：
- * 0. classpath:/skills/（内置 skills，如 java-scanner）
+ * 0. classpath:/skills/（内置 skills）
  * 1. ~/.claude/skills/<name>/SKILL.md（全局 Claude 兼容）
  * 2. ~/.agents/skills/<name>/SKILL.md（全局 Agent 兼容）
  * 3. <project>/.claude/skills/<name>/SKILL.md（项目 Claude 兼容）
@@ -90,22 +90,8 @@ class SkillLoader {
             }
 
             // 对于 JAR 内的资源，需要特殊处理
-            // 这里我们直接枚举已知的内置 skill 目录
-            val builtinSkillDirs = listOf(
-                "java-scanner/java-api-scanner",
-                "java-scanner/java-arch-scanner",
-                "java-scanner/java-common-class-scanner",
-                "java-scanner/java-config-scanner",
-                "java-scanner/java-entity-scanner",
-                "java-scanner/java-enum-scanner",
-                "java-scanner/java-external-call-scanner",
-                "java-scanner/java-flow-analyzer"
-            )
-
-            for (skillDir in builtinSkillDirs) {
-                val skillFilePath = "$builtinSkillsPath/$skillDir/$skillFileName"
-                loadBuiltinSkillFile(skillFilePath, skills)
-            }
+            // 目前没有内置 skills，从文件系统加载
+            logger.debug("无内置 skills，从文件系统加载")
 
         } catch (e: Exception) {
             logger.error("加载内置 skills 失败", e)

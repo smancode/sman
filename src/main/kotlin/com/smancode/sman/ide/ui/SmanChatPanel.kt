@@ -61,8 +61,7 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val controlBar = CliControlBar(
         onNewChatCallback = { startNewSession() },
         onHistoryCallback = { showHistory() },
-        onSettingsCallback = { showSettings() },
-        onProjectAnalysisCallback = { triggerProjectAnalysis() }
+        onSettingsCallback = { showSettings() }
     )
 
     private val inputArea = CliInputArea(
@@ -925,124 +924,6 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         logger.info("【/commit命令】开始处理: sessionId={}", currentSessionId)
         appendSystemMessage("⚠️ /commit 命令在本地模式下正在开发中...", saveToHistory = true)
-    }
-
-    /**
-     * 触发项目分析（使用 java-scanner 元 Skill）
-     *
-     * 通过 LLM 执行 java-scanner skills，生成项目专属 Skill 文件
-     */
-    private fun triggerProjectAnalysis() {
-        logger.info("触发项目分析")
-
-        // 检查服务初始化状态
-        smanService.initializationError?.let { error ->
-            appendSystemMessage("❌ 请先配置 LLM API Key")
-            showWelcomePanel()
-            return
-        }
-
-        // 确保有 sessionId
-        if (currentSessionId == null) {
-            currentSessionId = SessionIdGenerator.generate()
-            storageService.setCurrentSessionId(currentSessionId)
-            storageService.createOrGetSession(currentSessionId!!, projectKey)
-            logger.info("创建新会话: sessionId={}", currentSessionId)
-        }
-
-        showChat()
-
-        // 显示提示消息
-        appendSystemMessage("""
-            🔍 开始项目分析
-
-            将使用内置的 java-scanner skills 分析项目：
-            1. 项目架构扫描
-            2. API 接口扫描
-            3. 数据实体扫描
-            4. 枚举类扫描
-            5. 配置文件扫描
-            6. 外调接口扫描
-            7. 公共类扫描
-
-            分析结果将保存为项目专属 Skill 文件，后续对话可直接使用。
-        """.trimIndent())
-
-        // 构建分析提示词 - 直接使用 grep_file 和 read_file 扫描，不依赖 skill 工具
-        val analysisPrompt = """
-请帮我分析这个 Java 项目，生成项目专属 Skill 文件。
-
-**核心原则：边扫描边写入，有发现就保存，避免上下文爆炸！**
-
-## 扫描策略（分批写入）：
-
-### 项目架构扫描
-1. 使用 `find_file` 查找 build.gradle（pattern="build\\.gradle$"）
-2. 使用 `find_file` 查找 settings.gradle（pattern="settings\\.gradle$"）
-3. 使用 `read_file` 读取 settings.gradle 分析模块结构
-4. **立即使用 `apply_change` mode="create" 保存到 `.sman/skills/project-architecture.md`**
-5. 继续扫描其他构建文件，**每发现一个新模块就追加写入**
-
-### API 接口扫描（分批处理）
-1. 使用 `find_file` pattern=".*Controller\\.java$" 查找 Controller 文件
-2. **每找到 5 个 Controller，立即读取并写入 `.sman/skills/project-api-entry.md`**
-3. 使用 `grep_file` 补充查找 @RestController 等注解
-4. **有发现立即追加，不要等全部扫描完**
-
-### 数据实体扫描（分批处理）
-1. 使用 `find_file` pattern=".*Mapper\\.java$" 查找 MyBatis Mapper
-2. 使用 `grep_file` pattern="@Entity|@Table" 查找实体类
-3. **每发现 5 个实体/Mapper，立即写入 `.sman/skills/project-data-model.md`**
-
-### 枚举类扫描
-1. 使用 `find_file` pattern=".*Enum\\.java$" 查找枚举文件
-2. **每发现 3-5 个枚举类，立即读取并写入 `.sman/skills/project-enums.md`**
-
-### 配置文件扫描
-1. 使用 `find_file` pattern="application.*\\.yml$" 查找配置文件
-2. **读取关键配置后立即写入 `.sman/skills/project-config-guide.md`**
-
-### 外调接口扫描
-1. 使用 `grep_file` pattern="@FeignClient|RestTemplate" 查找外调代码
-2. **每发现 3-5 个外调点，立即写入 `.sman/skills/project-external-calls.md`**
-
-### 公共类扫描
-1. 使用 `find_file` pattern=".*Util\\.java$|.*Utils\\.java$" 查找工具类
-2. 使用 `grep_file` pattern="@Service|@Component" 查找服务类
-3. **每发现 5 个公共类，立即写入 `.sman/skills/project-common-components.md`**
-
-**关键要求：**
-1. **边扫描边写入，不要等任务完成！**
-2. **每批处理 3-5 个文件后立即写入，防止上下文爆炸**
-3. **使用 `apply_change` mode="create" 创建文件，后续使用 mode="replace" 追加**
-4. **不要询问用户，自动完成所有扫描**
-5. **所有扫描完成后，总结生成了哪些文件**
-
-**apply_change 参数：**
-- mode: "create"（首次）或 "replace"（追加）
-- relativePath: ".sman/skills/project-xxx.md"
-- newContent: 包含 frontmatter + 扫描结果的 markdown
-- description: "追加项目 xxx 分析"
-
-**文件格式示例：**
-```markdown
----
-name: project-api-entry
-description: 项目API接口分析
----
-
-# API 接口清单
-
-## 批次 1（Controller 1-5）
-...
-
-## 批次 2（Controller 6-10）
-...
-```
-        """.trimIndent()
-
-        // 复用现有的消息处理逻辑
-        processWithAgentLoop(currentSessionId!!, analysisPrompt)
     }
 
     fun dispose() {
