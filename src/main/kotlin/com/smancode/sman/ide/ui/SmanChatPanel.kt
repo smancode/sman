@@ -968,21 +968,77 @@ class SmanChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             分析结果将保存为项目专属 Skill 文件，后续对话可直接使用。
         """.trimIndent())
 
-        // 构建分析提示词
+        // 构建分析提示词 - 直接使用 grep_file 和 read_file 扫描，不依赖 skill 工具
         val analysisPrompt = """
-请帮我分析这个 Java 项目，使用以下 skills：
+请帮我分析这个 Java 项目，生成项目专属 Skill 文件。
 
-1. 首先加载 java-arch-scanner skill 分析项目架构
-2. 然后加载 java-api-scanner skill 扫描 API 接口
-3. 加载 java-entity-scanner skill 扫描数据实体
-4. 加载 java-enum-scanner skill 扫描枚举类
-5. 加载 java-config-scanner skill 扫描配置文件
-6. 加载 java-external-call-scanner skill 扫描外调接口
-7. 加载 java-common-class-scanner skill 扫描公共类
+**核心原则：边扫描边写入，有发现就保存，避免上下文爆炸！**
 
-每个 skill 扫描完成后，将结果保存到 `.sman/skills/` 目录下对应的项目 Skill 文件中。
+## 扫描策略（分批写入）：
 
-请按顺序执行，每个 skill 分批处理以避免 token 超限。
+### 项目架构扫描
+1. 使用 `find_file` 查找 build.gradle（pattern="build\\.gradle$"）
+2. 使用 `find_file` 查找 settings.gradle（pattern="settings\\.gradle$"）
+3. 使用 `read_file` 读取 settings.gradle 分析模块结构
+4. **立即使用 `apply_change` mode="create" 保存到 `.sman/skills/project-architecture.md`**
+5. 继续扫描其他构建文件，**每发现一个新模块就追加写入**
+
+### API 接口扫描（分批处理）
+1. 使用 `find_file` pattern=".*Controller\\.java$" 查找 Controller 文件
+2. **每找到 5 个 Controller，立即读取并写入 `.sman/skills/project-api-entry.md`**
+3. 使用 `grep_file` 补充查找 @RestController 等注解
+4. **有发现立即追加，不要等全部扫描完**
+
+### 数据实体扫描（分批处理）
+1. 使用 `find_file` pattern=".*Mapper\\.java$" 查找 MyBatis Mapper
+2. 使用 `grep_file` pattern="@Entity|@Table" 查找实体类
+3. **每发现 5 个实体/Mapper，立即写入 `.sman/skills/project-data-model.md`**
+
+### 枚举类扫描
+1. 使用 `find_file` pattern=".*Enum\\.java$" 查找枚举文件
+2. **每发现 3-5 个枚举类，立即读取并写入 `.sman/skills/project-enums.md`**
+
+### 配置文件扫描
+1. 使用 `find_file` pattern="application.*\\.yml$" 查找配置文件
+2. **读取关键配置后立即写入 `.sman/skills/project-config-guide.md`**
+
+### 外调接口扫描
+1. 使用 `grep_file` pattern="@FeignClient|RestTemplate" 查找外调代码
+2. **每发现 3-5 个外调点，立即写入 `.sman/skills/project-external-calls.md`**
+
+### 公共类扫描
+1. 使用 `find_file` pattern=".*Util\\.java$|.*Utils\\.java$" 查找工具类
+2. 使用 `grep_file` pattern="@Service|@Component" 查找服务类
+3. **每发现 5 个公共类，立即写入 `.sman/skills/project-common-components.md`**
+
+**关键要求：**
+1. **边扫描边写入，不要等任务完成！**
+2. **每批处理 3-5 个文件后立即写入，防止上下文爆炸**
+3. **使用 `apply_change` mode="create" 创建文件，后续使用 mode="replace" 追加**
+4. **不要询问用户，自动完成所有扫描**
+5. **所有扫描完成后，总结生成了哪些文件**
+
+**apply_change 参数：**
+- mode: "create"（首次）或 "replace"（追加）
+- relativePath: ".sman/skills/project-xxx.md"
+- newContent: 包含 frontmatter + 扫描结果的 markdown
+- description: "追加项目 xxx 分析"
+
+**文件格式示例：**
+```markdown
+---
+name: project-api-entry
+description: 项目API接口分析
+---
+
+# API 接口清单
+
+## 批次 1（Controller 1-5）
+...
+
+## 批次 2（Controller 6-10）
+...
+```
         """.trimIndent()
 
         // 复用现有的消息处理逻辑
