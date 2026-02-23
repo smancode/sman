@@ -60,7 +60,10 @@ class RealApiE2ETest {
     private val projectKey = "e2e-test-${System.currentTimeMillis()}"
 
     @BeforeAll
-    fun setUp() {
+    fun setUp(@TempDir tempDir: Path) {
+        // 使用参数注入的 tempDir，确保在 @BeforeAll 阶段可用
+        this.tempDir = tempDir
+
         // 检查是否跳过集成测试
         val skipTests = System.getenv("SKIP_INTEGRATION_TESTS") == "true"
         Assumptions.assumeFalse(skipTests, "E2E 测试已跳过（SKIP_INTEGRATION_TESTS=true）")

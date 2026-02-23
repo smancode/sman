@@ -1,19 +1,131 @@
 # CLAUDE.md
 
-SmanCode - AI 驱动的智能编程助手插件
+SmanCode - 面向业务的智能编程助手
 
 ---
 
-## 项目概述
+## 项目定位
 
-SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编程智能体。核心特性：
+SmanCode 是一个 IntelliJ IDEA 插件，实现**面向业务的 AI 编程智能体**。
 
-- **ReAct 循环**：Reasoning + Acting 交替进行，支持多步工具调用
-- **技能系统**：支持加载领域特定技能，扩展 AI 能力
-- **三层缓存架构**：L1 内存 + L2 JVector + L3 H2，高效处理大型项目
-- **语义搜索**：BGE-M3 向量化 + BGE-Reranker 重排，实现代码语义检索
-- **Web 搜索**：集成 Exa AI MCP 服务，支持实时网络搜索
-- **断点续传**：IDEA 重启后自动恢复分析状态
+**核心差异化**：
+- **自迭代项目理解**：Agent 自主理解项目，生成项目专属知识，持续迭代完善
+- **用户习惯学习**：自动学习用户偏好，越用越懂你
+- **一切基于 Markdown**：简单可靠，用户可见可编辑，Git 友好
+
+---
+
+## 核心架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         应用层 (app/)                            │
+│  SmanPlugin → ServiceLocator                                    │
+├─────────────────────────────────────────────────────────────────┤
+│                         领域层 (domain/)                         │
+│  ┌──────────────┬──────────────┬──────────────┬──────────────┐  │
+│  │   puzzle/    │   memory/    │   session/   │    react/    │  │
+│  │ 自迭代理解    │ 习惯学习     │ 会话管理     │ ReAct 循环   │  │
+│  └──────────────┴──────────────┴──────────────┴──────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                       基础设施层 (infra/)                        │
+│  ┌──────────────┬──────────────┬──────────────┬──────────────┐  │
+│  │    llm/      │   vector/    │   storage/   │     ide/     │  │
+│  │  LLM 调用    │ BGE+JVector  │ Markdown+H2  │ IntelliJ 集成│  │
+│  └──────────────┴──────────────┴──────────────┴──────────────┘  │
+├─────────────────────────────────────────────────────────────────┤
+│                         工具层 (tools/)                          │
+│  file/ | search/ | code/ | shell/ | skill/ | batch/             │
+├─────────────────────────────────────────────────────────────────┤
+│                         共享层 (shared/)                         │
+│  model/ | config/ | util/                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 目录结构（目标架构）
+
+```
+src/main/kotlin/com/smancode/sman/
+│
+├── app/                        # 应用层
+│   ├── SmanPlugin.kt          # 插件入口
+│   ├── SmanApplication.kt     # 生命周期管理
+│   └── ServiceLocator.kt      # 服务定位器
+│
+├── domain/                     # 领域层（核心业务逻辑）
+│   │
+│   ├── puzzle/                # 【核心】自迭代项目理解系统
+│   │   ├── Puzzle.kt          # 拼图块模型
+│   │   ├── PuzzleType.kt      # 拼图类型（结构/技术/入口/数据/流程/规则）
+│   │   ├── PuzzleCoordinator.kt  # 协调器（主入口）
+│   │   ├── GapDetector.kt     # 空白发现
+│   │   ├── TaskScheduler.kt   # 任务调度
+│   │   └── analyzer/          # 各类型分析器
+│   │
+│   ├── memory/                # 用户习惯学习系统
+│   │   ├── Memory.kt          # 记忆模型
+│   │   ├── MemoryService.kt   # 记忆服务
+│   │   ├── FeedbackCollector.kt  # 反馈收集
+│   │   └── PreferenceInjector.kt # 偏好注入
+│   │
+│   ├── session/               # 会话管理
+│   │   ├── Session.kt
+│   │   ├── SessionManager.kt
+│   │   └── ContextCompactor.kt
+│   │
+│   └── react/                 # ReAct 循环
+│       ├── ReactLoop.kt       # 主循环
+│       ├── ToolExecutor.kt    # 工具执行
+│       ├── ResponseParser.kt  # 响应解析
+│       └── DoomLoopGuard.kt   # 死循环防护
+│
+├── infra/                      # 基础设施层
+│   ├── llm/                   # LLM 调用
+│   │   ├── LlmClient.kt
+│   │   └── StreamHandler.kt
+│   │
+│   ├── vector/                # 向量存储
+│   │   ├── BgeM3Client.kt     # BGE-M3 向量化
+│   │   ├── RerankerClient.kt  # Reranker 重排
+│   │   ├── JVectorStore.kt    # JVector 索引
+│   │   └── TieredCache.kt     # 三层缓存
+│   │
+│   ├── storage/               # 持久化
+│   │   ├── MarkdownStore.kt   # Markdown 存储
+│   │   ├── PuzzleRepository.kt
+│   │   └── MemoryRepository.kt
+│   │
+│   └── ide/                   # IntelliJ 集成
+│       ├── SmanToolWindow.kt
+│       ├── ChatPanel.kt
+│       └── SettingsDialog.kt
+│
+├── tools/                      # 工具层
+│   ├── file/                  # 文件操作
+│   │   ├── ReadFileTool.kt
+│   │   ├── EditFileTool.kt
+│   │   └── FindFileTool.kt
+│   ├── search/                # 搜索相关
+│   │   ├── GrepTool.kt
+│   │   ├── SemanticSearchTool.kt
+│   │   └── WebSearchTool.kt
+│   ├── code/                  # 代码分析
+│   │   ├── CallChainTool.kt
+│   │   └── AnalyzeFlowTool.kt
+│   └── ToolRegistry.kt        # 工具注册表
+│
+└── shared/                     # 共享层
+    ├── model/                 # 数据模型
+    │   ├── Message.kt
+    │   ├── Part.kt
+    │   └── parts/
+    ├── config/                # 配置
+    │   ├── SmanConfig.kt
+    │   └── LlmConfig.kt
+    └── util/                  # 工具类
+```
 
 ---
 
@@ -25,10 +137,10 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 | 平台 | IntelliJ IDEA 2024.1+ |
 | HTTP | OkHttp 4.12.0 |
 | JSON | Jackson 2.16.0 + kotlinx.serialization 1.6.0 |
-| 数据库 | H2 2.2.224 + JVector 3.0.0 + HikariCP |
+| 向量存储 | JVector 3.0.0 + 三层缓存 |
 | 向量化 | BGE-M3 (外部服务) |
 | 重排序 | BGE-Reranker-v2-m3 (外部服务) |
-| Web 搜索 | Exa AI MCP 服务 |
+| 持久化 | Markdown 文件 + H2 (可选) |
 | 测试 | JUnit 5 + MockK |
 
 ---
@@ -46,149 +158,71 @@ SmanCode 是一个 IntelliJ IDEA 插件，实现了基于 ReAct 模式的 AI 编
 ./gradlew test
 
 # 运行指定测试
-./gradlew test --tests "*LlmCodeUnderstandingServiceTest*"
-
-# 仅编译
-./gradlew compileKotlin
-
-# 插件验证
-./gradlew verifyPluginConfiguration
-
-# 运行验证 Web 服务
-./gradlew runVerification -Pverification.port=8080
-```
-
----
-
-## 目录结构
-
-```
-src/main/kotlin/com/smancode/sman/
-├── analysis/           # 项目分析模块
-│   ├── coordination/   # 代码向量化协调器
-│   ├── database/       # 向量存储（JVector + H2 + 三层缓存）
-│   ├── executor/       # 分析任务执行器（AnalysisLoopExecutor）
-│   ├── guard/          # 死循环防护（DoomLoopGuard, 指数退避, 去重）
-│   ├── llm/            # LLM 代码理解服务
-│   ├── loop/           # 项目分析主循环（ProjectAnalysisLoop）
-│   ├── model/          # 分析模型（AnalysisType, AnalysisState, ProjectMap）
-│   ├── paths/          # 项目路径管理
-│   ├── persistence/    # 分析状态持久化
-│   ├── retry/          # 重试机制（熔断器, 并发限制, 失败记录）
-│   ├── scheduler/      # 后台分析调度器
-│   ├── service/        # 向量化和上下文注入服务
-│   ├── storage/        # 向量仓储
-│   └── vectorization/  # BGE-M3 向量化客户端
-├── config/             # 配置管理（SmanConfig, SmanCodeProperties）
-├── ide/                # IntelliJ 集成
-│   ├── action/         # IDE 动作
-│   ├── component/      # UI 组件
-│   ├── renderer/       # 消息渲染器
-│   ├── service/        # IDE 服务（WebSocket, 代码编辑, Git 提交）
-│   └── ui/             # 设置对话框、聊天面板
-├── model/              # 数据模型（Message, Part, Session）
-│   ├── context/        # 上下文模型
-│   ├── message/        # 消息模型
-│   ├── part/           # Part 类型（Goal, Progress, Reasoning, SubTask, Text, Todo, Tool）
-│   └── session/        # 会话模型
-├── skill/              # 技能系统
-│   ├── SkillInfo.kt    # 技能信息模型
-│   ├── SkillLoader.kt  # 技能加载器（从文件系统加载 SKILL.md）
-│   ├── SkillRegistry.kt# 技能注册中心
-│   └── SkillTool.kt    # 技能工具（允许 LLM 加载专业化技能）
-├── smancode/           # ReAct 循环核心
-│   ├── core/           # SmanLoop（主循环）、上下文压缩、子任务执行
-│   ├── llm/            # LLM 服务
-│   └── prompt/         # 提示词管理（动态注入、分发器、加载器）
-├── tools/              # 工具系统
-│   ├── ide/            # 工具实现
-│   │   ├── LocalToolAdapter.kt       # 本地工具适配器
-│   │   ├── LocalExpertConsultService.kt # 本地专家咨询服务
-│   │   └── WebSearchTool.kt          # Web 搜索工具（Exa AI）
-│   └── *.kt            # 工具基类、注册表、执行器
-├── util/               # 工具类
-└── verification/       # 验证 Web 服务
-
-src/main/resources/
-├── META-INF/plugin.xml    # 插件描述符
-├── db/analysis-schema.sql # 分析数据库表结构
-├── sman.properties        # 配置文件
-├── prompts/               # 提示词模板
-│   ├── analysis/          # 分析相关提示词（6 种分析类型）
-│   ├── common/            # 通用提示词
-│   └── tools/             # 工具提示词
-└── templates/             # 模板文件
+./gradlew test --tests "*PuzzleCoordinatorTest*"
 ```
 
 ---
 
 ## 核心模块说明
 
-### 1. ReAct 循环（SmanLoop）
+### 1. 自迭代项目理解（domain/puzzle/）
 
-位置：`smancode/core/SmanLoop.kt`
+**核心理念**：项目理解 = 拼图游戏，Agent 在后台持续填充拼图。
 
-核心流程：
-1. 接收用户消息
-2. 检查上下文压缩需求
-3. 调用 LLM 流式处理
-4. 解析工具调用（JSON 提取支持多级降级）
-5. 在子会话中执行工具（上下文隔离）
-6. 推送 Part 到前端
+**拼图类型**：
+| 类型 | 描述 | 输出文件 |
+|------|------|----------|
+| 结构拼图 | 项目结构、模块划分 | `PUZZLE_STRUCTURE.md` |
+| 技术拼图 | 技术栈、依赖关系 | `PUZZLE_TECH.md` |
+| 入口拼图 | API 入口、调用入口 | `PUZZLE_API.md` |
+| 数据拼图 | 数据模型、表关系 | `PUZZLE_DATA.md` |
+| **流程拼图** | 业务流程、调用链 | `PUZZLE_FLOW_*.md` |
+| 规则拼图 | 业务规则、约束条件 | `PUZZLE_RULES.md` |
 
-特性：
-- **Doom Loop 检测**：自动检测重复工具调用，防止无限循环
-- **智能摘要**：历史工具只发送摘要，新工具发送完整结果并要求 LLM 生成摘要
-- **多级 JSON 提取**：从直接解析到 LLM 辅助修复，确保最大容错
+**自迭代循环**：
+```
+发现空白 → 选择任务 → 执行分析 → 验证结果 → 更新拼图 → 发现新空白
+```
 
-### 2. 技能系统（Skill）
+### 2. 用户习惯学习（domain/memory/）
 
-位置：`skill/`
+**核心流程**：
+```
+用户交互 → 反馈收集 → 偏好提取 → 存储到 MEMORY.md → 下次注入
+```
 
-允许加载领域特定技能，扩展 AI 能力：
+**记忆文件**：`{project}/.sman/MEMORY.md`
 
-| 组件 | 职责 |
+### 3. 数据存储（一切基于 Markdown）
+
+```
+{projectPath}/.sman/
+├── MEMORY.md              # 项目记忆（用户可见可编辑）
+├── puzzles/               # 拼图块存储
+│   ├── status.json        # 拼图状态汇总
+│   ├── PUZZLE_*.md        # 各类型拼图
+│   └── flow/              # 流程拼图详情
+├── queue/                 # 任务队列
+│   └── pending.json
+└── cache/                 # 缓存（不入 Git）
+    ├── md5.json
+    └── vectors/           # 向量索引（可重建）
+```
+
+### 4. 可用工具
+
+| 工具 | 描述 |
 |------|------|
-| `SkillLoader` | 从文件系统加载 SKILL.md |
-| `SkillRegistry` | 管理所有已加载技能 |
-| `SkillTool` | 允许 LLM 加载专业化技能 |
-
-Skill 加载路径（优先级从高到低）：
-1. `<project>/.sman/skills/<name>/SKILL.md`
-2. `<project>/.claude/skills/<name>/SKILL.md`
-3. `~/.claude/skills/<name>/SKILL.md`
-
-### 3. 三层缓存架构
-
-```
-L1 (Hot):  内存 LRU 缓存（~500 entries）
-L2 (Warm): JVector 向量索引（磁盘持久化）
-L3 (Cold): H2 数据库（持久存储）
-```
-
-配置项：
-```properties
-vector.db.type=JVECTOR
-vector.db.l1.cache.size=500
-```
-
-### 4. 工具系统
-
-可用工具：
-| 工具名 | 描述 |
-|--------|------|
 | `read_file` | 读取文件内容 |
-| `grep_file` | 正则搜索 |
-| `find_file` | 文件模式搜索 |
+| `edit_file` | 编辑文件 |
+| `find_file` | 查找文件 |
+| `grep` | 正则搜索 |
+| `semantic_search` | 语义搜索（BGE + Reranker） |
 | `call_chain` | 调用链分析 |
-| `extract_xml` | 提取 XML 标签内容 |
-| `apply_change` | 代码修改 |
-| `expert_consult` | 语义搜索（BGE + Reranker） |
-| `web_search` | Web 搜索（Exa AI） |
+| `analyze_flow` | 流程分析（新增） |
+| `web_search` | Web 搜索 |
 | `skill` | 加载技能 |
-| `batch` | 批量执行工具 |
-
-工具注册：手动注册，无 Spring DI
+| `batch` | 批量执行 |
 
 ---
 
@@ -196,99 +230,66 @@ vector.db.l1.cache.size=500
 
 配置文件：`src/main/resources/sman.properties`
 
-### LLM 配置
 ```properties
+# LLM 配置
 llm.api.key=${LLM_API_KEY}
 llm.base.url=https://open.bigmodel.cn/api/coding/paas/v4
 llm.model.name=GLM-5
-llm.response.max.tokens=28192
-```
 
-### ReAct 配置
-```properties
-react.max.steps=25
-react.enable.streaming=true
-```
-
-### 上下文压缩
-```properties
-compaction.max.tokens=156000
-compaction.threshold=128000
-```
-
-### BGE-M3 / Reranker
-```properties
+# BGE-M3 向量化
 bge.endpoint=http://localhost:8000
+
+# Reranker
 reranker.enabled=true
 reranker.base.url=http://localhost:8001/v1
-```
 
-### WebSearch
-```properties
+# WebSearch
 websearch.enabled=true
-websearch.timeout.seconds=25
 ```
-
-配置优先级：用户设置 > 环境变量 > 配置文件 > 默认值
-
----
-
-## 数据存储
-
-每个项目独立存储，路径：`{projectPath}/.sman/`
-
-```
-{projectPath}/.sman/
-├── analysis.mv.db       # H2 数据库
-├── base/                # 基础分析结果
-├── cache/               # MD5 缓存
-└── md/
-    ├── classes/         # 类级分析结果
-    └── reports/         # 项目级分析结果
-```
-
-### 数据库表
-
-- `analysis_loop_state` - 分析循环状态（断点续传）
-- `analysis_result` - 分析结果存储
 
 ---
 
 ## 开发规范
 
-### 关键设计决策
+### 代码规范
 
-1. **无 Spring DI**：工具采用手动注册模式
-2. **三层缓存**：防止大型项目内存溢出
-3. **增量更新**：基于 MD5 的文件变更检测
-4. **上下文隔离**：子会话执行工具，防止 Token 爆炸
-5. **流式优先**：实时输出显示
-6. **语义搜索直接返回**：`expert_consult` 返回 BGE 结果，不经过 LLM 处理
-7. **断点续传**：状态持久化到 H2，IDEA 重启后自动恢复
+| 规范 | 限制 |
+|------|------|
+| 单文件行数 | ≤ 300 行（Kotlin） |
+| 单目录文件数 | ≤ 8 个 |
+| 目录层级 | ≤ 3 层 |
 
-### 代码风格
+### 命名规范
 
-- 单一职责原则
-- 动态语言 300 行 / 静态语言 500 行限制
-- 单文件夹不超过 8 个文件
-
----
-
-## 环境设置
-
-```bash
-# 设置 API Key
-export LLM_API_KEY=your_api_key_here
-
-# 启动 BGE-M3 服务（如需语义搜索）
-# docker run -p 8000:8000 ...
-
-# 启动 Reranker 服务（如需重排序）
-# docker run -p 8001:8001 ...
-```
+| 类型 | 命名 |
+|------|------|
+| 服务 | `*Service` |
+| 仓库 | `*Repository` |
+| 工具 | `*Tool` |
+| 协调器 | `*Coordinator` |
 
 ---
 
-## 测试报告
+## 相关文档
 
-运行测试后查看：`build/reports/tests/test/index.html`
+| 文档 | 内容 |
+|------|------|
+| `docs/项目战略分析-三项目对比.md` | 与 OpenCode/OpenClaw 对比 |
+| `docs/核心能力-自迭代项目理解系统.md` | Phase 2 详细设计 |
+| `docs/设计方案-Markdown驱动架构.md` | Phase 1 详细设计 |
+| `docs/设计方案-用户习惯学习.md` | Phase 3 详细设计 |
+| `docs/阶段0-项目结构重构方案.md` | 目录结构重构方案 |
+
+---
+
+## 实施路线
+
+| Phase | 内容 | 时间 |
+|-------|------|------|
+| 0 | 目录结构重构 | 1 周 |
+| 1 | Markdown 数据层 | 2-3 周 |
+| 2 | 自迭代项目理解 | 4-5 周 |
+| 3 | 用户习惯学习 | 3-4 周 |
+| 4 | Edit 容错 | 2 周 |
+| 5 | 主动服务 | 2-3 周 |
+| 6 | 沙盒验证（最低优先级） | 3-4 周 |

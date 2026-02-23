@@ -48,8 +48,8 @@ class DynamicLlmConfigTest {
         )
 
         // 应该使用配置文件中的值
-        // smanagent.properties: llm.base.url=https://open.bigmodel.cn/api/coding/paas/v4
-        // smanagent.properties: llm.model.name=GLM-4.7
+        // sman.properties: llm.base.url=https://open.bigmodel.cn/api/coding/paas/v4
+        // sman.properties: llm.model.name=GLM-5
         val baseUrl = SmanConfig.llmBaseUrl
         val modelName = SmanConfig.llmModelName
 
@@ -58,7 +58,7 @@ class DynamicLlmConfigTest {
             "BaseUrl 应该使用配置文件值: $baseUrl"
         )
         assertTrue(
-            modelName == "GLM-4.7",
+            modelName == "GLM-5",
             "ModelName 应该使用配置文件值: $modelName"
         )
     }
@@ -78,7 +78,7 @@ class DynamicLlmConfigTest {
         assertEquals("my_key", SmanConfig.llmApiKey)
         assertEquals("https://custom.api.com", SmanConfig.llmBaseUrl)
         // 模型名为空，应该使用配置文件值
-        assertEquals("GLM-4.7", SmanConfig.llmModelName)
+        assertEquals("GLM-5", SmanConfig.llmModelName)
     }
 
     @Test

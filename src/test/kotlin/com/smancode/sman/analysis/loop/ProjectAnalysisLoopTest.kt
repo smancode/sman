@@ -4,11 +4,16 @@ import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.executor.AnalysisLoopExecutor
+import com.smancode.sman.analysis.executor.AnalysisLoopResult
 import com.smancode.sman.analysis.executor.AnalysisOutputValidator
 import com.smancode.sman.analysis.model.*
 import com.smancode.sman.analysis.persistence.AnalysisStateRepository
 import com.smancode.sman.analysis.util.Md5FileTracker
 import com.smancode.sman.analysis.guard.DoomLoopGuard
+import com.smancode.sman.smancode.llm.LlmService
+import com.smancode.sman.tools.ToolExecutor
+import com.smancode.sman.tools.ToolRegistry
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
@@ -78,15 +83,47 @@ class ProjectAnalysisLoopTest {
         stateRepository.close()
     }
 
+    /**
+     * 创建一个 mock 的执行器，返回模拟的分析结果
+     */
     private fun createMockExecutor(): AnalysisLoopExecutor {
-        // 创建一个简化的执行器用于测试
-        // 在实际测试中，可以使用 mock 或真实的执行器
+        val toolRegistry = mockk<ToolRegistry>(relaxed = true)
+        val toolExecutor = mockk<ToolExecutor>(relaxed = true)
+        val doomLoopGuard = DoomLoopGuard.createDefault()
+        val llmService = mockk<LlmService>()
+        val validator = AnalysisOutputValidator()
+
+        // 模拟 LLM 返回工具调用和报告
+        val toolCallResponse = """{"parts": [{"type": "tool", "toolName": "list_directory", "parameters": {"path": "/src"}}]}"""
+        val reportResponse = """
+            # 项目结构分析
+
+            ## 项目概述
+            这是一个测试项目。
+
+            ## 目录结构
+            - src/main/kotlin: 源代码目录
+
+            ## 模块划分
+            - core: 核心模块
+
+            ## 依赖管理
+            使用 Gradle 构建工具。
+        """.trimIndent()
+
+        every { llmService.simpleRequest(any()) } returnsMany listOf(toolCallResponse, reportResponse)
+
+        // 模拟工具执行成功
+        every { toolExecutor.execute(any(), any(), any()) } returns mockk(relaxed = true) {
+            every { data } returns "目录列表: src/main/kotlin"
+        }
+
         return AnalysisLoopExecutor(
-            toolRegistry = mockk(relaxed = true),
-            toolExecutor = mockk(relaxed = true),
-            doomLoopGuard = DoomLoopGuard.createDefault(),
-            llmService = mockk(relaxed = true),
-            validator = AnalysisOutputValidator()
+            toolRegistry = toolRegistry,
+            toolExecutor = toolExecutor,
+            doomLoopGuard = doomLoopGuard,
+            llmService = llmService,
+            validator = validator
         )
     }
 

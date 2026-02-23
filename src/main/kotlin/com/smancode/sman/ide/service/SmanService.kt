@@ -19,7 +19,7 @@ import com.smancode.sman.model.session.Session
 import com.smancode.sman.model.session.SessionStatus
 import com.smancode.sman.smancode.core.ContextCompactor
 import com.smancode.sman.smancode.core.ResultSummarizer
-import com.smancode.sman.smancode.core.SmanLoop
+import com.smancode.sman.domain.react.ReactLoop as SmanLoop
 import com.smancode.sman.smancode.core.StreamingNotificationHandler
 import com.smancode.sman.smancode.core.SubTaskExecutor
 import com.smancode.sman.smancode.llm.LlmService

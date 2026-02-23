@@ -20,11 +20,11 @@ class ConfigPriorityTest {
         val baseUrl = SmanConfig.llmBaseUrl
         val modelName = SmanConfig.llmModelName
 
-        // 配置文件: smanagent.properties
+        // 配置文件: sman.properties
         // llm.base.url=https://open.bigmodel.cn/api/coding/paas/v4
-        // llm.model.name=GLM-4.7
+        // llm.model.name=GLM-5
         assertEquals("https://open.bigmodel.cn/api/coding/paas/v4", baseUrl)
-        assertEquals("GLM-4.7", modelName)
+        assertEquals("GLM-5", modelName)
     }
 
     @Test
@@ -59,7 +59,7 @@ class ConfigPriorityTest {
 
         // 应该使用配置文件中的值
         assertEquals("https://open.bigmodel.cn/api/coding/paas/v4", baseUrl)
-        assertEquals("GLM-4.7", modelName)
+        assertEquals("GLM-5", modelName)
     }
 
     @Test
