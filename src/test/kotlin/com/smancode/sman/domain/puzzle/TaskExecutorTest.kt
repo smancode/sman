@@ -18,6 +18,8 @@ class TaskExecutorTest {
     private lateinit var taskQueueStore: TaskQueueStore
     private lateinit var puzzleStore: PuzzleStore
     private lateinit var checksumCalculator: ChecksumCalculator
+    private lateinit var llmAnalyzer: LlmAnalyzer
+    private lateinit var fileReader: FileReader
     private lateinit var taskExecutor: TaskExecutor
 
     @BeforeEach
@@ -25,7 +27,94 @@ class TaskExecutorTest {
         taskQueueStore = mockk(relaxed = true)
         puzzleStore = mockk(relaxed = true)
         checksumCalculator = mockk(relaxed = true)
-        taskExecutor = TaskExecutor(taskQueueStore, puzzleStore, checksumCalculator)
+        llmAnalyzer = mockk()
+        fileReader = mockk()
+        taskExecutor = TaskExecutor(
+            taskQueueStore = taskQueueStore,
+            puzzleStore = puzzleStore,
+            checksumCalculator = checksumCalculator,
+            llmAnalyzer = llmAnalyzer,
+            fileReader = fileReader
+        )
+    }
+
+    // ========== LLM 分析集成测试 ==========
+
+    @Nested
+    @DisplayName("LLM 分析集成测试")
+    inner class LlmIntegrationTests {
+
+        @Test
+        @DisplayName("execute - 应调用 LlmAnalyzer 进行分析")
+        fun `execute should call LlmAnalyzer`() = runBlocking {
+            val task = createTestTask(
+                status = TaskStatus.PENDING,
+                target = "src/main/kotlin/User.kt"
+            )
+            val analysisResult = AnalysisResult(
+                title = "用户模块分析",
+                content = "# 用户模块\n\n包含用户管理逻辑。",
+                tags = listOf("user", "kotlin"),
+                confidence = 0.85,
+                sourceFiles = listOf("src/main/kotlin/User.kt")
+            )
+
+            every { checksumCalculator.hasChanged(any(), any()) } returns true
+            every { fileReader.readWithContext("src/main/kotlin/User.kt") } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze("src/main/kotlin/User.kt", any()) } returns analysisResult
+            every { puzzleStore.save(any()) } returns Result.success(Unit)
+
+            val result = taskExecutor.execute(task)
+
+            assertTrue(result is ExecutionResult.Success)
+            coVerify { llmAnalyzer.analyze("src/main/kotlin/User.kt", any()) }
+        }
+
+        @Test
+        @DisplayName("execute - 应使用分析结果创建 Puzzle")
+        fun `execute should create Puzzle from analysis result`() = runBlocking {
+            val task = createTestTask(
+                status = TaskStatus.PENDING,
+                target = "src/main/kotlin/Order.kt"
+            )
+            val analysisResult = AnalysisResult(
+                title = "订单模块",
+                content = "# 订单处理\n\n订单业务逻辑。",
+                tags = listOf("order", "business"),
+                confidence = 0.9,
+                sourceFiles = listOf("src/main/kotlin/Order.kt")
+            )
+
+            var savedPuzzle: com.smancode.sman.shared.model.Puzzle? = null
+            every { checksumCalculator.hasChanged(any(), any()) } returns true
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns analysisResult
+            every { puzzleStore.save(any()) } answers {
+                savedPuzzle = firstArg() as com.smancode.sman.shared.model.Puzzle
+                Result.success(Unit)
+            }
+
+            taskExecutor.execute(task)
+
+            assertNotNull(savedPuzzle)
+            assertEquals("订单模块", savedPuzzle?.content?.lines()?.firstOrNull { it.startsWith("#") }?.removePrefix("#")?.trim() ?: "订单模块")
+            assertEquals(0.9, savedPuzzle?.confidence)
+        }
+
+        @Test
+        @DisplayName("execute - LLM 分析失败应返回 Failed")
+        fun `execute should return Failed on LLM analysis error`() = runBlocking {
+            val task = createTestTask(status = TaskStatus.PENDING)
+
+            every { checksumCalculator.hasChanged(any(), any()) } returns true
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } throws AnalysisException("LLM 调用失败")
+
+            val result = taskExecutor.execute(task)
+
+            assertTrue(result is ExecutionResult.Failed)
+            assertTrue((result as ExecutionResult.Failed).error.message?.contains("LLM") == true)
+        }
     }
 
     // ========== 执行流程测试 ==========
@@ -38,9 +127,11 @@ class TaskExecutorTest {
         @DisplayName("execute - PENDING 任务应正常执行")
         fun `execute should run pending task`() = runBlocking {
             val task = createTestTask(status = TaskStatus.PENDING)
-            every { taskQueueStore.findById("task-1") } returns task
+            val analysisResult = createDefaultAnalysisResult()
+
             every { checksumCalculator.hasChanged(any(), any()) } returns true
-            every { puzzleStore.load("puzzle-1") } returns Result.success(null)
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns analysisResult
             every { puzzleStore.save(any()) } returns Result.success(Unit)
 
             val result = taskExecutor.execute(task)
@@ -54,7 +145,6 @@ class TaskExecutorTest {
         @DisplayName("execute - RUNNING 任务应跳过")
         fun `execute should skip running task`() = runBlocking {
             val task = createTestTask(status = TaskStatus.RUNNING)
-            every { taskQueueStore.findById("task-1") } returns task
 
             val result = taskExecutor.execute(task)
 
@@ -66,7 +156,6 @@ class TaskExecutorTest {
         @DisplayName("execute - COMPLETED 任务应跳过")
         fun `execute should skip completed task`() = runBlocking {
             val task = createTestTask(status = TaskStatus.COMPLETED)
-            every { taskQueueStore.findById("task-1") } returns task
 
             val result = taskExecutor.execute(task)
 
@@ -81,13 +170,12 @@ class TaskExecutorTest {
     inner class IdempotencyTests {
 
         @Test
-        @DisplayName("execute - checksum 未变更应跳过")
-        fun `execute should skip when checksum unchanged`() = runBlocking {
+        @DisplayName("execute - checksum 未变更且 Puzzle 完成应跳过")
+        fun `execute should skip when checksum unchanged and puzzle complete`() = runBlocking {
             val task = createTestTask(
                 status = TaskStatus.PENDING,
                 checksum = "sha256:abc123"
             )
-            every { taskQueueStore.findById("task-1") } returns task
             every { checksumCalculator.hasChanged(any<File>(), "sha256:abc123") } returns false
             every { puzzleStore.load("puzzle-1") } returns Result.success(
                 createTestPuzzle(completeness = 0.9)
@@ -106,10 +194,9 @@ class TaskExecutorTest {
                 status = TaskStatus.PENDING,
                 checksum = "sha256:old"
             )
-            every { taskQueueStore.findById("task-1") } returns task
             every { checksumCalculator.hasChanged(any<File>(), "sha256:old") } returns true
-            every { checksumCalculator.calculate(any<File>()) } returns "sha256:new"
-            every { puzzleStore.load("puzzle-1") } returns Result.success(null)
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns createDefaultAnalysisResult()
             every { puzzleStore.save(any()) } returns Result.success(Unit)
 
             val result = taskExecutor.execute(task)
@@ -128,8 +215,9 @@ class TaskExecutorTest {
         @DisplayName("execute - 执行失败应返回 Failed")
         fun `execute should return failed on error`() = runBlocking {
             val task = createTestTask(status = TaskStatus.PENDING)
-            every { taskQueueStore.update(any()) } returns Unit
             every { checksumCalculator.hasChanged(any(), any()) } returns true
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns createDefaultAnalysisResult()
             every { puzzleStore.save(any()) } throws RuntimeException("Save failed")
 
             val result = taskExecutor.execute(task)
@@ -171,14 +259,13 @@ class TaskExecutorTest {
         @DisplayName("execute - 执行前应标记 RUNNING")
         fun `execute should mark running before execution`() = runBlocking {
             val task = createTestTask(status = TaskStatus.PENDING)
-            every { taskQueueStore.findById("task-1") } returns task
             every { checksumCalculator.hasChanged(any(), any()) } returns true
-            every { puzzleStore.load("puzzle-1") } returns Result.success(null)
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns createDefaultAnalysisResult()
             every { puzzleStore.save(any()) } returns Result.success(Unit)
 
             taskExecutor.execute(task)
 
-            // 验证状态变更顺序：PENDING -> RUNNING -> COMPLETED
             verify {
                 taskQueueStore.update(match {
                     it.status == TaskStatus.RUNNING && it.startedAt != null
@@ -190,9 +277,9 @@ class TaskExecutorTest {
         @DisplayName("execute - 成功后应标记 COMPLETED")
         fun `execute should mark completed on success`() = runBlocking {
             val task = createTestTask(status = TaskStatus.PENDING)
-            every { taskQueueStore.findById("task-1") } returns task
             every { checksumCalculator.hasChanged(any(), any()) } returns true
-            every { puzzleStore.load("puzzle-1") } returns Result.success(null)
+            every { fileReader.readWithContext(any()) } returns AnalysisContext.empty()
+            coEvery { llmAnalyzer.analyze(any(), any()) } returns createDefaultAnalysisResult()
             every { puzzleStore.save(any()) } returns Result.success(Unit)
 
             taskExecutor.execute(task)
@@ -247,6 +334,16 @@ class TaskExecutorTest {
             confidence = 0.8,
             lastUpdated = Instant.now(),
             filePath = ".sman/puzzles/$id.md"
+        )
+    }
+
+    private fun createDefaultAnalysisResult(): AnalysisResult {
+        return AnalysisResult(
+            title = "测试分析",
+            content = "# 测试\n\n测试内容",
+            tags = listOf("test"),
+            confidence = 0.8,
+            sourceFiles = listOf("Test.kt")
         )
     }
 }

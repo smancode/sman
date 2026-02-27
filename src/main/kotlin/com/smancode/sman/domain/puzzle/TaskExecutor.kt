@@ -24,14 +24,16 @@ sealed class ExecutionResult {
  * 任务执行器
  *
  * 负责执行分析任务：
- * - 调用 LLM 分析代码（当前简化实现）
+ * - 调用 LlmAnalyzer 分析代码
  * - 生成/更新 Puzzle
  * - 支持幂等执行
  */
 class TaskExecutor(
     private val taskQueueStore: TaskQueueStore,
     private val puzzleStore: PuzzleStore,
-    private val checksumCalculator: ChecksumCalculator
+    private val checksumCalculator: ChecksumCalculator,
+    private val llmAnalyzer: LlmAnalyzer,
+    private val fileReader: FileReader
 ) {
     private val logger = LoggerFactory.getLogger(TaskExecutor::class.java)
 
@@ -97,11 +99,17 @@ class TaskExecutor(
             val runningTask = task.start()
             taskQueueStore.update(runningTask)
 
-            // 执行分析
-            val result = performAnalysis(task)
+            // 准备上下文
+            val context = fileReader.readWithContext(task.target)
 
-            // 更新 Puzzle
-            puzzleStore.save(result)
+            // 调用 LLM 分析
+            val analysisResult = llmAnalyzer.analyze(task.target, context)
+
+            // 构建 Puzzle
+            val puzzle = buildPuzzle(task.puzzleId, analysisResult)
+
+            // 保存 Puzzle
+            puzzleStore.save(puzzle)
 
             // 标记任务为 COMPLETED
             val completedTask = runningTask.complete()
@@ -110,8 +118,21 @@ class TaskExecutor(
             logger.info("任务执行完成: id={}", task.id)
             return ExecutionResult.Success
 
+        } catch (e: AnalysisException) {
+            logger.error("LLM 分析失败: id={}, error={}", task.id, e.message)
+
+            // 标记任务为 FAILED
+            val failedTask = task.copy(
+                status = TaskStatus.FAILED,
+                completedAt = Instant.now(),
+                errorMessage = e.message
+            )
+            taskQueueStore.update(failedTask)
+
+            return ExecutionResult.Failed(e)
+
         } catch (e: Exception) {
-            logger.error("任务执行失败: id={}, error={}", task.id, e.message)
+            logger.error("任务执行失败: id={}, error={}", task.id, e.message, e)
 
             // 标记任务为 FAILED
             val failedTask = task.copy(
@@ -125,78 +146,38 @@ class TaskExecutor(
         }
     }
 
-    // 私有方法
-
-    private fun performAnalysis(task: AnalysisTask): Puzzle {
-        // 简化实现：生成基础 Puzzle 内容
-        // TODO: 集成 LLM 进行深度分析
-
-        val content = when (task.type) {
-            TaskType.ANALYZE_API -> """
-                # API Analysis: ${task.target}
-
-                ## Endpoints
-                Analysis pending - LLM integration required.
-
-                ## Related Files
-                ${task.relatedFiles.joinToString("\n") { "- $it" }}
-            """.trimIndent()
-
-            TaskType.ANALYZE_STRUCTURE -> """
-                # Structure Analysis: ${task.target}
-
-                ## Modules
-                Analysis pending - LLM integration required.
-            """.trimIndent()
-
-            TaskType.ANALYZE_DATA -> """
-                # Data Analysis: ${task.target}
-
-                ## Entities
-                Analysis pending - LLM integration required.
-            """.trimIndent()
-
-            TaskType.ANALYZE_FLOW -> """
-                # Flow Analysis: ${task.target}
-
-                ## Steps
-                Analysis pending - LLM integration required.
-            """.trimIndent()
-
-            TaskType.ANALYZE_RULE -> """
-                # Rule Analysis: ${task.target}
-
-                ## Business Rules
-                Analysis pending - LLM integration required.
-            """.trimIndent()
-
-            TaskType.UPDATE_PUZZLE -> {
-                // 更新模式：加载现有 Puzzle 并更新
-                val existing = puzzleStore.load(task.puzzleId).getOrNull()
-                existing?.content ?: "# Updated Puzzle\n\nContent pending."
-            }
-        }
-
+    /**
+     * 从分析结果构建 Puzzle
+     */
+    private fun buildPuzzle(puzzleId: String, result: AnalysisResult): Puzzle {
         return Puzzle(
-            id = task.puzzleId,
-            type = mapTaskTypeToPuzzleType(task.type),
-            status = PuzzleStatus.IN_PROGRESS,
-            content = content,
-            completeness = 0.5,  // 简化实现，默认 50%
-            confidence = 0.7,
+            id = puzzleId,
+            type = inferPuzzleType(result.tags),
+            status = PuzzleStatus.COMPLETED,
+            content = "# ${result.title}\n\n${result.content}",
+            completeness = result.confidence,
+            confidence = result.confidence,
             lastUpdated = Instant.now(),
-            filePath = ".sman/puzzles/${task.puzzleId}.md"
+            filePath = ".sman/puzzles/$puzzleId.md"
         )
     }
 
-    private fun mapTaskTypeToPuzzleType(taskType: TaskType): PuzzleType {
-        return when (taskType) {
-            TaskType.ANALYZE_STRUCTURE -> PuzzleType.STRUCTURE
-            TaskType.ANALYZE_API -> PuzzleType.API
-            TaskType.ANALYZE_DATA -> PuzzleType.DATA
-            TaskType.ANALYZE_FLOW -> PuzzleType.FLOW
-            TaskType.ANALYZE_RULE -> PuzzleType.RULE
-            TaskType.UPDATE_PUZZLE -> PuzzleType.API  // 默认
+    /**
+     * 从标签推断 Puzzle 类型
+     *
+     * 不再硬编码类型，而是从 LLM 生成的标签中推断
+     */
+    private fun inferPuzzleType(tags: List<String>): PuzzleType {
+        val lowerTags = tags.map { it.lowercase() }
+
+        return when {
+            lowerTags.any { it in listOf("api", "rest", "controller", "endpoint") } -> PuzzleType.API
+            lowerTags.any { it in listOf("entity", "data", "model", "table", "schema") } -> PuzzleType.DATA
+            lowerTags.any { it in listOf("flow", "process", "workflow", "pipeline") } -> PuzzleType.FLOW
+            lowerTags.any { it in listOf("rule", "validation", "constraint", "policy") } -> PuzzleType.RULE
+            lowerTags.any { it in listOf("structure", "architecture", "module", "package") } -> PuzzleType.STRUCTURE
+            lowerTags.any { it in listOf("tech", "technology", "framework", "library", "dependency") } -> PuzzleType.TECH_STACK
+            else -> PuzzleType.STRUCTURE // 默认类型
         }
     }
 }

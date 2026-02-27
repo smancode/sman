@@ -3,7 +3,6 @@ package com.smancode.sman.domain.puzzle
 import com.smancode.sman.infra.storage.PuzzleStore
 import org.slf4j.LoggerFactory
 import java.time.Instant
-import java.util.UUID
 
 /**
  * 触发类型枚举
@@ -192,44 +191,10 @@ class PuzzleCoordinator(
     }
 
     private fun gapToTask(gap: Gap): AnalysisTask {
-        return AnalysisTask.create(
-            id = UUID.randomUUID().toString(),
-            type = mapGapTypeToTaskType(gap.type),
-            target = gap.relatedFiles.firstOrNull() ?: "unknown",
-            puzzleId = "${gap.puzzleType.name.lowercase()}-${gap.relatedFiles.firstOrNull()?.hashCode() ?: 0}",
-            priority = gap.priority,
-            relatedFiles = gap.relatedFiles
-        )
+        return TaskGapMapper.gapToTask(gap)
     }
 
     private fun gapFromTask(task: AnalysisTask): Gap {
-        return Gap(
-            type = GapType.INCOMPLETE,
-            puzzleType = mapTaskTypeToPuzzleType(task.type),
-            description = task.target,
-            priority = task.priority,
-            relatedFiles = task.relatedFiles,
-            detectedAt = Instant.now()
-        )
-    }
-
-    private fun mapGapTypeToTaskType(gapType: GapType): TaskType {
-        return when (gapType) {
-            GapType.LOW_COMPLETENESS, GapType.INCOMPLETE -> TaskType.UPDATE_PUZZLE
-            GapType.FILE_CHANGE_TRIGGERED -> TaskType.UPDATE_PUZZLE
-            GapType.USER_QUERY_TRIGGERED -> TaskType.UPDATE_PUZZLE
-            else -> TaskType.ANALYZE_API
-        }
-    }
-
-    private fun mapTaskTypeToPuzzleType(taskType: TaskType): com.smancode.sman.shared.model.PuzzleType {
-        return when (taskType) {
-            TaskType.ANALYZE_STRUCTURE -> com.smancode.sman.shared.model.PuzzleType.STRUCTURE
-            TaskType.ANALYZE_API -> com.smancode.sman.shared.model.PuzzleType.API
-            TaskType.ANALYZE_DATA -> com.smancode.sman.shared.model.PuzzleType.DATA
-            TaskType.ANALYZE_FLOW -> com.smancode.sman.shared.model.PuzzleType.FLOW
-            TaskType.ANALYZE_RULE -> com.smancode.sman.shared.model.PuzzleType.RULE
-            TaskType.UPDATE_PUZZLE -> com.smancode.sman.shared.model.PuzzleType.API
-        }
+        return TaskGapMapper.gapFromTask(task)
     }
 }

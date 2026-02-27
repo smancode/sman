@@ -4,6 +4,8 @@ import com.smancode.sman.analysis.service.ProjectContextInjector
 import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.config.JVectorConfig
+import com.smancode.sman.domain.puzzle.PuzzleIndexBuilder
+import com.smancode.sman.infra.storage.PuzzleStore
 import com.smancode.sman.util.StackTraceUtils
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
@@ -33,6 +35,9 @@ class DynamicPromptInjector(
     private var projectContextInjector: ProjectContextInjector? = null
     private val injectorLock = Any()
 
+    // PuzzleIndexBuilder 实例（懒加载）
+    private var puzzleIndexBuilder: PuzzleIndexBuilder? = null
+
     /**
      * 获取或创建 ProjectContextInjector
      */
@@ -51,6 +56,26 @@ class DynamicPromptInjector(
             }
         }
         return projectContextInjector
+    }
+
+    /**
+     * 获取或创建 PuzzleIndexBuilder
+     */
+    private fun getPuzzleIndexBuilder(): PuzzleIndexBuilder? {
+        if (puzzleIndexBuilder == null) {
+            synchronized(injectorLock) {
+                if (puzzleIndexBuilder == null) {
+                    try {
+                        val puzzleStore = PuzzleStore(projectPath.toString())
+                        puzzleIndexBuilder = PuzzleIndexBuilder(puzzleStore)
+                    } catch (e: Exception) {
+                        logger.warn("创建 PuzzleIndexBuilder 失败", e)
+                        return null
+                    }
+                }
+            }
+        }
+        return puzzleIndexBuilder
     }
 
     /**
@@ -117,6 +142,14 @@ class DynamicPromptInjector(
                 }
             }
 
+            // 注入拼图索引（LLM 驱动的知识注入）
+            val puzzleIndex = loadPuzzleIndex()
+            if (puzzleIndex.isNotEmpty()) {
+                result.puzzleIndex = puzzleIndex
+                result.needPuzzleIndex = true
+                logger.info("会话 {} 已加载拼图索引", sessionKey)
+            }
+
             // 标记该会话已加载
             loadedSessions[sessionKey] = true
 
@@ -147,6 +180,21 @@ class DynamicPromptInjector(
     }
 
     /**
+     * 加载拼图索引
+     *
+     * @return 格式化的拼图索引文本
+     */
+    private fun loadPuzzleIndex(): String {
+        return try {
+            val builder = getPuzzleIndexBuilder() ?: return ""
+            builder.buildIndex(maxTokens = 500)
+        } catch (e: Exception) {
+            logger.warn("加载拼图索引失败", e)
+            ""
+        }
+    }
+
+    /**
      * 清理会话记录（会话结束时调用）
      *
      * @param sessionKey 会话标识
@@ -163,9 +211,11 @@ class DynamicPromptInjector(
         var needComplexTaskWorkflow: Boolean = false
         var needCodingBestPractices: Boolean = false
         var needProjectContext: Boolean = false
+        var needPuzzleIndex: Boolean = false
         var complexTaskWorkflow: String? = null
         var codingBestPractices: String? = null
         var projectContext: String? = null
+        var puzzleIndex: String? = null
 
         /**
          * 获取需要注入的完整内容
@@ -177,6 +227,11 @@ class DynamicPromptInjector(
                 if (needProjectContext && projectContext != null) {
                     sb.append("\n\n## 项目上下文 (Project Context)\n\n")
                     sb.append(projectContext)
+                }
+
+                if (needPuzzleIndex && puzzleIndex != null) {
+                    sb.append("\n\n")
+                    sb.append(puzzleIndex)
                 }
 
                 if (needComplexTaskWorkflow && complexTaskWorkflow != null) {
@@ -199,6 +254,7 @@ class DynamicPromptInjector(
             return (needComplexTaskWorkflow && complexTaskWorkflow != null)
                 || (needCodingBestPractices && codingBestPractices != null)
                 || (needProjectContext && projectContext != null)
+                || (needPuzzleIndex && puzzleIndex != null)
         }
 
         // ========== 属性访问方式（兼容 Java 风格调用） ==========
@@ -220,5 +276,11 @@ class DynamicPromptInjector(
          */
         val isNeedProjectContext: Boolean
             get() = needProjectContext
+
+        /**
+         * 是否需要拼图索引（属性访问方式）
+         */
+        val isNeedPuzzleIndex: Boolean
+            get() = needPuzzleIndex
     }
 }
