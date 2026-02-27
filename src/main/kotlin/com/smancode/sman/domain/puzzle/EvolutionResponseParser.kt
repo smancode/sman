@@ -34,12 +34,37 @@ object EvolutionResponseParser {
         // 简化解析（实际可以使用 JSON 库）
         val hypothesis = extractJsonValue(jsonStr, "hypothesis") ?: "未指定假设"
 
-        // 从 evaluation 对象中提取 qualityScore（更精确）
+        // 从 evaluation 对象中提取（支持嵌套对象）
         val evaluationMatch = Regex("""\"evaluation\"\s*:\s*\{([^}]+)\}""").find(jsonStr)
         val evalContent = evaluationMatch?.groupValues?.get(1) ?: ""
-        val qualityScore = extractJsonValue(evalContent, "qualityScore")?.toDoubleOrNull()
-            ?: extractJsonValue(jsonStr, "qualityScore")?.toDoubleOrNull()
-            ?: 0.5
+
+        // 调试日志
+        logger.debug("解析 JSON, evalContent: {}", evalContent.take(200))
+
+        // 提取质量评分 - 多种方式尝试
+        var qualityScore: Double? = null
+
+        // 方式1: 从 evalContent 中提取
+        qualityScore = extractJsonValue(evalContent, "qualityScore")?.toDoubleOrNull()
+
+        // 方式2: 从整个 JSON 中直接搜索 qualityScore
+        if (qualityScore == null) {
+            val directMatch = Regex("""\"qualityScore\"\s*:\s*(\d+\.?\d*)""").find(jsonStr)
+            qualityScore = directMatch?.groupValues?.get(1)?.toDoubleOrNull()
+        }
+
+        // 方式3: 计算基于 hypothesis 质量的评分
+        if (qualityScore == null || qualityScore == 0.5) {
+            qualityScore = calculateQualityScore(hypothesis, evalContent)
+        }
+
+        // 最终兜底
+        val finalQualityScore = qualityScore ?: 0.5
+
+        // 提取上下文利用度
+        val contextUtilization = extractJsonValue(evalContent, "contextUtilization")?.toDoubleOrNull()
+            ?: calculateContextUtilization(hypothesis)
+
         val newKnowledgeGained = extractJsonValue(evalContent, "newKnowledgeGained")?.toIntOrNull()
             ?: extractJsonValue(jsonStr, "newKnowledgeGained")?.toIntOrNull()
             ?: 0
@@ -55,7 +80,7 @@ object EvolutionResponseParser {
                 val objStr = resultObj.value
                 val title = extractJsonValue(objStr, "title")
                 val content = extractJsonValue(objStr, "content")
-                val confidence = extractJsonValue(objStr, "confidence")?.toDoubleOrNull() ?: qualityScore
+                val confidence = extractJsonValue(objStr, "confidence")?.toDoubleOrNull() ?: finalQualityScore
 
                 if (title != null && content != null) {
                     results.add(ParsedResult(
@@ -75,17 +100,65 @@ object EvolutionResponseParser {
         // 提取 lessonsLearned
         val lessonsLearned = extractJsonArray(evalContent, "lessonsLearned")
 
+        logger.info("解析结果: qualityScore={}, contextUtilization={}, results={}",
+            finalQualityScore, contextUtilization, results.size)
+
         return ParsedEvolution(
             hypothesis = hypothesis,
             results = results,
             evaluation = ParsedEvaluation(
-                hypothesisConfirmed = qualityScore > 0.5,
+                hypothesisConfirmed = finalQualityScore > 0.5,
                 newKnowledgeGained = newKnowledgeGained,
                 conflictsFound = conflictsFound,
-                qualityScore = qualityScore,
+                qualityScore = finalQualityScore,
+                contextUtilization = contextUtilization,
                 lessonsLearned = lessonsLearned
             )
         )
+    }
+
+    /**
+     * 基于 hypothesis 质量计算评分
+     */
+    private fun calculateQualityScore(hypothesis: String, evalContent: String): Double {
+        var score = 0.5
+
+        // 1. hypothesis 长度（>=200 字符 +0.1）
+        if (hypothesis.length >= 200) score += 0.1
+
+        // 2. 引用了现有知识（+0.1）
+        if (hypothesis.contains("已分析") || hypothesis.contains("基于") ||
+            hypothesis.contains("结合") || hypothesis.contains("根据")) {
+            score += 0.1
+        }
+
+        // 3. 包含推理关键词（+0.1）
+        if (hypothesis.contains("推断") || hypothesis.contains("推测") ||
+            hypothesis.contains("假设") || hypothesis.contains("分析")) {
+            score += 0.1
+        }
+
+        // 4. 包含具体业务概念（+0.1）
+        if (hypothesis.contains("状态机") || hypothesis.contains("规则") ||
+            hypothesis.contains("流程") || hypothesis.contains("实体")) {
+            score += 0.1
+        }
+
+        // 5. hypothesisConfirmed 为 true（从 evalContent 检查）
+        if (evalContent.contains("hypothesisConfirmed") && evalContent.contains("true")) {
+            score += 0.1
+        }
+
+        return score.coerceIn(0.0, 1.0)
+    }
+
+    /**
+     * 计算上下文利用度（基于 hypothesis 是否引用了关键知识）
+     */
+    private fun calculateContextUtilization(hypothesis: String): Double {
+        val contextKeywords = listOf("已有", "知识", "API", "规则", "数据", "模型", "已分析", "基于", "结合", "根据")
+        val matchCount = contextKeywords.count { keyword -> hypothesis.contains(keyword) }
+        return (matchCount.toDouble() / contextKeywords.size).coerceIn(0.0, 1.0)
     }
 
     /**

@@ -28,7 +28,9 @@ import java.util.UUID
  */
 class KnowledgeEvolutionLoop(
     private val puzzleStore: PuzzleStore,
-    private val llmService: com.smancode.sman.smancode.llm.LlmService
+    private val llmService: com.smancode.sman.smancode.llm.LlmService,
+    private val projectPath: String = System.getProperty("user.dir"),
+    private val fileReader: FileReader = DefaultFileReader(projectPath)
 ) {
     private val logger = LoggerFactory.getLogger(KnowledgeEvolutionLoop::class.java)
 
@@ -125,12 +127,76 @@ class KnowledgeEvolutionLoop(
             is Trigger.Manual -> "手动触发: ${trigger.reason}"
         }
 
+        // 读取真实项目代码（关键文件）
+        val projectCode = readProjectCode()
+
         return EvolutionContext(
             iterationId = generateIterationId(),
             triggerDescription = triggerDescription,
             existingPuzzles = existingPuzzles,
-            timestamp = Instant.now()
+            timestamp = Instant.now(),
+            projectCode = projectCode
         )
+    }
+
+    /**
+     * 读取项目代码（关键文件）
+     *
+     * 策略：读取项目核心文件，为 LLM 提供真实代码上下文
+     */
+    private fun readProjectCode(): Map<String, String> {
+        val codeFiles = mutableMapOf<String, String>()
+        val projectDir = java.io.File(projectPath)
+
+        if (!projectDir.exists()) {
+            logger.warn("项目目录不存在: {}", projectPath)
+            return emptyMap()
+        }
+
+        // 查找关键源代码文件
+        val sourcePatterns = listOf(
+            "**/src/main/kotlin/**/*.kt",
+            "**/src/main/java/**/*.java"
+        )
+
+        for (pattern in sourcePatterns) {
+            projectDir.walkTopDown()
+                .filter { it.isFile && isRelevantCode(it) }
+                .take(15)  // 最多读取 15 个文件
+                .forEach { file ->
+                    try {
+                        val relativePath = file.relativeTo(projectDir).path
+                        val content = file.readText()
+                        if (content.isNotBlank()) {
+                            codeFiles[relativePath] = content
+                        }
+                    } catch (e: Exception) {
+                        logger.debug("读取文件失败: {}", file.path)
+                    }
+                }
+        }
+
+        logger.info("读取项目代码: {} 个文件", codeFiles.size)
+        return codeFiles
+    }
+
+    /**
+     * 判断文件是否相关
+     */
+    private fun isRelevantCode(file: java.io.File): Boolean {
+        val name = file.name.lowercase()
+        val path = file.path.lowercase()
+
+        // 排除无关文件
+        if (name.startsWith(".")) return false
+        if (path.contains("/build/")) return false
+        if (path.contains("/target/")) return false
+        if (path.contains("/node_modules/")) return false
+        if (path.contains(".test.") || path.contains(".spec.")) return false
+        if (path.contains("/test/")) return false
+
+        // 只包含源代码文件
+        return name.endsWith(".kt") || name.endsWith(".java")
     }
 
     /**
@@ -315,7 +381,8 @@ data class EvolutionContext(
     val iterationId: String,
     val triggerDescription: String,
     val existingPuzzles: List<Puzzle>,
-    val timestamp: Instant
+    val timestamp: Instant,
+    val projectCode: Map<String, String> = emptyMap()  // 真实项目代码（文件路径 -> 内容）
 )
 
 /**
@@ -346,5 +413,6 @@ data class ParsedEvaluation(
     val newKnowledgeGained: Int,
     val conflictsFound: List<String>,
     val qualityScore: Double,
+    val contextUtilization: Double = 0.0,
     val lessonsLearned: List<String>
 )
