@@ -1,5 +1,7 @@
 # SmanCode - 面向业务的智能编程助手
 
+> 版本: v1.0 | 更新日期: 2026-02-27
+>
 > IntelliJ IDEA 插件，实现自迭代项目理解、用户习惯学习的 AI 编程智能体
 
 ## 核心特性
@@ -66,7 +68,29 @@ reranker.base.url=http://localhost:8001/v1
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 数据存储
+## 核心模块
+
+### 自迭代知识进化系统
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    自迭代知识进化系统                             │
+├─────────────────────────────────────────────────────────────────┤
+│  【主动发现】              【被动响应】                          │
+│  GapDetector              KnowledgeEvolutionLoop                │
+│       │                         │                               │
+│       ▼                         ▼                               │
+│  发现空白 ──────────────────► 触发进化                           │
+│       │                         │                               │
+│       ▼                         ▼                               │
+│  PuzzleCoordinator ◄─────── 执行分析                            │
+│       │                         │                               │
+│       ▼                         ▼                               │
+│  TaskQueue → TaskExecutor → 生成 Puzzle                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 数据存储
 
 一切基于 Markdown，存储在项目 `.sman/` 目录：
 
@@ -74,6 +98,7 @@ reranker.base.url=http://localhost:8001/v1
 {projectPath}/.sman/
 ├── MEMORY.md              # 项目记忆（用户偏好、业务规则）
 ├── puzzles/               # 项目知识拼图
+│   ├── status.json        # 拼图状态汇总
 │   ├── PUZZLE_STRUCTURE.md
 │   ├── PUZZLE_TECH.md
 │   ├── PUZZLE_API.md
@@ -132,23 +157,28 @@ reranker.base.url=http://localhost:8001/v1
 | 持久化 | Markdown 文件 |
 | 测试 | JUnit 5 + MockK |
 
-## 相关文档
+## 文档索引
 
 | 文档 | 内容 |
 |------|------|
 | [CLAUDE.md](CLAUDE.md) | 项目架构和开发指南 |
-| [docs/项目战略分析-三项目对比.md](docs/项目战略分析-三项目对比.md) | 与 OpenCode/OpenClaw 对比 |
-| [docs/核心能力-自迭代项目理解系统.md](docs/核心能力-自迭代项目理解系统.md) | 核心能力详细设计 |
-| [docs/阶段0-项目结构重构方案.md](docs/阶段0-项目结构重构方案.md) | 目录结构重构方案 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构文档 |
+| [docs/PRD-SelfIteration-System.md](docs/PRD-SelfIteration-System.md) | 自迭代系统 PRD |
+| [docs/QUICK_START.md](docs/QUICK_START.md) | 快速启动指南 |
+| [docs/TASKS.md](docs/TASKS.md) | 任务追踪 |
+| [docs/EVAL-Evolution-Loop.md](docs/EVAL-Evolution-Loop.md) | 评估日志 |
 
 ## 实施路线
 
 | Phase | 内容 | 状态 |
 |-------|------|------|
-| 0 | 目录结构重构 | 规划中 |
-| 1 | Markdown 数据层 | 规划中 |
-| 2 | 自迭代项目理解（核心） | 规划中 |
-| 3 | 用户习惯学习 | 规划中 |
+| 0 | 目录结构重构 | ✅ 已完成 |
+| 1 | Markdown 数据层 | ✅ 已完成 |
+| 2 | 自迭代项目理解（核心） | ✅ 已完成 |
+| 3 | 用户习惯学习 | 🔲 规划中 |
+| 4 | Edit 容错 | 🔲 规划中 |
+| 5 | 主动服务 | 🔲 规划中 |
+| 6 | 沙盒验证 | 🔲 规划中 |
 
 ## 许可证
 

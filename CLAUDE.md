@@ -274,22 +274,41 @@ websearch.enabled=true
 
 | 文档 | 内容 |
 |------|------|
-| `docs/项目战略分析-三项目对比.md` | 与 OpenCode/OpenClaw 对比 |
-| `docs/核心能力-自迭代项目理解系统.md` | Phase 2 详细设计 |
-| `docs/设计方案-Markdown驱动架构.md` | Phase 1 详细设计 |
-| `docs/设计方案-用户习惯学习.md` | Phase 3 详细设计 |
-| `docs/阶段0-项目结构重构方案.md` | 目录结构重构方案 |
+| `docs/ARCHITECTURE.md` | 架构文档 |
+| `docs/PRD-SelfIteration-System.md` | 自迭代系统 PRD |
+| `docs/QUICK_START.md` | 快速启动指南 |
+| `docs/TASKS.md` | 任务追踪 |
+| `docs/EVAL-Evolution-Loop.md` | 评估日志 |
+| `docs/ANALYSIS-Project-Comparison.md` | 与 OpenCode/OpenClaw 对比 |
+| `docs/DESIGN-Markdown-Storage.md` | Markdown 存储设计 |
+| `docs/DESIGN-User-Preference-Learning.md` | 用户习惯学习设计 |
+| `docs/DESIGN-Sandbox-Verification.md` | 沙盒验证设计 |
 
 ---
 
 ## 实施路线
 
-| Phase | 内容 | 时间 |
+| Phase | 内容 | 状态 |
 |-------|------|------|
-| 0 | 目录结构重构 | 1 周 |
-| 1 | Markdown 数据层 | 2-3 周 |
-| 2 | 自迭代项目理解 | 4-5 周 |
-| 3 | 用户习惯学习 | 3-4 周 |
-| 4 | Edit 容错 | 2 周 |
-| 5 | 主动服务 | 2-3 周 |
-| 6 | 沙盒验证（最低优先级） | 3-4 周 |
+| 0 | 目录结构重构 | ✅ 已完成 |
+| 1 | Markdown 数据层 | ✅ 已完成 |
+| 2 | 自迭代项目理解 | ✅ 已完成 |
+| 3 | 用户习惯学习 | 🔲 规划中 |
+| 4 | Edit 容错 | 🔲 规划中 |
+| 5 | 主动服务 | 🔲 规划中 |
+| 6 | 沙盒验证（最低优先级） | 🔲 规划中 |
+
+---
+
+## 当前状态
+
+**自迭代知识进化系统已达到可用状态**，核心能力验证通过：
+
+| 能力 | 状态 | 证据 |
+|------|------|------|
+| 上下文推理 | ✅ | 能基于现有知识深度推理 |
+| 模式识别 | ✅ | 识别 Saga、状态机、策略模式 |
+| 跨领域分析 | ✅ | 技术+业务综合分析 |
+| 质量稳定 | ✅ | 解析正确，质量评分稳定 |
+
+详见：`docs/EVAL-Evolution-Loop.md`
