@@ -117,6 +117,62 @@ class GapDetector {
     }
 
     /**
+     * 增量模式检测
+     *
+     * 只分析与变更文件相关的空白，用于增量分析场景
+     *
+     * @param puzzles Puzzle 列表
+     * @param changedFiles 变更的文件路径列表
+     * @param lastVersionChecksum 上次版本的 checksum
+     * @return 发现的空白列表
+     */
+    fun detectIncremental(
+        puzzles: List<Puzzle>,
+        changedFiles: List<String>,
+        lastVersionChecksum: String
+    ): List<Gap> {
+        // 如果没有变更文件，返回空列表
+        if (changedFiles.isEmpty()) {
+            logger.debug("无变更文件，跳过增量检测")
+            return emptyList()
+        }
+
+        // 如果 checksum 为空，执行全量检测
+        if (lastVersionChecksum.isEmpty()) {
+            logger.info("无上次版本 checksum，执行全量检测")
+            return detect(puzzles)
+        }
+
+        logger.info("增量检测空白: puzzleCount={}, changedFileCount={}", puzzles.size, changedFiles.size)
+
+        // 基于文件变更检测
+        val fileChangeGaps = detectByFileChange(puzzles, changedFiles)
+
+        // 检测与变更文件相关但完成度低的 Puzzle
+        val relatedGaps = puzzles.filter { puzzle ->
+            val relatedFiles = extractRelatedFiles(puzzle)
+            changedFiles.any { changedFile ->
+                relatedFiles.any { relatedFile ->
+                    changedFile.contains(relatedFile, ignoreCase = true)
+                }
+            } && puzzle.completeness < LOW_COMPLETENESS_THRESHOLD
+        }.map { puzzle ->
+            createGap(
+                type = GapType.FILE_CHANGE_TRIGGERED,
+                puzzle = puzzle,
+                description = "增量分析：文件变更导致需要更新: ${puzzle.id}",
+                relatedFiles = changedFiles
+            )
+        }
+
+        // 合并去重
+        val allGaps = (fileChangeGaps + relatedGaps).distinctBy { it.description }
+
+        logger.info("增量检测完成: gapCount={}", allGaps.size)
+        return allGaps.sortedByDescending { it.priority }
+    }
+
+    /**
      * 方式二：用户查询触发
      *
      * 当用户查询无法得到满意答案时，记录为潜在空白

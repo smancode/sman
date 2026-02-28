@@ -1,16 +1,18 @@
 package com.smancode.sman.ide
 
 import com.intellij.openapi.components.service
-import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.StartupActivity
 import com.smancode.sman.analysis.scheduler.ProjectAnalysisScheduler
+import com.smancode.sman.config.SmanConfig
+import com.smancode.sman.domain.puzzle.PuzzleCoordinatorFactory
+import com.smancode.sman.domain.puzzle.PuzzleScheduler
+import com.smancode.sman.ide.component.CodeReferenceHintProvider
 import com.smancode.sman.ide.listener.CodeSelectionListener
 import com.smancode.sman.ide.service.StorageService
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.Socket
@@ -23,11 +25,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class SmanPlugin : StartupActivity {
 
-    private val logger: Logger = LoggerFactory.getLogger(SmanPlugin::class.java)
+    private val logger = LoggerFactory.getLogger(SmanPlugin::class.java)
     private val backendStarted = AtomicBoolean(false)
 
     // 后台分析调度器引用
     private var analysisScheduler: ProjectAnalysisScheduler? = null
+
+    // 知识进化调度器引用
+    private var puzzleScheduler: PuzzleScheduler? = null
 
     override fun runActivity(project: Project) {
         // 确保 UTF-8 编码（解决 Windows 中文乱码问题）
@@ -53,6 +58,9 @@ class SmanPlugin : StartupActivity {
 
         // 启动后台分析调度器
         startAnalysisSchedulerIfNeeded(project, storage)
+
+        // 启动知识进化调度器
+        startKnowledgeEvolutionIfNeeded(project, storage)
     }
 
     /**
@@ -115,8 +123,7 @@ class SmanPlugin : StartupActivity {
                 override fun editorReleased(event: EditorFactoryEvent) {
                     val editor = event.editor
                     if (editor.project == project) {
-                        // 编辑器释放时清理资源
-                        com.smancode.sman.ide.component.CodeReferenceHintProvider.hideHint()
+                        CodeReferenceHintProvider.hideHint()
                         logger.debug("编辑器已释放: {}", editor.virtualFile?.name)
                     }
                 }
@@ -146,15 +153,7 @@ class SmanPlugin : StartupActivity {
      * 启动后台分析调度器
      */
     private fun startAnalysisSchedulerIfNeeded(project: Project, storage: StorageService) {
-        // 检查 API Key 是否配置
-        if (storage.llmApiKey.isBlank()) {
-            logger.info("LLM API Key 未配置，跳过启动后台分析调度器")
-            return
-        }
-
-        // 检查自动分析是否启用
-        if (!storage.autoAnalysisEnabled) {
-            logger.info("自动分析已禁用，跳过启动后台分析调度器")
+        if (!canStartScheduler(storage, "后台分析")) {
             return
         }
 
@@ -173,6 +172,63 @@ class SmanPlugin : StartupActivity {
         } catch (e: Exception) {
             logger.error("启动后台分析调度器失败", e)
         }
+    }
+
+    /**
+     * 启动知识进化调度器
+     */
+    private fun startKnowledgeEvolutionIfNeeded(project: Project, storage: StorageService) {
+        if (!canStartScheduler(storage, "知识进化")) {
+            return
+        }
+
+        // 检查项目路径
+        val projectPath = project.basePath
+        if (projectPath.isNullOrBlank()) {
+            logger.warn("项目路径为空，跳过启动知识进化调度器")
+            return
+        }
+
+        try {
+            // 创建 LLM 服务
+            val llmService = SmanConfig.createLlmService()
+
+            // 创建并启动知识进化调度器
+            puzzleScheduler = PuzzleCoordinatorFactory.createScheduler(
+                projectPath = projectPath,
+                llmService = llmService,
+                intervalMs = 300_000  // 5 分钟
+            )
+            puzzleScheduler?.start()
+
+            // 注册到静态 Map，供外部获取
+            registerPuzzleScheduler(project.name, puzzleScheduler!!)
+            logger.info("知识进化调度器已启动: project={}", project.name)
+
+        } catch (e: Exception) {
+            logger.error("启动知识进化调度器失败", e)
+        }
+    }
+
+    /**
+     * 检查是否可以启动调度器
+     *
+     * @param storage 存储服务
+     * @param schedulerName 调度器名称（用于日志）
+     * @return true 如果可以启动
+     */
+    private fun canStartScheduler(storage: StorageService, schedulerName: String): Boolean {
+        if (storage.llmApiKey.isBlank()) {
+            logger.info("LLM API Key 未配置，跳过启动{}调度器", schedulerName)
+            return false
+        }
+
+        if (!storage.autoAnalysisEnabled) {
+            logger.info("自动分析已禁用，跳过启动{}调度器", schedulerName)
+            return false
+        }
+
+        return true
     }
 
     /**
@@ -268,6 +324,9 @@ class SmanPlugin : StartupActivity {
         // 存储每个项目的调度器实例（线程安全）
         private val schedulers = ConcurrentHashMap<String, ProjectAnalysisScheduler>()
 
+        // 存储每个项目的知识进化调度器实例（线程安全）
+        private val puzzleSchedulers = ConcurrentHashMap<String, PuzzleScheduler>()
+
         /**
          * 注册调度器实例
          */
@@ -287,6 +346,27 @@ class SmanPlugin : StartupActivity {
          */
         fun unregisterScheduler(projectName: String) {
             schedulers.remove(projectName)
+        }
+
+        /**
+         * 注册知识进化调度器实例
+         */
+        fun registerPuzzleScheduler(projectName: String, scheduler: PuzzleScheduler) {
+            puzzleSchedulers[projectName] = scheduler
+        }
+
+        /**
+         * 获取项目的知识进化调度器实例
+         */
+        fun getPuzzleScheduler(project: Project): PuzzleScheduler? {
+            return puzzleSchedulers[project.name]
+        }
+
+        /**
+         * 移除知识进化调度器实例
+         */
+        fun unregisterPuzzleScheduler(projectName: String) {
+            puzzleSchedulers.remove(projectName)
         }
     }
 }
