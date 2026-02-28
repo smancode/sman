@@ -9,6 +9,8 @@ import com.smancode.sman.shared.model.Puzzle
  */
 object EvolutionPromptBuilder {
 
+    private val experienceStore = ExperienceStore()
+
     /**
      * 构建进化 Prompt
      *
@@ -69,6 +71,28 @@ object EvolutionPromptBuilder {
             appendLine("4. **必须有洞察**：发现代码中的隐含逻辑和模式")
             appendLine("5. **hypothesis 必须详细**：至少 200 字，包含具体的推理过程")
             appendLine()
+            appendLine("### 必须追踪配置关联（核心！）")
+            appendLine("当代码调用看起来\"没有下文\"时，必须检查是否存在配置文件定义的执行流程：")
+            appendLine("- **MyBatis Mapper**: Java 接口方法 → XML 中的 SQL 定义")
+            appendLine("- **transaction.xml**: Service.executeXxx() → XML 中定义的 Procedure 调用链")
+            appendLine("- **规则引擎**: 代码中的 transCode → XML 中对应的业务流程")
+            appendLine("- **工作流配置**: 代码触发 → XML/JSON 定义的处理步骤")
+            appendLine()
+            appendLine("示例：")
+            appendLine("```java")
+            appendLine("// Java 代码看起来只有一行")
+            appendLine("transactionService.execute(\"2001\", context);")
+            appendLine("```")
+            appendLine("但你必须推断：这会触发 transaction.xml 中 TransactionCode=\"2001\" 定义的流程")
+            appendLine()
+
+            // 注入分析经验（核心改进）
+            appendLine("## 分析经验库（从用户提示和系统发现中积累）")
+            appendLine("以下是分析\"屎山代码\"时积累的经验，请参考：")
+            appendLine()
+            appendLine(experienceStore.formatForPrompt())
+            appendLine()
+
             appendLine("## 目标")
             appendLine("请执行完整的知识进化循环：")
             appendLine("1. 观察：分析现有知识和真实代码，识别空白")
