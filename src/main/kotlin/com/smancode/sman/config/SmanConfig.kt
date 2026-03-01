@@ -208,6 +208,17 @@ object SmanConfig {
      */
     val webSearchDefaultNumResults: Int by lazy { getConfigValue("websearch.default.num.results", 8) }
 
+    /**
+     * WebSearch Tavily API Key（付费搜索服务，用于 Exa 限流时降级）
+     */
+    val webSearchTavilyApiKey: String by lazy { getString("websearch.tavily.api.key", "") }
+
+    /**
+     * WebSearch Tavily 是否可用（API Key 非空）
+     */
+    val webSearchTavilyEnabled: Boolean
+        get() = webSearchTavilyApiKey.isNotEmpty()
+
     // ==================== 向量数据库配置 ====================
 
     val vectorDbType: VectorDbType by lazy {

@@ -79,6 +79,9 @@ class SettingsDialog(
     )
     private val rerankerApiKeyField = createTextFieldWithStorage(storage.rerankerApiKey)
 
+    // WebSearch Tavily 配置字段（付费搜索服务）
+    private val tavilyApiKeyField = createTextFieldWithStorage(storage.tavilyApiKey)
+
     // 其他配置字段
     private val saveHistoryCheckBox = JCheckBox("保存对话历史", true)
 
@@ -308,6 +311,7 @@ class SettingsDialog(
         row = addLlmConfigSection(panel, gbc, row)
         row = addBgeM3ConfigSection(panel, gbc, row)
         row = addRerankerConfigSection(panel, gbc, row)
+        row = addTavilyConfigSection(panel, gbc, row)
         addOtherConfigSection(panel, gbc, row)
 
         return panel
@@ -441,6 +445,16 @@ class SettingsDialog(
             fields = listOf(
                 "端点:" to rerankerEndpointField,
                 "API Key (可选):" to rerankerApiKeyField
+            )
+        )
+    }
+
+    private fun addTavilyConfigSection(panel: JPanel, gbc: GridBagConstraints, startRow: Int): Int {
+        return addConfigSection(
+            panel, gbc, startRow,
+            title = "WebSearch Tavily 配置（付费兜底）",
+            fields = listOf(
+                "API Key (可选):" to tavilyApiKeyField
             )
         )
     }
@@ -671,6 +685,7 @@ class SettingsDialog(
         val bgeApiKey = getApiKeyFieldValue(bgeApiKeyField)
         val rerankerEndpoint = rerankerEndpointField.text.trim()
         val rerankerApiKey = getApiKeyFieldValue(rerankerApiKeyField)
+        val tavilyApiKey = getApiKeyFieldValue(tavilyApiKeyField)
 
         // 验证必填字段
         if (!validateRequiredFields(llmBaseUrl, "LLM Base URL") ||
@@ -683,6 +698,7 @@ class SettingsDialog(
         return ConfigData(
             llmApiKey, llmBaseUrl, llmModelName,
             bgeEndpoint, bgeApiKey, rerankerEndpoint, rerankerApiKey,
+            tavilyApiKey,
             autoAnalysisEnabled = autoAnalysisSwitch.isSelected,
             deepAnalysisEnabled = deepAnalysisSwitch.isSelected
         )
@@ -712,6 +728,9 @@ class SettingsDialog(
         // BGE-Reranker 配置：明文保存
         storage.rerankerEndpoint = config.rerankerEndpoint
         storage.rerankerApiKey = config.rerankerApiKey
+
+        // WebSearch Tavily 配置：明文保存
+        storage.tavilyApiKey = config.tavilyApiKey
 
         // 自动分析配置
         storage.autoAnalysisEnabled = config.autoAnalysisEnabled
@@ -796,6 +815,7 @@ class SettingsDialog(
         val bgeApiKey: String,
         val rerankerEndpoint: String,
         val rerankerApiKey: String,
+        val tavilyApiKey: String,
         // 自动分析配置
         val autoAnalysisEnabled: Boolean,
         // 深度分析配置

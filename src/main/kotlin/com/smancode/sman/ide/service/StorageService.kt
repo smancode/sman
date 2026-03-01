@@ -87,6 +87,9 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
         var rerankerEndpoint: String = "",            // Reranker 服务端点
         var rerankerApiKey: String = "",               // Reranker API Key（可选）
 
+        // WebSearch Tavily 配置（付费搜索服务）
+        var tavilyApiKey: String = "",                 // Tavily API Key（可选，用于 Exa 限流时降级）
+
         // 性能配置（并发控制和重试机制）
         var bgeMaxTokens: String = "8192",             // BGE Token 限制
         var bgeTruncationStrategy: String = "TAIL",    // 截断策略 (HEAD/TAIL/MIDDLE/SMART)
@@ -435,6 +438,11 @@ class StorageService : PersistentStateComponent<StorageService.SettingsState> {
     var rerankerApiKey: String
         get() = state.rerankerApiKey
         set(value) { state.rerankerApiKey = value }
+
+    // WebSearch Tavily 配置
+    var tavilyApiKey: String
+        get() = state.tavilyApiKey
+        set(value) { state.tavilyApiKey = value }
 
     // 项目分析配置
     var skipAnalysisConfigDialog: Boolean
