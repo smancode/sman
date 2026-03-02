@@ -1,0 +1,32 @@
+{
+  "name": "@smancode/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun watch src/index.ts",
+    "dev:server": "bun run src/server/run.ts",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^5.0.0",
+    "zod": "^3.24.0",
+    "hono": "^4.10.0",
+    "@hono/zod-validator": "^0.4.0",
+    "remeda": "^2.26.0",
+    "ulid": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.0"
+  }
+}
