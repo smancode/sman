@@ -39,7 +39,7 @@ class LocalToolFactoryTest {
         val tools = LocalToolFactory.createTools(project)
 
         // Then: 应该创建 11 个工具（expert_consult + 8 个基础工具 + batch + web_search）
-        assertEquals(11, tools.size, "应该创建 11 个本地工具")
+        assertEquals(13, tools.size, "应该创建 13 个本地工具（添加了 load_puzzle 和 search_puzzles）")
     }
 
     @Test
@@ -64,7 +64,10 @@ class LocalToolFactoryTest {
             "apply_change",
             "run_shell_command",
             "batch",
-            "web_search"
+            "web_search",
+            // 新增：拼图工具
+            "load_puzzle",
+            "search_puzzles"
         )
 
         expectedTools.forEach { toolName ->

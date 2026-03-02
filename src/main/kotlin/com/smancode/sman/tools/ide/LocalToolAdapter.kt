@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.openapi.project.Project
 import com.smancode.sman.ide.service.LocalToolExecutor
+import com.smancode.sman.infra.storage.PuzzleStore
+import com.smancode.sman.domain.puzzle.PuzzleIndexBuilder
+import com.smancode.sman.tools.puzzle.LoadPuzzleTool
+import com.smancode.sman.tools.puzzle.SearchPuzzlesTool
 import com.smancode.sman.model.part.Part
 import com.smancode.sman.tools.AbstractTool
 import com.smancode.sman.tools.ParameterDef
@@ -251,7 +255,10 @@ object LocalToolFactory {
         applyChangeTool(project),
         runShellCommandTool(project),  // Shell 命令执行工具
         batchTool(project),  // 批量工具执行
-        WebSearchTool()  // Web 搜索工具
+        WebSearchTool(),  // Web 搜索工具
+        // 拼图工具（新）
+        loadPuzzleTool(project),
+        searchPuzzlesTool(project)
     )
 
     private fun readFileTool(project: Project) = LocalToolAdapter(
@@ -378,4 +385,25 @@ object LocalToolFactory {
             )
         )
     )
+
+    // ========== 拼图工具（新）==========
+    
+    /**
+     * 创建 LoadPuzzleTool 实例
+     */
+    private fun loadPuzzleTool(project: Project): LoadPuzzleTool {
+        val projectPath = project.basePath ?: return LoadPuzzleTool(PuzzleStore(""))
+        return LoadPuzzleTool(PuzzleStore(projectPath))
+    }
+
+    /**
+     * 创建 SearchPuzzlesTool 实例
+     */
+    private fun searchPuzzlesTool(project: Project): SearchPuzzlesTool {
+        val projectPath = project.basePath ?: return SearchPuzzlesTool(PuzzleStore(""), PuzzleIndexBuilder(PuzzleStore("")))
+        val puzzleStore = PuzzleStore(projectPath)
+        val indexBuilder = PuzzleIndexBuilder(puzzleStore)
+        return SearchPuzzlesTool(puzzleStore, indexBuilder)
+    }
+
 }

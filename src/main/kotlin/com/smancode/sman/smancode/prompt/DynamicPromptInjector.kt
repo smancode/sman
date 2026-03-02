@@ -5,6 +5,8 @@ import com.smancode.sman.analysis.config.VectorDatabaseConfig
 import com.smancode.sman.analysis.config.VectorDbType
 import com.smancode.sman.analysis.config.JVectorConfig
 import com.smancode.sman.domain.puzzle.PuzzleIndexBuilder
+import com.smancode.sman.domain.memory.PreferenceInjector
+import com.smancode.sman.domain.memory.FileBasedMemoryStore
 import com.smancode.sman.infra.storage.PuzzleStore
 import com.smancode.sman.util.StackTraceUtils
 import kotlinx.coroutines.runBlocking
@@ -38,6 +40,9 @@ class DynamicPromptInjector(
     // PuzzleIndexBuilder 实例（懒加载）
     private var puzzleIndexBuilder: PuzzleIndexBuilder? = null
 
+    // PreferenceInjector 实例（懒加载）
+    private var preferenceInjector: PreferenceInjector? = null
+
     /**
      * 获取或创建 ProjectContextInjector
      */
@@ -56,6 +61,26 @@ class DynamicPromptInjector(
             }
         }
         return projectContextInjector
+    }
+
+    /**
+     * 获取或创建 PreferenceInjector
+     */
+    private fun getPreferenceInjector(): PreferenceInjector? {
+        if (preferenceInjector == null) {
+            synchronized(injectorLock) {
+                if (preferenceInjector == null) {
+                    try {
+                        val memoryStore = FileBasedMemoryStore(projectPath.toString())
+                        preferenceInjector = PreferenceInjector(memoryStore)
+                    } catch (e: Exception) {
+                        logger.warn("创建 PreferenceInjector 失败", e)
+                        return null
+                    }
+                }
+            }
+        }
+        return preferenceInjector
     }
 
     /**
@@ -150,6 +175,14 @@ class DynamicPromptInjector(
                 logger.info("会话 {} 已加载拼图索引", sessionKey)
             }
 
+            // 注入用户偏好和业务规则
+            val userPreferences = loadUserPreferences()
+            if (userPreferences.isNotEmpty()) {
+                result.userPreferences = userPreferences
+                result.needUserPreferences = true
+                logger.info("会话 {} 已加载用户偏好", sessionKey)
+            }
+
             // 标记该会话已加载
             loadedSessions[sessionKey] = true
 
@@ -175,6 +208,21 @@ class DynamicPromptInjector(
             }
         } catch (e: Exception) {
             logger.warn("加载项目上下文失败: projectKey={}", projectKey, e)
+            ""
+        }
+    }
+
+    /**
+     * 加载用户偏好和业务规则
+     *
+     * @return 格式化的用户偏好文本
+     */
+    private fun loadUserPreferences(): String {
+        return try {
+            val injector = getPreferenceInjector() ?: return ""
+            injector.injectAll(projectPath.fileName?.toString() ?: "")
+        } catch (e: Exception) {
+            logger.warn("加载用户偏好失败", e)
             ""
         }
     }
@@ -212,10 +260,12 @@ class DynamicPromptInjector(
         var needCodingBestPractices: Boolean = false
         var needProjectContext: Boolean = false
         var needPuzzleIndex: Boolean = false
+        var needUserPreferences: Boolean = false
         var complexTaskWorkflow: String? = null
         var codingBestPractices: String? = null
         var projectContext: String? = null
         var puzzleIndex: String? = null
+        var userPreferences: String? = null
 
         /**
          * 获取需要注入的完整内容
@@ -232,6 +282,11 @@ class DynamicPromptInjector(
                 if (needPuzzleIndex && puzzleIndex != null) {
                     sb.append("\n\n")
                     sb.append(puzzleIndex)
+                }
+
+                if (needUserPreferences && userPreferences != null) {
+                    sb.append("\n\n")
+                    sb.append(userPreferences)
                 }
 
                 if (needComplexTaskWorkflow && complexTaskWorkflow != null) {
