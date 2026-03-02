@@ -249,6 +249,57 @@ websearch.enabled=true
 
 ---
 
+## AI Agent 规范
+
+### 时间规范（重要）
+
+**AI Agent 内部没有可靠的当前时间**。任何需要使用时间的场景（WebSearch、日志分析、代码生成等），**必须先执行 `date` 命令获取当前时间**。
+
+```
+规则：
+1. 涉及时间判断时，先执行 date 命令
+2. 搜索最新信息时，在查询中加入正确年份
+3. 不要依赖模型内部的"知识"来判断当前日期
+```
+
+**示例**：
+```bash
+# 先获取时间
+date
+# 输出：Sat Feb 28 14:23:45 CST 2026
+
+# 然后在搜索中使用正确年份
+web_search "Spring Boot 3.4 新特性 2026"
+```
+
+### WebSearch 实现说明
+
+当前项目 WebSearch 使用 **Exa AI MCP 服务**：
+
+| 项目 | 说明 |
+|------|------|
+| 端点 | `https://mcp.exa.ai/mcp` |
+| 认证 | 无需 API Key（免费托管服务） |
+| 原理 | AI 原生搜索引擎，语义向量搜索 |
+
+**工作流程**：
+```
+用户提问 → LLM 判断需要搜索 → 调用 web_search 工具
+         → WebSearchTool 发送 MCP 请求到 Exa
+         → Exa 返回语义搜索结果 → 格式化返回给 LLM
+```
+
+**代码位置**：`src/main/kotlin/com/smancode/sman/tools/ide/WebSearchTool.kt`
+
+**备选方案**（生产环境推荐）：
+| 服务商 | 特点 | 价格 |
+|--------|------|------|
+| Tavily | 专为 AI Agent 设计 | 1000 次/月免费 |
+| Serper | Google 结果代理，快 | 高性价比 |
+| Perplexity | 事实准确 | 按量计费 |
+
+---
+
 ## 开发规范
 
 ### 代码规范
