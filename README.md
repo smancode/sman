@@ -1,6 +1,6 @@
 # SmanCode - 面向业务的智能编程助手
 
-> 版本: v1.0 | 更新日期: 2026-02-27
+> 版本: v1.1 | 更新日期: 2026-03-02
 >
 > IntelliJ IDEA 插件，实现自迭代项目理解、用户习惯学习的 AI 编程智能体
 
@@ -9,8 +9,10 @@
 - **自迭代项目理解**：Agent 自主理解项目，像拼图一样持续完善项目知识
 - **用户习惯学习**：自动学习你的代码风格和偏好，越用越懂你
 - **一切基于 Markdown**：简单可靠，用户可见可编辑，天然支持 Git
+- **分层项目分析**：L0~L4 五层分析器，从结构到深度逐层理解
 - **语义代码搜索**：BGE-M3 向量化 + Reranker 重排，精准定位代码
 - **ReAct 多步推理**：Reasoning + Acting 交替，支持复杂任务分解
+- **双重 WebSearch**：Exa AI 主搜索 + Tavily 降级保障
 
 ## 快速开始
 
@@ -56,38 +58,37 @@ reranker.base.url=http://localhost:8001/v1
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         应用层 (app/)                            │
+│                         应用层 (ide/)                            │
+│  ui/ | renderer/ | listener/ | service/ | action/               │
 ├─────────────────────────────────────────────────────────────────┤
-│                         领域层 (domain/)                         │
-│  puzzle/（自迭代理解）| memory/（习惯学习）| react/（ReAct 循环） │
+│                       项目分析层 (analysis/)                      │
+│  L0 结构 | L1 模块 | L2 代码 | L3 场景 | L4 深度                │
+│  loop/ | scheduler/ | executor/ | vectorization/                │
 ├─────────────────────────────────────────────────────────────────┤
 │                       基础设施层 (infra/)                        │
-│  llm/（LLM 调用）| vector/（向量存储）| storage/（持久化）       │
+│  llm/（LLM 调用）| vector/（BGE+JVector）| storage/（Markdown） │
 ├─────────────────────────────────────────────────────────────────┤
-│  tools/（工具层）| shared/（共享层）                            │
+│                         工具层 (tools/)                          │
+│  WebSearch（Exa+Tavily）| LocalTool | PuzzleTool                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 核心模块
 
+### 分层项目分析
+
+| 层级 | 名称 | 职责 |
+|------|------|------|
+| L0 | 结构分析 | 项目结构、模块发现 |
+| L1 | 模块分析 | 模块内部结构 |
+| L2 | 代码分析 | 类/方法级别 |
+| L3 | 场景分析 | 业务场景 |
+| L4 | 深度分析 | 算法/协议细节 |
+
 ### 自迭代知识进化系统
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    自迭代知识进化系统                             │
-├─────────────────────────────────────────────────────────────────┤
-│  【主动发现】              【被动响应】                          │
-│  GapDetector              KnowledgeEvolutionLoop                │
-│       │                         │                               │
-│       ▼                         ▼                               │
-│  发现空白 ──────────────────► 触发进化                           │
-│       │                         │                               │
-│       ▼                         ▼                               │
-│  PuzzleCoordinator ◄─────── 执行分析                            │
-│       │                         │                               │
-│       ▼                         ▼                               │
-│  TaskQueue → TaskExecutor → 生成 Puzzle                         │
-└─────────────────────────────────────────────────────────────────┘
+发现空白 → 选择任务 → 执行分析 → 验证结果 → 更新拼图 → 发现新空白
 ```
 
 ### 数据存储
@@ -120,8 +121,9 @@ reranker.base.url=http://localhost:8001/v1
 | `semantic_search` | 语义搜索（BGE + Reranker） |
 | `call_chain` | 调用链分析 |
 | `analyze_flow` | 流程分析 |
-| `web_search` | Web 搜索 |
-| `skill` | 加载技能 |
+| `web_search` | Web 搜索（Exa + Tavily 降级） |
+| `load_puzzle` | 加载项目拼图 |
+| `search_puzzles` | 搜索拼图知识 |
 
 ## 使用示例
 
@@ -151,9 +153,10 @@ reranker.base.url=http://localhost:8001/v1
 |------|------|
 | 语言 | Kotlin 1.9.20 (JDK 17+) |
 | 平台 | IntelliJ IDEA 2024.1+ |
-| 向量存储 | JVector 3.0.0 |
-| 向量化 | BGE-M3 (外部服务) |
+| 向量存储 | JVector 3.0.0 + 三层缓存 |
+| 向量化 | BGE-M3 (1024 维) |
 | 重排序 | BGE-Reranker-v2-m3 |
+| WebSearch | Exa AI MCP + Tavily (降级) |
 | 持久化 | Markdown 文件 |
 | 测试 | JUnit 5 + MockK |
 
@@ -165,20 +168,18 @@ reranker.base.url=http://localhost:8001/v1
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构文档 |
 | [docs/PRD-SelfIteration-System.md](docs/PRD-SelfIteration-System.md) | 自迭代系统 PRD |
 | [docs/QUICK_START.md](docs/QUICK_START.md) | 快速启动指南 |
-| [docs/TASKS.md](docs/TASKS.md) | 任务追踪 |
-| [docs/EVAL-Evolution-Loop.md](docs/EVAL-Evolution-Loop.md) | 评估日志 |
+| [docs/CONFIGURATION_GUIDE.md](docs/CONFIGURATION_GUIDE.md) | 配置指南 |
+| [docs/COMPARISON-Evolution-vs-Direct.md](docs/COMPARISON-Evolution-vs-Direct.md) | 自迭代 vs 直接分析对比 |
 
 ## 实施路线
 
 | Phase | 内容 | 状态 |
 |-------|------|------|
-| 0 | 目录结构重构 | ✅ 已完成 |
-| 1 | Markdown 数据层 | ✅ 已完成 |
-| 2 | 自迭代项目理解（核心） | ✅ 已完成 |
-| 3 | 用户习惯学习 | 🔲 规划中 |
-| 4 | Edit 容错 | 🔲 规划中 |
+| 1 | 知识注入（核心） | ✅ 已完成 |
+| 2 | 增强代码理解 | 🔲 进行中 |
+| 3 | 用户习惯学习 | ✅ 已完成 |
+| 4 | Edit 容错增强 | 🔲 规划中 |
 | 5 | 主动服务 | 🔲 规划中 |
-| 6 | 沙盒验证 | 🔲 规划中 |
 
 ## 许可证
 
