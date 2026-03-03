@@ -1,0 +1,14 @@
+[package]
+name = "smanclaw-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Tauri desktop application for SmanClaw (wrapper crate)"
+
+[dependencies]
+smanclaw-desktop-tauri = { path = "src-tauri" }
+
+[dev-dependencies]
+tempfile = "3.14"

@@ -1,0 +1,134 @@
+import { invoke } from '@tauri-apps/api/core';
+import type {
+  ApiResponse,
+  ExecuteTaskRequest,
+  ExecuteTaskResponse,
+  GetTaskStatusResponse,
+  ListProjectsResponse,
+  GetHistoryResponse,
+  Project,
+  Task,
+  Message,
+  Settings
+} from '../types';
+
+// Check if running in Tauri environment
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI__' in window;
+}
+
+// Safe invoke wrapper
+async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<ApiResponse<T>> {
+  if (!isTauri()) {
+    return {
+      success: false,
+      error: 'Not running in Tauri environment'
+    };
+  }
+
+  try {
+    const data = await invoke<T>(command, args);
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+// Project API
+export const projectApi = {
+  async list(): Promise<ApiResponse<ListProjectsResponse>> {
+    return safeInvoke<ListProjectsResponse>('list_projects');
+  },
+
+  async get(id: string): Promise<ApiResponse<Project>> {
+    return safeInvoke<Project>('get_project', { id });
+  },
+
+  async create(name: string, path: string, description?: string): Promise<ApiResponse<Project>> {
+    return safeInvoke<Project>('create_project', { name, path, description });
+  },
+
+  async update(id: string, updates: Partial<Project>): Promise<ApiResponse<Project>> {
+    return safeInvoke<Project>('update_project', { id, updates });
+  },
+
+  async delete(id: string): Promise<ApiResponse<void>> {
+    return safeInvoke<void>('delete_project', { id });
+  },
+
+  async openDialog(): Promise<ApiResponse<string>> {
+    return safeInvoke<string>('open_project_dialog');
+  }
+};
+
+// Task API
+export const taskApi = {
+  async execute(request: ExecuteTaskRequest): Promise<ApiResponse<ExecuteTaskResponse>> {
+    return safeInvoke<ExecuteTaskResponse>('execute_task', { ...request });
+  },
+
+  async getStatus(taskId: string): Promise<ApiResponse<GetTaskStatusResponse>> {
+    return safeInvoke<GetTaskStatusResponse>('get_task_status', { taskId });
+  },
+
+  async cancel(taskId: string): Promise<ApiResponse<void>> {
+    return safeInvoke<void>('cancel_task', { taskId });
+  },
+
+  async list(projectId?: string): Promise<ApiResponse<Task[]>> {
+    return safeInvoke<Task[]>('list_tasks', { projectId });
+  }
+};
+
+// History API
+export const historyApi = {
+  async get(projectId: string): Promise<ApiResponse<GetHistoryResponse>> {
+    return safeInvoke<GetHistoryResponse>('get_history', { projectId });
+  },
+
+  async addMessage(projectId: string, message: Omit<Message, 'id' | 'timestamp'>): Promise<ApiResponse<Message>> {
+    return safeInvoke<Message>('add_message', { projectId, message });
+  },
+
+  async clear(projectId: string): Promise<ApiResponse<void>> {
+    return safeInvoke<void>('clear_history', { projectId });
+  }
+};
+
+// Settings API
+export const settingsApi = {
+  async get(): Promise<ApiResponse<Settings>> {
+    return safeInvoke<Settings>('get_settings');
+  },
+
+  async update(settings: Partial<Settings>): Promise<ApiResponse<Settings>> {
+    return safeInvoke<Settings>('update_settings', { settings });
+  }
+};
+
+// File system API
+export const fsApi = {
+  async readTextFile(path: string): Promise<ApiResponse<string>> {
+    return safeInvoke<string>('read_text_file', { path });
+  },
+
+  async writeTextFile(path: string, content: string): Promise<ApiResponse<void>> {
+    return safeInvoke<void>('write_text_file', { path, content });
+  },
+
+  async exists(path: string): Promise<ApiResponse<boolean>> {
+    return safeInvoke<boolean>('file_exists', { path });
+  }
+};
+
+// Shell API
+export const shellApi = {
+  async execute(command: string, cwd?: string): Promise<ApiResponse<{ stdout: string; stderr: string; code: number }>> {
+    return safeInvoke('execute_command', { command, cwd });
+  }
+};
+
+export { isTauri };

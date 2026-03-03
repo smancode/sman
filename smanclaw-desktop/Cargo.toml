@@ -1,0 +1,47 @@
+[workspace]
+members = [
+    "crates/smanclaw-types",
+    "crates/smanclaw-core",
+    "crates/smanclaw-ffi",
+    "crates/smanclaw-desktop",
+    "crates/smanclaw-desktop/src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["SmanClaw Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/smanclaw/smanclaw-desktop"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Async
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+async-trait = "0.1"
+
+# Database
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+# UUID
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# ZeroClaw (parent project)
+zeroclaw = { path = "../" }
+
+# Internal crates
+smanclaw-types = { path = "crates/smanclaw-types" }
+smanclaw-core = { path = "crates/smanclaw-core" }
+smanclaw-ffi = { path = "crates/smanclaw-ffi" }

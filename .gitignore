@@ -43,3 +43,16 @@ credentials.json
 # Nix
 result
 .VSCodeCounter/
+
+# IDE
+.vscode/
+
+# Documentation drafts
+docs/desktop-app*.md
+
+# Desktop app build artifacts
+smanclaw-desktop/target/
+smanclaw-desktop/**/node_modules/
+smanclaw-desktop/**/.svelte-kit/
+smanclaw-desktop/**/src-tauri/web/
+smanclaw-desktop/**/src-tauri/gen/
