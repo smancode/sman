@@ -20,3 +20,21 @@ export * from "./api/interface"
 export { createAgentRegistry, AgentRegistryImpl } from "./agent/registry"
 export { createSessionManager, SessionManagerImpl } from "./session/manager"
 export { createEventBus, EventBusImpl } from "./bus"
+
+// File-based Storage
+export {
+  JsonlSessionStore,
+  JsonlMessageStore,
+  FileMarkdownStore,
+  JsonKeyValueStore,
+  createSessionStore,
+  createMessageStore,
+  createMarkdownStore,
+  createKeyValueStore,
+  getSmanDir,
+  getSessionsDir,
+  getPuzzlesDir,
+  getCacheDir,
+  ensureDir,
+  type StorageConfig,
+} from "./storage/files"

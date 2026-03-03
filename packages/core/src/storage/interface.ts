@@ -4,6 +4,8 @@
  * 统一的存储抽象层
  */
 
+import type { Message, Session, SessionStatus } from "../types"
+
 // ============================================================================
 // 键值存储接口
 // ============================================================================
@@ -37,6 +39,70 @@ export interface KeyValueStore {
 
   /** 清空 */
   clear(): Promise<void>
+}
+
+// ============================================================================
+// 会话存储接口
+// ============================================================================
+
+/** 会话存储接口 */
+export interface SessionStore {
+  /** 创建会话 */
+  create(input: {
+    projectId: string
+    parentId?: string
+    title?: string
+  }): Promise<Session>
+
+  /** 获取会话 */
+  get(sessionId: string): Promise<Session | undefined>
+
+  /** 更新会话 */
+  update(sessionId: string, updates: Partial<Session>): Promise<Session>
+
+  /** 删除会话 */
+  delete(sessionId: string): Promise<void>
+
+  /** 列出会话 */
+  list(projectId: string, options?: {
+    status?: SessionStatus
+    limit?: number
+    offset?: number
+  }): Promise<Session[]>
+
+  /** 获取子会话 */
+  getChildren(parentId: string): Promise<Session[]>
+}
+
+// ============================================================================
+// 消息存储接口
+// ============================================================================
+
+/** 消息存储接口 */
+export interface MessageStore {
+  /** 追加消息 */
+  append(sessionId: string, message: Omit<Message, "id" | "sessionId" | "timestamp">): Promise<Message>
+
+  /** 获取消息 */
+  get(messageId: string): Promise<Message | undefined>
+
+  /** 更新消息 */
+  update(messageId: string, updates: Partial<Message>): Promise<Message>
+
+  /** 删除消息 */
+  delete(messageId: string): Promise<void>
+
+  /** 获取会话消息流 */
+  stream(sessionId: string, options?: {
+    afterMessageId?: string
+    limit?: number
+  }): AsyncGenerator<Message>
+
+  /** 获取消息历史 */
+  getHistory(sessionId: string, options?: {
+    limit?: number
+    includeCompacted?: boolean
+  }): Promise<Message[]>
 }
 
 // ============================================================================
