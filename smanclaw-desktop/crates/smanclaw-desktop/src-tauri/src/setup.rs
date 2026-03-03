@@ -60,6 +60,12 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::list_conversations,
             crate::commands::create_conversation,
             crate::commands::send_message,
+            // Settings commands
+            crate::commands::get_app_settings,
+            crate::commands::update_app_settings,
+            crate::commands::test_llm_connection,
+            crate::commands::test_embedding_connection,
+            crate::commands::test_qdrant_connection,
             // Utility commands
             crate::commands::get_version,
             crate::commands::path_exists,

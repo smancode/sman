@@ -3,7 +3,8 @@
 use chrono::Utc;
 use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::{
-    Conversation, FileAction, HistoryEntry, Project, ProjectConfig, Role, Task,
+    AppSettings, ConnectionTestResult, Conversation, EmbeddingSettings, FileAction, HistoryEntry,
+    LlmSettings, Project, ProjectConfig, QdrantSettings, Role, Task,
     TaskStatus,
 };
 use std::path::PathBuf;
@@ -187,11 +188,9 @@ pub async fn execute_task(
                 }
 
                 // Emit completion event
-                let status_str = if result.success { "completed" } else { "failed" };
-                let message = if result.success {
-                    Some(result.output.clone())
-                } else {
-                    result.error.clone()
+                let (status_str, message) = match result.success {
+                    true => ("completed", Some(result.output.clone())),
+                    false => ("failed", result.error.clone()),
                 };
                 if let Err(e) = emit_task_status(&app_handle_clone, &task_id, status_str, message) {
                     tracing::error!("Failed to emit task status event: {}", e);
@@ -437,4 +436,185 @@ pub async fn select_folder(
         .blocking_pick_folder();
 
     Ok(folder.map(|p| p.to_string()))
+}
+
+// ============================================================================
+// Settings Commands
+// ============================================================================
+
+/// Get application settings
+#[tauri::command]
+pub async fn get_app_settings(state: State<'_, AppState>) -> TauriResult<AppSettings> {
+    let store = state.settings_store.lock().await;
+    let settings = store.load()?;
+    Ok(settings)
+}
+
+/// Update application settings
+#[tauri::command]
+pub async fn update_app_settings(
+    state: State<'_, AppState>,
+    settings: AppSettings,
+) -> TauriResult<AppSettings> {
+    let store = state.settings_store.lock().await;
+    store.save(&settings)?;
+    // Reload to get the actual stored values (with API keys from secure storage)
+    let loaded = store.load()?;
+    Ok(loaded)
+}
+
+/// Test LLM API connection
+#[tauri::command]
+pub async fn test_llm_connection(
+    settings: LlmSettings,
+) -> TauriResult<ConnectionTestResult> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // Build a simple test request
+    let client = reqwest::Client::new();
+    let url = format!("{}/chat/completions", settings.api_url.trim_end_matches('/'));
+
+    let body = serde_json::json!({
+        "model": settings.default_model,
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_tokens": 1
+    });
+
+    let result = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", settings.api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await;
+
+    match result {
+        Ok(response) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            if response.status().is_success() {
+                Ok(ConnectionTestResult {
+                    success: true,
+                    error: None,
+                    latency_ms: Some(latency_ms),
+                })
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                Ok(ConnectionTestResult {
+                    success: false,
+                    error: Some(format!("HTTP {}: {}", status, error_text)),
+                    latency_ms: Some(latency_ms),
+                })
+            }
+        }
+        Err(e) => Ok(ConnectionTestResult {
+            success: false,
+            error: Some(e.to_string()),
+            latency_ms: None,
+        }),
+    }
+}
+
+/// Test Embedding API connection
+#[tauri::command]
+pub async fn test_embedding_connection(
+    settings: EmbeddingSettings,
+) -> TauriResult<ConnectionTestResult> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/embeddings", settings.api_url.trim_end_matches('/'));
+
+    let body = serde_json::json!({
+        "model": settings.model,
+        "input": "test"
+    });
+
+    let result = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", settings.api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await;
+
+    match result {
+        Ok(response) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            if response.status().is_success() {
+                Ok(ConnectionTestResult {
+                    success: true,
+                    error: None,
+                    latency_ms: Some(latency_ms),
+                })
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                Ok(ConnectionTestResult {
+                    success: false,
+                    error: Some(format!("HTTP {}: {}", status, error_text)),
+                    latency_ms: Some(latency_ms),
+                })
+            }
+        }
+        Err(e) => Ok(ConnectionTestResult {
+            success: false,
+            error: Some(e.to_string()),
+            latency_ms: None,
+        }),
+    }
+}
+
+/// Test Qdrant connection
+#[tauri::command]
+pub async fn test_qdrant_connection(
+    settings: QdrantSettings,
+) -> TauriResult<ConnectionTestResult> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/collections/{}", settings.url.trim_end_matches('/'), settings.collection);
+
+    let mut request = client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10));
+
+    if let Some(api_key) = settings.api_key {
+        request = request.header("api-key", api_key);
+    }
+
+    let result = request.send().await;
+
+    match result {
+        Ok(response) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            if response.status().is_success() {
+                Ok(ConnectionTestResult {
+                    success: true,
+                    error: None,
+                    latency_ms: Some(latency_ms),
+                })
+            } else {
+                let status = response.status();
+                Ok(ConnectionTestResult {
+                    success: false,
+                    error: Some(format!("HTTP {}", status)),
+                    latency_ms: Some(latency_ms),
+                })
+            }
+        }
+        Err(e) => Ok(ConnectionTestResult {
+            success: false,
+            error: Some(e.to_string()),
+            latency_ms: None,
+        }),
+    }
 }

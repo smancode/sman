@@ -9,7 +9,12 @@ import type {
   Project,
   Task,
   Message,
-  Settings
+  Settings,
+  AppSettings,
+  LlmSettings,
+  EmbeddingSettings,
+  QdrantSettings,
+  ConnectionTestResult
 } from '../types';
 
 // Check if running in Tauri environment
@@ -98,7 +103,30 @@ export const historyApi = {
   }
 };
 
-// Settings API
+// App Settings API (for API configuration)
+export const appSettingsApi = {
+  async get(): Promise<ApiResponse<AppSettings>> {
+    return safeInvoke<AppSettings>('get_app_settings');
+  },
+
+  async update(settings: AppSettings): Promise<ApiResponse<AppSettings>> {
+    return safeInvoke<AppSettings>('update_app_settings', { settings });
+  },
+
+  async testLlm(llm: LlmSettings): Promise<ApiResponse<ConnectionTestResult>> {
+    return safeInvoke<ConnectionTestResult>('test_llm_connection', { settings: llm });
+  },
+
+  async testEmbedding(embedding: EmbeddingSettings): Promise<ApiResponse<ConnectionTestResult>> {
+    return safeInvoke<ConnectionTestResult>('test_embedding_connection', { settings: embedding });
+  },
+
+  async testQdrant(qdrant: QdrantSettings): Promise<ApiResponse<ConnectionTestResult>> {
+    return safeInvoke<ConnectionTestResult>('test_qdrant_connection', { settings: qdrant });
+  }
+};
+
+// Settings API (for UI preferences)
 export const settingsApi = {
   async get(): Promise<ApiResponse<Settings>> {
     return safeInvoke<Settings>('get_settings');

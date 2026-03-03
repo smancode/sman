@@ -1,6 +1,7 @@
 //! Application state management
 
-use smanclaw_core::{ProjectManager, SqliteHistoryStore, TaskManager};
+use smanclaw_core::{ProjectManager, SettingsStore, SqliteHistoryStore, TaskManager};
+use smanclaw_types::AppSettings;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -15,6 +16,8 @@ pub struct AppState {
     pub task_manager: Arc<Mutex<TaskManager>>,
     /// History store (wrapped in Mutex for thread safety)
     pub history_store: Arc<Mutex<SqliteHistoryStore>>,
+    /// Settings store (wrapped in Mutex for thread safety)
+    pub settings_store: Arc<Mutex<SettingsStore>>,
     /// Configuration directory
     pub config_dir: PathBuf,
 }
@@ -34,11 +37,13 @@ impl AppState {
         let project_manager = Arc::new(Mutex::new(ProjectManager::new(config_dir.clone())?));
         let task_manager = Arc::new(Mutex::new(TaskManager::new(&config_dir.join("tasks.db"))?));
         let history_store = Arc::new(Mutex::new(SqliteHistoryStore::new(&config_dir.join("history.db"))?));
+        let settings_store = Arc::new(Mutex::new(SettingsStore::new(config_dir.clone())?));
 
         Ok(Self {
             project_manager,
             task_manager,
             history_store,
+            settings_store,
             config_dir,
         })
     }

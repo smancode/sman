@@ -39,6 +39,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Async utilities
 futures = "0.3"
 
+# HTTP client (for API testing)
+reqwest = { version = "0.12", features = ["json"] }
+
 # Directories
 dirs = "5"
 

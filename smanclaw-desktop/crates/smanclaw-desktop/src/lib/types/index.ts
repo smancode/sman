@@ -63,14 +63,50 @@ export interface ChatSession {
 }
 
 // Settings types
+
+// LLM Settings (OpenAI Compatible)
+export interface LlmSettings {
+  apiUrl: string;
+  apiKey: string;
+  defaultModel: string;
+}
+
+// Embedding Settings
+export interface EmbeddingSettings {
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  dimensions: number;
+}
+
+// Qdrant Settings
+export interface QdrantSettings {
+  url: string;
+  collection: string;
+  apiKey?: string;
+}
+
+// Application Settings
+export interface AppSettings {
+  llm: LlmSettings;
+  embedding?: EmbeddingSettings;
+  qdrant?: QdrantSettings;
+}
+
+// Connection Test Result
+export interface ConnectionTestResult {
+  success: boolean;
+  error?: string;
+  latencyMs?: number;
+}
+
+// Legacy Settings (for UI preferences)
 export interface Settings {
   theme: 'dark' | 'light' | 'system';
   fontSize: 'small' | 'medium' | 'large';
   autoSave: boolean;
   showFileChanges: boolean;
   maxHistoryItems: number;
-  llmProvider?: string;
-  apiKey?: string;
 }
 
 // API response types

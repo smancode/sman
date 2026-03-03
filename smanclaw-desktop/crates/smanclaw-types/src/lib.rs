@@ -5,9 +5,11 @@
 pub mod events;
 pub mod history;
 pub mod project;
+pub mod settings;
 pub mod task;
 
 pub use events::*;
 pub use history::*;
 pub use project::*;
+pub use settings::*;
 pub use task::*;
