@@ -1,0 +1,466 @@
+name: CI Run
+
+on:
+    push:
+        branches: [dev, main]
+    pull_request:
+        branches: [dev, main]
+    merge_group:
+        branches: [dev, main]
+
+concurrency:
+    group: ci-run-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name || github.sha }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+env:
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: core.hooksPath
+    GIT_CONFIG_VALUE_0: /dev/null
+    CARGO_TERM_COLOR: always
+
+jobs:
+    changes:
+        name: Detect Change Scope
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        outputs:
+            docs_only: ${{ steps.scope.outputs.docs_only }}
+            docs_changed: ${{ steps.scope.outputs.docs_changed }}
+            rust_changed: ${{ steps.scope.outputs.rust_changed }}
+            workflow_changed: ${{ steps.scope.outputs.workflow_changed }}
+            ci_cd_changed: ${{ steps.scope.outputs.ci_cd_changed }}
+            docs_files: ${{ steps.scope.outputs.docs_files }}
+            base_sha: ${{ steps.scope.outputs.base_sha }}
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                  fetch-depth: 0
+
+            - name: Detect docs-only changes
+              id: scope
+              shell: bash
+              env:
+                  EVENT_NAME: ${{ github.event_name }}
+                  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
+              run: ./scripts/ci/detect_change_scope.sh
+
+    lint:
+        name: Lint Gate (Format + Clippy + Strict Delta)
+        needs: [changes]
+        if: needs.changes.outputs.rust_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, blacksmith-2vcpu-ubuntu-2404, hetzner]
+        timeout-minutes: 75
+        env:
+            CARGO_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/cargo
+            RUSTUP_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/rustup
+            CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/target
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                  fetch-depth: 0
+            - name: Self-heal Rust toolchain cache
+              shell: bash
+              run: ./scripts/ci/self_heal_rust_toolchain.sh 1.92.0
+            - name: Ensure C toolchain
+              shell: bash
+              run: bash ./scripts/ci/ensure_c_toolchain.sh
+            - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+              with:
+                  toolchain: 1.92.0
+                  components: rustfmt, clippy
+            - name: Ensure C toolchain for Rust builds
+              run: ./scripts/ci/ensure_cc.sh
+            - name: Ensure cargo component
+              shell: bash
+              run: bash ./scripts/ci/ensure_cargo_component.sh 1.92.0
+            - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v3
+              with:
+                  prefix-key: ci-run-check
+                  cache-bin: false
+            - name: Run rust quality gate
+              run: ./scripts/ci/rust_quality_gate.sh
+            - name: Run strict lint delta gate
+              env:
+                  BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+              run: ./scripts/ci/rust_strict_delta_gate.sh
+
+    workspace-check:
+        name: Workspace Check
+        needs: [changes]
+        if: needs.changes.outputs.rust_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, blacksmith-2vcpu-ubuntu-2404, hetzner]
+        timeout-minutes: 45
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - name: Self-heal Rust toolchain cache
+              shell: bash
+              run: ./scripts/ci/self_heal_rust_toolchain.sh 1.92.0
+            - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+              with:
+                  toolchain: 1.92.0
+            - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v3
+              with:
+                  prefix-key: ci-run-workspace-check
+                  cache-bin: false
+            - name: Check workspace
+              run: cargo check --workspace --locked
+
+    package-check:
+        name: Package Check (${{ matrix.package }})
+        needs: [changes]
+        if: needs.changes.outputs.rust_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, blacksmith-2vcpu-ubuntu-2404, hetzner]
+        timeout-minutes: 25
+        strategy:
+            fail-fast: false
+            matrix:
+                package: [zeroclaw-types, zeroclaw-core]
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - name: Self-heal Rust toolchain cache
+              shell: bash
+              run: ./scripts/ci/self_heal_rust_toolchain.sh 1.92.0
+            - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+              with:
+                  toolchain: 1.92.0
+            - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v3
+              with:
+                  prefix-key: ci-run-package-check
+                  cache-bin: false
+            - name: Check package
+              run: cargo check -p ${{ matrix.package }} --locked
+
+    test:
+        name: Test
+        needs: [changes]
+        if: needs.changes.outputs.rust_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, blacksmith-2vcpu-ubuntu-2404, hetzner]
+        timeout-minutes: 120
+        env:
+            CARGO_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/cargo
+            RUSTUP_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/rustup
+            CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/target
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - name: Ensure C toolchain
+              shell: bash
+              run: bash ./scripts/ci/ensure_c_toolchain.sh
+            - name: Self-heal Rust toolchain cache
+              shell: bash
+              run: ./scripts/ci/self_heal_rust_toolchain.sh 1.92.0
+            - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+              with:
+                  toolchain: 1.92.0
+            - name: Ensure C toolchain for Rust builds
+              run: ./scripts/ci/ensure_cc.sh
+            - name: Ensure cargo component
+              shell: bash
+              run: bash ./scripts/ci/ensure_cargo_component.sh 1.92.0
+            - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v3
+              with:
+                  prefix-key: ci-run-check
+                  cache-bin: false
+            - name: Run tests with flake detection
+              shell: bash
+              env:
+                  BLOCK_ON_FLAKE: ${{ vars.CI_BLOCK_ON_FLAKE_SUSPECTED || 'false' }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p artifacts
+
+                  toolchain_bin=""
+                  if [ -n "${CARGO:-}" ]; then
+                    toolchain_bin="$(dirname "${CARGO}")"
+                  elif [ -n "${RUSTC:-}" ]; then
+                    toolchain_bin="$(dirname "${RUSTC}")"
+                  fi
+
+                  if [ -n "${toolchain_bin}" ] && [ -d "${toolchain_bin}" ]; then
+                    case ":$PATH:" in
+                      *":${toolchain_bin}:"*) ;;
+                      *) export PATH="${toolchain_bin}:$PATH" ;;
+                    esac
+                  fi
+
+                  if cargo test --locked --verbose; then
+                    echo '{"flake_suspected":false,"status":"success"}' > artifacts/flake-probe.json
+                    exit 0
+                  fi
+
+                  echo "::warning::First test run failed. Retrying for flake detection..."
+                  if cargo test --locked --verbose; then
+                    echo '{"flake_suspected":true,"status":"flake"}' > artifacts/flake-probe.json
+                    echo "::warning::Flake suspected — test passed on retry"
+                    if [ "${BLOCK_ON_FLAKE}" = "true" ]; then
+                      echo "BLOCK_ON_FLAKE is set; failing on suspected flake."
+                      exit 1
+                    fi
+                    exit 0
+                  fi
+
+                  echo '{"flake_suspected":false,"status":"failure"}' > artifacts/flake-probe.json
+                  exit 1
+            - name: Publish flake probe summary
+              if: always()
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  if [ -f artifacts/flake-probe.json ]; then
+                    status=$(python3 -c "import json; print(json.load(open('artifacts/flake-probe.json'))['status'])")
+                    flake=$(python3 -c "import json; print(json.load(open('artifacts/flake-probe.json'))['flake_suspected'])")
+                    {
+                      echo "### Test Flake Probe"
+                      echo "- Status: \`${status}\`"
+                      echo "- Flake suspected: \`${flake}\`"
+                    } >> "$GITHUB_STEP_SUMMARY"
+                  fi
+            - name: Upload flake probe artifact
+              if: always()
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+              with:
+                  name: test-flake-probe
+                  path: artifacts/flake-probe.*
+                  if-no-files-found: ignore
+                  retention-days: 14
+
+    build:
+        name: Build (Smoke)
+        needs: [changes]
+        if: needs.changes.outputs.rust_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, blacksmith-2vcpu-ubuntu-2404, hetzner]
+        timeout-minutes: 90
+        env:
+            CARGO_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/cargo
+            RUSTUP_HOME: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/rustup
+            CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-rust/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}/target
+
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - name: Ensure C toolchain
+              shell: bash
+              run: bash ./scripts/ci/ensure_c_toolchain.sh
+            - name: Self-heal Rust toolchain cache
+              shell: bash
+              run: ./scripts/ci/self_heal_rust_toolchain.sh 1.92.0
+            - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+              with:
+                  toolchain: 1.92.0
+            - name: Ensure C toolchain for Rust builds
+              run: ./scripts/ci/ensure_cc.sh
+            - name: Ensure cargo component
+              shell: bash
+              run: bash ./scripts/ci/ensure_cargo_component.sh 1.92.0
+            - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v3
+              with:
+                  prefix-key: ci-run-build
+                  cache-targets: true
+                  cache-bin: false
+            - name: Build binary (smoke check)
+              env:
+                  CARGO_BUILD_JOBS: 2
+                  CI_SMOKE_BUILD_ATTEMPTS: 3
+              run: bash scripts/ci/smoke_build_retry.sh
+            - name: Check binary size
+              env:
+                  BINARY_SIZE_HARD_LIMIT_MB: 28
+                  BINARY_SIZE_ADVISORY_MB: 20
+                  BINARY_SIZE_TARGET_MB: 5
+              run: bash scripts/ci/check_binary_size.sh target/release-fast/zeroclaw
+
+    docs-only:
+        name: Docs-Only Fast Path
+        needs: [changes]
+        if: needs.changes.outputs.docs_only == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        steps:
+            - name: Skip heavy jobs for docs-only change
+              run: echo "Docs-only change detected. Rust lint/test/build skipped."
+
+    non-rust:
+        name: Non-Rust Fast Path
+        needs: [changes]
+        if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.rust_changed != 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        steps:
+            - name: Skip Rust jobs for non-Rust change scope
+              run: echo "No Rust-impacting files changed. Rust lint/test/build skipped."
+
+    docs-quality:
+        name: Docs Quality
+        needs: [changes]
+        if: needs.changes.outputs.docs_changed == 'true'
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+              with:
+                  fetch-depth: 0
+            - name: Setup Node.js for markdown lint
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+              with:
+                  node-version: "22"
+
+            - name: Markdown lint (changed lines only)
+              env:
+                  BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+                  DOCS_FILES: ${{ needs.changes.outputs.docs_files }}
+              run: ./scripts/ci/docs_quality_gate.sh
+
+            - name: Collect added links
+              id: collect_links
+              shell: bash
+              env:
+                  BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+                  DOCS_FILES: ${{ needs.changes.outputs.docs_files }}
+              run: |
+                  set -euo pipefail
+                  python3 ./scripts/ci/collect_changed_links.py \
+                    --base "$BASE_SHA" \
+                    --docs-files "$DOCS_FILES" \
+                    --output .ci-added-links.txt
+                  count=$(wc -l < .ci-added-links.txt | tr -d ' ')
+                  echo "count=$count" >> "$GITHUB_OUTPUT"
+                  if [ "$count" -gt 0 ]; then
+                    echo "Added links queued for check:"
+                    cat .ci-added-links.txt
+                  else
+                    echo "No added links found in changed docs lines."
+                  fi
+
+            - name: Link check (offline, added links only)
+              if: steps.collect_links.outputs.count != '0'
+              uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2
+              with:
+                  fail: true
+                  args: >-
+                      --offline
+                      --no-progress
+                      --format detailed
+                      .ci-added-links.txt
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Skip link check (no added links)
+              if: steps.collect_links.outputs.count == '0'
+              run: echo "No added links in changed docs lines. Link check skipped."
+
+    lint-feedback:
+        name: Lint Feedback
+        if: github.event_name == 'pull_request'
+        needs: [changes, lint, docs-quality]
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        permissions:
+            contents: read
+            pull-requests: write
+            issues: write
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+            - name: Post actionable lint failure summary
+              if: always()
+              uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+              env:
+                  RUST_CHANGED: ${{ needs.changes.outputs.rust_changed }}
+                  DOCS_CHANGED: ${{ needs.changes.outputs.docs_changed }}
+                  LINT_RESULT: ${{ needs.lint.result }}
+                  LINT_DELTA_RESULT: ${{ needs.lint.result }}
+                  DOCS_RESULT: ${{ needs.docs-quality.result }}
+              with:
+                  script: |
+                      const script = require('./.github/workflows/scripts/lint_feedback.js');
+                      await script({github, context, core});
+
+    license-file-owner-guard:
+        name: License File Owner Guard
+        needs: [changes]
+        if: github.event_name == 'pull_request'
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        permissions:
+            contents: read
+            pull-requests: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+            - name: Enforce owner-only edits for root license files
+              uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+              with:
+                  script: |
+                    const script = require('./.github/workflows/scripts/ci_license_file_owner_guard.js');
+                    await script({ github, context, core });
+    ci-required:
+        name: CI Required Gate
+        if: always()
+        needs: [changes, lint, workspace-check, package-check, test, build, docs-only, non-rust, docs-quality, lint-feedback, license-file-owner-guard]
+        runs-on: [self-hosted, Linux, X64, aws-india, light, cpu40]
+        steps:
+            - name: Enforce required status
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  event_name="${{ github.event_name }}"
+                  rust_changed="${{ needs.changes.outputs.rust_changed }}"
+                  docs_changed="${{ needs.changes.outputs.docs_changed }}"
+                  docs_result="${{ needs.docs-quality.result }}"
+                  license_owner_result="${{ needs.license-file-owner-guard.result }}"
+
+                  # --- Helper: enforce PR governance gates ---
+                  check_pr_governance() {
+                    if [ "$event_name" != "pull_request" ]; then return 0; fi
+                    if [ "$license_owner_result" != "success" ]; then
+                      echo "License file owner guard did not pass."
+                      exit 1
+                    fi
+                  }
+
+                  check_docs_quality() {
+                    if [ "$docs_changed" = "true" ] && [ "$docs_result" != "success" ]; then
+                      echo "Docs changed but docs-quality did not pass."
+                      exit 1
+                    fi
+                  }
+
+                  # --- Docs-only fast path ---
+                  if [ "${{ needs.changes.outputs.docs_only }}" = "true" ]; then
+                    check_pr_governance
+                    check_docs_quality
+                    echo "Docs-only fast path passed."
+                    exit 0
+                  fi
+
+                  # --- Non-rust fast path ---
+                  if [ "$rust_changed" != "true" ]; then
+                    check_pr_governance
+                    check_docs_quality
+                    echo "Non-rust fast path passed."
+                    exit 0
+                  fi
+
+                  # --- Rust change path ---
+                  lint_result="${{ needs.lint.result }}"
+                  workspace_check_result="${{ needs.workspace-check.result }}"
+                  package_check_result="${{ needs.package-check.result }}"
+                  test_result="${{ needs.test.result }}"
+                  build_result="${{ needs.build.result }}"
+
+                  echo "lint=${lint_result}"
+                  echo "workspace-check=${workspace_check_result}"
+                  echo "package-check=${package_check_result}"
+                  echo "test=${test_result}"
+                  echo "build=${build_result}"
+                  echo "docs=${docs_result}"
+                  echo "license_file_owner_guard=${license_owner_result}"
+
+                  check_pr_governance
+
+                  if [ "$lint_result" != "success" ] || [ "$workspace_check_result" != "success" ] || [ "$package_check_result" != "success" ] || [ "$test_result" != "success" ] || [ "$build_result" != "success" ]; then
+                    echo "Required CI jobs did not pass: lint=${lint_result} workspace-check=${workspace_check_result} package-check=${package_check_result} test=${test_result} build=${build_result}"
+                    exit 1
+                  fi
+
+                  check_docs_quality
+
+                  echo "All required checks passed."
