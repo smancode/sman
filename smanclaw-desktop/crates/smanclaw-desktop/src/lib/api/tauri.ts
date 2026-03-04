@@ -19,12 +19,19 @@ import type {
 
 // Check if running in Tauri environment
 function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window;
+  // Tauri 2.x uses __TAURI_INTERNALS__
+  if (typeof window !== 'undefined') {
+    return '__TAURI__' in window || '__TAURI_INTERNALS__' in window;
+  }
+  return false;
 }
 
 // Safe invoke wrapper
 async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<ApiResponse<T>> {
-  if (!isTauri()) {
+  const inTauri = isTauri();
+  console.log(`[safeInvoke] Command: ${command}, isTauri: ${inTauri}`);
+
+  if (!inTauri) {
     return {
       success: false,
       error: 'Not running in Tauri environment'

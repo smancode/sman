@@ -8,6 +8,7 @@ pub type ProjectId = String;
 
 /// A project represents a codebase that ZeroClaw can work on
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     /// Unique project identifier
     pub id: ProjectId,

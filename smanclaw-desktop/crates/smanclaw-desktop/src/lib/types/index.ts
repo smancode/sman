@@ -4,9 +4,8 @@ export interface Project {
   name: string;
   path: string;
   description?: string;
-  createdAt: number;
-  updatedAt: number;
-  lastAccessedAt?: number;
+  createdAt: string;
+  lastAccessed: string;
 }
 
 // Task types
