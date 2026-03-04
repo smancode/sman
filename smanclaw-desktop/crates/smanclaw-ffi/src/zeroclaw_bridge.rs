@@ -21,10 +21,7 @@ impl ZeroclawBridge {
     }
 
     /// Create a bridge with user settings
-    pub fn from_project_with_settings(
-        project_path: &Path,
-        settings: &AppSettings,
-    ) -> Result<Self> {
+    pub fn from_project_with_settings(project_path: &Path, settings: &AppSettings) -> Result<Self> {
         let mut config = zeroclaw::Config::default();
         config.workspace_dir = project_path.to_path_buf();
 
@@ -65,9 +62,7 @@ impl ZeroclawBridge {
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => {
                 // We're already in a runtime context, use block_in_place
-                tokio::task::block_in_place(|| {
-                    handle.block_on(self.execute_task_async(input))
-                })
+                tokio::task::block_in_place(|| handle.block_on(self.execute_task_async(input)))
             }
             Err(_) => {
                 // No runtime, create one
@@ -211,8 +206,7 @@ impl ZeroclawBridge {
                                     || content.contains("Created")
                                 {
                                     FileAction::Created
-                                } else if content.contains("deleted")
-                                    || content.contains("Deleted")
+                                } else if content.contains("deleted") || content.contains("Deleted")
                                 {
                                     FileAction::Deleted
                                 } else {

@@ -24,8 +24,9 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
 /// Setup logging infrastructure
 fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
-    let filter = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| "smanclaw_desktop_tauri=info,smanclaw_core=info,smanclaw_ffi=info".to_string());
+    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
+        "smanclaw_desktop_tauri=info,smanclaw_core=info,smanclaw_ffi=info".to_string()
+    });
 
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new(filter))
@@ -62,6 +63,10 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::execute_task,
             crate::commands::get_task,
             crate::commands::list_tasks,
+            // Orchestration commands
+            crate::commands::execute_orchestrated_task,
+            crate::commands::get_task_dag,
+            crate::commands::get_orchestration_status,
             // Conversation commands
             crate::commands::get_conversation,
             crate::commands::get_conversation_messages,

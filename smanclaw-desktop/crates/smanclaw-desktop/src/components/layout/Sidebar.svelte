@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
   import { projectsStore, selectedProject, sortedProjects } from '../../lib/stores/projects';
   import ProjectList from '../project/ProjectList.svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { goto } from '$app/navigation';
 
   let isCollapsed = $state(false);
   let showNewProjectModal = $state(false);

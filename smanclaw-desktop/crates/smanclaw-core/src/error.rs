@@ -32,6 +32,34 @@ pub enum CoreError {
     /// Serialization error
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    /// Cycle detected in task dependencies
+    #[error("Cycle detected in task dependencies: {0}")]
+    CycleDetected(String),
+
+    /// Task already exists
+    #[error("Task already exists: {0}")]
+    TaskAlreadyExists(String),
+
+    /// Skill not found
+    #[error("Skill not found: {0}")]
+    SkillNotFound(String),
+
+    /// Skill already exists
+    #[error("Skill already exists: {0}")]
+    SkillAlreadyExists(String),
+
+    /// Task file not found
+    #[error("Task file not found: {0}")]
+    TaskFileNotFound(String),
+
+    /// Task file parse error
+    #[error("Failed to parse task file: {0}")]
+    TaskFileParseError(String),
+
+    /// Poll timeout
+    #[error("Poll timeout after {0:?}")]
+    PollTimeout(std::time::Duration),
 }
 
 /// Result type alias for CoreError

@@ -165,7 +165,7 @@ impl SqliteHistoryStore {
     /// Get a conversation by ID
     pub fn get_conversation(&self, conversation_id: &str) -> CoreResult<Option<Conversation>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, title, created_at, updated_at FROM conversations WHERE id = ?1"
+            "SELECT id, project_id, title, created_at, updated_at FROM conversations WHERE id = ?1",
         )?;
 
         let result = stmt.query_row([conversation_id], |row| {
@@ -200,7 +200,9 @@ mod tests {
     #[test]
     fn create_conversation_should_succeed() {
         let store = SqliteHistoryStore::in_memory().expect("create store");
-        let conv = store.create_conversation("proj-123", "Login Feature").expect("create");
+        let conv = store
+            .create_conversation("proj-123", "Login Feature")
+            .expect("create");
 
         assert_eq!(conv.project_id, "proj-123");
         assert_eq!(conv.title, "Login Feature");
@@ -209,7 +211,9 @@ mod tests {
     #[test]
     fn save_and_load_entries() {
         let store = SqliteHistoryStore::in_memory().expect("create store");
-        let conv = store.create_conversation("proj-123", "Test").expect("create");
+        let conv = store
+            .create_conversation("proj-123", "Test")
+            .expect("create");
 
         let entry1 = HistoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -238,9 +242,15 @@ mod tests {
     #[test]
     fn list_conversations_by_project() {
         let store = SqliteHistoryStore::in_memory().expect("create store");
-        store.create_conversation("proj-a", "Conv A1").expect("create");
-        store.create_conversation("proj-a", "Conv A2").expect("create");
-        store.create_conversation("proj-b", "Conv B1").expect("create");
+        store
+            .create_conversation("proj-a", "Conv A1")
+            .expect("create");
+        store
+            .create_conversation("proj-a", "Conv A2")
+            .expect("create");
+        store
+            .create_conversation("proj-b", "Conv B1")
+            .expect("create");
 
         let convs_a = store.list_conversations("proj-a").expect("list");
         assert_eq!(convs_a.len(), 2);

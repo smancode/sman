@@ -19,7 +19,7 @@
     onDelete?.(project.id);
   }
 
-  function formatDate(timestamp: number): string {
+  function formatDate(timestamp: string): string {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -48,7 +48,7 @@
 
   <div class="info">
     <span class="name">{project.name}</span>
-    <span class="meta">{formatDate(project.updatedAt)}</span>
+    <span class="meta">{formatDate(project.lastAccessed)}</span>
   </div>
 
   <button class="delete-btn" onclick={handleDelete} aria-label="Delete project">

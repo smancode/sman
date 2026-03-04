@@ -1,8 +1,8 @@
 //! Task executor for managing task execution lifecycle
 
 use anyhow::Result;
-use smanclaw_types::{ProgressEvent, TaskResult, TaskStatus};
 use smanclaw_core::TaskManager;
+use smanclaw_types::{ProgressEvent, TaskResult, TaskStatus};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -24,11 +24,7 @@ impl TaskExecutor {
     }
 
     /// Execute a task and return progress events
-    pub async fn execute(
-        &self,
-        task_id: &str,
-        input: &str,
-    ) -> Result<TaskResult> {
+    pub async fn execute(&self, task_id: &str, input: &str) -> Result<TaskResult> {
         // Update status to running
         self.task_manager
             .update_task_status(task_id, TaskStatus::Running)?;
@@ -91,12 +87,22 @@ mod tests {
         );
 
         // Create a task first
-        let task = task_manager.create_task("proj-123", "Test input").expect("create");
+        let task = task_manager
+            .create_task("proj-123", "Test input")
+            .expect("create");
 
         let executor = TaskExecutor::new(task_manager.clone(), bridge);
 
         // Verify executor was created successfully
-        assert_eq!(executor.task_manager.get_task(&task.id).expect("get").expect("exists").id, task.id);
+        assert_eq!(
+            executor
+                .task_manager
+                .get_task(&task.id)
+                .expect("get")
+                .expect("exists")
+                .id,
+            task.id
+        );
     }
 
     #[tokio::test]
@@ -107,16 +113,16 @@ mod tests {
             ZeroclawBridge::from_project(std::path::Path::new("/tmp/test")).expect("create"),
         );
 
-        let task = task_manager.create_task("proj-123", "Test").expect("create");
+        let task = task_manager
+            .create_task("proj-123", "Test")
+            .expect("create");
 
         let executor = TaskExecutor::new(task_manager.clone(), bridge);
         let (tx, mut rx) = mpsc::channel(32);
 
         // Execute with progress - this will attempt real ZeroClaw call
         // It may fail if no API key is configured, but channel infrastructure should work
-        let result = executor
-            .execute_with_progress(&task.id, "Test", tx)
-            .await;
+        let result = executor.execute_with_progress(&task.id, "Test", tx).await;
 
         // Collect any events that were sent
         let mut events = vec![];

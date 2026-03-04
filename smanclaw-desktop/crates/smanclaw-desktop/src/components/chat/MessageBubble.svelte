@@ -1,5 +1,6 @@
 <script lang="ts">
   import CodeBlock from './CodeBlock.svelte';
+  import MermaidRenderer from './MermaidRenderer.svelte';
   import type { Message } from '../../lib/types';
 
   interface Props {
@@ -14,8 +15,8 @@
   }
 
   // Parse message content to identify code blocks
-  function parseContent(content: string): Array<{ type: 'text' | 'code'; content: string; language?: string }> {
-    const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
+  function parseContent(content: string): Array<{ type: 'text' | 'code' | 'mermaid'; content: string; language?: string }> {
+    const parts: Array<{ type: 'text' | 'code' | 'mermaid'; content: string; language?: string }> = [];
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let lastIndex = 0;
     let match;
@@ -25,8 +26,13 @@
       if (match.index > lastIndex) {
         parts.push({ type: 'text', content: content.slice(lastIndex, match.index) });
       }
-      // Add code block
-      parts.push({ type: 'code', content: match[2], language: match[1] || 'plaintext' });
+      // Add code block or mermaid block
+      const language = match[1] || 'plaintext';
+      if (language === 'mermaid') {
+        parts.push({ type: 'mermaid', content: match[2] });
+      } else {
+        parts.push({ type: 'code', content: match[2], language });
+      }
       lastIndex = match.index + match[0].length;
     }
 
@@ -67,6 +73,8 @@
       {#each parts as part}
         {#if part.type === 'text'}
           <p class="text">{part.content}</p>
+        {:else if part.type === 'mermaid'}
+          <MermaidRenderer code={part.content} />
         {:else if part.type === 'code'}
           <CodeBlock code={part.content} language={part.language || 'plaintext'} />
         {/if}

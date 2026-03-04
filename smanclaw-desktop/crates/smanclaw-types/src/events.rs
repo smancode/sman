@@ -70,8 +70,7 @@ mod tests {
         let json = serde_json::to_string(&event).expect("serialize");
         assert!(json.contains("task_started"));
 
-        let deserialized: ProgressEvent =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ProgressEvent = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(event, deserialized);
     }
 
@@ -83,8 +82,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&event).expect("serialize");
-        let deserialized: ProgressEvent =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ProgressEvent = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(event, deserialized);
     }
 
@@ -96,8 +94,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&event).expect("serialize");
-        let deserialized: ProgressEvent =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ProgressEvent = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(event, deserialized);
     }
 }

@@ -1,11 +1,13 @@
 <script lang="ts">
   import { selectedProject } from '../../lib/stores/projects';
-  import { tasksStore, activeTask } from '../../lib/stores/tasks';
+  import { tasksStore, activeTask, activeSubtasks, activeOrchestrationProgress, activeParallelGroups } from '../../lib/stores/tasks';
   import MessageBubble from './MessageBubble.svelte';
   import InputArea from './InputArea.svelte';
   import TaskProgress from '../task/TaskProgress.svelte';
+  import SubTaskProgress from '../task/SubTaskProgress.svelte';
   import FileTree from '../task/FileTree.svelte';
   import type { Message } from '../../lib/types';
+  import { onMount } from 'svelte';
 
   let messages = $state<Message[]>([]);
   let messagesContainer: HTMLDivElement = $state()!;
@@ -19,6 +21,15 @@
       timestamp: Date.now() - 60000
     }
   ];
+
+  // Initialize store event listeners on mount
+  onMount(() => {
+    tasksStore.initialize();
+
+    return () => {
+      tasksStore.destroy();
+    };
+  });
 
   $effect(() => {
     if ($selectedProject) {
@@ -46,15 +57,15 @@
     };
     messages = [...messages, userMessage];
 
-    // Execute task
-    const taskId = await tasksStore.executeTask(prompt, $selectedProject.path);
+    // Execute orchestrated task (uses automatic decomposition)
+    const taskId = await tasksStore.executeOrchestratedTask($selectedProject.id, prompt);
 
     if (taskId) {
       // Add assistant message placeholder
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: 'Working on your request...',
+        content: 'Analyzing your request and orchestrating subtasks...',
         timestamp: Date.now(),
         taskId
       };
@@ -72,6 +83,16 @@
     {#if $activeTask}
       <div class="task-panel">
         <TaskProgress task={$activeTask} />
+
+        <!-- Show subtask progress if we have orchestrated subtasks -->
+        {#if $activeSubtasks.length > 0}
+          <SubTaskProgress
+            subtasks={$activeSubtasks}
+            progress={$activeOrchestrationProgress}
+            parallelGroups={$activeParallelGroups}
+          />
+        {/if}
+
         {#if $activeTask.fileChanges.length > 0}
           <FileTree fileChanges={$activeTask.fileChanges} />
         {/if}

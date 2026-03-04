@@ -1,18 +1,23 @@
 //! Tauri commands for frontend communication
 
 use chrono::Utc;
+use smanclaw_core::{Orchestrator, SubClawExecutor, SubTaskStatus, TaskDag};
 use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::{
     AppSettings, ConnectionTestResult, Conversation, EmbeddingSettings, FileAction, HistoryEntry,
-    LlmSettings, Project, ProjectConfig, QdrantSettings, Role, Task,
-    TaskStatus,
+    LlmSettings, Project, ProjectConfig, QdrantSettings, Role, Task, TaskStatus,
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
+use tokio::sync::RwLock;
 
 use crate::error::{TauriError, TauriResult};
-use crate::events::{emit_file_change, emit_progress_event, emit_task_status};
+use crate::events::{
+    emit_file_change, emit_orchestration_progress, emit_progress_event, emit_subtask_completed,
+    emit_subtask_started, emit_task_dag, emit_task_status, emit_test_result, SubTaskInfo,
+};
 use crate::state::AppState;
 
 // ============================================================================
@@ -29,12 +34,11 @@ pub async fn get_projects(state: State<'_, AppState>) -> TauriResult<Vec<Project
 
 /// Add a new project
 #[tauri::command]
-pub async fn add_project(
-    state: State<'_, AppState>,
-    path: String,
-) -> TauriResult<Project> {
+pub async fn add_project(state: State<'_, AppState>, path: String) -> TauriResult<Project> {
     if path.is_empty() {
-        return Err(TauriError::InvalidInput("Project path cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project path cannot be empty".to_string(),
+        ));
     }
 
     let project_path = PathBuf::from(&path);
@@ -54,12 +58,11 @@ pub async fn add_project(
 
 /// Remove a project
 #[tauri::command]
-pub async fn remove_project(
-    state: State<'_, AppState>,
-    project_id: String,
-) -> TauriResult<()> {
+pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> TauriResult<()> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
 
     let mut pm = state.project_manager.lock().await;
@@ -74,7 +77,9 @@ pub async fn get_project_config(
     project_id: String,
 ) -> TauriResult<ProjectConfig> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
 
     let pm = state.project_manager.lock().await;
@@ -89,7 +94,9 @@ pub async fn update_project_config(
     config: ProjectConfig,
 ) -> TauriResult<()> {
     if config.project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
 
     let mut pm = state.project_manager.lock().await;
@@ -110,10 +117,14 @@ pub async fn execute_task(
     input: String,
 ) -> TauriResult<Task> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
     if input.is_empty() {
-        return Err(TauriError::InvalidInput("Task input cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Task input cannot be empty".to_string(),
+        ));
     }
 
     // Get project path
@@ -171,7 +182,11 @@ pub async fn execute_task(
                 } else {
                     TaskStatus::Failed
                 };
-                if let Err(e) = task_manager.lock().await.update_task_status(&task_id, status) {
+                if let Err(e) = task_manager
+                    .lock()
+                    .await
+                    .update_task_status(&task_id, status)
+                {
                     tracing::error!("Failed to update task status: {}", e);
                 }
 
@@ -198,15 +213,16 @@ pub async fn execute_task(
             }
             Err(e) => {
                 tracing::error!("Task execution failed: {}", e);
-                if let Err(update_err) = task_manager.lock().await.update_task_status(&task_id, TaskStatus::Failed) {
+                if let Err(update_err) = task_manager
+                    .lock()
+                    .await
+                    .update_task_status(&task_id, TaskStatus::Failed)
+                {
                     tracing::error!("Failed to update task status: {}", update_err);
                 }
-                if let Err(emit_err) = emit_task_status(
-                    &app_handle_clone,
-                    &task_id,
-                    "failed",
-                    Some(e.to_string()),
-                ) {
+                if let Err(emit_err) =
+                    emit_task_status(&app_handle_clone, &task_id, "failed", Some(e.to_string()))
+                {
                     tracing::error!("Failed to emit task status event: {}", emit_err);
                 }
             }
@@ -221,12 +237,11 @@ pub async fn execute_task(
 
 /// Get task status
 #[tauri::command]
-pub async fn get_task(
-    state: State<'_, AppState>,
-    task_id: String,
-) -> TauriResult<Option<Task>> {
+pub async fn get_task(state: State<'_, AppState>, task_id: String) -> TauriResult<Option<Task>> {
     if task_id.is_empty() {
-        return Err(TauriError::InvalidInput("Task ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Task ID cannot be empty".to_string(),
+        ));
     }
 
     let tm = state.task_manager.lock().await;
@@ -236,12 +251,11 @@ pub async fn get_task(
 
 /// List tasks for a project
 #[tauri::command]
-pub async fn list_tasks(
-    state: State<'_, AppState>,
-    project_id: String,
-) -> TauriResult<Vec<Task>> {
+pub async fn list_tasks(state: State<'_, AppState>, project_id: String) -> TauriResult<Vec<Task>> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
 
     let tm = state.task_manager.lock().await;
@@ -260,7 +274,9 @@ pub async fn get_conversation(
     conversation_id: String,
 ) -> TauriResult<Option<Conversation>> {
     if conversation_id.is_empty() {
-        return Err(TauriError::InvalidInput("Conversation ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Conversation ID cannot be empty".to_string(),
+        ));
     }
 
     let hs = state.history_store.lock().await;
@@ -275,7 +291,9 @@ pub async fn get_conversation_messages(
     conversation_id: String,
 ) -> TauriResult<Vec<HistoryEntry>> {
     if conversation_id.is_empty() {
-        return Err(TauriError::InvalidInput("Conversation ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Conversation ID cannot be empty".to_string(),
+        ));
     }
 
     let hs = state.history_store.lock().await;
@@ -290,7 +308,9 @@ pub async fn list_conversations(
     project_id: String,
 ) -> TauriResult<Vec<Conversation>> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
 
     let hs = state.history_store.lock().await;
@@ -306,10 +326,14 @@ pub async fn create_conversation(
     title: String,
 ) -> TauriResult<Conversation> {
     if project_id.is_empty() {
-        return Err(TauriError::InvalidInput("Project ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
     }
     if title.is_empty() {
-        return Err(TauriError::InvalidInput("Conversation title cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Conversation title cannot be empty".to_string(),
+        ));
     }
 
     let mut hs = state.history_store.lock().await;
@@ -326,10 +350,14 @@ pub async fn send_message(
     content: String,
 ) -> TauriResult<HistoryEntry> {
     if conversation_id.is_empty() {
-        return Err(TauriError::InvalidInput("Conversation ID cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Conversation ID cannot be empty".to_string(),
+        ));
     }
     if content.is_empty() {
-        return Err(TauriError::InvalidInput("Message content cannot be empty".to_string()));
+        return Err(TauriError::InvalidInput(
+            "Message content cannot be empty".to_string(),
+        ));
     }
 
     // Get conversation and project path
@@ -381,7 +409,10 @@ pub async fn send_message(
         };
 
         // Execute task
-        match bridge.execute_task_stream(&conv_id, &content_clone, tx).await {
+        match bridge
+            .execute_task_stream(&conv_id, &content_clone, tx)
+            .await
+        {
             Ok(result) => {
                 // Create assistant message
                 let assistant_entry = HistoryEntry {
@@ -425,15 +456,10 @@ pub fn path_exists(path: String) -> bool {
 
 /// Select a folder using native dialog
 #[tauri::command]
-pub async fn select_folder(
-    app_handle: AppHandle,
-) -> TauriResult<Option<String>> {
+pub async fn select_folder(app_handle: AppHandle) -> TauriResult<Option<String>> {
     use tauri_plugin_dialog::DialogExt;
 
-    let folder = app_handle
-        .dialog()
-        .file()
-        .blocking_pick_folder();
+    let folder = app_handle.dialog().file().blocking_pick_folder();
 
     Ok(folder.map(|p| p.to_string()))
 }
@@ -465,16 +491,17 @@ pub async fn update_app_settings(
 
 /// Test LLM API connection
 #[tauri::command]
-pub async fn test_llm_connection(
-    settings: LlmSettings,
-) -> TauriResult<ConnectionTestResult> {
+pub async fn test_llm_connection(settings: LlmSettings) -> TauriResult<ConnectionTestResult> {
     use std::time::Instant;
 
     let start = Instant::now();
 
     // Build a simple test request
     let client = reqwest::Client::new();
-    let url = format!("{}/chat/completions", settings.api_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/chat/completions",
+        settings.api_url.trim_end_matches('/')
+    );
 
     let body = serde_json::json!({
         "model": settings.default_model,
@@ -573,19 +600,19 @@ pub async fn test_embedding_connection(
 
 /// Test Qdrant connection
 #[tauri::command]
-pub async fn test_qdrant_connection(
-    settings: QdrantSettings,
-) -> TauriResult<ConnectionTestResult> {
+pub async fn test_qdrant_connection(settings: QdrantSettings) -> TauriResult<ConnectionTestResult> {
     use std::time::Instant;
 
     let start = Instant::now();
 
     let client = reqwest::Client::new();
-    let url = format!("{}/collections/{}", settings.url.trim_end_matches('/'), settings.collection);
+    let url = format!(
+        "{}/collections/{}",
+        settings.url.trim_end_matches('/'),
+        settings.collection
+    );
 
-    let mut request = client
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(10));
+    let mut request = client.get(&url).timeout(std::time::Duration::from_secs(10));
 
     if let Some(api_key) = settings.api_key {
         request = request.header("api-key", api_key);
@@ -617,4 +644,396 @@ pub async fn test_qdrant_connection(
             latency_ms: None,
         }),
     }
+}
+
+// ============================================================================
+// Orchestration Commands
+// ============================================================================
+
+/// Global storage for active orchestrations (task_id -> TaskDag)
+/// Uses RwLock for concurrent read access from multiple commands
+static ORCHESTRATION_DAGS: once_cell::sync::Lazy<Arc<RwLock<HashMap<String, TaskDag>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+
+/// Result of execute_orchestrated_task command
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OrchestratedTaskResult {
+    /// Task ID
+    pub task_id: String,
+    /// Number of subtasks
+    pub subtask_count: usize,
+    /// Parallel execution groups
+    pub parallel_groups: Vec<Vec<String>>,
+}
+
+/// DAG response for get_task_dag command
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TaskDagResponse {
+    /// Task ID
+    pub task_id: String,
+    /// All subtasks
+    pub tasks: Vec<SubTaskInfo>,
+    /// Parallel execution groups
+    pub parallel_groups: Vec<Vec<String>>,
+    /// Overall progress
+    pub progress: OrchestrationProgress,
+}
+
+/// Progress information
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OrchestrationProgress {
+    /// Completed subtasks
+    pub completed: usize,
+    /// Total subtasks
+    pub total: usize,
+    /// Percentage (0.0 - 1.0)
+    pub percent: f32,
+}
+
+/// Execute an orchestrated task with automatic decomposition
+#[tauri::command]
+pub async fn execute_orchestrated_task(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+    input: String,
+) -> TauriResult<OrchestratedTaskResult> {
+    if project_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
+    }
+    if input.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Task input cannot be empty".to_string(),
+        ));
+    }
+
+    // Get project path
+    let project_path = {
+        let pm = state.project_manager.lock().await;
+        let project = pm
+            .get_project(&project_id)?
+            .ok_or_else(|| TauriError::ProjectNotFound(project_id.clone()))?;
+        PathBuf::from(&project.path)
+    };
+
+    // Create task
+    let task = {
+        let mut tm = state.task_manager.lock().await;
+        tm.create_task(&project_id, &input)?
+    };
+    let task_id = task.id.clone();
+
+    // Update project last accessed
+    {
+        let mut pm = state.project_manager.lock().await;
+        pm.touch_project(&project_id)?;
+    }
+
+    // Parse requirement and build DAG
+    let subtasks = Orchestrator::parse_requirement(&input);
+    let mut dag = Orchestrator::build_dag(subtasks.clone())?;
+    let parallel_groups: Vec<Vec<String>> = dag
+        .get_parallel_groups()
+        .iter()
+        .map(|group| group.iter().map(|t| t.id.clone()).collect())
+        .collect();
+
+    // Store DAG for later queries
+    {
+        let mut dags = ORCHESTRATION_DAGS.write().await;
+        dags.insert(task_id.clone(), dag);
+    }
+
+    // Emit initial task DAG event
+    let tasks_info: Vec<SubTaskInfo> = subtasks
+        .iter()
+        .map(|t| SubTaskInfo {
+            id: t.id.clone(),
+            description: t.description.clone(),
+            status: "pending".to_string(),
+            depends_on: t.depends_on.clone(),
+        })
+        .collect();
+    emit_task_dag(
+        &app_handle,
+        &task_id,
+        tasks_info.clone(),
+        parallel_groups.clone(),
+    )?;
+
+    // Emit task started event
+    emit_task_status(
+        &app_handle,
+        &task_id,
+        "running",
+        Some("Orchestrating subtasks...".to_string()),
+    )?;
+
+    // Spawn background task for execution
+    let app_handle_clone = app_handle.clone();
+    let task_manager = state.task_manager.clone();
+    let task_id_clone = task_id.clone();
+
+    tokio::spawn(async move {
+        // Create executor with mock runner (for now, can be replaced with real LLM runner)
+        let executor = SubClawExecutor::with_mock(project_path);
+
+        // Load DAG from storage
+        let mut dag = {
+            let dags = ORCHESTRATION_DAGS.read().await;
+            dags.get(&task_id_clone)
+                .cloned()
+                .unwrap_or_else(|| TaskDag::new())
+        };
+
+        let total_tasks = dag.len();
+        let mut completed_count = 0;
+
+        // Collect parallel groups upfront to avoid borrow issues
+        let parallel_groups: Vec<Vec<_>> = dag
+            .get_parallel_groups()
+            .into_iter()
+            .map(|group| group.into_iter().cloned().collect())
+            .collect();
+
+        // Execute in parallel groups
+        for group_tasks in parallel_groups {
+            // Emit subtask started events
+            for task in &group_tasks {
+                if let Err(e) = emit_subtask_started(
+                    &app_handle_clone,
+                    &task_id_clone,
+                    &task.id,
+                    &task.description,
+                ) {
+                    tracing::error!("Failed to emit subtask started event: {}", e);
+                }
+            }
+
+            // Execute group in parallel
+            match executor.execute_parallel(&group_tasks).await {
+                Ok(results) => {
+                    for result in results {
+                        // Update DAG
+                        if let Some(task) = dag.get_task_mut(&result.task_id) {
+                            task.status = if result.success {
+                                SubTaskStatus::Completed
+                            } else {
+                                SubTaskStatus::Failed
+                            };
+                            task.result = Some(result.output.clone());
+                        }
+
+                        completed_count += 1;
+
+                        // Emit progress
+                        if let Err(e) = emit_orchestration_progress(
+                            &app_handle_clone,
+                            &task_id_clone,
+                            completed_count,
+                            total_tasks,
+                        ) {
+                            tracing::error!("Failed to emit progress event: {}", e);
+                        }
+
+                        // Emit test result if available
+                        if let Some(test_result) = &result.test_result {
+                            if let Err(e) = emit_test_result(
+                                &app_handle_clone,
+                                &task_id_clone,
+                                &result.task_id,
+                                test_result.passed,
+                                &test_result.output,
+                                test_result.tests_run,
+                                test_result.tests_passed,
+                            ) {
+                                tracing::error!("Failed to emit test result event: {}", e);
+                            }
+                        }
+
+                        // Emit subtask completed event
+                        if let Err(e) = emit_subtask_completed(
+                            &app_handle_clone,
+                            &task_id_clone,
+                            &result.task_id,
+                            result.success,
+                            &result.output,
+                            result.error.clone(),
+                        ) {
+                            tracing::error!("Failed to emit subtask completed event: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Parallel execution failed: {}", e);
+                    // Mark all tasks in group as failed
+                    for task in &group_tasks {
+                        if let Some(t) = dag.get_task_mut(&task.id) {
+                            t.status = SubTaskStatus::Failed;
+                            t.result = Some(e.to_string());
+                        }
+                        if let Err(emit_err) = emit_subtask_completed(
+                            &app_handle_clone,
+                            &task_id_clone,
+                            &task.id,
+                            false,
+                            "",
+                            Some(e.to_string()),
+                        ) {
+                            tracing::error!("Failed to emit subtask failed event: {}", emit_err);
+                        }
+                    }
+                }
+            }
+
+            // Update stored DAG
+            {
+                let mut dags = ORCHESTRATION_DAGS.write().await;
+                dags.insert(task_id_clone.clone(), dag.clone());
+            }
+        }
+
+        // Check overall success
+        let all_completed = dag
+            .tasks_in_order()
+            .iter()
+            .all(|t| t.status == SubTaskStatus::Completed);
+
+        // Update task status
+        let final_status = if all_completed {
+            TaskStatus::Completed
+        } else {
+            TaskStatus::Failed
+        };
+        if let Err(e) = task_manager
+            .lock()
+            .await
+            .update_task_status(&task_id_clone, final_status)
+        {
+            tracing::error!("Failed to update task status: {}", e);
+        }
+
+        // Emit final status
+        let (status_str, message) = match all_completed {
+            true => (
+                "completed",
+                Some(format!(
+                    "All {} subtasks completed successfully",
+                    total_tasks
+                )),
+            ),
+            false => ("failed", Some("Some subtasks failed".to_string())),
+        };
+        if let Err(e) = emit_task_status(&app_handle_clone, &task_id_clone, status_str, message) {
+            tracing::error!("Failed to emit final task status event: {}", e);
+        }
+
+        // Clean up DAG storage (optional, keep for history if needed)
+        // {
+        //     let mut dags = ORCHESTRATION_DAGS.write().await;
+        //     dags.remove(&task_id_clone);
+        // }
+    });
+
+    Ok(OrchestratedTaskResult {
+        task_id,
+        subtask_count: subtasks.len(),
+        parallel_groups,
+    })
+}
+
+/// Get the DAG structure for an orchestrated task
+#[tauri::command]
+pub async fn get_task_dag(task_id: String) -> TauriResult<Option<TaskDagResponse>> {
+    if task_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Task ID cannot be empty".to_string(),
+        ));
+    }
+
+    let dags = ORCHESTRATION_DAGS.read().await;
+    let dag = match dags.get(&task_id) {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+
+    let tasks: Vec<SubTaskInfo> = dag
+        .tasks_in_order()
+        .iter()
+        .map(|t| SubTaskInfo {
+            id: t.id.clone(),
+            description: t.description.clone(),
+            status: match t.status {
+                SubTaskStatus::Pending => "pending",
+                SubTaskStatus::Running => "running",
+                SubTaskStatus::Completed => "completed",
+                SubTaskStatus::Failed => "failed",
+            }
+            .to_string(),
+            depends_on: t.depends_on.clone(),
+        })
+        .collect();
+
+    let parallel_groups: Vec<Vec<String>> = dag
+        .get_parallel_groups()
+        .iter()
+        .map(|group| group.iter().map(|t| t.id.clone()).collect())
+        .collect();
+
+    let completed = tasks.iter().filter(|t| t.status == "completed").count();
+    let total = tasks.len();
+    let percent = if total > 0 {
+        completed as f32 / total as f32
+    } else {
+        0.0
+    };
+
+    Ok(Some(TaskDagResponse {
+        task_id,
+        tasks,
+        parallel_groups,
+        progress: OrchestrationProgress {
+            completed,
+            total,
+            percent,
+        },
+    }))
+}
+
+/// Get orchestration status for a task
+#[tauri::command]
+pub async fn get_orchestration_status(
+    task_id: String,
+) -> TauriResult<Option<OrchestrationProgress>> {
+    if task_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Task ID cannot be empty".to_string(),
+        ));
+    }
+
+    let dags = ORCHESTRATION_DAGS.read().await;
+    let dag = match dags.get(&task_id) {
+        Some(d) => d,
+        None => return Ok(None),
+    };
+
+    let total = dag.len();
+    let completed = dag
+        .tasks_in_order()
+        .iter()
+        .filter(|t| t.status == SubTaskStatus::Completed)
+        .count();
+    let percent = if total > 0 {
+        completed as f32 / total as f32
+    } else {
+        0.0
+    };
+
+    Ok(Some(OrchestrationProgress {
+        completed,
+        total,
+        percent,
+    }))
 }

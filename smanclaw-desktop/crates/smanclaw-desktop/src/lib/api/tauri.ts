@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   ApiResponse,
   ExecuteTaskRequest,
@@ -14,7 +15,15 @@ import type {
   LlmSettings,
   EmbeddingSettings,
   QdrantSettings,
-  ConnectionTestResult
+  ConnectionTestResult,
+  OrchestratedTaskResult,
+  TaskDagResponse,
+  OrchestrationProgress,
+  SubTaskStartedEvent,
+  SubTaskCompletedEvent,
+  TestResultEvent,
+  OrchestrationProgressEvent,
+  TaskDagEvent
 } from '../types';
 
 // Check if running in Tauri environment
@@ -183,5 +192,70 @@ export const shellApi = {
     return safeInvoke('execute_command', { command, cwd });
   }
 };
+
+// ============================================================================
+// Orchestration API
+// ============================================================================
+
+export const orchestrationApi = {
+  /// Execute an orchestrated task with automatic decomposition
+  async executeTask(projectId: string, input: string): Promise<ApiResponse<OrchestratedTaskResult>> {
+    return safeInvoke<OrchestratedTaskResult>('execute_orchestrated_task', { projectId, input });
+  },
+
+  /// Get the DAG structure for an orchestrated task
+  async getTaskDag(taskId: string): Promise<ApiResponse<TaskDagResponse | null>> {
+    return safeInvoke<TaskDagResponse | null>('get_task_dag', { taskId });
+  },
+
+  /// Get orchestration status for a task
+  async getStatus(taskId: string): Promise<ApiResponse<OrchestrationProgress | null>> {
+    return safeInvoke<OrchestrationProgress | null>('get_orchestration_status', { taskId });
+  }
+};
+
+// ============================================================================
+// Event Listeners
+// ============================================================================
+
+/// Subscribe to subtask started events
+export async function onSubTaskStarted(callback: (event: SubTaskStartedEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => {};
+  }
+  return await listen<SubTaskStartedEvent>('subtask-started', (e) => callback(e.payload));
+}
+
+/// Subscribe to subtask completed events
+export async function onSubTaskCompleted(callback: (event: SubTaskCompletedEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => {};
+  }
+  return await listen<SubTaskCompletedEvent>('subtask-completed', (e) => callback(e.payload));
+}
+
+/// Subscribe to test result events
+export async function onTestResult(callback: (event: TestResultEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => {};
+  }
+  return await listen<TestResultEvent>('test-result', (e) => callback(e.payload));
+}
+
+/// Subscribe to orchestration progress events
+export async function onOrchestrationProgress(callback: (event: OrchestrationProgressEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => {};
+  }
+  return await listen<OrchestrationProgressEvent>('orchestration-progress', (e) => callback(e.payload));
+}
+
+/// Subscribe to task DAG events
+export async function onTaskDag(callback: (event: TaskDagEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) {
+    return () => {};
+  }
+  return await listen<TaskDagEvent>('task-dag', (e) => callback(e.payload));
+}
 
 export { isTauri };

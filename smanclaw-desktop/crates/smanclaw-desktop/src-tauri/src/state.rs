@@ -36,7 +36,9 @@ impl AppState {
         // Initialize managers
         let project_manager = Arc::new(Mutex::new(ProjectManager::new(config_dir.clone())?));
         let task_manager = Arc::new(Mutex::new(TaskManager::new(&config_dir.join("tasks.db"))?));
-        let history_store = Arc::new(Mutex::new(SqliteHistoryStore::new(&config_dir.join("history.db"))?));
+        let history_store = Arc::new(Mutex::new(SqliteHistoryStore::new(
+            &config_dir.join("history.db"),
+        )?));
         let settings_store = Arc::new(Mutex::new(SettingsStore::new(config_dir.clone())?));
 
         Ok(Self {

@@ -106,8 +106,10 @@ impl ProjectManager {
         }
 
         // Also remove associated config
-        self.conn
-            .execute("DELETE FROM project_configs WHERE project_id = ?1", [project_id])?;
+        self.conn.execute(
+            "DELETE FROM project_configs WHERE project_id = ?1",
+            [project_id],
+        )?;
 
         Ok(())
     }
@@ -298,7 +300,10 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
         manager.touch_project(&project.id).expect("touch");
-        let updated = manager.get_project(&project.id).expect("get").expect("exists");
+        let updated = manager
+            .get_project(&project.id)
+            .expect("get")
+            .expect("exists");
         assert!(updated.last_accessed > project.last_accessed);
     }
 
@@ -318,7 +323,9 @@ mod tests {
             default_provider: Some("openai".to_string()),
             default_model: Some("gpt-4".to_string()),
         };
-        manager.update_project_config(&updated_config).expect("update");
+        manager
+            .update_project_config(&updated_config)
+            .expect("update");
 
         // Verify update
         let retrieved = manager.get_project_config(&project.id).expect("get config");

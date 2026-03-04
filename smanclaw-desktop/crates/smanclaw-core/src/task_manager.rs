@@ -77,7 +77,7 @@ impl TaskManager {
     /// Get a task by ID
     pub fn get_task(&self, task_id: &str) -> CoreResult<Option<Task>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, input, status, created_at, updated_at FROM tasks WHERE id = ?1"
+            "SELECT id, project_id, input, status, created_at, updated_at FROM tasks WHERE id = ?1",
         )?;
 
         let result = stmt.query_row([task_id], |row| {
@@ -85,7 +85,8 @@ impl TaskManager {
                 id: row.get(0)?,
                 project_id: row.get(1)?,
                 input: row.get(2)?,
-                status: serde_json::from_str(&row.get::<_, String>(3)?).unwrap_or(TaskStatus::Pending),
+                status: serde_json::from_str(&row.get::<_, String>(3)?)
+                    .unwrap_or(TaskStatus::Pending),
                 created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
@@ -114,7 +115,8 @@ impl TaskManager {
                     id: row.get(0)?,
                     project_id: row.get(1)?,
                     input: row.get(2)?,
-                    status: serde_json::from_str(&row.get::<_, String>(3)?).unwrap_or(TaskStatus::Pending),
+                    status: serde_json::from_str(&row.get::<_, String>(3)?)
+                        .unwrap_or(TaskStatus::Pending),
                     created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
@@ -153,7 +155,9 @@ mod tests {
     #[test]
     fn create_task_should_succeed() {
         let manager = TaskManager::in_memory().expect("create manager");
-        let task = manager.create_task("proj-123", "Implement login").expect("create task");
+        let task = manager
+            .create_task("proj-123", "Implement login")
+            .expect("create task");
 
         assert_eq!(task.project_id, "proj-123");
         assert_eq!(task.input, "Implement login");
@@ -163,7 +167,9 @@ mod tests {
     #[test]
     fn get_task_should_return_created_task() {
         let manager = TaskManager::in_memory().expect("create manager");
-        let created = manager.create_task("proj-123", "Test task").expect("create task");
+        let created = manager
+            .create_task("proj-123", "Test task")
+            .expect("create task");
 
         let retrieved = manager.get_task(&created.id).expect("get task");
         assert!(retrieved.is_some());
@@ -201,12 +207,22 @@ mod tests {
         let manager = TaskManager::in_memory().expect("create manager");
         let task = manager.create_task("proj-123", "Test").expect("create");
 
-        manager.update_task_status(&task.id, TaskStatus::Running).expect("update");
-        let updated = manager.get_task(&task.id).expect("get").expect("task exists");
+        manager
+            .update_task_status(&task.id, TaskStatus::Running)
+            .expect("update");
+        let updated = manager
+            .get_task(&task.id)
+            .expect("get")
+            .expect("task exists");
         assert_eq!(updated.status, TaskStatus::Running);
 
-        manager.update_task_status(&task.id, TaskStatus::Completed).expect("update");
-        let updated = manager.get_task(&task.id).expect("get").expect("task exists");
+        manager
+            .update_task_status(&task.id, TaskStatus::Completed)
+            .expect("update");
+        let updated = manager
+            .get_task(&task.id)
+            .expect("get")
+            .expect("task exists");
         assert_eq!(updated.status, TaskStatus::Completed);
     }
 

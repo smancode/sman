@@ -17,6 +17,9 @@ tokio = { workspace = true }
 rusqlite = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+async-stream = "0.3"
 dirs = "6.0"
 
 [dev-dependencies]

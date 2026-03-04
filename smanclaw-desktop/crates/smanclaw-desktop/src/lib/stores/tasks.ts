@@ -1,6 +1,19 @@
-import { writable, derived, get } from 'svelte/store';
-import type { Task, TaskStatus, FileChange } from '../types';
-import { taskApi } from '../api/tauri';
+import { writable, derived } from 'svelte/store';
+import type {
+  Task,
+  TaskStatus,
+  FileChange,
+  SubTaskInfo,
+  OrchestrationProgress
+} from '../types';
+import { taskApi, orchestrationApi } from '../api/tauri';
+import {
+  onSubTaskStarted,
+  onSubTaskCompleted,
+  onOrchestrationProgress,
+  onTaskDag
+} from '../api/tauri';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 
 // State interface
 interface TasksState {
@@ -8,6 +21,10 @@ interface TasksState {
   activeTaskId: string | null;
   isLoading: boolean;
   error: string | null;
+  // Orchestration state
+  subtasks: Map<string, SubTaskInfo[]>; // taskId -> subtasks
+  orchestrationProgress: Map<string, OrchestrationProgress>; // taskId -> progress
+  parallelGroups: Map<string, string[][]>; // taskId -> parallel groups
 }
 
 // Initial state
@@ -15,7 +32,10 @@ const initialState: TasksState = {
   tasks: [],
   activeTaskId: null,
   isLoading: false,
-  error: null
+  error: null,
+  subtasks: new Map(),
+  orchestrationProgress: new Map(),
+  parallelGroups: new Map()
 };
 
 // Main store
@@ -24,6 +44,9 @@ function createTasksStore() {
 
   // Polling interval for active tasks
   let pollingInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Event listeners
+  let eventUnlisteners: UnlistenFn[] = [];
 
   // Start polling for task updates
   function startPolling(taskId: string) {
@@ -68,8 +91,96 @@ function createTasksStore() {
     }
   }
 
+  // Setup event listeners for orchestration
+  async function setupEventListeners() {
+    try {
+      // Listen for subtask started events
+      const unlistenStarted = await onSubTaskStarted((event) => {
+        update((state) => {
+          const subtasks = new Map(state.subtasks);
+          const existing = subtasks.get(event.task_id) || [];
+          const updated = existing.map((st) =>
+            st.id === event.subtask_id
+              ? { ...st, status: 'running' as const }
+              : st
+          );
+          // Add if not exists
+          if (!existing.find((st) => st.id === event.subtask_id)) {
+            updated.push({
+              id: event.subtask_id,
+              description: event.description,
+              status: 'running',
+              depends_on: []
+            });
+          }
+          subtasks.set(event.task_id, updated);
+          return { ...state, subtasks };
+        });
+      });
+      eventUnlisteners.push(unlistenStarted);
+
+      // Listen for subtask completed events
+      const unlistenCompleted = await onSubTaskCompleted((event) => {
+        update((state) => {
+          const subtasks = new Map(state.subtasks);
+          const existing = subtasks.get(event.task_id) || [];
+          const updated = existing.map((st) =>
+            st.id === event.subtask_id
+              ? {
+                  ...st,
+                  status: event.success ? 'completed' as const : 'failed' as const
+                }
+              : st
+          );
+          subtasks.set(event.task_id, updated);
+          return { ...state, subtasks };
+        });
+      });
+      eventUnlisteners.push(unlistenCompleted);
+
+      // Listen for orchestration progress events
+      const unlistenProgress = await onOrchestrationProgress((event) => {
+        update((state) => {
+          const orchestrationProgress = new Map(state.orchestrationProgress);
+          orchestrationProgress.set(event.task_id, {
+            completed: event.completed,
+            total: event.total,
+            percent: event.percent
+          });
+          return { ...state, orchestrationProgress };
+        });
+      });
+      eventUnlisteners.push(unlistenProgress);
+
+      // Listen for task DAG events
+      const unlistenDag = await onTaskDag((event) => {
+        update((state) => {
+          const subtasks = new Map(state.subtasks);
+          const parallelGroups = new Map(state.parallelGroups);
+          subtasks.set(event.task_id, event.tasks);
+          parallelGroups.set(event.task_id, event.parallel_groups);
+          return { ...state, subtasks, parallelGroups };
+        });
+      });
+      eventUnlisteners.push(unlistenDag);
+    } catch (e) {
+      console.error('Failed to setup event listeners:', e);
+    }
+  }
+
+  // Cleanup event listeners
+  function cleanupEventListeners() {
+    eventUnlisteners.forEach((unlisten) => unlisten());
+    eventUnlisteners = [];
+  }
+
   return {
     subscribe,
+
+    // Initialize store (call once at app startup)
+    async initialize() {
+      await setupEventListeners();
+    },
 
     // Load tasks for a project
     async loadTasks(projectId?: string) {
@@ -92,7 +203,7 @@ function createTasksStore() {
       }
     },
 
-    // Execute a new task
+    // Execute a new task (simple, non-orchestrated)
     async executeTask(prompt: string, projectPath: string) {
       update((state) => ({ ...state, isLoading: true, error: null }));
 
@@ -129,6 +240,60 @@ function createTasksStore() {
       update((state) => ({
         ...state,
         error: response.error || 'Failed to execute task',
+        isLoading: false
+      }));
+      return null;
+    },
+
+    // Execute an orchestrated task with automatic decomposition
+    async executeOrchestratedTask(projectId: string, prompt: string) {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+
+      const response = await orchestrationApi.executeTask(projectId, prompt);
+
+      if (response.success && response.data) {
+        const { task_id, subtask_count, parallel_groups } = response.data;
+
+        // Create a temporary task object
+        const newTask: Task = {
+          id: task_id,
+          projectId: projectId,
+          prompt,
+          status: 'running',
+          progress: 0,
+          steps: [],
+          fileChanges: [],
+          createdAt: Date.now()
+        };
+
+        update((state) => {
+          // Initialize orchestration state
+          const orchestrationProgress = new Map(state.orchestrationProgress);
+          const parallelGroupsMap = new Map(state.parallelGroups);
+
+          orchestrationProgress.set(task_id, {
+            completed: 0,
+            total: subtask_count,
+            percent: 0
+          });
+          parallelGroupsMap.set(task_id, parallel_groups);
+
+          return {
+            ...state,
+            tasks: [newTask, ...state.tasks],
+            activeTaskId: task_id,
+            isLoading: false,
+            orchestrationProgress,
+            parallelGroups: parallelGroupsMap
+          };
+        });
+
+        return task_id;
+      }
+
+      update((state) => ({
+        ...state,
+        error: response.error || 'Failed to execute orchestrated task',
         isLoading: false
       }));
       return null;
@@ -179,12 +344,14 @@ function createTasksStore() {
     // Reset store
     reset() {
       stopPolling();
+      cleanupEventListeners();
       set(initialState);
     },
 
     // Cleanup
     destroy() {
       stopPolling();
+      cleanupEventListeners();
     }
   };
 }
@@ -207,3 +374,19 @@ export const completedTasks = derived(tasksStore, ($state) =>
 export const failedTasks = derived(tasksStore, ($state) =>
   $state.tasks.filter((t) => t.status === 'error')
 );
+
+// Orchestration derived stores
+export const activeSubtasks = derived(tasksStore, ($state) => {
+  if (!$state.activeTaskId) return [];
+  return $state.subtasks.get($state.activeTaskId) || [];
+});
+
+export const activeOrchestrationProgress = derived(tasksStore, ($state) => {
+  if (!$state.activeTaskId) return null;
+  return $state.orchestrationProgress.get($state.activeTaskId) || null;
+});
+
+export const activeParallelGroups = derived(tasksStore, ($state) => {
+  if (!$state.activeTaskId) return [];
+  return $state.parallelGroups.get($state.activeTaskId) || [];
+});
