@@ -1,0 +1,72 @@
+# Project Agents Configuration
+
+> 此文件由 SmanClaw 自动生成，描述项目结构和约定
+>
+> 复制此文件为 AGENTS.md 并根据实际项目填充内容
+
+## 项目信息
+
+- **名称**：{project_name}
+- **类型**：{project_type}  <!-- Rust / Node.js / Python / Go / Java 等 -->
+- **语言**：{primary_language}
+
+## 项目结构
+
+```
+{directory_tree}
+```
+
+示例：
+```
+src/
+├── main.rs           # 应用入口
+├── lib.rs            # 库导出
+├── config/           # 配置模块
+├── agent/            # Agent 逻辑
+├── tools/            # 工具定义
+└── utils/            # 工具函数
+```
+
+## 构建/测试命令
+
+- **构建**：`{build_command}`     <!-- 例如: cargo build -->
+- **测试**：`{test_command}`      <!-- 例如: cargo test -->
+- **Lint**：`{lint_command}`      <!-- 例如: cargo clippy -->
+- **格式化**：`{fmt_command}`     <!-- 例如: cargo fmt -->
+
+## 代码约定
+
+### 命名规范
+
+- 模块/文件：snake_case
+- 类型/Trait：PascalCase
+- 函数/变量：snake_case
+- 常量：SCREAMING_SNAKE_CASE
+
+### 错误处理
+
+- 使用 `Result<T, E>` 作为返回类型
+- 使用 `thiserror` 定义自定义错误
+- 不使用 `unwrap()`，使用 `?` 或 `context()`
+
+### 测试规范
+
+- 单元测试放在同一文件的 `#[cfg(test)] mod tests`
+- 集成测试放在 `tests/` 目录
+- 测试命名：`test_<功能>_<预期结果>`
+
+## 关键文件
+
+| 文件 | 用途 |
+|------|------|
+| `{key_file_1}` | {description} |
+| `{key_file_2}` | {description} |
+
+## 注意事项
+
+1. {note_1}
+2. {note_2}
+3. {note_3}
+
+---
+*最后更新: {timestamp}*

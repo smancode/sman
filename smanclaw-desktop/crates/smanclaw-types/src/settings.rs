@@ -29,17 +29,22 @@ pub struct LlmSettings {
 impl Default for LlmSettings {
     fn default() -> Self {
         Self {
-            api_url: String::new(),
+            api_url: "https://open.bigmodel.cn/api/coding/paas/v4".to_string(),
             api_key: String::new(),
-            default_model: String::new(),
+            default_model: "GLM-5".to_string(),
         }
     }
 }
 
 impl LlmSettings {
+    /// Default LLM API URL (智谱 GLM)
+    pub const DEFAULT_API_URL: &'static str = "https://open.bigmodel.cn/api/coding/paas/v4";
+    /// Default model name
+    pub const DEFAULT_MODEL: &'static str = "GLM-5";
+
     /// Check if LLM settings are configured
     pub fn is_configured(&self) -> bool {
-        !self.api_url.is_empty() && !self.api_key.is_empty() && !self.default_model.is_empty()
+        !self.api_key.is_empty()
     }
 
     /// Get masked API key for display (show first 4 and last 4 chars)
@@ -150,7 +155,19 @@ mod tests {
         assert!(settings.is_configured());
 
         let empty = LlmSettings::default();
+        // Default has no API key, so not configured
         assert!(!empty.is_configured());
+        // But defaults are set
+        assert_eq!(empty.api_url, LlmSettings::DEFAULT_API_URL);
+        assert_eq!(empty.default_model, LlmSettings::DEFAULT_MODEL);
+    }
+
+    #[test]
+    fn llm_settings_defaults() {
+        let settings = LlmSettings::default();
+        assert_eq!(settings.api_url, "https://open.bigmodel.cn/api/coding/paas/v4");
+        assert_eq!(settings.default_model, "GLM-5");
+        assert!(settings.api_key.is_empty());
     }
 
     #[test]

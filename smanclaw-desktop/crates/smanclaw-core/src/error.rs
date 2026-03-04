@@ -60,6 +60,22 @@ pub enum CoreError {
     /// Poll timeout
     #[error("Poll timeout after {0:?}")]
     PollTimeout(std::time::Duration),
+
+    /// Verification error
+    #[error("Verification error: {0}")]
+    Verification(String),
+
+    /// Command execution error
+    #[error("Command execution error: {0}")]
+    CommandExecution(String),
+
+    /// Regex error
+    #[error("Regex error: {0}")]
+    Regex(#[from] regex::Error),
+
+    /// LLM error
+    #[error("LLM error: {0}")]
+    LLMError(String),
 }
 
 /// Result type alias for CoreError

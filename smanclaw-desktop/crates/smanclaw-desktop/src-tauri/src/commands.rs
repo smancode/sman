@@ -1,7 +1,7 @@
 //! Tauri commands for frontend communication
 
 use chrono::Utc;
-use smanclaw_core::{Orchestrator, SubClawExecutor, SubTaskStatus, TaskDag};
+use smanclaw_core::{MockStepExecutor, Orchestrator, SkillStore, SubClawExecutor, SubTaskStatus, TaskDag};
 use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::{
     AppSettings, ConnectionTestResult, Conversation, EmbeddingSettings, FileAction, HistoryEntry,
@@ -386,8 +386,11 @@ pub async fn send_message(
 
     state.history_store.lock().await.save_entry(&user_entry)?;
 
-    // Execute task and get response
-    let bridge = Arc::new(ZeroclawBridge::from_project(&project_path)?);
+    // Get settings for LLM configuration
+    let settings = state.settings_store.lock().await.load()?;
+
+    // Execute task and get response with settings
+    let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(&project_path, &settings)?);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     let app_handle_clone = app_handle.clone();
@@ -777,9 +780,6 @@ pub async fn execute_orchestrated_task(
     let task_id_clone = task_id.clone();
 
     tokio::spawn(async move {
-        // Create executor with mock runner (for now, can be replaced with real LLM runner)
-        let executor = SubClawExecutor::with_mock(project_path);
-
         // Load DAG from storage
         let mut dag = {
             let dags = ORCHESTRATION_DAGS.read().await;
@@ -812,79 +812,92 @@ pub async fn execute_orchestrated_task(
                 }
             }
 
-            // Execute group in parallel
-            match executor.execute_parallel(&group_tasks).await {
-                Ok(results) => {
-                    for result in results {
-                        // Update DAG
-                        if let Some(task) = dag.get_task_mut(&result.task_id) {
-                            task.status = if result.success {
+            // Execute each task in the group (sequentially for now, can be parallelized later)
+            for task in &group_tasks {
+                // Create a task.md file for this subtask
+                let task_dir = project_path.join(".smanclaw").join("tasks");
+                if let Err(e) = std::fs::create_dir_all(&task_dir) {
+                    tracing::error!("Failed to create task directory: {}", e);
+                    continue;
+                }
+
+                let task_md_path = task_dir.join(format!("{}.md", task.id));
+                let task_content = format!(
+                    "# Task: {}\n\n## Description\n{}\n\n## Checklist\n- [ ] Execute task\n- [ ] Verify result",
+                    task.description,
+                    task.description
+                );
+
+                if let Err(e) = std::fs::write(&task_md_path, &task_content) {
+                    tracing::error!("Failed to write task file: {}", e);
+                    continue;
+                }
+
+                // Create executor for this task
+                let skill_store = match SkillStore::new(&project_path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!("Failed to create SkillStore: {}", e);
+                        continue;
+                    }
+                };
+
+                let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
+                executor.set_step_executor(std::sync::Arc::new(
+                    MockStepExecutor::new("Mock execution response")
+                ));
+
+                // Execute the task
+                let result = executor.run().await;
+
+                // Update DAG with result
+                if let Some(t) = dag.get_task_mut(&task.id) {
+                    match &result {
+                        Ok(exec_result) => {
+                            t.status = if exec_result.success {
                                 SubTaskStatus::Completed
                             } else {
                                 SubTaskStatus::Failed
                             };
-                            task.result = Some(result.output.clone());
+                            t.result = exec_result.error.clone().or(Some(format!(
+                                "Completed {}/{} steps",
+                                exec_result.steps_completed, exec_result.steps_total
+                            )));
                         }
-
-                        completed_count += 1;
-
-                        // Emit progress
-                        if let Err(e) = emit_orchestration_progress(
-                            &app_handle_clone,
-                            &task_id_clone,
-                            completed_count,
-                            total_tasks,
-                        ) {
-                            tracing::error!("Failed to emit progress event: {}", e);
-                        }
-
-                        // Emit test result if available
-                        if let Some(test_result) = &result.test_result {
-                            if let Err(e) = emit_test_result(
-                                &app_handle_clone,
-                                &task_id_clone,
-                                &result.task_id,
-                                test_result.passed,
-                                &test_result.output,
-                                test_result.tests_run,
-                                test_result.tests_passed,
-                            ) {
-                                tracing::error!("Failed to emit test result event: {}", e);
-                            }
-                        }
-
-                        // Emit subtask completed event
-                        if let Err(e) = emit_subtask_completed(
-                            &app_handle_clone,
-                            &task_id_clone,
-                            &result.task_id,
-                            result.success,
-                            &result.output,
-                            result.error.clone(),
-                        ) {
-                            tracing::error!("Failed to emit subtask completed event: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("Parallel execution failed: {}", e);
-                    // Mark all tasks in group as failed
-                    for task in &group_tasks {
-                        if let Some(t) = dag.get_task_mut(&task.id) {
+                        Err(e) => {
                             t.status = SubTaskStatus::Failed;
                             t.result = Some(e.to_string());
                         }
-                        if let Err(emit_err) = emit_subtask_completed(
-                            &app_handle_clone,
-                            &task_id_clone,
-                            &task.id,
-                            false,
-                            "",
-                            Some(e.to_string()),
-                        ) {
-                            tracing::error!("Failed to emit subtask failed event: {}", emit_err);
-                        }
                     }
+                }
+
+                completed_count += 1;
+
+                // Emit progress
+                if let Err(e) = emit_orchestration_progress(
+                    &app_handle_clone,
+                    &task_id_clone,
+                    completed_count,
+                    total_tasks,
+                ) {
+                    tracing::error!("Failed to emit progress event: {}", e);
+                }
+
+                // Emit subtask completed event
+                let (success, output, error) = match &result {
+                    Ok(r) => (r.success, format!("Completed {}/{} steps", r.steps_completed, r.steps_total), r.error.clone()),
+                    Err(e) => (false, String::new(), Some(e.to_string())),
+                };
+
+                if let Err(emit_err) = emit_subtask_completed(
+                    &app_handle_clone,
+                    &task_id_clone,
+                    &task.id,
+                    success,
+                    &output,
+                    error,
+                ) {
+                    tracing::error!("Failed to emit subtask completed event: {}", emit_err);
                 }
             }
 

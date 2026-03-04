@@ -1,38 +1,24 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { appSettingsApi } from '$lib/api/tauri';
-  import type { AppSettings, LlmSettings, EmbeddingSettings, QdrantSettings, ConnectionTestResult } from '$lib/types';
+  import type { AppSettings, LlmSettings, ConnectionTestResult } from '$lib/types';
+
+  // Default LLM settings
+  const DEFAULT_LLM_URL = 'https://open.bigmodel.cn/api/coding/paas/v4';
+  const DEFAULT_MODEL = 'GLM-5';
 
   let settings: AppSettings = $state({
-    llm: { apiUrl: '', apiKey: '', defaultModel: '' },
+    llm: { apiUrl: DEFAULT_LLM_URL, apiKey: '', defaultModel: DEFAULT_MODEL },
     embedding: undefined,
     qdrant: undefined
   });
 
-  // Local state for optional sections (to avoid bind issues with optional chaining)
-  let embeddingUrl = $state('');
-  let embeddingKey = $state('');
-  let embeddingModel = $state('text-embedding-3-small');
-  let embeddingDims = $state(1536);
-
-  let qdrantUrl = $state('');
-  let qdrantCollection = $state('smanclaw_memories');
-  let qdrantKey = $state('');
-
   let isLoading = $state(false);
   let isSaving = $state(false);
   let showApiKey = $state(false);
-  let showEmbeddingKey = $state(false);
-  let showQdrantKey = $state(false);
 
   // Test results
   let llmTestResult: ConnectionTestResult | null = $state(null);
-  let embeddingTestResult: ConnectionTestResult | null = $state(null);
-  let qdrantTestResult: ConnectionTestResult | null = $state(null);
-
-  // Enable flags
-  let enableEmbedding = $state(false);
-  let enableQdrant = $state(false);
 
   onMount(async () => {
     await loadSettings();
@@ -43,22 +29,12 @@
     const response = await appSettingsApi.get();
     if (response.success && response.data) {
       settings = response.data;
-      enableEmbedding = !!settings.embedding;
-      enableQdrant = !!settings.qdrant;
-
-      // Load embedding values
-      if (settings.embedding) {
-        embeddingUrl = settings.embedding.apiUrl;
-        embeddingKey = settings.embedding.apiKey;
-        embeddingModel = settings.embedding.model;
-        embeddingDims = settings.embedding.dimensions;
+      // Ensure defaults are set if empty
+      if (!settings.llm.apiUrl) {
+        settings.llm.apiUrl = DEFAULT_LLM_URL;
       }
-
-      // Load qdrant values
-      if (settings.qdrant) {
-        qdrantUrl = settings.qdrant.url;
-        qdrantCollection = settings.qdrant.collection;
-        qdrantKey = settings.qdrant.apiKey || '';
+      if (!settings.llm.defaultModel) {
+        settings.llm.defaultModel = DEFAULT_MODEL;
       }
     }
     isLoading = false;
@@ -67,28 +43,8 @@
   async function saveSettings() {
     isSaving = true;
 
-    // Build embedding settings
-    if (enableEmbedding) {
-      settings.embedding = {
-        apiUrl: embeddingUrl,
-        apiKey: embeddingKey,
-        model: embeddingModel,
-        dimensions: embeddingDims
-      };
-    } else {
-      settings.embedding = undefined;
-    }
-
-    // Build qdrant settings
-    if (enableQdrant) {
-      settings.qdrant = {
-        url: qdrantUrl,
-        collection: qdrantCollection,
-        apiKey: qdrantKey || undefined
-      };
-    } else {
-      settings.qdrant = undefined;
-    }
+    // Vector settings are optional - keep them as-is if already configured
+    // If not configured, they remain undefined
 
     const response = await appSettingsApi.update(settings);
     if (response.success) {
@@ -108,45 +64,12 @@
       llmTestResult = { success: false, error: response.error, latencyMs: undefined };
     }
   }
-
-  async function testEmbeddingConnection() {
-    if (!embeddingUrl || !embeddingKey) return;
-    embeddingTestResult = null;
-    const embSettings: EmbeddingSettings = {
-      apiUrl: embeddingUrl,
-      apiKey: embeddingKey,
-      model: embeddingModel,
-      dimensions: embeddingDims
-    };
-    const response = await appSettingsApi.testEmbedding(embSettings);
-    if (response.success) {
-      embeddingTestResult = response.data!;
-    } else {
-      embeddingTestResult = { success: false, error: response.error, latencyMs: undefined };
-    }
-  }
-
-  async function testQdrantConnection() {
-    if (!qdrantUrl) return;
-    qdrantTestResult = null;
-    const qdrantSettings: QdrantSettings = {
-      url: qdrantUrl,
-      collection: qdrantCollection,
-      apiKey: qdrantKey || undefined
-    };
-    const response = await appSettingsApi.testQdrant(qdrantSettings);
-    if (response.success) {
-      qdrantTestResult = response.data!;
-    } else {
-      qdrantTestResult = { success: false, error: response.error, latencyMs: undefined };
-    }
-  }
 </script>
 
 <div class="settings-page">
   <div class="settings-header">
-    <h1>⚙️ Settings</h1>
-    <p class="subtitle">Configure your LLM, embedding, and vector store settings</p>
+    <h1>Settings</h1>
+    <p class="subtitle">Configure your LLM settings for SmanClaw</p>
   </div>
 
   {#if isLoading}
@@ -155,8 +78,8 @@
     <div class="settings-content">
       <!-- LLM Configuration -->
       <section class="settings-section">
-        <h2>📡 LLM Configuration</h2>
-        <p class="section-desc">Configure your OpenAI-compatible LLM API (required)</p>
+        <h2>LLM Configuration</h2>
+        <p class="section-desc">Configure your OpenAI-compatible LLM API (智谱 GLM-5 recommended)</p>
 
         <div class="form-group">
           <label for="llm-url">API URL</label>
@@ -164,20 +87,21 @@
             type="text"
             id="llm-url"
             bind:value={settings.llm.apiUrl}
-            placeholder="https://api.openai.com/v1"
+            placeholder={DEFAULT_LLM_URL}
           />
+          <span class="hint">Default: {DEFAULT_LLM_URL}</span>
         </div>
 
         <div class="form-group">
-          <label for="llm-key">API Key</label>
+          <label for="llm-key">API Key <span class="required">*</span></label>
           <div class="input-with-button">
             <input
               type={showApiKey ? 'text' : 'password'}
               id="llm-key"
               bind:value={settings.llm.apiKey}
-              placeholder="sk-..."
+              placeholder="Enter your API key"
             />
-            <button class="btn-icon" onclick={() => showApiKey = !showApiKey}>
+            <button class="btn-icon" onclick={() => showApiKey = !showApiKey} title={showApiKey ? 'Hide' : 'Show'}>
               {showApiKey ? '👁️' : '👁️‍🗨️'}
             </button>
             <button class="btn-secondary" onclick={testLlmConnection}>Test</button>
@@ -185,9 +109,9 @@
           {#if llmTestResult}
             <div class="test-result {llmTestResult.success ? 'success' : 'error'}">
               {#if llmTestResult.success}
-                ✅ Connected successfully ({llmTestResult.latencyMs}ms)
+                Connected successfully ({llmTestResult.latencyMs}ms)
               {:else}
-                ❌ {llmTestResult.error}
+                {llmTestResult.error}
               {/if}
             </div>
           {/if}
@@ -199,145 +123,19 @@
             type="text"
             id="llm-model"
             bind:value={settings.llm.defaultModel}
-            placeholder="gpt-4o"
+            placeholder={DEFAULT_MODEL}
           />
+          <span class="hint">Default: {DEFAULT_MODEL}</span>
         </div>
       </section>
 
-      <!-- Embedding Configuration -->
-      <section class="settings-section">
-        <div class="section-header">
-          <h2>📊 Embedding Configuration</h2>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={enableEmbedding} />
-            <span class="slider"></span>
-            <span class="label">Enable</span>
-          </label>
-        </div>
-        <p class="section-desc">Configure embedding API for semantic search (optional)</p>
-
-        {#if enableEmbedding}
-          <div class="form-group">
-            <label for="emb-url">API URL</label>
-            <div class="input-with-button">
-              <input
-                type="text"
-                id="emb-url"
-                bind:value={embeddingUrl}
-                placeholder="https://api.openai.com/v1"
-              />
-              <button class="btn-secondary" onclick={testEmbeddingConnection}>Test</button>
-            </div>
-            {#if embeddingTestResult}
-              <div class="test-result {embeddingTestResult.success ? 'success' : 'error'}">
-                {#if embeddingTestResult.success}
-                  ✅ Connected successfully ({embeddingTestResult.latencyMs}ms)
-                {:else}
-                  ❌ {embeddingTestResult.error}
-                {/if}
-              </div>
-            {/if}
-          </div>
-
-          <div class="form-group">
-            <label for="emb-key">API Key</label>
-            <div class="input-with-button">
-              <input
-                type={showEmbeddingKey ? 'text' : 'password'}
-                id="emb-key"
-                bind:value={embeddingKey}
-                placeholder="sk-..."
-              />
-              <button class="btn-icon" onclick={() => showEmbeddingKey = !showEmbeddingKey}>
-                {showEmbeddingKey ? '👁️' : '👁️‍🗨️'}
-              </button>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="emb-model">Model</label>
-              <input
-                type="text"
-                id="emb-model"
-                bind:value={embeddingModel}
-                placeholder="text-embedding-3-small"
-              />
-            </div>
-            <div class="form-group">
-              <label for="emb-dims">Dimensions</label>
-              <input
-                type="number"
-                id="emb-dims"
-                bind:value={embeddingDims}
-                placeholder="1536"
-              />
-            </div>
-          </div>
-        {/if}
-      </section>
-
-      <!-- Qdrant Configuration -->
-      <section class="settings-section">
-        <div class="section-header">
-          <h2>🗄️ Vector Store (Qdrant)</h2>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={enableQdrant} />
-            <span class="slider"></span>
-            <span class="label">Enable</span>
-          </label>
-        </div>
-        <p class="section-desc">Configure Qdrant vector database (optional)</p>
-
-        {#if enableQdrant}
-          <div class="form-group">
-            <label for="qd-url">URL</label>
-            <div class="input-with-button">
-              <input
-                type="text"
-                id="qd-url"
-                bind:value={qdrantUrl}
-                placeholder="http://localhost:6333"
-              />
-              <button class="btn-secondary" onclick={testQdrantConnection}>Test</button>
-            </div>
-            {#if qdrantTestResult}
-              <div class="test-result {qdrantTestResult.success ? 'success' : 'error'}">
-                {#if qdrantTestResult.success}
-                  ✅ Connected successfully ({qdrantTestResult.latencyMs}ms)
-                {:else}
-                  ❌ {qdrantTestResult.error}
-                {/if}
-              </div>
-            {/if}
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="qd-collection">Collection</label>
-              <input
-                type="text"
-                id="qd-collection"
-                bind:value={qdrantCollection}
-                placeholder="smanclaw_memories"
-              />
-            </div>
-            <div class="form-group">
-              <label for="qd-key">API Key (optional)</label>
-              <div class="input-with-button">
-                <input
-                  type={showQdrantKey ? 'text' : 'password'}
-                  id="qd-key"
-                  bind:value={qdrantKey}
-                  placeholder="Optional"
-                />
-                <button class="btn-icon" onclick={() => showQdrantKey = !showQdrantKey}>
-                  {showQdrantKey ? '👁️' : '👁️‍🗨️'}
-                </button>
-              </div>
-            </div>
-          </div>
-        {/if}
+      <!-- Advanced Settings Note -->
+      <section class="settings-section info-section">
+        <h3>Advanced Settings</h3>
+        <p class="info-text">
+          Vector store and embedding settings are configured automatically based on your project.
+          They are optional and only needed for semantic memory features.
+        </p>
       </section>
 
       <!-- Action Buttons -->
@@ -388,21 +186,15 @@
     margin-bottom: 1.5rem;
   }
 
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-  }
-
-  .section-header h2 {
-    font-size: 1.1rem;
-    margin: 0;
-  }
-
   .settings-section h2 {
     font-size: 1.1rem;
     margin-bottom: 0.5rem;
+  }
+
+  .settings-section h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary, #888);
   }
 
   .section-desc {
@@ -422,6 +214,10 @@
     color: var(--text-secondary, #888);
   }
 
+  .required {
+    color: var(--accent, #6366f1);
+  }
+
   .form-group input {
     width: 100%;
     padding: 0.75rem;
@@ -437,10 +233,11 @@
     border-color: var(--accent, #6366f1);
   }
 
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+  .hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
   }
 
   .input-with-button {
@@ -458,6 +255,10 @@
     border: 1px solid var(--border, #2a2a32);
     border-radius: 6px;
     cursor: pointer;
+  }
+
+  .btn-icon:hover {
+    background: var(--border, #2a2a32);
   }
 
   .btn-secondary {
@@ -512,49 +313,15 @@
     color: #ef4444;
   }
 
-  .toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
+  .info-section {
+    background: rgba(99, 102, 241, 0.05);
+    border-color: rgba(99, 102, 241, 0.2);
   }
 
-  .toggle input {
-    display: none;
-  }
-
-  .toggle .slider {
-    width: 36px;
-    height: 20px;
-    background: var(--border, #2a2a32);
-    border-radius: 10px;
-    position: relative;
-    transition: background 0.2s;
-  }
-
-  .toggle .slider::after {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    background: var(--text-primary, #f5f5f7);
-    border-radius: 50%;
-    top: 2px;
-    left: 2px;
-    transition: transform 0.2s;
-  }
-
-  .toggle input:checked + .slider {
-    background: var(--accent, #6366f1);
-  }
-
-  .toggle input:checked + .slider::after {
-    transform: translateX(16px);
-  }
-
-  .toggle .label {
-    font-size: 0.85rem;
+  .info-text {
     color: var(--text-secondary, #888);
+    font-size: 0.85rem;
+    line-height: 1.5;
   }
 
   .actions {

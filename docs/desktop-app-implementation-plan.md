@@ -1377,20 +1377,31 @@ pub fn find_user(id: u64) -> Result<Option<User>> {
 | T20 | 进度事件细化 | ✅ 已完成 |
 | T21 | UI 任务可视化 | ✅ 已完成 |
 
-### 经验体系（待实现）
+### 经验体系（已完成）
+
+| Task ID | 任务 | 状态 | 说明 |
+|---------|------|------|------|
+| **T22** | 项目探索模块 | 已完成 | project_explorer.rs 已实现 |
+| **T23** | AGENTS.md 生成器 | 已完成 | 集成在 project_explorer.rs |
+| **T24** | Skill 存储系统 | 已完成 | skill_store.rs 已实现 |
+| **T25** | 子 Claw 经验沉淀 | 已完成 | experience_sink.rs 已实现 |
+| **T26** | 用户经验吸收 | 已完成 | user_experience.rs 已实现 |
+| **T27** | Skill 更新工具 | 已完成 | 通过 experience_sink.rs 实现 |
+| **T28** | 主 Claw 轮询机制 | 已完成 | task_poller.rs 已实现 |
+| **T29** | task.md 生成器 | 已完成 | task_generator.rs 已实现 |
+| **T30** | 验收评估模块 | 已完成 | acceptance_evaluator.rs 结构完整 |
+
+### 核心运行时（待实现）
 
 | Task ID | 任务 | 优先级 | 说明 |
 |---------|------|--------|------|
-| **T22** | 项目探索模块 | P0 | 参考 opencode /init 实现 |
-| **T23** | AGENTS.md 生成器 | P0 | 生成项目结构描述 |
-| **T24** | Skill 存储系统 | P0 | .skills/ 目录 + 索引管理 |
-| **T25** | 子 Claw 经验沉淀 | P0 | 任务完成后更新 Skill |
-| **T26** | 用户经验吸收 | P1 | 对话中识别并存储用户经验 |
-| **T27** | Skill 更新工具 | P1 | 子 Claw 调用的 Skill 更新 API |
-| **T28** | 主 Claw 轮询机制 | P0 | 检查 task.md 完成状态 |
-| **T29** | task.md 生成器 | P0 | 为每个子任务生成规范文档 |
-| **T30** | 验收评估模块 | P0 | 对照验收标准执行评估 |
 | **T31** | E2E 验收 Claw | P1 | 专门的验收测试 Agent |
+| **T35** | llm_client.rs | P0 | 统一的 LLM 调用层 |
+| **T36** | orchestrator.rs 重写 | P0 | 真正的编排逻辑 |
+| **T37** | sub_claw_executor.rs 重写 | P0 | 真正的执行逻辑 |
+| **T38** | runtime.rs | P1 | 事件驱动的主循环 |
+| **T39** | 验收逻辑增强 | P1 | acceptance_evaluator 真实验证 |
+| **T40** | 身份定义文件 | P2 | SOUL/USER/AGENTS.md |
 
 ---
 
@@ -1442,3 +1453,128 @@ cargo tauri build
 5. 点击 **Save Settings** 保存
 
 配置将持久化存储，重启应用后仍保留。
+
+---
+
+## 十八、两层循环机制评估
+
+### 18.1 大循环状态
+
+| 环节 | 模块 | 实现状态 | 问题 |
+|------|------|---------|------|
+| 主Claw编排 | orchestrator.rs | 框架占位 | 无真正的编排逻辑 |
+| 子Claw执行 | sub_claw_executor.rs | 框架占位 | 无实际调用LLM的逻辑 |
+| 主Claw评估 | acceptance_evaluator.rs | 结构完整 | evaluate_criterion() 返回 Pending |
+
+### 18.2 小循环状态
+
+task_poller.rs 设计合理，可以工作。
+
+### 18.3 核心缺失
+
+- 事件驱动的主循环
+- LLM 调用层
+- 状态机（MainTask 状态流转）
+
+---
+
+## 十九、核心差距分析与补齐计划
+
+### 19.1 当前实现 vs 目标状态
+
+| 能力 | 模块 | 状态 | 缺失 |
+|------|------|------|------|
+| 项目探索 | project_explorer.rs | 完整 | - |
+| 技能存储 | skill_store.rs | 完整 | - |
+| 任务生成 | task_generator.rs | 完整 | - |
+| 主任务管理 | main_task.rs | 完整 | - |
+| 任务轮询 | task_poller.rs | 完整 | - |
+| 经验提取 | experience_sink.rs | 完整 | - |
+| 用户偏好 | user_experience.rs | 完整 | - |
+| 验收评估 | acceptance_evaluator.rs | 部分实现 | 无真实验证逻辑 |
+| **编排器** | orchestrator.rs | 未实现 | 核心编排逻辑 |
+| **LLM调用** | - | 未实现 | 调用模型的能力 |
+| **子Claw执行** | sub_claw_executor.rs | 未实现 | 实际执行逻辑 |
+
+### 19.2 补齐计划
+
+| 优先级 | 模块 | 说明 |
+|--------|------|------|
+| P0 | llm_client.rs | 统一的LLM调用层 |
+| P0 | orchestrator.rs 重写 | 真正的编排逻辑 |
+| P0 | sub_claw_executor.rs 重写 | 真正的执行逻辑 |
+| P1 | runtime.rs | 事件驱动的主循环 |
+| P1 | 验收增强 | 实际的验证逻辑 |
+| P2 | SOUL/USER/AGENTS.md | 身份定义文件 |
+
+---
+
+## 二十、运行时层设计
+
+### 20.1 架构图
+
+```
++-------------------------------------------------------------+
+|                        Runtime 层                            |
+|  +-----------------------------------------------------+    |
+|  |                    Runtime                          |    |
+|  |  * event_loop() - 主事件循环                         |    |
+|  |  * state_machine() - 状态机                          |    |
+|  |  * user_feedback() - 用户反馈                        |    |
+|  +-----------------------------------------------------+    |
++-------------------------------------------------------------+
+                            |
+              +-------------+-------------+
+              v             v             v
++-----------------+ +-------------+ +-----------------+
+|   LLM Client    | | Orchestrator | | SubClawExecutor |
+|  * call_llm()   | |  * 编排逻辑  | |  * 执行逻辑     |
+|  * stream()     | |  * 状态机    | |  * checkbox循环 |
++-----------------+ +-------------+ +-----------------+
+```
+
+### 20.2 LLM Client 接口
+
+```rust
+pub trait LLMClient {
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse>;
+    async fn stream(&self, request: CompletionRequest) -> Result<impl Stream<Item = String>>;
+}
+```
+
+### 20.3 Orchestrator 状态机
+
+```
+Idle -> Analyzing -> Splitting -> Dispatching -> Polling -> Evaluating -> Completed
+                                    ^              |
+                                    +--------------+ (不通过则重新派发)
+```
+
+### 20.4 SubClaw 执行循环
+
+```rust
+loop {
+    let task = read_task_md(task_path)?;
+    let next_step = find_first_unchecked(&task)?;
+
+    match next_step {
+        Some(step) => {
+            let result = llm_client.execute(step).await?;
+            if result.success {
+                mark_checked(task_path, step)?;
+            }
+        }
+        None => break, // 全部完成
+    }
+}
+```
+
+### 20.5 验收策略
+
+| 验收方式 | 实现难度 | 可靠性 | 适用场景 |
+|---------|---------|--------|---------|
+| LLM判断 | 中 | 中 | 功能性描述 |
+| 测试通过 | 低 | 高 | 有测试用例 |
+| 命令执行 | 低 | 高 | 可命令验证 |
+| 文件检查 | 低 | 高 | 文件存在性 |
+| 内容匹配 | 低 | 高 | 代码/配置内容 |
