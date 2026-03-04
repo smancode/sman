@@ -9,21 +9,14 @@
   let showNewProjectModal = $state(false);
 
   async function handleNewProject() {
-    console.log('[handleNewProject] Starting...');
     try {
       const path = await invoke<string | null>('select_folder');
-      console.log('[handleNewProject] Selected path:', path);
       if (path) {
         const name = path.split('/').pop() || 'Untitled';
-        console.log('[handleNewProject] Creating project:', name, path);
-        const project = await projectsStore.createProject(name, path);
-        console.log('[handleNewProject] Created project:', project);
-        if (project) {
-          console.log('[handleNewProject] Project created successfully, current projects:', $sortedProjects);
-        }
+        await projectsStore.createProject(name, path);
       }
     } catch (error) {
-      console.error('[handleNewProject] Error:', error);
+      console.error('Failed to add project:', error);
     }
   }
 

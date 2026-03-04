@@ -28,10 +28,7 @@ function isTauri(): boolean {
 
 // Safe invoke wrapper
 async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<ApiResponse<T>> {
-  const inTauri = isTauri();
-  console.log(`[safeInvoke] Command: ${command}, isTauri: ${inTauri}`);
-
-  if (!inTauri) {
+  if (!isTauri()) {
     return {
       success: false,
       error: 'Not running in Tauri environment'

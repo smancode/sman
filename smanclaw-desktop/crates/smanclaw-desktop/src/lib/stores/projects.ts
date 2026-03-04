@@ -56,24 +56,16 @@ function createProjectsStore() {
 
     // Create a new project
     async createProject(name: string, path: string, description?: string) {
-      console.log('[createProject] Creating project:', name, path);
       const response = await projectApi.create(name, path, description);
-      console.log('[createProject] API response:', response);
 
       if (response.success && response.data) {
-        console.log('[createProject] Project created successfully:', response.data);
-        update((state) => {
-          const newState = {
-            ...state,
-            projects: [...state.projects, response.data!]
-          };
-          console.log('[createProject] Updated state, projects count:', newState.projects.length);
-          return newState;
-        });
+        update((state) => ({
+          ...state,
+          projects: [...state.projects, response.data!]
+        }));
         return response.data;
       }
 
-      console.error('[createProject] Failed to create project:', response.error);
       update((state) => ({
         ...state,
         error: response.error || 'Failed to create project'
