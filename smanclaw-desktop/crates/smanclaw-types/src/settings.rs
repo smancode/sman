@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Application global settings (persisted)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     /// LLM configuration
     pub llm: LlmSettings,
@@ -15,6 +16,7 @@ pub struct AppSettings {
 
 /// LLM provider settings (OpenAI Compatible)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LlmSettings {
     /// API Base URL (OpenAI Compatible endpoint)
     pub api_url: String,
@@ -53,6 +55,7 @@ impl LlmSettings {
 
 /// Embedding provider settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EmbeddingSettings {
     /// Embedding API URL
     pub api_url: String,
@@ -94,6 +97,7 @@ impl EmbeddingSettings {
 
 /// Qdrant vector store settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QdrantSettings {
     /// Qdrant server URL
     pub url: String,
@@ -122,6 +126,7 @@ impl QdrantSettings {
 
 /// Connection test result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionTestResult {
     /// Whether the connection was successful
     pub success: bool,

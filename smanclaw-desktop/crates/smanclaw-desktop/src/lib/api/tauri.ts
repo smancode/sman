@@ -44,8 +44,8 @@ async function safeInvoke<T>(command: string, args?: Record<string, unknown>): P
 
 // Project API
 export const projectApi = {
-  async list(): Promise<ApiResponse<ListProjectsResponse>> {
-    return safeInvoke<ListProjectsResponse>('list_projects');
+  async list(): Promise<ApiResponse<Project[]>> {
+    return safeInvoke<Project[]>('get_projects');
   },
 
   async get(id: string): Promise<ApiResponse<Project>> {
@@ -53,7 +53,7 @@ export const projectApi = {
   },
 
   async create(name: string, path: string, description?: string): Promise<ApiResponse<Project>> {
-    return safeInvoke<Project>('create_project', { name, path, description });
+    return safeInvoke<Project>('add_project', { path });
   },
 
   async update(id: string, updates: Partial<Project>): Promise<ApiResponse<Project>> {
@@ -61,11 +61,32 @@ export const projectApi = {
   },
 
   async delete(id: string): Promise<ApiResponse<void>> {
-    return safeInvoke<void>('delete_project', { id });
+    return safeInvoke<void>('remove_project', { projectId: id });
   },
 
   async openDialog(): Promise<ApiResponse<string>> {
-    return safeInvoke<string>('open_project_dialog');
+    console.log('[openDialog] Starting...');
+    if (!isTauri()) {
+      console.error('[openDialog] Not in Tauri environment');
+      return { success: false, error: 'Not running in Tauri environment' };
+    }
+
+    try {
+      console.log('[openDialog] Calling select_folder command...');
+      const result = await invoke<string | null>('select_folder');
+      console.log('[openDialog] Dialog result:', result);
+      if (result) {
+        return { success: true, data: result };
+      }
+      console.log('[openDialog] No folder selected');
+      return { success: false, error: 'No folder selected' };
+    } catch (error) {
+      console.error('[openDialog] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 };
 

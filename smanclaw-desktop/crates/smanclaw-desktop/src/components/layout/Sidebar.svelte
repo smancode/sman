@@ -3,15 +3,27 @@
   import { page } from '$app/stores';
   import { projectsStore, selectedProject, sortedProjects } from '../../lib/stores/projects';
   import ProjectList from '../project/ProjectList.svelte';
+  import { invoke } from '@tauri-apps/api/core';
 
   let isCollapsed = $state(false);
   let showNewProjectModal = $state(false);
 
   async function handleNewProject() {
-    const path = await projectsStore.openProjectDialog();
-    if (path) {
-      const name = path.split('/').pop() || 'Untitled';
-      await projectsStore.createProject(name, path);
+    console.log('[handleNewProject] Starting...');
+    try {
+      const path = await invoke<string | null>('select_folder');
+      console.log('[handleNewProject] Selected path:', path);
+      if (path) {
+        const name = path.split('/').pop() || 'Untitled';
+        console.log('[handleNewProject] Creating project:', name, path);
+        const project = await projectsStore.createProject(name, path);
+        console.log('[handleNewProject] Created project:', project);
+        if (project) {
+          console.log('[handleNewProject] Project created successfully, current projects:', $sortedProjects);
+        }
+      }
+    } catch (error) {
+      console.error('[handleNewProject] Error:', error);
     }
   }
 

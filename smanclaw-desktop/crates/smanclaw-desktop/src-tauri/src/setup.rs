@@ -75,3 +75,9 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
 }
+
+/// Initialize plugin permissions
+pub fn init_permissions() {
+    // Permissions are now handled via capabilities in Tauri 2.x
+    // See: src-tauri/capabilities/
+}

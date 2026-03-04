@@ -3,11 +3,11 @@
   import { appSettingsApi } from '$lib/api/tauri';
   import type { AppSettings, LlmSettings, EmbeddingSettings, QdrantSettings, ConnectionTestResult } from '$lib/types';
 
-  let settings: AppSettings = {
+  let settings: AppSettings = $state({
     llm: { apiUrl: '', apiKey: '', defaultModel: '' },
-    embedding: null,
-    qdrant: null
-  };
+    embedding: undefined,
+    qdrant: undefined
+  });
 
   // Local state for optional sections (to avoid bind issues with optional chaining)
   let embeddingUrl = $state('');
@@ -19,16 +19,16 @@
   let qdrantCollection = $state('smanclaw_memories');
   let qdrantKey = $state('');
 
-  let isLoading = false;
-  let isSaving = false;
-  let showApiKey = false;
-  let showEmbeddingKey = false;
-  let showQdrantKey = false;
+  let isLoading = $state(false);
+  let isSaving = $state(false);
+  let showApiKey = $state(false);
+  let showEmbeddingKey = $state(false);
+  let showQdrantKey = $state(false);
 
   // Test results
-  let llmTestResult: ConnectionTestResult | null = null;
-  let embeddingTestResult: ConnectionTestResult | null = null;
-  let qdrantTestResult: ConnectionTestResult | null = null;
+  let llmTestResult: ConnectionTestResult | null = $state(null);
+  let embeddingTestResult: ConnectionTestResult | null = $state(null);
+  let qdrantTestResult: ConnectionTestResult | null = $state(null);
 
   // Enable flags
   let enableEmbedding = $state(false);
@@ -76,7 +76,7 @@
         dimensions: embeddingDims
       };
     } else {
-      settings.embedding = null;
+      settings.embedding = undefined;
     }
 
     // Build qdrant settings
@@ -87,7 +87,7 @@
         apiKey: qdrantKey || undefined
       };
     } else {
-      settings.qdrant = null;
+      settings.qdrant = undefined;
     }
 
     const response = await appSettingsApi.update(settings);

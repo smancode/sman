@@ -34,7 +34,7 @@ function createProjectsStore() {
       if (response.success && response.data) {
         update((state) => ({
           ...state,
-          projects: response.data!.projects,
+          projects: response.data!,
           isLoading: false
         }));
       } else {
@@ -114,7 +114,9 @@ function createProjectsStore() {
 
     // Open project dialog
     async openProjectDialog() {
+      console.log('[projectsStore.openProjectDialog] Starting...');
       const response = await projectApi.openDialog();
+      console.log('[projectsStore.openProjectDialog] Response:', response);
 
       if (response.success && response.data) {
         return response.data;
