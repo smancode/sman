@@ -19,6 +19,7 @@ use crate::events::{
     emit_subtask_started, emit_task_dag, emit_task_status, emit_test_result, SubTaskInfo,
 };
 use crate::state::AppState;
+use smanclaw_ffi::test_llm_direct;
 
 // ============================================================================
 // Project Commands
@@ -57,7 +58,7 @@ pub async fn add_project(state: State<'_, AppState>, path: String) -> TauriResul
 }
 
 /// Remove a project
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> TauriResult<()> {
     if project_id.is_empty() {
         return Err(TauriError::InvalidInput(
@@ -71,7 +72,7 @@ pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> T
 }
 
 /// Get project configuration
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_project_config(
     state: State<'_, AppState>,
     project_id: String,
@@ -109,7 +110,7 @@ pub async fn update_project_config(
 // ============================================================================
 
 /// Execute a task
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn execute_task(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -127,13 +128,18 @@ pub async fn execute_task(
         ));
     }
 
-    // Get project path
-    let project_path = {
+    // Get project path and settings
+    let (project_path, settings) = {
         let pm = state.project_manager.lock().await;
         let project = pm
             .get_project(&project_id)?
             .ok_or_else(|| TauriError::ProjectNotFound(project_id.clone()))?;
-        PathBuf::from(&project.path)
+        let path = PathBuf::from(&project.path);
+        drop(pm);
+
+        let ss = state.settings_store.lock().await;
+        let settings = ss.load()?;
+        (path, settings)
     };
 
     // Create task
@@ -149,11 +155,28 @@ pub async fn execute_task(
         pm.touch_project(&project_id)?;
     }
 
+    // Update task status to running before spawning execution
+    if let Err(e) = state.task_manager.lock().await.update_task_status(&task_id, TaskStatus::Running) {
+        tracing::error!("Failed to update task status to running: {}", e);
+    }
+
     // Emit task started event
     emit_task_status(&app_handle, &task_id, "running", None)?;
 
-    // Create bridge and execute task
-    let bridge = Arc::new(ZeroclawBridge::from_project(&project_path)?);
+    // Get or create cached bridge for this project (maintains conversation history)
+    let bridge = {
+        let mut bridges = state.zeroclaw_bridges.lock().await;
+        if let Some(existing) = bridges.get(&project_id) {
+            existing.clone()
+        } else {
+            let new_bridge = Arc::new(ZeroclawBridge::from_project_with_settings(
+                &project_path,
+                &settings,
+            )?);
+            bridges.insert(project_id.clone(), new_bridge.clone());
+            new_bridge
+        }
+    };
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     let app_handle_clone = app_handle.clone();
@@ -176,18 +199,31 @@ pub async fn execute_task(
         // Execute task
         match bridge.execute_task_stream(&task_id, &input_clone, tx).await {
             Ok(result) => {
-                // Update task status
+                tracing::info!("execute_task: bridge.execute_task_stream succeeded, output length: {}, output: {}", result.output.len(), result.output);
+
+                // Update task with result (status + output/error)
                 let status = if result.success {
                     TaskStatus::Completed
                 } else {
                     TaskStatus::Failed
                 };
+                let output = if result.success {
+                    Some(result.output.clone())
+                } else {
+                    None
+                };
+                let error = if !result.success {
+                    result.error.clone()
+                } else {
+                    None
+                };
+
                 if let Err(e) = task_manager
                     .lock()
                     .await
-                    .update_task_status(&task_id, status)
+                    .update_task_result(&task_id, status, output, error)
                 {
-                    tracing::error!("Failed to update task status: {}", e);
+                    tracing::error!("Failed to update task result: {}", e);
                 }
 
                 // Emit file change events
@@ -207,6 +243,7 @@ pub async fn execute_task(
                     true => ("completed", Some(result.output.clone())),
                     false => ("failed", result.error.clone()),
                 };
+                tracing::info!("Emitting task status: task_id={}, status={}, message={}", task_id, status_str, message.as_deref().unwrap_or(""));
                 if let Err(e) = emit_task_status(&app_handle_clone, &task_id, status_str, message) {
                     tracing::error!("Failed to emit task status event: {}", e);
                 }
@@ -216,9 +253,9 @@ pub async fn execute_task(
                 if let Err(update_err) = task_manager
                     .lock()
                     .await
-                    .update_task_status(&task_id, TaskStatus::Failed)
+                    .update_task_result(&task_id, TaskStatus::Failed, None, Some(e.to_string()))
                 {
-                    tracing::error!("Failed to update task status: {}", update_err);
+                    tracing::error!("Failed to update task result: {}", update_err);
                 }
                 if let Err(emit_err) =
                     emit_task_status(&app_handle_clone, &task_id, "failed", Some(e.to_string()))
@@ -236,7 +273,7 @@ pub async fn execute_task(
 }
 
 /// Get task status
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_task(state: State<'_, AppState>, task_id: String) -> TauriResult<Option<Task>> {
     if task_id.is_empty() {
         return Err(TauriError::InvalidInput(
@@ -250,7 +287,7 @@ pub async fn get_task(state: State<'_, AppState>, task_id: String) -> TauriResul
 }
 
 /// List tasks for a project
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_tasks(state: State<'_, AppState>, project_id: String) -> TauriResult<Vec<Task>> {
     if project_id.is_empty() {
         return Err(TauriError::InvalidInput(
@@ -263,12 +300,37 @@ pub async fn list_tasks(state: State<'_, AppState>, project_id: String) -> Tauri
     Ok(tasks)
 }
 
+/// Cancel a running task
+#[tauri::command(rename_all = "snake_case")]
+pub async fn cancel_task(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+) -> TauriResult<()> {
+    if task_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Task ID cannot be empty".to_string(),
+        ));
+    }
+
+    // Update task status to failed (cancelled)
+    {
+        let mut tm = state.task_manager.lock().await;
+        tm.update_task_status(&task_id, TaskStatus::Failed)?;
+    }
+
+    // Emit cancelled event
+    emit_task_status(&app_handle, &task_id, "cancelled", Some("Task cancelled by user".to_string()))?;
+
+    Ok(())
+}
+
 // ============================================================================
 // Conversation Commands
 // ============================================================================
 
 /// Get conversation history
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_conversation(
     state: State<'_, AppState>,
     conversation_id: String,
@@ -285,7 +347,7 @@ pub async fn get_conversation(
 }
 
 /// Get conversation messages
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_conversation_messages(
     state: State<'_, AppState>,
     conversation_id: String,
@@ -302,7 +364,7 @@ pub async fn get_conversation_messages(
 }
 
 /// List conversations for a project
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_conversations(
     state: State<'_, AppState>,
     project_id: String,
@@ -319,7 +381,7 @@ pub async fn list_conversations(
 }
 
 /// Create a new conversation
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_conversation(
     state: State<'_, AppState>,
     project_id: String,
@@ -342,7 +404,7 @@ pub async fn create_conversation(
 }
 
 /// Send a message in a conversation
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn send_message(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -480,7 +542,7 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> TauriResult<AppSett
 }
 
 /// Update application settings
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn update_app_settings(
     state: State<'_, AppState>,
     settings: AppSettings,
@@ -493,7 +555,7 @@ pub async fn update_app_settings(
 }
 
 /// Test LLM API connection
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn test_llm_connection(settings: LlmSettings) -> TauriResult<ConnectionTestResult> {
     use std::time::Instant;
 
@@ -548,8 +610,51 @@ pub async fn test_llm_connection(settings: LlmSettings) -> TauriResult<Connectio
     }
 }
 
+/// Test LLM connection using ZeroClaw's provider system (direct chat test)
+#[tauri::command(rename_all = "snake_case")]
+pub async fn test_llm_direct_chat(state: State<'_, AppState>) -> TauriResult<ConnectionTestResult> {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // Load settings
+    let settings = {
+        let store = state.settings_store.lock().await;
+        store.load()?
+    };
+
+    if !settings.llm.is_configured() {
+        return Ok(ConnectionTestResult {
+            success: false,
+            error: Some("LLM not configured (API key missing)".to_string()),
+            latency_ms: None,
+        });
+    }
+
+    // Test using ZeroClaw's provider system
+    match test_llm_direct(&settings).await {
+        Ok(response) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            eprintln!("LLM direct test succeeded: {}", response);
+            Ok(ConnectionTestResult {
+                success: true,
+                error: None,
+                latency_ms: Some(latency_ms),
+            })
+        }
+        Err(e) => {
+            eprintln!("LLM direct test failed: {}", e);
+            Ok(ConnectionTestResult {
+                success: false,
+                error: Some(e.to_string()),
+                latency_ms: None,
+            })
+        }
+    }
+}
+
 /// Test Embedding API connection
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn test_embedding_connection(
     settings: EmbeddingSettings,
 ) -> TauriResult<ConnectionTestResult> {
@@ -602,7 +707,7 @@ pub async fn test_embedding_connection(
 }
 
 /// Test Qdrant connection
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn test_qdrant_connection(settings: QdrantSettings) -> TauriResult<ConnectionTestResult> {
     use std::time::Instant;
 
@@ -694,7 +799,7 @@ pub struct OrchestrationProgress {
 }
 
 /// Execute an orchestrated task with automatic decomposition
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn execute_orchestrated_task(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -958,7 +1063,7 @@ pub async fn execute_orchestrated_task(
 }
 
 /// Get the DAG structure for an orchestrated task
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_task_dag(task_id: String) -> TauriResult<Option<TaskDagResponse>> {
     if task_id.is_empty() {
         return Err(TauriError::InvalidInput(
@@ -1016,7 +1121,7 @@ pub async fn get_task_dag(task_id: String) -> TauriResult<Option<TaskDagResponse
 }
 
 /// Get orchestration status for a task
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_orchestration_status(
     task_id: String,
 ) -> TauriResult<Option<OrchestrationProgress>> {

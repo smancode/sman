@@ -1,7 +1,10 @@
 //! Application state management
 
 use smanclaw_core::{ProjectManager, SettingsStore, SqliteHistoryStore, TaskManager};
+use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::AppSettings;
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -18,6 +21,9 @@ pub struct AppState {
     pub history_store: Arc<Mutex<SqliteHistoryStore>>,
     /// Settings store (wrapped in Mutex for thread safety)
     pub settings_store: Arc<Mutex<SettingsStore>>,
+    /// ZeroClaw bridges per project (project_id -> bridge)
+    /// This maintains persistent Agent instances for multi-turn conversations
+    pub zeroclaw_bridges: Arc<Mutex<HashMap<String, Arc<ZeroclawBridge>>>>,
     /// Configuration directory
     pub config_dir: PathBuf,
 }
@@ -40,12 +46,14 @@ impl AppState {
             &config_dir.join("history.db"),
         )?));
         let settings_store = Arc::new(Mutex::new(SettingsStore::new(config_dir.clone())?));
+        let zeroclaw_bridges = Arc::new(Mutex::new(HashMap::new()));
 
         Ok(Self {
             project_manager,
             task_manager,
             history_store,
             settings_store,
+            zeroclaw_bridges,
             config_dir,
         })
     }
@@ -53,7 +61,35 @@ impl AppState {
 
 /// Create default config directory
 pub fn default_config_dir() -> PathBuf {
-    dirs::config_dir()
+    if let Ok(dir) = std::env::var("SMANCLAW_DESKTOP_CONFIG_DIR") {
+        let path = PathBuf::from(dir);
+        if ensure_writable_dir(&path).is_ok() {
+            return path;
+        }
+    }
+
+    let preferred = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("smanclaw-desktop")
+        .join("smanclaw-desktop");
+    if ensure_writable_dir(&preferred).is_ok() {
+        return preferred;
+    }
+
+    let fallback = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".smanclaw-desktop");
+    let _ = ensure_writable_dir(&fallback);
+    fallback
+}
+
+fn ensure_writable_dir(path: &PathBuf) -> std::io::Result<()> {
+    fs::create_dir_all(path)?;
+    let probe = path.join(".write_test");
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&probe)?;
+    fs::remove_file(probe)?;
+    Ok(())
 }

@@ -2,7 +2,6 @@
   import { projectsStore, selectedProject, sortedProjects } from '../../lib/stores/projects';
   import ProjectList from '../project/ProjectList.svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { goto } from '$app/navigation';
 
   let isCollapsed = $state(false);
   let showNewProjectModal = $state(false);
@@ -11,8 +10,8 @@
     try {
       const path = await invoke<string | null>('select_folder');
       if (path) {
-        const name = path.split('/').pop() || 'Untitled';
-        await projectsStore.createProject(name, path);
+        // createProject now only takes path - backend extracts name from path
+        await projectsStore.createProject(path);
       }
     } catch (error) {
       console.error('Failed to add project:', error);
@@ -24,11 +23,11 @@
   }
 
   function navigateToSettings() {
-    goto('/settings');
+    window.location.href = '/settings';
   }
 
   function navigateToHome() {
-    goto('/');
+    window.location.href = '/';
   }
 </script>
 

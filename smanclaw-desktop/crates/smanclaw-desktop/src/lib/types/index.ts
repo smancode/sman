@@ -8,8 +8,8 @@ export interface Project {
   lastAccessed: string;
 }
 
-// Task types
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'error';
+// Task types - Must match smanclaw-types/src/task.rs
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface TaskStep {
   id: string;
@@ -23,23 +23,27 @@ export interface TaskStep {
 
 export interface FileChange {
   path: string;
-  action: 'create' | 'modify' | 'delete';
+  action: 'Created' | 'Modified' | 'Deleted';
   linesAdded: number;
   linesRemoved: number;
 }
 
+// Backend Task structure - matches smanclaw_types::Task
+// Fields are in camelCase due to serde(rename_all = "camelCase")
 export interface Task {
   id: string;
   projectId: string;
-  prompt: string;
+  input: string;  // Backend uses "input", not "prompt"
   status: TaskStatus;
-  progress: number;
-  steps: TaskStep[];
-  fileChanges: FileChange[];
   output?: string;
   error?: string;
-  createdAt: number;
-  completedAt?: number;
+  createdAt: string;  // ISO 8601 datetime string from backend
+  updatedAt: string;
+  completedAt?: string;
+  // Frontend-only fields for UI state
+  progress?: number;
+  steps?: TaskStep[];
+  fileChanges?: FileChange[];
 }
 
 // Message types
@@ -117,22 +121,15 @@ export interface ApiResponse<T> {
 
 // Tauri command types
 export interface ExecuteTaskRequest {
+  projectId: string;
   prompt: string;
-  projectPath: string;
 }
 
-export interface ExecuteTaskResponse {
-  taskId: string;
-  status: TaskStatus;
-}
+// Backend returns full Task object, not just id/status
+export type ExecuteTaskResponse = Task;
 
-export interface GetTaskStatusResponse {
-  id: string;
-  status: TaskStatus;
-  progress: number;
-  output?: string;
-  error?: string;
-}
+// get_task returns Task or null
+export type GetTaskStatusResponse = Task | null;
 
 export interface ListProjectsResponse {
   projects: Project[];
@@ -178,6 +175,36 @@ export interface OrchestrationProgress {
   total: number;
   percent: number;
 }
+
+// ============================================================================
+// Progress Event Types (from smanclaw_types::events)
+// ============================================================================
+
+/// File action type
+export type FileAction = 'created' | 'modified' | 'deleted';
+
+/// Task result
+export interface TaskResult {
+  task_id: string;
+  success: boolean;
+  output: string;
+  error?: string;
+  files_changed: Array<{
+    path: string;
+    action: FileAction;
+  }>;
+}
+
+/// Progress event from backend
+export type ProgressEvent =
+  | { type: 'task_started'; task_id: string }
+  | { type: 'tool_call'; tool: string; args: unknown }
+  | { type: 'file_read'; path: string }
+  | { type: 'file_written'; path: string; action: FileAction }
+  | { type: 'command_run'; command: string }
+  | { type: 'progress'; message: string; percent: number }
+  | { type: 'task_completed'; result: TaskResult }
+  | { type: 'task_failed'; error: string };
 
 // ============================================================================
 // Orchestration Event Types

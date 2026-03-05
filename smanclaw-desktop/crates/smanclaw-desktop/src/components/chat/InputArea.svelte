@@ -13,9 +13,14 @@
   let textareaRef: HTMLTextAreaElement = $state()!;
 
   function handleSubmit() {
+    console.log('[InputArea.handleSubmit] Called, inputValue:', inputValue, 'disabled:', disabled);
     const trimmed = inputValue.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled) {
+      console.log('[InputArea.handleSubmit] Early return - trimmed:', trimmed);
+      return;
+    }
 
+    console.log('[InputArea.handleSubmit] Calling onSubmit with:', trimmed);
     onSubmit(trimmed);
     inputValue = '';
     adjustHeight();

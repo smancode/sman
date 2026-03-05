@@ -1,9 +1,9 @@
 import { writable, derived } from 'svelte/store';
-import type { Settings } from '../types';
-import { settingsApi } from '../api/tauri';
+import type { Settings, AppSettings } from '../types';
+import { appSettingsApi } from '../api/tauri';
 
-// Default settings
-const defaultSettings: Settings = {
+// Default UI settings (local state)
+const defaultUISettings: Settings = {
   theme: 'dark',
   fontSize: 'medium',
   autoSave: true,
@@ -11,16 +11,18 @@ const defaultSettings: Settings = {
   maxHistoryItems: 100
 };
 
-// State interface
+// State interface - combines UI settings and App settings
 interface SettingsState {
-  settings: Settings;
+  uiSettings: Settings;  // Local UI preferences
+  appSettings: AppSettings | null;  // Backend settings (LLM, etc.)
   isLoading: boolean;
   error: string | null;
 }
 
 // Initial state
 const initialState: SettingsState = {
-  settings: defaultSettings,
+  uiSettings: defaultUISettings,
+  appSettings: null,
   isLoading: false,
   error: null
 };
@@ -32,36 +34,36 @@ function createSettingsStore() {
   return {
     subscribe,
 
-    // Load settings
+    // Load app settings from backend
     async loadSettings() {
       update((state) => ({ ...state, isLoading: true, error: null }));
 
-      const response = await settingsApi.get();
+      const response = await appSettingsApi.get();
 
       if (response.success && response.data) {
         update((state) => ({
           ...state,
-          settings: { ...defaultSettings, ...response.data },
+          appSettings: response.data!,
           isLoading: false
         }));
       } else {
-        // Use defaults if load fails
         update((state) => ({
           ...state,
-          settings: defaultSettings,
-          isLoading: false
+          appSettings: null,
+          isLoading: false,
+          error: response.error || 'Failed to load settings'
         }));
       }
     },
 
-    // Update settings
-    async updateSettings(updates: Partial<Settings>) {
-      const response = await settingsApi.update(updates);
+    // Update app settings
+    async updateAppSettings(settings: AppSettings) {
+      const response = await appSettingsApi.update(settings);
 
       if (response.success && response.data) {
         update((state) => ({
           ...state,
-          settings: response.data!
+          appSettings: response.data!
         }));
         return true;
       }
@@ -73,16 +75,24 @@ function createSettingsStore() {
       return false;
     },
 
-    // Update a single setting
-    async setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
-      return this.updateSettings({ [key]: value });
+    // Update UI settings (local only)
+    updateUISettings(updates: Partial<Settings>) {
+      update((state) => ({
+        ...state,
+        uiSettings: { ...state.uiSettings, ...updates }
+      }));
     },
 
-    // Toggle theme
-    async toggleTheme() {
-      const current = get({ subscribe }).settings.theme;
-      const next = current === 'dark' ? 'light' : current === 'light' ? 'system' : 'dark';
-      return this.setSetting('theme', next);
+    // Toggle theme (UI setting)
+    toggleTheme() {
+      update((state) => {
+        const current = state.uiSettings.theme;
+        const next = current === 'dark' ? 'light' : current === 'light' ? 'system' : 'dark';
+        return {
+          ...state,
+          uiSettings: { ...state.uiSettings, theme: next }
+        };
+      });
     },
 
     // Clear error
@@ -91,26 +101,19 @@ function createSettingsStore() {
     },
 
     // Reset to defaults
-    async resetToDefaults() {
-      return this.updateSettings(defaultSettings);
+    resetToDefaults() {
+      update((state) => ({
+        ...state,
+        uiSettings: defaultUISettings
+      }));
     }
   };
 }
 
-// Helper to get current value
-function get(store: { subscribe: (run: (value: SettingsState) => void) => () => void }): SettingsState {
-  let value: SettingsState = initialState;
-  const unsubscribe = store.subscribe((v) => {
-    value = v;
-  });
-  unsubscribe();
-  return value;
-}
-
 export const settingsStore = createSettingsStore();
 
-// Derived stores
-export const currentTheme = derived(settingsStore, ($state) => $state.settings.theme);
+// Derived stores for UI settings
+export const currentTheme = derived(settingsStore, ($state) => $state.uiSettings.theme);
 
 export const fontSize = derived(settingsStore, ($state) => {
   const sizes = {
@@ -118,5 +121,8 @@ export const fontSize = derived(settingsStore, ($state) => {
     medium: '16px',
     large: '18px'
   };
-  return sizes[$state.settings.fontSize];
+  return sizes[$state.uiSettings.fontSize];
 });
+
+// Derived store for app settings
+export const appSettings = derived(settingsStore, ($state) => $state.appSettings);

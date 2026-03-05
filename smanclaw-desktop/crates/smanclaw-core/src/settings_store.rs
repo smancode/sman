@@ -40,61 +40,37 @@ impl SettingsStore {
             return Ok(AppSettings::default());
         }
 
+        // Load settings directly from file (contains full API keys)
         let content = fs::read_to_string(&self.settings_file)?;
-        let mut settings: AppSettings = serde_json::from_str(&content)?;
-
-        // Load API keys from secure storage
-        if let Ok(key) = self.load_secure_key("llm") {
-            settings.llm.api_key = key;
-        }
-        if let Some(ref mut emb) = settings.embedding {
-            if let Ok(key) = self.load_secure_key("embedding") {
-                emb.api_key = key;
-            }
-        }
-        if let Some(ref mut qd) = settings.qdrant {
-            if let Ok(key) = self.load_secure_key("qdrant") {
-                qd.api_key = Some(key);
-            }
-        }
+        let settings: AppSettings = serde_json::from_str(&content)?;
 
         Ok(settings)
     }
 
     /// Save settings to disk
     pub fn save(&self, settings: &AppSettings) -> Result<()> {
-        // Create a copy for serialization (with masked API keys)
-        let mut save_settings = settings.clone();
-
-        // Save API keys to secure storage
+        // Save API keys to secure storage (optional, for backwards compatibility)
+        // Now we also save the full key to settings.json for direct access
         if !settings.llm.api_key.is_empty() {
-            self.save_secure_key("llm", &settings.llm.api_key)?;
+            let _ = self.save_secure_key("llm", &settings.llm.api_key);
         }
-        save_settings.llm.api_key = settings.llm.masked_api_key();
 
         if let Some(ref emb) = settings.embedding {
             if !emb.api_key.is_empty() {
-                self.save_secure_key("embedding", &emb.api_key)?;
-            }
-            if let Some(ref mut save_emb) = save_settings.embedding {
-                save_emb.api_key = emb.masked_api_key();
+                let _ = self.save_secure_key("embedding", &emb.api_key);
             }
         }
 
         if let Some(ref qd) = settings.qdrant {
             if let Some(ref key) = qd.api_key {
                 if !key.is_empty() {
-                    self.save_secure_key("qdrant", key)?;
+                    let _ = self.save_secure_key("qdrant", key);
                 }
-            }
-            // Don't serialize Qdrant API key to file
-            if let Some(ref mut save_qd) = save_settings.qdrant {
-                save_qd.api_key = None;
             }
         }
 
-        // Save non-sensitive settings to file
-        let content = serde_json::to_string_pretty(&save_settings)?;
+        // Save settings to file (with full API keys, not masked)
+        let content = serde_json::to_string_pretty(settings)?;
         fs::write(&self.settings_file, content)?;
 
         Ok(())

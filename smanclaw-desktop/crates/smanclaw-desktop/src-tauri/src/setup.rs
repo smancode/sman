@@ -63,6 +63,7 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::execute_task,
             crate::commands::get_task,
             crate::commands::list_tasks,
+            crate::commands::cancel_task,
             // Orchestration commands
             crate::commands::execute_orchestrated_task,
             crate::commands::get_task_dag,
@@ -77,6 +78,7 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::get_app_settings,
             crate::commands::update_app_settings,
             crate::commands::test_llm_connection,
+            crate::commands::test_llm_direct_chat,
             crate::commands::test_embedding_connection,
             crate::commands::test_qdrant_connection,
             // Utility commands

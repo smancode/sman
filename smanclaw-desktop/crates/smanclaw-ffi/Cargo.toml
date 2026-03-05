@@ -19,6 +19,7 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3.14"

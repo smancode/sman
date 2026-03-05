@@ -7,12 +7,7 @@ import type {
   OrchestrationProgress
 } from '../types';
 import { taskApi, orchestrationApi } from '../api/tauri';
-import {
-  onSubTaskStarted,
-  onSubTaskCompleted,
-  onOrchestrationProgress,
-  onTaskDag
-} from '../api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
 // State interface
@@ -42,6 +37,38 @@ const initialState: TasksState = {
 function createTasksStore() {
   const { subscribe, set, update } = writable<TasksState>(initialState);
 
+  // Poll task until completed (standalone function)
+  async function pollTaskUntilComplete(taskId: string) {
+    console.log('pollTaskUntilComplete started for:', taskId);
+    while (true) {
+      await new Promise(r => setTimeout(r, 1000));
+
+      const statusRes = await taskApi.getStatus(taskId);
+      console.log('pollTaskUntilComplete getStatus result:', statusRes);
+      if (statusRes.success && statusRes.data) {
+        const task = statusRes.data;
+        console.log('pollTaskUntilComplete task:', task);
+
+        update((state) => ({
+          ...state,
+          tasks: state.tasks.map(t =>
+            t.id === taskId ? { ...t, ...task } : t
+          ),
+          // Keep activeTaskId until task is truly done (completed/failed/cancelled)
+          activeTaskId: (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled')
+            ? null
+            : state.activeTaskId
+        }));
+
+        // Stop polling only when task reaches terminal state
+        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+          console.log('pollTaskUntilComplete completed with status:', task.status);
+          break;
+        }
+      }
+    }
+  }
+
   // Polling interval for active tasks
   let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -50,33 +77,54 @@ function createTasksStore() {
 
   // Start polling for task updates
   function startPolling(taskId: string) {
+    console.log('startPolling called for task:', taskId);
     if (pollingInterval) {
       clearInterval(pollingInterval);
     }
 
     pollingInterval = setInterval(async () => {
+      console.log('Polling task:', taskId);
       const response = await taskApi.getStatus(taskId);
 
-      if (response.success && response.data) {
-        const { status, progress, output, error } = response.data;
+      console.log('Polling response:', response);
 
-        update((state) => ({
-          ...state,
-          tasks: state.tasks.map((t) =>
+      if (response.success && response.data) {
+        // Backend returns Task object (or null if not found)
+        const taskData = response.data;
+        console.log('Polling taskData:', taskData);
+
+        // If task not found or not the right task, skip
+        if (!taskData || taskData.id !== taskId) {
+          return;
+        }
+
+        update((state) => {
+          const newTasks = state.tasks.map((t) =>
             t.id === taskId
               ? {
                   ...t,
-                  status: status as TaskStatus,
-                  progress,
-                  output: output || t.output,
-                  error: error || t.error
+                  ...taskData,  // Merge all fields from backend
+                  // Keep frontend-only fields
+                  progress: t.progress,
+                  steps: t.steps,
+                  fileChanges: t.fileChanges
                 }
               : t
-          )
-        }));
+          );
+          // If task is completed/failed/cancelled, clear active task
+          const newActiveTaskId = (taskData.status !== 'running' && state.activeTaskId === taskId)
+            ? null
+            : state.activeTaskId;
+          return {
+            ...state,
+            tasks: newTasks,
+            activeTaskId: newActiveTaskId
+          };
+        });
 
         // Stop polling if task is no longer running
-        if (status !== 'running') {
+        if (taskData.status !== 'running') {
+          console.log('Task completed, stopping polling');
           stopPolling();
         }
       }
@@ -93,78 +141,81 @@ function createTasksStore() {
 
   // Setup event listeners for orchestration
   async function setupEventListeners() {
+    console.log('setupEventListeners called');
     try {
-      // Listen for subtask started events
-      const unlistenStarted = await onSubTaskStarted((event) => {
-        update((state) => {
-          const subtasks = new Map(state.subtasks);
-          const existing = subtasks.get(event.task_id) || [];
-          const updated = existing.map((st) =>
-            st.id === event.subtask_id
-              ? { ...st, status: 'running' as const }
-              : st
-          );
-          // Add if not exists
-          if (!existing.find((st) => st.id === event.subtask_id)) {
-            updated.push({
-              id: event.subtask_id,
-              description: event.description,
-              status: 'running',
-              depends_on: []
-            });
-          }
-          subtasks.set(event.task_id, updated);
-          return { ...state, subtasks };
-        });
-      });
-      eventUnlisteners.push(unlistenStarted);
+      // Listen for task status events
+      const unlistenTaskStatus = await listen<{ task_id: string; status: string; message?: string }>(
+        'task-status',
+        (event) => {
+          console.log('Received task-status event:', event.payload);
+          const { task_id, status, message } = event.payload;
 
-      // Listen for subtask completed events
-      const unlistenCompleted = await onSubTaskCompleted((event) => {
-        update((state) => {
-          const subtasks = new Map(state.subtasks);
-          const existing = subtasks.get(event.task_id) || [];
-          const updated = existing.map((st) =>
-            st.id === event.subtask_id
-              ? {
-                  ...st,
-                  status: event.success ? 'completed' as const : 'failed' as const
-                }
-              : st
-          );
-          subtasks.set(event.task_id, updated);
-          return { ...state, subtasks };
-        });
-      });
-      eventUnlisteners.push(unlistenCompleted);
+          update((state) => {
+            const tasks = state.tasks.map((t) =>
+              t.id === task_id
+                ? {
+                    ...t,
+                    status: status as TaskStatus,
+                    output: message || t.output,
+                    error: status === 'failed' ? message : t.error
+                  }
+                : t
+            );
 
-      // Listen for orchestration progress events
-      const unlistenProgress = await onOrchestrationProgress((event) => {
-        update((state) => {
-          const orchestrationProgress = new Map(state.orchestrationProgress);
-          orchestrationProgress.set(event.task_id, {
-            completed: event.completed,
-            total: event.total,
-            percent: event.percent
+            // If task completed or failed, clear active task
+            const activeTaskId =
+              state.activeTaskId === task_id &&
+              (status === 'completed' || status === 'failed' || status === 'cancelled')
+                ? null
+                : state.activeTaskId;
+
+            return { ...state, tasks, activeTaskId };
           });
-          return { ...state, orchestrationProgress };
-        });
-      });
-      eventUnlisteners.push(unlistenProgress);
 
-      // Listen for task DAG events
-      const unlistenDag = await onTaskDag((event) => {
-        update((state) => {
-          const subtasks = new Map(state.subtasks);
-          const parallelGroups = new Map(state.parallelGroups);
-          subtasks.set(event.task_id, event.tasks);
-          parallelGroups.set(event.task_id, event.parallel_groups);
-          return { ...state, subtasks, parallelGroups };
-        });
-      });
-      eventUnlisteners.push(unlistenDag);
+          // Stop polling if task is done
+          if (status !== 'running') {
+            stopPolling();
+          }
+        }
+      );
+      eventUnlisteners.push(unlistenTaskStatus);
+
+      // Listen for file change events
+      const unlistenFileChange = await listen<{ path: string; action: string }>(
+        'file-change',
+        (event) => {
+          const { path, action } = event.payload;
+
+          update((state) => {
+            if (!state.activeTaskId) return state;
+
+            const tasks = state.tasks.map((t) => {
+              if (t.id !== state.activeTaskId) return t;
+
+              // Map action from backend to frontend type (capitalize first letter)
+              const mappedAction = action.charAt(0).toUpperCase() + action.slice(1) as 'Created' | 'Modified' | 'Deleted';
+
+              const fileChanges = [
+                ...(t.fileChanges || []),
+                {
+                  path,
+                  action: mappedAction,
+                  linesAdded: 0,
+                  linesRemoved: 0
+                }
+              ];
+              return { ...t, fileChanges };
+            });
+
+            return { ...state, tasks };
+          });
+        }
+      );
+      eventUnlisteners.push(unlistenFileChange);
     } catch (e) {
-      console.error('Failed to setup event listeners:', e);
+      // Event listeners may fail during development hot reload
+      // This is not critical - log but don't crash
+      console.warn('Event listeners not available:', e);
     }
   }
 
@@ -204,37 +255,39 @@ function createTasksStore() {
     },
 
     // Execute a new task (simple, non-orchestrated)
-    async executeTask(prompt: string, projectPath: string) {
+    async executeTask(projectId: string, prompt: string) {
+      console.log('executeTask called:', projectId, prompt);
       update((state) => ({ ...state, isLoading: true, error: null }));
 
-      const response = await taskApi.execute({ prompt, projectPath });
+      const response = await taskApi.execute({ projectId, prompt });
+      console.log('executeTask response:', response);
 
       if (response.success && response.data) {
-        const { taskId, status } = response.data;
+        // Backend returns full Task object
+        const taskData = response.data;
+        console.log('executeTask taskData:', taskData);
 
-        // Create a temporary task object
+        // Create a task object with frontend-only fields
         const newTask: Task = {
-          id: taskId,
-          projectId: '',
-          prompt,
-          status: status as TaskStatus,
+          ...taskData,  // Spread all backend fields
+          // Add frontend-only UI state fields
           progress: 0,
           steps: [],
-          fileChanges: [],
-          createdAt: Date.now()
+          fileChanges: []
         };
 
         update((state) => ({
           ...state,
           tasks: [newTask, ...state.tasks],
-          activeTaskId: taskId,
+          activeTaskId: taskData.id,
           isLoading: false
         }));
 
-        // Start polling for updates
-        startPolling(taskId);
+        console.log('executeTask calling pollTaskUntilComplete:', taskData.id);
+        // Start polling in background (don't await)
+        pollTaskUntilComplete(taskData.id);
 
-        return taskId;
+        return taskData.id;
       }
 
       update((state) => ({
@@ -254,16 +307,18 @@ function createTasksStore() {
       if (response.success && response.data) {
         const { task_id, subtask_count, parallel_groups } = response.data;
 
-        // Create a temporary task object
+        // Create a task object that matches backend Task structure
         const newTask: Task = {
           id: task_id,
           projectId: projectId,
-          prompt,
+          input: prompt,  // Backend uses "input", not "prompt"
           status: 'running',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          // Frontend-only UI state fields
           progress: 0,
           steps: [],
-          fileChanges: [],
-          createdAt: Date.now()
+          fileChanges: []
         };
 
         update((state) => {
@@ -309,7 +364,7 @@ function createTasksStore() {
         update((state) => ({
           ...state,
           tasks: state.tasks.map((t) =>
-            t.id === taskId ? { ...t, status: 'error' as TaskStatus, error: 'Task cancelled' } : t
+            t.id === taskId ? { ...t, status: 'failed' as TaskStatus, error: 'Task cancelled' } : t
           ),
           activeTaskId: state.activeTaskId === taskId ? null : state.activeTaskId
         }));
@@ -326,6 +381,27 @@ function createTasksStore() {
     // Set active task
     setActiveTask(taskId: string | null) {
       update((state) => ({ ...state, activeTaskId: taskId }));
+    },
+
+    // Update task status from event
+    updateTaskStatus(taskId: string, status: string, message?: string) {
+      console.log('updateTaskStatus called:', taskId, status, message);
+      update((state) => {
+        const tasks = state.tasks.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                status: status as TaskStatus,
+                output: message || t.output,
+                error: status === 'failed' ? message : t.error
+              }
+            : t
+        );
+        const activeTaskId = (status !== 'running' && state.activeTaskId === taskId)
+          ? null
+          : state.activeTaskId;
+        return { ...state, tasks, activeTaskId };
+      });
     },
 
     // Update task file changes
@@ -359,6 +435,8 @@ function createTasksStore() {
 export const tasksStore = createTasksStore();
 
 // Derived stores
+export const tasks = derived(tasksStore, ($state) => $state.tasks);
+
 export const activeTask = derived(tasksStore, ($state) =>
   $state.tasks.find((t) => t.id === $state.activeTaskId)
 );
@@ -372,7 +450,7 @@ export const completedTasks = derived(tasksStore, ($state) =>
 );
 
 export const failedTasks = derived(tasksStore, ($state) =>
-  $state.tasks.filter((t) => t.status === 'error')
+  $state.tasks.filter((t) => t.status === 'failed')
 );
 
 // Orchestration derived stores

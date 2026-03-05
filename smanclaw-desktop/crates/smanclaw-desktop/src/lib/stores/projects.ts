@@ -54,9 +54,9 @@ function createProjectsStore() {
       }));
     },
 
-    // Create a new project
-    async createProject(name: string, path: string, description?: string) {
-      const response = await projectApi.create(name, path, description);
+    // Create a new project (add existing project by path)
+    async createProject(path: string) {
+      const response = await projectApi.create(path);
 
       if (response.success && response.data) {
         update((state) => ({
@@ -69,25 +69,6 @@ function createProjectsStore() {
       update((state) => ({
         ...state,
         error: response.error || 'Failed to create project'
-      }));
-      return null;
-    },
-
-    // Update a project
-    async updateProject(id: string, updates: Partial<Project>) {
-      const response = await projectApi.update(id, updates);
-
-      if (response.success && response.data) {
-        update((state) => ({
-          ...state,
-          projects: state.projects.map((p) => (p.id === id ? response.data! : p))
-        }));
-        return response.data;
-      }
-
-      update((state) => ({
-        ...state,
-        error: response.error || 'Failed to update project'
       }));
       return null;
     },

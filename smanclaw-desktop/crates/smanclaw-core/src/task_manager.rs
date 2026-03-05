@@ -1,6 +1,5 @@
 //! Task manager for creating and tracking tasks
 
-use anyhow::Result;
 use chrono::Utc;
 use rusqlite::Connection;
 use smanclaw_types::{Task, TaskId, TaskStatus};
@@ -39,8 +38,11 @@ impl TaskManager {
                 project_id TEXT NOT NULL,
                 input TEXT NOT NULL,
                 status TEXT NOT NULL,
+                output TEXT,
+                error TEXT,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                completed_at TEXT
             )
             "#,
             [],
@@ -50,24 +52,31 @@ impl TaskManager {
 
     /// Create a new task
     pub fn create_task(&self, project_id: &str, input: &str) -> CoreResult<Task> {
+        let now = Utc::now();
         let task = Task {
             id: uuid::Uuid::new_v4().to_string(),
             project_id: project_id.to_string(),
             input: input.to_string(),
             status: TaskStatus::Pending,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            output: None,
+            error: None,
+            created_at: now,
+            updated_at: now,
+            completed_at: None,
         };
 
         self.conn.execute(
-            "INSERT INTO tasks (id, project_id, input, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            [
+            "INSERT INTO tasks (id, project_id, input, status, output, error, created_at, updated_at, completed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
                 &task.id,
                 &task.project_id,
                 &task.input,
                 &serde_json::to_string(&task.status)?,
+                &task.output,
+                &task.error,
                 &task.created_at.to_rfc3339(),
                 &task.updated_at.to_rfc3339(),
+                &task.completed_at.map(|t| t.to_rfc3339()),
             ],
         )?;
 
@@ -77,7 +86,7 @@ impl TaskManager {
     /// Get a task by ID
     pub fn get_task(&self, task_id: &str) -> CoreResult<Option<Task>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, input, status, created_at, updated_at FROM tasks WHERE id = ?1",
+            "SELECT id, project_id, input, status, output, error, created_at, updated_at, completed_at FROM tasks WHERE id = ?1",
         )?;
 
         let result = stmt.query_row([task_id], |row| {
@@ -87,12 +96,17 @@ impl TaskManager {
                 input: row.get(2)?,
                 status: serde_json::from_str(&row.get::<_, String>(3)?)
                     .unwrap_or(TaskStatus::Pending),
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                output: row.get(4)?,
+                error: row.get(5)?,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
+                completed_at: row.get::<_, Option<String>>(8)?
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&Utc)),
             })
         });
 
@@ -106,7 +120,7 @@ impl TaskManager {
     /// List all tasks for a project
     pub fn list_tasks(&self, project_id: &str) -> CoreResult<Vec<Task>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, input, status, created_at, updated_at FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC"
+            "SELECT id, project_id, input, status, output, error, created_at, updated_at, completed_at FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC"
         )?;
 
         let tasks = stmt
@@ -117,12 +131,17 @@ impl TaskManager {
                     input: row.get(2)?,
                     status: serde_json::from_str(&row.get::<_, String>(3)?)
                         .unwrap_or(TaskStatus::Pending),
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                    output: row.get(4)?,
+                    error: row.get(5)?,
+                    created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
-                    updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(5)?)
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
+                    completed_at: row.get::<_, Option<String>>(8)?
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                        .map(|dt| dt.with_timezone(&Utc)),
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -134,10 +153,43 @@ impl TaskManager {
     pub fn update_task_status(&self, task_id: &str, status: TaskStatus) -> CoreResult<()> {
         let now = Utc::now().to_rfc3339();
         let status_json = serde_json::to_string(&status)?;
+        let completed_at = if status == TaskStatus::Completed || status == TaskStatus::Failed {
+            Some(now.clone())
+        } else {
+            None
+        };
 
         let rows_affected = self.conn.execute(
-            "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
-            [&status_json, &now, task_id],
+            "UPDATE tasks SET status = ?1, updated_at = ?2, completed_at = ?3 WHERE id = ?4",
+            rusqlite::params![&status_json, &now, &completed_at, task_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(CoreError::TaskNotFound(task_id.to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Update task with result (output or error)
+    pub fn update_task_result(
+        &self,
+        task_id: &str,
+        status: TaskStatus,
+        output: Option<String>,
+        error: Option<String>,
+    ) -> CoreResult<()> {
+        let now = Utc::now().to_rfc3339();
+        let status_json = serde_json::to_string(&status)?;
+        let completed_at = if status == TaskStatus::Completed || status == TaskStatus::Failed {
+            Some(now.clone())
+        } else {
+            None
+        };
+
+        let rows_affected = self.conn.execute(
+            "UPDATE tasks SET status = ?1, output = ?2, error = ?3, updated_at = ?4, completed_at = ?5 WHERE id = ?6",
+            rusqlite::params![&status_json, &output, &error, &now, &completed_at, task_id],
         )?;
 
         if rows_affected == 0 {
@@ -162,6 +214,8 @@ mod tests {
         assert_eq!(task.project_id, "proj-123");
         assert_eq!(task.input, "Implement login");
         assert_eq!(task.status, TaskStatus::Pending);
+        assert!(task.output.is_none());
+        assert!(task.error.is_none());
     }
 
     #[test]
@@ -215,6 +269,7 @@ mod tests {
             .expect("get")
             .expect("task exists");
         assert_eq!(updated.status, TaskStatus::Running);
+        assert!(updated.completed_at.is_none());
 
         manager
             .update_task_status(&task.id, TaskStatus::Completed)
@@ -224,6 +279,44 @@ mod tests {
             .expect("get")
             .expect("task exists");
         assert_eq!(updated.status, TaskStatus::Completed);
+        assert!(updated.completed_at.is_some());
+    }
+
+    #[test]
+    fn update_task_result_should_update_output() {
+        let manager = TaskManager::in_memory().expect("create manager");
+        let task = manager.create_task("proj-123", "Test").expect("create");
+
+        manager
+            .update_task_result(&task.id, TaskStatus::Completed, Some("Done!".to_string()), None)
+            .expect("update");
+
+        let updated = manager
+            .get_task(&task.id)
+            .expect("get")
+            .expect("task exists");
+        assert_eq!(updated.status, TaskStatus::Completed);
+        assert_eq!(updated.output, Some("Done!".to_string()));
+        assert!(updated.error.is_none());
+        assert!(updated.completed_at.is_some());
+    }
+
+    #[test]
+    fn update_task_result_should_update_error() {
+        let manager = TaskManager::in_memory().expect("create manager");
+        let task = manager.create_task("proj-123", "Test").expect("create");
+
+        manager
+            .update_task_result(&task.id, TaskStatus::Failed, None, Some("Something went wrong".to_string()))
+            .expect("update");
+
+        let updated = manager
+            .get_task(&task.id)
+            .expect("get")
+            .expect("task exists");
+        assert_eq!(updated.status, TaskStatus::Failed);
+        assert!(updated.output.is_none());
+        assert_eq!(updated.error, Some("Something went wrong".to_string()));
     }
 
     #[test]

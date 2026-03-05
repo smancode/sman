@@ -48,9 +48,10 @@
 
     const response = await appSettingsApi.update(settings);
     if (response.success) {
-      alert('Settings saved successfully!');
+      // Show success in test result area
+      llmTestResult = { success: true, error: undefined, latencyMs: undefined };
     } else {
-      alert('Failed to save settings: ' + response.error);
+      llmTestResult = { success: false, error: response.error, latencyMs: undefined };
     }
     isSaving = false;
   }
