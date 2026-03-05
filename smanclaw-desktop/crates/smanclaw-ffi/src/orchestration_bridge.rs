@@ -310,7 +310,10 @@ mod tests {
         assert!(bundle.is_ok());
         let bundle = bundle.unwrap();
         assert!(!bundle.plan.topological_order.is_empty());
-        assert!(!bundle.handoff_messages.is_empty() || bundle.estimated_handoff_tokens >= 0);
+        assert_eq!(
+            bundle.estimated_handoff_tokens,
+            estimate_batch_handoff_tokens(&bundle.handoff_messages)
+        );
     }
 
     #[test]

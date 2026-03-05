@@ -4,6 +4,55 @@
 
 基于 ZeroClaw 开发跨平台桌面应用（Windows + macOS），支持可视化管理项目和执行编码任务。
 
+## 0. 当前实现对照（2026-03-05）
+
+### 0.1 Desktop → 主/子 Claw 实际调用链路
+
+1. 前端通过 `orchestrationApi.executeTask` 调用 Tauri 命令 `execute_orchestrated_task`
+2. `execute_orchestrated_task` 在 Tauri 层直接调用 `Orchestrator::parse_requirement` 与 `Orchestrator::build_dag`
+3. Tauri 层按 DAG 分组循环执行，每个子任务先写入 `.smanclaw/tasks/<subtask-id>.md`
+4. 每个子任务由 `SubClawExecutor::run()` 执行 checklist 循环，完成后回写 `- [x]`
+5. 执行进度通过事件 `subtask-started` / `subtask-completed` / `orchestration-progress` 推送到前端
+6. 全部子任务结束后更新 Task 状态为 completed/failed，并可通过 `get_task_dag` / `get_orchestration_status` 查询
+
+### 0.2 蓝图完成度评估（按主子 Claw 自动化目标）
+
+| 能力项 | 蓝图目标 | 当前状态 | 完成度 |
+|---|---|---|---|
+| 主控状态机 | Analyzing→Splitting→Dispatching→Polling→Evaluating 闭环 | `smanclaw-core::Orchestrator::handle_request` 已实现，但 desktop 主链路仍走 `execute_orchestrated_task` | ⚠️ 部分实现 |
+| 任务拆解 | 基于语义理解拆分子任务 | 已接入“语义优先 + 规则兜底”拆解，仍需提升复杂需求稳定性 | ⚠️ 部分实现 |
+| DAG 管理 | 依赖分析与拓扑排序 | `TaskDag` 已实现并用于 orchestrated 命令 | ✅ 已实现 |
+| 子 Claw 执行 | 按 task.md checklist 自动执行 | `SubClawExecutor` 已接入 orchestrated 命令并执行 checklist | ✅ 已实现 |
+| 并行执行 | 无依赖任务并行执行 | 当前“分组内顺序执行”，仅结构支持并行 | ⚠️ 部分实现 |
+| 验收评估 | 按验收标准自动评估（测试/E2E/命令） | orchestrated 主流程已接入 `AcceptanceEvaluator`，当前以基础规则校验为主 | ⚠️ 部分实现 |
+| main-task.md 协同 | 主 Claw 输出 main-task.md 并追踪子任务 | orchestrated 主流程已接入 `MainTaskManager`（创建、子任务状态更新、完成回写） | ✅ 已实现 |
+| 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入 `ExperienceSink`，按子任务提取经验并尝试更新技能 | ✅ 已实现 |
+| ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`，桥接失败时会降级占位执行 | ⚠️ 部分实现 |
+
+### 0.3 已确认缺口（与“核心自动化愿景”对照）
+
+1. **主链路分叉**：Desktop 当前编排主链路仍在 Tauri `execute_orchestrated_task`，尚未统一切到 `Orchestrator::handle_request`。
+2. **并行执行未落地**：虽然 DAG 有 parallel group，但组内仍按顺序执行。
+3. **拆解智能度不足**：子任务拆解仍偏规则匹配，语义泛化能力有限。
+4. **验收深度不足**：已接入 `AcceptanceEvaluator`，但当前偏基础校验，未形成失败补救再执行闭环。
+5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需统一状态来源与一致性策略。
+6. **ZeroClaw 失败降级策略偏宽松**：桥接不可用时会降级占位执行，可能导致“执行成功”语义偏弱。
+7. **交互说明仍可增强**：已增加主 Claw 分阶段状态说明，但前端尚未提供独立“过程解说面板/时间线”。
+
+### 0.5 交互待办（暂缓项）
+
+- 在前端增加“主 Claw 过程说明时间线”，按分析/拆解/分发/执行/验收分阶段展示细节。
+- 将子任务测试证据（命令、通过/失败摘要）结构化展示，避免用户只看到最终一句话。
+- 支持长任务中的心跳播报与预计剩余步骤提示，降低“无响应等待”感知。
+
+### 0.4 建议的收敛路径（按落地优先级）
+
+1. 将 Desktop orchestrated 入口统一切换到 `Orchestrator::handle_request`，Tauri 层仅做命令与事件编排。
+2. 在 DAG 的同组任务引入真正并发执行（`join_all` / `FuturesUnordered`），并保留失败短路策略。
+3. 将验收失败结果转成补救子任务并回流 DAG，形成“执行→验收→补救→再验收”闭环。
+4. 统一 `tasks.db` 与 `main-task.md` 的状态主数据源，避免双写漂移。
+5. 收紧 ZeroClaw 降级策略：桥接失败时显式失败或进入重试，而非占位成功。
+
 ### 设计原则
 
 1. **高内聚** - UI 层完全独立，可单独调整

@@ -1,13 +1,18 @@
 //! Tauri commands for frontend communication
 
 use chrono::Utc;
-use smanclaw_core::{MockStepExecutor, Orchestrator, SkillStore, SubClawExecutor, SubTaskStatus, TaskDag};
-use smanclaw_ffi::ZeroclawBridge;
+use smanclaw_core::{
+    AcceptanceEvaluator, MainTaskManager, MainTaskResult, MainTaskStatus, Orchestrator,
+    SkillStore, SubClawExecutor, SubTask, SubTaskRef, SubTaskStatus, TaskDag, TaskGenerator,
+    TaskResultForExperience,
+    VerificationMethod, ExperienceSink,
+};
+use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::{
     AppSettings, ConnectionTestResult, Conversation, EmbeddingSettings, FileAction, HistoryEntry,
     LlmSettings, Project, ProjectConfig, QdrantSettings, Role, Task, TaskStatus,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -798,6 +803,190 @@ pub struct OrchestrationProgress {
     pub percent: f32,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct SemanticDecomposeResponse {
+    subtasks: Vec<SemanticSubTask>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SemanticSubTask {
+    id: Option<String>,
+    description: String,
+    #[serde(default)]
+    depends_on: Vec<String>,
+    #[serde(default)]
+    test_command: Option<String>,
+}
+
+async fn try_semantic_decompose_with_zeroclaw(
+    project_path: &std::path::Path,
+    settings: &AppSettings,
+    input: &str,
+) -> Option<Vec<SubTask>> {
+    if !settings.llm.is_configured() {
+        return None;
+    }
+
+    let bridge = ZeroclawBridge::from_project_with_settings(project_path, settings).ok()?;
+    let prompt = build_semantic_decompose_prompt(input);
+    let result = bridge.execute_task_async(&prompt).await.ok()?;
+    let parsed = parse_semantic_subtasks(&result.output)?;
+    if Orchestrator::build_dag(parsed.clone()).is_err() {
+        return None;
+    }
+    Some(parsed)
+}
+
+fn build_semantic_decompose_prompt(input: &str) -> String {
+    format!(
+        "你是任务拆解器。把用户需求拆成可执行子任务，必要时可调用已安装 skills（如 ClawHub 安装的能力），但最终只输出 JSON，不要输出解释。\n\
+输出必须是一个 JSON 对象，结构如下：\n\
+{{\"subtasks\":[{{\"id\":\"task-1\",\"description\":\"...\",\"depends_on\":[],\"test_command\":\"...\"}}]}}\n\
+规则：\n\
+1) id 唯一，使用 kebab-case。\n\
+2) depends_on 只能引用已有 id，不允许自依赖。\n\
+3) 子任务要覆盖：实现、验证、回归。\n\
+4) 如果需求很小，也至少拆成 2 个子任务。\n\
+5) 不要使用 markdown 代码块包裹。\n\
+用户需求：{}",
+        input
+    )
+}
+
+fn parse_semantic_subtasks(output: &str) -> Option<Vec<SubTask>> {
+    let payload = extract_json_payload(output)?;
+    let response: SemanticDecomposeResponse = serde_json::from_str(&payload).ok()?;
+    normalize_semantic_subtasks(response)
+}
+
+fn extract_json_payload(output: &str) -> Option<String> {
+    let trimmed = output.trim();
+    if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+        return Some(trimmed.to_string());
+    }
+
+    if let Some(start) = trimmed.find("```json") {
+        let rest = &trimmed[start + 7..];
+        if let Some(end) = rest.find("```") {
+            let candidate = rest[..end].trim();
+            if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+
+    if let Some(start) = trimmed.find("```") {
+        let rest = &trimmed[start + 3..];
+        if let Some(end) = rest.find("```") {
+            let candidate = rest[..end].trim();
+            if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+
+    let mut depth = 0usize;
+    let mut start_idx = None;
+    for (idx, ch) in trimmed.char_indices() {
+        if ch == '{' {
+            if start_idx.is_none() {
+                start_idx = Some(idx);
+            }
+            depth += 1;
+        } else if ch == '}' {
+            if depth == 0 {
+                continue;
+            }
+            depth -= 1;
+            if depth == 0 {
+                if let Some(start) = start_idx {
+                    let candidate = trimmed[start..=idx].trim();
+                    if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
+                        return Some(candidate.to_string());
+                    }
+                }
+                start_idx = None;
+            }
+        }
+    }
+
+    None
+}
+
+fn sanitize_task_id(raw: &str, fallback_index: usize) -> String {
+    let mut cleaned = raw
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect::<String>();
+    cleaned = cleaned.replace('_', "-");
+    if cleaned.is_empty() || cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        return format!("task-{}", fallback_index + 1);
+    }
+    cleaned
+}
+
+fn normalize_semantic_subtasks(response: SemanticDecomposeResponse) -> Option<Vec<SubTask>> {
+    if response.subtasks.is_empty() {
+        return None;
+    }
+
+    let mut ids = Vec::with_capacity(response.subtasks.len());
+    let mut seen = HashSet::new();
+
+    for (idx, task) in response.subtasks.iter().enumerate() {
+        let mut id = sanitize_task_id(task.id.as_deref().unwrap_or_default(), idx);
+        if seen.contains(&id) {
+            let mut suffix = 2usize;
+            loop {
+                let candidate = format!("{id}-{suffix}");
+                if !seen.contains(&candidate) {
+                    id = candidate;
+                    break;
+                }
+                suffix += 1;
+            }
+        }
+        seen.insert(id.clone());
+        ids.push(id);
+    }
+
+    let id_set = ids.iter().cloned().collect::<HashSet<_>>();
+    let mut subtasks = Vec::new();
+
+    for (idx, task) in response.subtasks.into_iter().enumerate() {
+        let description = task.description.trim().to_string();
+        if description.is_empty() {
+            continue;
+        }
+
+        let id = ids.get(idx).cloned().unwrap_or_else(|| format!("task-{}", idx + 1));
+        let mut subtask = SubTask::new(id.clone(), description);
+
+        for dep in task.depends_on {
+            let dep_id = sanitize_task_id(&dep, idx);
+            if dep_id != id && id_set.contains(&dep_id) {
+                subtask = subtask.depends_on(dep_id);
+            }
+        }
+
+        if let Some(cmd) = task.test_command.map(|s| s.trim().to_string()) {
+            if !cmd.is_empty() {
+                subtask = subtask.with_test_command(cmd);
+            }
+        }
+
+        subtasks.push(subtask);
+    }
+
+    if subtasks.is_empty() {
+        None
+    } else {
+        Some(subtasks)
+    }
+}
+
 /// Execute an orchestrated task with automatic decomposition
 #[tauri::command(rename_all = "snake_case")]
 pub async fn execute_orchestrated_task(
@@ -817,13 +1006,17 @@ pub async fn execute_orchestrated_task(
         ));
     }
 
-    // Get project path
-    let project_path = {
+    // Get project path and settings
+    let (project_path, settings) = {
         let pm = state.project_manager.lock().await;
         let project = pm
             .get_project(&project_id)?
             .ok_or_else(|| TauriError::ProjectNotFound(project_id.clone()))?;
-        PathBuf::from(&project.path)
+        let path = PathBuf::from(&project.path);
+        drop(pm);
+        let ss = state.settings_store.lock().await;
+        let settings = ss.load()?;
+        (path, settings)
     };
 
     // Create task
@@ -839,9 +1032,31 @@ pub async fn execute_orchestrated_task(
         pm.touch_project(&project_id)?;
     }
 
+    if let Err(e) = state
+        .task_manager
+        .lock()
+        .await
+        .update_task_status(&task_id, TaskStatus::Running)
+    {
+        tracing::error!("Failed to update task status to running: {}", e);
+    }
+
+    if let Err(e) = emit_task_status(
+        &app_handle,
+        &task_id,
+        "running",
+        Some("主 Claw 正在进行语义拆解与依赖分析...".to_string()),
+    ) {
+        tracing::error!("Failed to emit decomposition status event: {}", e);
+    }
+
     // Parse requirement and build DAG
-    let subtasks = Orchestrator::parse_requirement(&input);
-    let mut dag = Orchestrator::build_dag(subtasks.clone())?;
+    let subtasks = match try_semantic_decompose_with_zeroclaw(&project_path, &settings, &input).await
+    {
+        Some(tasks) => tasks,
+        None => Orchestrator::parse_requirement(&input),
+    };
+    let dag = Orchestrator::build_dag(subtasks.clone())?;
     let parallel_groups: Vec<Vec<String>> = dag
         .get_parallel_groups()
         .iter()
@@ -864,6 +1079,27 @@ pub async fn execute_orchestrated_task(
             depends_on: t.depends_on.clone(),
         })
         .collect();
+
+    let main_task_manager = MainTaskManager::new(&project_path)?;
+    let main_task = main_task_manager.create(&input)?;
+    main_task_manager.update_status(&main_task.id, MainTaskStatus::Planning)?;
+    for task in &subtasks {
+        let mut sub_task_ref = SubTaskRef::new(&task.id, &task.description);
+        for dep in &task.depends_on {
+            sub_task_ref = sub_task_ref.depends_on(dep.clone());
+        }
+        main_task_manager.add_sub_task(&main_task.id, &sub_task_ref)?;
+    }
+    if let Some(mut loaded_main_task) = main_task_manager.load(&main_task.id)? {
+        for task in &subtasks {
+            loaded_main_task.add_acceptance_criterion(format!(
+                "content: .smanclaw/tasks/{}.md contains '- [x]'",
+                task.id
+            ));
+        }
+        main_task_manager.update(&loaded_main_task)?;
+    }
+
     emit_task_dag(
         &app_handle,
         &task_id,
@@ -876,15 +1112,54 @@ pub async fn execute_orchestrated_task(
         &app_handle,
         &task_id,
         "running",
-        Some("Orchestrating subtasks...".to_string()),
+        Some(format!("主 Claw 已生成 {} 个子任务，准备分发执行...", subtasks.len())),
     )?;
 
     // Spawn background task for execution
     let app_handle_clone = app_handle.clone();
     let task_manager = state.task_manager.clone();
     let task_id_clone = task_id.clone();
+    let main_task_id = main_task.id.clone();
+    let settings_clone = settings.clone();
+    let input_clone = input.clone();
 
     tokio::spawn(async move {
+        let main_task_manager = match MainTaskManager::new(&project_path) {
+            Ok(manager) => manager,
+            Err(e) => {
+                tracing::error!("Failed to create MainTaskManager: {}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = main_task_manager.update_status(&main_task_id, MainTaskStatus::Executing) {
+            tracing::error!("Failed to update main task status: {}", e);
+        }
+
+        let bridge = match ZeroclawBridge::from_project_with_settings(&project_path, &settings_clone)
+        {
+            Ok(bridge) => Some(Arc::new(bridge)),
+            Err(e) => {
+                tracing::error!("Failed to initialize ZeroClaw bridge: {}", e);
+                None
+            }
+        };
+
+        let experience_sink = match SkillStore::new(&project_path) {
+            Ok(skill_store) => Some(ExperienceSink::new(skill_store)),
+            Err(e) => {
+                tracing::error!("Failed to create ExperienceSink: {}", e);
+                None
+            }
+        };
+        let task_generator = match TaskGenerator::new(&project_path) {
+            Ok(generator) => Some(generator),
+            Err(e) => {
+                tracing::error!("Failed to create TaskGenerator: {}", e);
+                None
+            }
+        };
+
         // Load DAG from storage
         let mut dag = {
             let dags = ORCHESTRATION_DAGS.read().await;
@@ -904,9 +1179,22 @@ pub async fn execute_orchestrated_task(
             .collect();
 
         // Execute in parallel groups
-        for group_tasks in parallel_groups {
+        for (group_index, group_tasks) in parallel_groups.iter().enumerate() {
+            if let Err(e) = emit_task_status(
+                &app_handle_clone,
+                &task_id_clone,
+                "running",
+                Some(format!(
+                    "主 Claw 正在执行第 {}/{} 批子任务...",
+                    group_index + 1,
+                    parallel_groups.len()
+                )),
+            ) {
+                tracing::error!("Failed to emit group progress status: {}", e);
+            }
+
             // Emit subtask started events
-            for task in &group_tasks {
+            for task in group_tasks {
                 if let Err(e) = emit_subtask_started(
                     &app_handle_clone,
                     &task_id_clone,
@@ -918,25 +1206,27 @@ pub async fn execute_orchestrated_task(
             }
 
             // Execute each task in the group (sequentially for now, can be parallelized later)
-            for task in &group_tasks {
-                // Create a task.md file for this subtask
-                let task_dir = project_path.join(".smanclaw").join("tasks");
-                if let Err(e) = std::fs::create_dir_all(&task_dir) {
-                    tracing::error!("Failed to create task directory: {}", e);
-                    continue;
+            for task in group_tasks {
+                if let Err(e) = main_task_manager.update_sub_task_status(
+                    &main_task_id,
+                    &task.id,
+                    SubTaskStatus::Running,
+                ) {
+                    tracing::error!("Failed to update subtask running status: {}", e);
                 }
 
-                let task_md_path = task_dir.join(format!("{}.md", task.id));
-                let task_content = format!(
-                    "# Task: {}\n\n## Description\n{}\n\n## Checklist\n- [ ] Execute task\n- [ ] Verify result",
-                    task.description,
-                    task.description
-                );
-
-                if let Err(e) = std::fs::write(&task_md_path, &task_content) {
-                    tracing::error!("Failed to write task file: {}", e);
+                let task_md_path = if let Some(generator) = &task_generator {
+                    match generator.generate(task) {
+                        Ok(path) => path,
+                        Err(e) => {
+                            tracing::error!("Failed to generate task.md for {}: {}", task.id, e);
+                            continue;
+                        }
+                    }
+                } else {
+                    tracing::error!("TaskGenerator unavailable, skip subtask {}", task.id);
                     continue;
-                }
+                };
 
                 // Create executor for this task
                 let skill_store = match SkillStore::new(&project_path) {
@@ -948,9 +1238,11 @@ pub async fn execute_orchestrated_task(
                 };
 
                 let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
-                executor.set_step_executor(std::sync::Arc::new(
-                    MockStepExecutor::new("Mock execution response")
-                ));
+                if let Some(ref bridge) = bridge {
+                    executor.set_step_executor(Arc::new(ZeroclawStepExecutor::from_bridge(
+                        bridge.clone(),
+                    )));
+                }
 
                 // Execute the task
                 let result = executor.run().await;
@@ -976,7 +1268,59 @@ pub async fn execute_orchestrated_task(
                     }
                 }
 
+                let subtask_status = match &result {
+                    Ok(exec_result) if exec_result.success => SubTaskStatus::Completed,
+                    _ => SubTaskStatus::Failed,
+                };
+                if let Err(e) =
+                    main_task_manager.update_sub_task_status(&main_task_id, &task.id, subtask_status)
+                {
+                    tracing::error!("Failed to update subtask final status: {}", e);
+                }
+
+                if let (Some(sink), Ok(exec_result)) = (experience_sink.as_ref(), &result) {
+                    let task_md_content = std::fs::read_to_string(&task_md_path).ok();
+                    let output_text = exec_result
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| {
+                            format!(
+                                "Completed {}/{} steps",
+                                exec_result.steps_completed, exec_result.steps_total
+                            )
+                        });
+                    let mut task_result = TaskResultForExperience::new(
+                        task.id.clone(),
+                        task.description.clone(),
+                        output_text,
+                        exec_result.success,
+                    )
+                    .with_files(vec![task_md_path.display().to_string()]);
+                    if let Some(content) = task_md_content {
+                        task_result = task_result.with_task_md(content);
+                    }
+                    if let Ok(experience) = sink.extract_experience(&task_result) {
+                        if sink.should_update_skill(&experience) {
+                            if let Err(e) = sink.update_skill(&experience) {
+                                tracing::error!("Failed to update skill from experience: {}", e);
+                            }
+                        }
+                    }
+                }
+
                 completed_count += 1;
+
+                if let Err(e) = emit_task_status(
+                    &app_handle_clone,
+                    &task_id_clone,
+                    "running",
+                    Some(format!(
+                        "主 Claw 验证中：已完成 {}/{} 个子任务",
+                        completed_count, total_tasks
+                    )),
+                ) {
+                    tracing::error!("Failed to emit running status event: {}", e);
+                }
 
                 // Emit progress
                 if let Err(e) = emit_orchestration_progress(
@@ -1019,30 +1363,113 @@ pub async fn execute_orchestrated_task(
             .iter()
             .all(|t| t.status == SubTaskStatus::Completed);
 
-        // Update task status
-        let final_status = if all_completed {
+        if let Err(e) = main_task_manager.update_status(&main_task_id, MainTaskStatus::Verifying) {
+            tracing::error!("Failed to update main task verifying status: {}", e);
+        }
+
+        let evaluator = AcceptanceEvaluator::new(&project_path);
+        let acceptance_criteria = dag
+            .tasks_in_order()
+            .iter()
+            .map(|task| smanclaw_core::AcceptanceCriteria::Functional {
+                id: format!("subtask-{}", task.id),
+                description: format!("content: .smanclaw/tasks/{}.md contains '- [x]'", task.id),
+                verification_method: VerificationMethod::ContentMatch,
+            })
+            .collect::<Vec<_>>();
+        let evaluation = evaluator.evaluate(&acceptance_criteria);
+        let evaluation_passed = evaluation
+            .as_ref()
+            .map(|result| result.overall_passed)
+            .unwrap_or(false);
+        let final_passed = all_completed && evaluation_passed;
+
+        let tests_run = evaluation
+            .as_ref()
+            .ok()
+            .map(|result| result.criteria_results.len());
+        let tests_passed = evaluation.as_ref().ok().map(|result| {
+            result
+                .criteria_results
+                .iter()
+                .filter(|criteria| criteria.status == smanclaw_core::CriteriaStatus::Passed)
+                .count()
+        });
+        if let Err(e) = emit_test_result(
+            &app_handle_clone,
+            &task_id_clone,
+            "acceptance",
+            final_passed,
+            &format!("Acceptance for request: {}", input_clone),
+            tests_run,
+            tests_passed,
+        ) {
+            tracing::error!("Failed to emit acceptance test result: {}", e);
+        }
+
+        let final_status = if final_passed {
             TaskStatus::Completed
         } else {
             TaskStatus::Failed
         };
-        if let Err(e) = task_manager
-            .lock()
-            .await
-            .update_task_status(&task_id_clone, final_status)
-        {
-            tracing::error!("Failed to update task status: {}", e);
+        let final_output = if final_passed {
+            Some(format!("All {} subtasks completed and accepted", total_tasks))
+        } else {
+            None
+        };
+        let final_error = if final_passed {
+            None
+        } else {
+            let mut errors = Vec::new();
+            if !all_completed {
+                errors.push("Some subtasks failed".to_string());
+            }
+            if !evaluation_passed {
+                errors.push("Acceptance criteria not fully passed".to_string());
+            }
+            if let Err(e) = &evaluation {
+                errors.push(format!("Acceptance evaluator error: {}", e));
+            }
+            Some(errors.join("; "))
+        };
+        if let Err(e) = task_manager.lock().await.update_task_result(
+            &task_id_clone,
+            final_status,
+            final_output.clone(),
+            final_error.clone(),
+        ) {
+            tracing::error!("Failed to update task result: {}", e);
+        }
+
+        let main_task_result = if final_passed {
+            MainTaskResult::success(
+                format!("Completed {} subtasks and passed acceptance", total_tasks),
+                dag.tasks_in_order()
+                    .iter()
+                    .map(|task| format!(".smanclaw/tasks/{}.md", task.id))
+                    .collect(),
+            )
+        } else {
+            MainTaskResult::failure(
+                final_error
+                    .clone()
+                    .unwrap_or_else(|| "Orchestration failed".to_string()),
+            )
+        };
+        if let Err(e) = main_task_manager.complete(&main_task_id, &main_task_result) {
+            tracing::error!("Failed to complete main task: {}", e);
         }
 
         // Emit final status
-        let (status_str, message) = match all_completed {
+        let (status_str, message) = match final_passed {
             true => (
                 "completed",
                 Some(format!(
-                    "All {} subtasks completed successfully",
+                    "All {} subtasks completed and accepted",
                     total_tasks
                 )),
             ),
-            false => ("failed", Some("Some subtasks failed".to_string())),
+            false => ("failed", final_error),
         };
         if let Err(e) = emit_task_status(&app_handle_clone, &task_id_clone, status_str, message) {
             tracing::error!("Failed to emit final task status event: {}", e);
@@ -1154,4 +1581,59 @@ pub async fn get_orchestration_status(
         total,
         percent,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        extract_json_payload, normalize_semantic_subtasks, parse_semantic_subtasks,
+        sanitize_task_id, SemanticDecomposeResponse, SemanticSubTask,
+    };
+
+    #[test]
+    fn extracts_json_from_markdown_block() {
+        let output = "text\n```json\n{\"subtasks\":[{\"id\":\"task-1\",\"description\":\"a\"}]}\n```\nend";
+        let payload = extract_json_payload(output).expect("json payload");
+        assert!(payload.contains("\"subtasks\""));
+    }
+
+    #[test]
+    fn sanitizes_and_deduplicates_task_ids() {
+        let response = SemanticDecomposeResponse {
+            subtasks: vec![
+                SemanticSubTask {
+                    id: Some("Task_1".to_string()),
+                    description: "first".to_string(),
+                    depends_on: vec![],
+                    test_command: None,
+                },
+                SemanticSubTask {
+                    id: Some("task-1".to_string()),
+                    description: "second".to_string(),
+                    depends_on: vec!["Task_1".to_string()],
+                    test_command: None,
+                },
+            ],
+        };
+
+        let tasks = normalize_semantic_subtasks(response).expect("normalized tasks");
+        assert_eq!(tasks[0].id, "task-1");
+        assert_eq!(tasks[1].id, "task-1-2");
+        assert_eq!(tasks[1].depends_on, vec!["task-1"]);
+    }
+
+    #[test]
+    fn parses_semantic_subtasks_with_dependencies() {
+        let output = r#"{"subtasks":[{"id":"plan","description":"plan work","depends_on":[]},{"id":"impl","description":"implement","depends_on":["plan"],"test_command":"cargo test"}]}"#;
+        let tasks = parse_semantic_subtasks(output).expect("parsed subtasks");
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[1].depends_on, vec!["plan"]);
+        assert_eq!(tasks[1].test_command.as_deref(), Some("cargo test"));
+    }
+
+    #[test]
+    fn sanitize_id_falls_back_for_numeric_prefix() {
+        let id = sanitize_task_id("123abc", 0);
+        assert_eq!(id, "task-1");
+    }
 }
