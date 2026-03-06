@@ -58,7 +58,11 @@
     }));
   }
 
-  async function ensureProjectConversation(projectId: string, projectName: string): Promise<string | null> {
+  function createLocalMessageId(): string {
+    return globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  async function ensureProjectConversation(projectId: string, projectName: string): Promise<string> {
     if (conversationByProject[projectId]) {
       return conversationByProject[projectId];
     }
@@ -69,6 +73,9 @@
       conversationByProject[projectId] = currentConversationId;
       return currentConversationId;
     }
+    if (!listResponse.success) {
+      throw new Error(`加载会话失败: ${listResponse.error || '未知错误'}`);
+    }
 
     const createResponse = await conversationApi.create(projectId, `${projectName} 对话`);
     if (createResponse.success && createResponse.data) {
@@ -76,7 +83,7 @@
       return createResponse.data.id;
     }
 
-    return null;
+    throw new Error(`创建会话失败: ${createResponse.error || '未知错误'}`);
   }
 
   async function loadConversationMessages(projectId: string, projectName: string) {
@@ -207,43 +214,47 @@
     if (!$selectedProject) return;
 
     const projectId = $selectedProject.id;
-    const conversationId = await ensureProjectConversation(projectId, $selectedProject.name);
-    if (!conversationId) {
-      return;
-    }
     const currentMessages = messagesByProject[projectId] || getDemoMessages($selectedProject.name);
-
     const userMessage: Message = {
-      id: crypto.randomUUID(),
+      id: createLocalMessageId(),
       role: 'user',
       content: prompt,
       timestamp: Date.now()
     };
-
     const updatedMessages = [...currentMessages, userMessage];
     messagesByProject[projectId] = updatedMessages;
     isSending = true;
 
     const assistantMessage: Message = {
-      id: crypto.randomUUID(),
+      id: createLocalMessageId(),
       role: 'assistant',
       content: 'Thinking...',
-      timestamp: Date.now(),
-      taskId: conversationId
+      timestamp: Date.now()
     };
     messagesByProject[projectId] = [...updatedMessages, assistantMessage];
 
-    const response = await conversationApi.sendMessage(conversationId, prompt);
-    if (!response.success) {
+    try {
+      const conversationId = await ensureProjectConversation(projectId, $selectedProject.name);
+      messagesByProject[projectId] = [...updatedMessages, { ...assistantMessage, taskId: conversationId }];
+
+      const response = await conversationApi.sendMessage(conversationId, prompt);
+      if (!response.success) {
+        isSending = false;
+        messagesByProject[projectId] = [...updatedMessages, {
+          ...assistantMessage,
+          content: `Error: ${response.error || 'Failed to send message'}`
+        }];
+        return;
+      }
+
+      void waitForAssistantReply(projectId, $selectedProject.name, conversationId, response.data?.id);
+    } catch (error) {
       isSending = false;
       messagesByProject[projectId] = [...updatedMessages, {
         ...assistantMessage,
-        content: `Error: ${response.error || 'Failed to send message'}`
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`
       }];
-      return;
     }
-
-    void waitForAssistantReply(projectId, $selectedProject.name, conversationId, response.data?.id);
   }
 </script>
 

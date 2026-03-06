@@ -66,16 +66,111 @@ fn ensure_default_identity_files(project_path: &Path) -> TauriResult<()> {
     Ok(())
 }
 
-fn ensure_project_runtime_dir(project_path: &Path) -> TauriResult<PathBuf> {
-    let runtime_dir = project_path.join(".smanclaw");
-    std::fs::create_dir_all(&runtime_dir)?;
-    Ok(runtime_dir)
+fn fallback_project_runtime_dir(config_dir: &Path, project_path: &Path) -> PathBuf {
+    let mut project_key = String::with_capacity(project_path.to_string_lossy().len() * 2);
+    for byte in project_path.to_string_lossy().as_bytes() {
+        project_key.push_str(&format!("{byte:02x}"));
+    }
+    config_dir.join("project-runtime").join(project_key)
 }
 
-fn open_project_history_store(project_path: &Path) -> TauriResult<SqliteHistoryStore> {
-    let runtime_dir = ensure_project_runtime_dir(project_path)?;
+fn ensure_project_runtime_dir(config_dir: &Path, project_path: &Path) -> TauriResult<PathBuf> {
+    let runtime_dir = project_path.join(".smanclaw");
+    match std::fs::create_dir_all(&runtime_dir) {
+        Ok(()) => {
+            let probe_file = runtime_dir.join(".write_probe");
+            match std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&probe_file)
+            {
+                Ok(_) => {
+                    let _ = std::fs::remove_file(&probe_file);
+                    Ok(runtime_dir)
+                }
+                Err(project_error) => {
+                    let fallback_dir = fallback_project_runtime_dir(config_dir, project_path);
+                    std::fs::create_dir_all(&fallback_dir).map_err(|fallback_error| {
+                        tracing::error!(
+                            project_path = %project_path.display(),
+                            fallback_path = %fallback_dir.display(),
+                            project_error = %project_error,
+                            fallback_error = %fallback_error,
+                            "Failed to write in project runtime directory and create fallback directory"
+                        );
+                        TauriError::Io(fallback_error)
+                    })?;
+                    tracing::warn!(
+                        project_path = %project_path.display(),
+                        fallback_path = %fallback_dir.display(),
+                        error = %project_error,
+                        "Using fallback runtime directory because project runtime directory is not writable"
+                    );
+                    Ok(fallback_dir)
+                }
+            }
+        }
+        Err(project_error) => {
+            let fallback_dir = fallback_project_runtime_dir(config_dir, project_path);
+            std::fs::create_dir_all(&fallback_dir).map_err(|fallback_error| {
+                tracing::error!(
+                    project_path = %project_path.display(),
+                    fallback_path = %fallback_dir.display(),
+                    project_error = %project_error,
+                    fallback_error = %fallback_error,
+                    "Failed to create project runtime directory and fallback directory"
+                );
+                TauriError::Io(fallback_error)
+            })?;
+            tracing::warn!(
+                project_path = %project_path.display(),
+                fallback_path = %fallback_dir.display(),
+                error = %project_error,
+                "Using fallback runtime directory because project path is not writable"
+            );
+            Ok(fallback_dir)
+        }
+    }
+}
+
+fn open_project_history_store(
+    config_dir: &Path,
+    project_path: &Path,
+) -> TauriResult<SqliteHistoryStore> {
+    let runtime_dir = ensure_project_runtime_dir(config_dir, project_path)?;
     let history_db = runtime_dir.join("history.db");
-    Ok(SqliteHistoryStore::new(&history_db)?)
+    match SqliteHistoryStore::new(&history_db) {
+        Ok(store) => Ok(store),
+        Err(primary_error) => {
+            let fallback_dir = fallback_project_runtime_dir(config_dir, project_path);
+            std::fs::create_dir_all(&fallback_dir)?;
+            let fallback_db = fallback_dir.join("history.db");
+            match SqliteHistoryStore::new(&fallback_db) {
+                Ok(store) => {
+                    tracing::warn!(
+                        project_path = %project_path.display(),
+                        history_db = %history_db.display(),
+                        fallback_db = %fallback_db.display(),
+                        error = %primary_error,
+                        "Using fallback history database because project history database is unavailable"
+                    );
+                    Ok(store)
+                }
+                Err(fallback_error) => {
+                    tracing::error!(
+                        project_path = %project_path.display(),
+                        history_db = %history_db.display(),
+                        fallback_db = %fallback_db.display(),
+                        primary_error = %primary_error,
+                        fallback_error = %fallback_error,
+                        "Failed to open both project history database and fallback history database"
+                    );
+                    Err(TauriError::from(fallback_error))
+                }
+            }
+        }
+    }
 }
 
 async fn get_project_path(state: &State<'_, AppState>, project_id: &str) -> TauriResult<PathBuf> {
@@ -97,7 +192,7 @@ async fn resolve_conversation_project(
 
     for project in projects {
         let project_path = PathBuf::from(&project.path);
-        let store = match open_project_history_store(&project_path) {
+        let store = match open_project_history_store(&state.config_dir, &project_path) {
             Ok(store) => store,
             Err(err) => {
                 tracing::warn!(
@@ -453,7 +548,7 @@ pub async fn get_conversation_messages(
     let (_, project_path) = resolve_conversation_project(&state, &conversation_id)
         .await?
         .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
-    let history_store = open_project_history_store(&project_path)?;
+    let history_store = open_project_history_store(&state.config_dir, &project_path)?;
     let entries = history_store.load_conversation(&conversation_id)?;
     Ok(entries)
 }
@@ -470,9 +565,32 @@ pub async fn list_conversations(
         ));
     }
 
-    let project_path = get_project_path(&state, &project_id).await?;
-    let history_store = open_project_history_store(&project_path)?;
-    let conversations = history_store.list_conversations(&project_id)?;
+    let project_path = get_project_path(&state, &project_id).await.map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            error = %error,
+            "Failed to resolve project path when listing conversations"
+        );
+        error
+    })?;
+    let history_store = open_project_history_store(&state.config_dir, &project_path).map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            project_path = %project_path.display(),
+            error = %error,
+            "Failed to open project history store when listing conversations"
+        );
+        error
+    })?;
+    let conversations = history_store.list_conversations(&project_id).map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            project_path = %project_path.display(),
+            error = %error,
+            "Failed to list conversations from history store"
+        );
+        TauriError::from(error)
+    })?;
     Ok(conversations)
 }
 
@@ -494,9 +612,33 @@ pub async fn create_conversation(
         ));
     }
 
-    let project_path = get_project_path(&state, &project_id).await?;
-    let history_store = open_project_history_store(&project_path)?;
-    let conversation = history_store.create_conversation(&project_id, &title)?;
+    let project_path = get_project_path(&state, &project_id).await.map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            error = %error,
+            "Failed to resolve project path when creating conversation"
+        );
+        error
+    })?;
+    let history_store = open_project_history_store(&state.config_dir, &project_path).map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            project_path = %project_path.display(),
+            error = %error,
+            "Failed to open project history store when creating conversation"
+        );
+        error
+    })?;
+    let conversation = history_store.create_conversation(&project_id, &title).map_err(|error| {
+        tracing::error!(
+            project_id = %project_id,
+            project_path = %project_path.display(),
+            title = %title,
+            error = %error,
+            "Failed to create conversation in history store"
+        );
+        TauriError::from(error)
+    })?;
     Ok(conversation)
 }
 
@@ -522,7 +664,7 @@ pub async fn send_message(
     let (_conversation, project_path) = resolve_conversation_project(&state, &conversation_id)
         .await?
         .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
-    let history_store = open_project_history_store(&project_path)?;
+    let history_store = open_project_history_store(&state.config_dir, &project_path)?;
 
     // Create user message
     let user_entry = HistoryEntry {
@@ -544,6 +686,7 @@ pub async fn send_message(
 
     let app_handle_clone = app_handle.clone();
     let project_path_for_save = project_path.clone();
+    let config_dir_for_save = state.config_dir.clone();
     let conv_id = conversation_id.clone();
     let content_clone = content.clone();
 
@@ -575,7 +718,7 @@ pub async fn send_message(
                     timestamp: Utc::now(),
                 };
 
-                let save_store = match open_project_history_store(&project_path_for_save) {
+                let save_store = match open_project_history_store(&config_dir_for_save, &project_path_for_save) {
                     Ok(store) => store,
                     Err(e) => {
                         tracing::error!("Failed to open project history store: {}", e);
@@ -588,6 +731,23 @@ pub async fn send_message(
             }
             Err(e) => {
                 tracing::error!("Task execution failed: {}", e);
+                let assistant_entry = HistoryEntry {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    conversation_id: conv_id.clone(),
+                    role: Role::Assistant,
+                    content: format!("Error: {}", e),
+                    timestamp: Utc::now(),
+                };
+                match open_project_history_store(&config_dir_for_save, &project_path_for_save) {
+                    Ok(store) => {
+                        if let Err(save_error) = store.save_entry(&assistant_entry) {
+                            tracing::error!("Failed to save assistant error message: {}", save_error);
+                        }
+                    }
+                    Err(open_error) => {
+                        tracing::error!("Failed to open project history store: {}", open_error);
+                    }
+                }
             }
         }
 

@@ -30,6 +30,9 @@
   }
 
   function startResize(event: MouseEvent) {
+    if (typeof window === 'undefined') {
+      return;
+    }
     event.preventDefault();
     isResizing = true;
     window.addEventListener('mousemove', onResizeMove);
@@ -46,6 +49,9 @@
 
   function stopResize() {
     isResizing = false;
+    if (typeof window === 'undefined') {
+      return;
+    }
     window.removeEventListener('mousemove', onResizeMove);
     window.removeEventListener('mouseup', stopResize);
   }

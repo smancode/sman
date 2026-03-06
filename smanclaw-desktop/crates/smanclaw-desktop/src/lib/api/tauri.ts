@@ -35,10 +35,6 @@ function isTauri(): boolean {
 
 // Safe invoke wrapper
 async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<ApiResponse<T>> {
-  if (!isTauri()) {
-    return { success: false, error: 'Not running in Tauri environment' };
-  }
-
   try {
     const data = await invoke<T>(command, args);
     return { success: true, data };
