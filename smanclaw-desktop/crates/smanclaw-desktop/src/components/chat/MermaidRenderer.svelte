@@ -29,7 +29,7 @@
             const { svg } = await mermaid.render(id, code);
             rendered = svg;
         } catch (e: any) {
-            error = e.message || "Unknown error";
+            error = e.message || "未知错误";
         } finally {
             loading = false;
         }
@@ -38,7 +38,7 @@
 
 {#if loading}
     <div class="mermaid-loading">
-        <span class="loading-text">Loading diagram...</span>
+        <span class="loading-text">正在加载图表...</span>
     </div>
 {:else if error}
     <div class="mermaid-error">
@@ -56,7 +56,7 @@
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <span>Mermaid rendering failed</span>
+            <span>图表渲染失败</span>
         </div>
         <pre class="error-code">{code}</pre>
     </div>
@@ -74,7 +74,6 @@
         padding: 2rem;
         background-color: var(--surface);
         border-radius: 8px;
-        border: 1px dashed var(--border);
     }
 
     .loading-text {
@@ -84,7 +83,6 @@
 
     .mermaid-error {
         background-color: var(--surface);
-        border: 1px solid #ff6b6b;
         border-radius: 8px;
         overflow: hidden;
     }
@@ -114,7 +112,6 @@
     .mermaid-container {
         background-color: var(--surface);
         border-radius: 8px;
-        border: 1px solid var(--border);
         padding: 1rem;
         overflow-x: auto;
     }

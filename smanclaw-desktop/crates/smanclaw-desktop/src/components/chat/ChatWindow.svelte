@@ -39,7 +39,7 @@
             {
                 id: "1",
                 role: "assistant",
-                content: `Welcome to ${projectName}! Describe what you want to build or modify.`,
+                content: `欢迎来到 ${projectName}！请描述你希望构建或修改的内容。`,
                 timestamp: Date.now() - 60000,
             },
         ];
@@ -234,10 +234,10 @@
                             if (
                                 !updated &&
                                 msg.taskId &&
-                                msg.content === "Thinking..."
+                                msg.content === "思考中..."
                             ) {
                                 updated = true;
-                                return { ...msg, content: `Error: ${error}` };
+                                return { ...msg, content: `错误：${error}` };
                             }
                             return msg;
                         });
@@ -301,7 +301,7 @@
         const assistantMessage: Message = {
             id: createLocalMessageId(),
             role: "assistant",
-            content: "Thinking...",
+            content: "思考中...",
             timestamp: Date.now(),
         };
         messagesByProject[projectId] = [...updatedMessages, assistantMessage];
@@ -326,7 +326,7 @@
                     ...updatedMessages,
                     {
                         ...assistantMessage,
-                        content: `Error: ${response.error || "Failed to send message"}`,
+                        content: `错误：${response.error || "发送消息失败"}`,
                     },
                 ];
                 return;
@@ -345,7 +345,7 @@
                 ...updatedMessages,
                 {
                     ...assistantMessage,
-                    content: `Error: ${error instanceof Error ? error.message : "Failed to send message"}`,
+                    content: `错误：${error instanceof Error ? error.message : "发送消息失败"}`,
                 },
             ];
         }
@@ -380,8 +380,8 @@
     <InputArea
         disabled={!$selectedProject || isSending}
         placeholder={$selectedProject
-            ? "Describe what you want to build..."
-            : "Select a project first..."}
+            ? "请描述你要构建的内容..."
+            : "请先选择项目..."}
         onSubmit={handleSubmit}
     />
 </div>
@@ -410,6 +410,5 @@
         padding: 1rem;
         background-color: var(--surface);
         border-radius: 8px;
-        border: 1px solid var(--border);
     }
 </style>

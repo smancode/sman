@@ -111,7 +111,7 @@
     <div class="content">
         <div class="header">
             <span class="role"
-                >{message.role === "user" ? "You" : "SmanClaw"}</span
+                >{message.role === "user" ? "你" : "斯曼克劳"}</span
             >
             <span class="time">{formatTime(message.timestamp)}</span>
         </div>
@@ -214,7 +214,6 @@
 
     .message.assistant .body {
         background-color: var(--surface);
-        border: 1px solid var(--border);
         border-bottom-left-radius: 4px;
     }
 

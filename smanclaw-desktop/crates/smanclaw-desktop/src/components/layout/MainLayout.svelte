@@ -70,7 +70,7 @@
         class="sidebar-divider"
         class:active={isResizing}
         type="button"
-        aria-label="Resize sidebar"
+        aria-label="调整侧边栏宽度"
         onmousedown={startResize}
     ></button>
     <div class="main-container">
@@ -86,7 +86,7 @@
         class="settings-modal-backdrop"
         role="button"
         tabindex="0"
-        aria-label="Close settings"
+        aria-label="关闭设置"
         onclick={closeSettings}
         onkeydown={handleBackdropKeydown}
     >
@@ -95,7 +95,7 @@
             role="dialog"
             tabindex="-1"
             aria-modal="true"
-            aria-label="Settings"
+            aria-label="设置"
             onclick={(event) => event.stopPropagation()}
             onkeydown={(event) => event.stopPropagation()}
         >
@@ -126,20 +126,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background-color: var(--surface);
-        border-left: 1px solid var(--border);
-        border-right: 1px solid var(--border);
+        background-color: transparent;
         cursor: ew-resize;
         user-select: none;
-        transition:
-            background-color 0.15s,
-            border-color 0.15s;
+        transition: background-color 0.15s;
     }
 
     .sidebar-divider:hover,
     .sidebar-divider.active {
-        border-color: rgba(var(--accent-rgb), 0.35);
-        background-color: rgba(var(--accent-rgb), 0.08);
+        background-color: rgba(var(--accent-rgb), 0.06);
     }
 
     .main-container {
@@ -171,8 +166,8 @@
         max-height: calc(100vh - 3rem);
         overflow: auto;
         background: var(--background);
-        border: 1px solid var(--border);
         border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
     }
 
     .settings-modal-header {
@@ -182,7 +177,6 @@
         justify-content: flex-end;
         padding: 0.75rem 1rem;
         background: var(--surface);
-        border-bottom: 1px solid var(--border);
         z-index: 1;
     }
 
@@ -190,7 +184,6 @@
         padding: 0.4rem 0.85rem;
         border-radius: 6px;
         color: var(--text-secondary);
-        border: 1px solid var(--border);
         background: var(--background);
         transition: all 0.15s;
     }

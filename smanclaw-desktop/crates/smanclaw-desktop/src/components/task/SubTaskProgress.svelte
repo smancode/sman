@@ -31,15 +31,15 @@
     function getStatusLabel(status: SubTaskStatus): string {
         switch (status) {
             case "pending":
-                return "Pending";
+                return "等待中";
             case "running":
-                return "Running";
+                return "执行中";
             case "completed":
-                return "Completed";
+                return "已完成";
             case "failed":
-                return "Failed";
+                return "失败";
             default:
-                return "Unknown";
+                return "未知";
         }
     }
 
@@ -63,7 +63,7 @@
     {#if progress}
         <div class="overall-progress">
             <div class="progress-header">
-                <span class="progress-label">Overall Progress</span>
+                <span class="progress-label">总体进度</span>
                 <span class="progress-count"
                     >{progress.completed} / {progress.total}</span
                 >
@@ -82,7 +82,7 @@
 
     {#if subtasks.length > 0}
         <div class="subtasks-list">
-            <div class="subtasks-header">Subtasks</div>
+            <div class="subtasks-header">子任务</div>
             {#each subtasks as subtask (subtask.id)}
                 <div
                     class="subtask-item"
@@ -142,9 +142,7 @@
                         >
                         {#if subtask.depends_on.length > 0}
                             <span class="subtask-deps"
-                                >depends on: {subtask.depends_on.join(
-                                    ", ",
-                                )}</span
+                                >依赖：{subtask.depends_on.join(", ")}</span
                             >
                         {/if}
                     </div>
@@ -161,11 +159,11 @@
 
     {#if parallelGroups.length > 1}
         <div class="parallel-groups">
-            <div class="groups-header">Parallel Execution Groups</div>
+            <div class="groups-header">并行执行分组</div>
             {#each parallelGroups as group, groupIndex}
                 <div class="group-item">
-                    <span class="group-label">Group {groupIndex + 1}</span>
-                    <span class="group-tasks">{group.length} task(s)</span>
+                    <span class="group-label">分组 {groupIndex + 1}</span>
+                    <span class="group-tasks">{group.length} 个任务</span>
                 </div>
             {/each}
         </div>
@@ -243,7 +241,6 @@
         padding: 0.5rem 0.75rem;
         background-color: var(--background);
         border-radius: 6px;
-        border: 1px solid var(--border);
     }
 
     .subtask-status {
@@ -294,16 +291,8 @@
         flex-shrink: 0;
     }
 
-    .subtask-item.running {
-        border-color: var(--accent);
-    }
-
     .subtask-item.completed {
         opacity: 0.8;
-    }
-
-    .subtask-item.failed {
-        border-color: var(--error);
     }
 
     .parallel-groups {

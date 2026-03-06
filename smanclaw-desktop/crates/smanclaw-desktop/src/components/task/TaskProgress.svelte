@@ -25,15 +25,15 @@
     function getStatusLabel(status: TaskStatus): string {
         switch (status) {
             case "pending":
-                return "Pending";
+                return "等待中";
             case "running":
-                return "Running";
+                return "执行中";
             case "completed":
-                return "Completed";
+                return "已完成";
             case "failed":
-                return "Failed";
+                return "失败";
             default:
-                return "Unknown";
+                return "未知";
         }
     }
 
@@ -270,7 +270,6 @@
     .error-message {
         padding: 0.75rem;
         background-color: rgba(239, 68, 68, 0.1);
-        border: 1px solid var(--error);
         border-radius: 6px;
     }
 

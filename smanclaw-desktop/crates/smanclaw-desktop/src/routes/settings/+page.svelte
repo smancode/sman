@@ -1,11 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { appSettingsApi } from "$lib/api/tauri";
-    import type {
-        AppSettings,
-        LlmSettings,
-        ConnectionTestResult,
-    } from "$lib/types";
+    import type { AppSettings, ConnectionTestResult } from "$lib/types";
 
     // Default LLM settings
     const DEFAULT_LLM_URL = "https://open.bigmodel.cn/api/coding/paas/v4";
@@ -89,54 +85,53 @@
 
 <div class="settings-page">
     <div class="settings-header">
-        <h1>Settings</h1>
-        <p class="subtitle">Configure your LLM settings for SmanClaw</p>
+        <h1>设置</h1>
+        <p class="subtitle">配置 SmanClaw 的大模型参数</p>
     </div>
 
     {#if isLoading}
-        <div class="loading">Loading settings...</div>
+        <div class="loading">正在加载设置...</div>
     {:else}
         <div class="settings-content">
             <!-- LLM Configuration -->
             <section class="settings-section">
-                <h2>LLM Configuration</h2>
+                <h2>大模型配置</h2>
                 <p class="section-desc">
-                    Configure your OpenAI-compatible LLM API (智谱 GLM-5
-                    recommended)
+                    配置兼容 OpenAI 的大模型 API（推荐智谱 GLM-5）
                 </p>
 
                 <div class="form-group">
-                    <label for="llm-url">API URL</label>
+                    <label for="llm-url">API 地址</label>
                     <input
                         type="text"
                         id="llm-url"
                         bind:value={settings.llm.apiUrl}
                         placeholder={DEFAULT_LLM_URL}
                     />
-                    <span class="hint">Default: {DEFAULT_LLM_URL}</span>
+                    <span class="hint">默认值：{DEFAULT_LLM_URL}</span>
                 </div>
 
                 <div class="form-group">
                     <label for="llm-key"
-                        >API Key <span class="required">*</span></label
+                        >API 密钥 <span class="required">*</span></label
                     >
                     <div class="input-with-button">
                         <input
                             type={showApiKey ? "text" : "password"}
                             id="llm-key"
                             bind:value={settings.llm.apiKey}
-                            placeholder="Enter your API key"
+                            placeholder="请输入 API 密钥"
                         />
                         <button
                             class="btn-icon"
                             onclick={() => (showApiKey = !showApiKey)}
-                            title={showApiKey ? "Hide" : "Show"}
+                            title={showApiKey ? "隐藏" : "显示"}
                         >
                             {showApiKey ? "👁️" : "👁️‍🗨️"}
                         </button>
                         <button
                             class="btn-secondary"
-                            onclick={testLlmConnection}>Test</button
+                            onclick={testLlmConnection}>测试</button
                         >
                     </div>
                     {#if llmTestResult}
@@ -146,7 +141,7 @@
                                 : 'error'}"
                         >
                             {#if llmTestResult.success}
-                                Connected successfully ({llmTestResult.latencyMs}ms)
+                                连接成功（{llmTestResult.latencyMs}ms）
                             {:else}
                                 {llmTestResult.error}
                             {/if}
@@ -155,24 +150,23 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="llm-model">Default Model</label>
+                    <label for="llm-model">默认模型</label>
                     <input
                         type="text"
                         id="llm-model"
                         bind:value={settings.llm.defaultModel}
                         placeholder={DEFAULT_MODEL}
                     />
-                    <span class="hint">Default: {DEFAULT_MODEL}</span>
+                    <span class="hint">默认值：{DEFAULT_MODEL}</span>
                 </div>
             </section>
 
             <!-- Advanced Settings Note -->
             <section class="settings-section info-section">
-                <h3>Advanced Settings</h3>
+                <h3>高级说明</h3>
                 <p class="info-text">
-                    Vector store and embedding settings are configured
-                    automatically based on your project. They are optional and
-                    only needed for semantic memory features.
+                    向量库与向量嵌入设置会根据你的项目自动配置。它们是可选项，
+                    仅在语义记忆功能中需要。
                 </p>
             </section>
 
@@ -183,14 +177,14 @@
                     onclick={loadSettings}
                     disabled={isLoading}
                 >
-                    Reset
+                    重置
                 </button>
                 <button
                     class="btn-primary"
                     onclick={saveSettings}
                     disabled={isSaving}
                 >
-                    {isSaving ? "Saving..." : "Save Settings"}
+                    {isSaving ? "保存中..." : "保存设置"}
                 </button>
             </div>
         </div>
@@ -226,7 +220,6 @@
 
     .settings-section {
         background: var(--surface, #1a1a1f);
-        border: 1px solid var(--border, #2a2a32);
         border-radius: 8px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
@@ -299,7 +292,6 @@
     .btn-icon {
         padding: 0.5rem 0.75rem;
         background: var(--surface);
-        border: 1px solid var(--border);
         border-radius: 6px;
         cursor: pointer;
     }
@@ -311,7 +303,6 @@
     .btn-secondary {
         padding: 0.5rem 1rem;
         background: var(--surface);
-        border: 1px solid var(--border);
         border-radius: 6px;
         color: var(--text-primary);
         cursor: pointer;
@@ -362,7 +353,6 @@
 
     .info-section {
         background: rgba(var(--accent-rgb), 0.05);
-        border-color: rgba(var(--accent-rgb), 0.2);
     }
 
     .info-text {

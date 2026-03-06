@@ -36,13 +36,13 @@
     function getActionLabel(action: FileChange["action"]): string {
         switch (action) {
             case "Created":
-                return "Created";
+                return "已创建";
             case "Modified":
-                return "Modified";
+                return "已修改";
             case "Deleted":
-                return "Deleted";
+                return "已删除";
             default:
-                return "Unknown";
+                return "未知";
         }
     }
 
@@ -79,7 +79,7 @@
 
 <div class="file-tree">
     <div class="header">
-        <span class="title">File Changes</span>
+        <span class="title">文件变更</span>
         <div class="stats">
             <span class="added">+{stats.added}</span>
             <span class="removed">-{stats.removed}</span>

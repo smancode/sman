@@ -28,8 +28,8 @@
                     d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
                 />
             </svg>
-            <p>No projects yet</p>
-            <span>Click the + button to add a project</span>
+            <p>暂无项目</p>
+            <span>点击 + 按钮添加项目</span>
         </div>
     {:else}
         {#each projects as project (project.id)}

@@ -17,7 +17,7 @@
                 <span class="project-path">{$selectedProject.path}</span>
             </div>
         {:else}
-            <h1 class="project-name">Select a Project</h1>
+            <h1 class="project-name">请选择项目</h1>
         {/if}
     </div>
 
@@ -25,9 +25,9 @@
         {#if $activeTask}
             <div class="task-status running">
                 <div class="spinner"></div>
-                <span>Task running...</span>
+                <span>任务执行中...</span>
                 <button class="cancel-btn" onclick={handleCancelTask}
-                    >Cancel</button
+                    >取消</button
                 >
             </div>
         {/if}
@@ -42,7 +42,6 @@
         height: 56px;
         padding: 0 1rem;
         background-color: var(--surface);
-        border-bottom: 1px solid var(--border);
     }
 
     .header-left {

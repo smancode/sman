@@ -31,11 +31,11 @@
     <div class="sidebar-content">
         <div class="section">
             <div class="section-header">
-                <span class="section-title">Projects</span>
+                <span class="section-title">项目</span>
                 <button
                     class="add-btn"
                     onclick={handleNewProject}
-                    aria-label="Add project"
+                    aria-label="添加项目"
                 >
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -63,8 +63,8 @@
         <button
             class="settings-btn"
             onclick={navigateToSettings}
-            aria-label="Open settings"
-            title="Settings"
+            aria-label="打开设置"
+            title="设置"
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -89,7 +89,6 @@
         display: flex;
         flex-direction: column;
         background-color: var(--surface);
-        border-right: 1px solid var(--border);
     }
 
     .sidebar-content {
@@ -138,7 +137,6 @@
         align-items: center;
         justify-content: flex-start;
         padding: 1rem;
-        border-top: 1px solid var(--border);
     }
 
     .settings-btn {

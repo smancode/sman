@@ -86,8 +86,8 @@
             vue: "Vue",
             jsx: "JSX",
             tsx: "TSX",
-            markdown: "Markdown",
-            plaintext: "Text",
+            markdown: "Markdown 文档",
+            plaintext: "文本",
         };
         const normalized = normalizeLanguage(lang);
         return displayNames[normalized] || lang;
@@ -100,7 +100,7 @@
         <button
             class="copy-btn"
             onclick={copyToClipboard}
-            aria-label="Copy code"
+            aria-label="复制代码"
         >
             {#if copied}
                 <svg
@@ -114,7 +114,7 @@
                 >
                     <path d="M20 6L9 17l-5-5" />
                 </svg>
-                <span>Copied!</span>
+                <span>已复制</span>
             {:else}
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -130,7 +130,7 @@
                         d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
                     />
                 </svg>
-                <span>Copy</span>
+                <span>复制</span>
             {/if}
         </button>
     </div>
@@ -148,7 +148,6 @@
         background-color: #f8f8fa;
         border-radius: 10px;
         overflow: hidden;
-        border: 1px solid var(--border);
     }
 
     .header {
@@ -157,7 +156,6 @@
         justify-content: space-between;
         padding: 0.5rem 1rem;
         background-color: #f0f1f4;
-        border-bottom: 1px solid var(--border);
     }
 
     .language {

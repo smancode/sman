@@ -9,7 +9,7 @@
 
     let {
         disabled = false,
-        placeholder = "Type a message...",
+        placeholder = "请输入消息...",
         onSubmit,
     }: Props = $props();
 
@@ -77,7 +77,7 @@
             class="send-btn"
             onclick={handleSubmit}
             disabled={disabled || !inputValue.trim()}
-            aria-label="Send message"
+            aria-label="发送消息"
         >
             {#if $activeTask?.status === "running"}
                 <div class="spinner"></div>
@@ -105,7 +105,6 @@
         flex-direction: column;
         padding: 0.85rem 1rem;
         background-color: var(--surface);
-        border-top: 1px solid var(--border);
     }
 
     .input-container {
