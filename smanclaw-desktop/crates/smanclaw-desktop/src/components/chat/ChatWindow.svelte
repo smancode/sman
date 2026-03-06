@@ -120,6 +120,25 @@
         return [...withoutThinking, thinkingMessage];
     }
 
+    function resolveThinkingMessage(
+        projectId: string,
+        fallbackMessage: Message,
+    ): Message {
+        const projectMessages = messagesByProject[projectId];
+        if (!projectMessages || projectMessages.length === 0) {
+            return fallbackMessage;
+        }
+        const lastMessage = projectMessages[projectMessages.length - 1];
+        if (
+            lastMessage.role === "assistant" &&
+            fallbackMessage.taskId &&
+            lastMessage.taskId === fallbackMessage.taskId
+        ) {
+            return lastMessage;
+        }
+        return fallbackMessage;
+    }
+
     function updateLatestThinkingMessage(projectId: string, content: string) {
         const projectMessages = messagesByProject[projectId];
         if (!projectMessages || projectMessages.length === 0) {
@@ -240,9 +259,22 @@
         userEntryId?: string,
         thinkingMessage?: Message,
     ) {
-        const maxAttempts = 90;
+        const pollIntervalMs = 1500;
+        const maxWaitMs = 30 * 60 * 1000;
+        const maxAttempts = Math.ceil(maxWaitMs / pollIntervalMs);
+        const startedAt = Date.now();
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            if (thinkingMessage) {
+                const elapsedSeconds = Math.max(
+                    1,
+                    Math.floor((Date.now() - startedAt) / 1000),
+                );
+                updateLatestThinkingMessage(
+                    projectId,
+                    `处理中：等待模型响应（${elapsedSeconds}s）`,
+                );
+            }
             const response = await conversationApi.getMessages(conversationId);
             if (!response.success || !response.data) {
                 continue;
@@ -263,7 +295,10 @@
                     return;
                 }
                 messagesByProject[projectId] = thinkingMessage
-                    ? withThinkingMessage(mappedMessages, thinkingMessage)
+                    ? withThinkingMessage(
+                          mappedMessages,
+                          resolveThinkingMessage(projectId, thinkingMessage),
+                      )
                     : mappedMessages;
                 continue;
             }
@@ -286,7 +321,10 @@
             }
 
             messagesByProject[projectId] = thinkingMessage
-                ? withThinkingMessage(mappedMessages, thinkingMessage)
+                ? withThinkingMessage(
+                      mappedMessages,
+                      resolveThinkingMessage(projectId, thinkingMessage),
+                  )
                 : mappedMessages;
         }
 
