@@ -111,7 +111,7 @@
     <div class="content">
         <div class="header">
             <span class="role"
-                >{message.role === "user" ? "你" : "斯曼克劳"}</span
+                >{message.role === "user" ? "你" : "SmanClaw"}</span
             >
             <span class="time">{formatTime(message.timestamp)}</span>
         </div>
