@@ -1,4 +1,6 @@
 <script lang="ts">
+  import hljs from 'highlight.js';
+
   interface Props {
     code: string;
     language: string;
@@ -7,6 +9,39 @@
   let { code, language }: Props = $props();
 
   let copied = $state(false);
+
+  function normalizeLanguage(lang: string): string {
+    const value = lang.trim().toLowerCase();
+    const aliases: Record<string, string> = {
+      js: 'javascript',
+      ts: 'typescript',
+      jsx: 'javascript',
+      tsx: 'typescript',
+      py: 'python',
+      sh: 'bash',
+      zsh: 'bash',
+      shell: 'bash',
+      yml: 'yaml',
+      md: 'markdown',
+      csharp: 'csharp',
+      'c#': 'csharp',
+      'c++': 'cpp',
+      plaintext: 'plaintext',
+      text: 'plaintext'
+    };
+    return aliases[value] || value;
+  }
+
+  function highlightCode(source: string, lang: string): string {
+    const normalized = normalizeLanguage(lang);
+    if (normalized !== 'plaintext' && hljs.getLanguage(normalized)) {
+      return hljs.highlight(source, { language: normalized, ignoreIllegals: true }).value;
+    }
+    return hljs.highlightAuto(source).value;
+  }
+
+  let normalizedLanguage = $derived(normalizeLanguage(language));
+  let highlightedCode = $derived(highlightCode(code, language));
 
   async function copyToClipboard() {
     try {
@@ -51,7 +86,8 @@
       markdown: 'Markdown',
       plaintext: 'Text'
     };
-    return displayNames[lang.toLowerCase()] || lang;
+    const normalized = normalizeLanguage(lang);
+    return displayNames[normalized] || lang;
   }
 </script>
 
@@ -75,7 +111,7 @@
   </div>
 
   <div class="content">
-    <pre><code class="language-{language}">{code}</code></pre>
+    <pre><code class={`hljs language-${normalizedLanguage}`}>{@html highlightedCode}</code></pre>
   </div>
 </div>
 
@@ -133,8 +169,9 @@
     color: #d4d4d4;
   }
 
-  code {
+  pre code {
     font-family: inherit;
     white-space: pre;
+    display: block;
   }
 </style>

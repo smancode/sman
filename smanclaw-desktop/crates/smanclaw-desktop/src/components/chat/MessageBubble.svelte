@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MarkdownIt from 'markdown-it';
   import CodeBlock from './CodeBlock.svelte';
   import MermaidRenderer from './MermaidRenderer.svelte';
   import type { Message } from '../../lib/types';
@@ -8,6 +9,12 @@
   }
 
   let { message }: Props = $props();
+
+  const markdown = new MarkdownIt({
+    html: false,
+    linkify: true,
+    breaks: true
+  });
 
   function formatTime(timestamp: number): string {
     const date = new Date(timestamp);
@@ -44,6 +51,10 @@
     return parts.length > 0 ? parts : [{ type: 'text', content }];
   }
 
+  function renderMarkdown(content: string): string {
+    return markdown.render(content);
+  }
+
   const parts = $derived(parseContent(message.content));
 </script>
 
@@ -72,7 +83,7 @@
     <div class="body">
       {#each parts as part}
         {#if part.type === 'text'}
-          <p class="text">{part.content}</p>
+          <div class="markdown">{@html renderMarkdown(part.content)}</div>
         {:else if part.type === 'mermaid'}
           <MermaidRenderer code={part.content} />
         {:else if part.type === 'code'}
@@ -166,14 +177,94 @@
     border-bottom-left-radius: 4px;
   }
 
-  .text {
-    margin: 0;
-    white-space: pre-wrap;
+  .markdown {
     line-height: 1.6;
   }
 
-  .text + .text {
-    margin-top: 0.5rem;
+  .markdown :global(*:first-child) {
+    margin-top: 0;
+  }
+
+  .markdown :global(*:last-child) {
+    margin-bottom: 0;
+  }
+
+  .markdown :global(p) {
+    margin: 0.45rem 0;
+  }
+
+  .markdown :global(h1),
+  .markdown :global(h2),
+  .markdown :global(h3),
+  .markdown :global(h4),
+  .markdown :global(h5),
+  .markdown :global(h6) {
+    margin: 0.75rem 0 0.45rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .markdown :global(h1) {
+    font-size: 1.1rem;
+  }
+
+  .markdown :global(h2) {
+    font-size: 1rem;
+  }
+
+  .markdown :global(h3) {
+    font-size: 0.95rem;
+  }
+
+  .markdown :global(ul),
+  .markdown :global(ol) {
+    margin: 0.5rem 0;
+    padding-left: 1.3rem;
+  }
+
+  .markdown :global(li + li) {
+    margin-top: 0.2rem;
+  }
+
+  .markdown :global(blockquote) {
+    margin: 0.6rem 0;
+    padding: 0.45rem 0.7rem;
+    border-left: 3px solid var(--accent);
+    background-color: color-mix(in srgb, var(--surface) 86%, transparent);
+    border-radius: 4px;
+  }
+
+  .markdown :global(hr) {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.8rem 0;
+  }
+
+  .markdown :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.6rem 0;
+    font-size: 0.86rem;
+  }
+
+  .markdown :global(th),
+  .markdown :global(td) {
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .markdown :global(a) {
+    text-decoration: underline;
+  }
+
+  .markdown :global(:not(pre) > code) {
+    font-size: 0.85em;
+    background-color: color-mix(in srgb, var(--surface) 84%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.1rem 0.35rem;
   }
 
   @keyframes slideIn {
