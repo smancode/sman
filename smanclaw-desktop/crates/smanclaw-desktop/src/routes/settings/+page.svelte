@@ -15,11 +15,16 @@
         },
         embedding: undefined,
         qdrant: undefined,
+        webSearch: {
+            braveApiKey: "",
+            tavilyApiKey: "",
+        },
     });
 
     let isLoading = $state(false);
     let isSaving = $state(false);
     let showApiKey = $state(false);
+    let showWebSearchApiKeys = $state(false);
 
     // Test results
     let llmTestResult: ConnectionTestResult | null = $state(null);
@@ -39,6 +44,9 @@
             }
             if (!settings.llm.defaultModel) {
                 settings.llm.defaultModel = DEFAULT_MODEL;
+            }
+            if (!settings.webSearch) {
+                settings.webSearch = { braveApiKey: "", tavilyApiKey: "" };
             }
         }
         isLoading = false;
@@ -158,6 +166,42 @@
                         placeholder={DEFAULT_MODEL}
                     />
                     <span class="hint">默认值：{DEFAULT_MODEL}</span>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>Web Search</h2>
+                <p class="section-desc">
+                    默认使用 DuckDuckGo（免费免 key）。可选配置 Brave/Tavily
+                    付费 key 作为回退。
+                </p>
+                <div class="form-group">
+                    <label for="brave-key">Brave API Key（可选）</label>
+                    <div class="input-with-button">
+                        <input
+                            type={showWebSearchApiKeys ? "text" : "password"}
+                            id="brave-key"
+                            bind:value={settings.webSearch.braveApiKey}
+                            placeholder="未配置则不启用 Brave 回退"
+                        />
+                        <button
+                            class="btn-icon"
+                            onclick={() =>
+                                (showWebSearchApiKeys = !showWebSearchApiKeys)}
+                            title={showWebSearchApiKeys ? "隐藏" : "显示"}
+                        >
+                            {showWebSearchApiKeys ? "👁️" : "👁️‍🗨️"}
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="tavily-key">Tavily API Key（可选）</label>
+                    <input
+                        type={showWebSearchApiKeys ? "text" : "password"}
+                        id="tavily-key"
+                        bind:value={settings.webSearch.tavilyApiKey}
+                        placeholder="未配置则不启用 Tavily 回退"
+                    />
                 </div>
             </section>
 

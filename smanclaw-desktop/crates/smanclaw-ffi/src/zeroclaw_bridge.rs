@@ -207,8 +207,26 @@ impl ZeroclawBridge {
                     config.memory.qdrant.api_key = qd.api_key.clone();
                 }
             }
+
+            config.web_search.enabled = true;
+            config.web_search.provider = "duckduckgo".to_string();
+            config.web_search.fallback_providers.clear();
+            if !settings.web_search.brave_api_key.trim().is_empty() {
+                config.web_search.brave_api_key = Some(settings.web_search.brave_api_key.clone());
+                config.web_search.fallback_providers.push("brave".to_string());
+            }
+            if !settings.web_search.tavily_api_key.trim().is_empty() {
+                config.web_search.api_key = Some(settings.web_search.tavily_api_key.clone());
+                config.web_search.fallback_providers.push("tavily".to_string());
+            }
         }
 
+        config
+            .autonomy
+            .allowed_commands
+            .extend(["curl".to_string(), "wget".to_string()]);
+        config.autonomy.allowed_commands.sort();
+        config.autonomy.allowed_commands.dedup();
         config
     }
 
@@ -443,7 +461,10 @@ mod tests {
     fn test_detect_provider_from_url() {
         // MiniMax
         assert_eq!(detect_provider_from_url("https://api.minimax.io/v1"), "minimax");
-        assert_eq!(detect_provider_from_url("https://api.minimaxi.com/v1"), "minimax");
+        assert_eq!(
+            detect_provider_from_url("https://api.minimaxi.com/v1"),
+            "minimax-cn"
+        );
 
         // GLM / Zhipu
         assert_eq!(detect_provider_from_url("https://open.bigmodel.cn/api/paas/v4"), "glm");

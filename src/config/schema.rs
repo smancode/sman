@@ -2338,7 +2338,7 @@ fn normalize_web_search_provider(raw: &str) -> Option<&'static str> {
 impl Default for WebSearchConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             provider: default_web_search_provider(),
             api_key: None,
             api_url: None,
@@ -3572,6 +3572,8 @@ impl Default for AutonomyConfig {
                 "git".into(),
                 "npm".into(),
                 "cargo".into(),
+                "curl".into(),
+                "wget".into(),
                 "mkdir".into(),
                 "touch".into(),
                 "cp".into(),

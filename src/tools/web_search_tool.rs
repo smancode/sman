@@ -896,12 +896,20 @@ impl Tool for WebSearchTool {
         let retry_attempts = self.retries_per_provider + 1;
 
         let mut result: Option<String> = None;
+        let mut no_results_output: Option<String> = None;
         for provider in providers {
             let mut attempt = 0u32;
             let mut success = false;
             while attempt < retry_attempts {
                 match self.search_with_provider(provider, query).await {
                     Ok(output) => {
+                        if output.trim_start().starts_with("No results found for:") {
+                            if no_results_output.is_none() {
+                                no_results_output = Some(output);
+                            }
+                            provider_errors.push(format!("{provider}: no results"));
+                            break;
+                        }
                         result = Some(output);
                         success = true;
                         break;
@@ -925,7 +933,7 @@ impl Tool for WebSearchTool {
             }
         }
 
-        let result = result.ok_or_else(|| {
+        let result = result.or(no_results_output).ok_or_else(|| {
             anyhow::anyhow!(
                 "All configured web_search providers failed: {}",
                 provider_errors.join(" | ")

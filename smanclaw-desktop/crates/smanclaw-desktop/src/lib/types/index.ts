@@ -105,11 +105,17 @@ export interface QdrantSettings {
     apiKey?: string;
 }
 
+export interface WebSearchSettings {
+    braveApiKey: string;
+    tavilyApiKey: string;
+}
+
 // Application Settings
 export interface AppSettings {
     llm: LlmSettings;
     embedding?: EmbeddingSettings;
     qdrant?: QdrantSettings;
+    webSearch: WebSearchSettings;
 }
 
 // Connection Test Result

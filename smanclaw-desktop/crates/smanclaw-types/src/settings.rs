@@ -12,6 +12,8 @@ pub struct AppSettings {
     pub embedding: Option<EmbeddingSettings>,
     /// Qdrant vector store configuration (optional)
     pub qdrant: Option<QdrantSettings>,
+    #[serde(default)]
+    pub web_search: WebSearchSettings,
 }
 
 /// LLM provider settings (OpenAI Compatible)
@@ -110,6 +112,13 @@ pub struct QdrantSettings {
     pub collection: String,
     /// API Key (optional, for Qdrant Cloud or secured instances)
     pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSearchSettings {
+    pub brave_api_key: String,
+    pub tavily_api_key: String,
 }
 
 impl Default for QdrantSettings {
@@ -216,6 +225,10 @@ mod tests {
                 dimensions: 1536,
             }),
             qdrant: None,
+            web_search: WebSearchSettings {
+                brave_api_key: "brave-key".to_string(),
+                tavily_api_key: "tavily-key".to_string(),
+            },
         };
 
         let json = serde_json::to_string(&settings).expect("serialize");
@@ -224,5 +237,6 @@ mod tests {
         assert_eq!(settings.llm.api_url, deserialized.llm.api_url);
         assert!(deserialized.embedding.is_some());
         assert!(deserialized.qdrant.is_none());
+        assert_eq!(deserialized.web_search.brave_api_key, "brave-key");
     }
 }

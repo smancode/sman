@@ -1,7 +1,9 @@
 //! Settings persistence store for SmanClaw Desktop
 
 use anyhow::Result;
-use smanclaw_types::{AppSettings, EmbeddingSettings, LlmSettings, QdrantSettings};
+use smanclaw_types::{
+    AppSettings, EmbeddingSettings, LlmSettings, QdrantSettings, WebSearchSettings,
+};
 use std::fs;
 use std::path::PathBuf;
 
@@ -207,7 +209,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("temp dir");
         let store = SettingsStore::new(temp_dir.path().to_path_buf()).expect("create store");
 
-        let mut settings = AppSettings {
+        let settings = AppSettings {
             llm: LlmSettings {
                 api_url: "https://api.example.com/v1".to_string(),
                 api_key: "test-api-key-12345".to_string(),
@@ -215,6 +217,7 @@ mod tests {
             },
             embedding: None,
             qdrant: None,
+            web_search: WebSearchSettings::default(),
         };
 
         store.save(&settings).expect("save settings");
