@@ -62,6 +62,11 @@
     return globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  function withThinkingMessage(baseMessages: Message[], thinkingMessage: Message): Message[] {
+    const withoutThinking = baseMessages.filter((msg) => msg.id !== thinkingMessage.id);
+    return [...withoutThinking, thinkingMessage];
+  }
+
   async function ensureProjectConversation(projectId: string, projectName: string): Promise<string> {
     if (conversationByProject[projectId]) {
       return conversationByProject[projectId];
@@ -106,7 +111,8 @@
     projectId: string,
     projectName: string,
     conversationId: string,
-    userEntryId?: string
+    userEntryId?: string,
+    thinkingMessage?: Message
   ) {
     const maxAttempts = 90;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -116,14 +122,18 @@
         continue;
       }
 
-      messagesByProject[projectId] = response.data.length > 0 ? mapHistoryEntries(response.data) : getDemoMessages(projectName);
+      const mappedMessages = response.data.length > 0 ? mapHistoryEntries(response.data) : getDemoMessages(projectName);
 
       if (!userEntryId) {
         const hasAssistant = response.data.some((entry) => normalizeRole(entry.role) === 'assistant');
         if (hasAssistant) {
+          messagesByProject[projectId] = mappedMessages;
           isSending = false;
           return;
         }
+        messagesByProject[projectId] = thinkingMessage
+          ? withThinkingMessage(mappedMessages, thinkingMessage)
+          : mappedMessages;
         continue;
       }
 
@@ -137,9 +147,14 @@
         .some((entry) => normalizeRole(entry.role) === 'assistant');
 
       if (hasAssistantAfterUser) {
+        messagesByProject[projectId] = mappedMessages;
         isSending = false;
         return;
       }
+
+      messagesByProject[projectId] = thinkingMessage
+        ? withThinkingMessage(mappedMessages, thinkingMessage)
+        : mappedMessages;
     }
 
     isSending = false;
@@ -247,7 +262,13 @@
         return;
       }
 
-      void waitForAssistantReply(projectId, $selectedProject.name, conversationId, response.data?.id);
+      void waitForAssistantReply(
+        projectId,
+        $selectedProject.name,
+        conversationId,
+        response.data?.id,
+        { ...assistantMessage, taskId: conversationId }
+      );
     } catch (error) {
       isSending = false;
       messagesByProject[projectId] = [...updatedMessages, {
