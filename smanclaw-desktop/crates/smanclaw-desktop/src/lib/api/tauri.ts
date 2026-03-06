@@ -8,6 +8,8 @@ import type {
   Project,
   Task,
   Message,
+  ConversationRecord,
+  HistoryEntryRecord,
   AppSettings,
   LlmSettings,
   EmbeddingSettings,
@@ -101,6 +103,32 @@ export const taskApi = {
 
   async list(projectId?: string): Promise<ApiResponse<Task[]>> {
     return safeInvoke<Task[]>('list_tasks', { project_id: projectId });
+  }
+};
+
+export const conversationApi = {
+  async list(projectId: string): Promise<ApiResponse<ConversationRecord[]>> {
+    return safeInvoke<ConversationRecord[]>('list_conversations', { project_id: projectId });
+  },
+
+  async create(projectId: string, title: string): Promise<ApiResponse<ConversationRecord>> {
+    return safeInvoke<ConversationRecord>('create_conversation', {
+      project_id: projectId,
+      title
+    });
+  },
+
+  async getMessages(conversationId: string): Promise<ApiResponse<HistoryEntryRecord[]>> {
+    return safeInvoke<HistoryEntryRecord[]>('get_conversation_messages', {
+      conversation_id: conversationId
+    });
+  },
+
+  async sendMessage(conversationId: string, content: string): Promise<ApiResponse<HistoryEntryRecord>> {
+    return safeInvoke<HistoryEntryRecord>('send_message', {
+      conversation_id: conversationId,
+      content
+    });
   }
 };
 

@@ -13,14 +13,11 @@
   let textareaRef: HTMLTextAreaElement = $state()!;
 
   function handleSubmit() {
-    console.log('[InputArea.handleSubmit] Called, inputValue:', inputValue, 'disabled:', disabled);
     const trimmed = inputValue.trim();
     if (!trimmed || disabled) {
-      console.log('[InputArea.handleSubmit] Early return - trimmed:', trimmed);
       return;
     }
 
-    console.log('[InputArea.handleSubmit] Calling onSubmit with:', trimmed);
     onSubmit(trimmed);
     inputValue = '';
     adjustHeight();
@@ -79,7 +76,7 @@
   .input-area {
     display: flex;
     flex-direction: column;
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     background-color: var(--surface);
     border-top: 1px solid var(--border);
   }
@@ -88,15 +85,16 @@
     display: flex;
     align-items: flex-end;
     gap: 0.5rem;
-    padding: 0.75rem;
+    padding: 0.55rem 0.6rem 0.55rem 0.7rem;
     background-color: var(--background);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    transition: border-color 0.15s;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
 
   .input-container:focus-within {
-    border-color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.6);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
   }
 
   .input-container.disabled {
@@ -128,11 +126,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     color: white;
     background-color: var(--accent);
-    border-radius: 8px;
+    border-radius: 7px;
     transition: all 0.15s;
     flex-shrink: 0;
   }

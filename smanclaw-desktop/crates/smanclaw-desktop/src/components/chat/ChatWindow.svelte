@@ -1,9 +1,9 @@
 <script lang="ts">
-  console.log('ChatWindow component loading...');
   import { selectedProject } from '../../lib/stores/projects';
-  import { tasksStore, tasks, activeTask, activeSubtasks, activeOrchestrationProgress, activeParallelGroups } from '../../lib/stores/tasks';
-  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import type { ProgressEvent } from '../../lib/types';
+  import { tasksStore, activeTask, activeSubtasks, activeOrchestrationProgress, activeParallelGroups } from '../../lib/stores/tasks';
+  import { listen } from '@tauri-apps/api/event';
+  import { conversationApi } from '../../lib/api/tauri';
+  import type { ProgressEvent, HistoryEntryRecord } from '../../lib/types';
   import MessageBubble from './MessageBubble.svelte';
   import InputArea from './InputArea.svelte';
   import TaskProgress from '../task/TaskProgress.svelte';
@@ -14,6 +14,9 @@
 
   // Messages per project (projectId -> messages)
   let messagesByProject = $state<Record<string, Message[]>>({});
+  let conversationByProject = $state<Record<string, string>>({});
+  let isSending = $state(false);
+  let initializedProjectId = $state<string | null>(null);
   let messagesContainer: HTMLDivElement = $state()!;
 
   // Get current project's messages
@@ -35,97 +38,164 @@
     ];
   }
 
-  // Initialize store and event listeners on mount
-  onMount(async () => {
-    console.log('[ChatWindow] Initializing...');
-    
-    tasksStore.initialize();
+  function normalizeRole(role: HistoryEntryRecord['role']): Message['role'] {
+    const normalized = role.toLowerCase();
+    if (normalized === 'assistant') {
+      return 'assistant';
+    }
+    if (normalized === 'system') {
+      return 'system';
+    }
+    return 'user';
+  }
 
-    // TEST: Emit a test event to verify event system works
-    setTimeout(() => {
-      console.log('[ChatWindow] Test: Emitting test event...');
-      // @ts-ignore
-      if (window.__TAURI__) {
-        console.log('[ChatWindow] Tauri detected');
-      } else {
-        console.log('[ChatWindow] Tauri NOT detected');
+  function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
+    return entries.map((entry) => ({
+      id: entry.id,
+      role: normalizeRole(entry.role),
+      content: entry.content,
+      timestamp: new Date(entry.timestamp).getTime()
+    }));
+  }
+
+  async function ensureProjectConversation(projectId: string, projectName: string): Promise<string | null> {
+    if (conversationByProject[projectId]) {
+      return conversationByProject[projectId];
+    }
+
+    const listResponse = await conversationApi.list(projectId);
+    if (listResponse.success && listResponse.data && listResponse.data.length > 0) {
+      const currentConversationId = listResponse.data[0].id;
+      conversationByProject[projectId] = currentConversationId;
+      return currentConversationId;
+    }
+
+    const createResponse = await conversationApi.create(projectId, `${projectName} 对话`);
+    if (createResponse.success && createResponse.data) {
+      conversationByProject[projectId] = createResponse.data.id;
+      return createResponse.data.id;
+    }
+
+    return null;
+  }
+
+  async function loadConversationMessages(projectId: string, projectName: string) {
+    const conversationId = await ensureProjectConversation(projectId, projectName);
+    if (!conversationId) {
+      messagesByProject[projectId] = getDemoMessages(projectName);
+      return;
+    }
+
+    const response = await conversationApi.getMessages(conversationId);
+    if (response.success && response.data) {
+      messagesByProject[projectId] = response.data.length > 0 ? mapHistoryEntries(response.data) : getDemoMessages(projectName);
+      return;
+    }
+
+    messagesByProject[projectId] = getDemoMessages(projectName);
+  }
+
+  async function waitForAssistantReply(
+    projectId: string,
+    projectName: string,
+    conversationId: string,
+    userEntryId?: string
+  ) {
+    const maxAttempts = 90;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await conversationApi.getMessages(conversationId);
+      if (!response.success || !response.data) {
+        continue;
       }
-    }, 2000);
 
-    // Listen for progress events (TaskCompleted, TaskFailed)
-    const unlistenProgress = await listen<ProgressEvent>('progress', (event) => {
-      console.log('[ChatWindow] Received progress event:', event.payload);
-      
-      const payload = event.payload;
-      
-      // Handle task completion
-      if (payload.type === 'task_completed' && $selectedProject) {
-        const projectId = $selectedProject.id;
-        const projectMessages = messagesByProject[projectId];
-        if (!projectMessages) return;
+      messagesByProject[projectId] = response.data.length > 0 ? mapHistoryEntries(response.data) : getDemoMessages(projectName);
 
-        const taskId = payload.result.task_id;
-        const output = payload.result.output;
-        
-        console.log('[ChatWindow] Task completed:', taskId, 'output:', output.substring(0, 50));
-
-        // Update the corresponding message
-        const updatedMessages = projectMessages.map(msg => {
-          if (msg.taskId === taskId && msg.content === 'Thinking...') {
-            return { ...msg, content: output };
-          }
-          return msg;
-        });
-
-        messagesByProject[projectId] = updatedMessages;
-      }
-      
-      // Handle task failure - Note: TaskFailed doesn't include task_id in current backend
-      // We need to track the active task and match it
-      if (payload.type === 'task_failed' && $selectedProject) {
-        const projectId = $selectedProject.id;
-        const projectMessages = messagesByProject[projectId];
-        if (!projectMessages) return;
-
-        const error = payload.error;
-        
-        // Find the most recent "Thinking..." message and update it
-        // This is a workaround since TaskFailed doesn't include task_id
-        let updated = false;
-        const updatedMessages = projectMessages.map(msg => {
-          if (!updated && msg.taskId && msg.content === 'Thinking...') {
-            updated = true;
-            return { ...msg, content: `Error: ${error}` };
-          }
-          return msg;
-        });
-
-        if (updated) {
-          console.log('[ChatWindow] Task failed, updated message with error:', error);
-          messagesByProject[projectId] = updatedMessages;
+      if (!userEntryId) {
+        const hasAssistant = response.data.some((entry) => normalizeRole(entry.role) === 'assistant');
+        if (hasAssistant) {
+          isSending = false;
+          return;
         }
+        continue;
       }
-    });
+
+      const userIndex = response.data.findIndex((entry) => entry.id === userEntryId);
+      if (userIndex < 0) {
+        continue;
+      }
+
+      const hasAssistantAfterUser = response.data
+        .slice(userIndex + 1)
+        .some((entry) => normalizeRole(entry.role) === 'assistant');
+
+      if (hasAssistantAfterUser) {
+        isSending = false;
+        return;
+      }
+    }
+
+    isSending = false;
+  }
+
+  onMount(() => {
+    tasksStore.initialize();
+    let unlistenProgress: (() => void) | null = null;
+
+    void (async () => {
+      unlistenProgress = await listen<ProgressEvent>('progress', (event) => {
+        const payload = event.payload;
+
+        if (payload.type === 'task_completed' && $selectedProject) {
+          if (isSending) {
+            isSending = false;
+            void loadConversationMessages($selectedProject.id, $selectedProject.name);
+          }
+        }
+
+        if (payload.type === 'task_failed' && $selectedProject) {
+          isSending = false;
+          const projectId = $selectedProject.id;
+          const projectMessages = messagesByProject[projectId];
+          if (!projectMessages) return;
+          const error = payload.error;
+          let updated = false;
+          const updatedMessages = projectMessages.map((msg) => {
+            if (!updated && msg.taskId && msg.content === 'Thinking...') {
+              updated = true;
+              return { ...msg, content: `Error: ${error}` };
+            }
+            return msg;
+          });
+
+          if (updated) {
+            messagesByProject[projectId] = updatedMessages;
+          }
+        }
+      });
+    })();
 
     return () => {
-      console.log('[ChatWindow] Cleaning up...');
-      unlistenProgress();
+      unlistenProgress?.();
       tasksStore.destroy();
     };
   });
 
-  // Clear active task when switching projects
   $effect(() => {
-    if ($selectedProject) {
-      tasksStore.setActiveTask(null);
-      
-      if (!messagesByProject[$selectedProject.id]) {
-        messagesByProject[$selectedProject.id] = getDemoMessages($selectedProject.name);
-      }
+    if (!$selectedProject) {
+      initializedProjectId = null;
+      return;
     }
+
+    if (initializedProjectId === $selectedProject.id) {
+      return;
+    }
+
+    initializedProjectId = $selectedProject.id;
+    tasksStore.setActiveTask(null);
+    void loadConversationMessages($selectedProject.id, $selectedProject.name);
   });
 
-  // Auto-scroll when messages change
   $effect(() => {
     const _ = messages;
     if (messagesContainer) {
@@ -133,46 +203,16 @@
     }
   });
 
-  $effect(() => {
-    if (!$selectedProject) return;
-
-    const projectId = $selectedProject.id;
-    const projectMessages = messagesByProject[projectId];
-    if (!projectMessages || projectMessages.length === 0) return;
-
-    let updated = false;
-    const updatedMessages = projectMessages.map((msg) => {
-      if (!msg.taskId || msg.content !== 'Thinking...') return msg;
-
-      const task = $tasks.find((t) => t.id === msg.taskId);
-      if (!task) return msg;
-
-      if (task.status === 'completed' && task.output) {
-        updated = true;
-        return { ...msg, content: task.output };
-      }
-
-      if (task.status === 'failed') {
-        const errorMsg = task.error || task.output || 'Task failed';
-        updated = true;
-        return { ...msg, content: `Error: ${errorMsg}` };
-      }
-
-      return msg;
-    });
-
-    if (updated) {
-      messagesByProject[projectId] = updatedMessages;
-    }
-  });
-
   async function handleSubmit(prompt: string) {
     if (!$selectedProject) return;
 
     const projectId = $selectedProject.id;
+    const conversationId = await ensureProjectConversation(projectId, $selectedProject.name);
+    if (!conversationId) {
+      return;
+    }
     const currentMessages = messagesByProject[projectId] || getDemoMessages($selectedProject.name);
 
-    // Add user message
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -182,21 +222,28 @@
 
     const updatedMessages = [...currentMessages, userMessage];
     messagesByProject[projectId] = updatedMessages;
+    isSending = true;
 
-    // Execute task
-    const taskId = await tasksStore.executeTask(projectId, prompt);
+    const assistantMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: 'Thinking...',
+      timestamp: Date.now(),
+      taskId: conversationId
+    };
+    messagesByProject[projectId] = [...updatedMessages, assistantMessage];
 
-    if (taskId) {
-      // Add assistant message placeholder
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'Thinking...',
-        timestamp: Date.now(),
-        taskId
-      };
-      messagesByProject[projectId] = [...updatedMessages, assistantMessage];
+    const response = await conversationApi.sendMessage(conversationId, prompt);
+    if (!response.success) {
+      isSending = false;
+      messagesByProject[projectId] = [...updatedMessages, {
+        ...assistantMessage,
+        content: `Error: ${response.error || 'Failed to send message'}`
+      }];
+      return;
     }
+
+    void waitForAssistantReply(projectId, $selectedProject.name, conversationId, response.data?.id);
   }
 </script>
 
@@ -226,7 +273,7 @@
   </div>
 
   <InputArea
-    disabled={!$selectedProject || $activeTask?.status === 'running'}
+    disabled={!$selectedProject || isSending}
     placeholder={$selectedProject ? 'Describe what you want to build...' : 'Select a project first...'}
     onSubmit={handleSubmit}
   />

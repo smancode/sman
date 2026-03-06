@@ -2,10 +2,10 @@
 
 use chrono::Utc;
 use smanclaw_core::{
-    AcceptanceEvaluator, Experience, ExperienceSink, LearnedItem, MainTaskManager, MainTaskResult,
-    MainTaskStatus, Orchestrator, Skill, SkillMeta, SkillStore, SubClawExecutor, SubTask,
-    SubTaskRef, SubTaskStatus, TaskDag, TaskGenerator, TaskResultForExperience,
-    UserExperienceExtractor, VerificationMethod,
+    AcceptanceEvaluator, AgentsGenerator, Experience, ExperienceSink, IdentityFiles, LearnedItem,
+    MainTaskManager, MainTaskResult, MainTaskStatus, Orchestrator, ProjectExplorer, Skill,
+    SkillMeta, SkillStore, SubClawExecutor, SubTask, SubTaskRef, SubTaskStatus, TaskDag,
+    TaskGenerator, TaskResultForExperience, UserExperienceExtractor, VerificationMethod,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::{
@@ -13,7 +13,7 @@ use smanclaw_types::{
     LlmSettings, Project, ProjectConfig, QdrantSettings, Role, Task, TaskStatus,
 };
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tokio::sync::RwLock;
@@ -29,6 +29,41 @@ use smanclaw_ffi::test_llm_direct;
 // ============================================================================
 // Project Commands
 // ============================================================================
+
+fn generate_fallback_agents(project_path: &Path) -> String {
+    let project_name = project_path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Project".to_string());
+
+    format!(
+        "# {}\n\n## Project Structure\n\n```\n(project root)\n```\n\n## Build Commands\n\n- Build: detect from project\n- Test: detect from project\n",
+        project_name
+    )
+}
+
+fn ensure_default_identity_files(project_path: &Path) -> TauriResult<()> {
+    let identity = IdentityFiles::new(project_path);
+
+    if !identity.soul_exists() {
+        std::fs::write(project_path.join("SOUL.md"), include_str!("../../../../SOUL.md"))?;
+    }
+
+    if !identity.user_exists() {
+        std::fs::write(project_path.join("USER.md"), include_str!("../../../../USER.md"))?;
+    }
+
+    if !identity.agents_exists() {
+        let explorer = ProjectExplorer::new();
+        let agents_content = match explorer.explore(project_path) {
+            Ok(knowledge) => AgentsGenerator::generate(&knowledge),
+            Err(_) => generate_fallback_agents(project_path),
+        };
+        identity.write_agents(&agents_content)?;
+    }
+
+    Ok(())
+}
 
 /// Get all projects
 #[tauri::command]
@@ -58,6 +93,7 @@ pub async fn add_project(state: State<'_, AppState>, path: String) -> TauriResul
     let mut pm = state.project_manager.lock().await;
     let project = pm.add_project(&project_path)?;
     drop(pm);
+    ensure_default_identity_files(&project_path)?;
 
     Ok(project)
 }

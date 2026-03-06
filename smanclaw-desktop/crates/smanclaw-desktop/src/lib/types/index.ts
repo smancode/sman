@@ -65,6 +65,22 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+export interface ConversationRecord {
+  id: string;
+  project_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HistoryEntryRecord {
+  id: string;
+  conversation_id: string;
+  role: 'User' | 'Assistant' | 'System' | 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
 // Settings types
 
 // LLM Settings (OpenAI Compatible)
