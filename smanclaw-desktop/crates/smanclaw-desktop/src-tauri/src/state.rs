@@ -75,11 +75,19 @@ pub fn default_config_dir() -> PathBuf {
         return preferred;
     }
 
-    let fallback = std::env::current_dir()
+    let current_dir_fallback = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(".smanclaw-desktop");
-    let _ = ensure_writable_dir(&fallback);
-    fallback
+    if ensure_writable_dir(&current_dir_fallback).is_ok() {
+        return current_dir_fallback;
+    }
+
+    let temp_fallback = std::env::temp_dir().join("smanclaw-desktop");
+    if ensure_writable_dir(&temp_fallback).is_ok() {
+        return temp_fallback;
+    }
+
+    PathBuf::from(".")
 }
 
 fn ensure_writable_dir(path: &PathBuf) -> std::io::Result<()> {

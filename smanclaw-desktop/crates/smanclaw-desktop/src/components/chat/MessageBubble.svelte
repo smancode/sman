@@ -150,6 +150,8 @@
 
     .message.assistant {
         align-self: flex-start;
+        width: min(92%, 980px);
+        max-width: 92%;
     }
 
     .avatar {
@@ -177,6 +179,10 @@
         flex-direction: column;
         gap: 0.25rem;
         min-width: 0;
+    }
+
+    .message.assistant .content {
+        width: 100%;
     }
 
     .header {
@@ -213,8 +219,12 @@
     }
 
     .message.assistant .body {
-        background-color: var(--surface);
-        border-bottom-left-radius: 4px;
+        background-color: transparent;
+        border-bottom-left-radius: 0;
+        padding: 0;
+        width: 100%;
+        box-sizing: border-box;
+        overflow-x: auto;
     }
 
     .markdown {

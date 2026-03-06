@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use smanclaw_types::{AppSettings, FileAction, FileChange, ProgressEvent, TaskResult};
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -117,6 +118,22 @@ pub struct ZeroclawBridge {
 }
 
 impl ZeroclawBridge {
+    fn supports_sqlite_session(project_path: &Path) -> bool {
+        let memory_dir = project_path.join("memory");
+        if std::fs::create_dir_all(&memory_dir).is_err() {
+            return false;
+        }
+        let probe_file = memory_dir.join(".session_probe");
+        let writable = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&probe_file)
+            .is_ok();
+        let _ = std::fs::remove_file(&probe_file);
+        writable
+    }
+
     /// Create a bridge for a specific project (with default config)
     pub fn from_project(project_path: &Path) -> Result<Self> {
         let config = Self::build_config(project_path, None);
@@ -144,10 +161,18 @@ impl ZeroclawBridge {
         let mut config = Config::default();
         config.workspace_dir = project_path.to_path_buf();
 
-        // Enable SQLite session backend for multi-turn conversations
-        // This allows ZeroClaw to persist and recall conversation history
-        config.agent.session.backend = zeroclaw::config::AgentSessionBackend::Sqlite;
+        let project_writable = Self::supports_sqlite_session(project_path);
+
+        config.agent.session.backend = if project_writable {
+            zeroclaw::config::AgentSessionBackend::Sqlite
+        } else {
+            zeroclaw::config::AgentSessionBackend::Memory
+        };
         config.agent.session.max_messages = 100; // Keep last 100 messages
+        if !project_writable {
+            config.memory.backend = "none".to_string();
+            config.memory.auto_save = false;
+        }
 
         // Configure LLM Provider if settings provided
         if let Some(settings) = settings {
@@ -386,6 +411,20 @@ mod tests {
             bridge.config.agent.session.backend,
             zeroclaw::config::AgentSessionBackend::Sqlite
         );
+    }
+
+    #[test]
+    fn config_disables_persistent_memory_when_workspace_not_writable() {
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let file_path = temp_dir.path().join("not-a-directory");
+        std::fs::write(&file_path, b"x").expect("create file");
+        let config = ZeroclawBridge::build_config(&file_path, None);
+        assert_eq!(
+            config.agent.session.backend,
+            zeroclaw::config::AgentSessionBackend::Memory
+        );
+        assert_eq!(config.memory.backend, "none");
+        assert!(!config.memory.auto_save);
     }
 
     #[tokio::test]
