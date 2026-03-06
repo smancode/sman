@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { projectsStore, selectedProject, sortedProjects } from '../../lib/stores/projects';
+  import { projectsStore, sortedProjects } from '../../lib/stores/projects';
   import ProjectList from '../project/ProjectList.svelte';
   import { invoke } from '@tauri-apps/api/core';
 
   let isCollapsed = $state(false);
-  let showNewProjectModal = $state(false);
 
   async function handleNewProject() {
     try {
@@ -26,16 +25,10 @@
     window.location.href = '/settings';
   }
 
-  function navigateToHome() {
-    window.location.href = '/';
-  }
 </script>
 
 <aside class="sidebar" class:collapsed={isCollapsed}>
   <div class="sidebar-header">
-    {#if !isCollapsed}
-      <h2 class="title">SmanClaw</h2>
-    {/if}
     <button class="toggle-btn" onclick={toggleSidebar} aria-label="Toggle sidebar">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         {#if isCollapsed}
@@ -65,31 +58,15 @@
           onSelect={(id) => projectsStore.selectProject(id)}
         />
       </div>
-
-      <div class="section">
-        <div class="section-header">
-          <span class="section-title">Quick Actions</span>
-        </div>
-        <nav class="nav-menu">
-          <button class="nav-item" onclick={navigateToHome}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 8v4l3 3" />
-              <circle cx="12" cy="12" r="10" />
-            </svg>
-            <span>History</span>
-          </button>
-          <button class="nav-item" onclick={navigateToSettings}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <span>Settings</span>
-          </button>
-        </nav>
-      </div>
     </div>
 
     <div class="sidebar-footer">
+      <button class="settings-btn" onclick={navigateToSettings} aria-label="Open settings" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
       <div class="status">
         <span class="status-dot"></span>
         <span>Ready</span>
@@ -115,15 +92,9 @@
   .sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 1rem;
     border-bottom: 1px solid var(--border);
-  }
-
-  .title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-primary);
   }
 
   .toggle-btn {
@@ -182,31 +153,28 @@
     background-color: var(--border);
   }
 
-  .nav-menu {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .nav-item {
+  .sidebar-footer {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
     color: var(--text-secondary);
     border-radius: 6px;
-    text-align: left;
     transition: all 0.15s;
   }
 
-  .nav-item:hover {
+  .settings-btn:hover {
     color: var(--text-primary);
     background-color: var(--border);
-  }
-
-  .sidebar-footer {
-    padding: 1rem;
-    border-top: 1px solid var(--border);
   }
 
   .status {

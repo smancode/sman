@@ -73,17 +73,12 @@
       {/if}
     </button>
   </div>
-
-  <div class="hint">
-    <span>Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line</span>
-  </div>
 </div>
 
 <style>
   .input-area {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
     padding: 1rem;
     background-color: var(--surface);
     border-top: 1px solid var(--border);
@@ -166,20 +161,4 @@
     }
   }
 
-  .hint {
-    display: flex;
-    justify-content: center;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-  }
-
-  kbd {
-    display: inline-block;
-    padding: 0.125rem 0.375rem;
-    font-size: 0.625rem;
-    font-family: inherit;
-    background-color: var(--border);
-    border-radius: 4px;
-    margin: 0 0.125rem;
-  }
 </style>

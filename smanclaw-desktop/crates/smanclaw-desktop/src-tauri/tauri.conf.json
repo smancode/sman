@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SmanClaw Desktop",
+  "productName": "SmanClaw",
   "version": "0.1.0",
   "identifier": "com.smanclaw.desktop",
   "build": {
@@ -16,7 +16,7 @@
     },
     "windows": [
       {
-        "title": "SmanClaw Desktop",
+        "title": "SmanClaw",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
