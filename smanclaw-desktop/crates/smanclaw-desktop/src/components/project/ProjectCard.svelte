@@ -6,9 +6,20 @@
         selected?: boolean;
         onSelect?: (id: string) => void;
         onDelete?: (id: string) => void;
+        onPressStart?: (id: string, event: MouseEvent) => void;
+        onHoverWhilePressed?: (id: string) => void;
+        onPressEnd?: () => void;
     }
 
-    let { project, selected = false, onSelect, onDelete }: Props = $props();
+    let {
+        project,
+        selected = false,
+        onSelect,
+        onDelete,
+        onPressStart,
+        onHoverWhilePressed,
+        onPressEnd,
+    }: Props = $props();
 
     function handleClick() {
         onSelect?.(project.id);
@@ -17,6 +28,14 @@
     function handleDelete(event: Event) {
         event.stopPropagation();
         onDelete?.(project.id);
+    }
+
+    function handleMouseDown(event: MouseEvent) {
+        onPressStart?.(project.id, event);
+    }
+
+    function handleMouseEnter() {
+        onHoverWhilePressed?.(project.id);
     }
 
     function formatDate(timestamp: string): string {
@@ -36,6 +55,9 @@
     class="project-card"
     class:selected
     onclick={handleClick}
+    onmousedown={handleMouseDown}
+    onmouseenter={handleMouseEnter}
+    onmouseup={onPressEnd}
     role="button"
     tabindex="0"
     onkeydown={(e) => e.key === "Enter" && handleClick()}

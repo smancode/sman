@@ -6,12 +6,14 @@ import { projectApi } from "../api/tauri";
 interface ProjectsState {
     projects: Project[];
     projectOrder: string[];
+    hiddenProjectIds: string[];
     selectedProjectId: string | null;
     isLoading: boolean;
     error: string | null;
 }
 
 const PROJECT_ORDER_STORAGE_KEY = "smanclaw.projectOrder";
+const HIDDEN_PROJECTS_STORAGE_KEY = "smanclaw.hiddenProjects";
 
 function loadProjectOrder(): string[] {
     if (typeof window === "undefined") {
@@ -41,6 +43,37 @@ function saveProjectOrder(projectOrder: string[]) {
     window.localStorage.setItem(
         PROJECT_ORDER_STORAGE_KEY,
         JSON.stringify(projectOrder),
+    );
+}
+
+function loadHiddenProjectIds(): string[] {
+    if (typeof window === "undefined") {
+        return [];
+    }
+    try {
+        const raw = window.localStorage.getItem(HIDDEN_PROJECTS_STORAGE_KEY);
+        if (!raw) {
+            return [];
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+        return parsed.filter(
+            (item): item is string => typeof item === "string",
+        );
+    } catch {
+        return [];
+    }
+}
+
+function saveHiddenProjectIds(hiddenProjectIds: string[]) {
+    if (typeof window === "undefined") {
+        return;
+    }
+    window.localStorage.setItem(
+        HIDDEN_PROJECTS_STORAGE_KEY,
+        JSON.stringify(hiddenProjectIds),
     );
 }
 
@@ -84,9 +117,21 @@ function resolveSelectedProjectId(
     return firstOrderedId || projects[0].id;
 }
 
+function getVisibleProjects(
+    projects: Project[],
+    hiddenProjectIds: string[],
+): Project[] {
+    if (hiddenProjectIds.length === 0) {
+        return projects;
+    }
+    const hiddenSet = new Set(hiddenProjectIds);
+    return projects.filter((project) => !hiddenSet.has(project.id));
+}
+
 const initialState: ProjectsState = {
     projects: [],
     projectOrder: loadProjectOrder(),
+    hiddenProjectIds: loadHiddenProjectIds(),
     selectedProjectId: null,
     isLoading: false,
     error: null,
@@ -106,25 +151,36 @@ function createProjectsStore() {
             const response = await projectApi.list();
 
             if (response.success && response.data) {
-                update((state) => ({
-                    ...state,
-                    projects: response.data!,
-                    projectOrder: normalizeProjectOrder(
+                update((state) => {
+                    const hiddenProjectIds = state.hiddenProjectIds.filter(
+                        (id) =>
+                            response.data!.some((project) => project.id === id),
+                    );
+                    const visibleProjects = getVisibleProjects(
                         response.data!,
+                        hiddenProjectIds,
+                    );
+                    const projectOrder = normalizeProjectOrder(
+                        visibleProjects,
                         state.projectOrder,
-                    ),
-                    selectedProjectId: resolveSelectedProjectId(
-                        response.data!,
-                        normalizeProjectOrder(
-                            response.data!,
-                            state.projectOrder,
-                        ),
+                    );
+                    const selectedProjectId = resolveSelectedProjectId(
+                        visibleProjects,
+                        projectOrder,
                         state.selectedProjectId,
-                    ),
-                    isLoading: false,
-                }));
+                    );
+                    return {
+                        ...state,
+                        projects: response.data!,
+                        hiddenProjectIds,
+                        projectOrder,
+                        selectedProjectId,
+                        isLoading: false,
+                    };
+                });
                 const state = get({ subscribe });
                 saveProjectOrder(state.projectOrder);
+                saveHiddenProjectIds(state.hiddenProjectIds);
             } else {
                 update((state) => ({
                     ...state,
@@ -147,8 +203,12 @@ function createProjectsStore() {
                 return;
             }
             update((state) => {
-                const normalized = normalizeProjectOrder(
+                const visibleProjects = getVisibleProjects(
                     state.projects,
+                    state.hiddenProjectIds,
+                );
+                const normalized = normalizeProjectOrder(
+                    visibleProjects,
                     state.projectOrder,
                 );
                 const draggedIndex = normalized.indexOf(draggedId);
@@ -172,49 +232,76 @@ function createProjectsStore() {
             const response = await projectApi.create(path);
 
             if (response.success && response.data) {
-                update((state) => ({
-                    ...state,
-                    projects: [
+                update((state) => {
+                    const projects = [
                         ...state.projects.filter(
                             (project) => project.id !== response.data!.id,
                         ),
                         response.data!,
-                    ],
-                    projectOrder: [
+                    ];
+                    const hiddenProjectIds = state.hiddenProjectIds.filter(
+                        (id) => id !== response.data!.id,
+                    );
+                    const visibleProjects = getVisibleProjects(
+                        projects,
+                        hiddenProjectIds,
+                    );
+                    const projectOrder = [
                         response.data!.id,
                         ...normalizeProjectOrder(
-                            state.projects,
+                            visibleProjects,
                             state.projectOrder,
                         ).filter((id) => id !== response.data!.id),
-                    ],
-                    selectedProjectId: response.data!.id,
-                    error: null,
-                }));
+                    ];
+                    return {
+                        ...state,
+                        projects,
+                        hiddenProjectIds,
+                        projectOrder,
+                        selectedProjectId: response.data!.id,
+                        error: null,
+                    };
+                });
                 const state = get({ subscribe });
                 saveProjectOrder(state.projectOrder);
+                saveHiddenProjectIds(state.hiddenProjectIds);
                 return response.data;
             }
 
             const refreshed = await projectApi.list();
             if (refreshed.success && refreshed.data) {
                 update((state) => {
-                    const projectOrder = normalizeProjectOrder(
-                        refreshed.data!,
-                        state.projectOrder,
-                    );
                     const existing = refreshed.data!.find(
                         (project) => project.path === path,
+                    );
+                    const hiddenProjectIds = existing
+                        ? state.hiddenProjectIds.filter(
+                              (id) => id !== existing.id,
+                          )
+                        : state.hiddenProjectIds.filter((id) =>
+                              refreshed.data!.some(
+                                  (project) => project.id === id,
+                              ),
+                          );
+                    const visibleProjects = getVisibleProjects(
+                        refreshed.data!,
+                        hiddenProjectIds,
+                    );
+                    const projectOrder = normalizeProjectOrder(
+                        visibleProjects,
+                        state.projectOrder,
                     );
                     const selectedProjectId = existing
                         ? existing.id
                         : resolveSelectedProjectId(
-                              refreshed.data!,
+                              visibleProjects,
                               projectOrder,
                               state.selectedProjectId,
                           );
                     return {
                         ...state,
                         projects: refreshed.data!,
+                        hiddenProjectIds,
                         projectOrder,
                         selectedProjectId,
                         error: response.error || "Failed to create project",
@@ -222,6 +309,7 @@ function createProjectsStore() {
                 });
                 const state = get({ subscribe });
                 saveProjectOrder(state.projectOrder);
+                saveHiddenProjectIds(state.hiddenProjectIds);
             } else {
                 update((state) => ({
                     ...state,
@@ -233,43 +321,37 @@ function createProjectsStore() {
 
         // Delete a project
         async deleteProject(id: string) {
-            const response = await projectApi.delete(id);
-
-            if (response.success) {
-                update((state) => {
-                    const projects = state.projects.filter(
-                        (project) => project.id !== id,
-                    );
-                    const projectOrder = normalizeProjectOrder(
-                        projects,
-                        state.projectOrder.filter(
-                            (projectId) => projectId !== id,
-                        ),
-                    );
-                    const selectedProjectId = resolveSelectedProjectId(
-                        projects,
-                        projectOrder,
-                        state.selectedProjectId === id
-                            ? null
-                            : state.selectedProjectId,
-                    );
-                    return {
-                        ...state,
-                        projects,
-                        projectOrder,
-                        selectedProjectId,
-                    };
-                });
-                const state = get({ subscribe });
-                saveProjectOrder(state.projectOrder);
-                return true;
-            }
-
-            update((state) => ({
-                ...state,
-                error: response.error || "Failed to delete project",
-            }));
-            return false;
+            update((state) => {
+                const hiddenProjectIds = state.hiddenProjectIds.includes(id)
+                    ? state.hiddenProjectIds
+                    : [...state.hiddenProjectIds, id];
+                const visibleProjects = getVisibleProjects(
+                    state.projects,
+                    hiddenProjectIds,
+                );
+                const projectOrder = normalizeProjectOrder(
+                    visibleProjects,
+                    state.projectOrder.filter((projectId) => projectId !== id),
+                );
+                const selectedProjectId = resolveSelectedProjectId(
+                    visibleProjects,
+                    projectOrder,
+                    state.selectedProjectId === id
+                        ? null
+                        : state.selectedProjectId,
+                );
+                return {
+                    ...state,
+                    hiddenProjectIds,
+                    projectOrder,
+                    selectedProjectId,
+                    error: null,
+                };
+            });
+            const state = get({ subscribe });
+            saveProjectOrder(state.projectOrder);
+            saveHiddenProjectIds(state.hiddenProjectIds);
+            return true;
         },
 
         // Open project dialog
@@ -308,17 +390,23 @@ export const projectsStore = createProjectsStore();
 
 // Derived stores
 export const selectedProject = derived(projectsStore, ($state) =>
-    $state.projects.find((p) => p.id === $state.selectedProjectId),
+    getVisibleProjects($state.projects, $state.hiddenProjectIds).find(
+        (p) => p.id === $state.selectedProjectId,
+    ),
 );
 
 export const sortedProjects = derived(projectsStore, ($state) => {
+    const visibleProjects = getVisibleProjects(
+        $state.projects,
+        $state.hiddenProjectIds,
+    );
     const byId = new Map(
-        $state.projects.map((project) => [project.id, project]),
+        visibleProjects.map((project) => [project.id, project]),
     );
     const ordered = $state.projectOrder
         .map((id) => byId.get(id))
         .filter((project): project is Project => Boolean(project));
-    const missing = sortByLastAccessed($state.projects).filter(
+    const missing = sortByLastAccessed(visibleProjects).filter(
         (project) => !$state.projectOrder.includes(project.id),
     );
     return [...ordered, ...missing];

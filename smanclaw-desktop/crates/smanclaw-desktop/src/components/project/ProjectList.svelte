@@ -18,6 +18,7 @@
         onReorder,
     }: Props = $props();
     let dragSourceId: string | null = null;
+    let mouseDragSourceId: string | null = null;
 
     function handleDragStart(event: DragEvent, projectId: string) {
         dragSourceId = projectId;
@@ -44,7 +45,32 @@
         onReorder?.(dragSourceId, targetId);
         dragSourceId = null;
     }
+
+    function handlePressStart(projectId: string, event: MouseEvent) {
+        if (event.button !== 0) {
+            return;
+        }
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button")) {
+            return;
+        }
+        mouseDragSourceId = projectId;
+    }
+
+    function handleHoverWhilePressed(targetId: string) {
+        if (!mouseDragSourceId || mouseDragSourceId === targetId) {
+            return;
+        }
+        onReorder?.(mouseDragSourceId, targetId);
+        mouseDragSourceId = targetId;
+    }
+
+    function handlePressEnd() {
+        mouseDragSourceId = null;
+    }
 </script>
+
+<svelte:window onmouseup={handlePressEnd} />
 
 <div class="project-list">
     {#if projects.length === 0}
@@ -81,6 +107,9 @@
                     selected={project.id === selectedId}
                     onSelect={(id) => onSelect?.(id)}
                     onDelete={(id) => onDelete?.(id)}
+                    onPressStart={handlePressStart}
+                    onHoverWhilePressed={handleHoverWhilePressed}
+                    onPressEnd={handlePressEnd}
                 />
             </div>
         {/each}
