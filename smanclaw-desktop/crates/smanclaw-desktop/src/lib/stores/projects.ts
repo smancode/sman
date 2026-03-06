@@ -227,6 +227,34 @@ function createProjectsStore() {
             });
         },
 
+        reorderProjectsByOrder(nextOrder: string[]) {
+            if (!Array.isArray(nextOrder) || nextOrder.length === 0) {
+                return;
+            }
+            update((state) => {
+                const visibleProjects = getVisibleProjects(
+                    state.projects,
+                    state.hiddenProjectIds,
+                );
+                const visibleIds = new Set(
+                    visibleProjects.map((project) => project.id),
+                );
+                const sanitized = nextOrder.filter((id) => visibleIds.has(id));
+                if (sanitized.length === 0) {
+                    return state;
+                }
+                const normalized = normalizeProjectOrder(
+                    visibleProjects,
+                    sanitized,
+                );
+                saveProjectOrder(normalized);
+                return {
+                    ...state,
+                    projectOrder: normalized,
+                };
+            });
+        },
+
         // Create a new project (add existing project by path)
         async createProject(path: string) {
             const response = await projectApi.create(path);

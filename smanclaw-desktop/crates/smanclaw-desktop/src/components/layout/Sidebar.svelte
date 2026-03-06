@@ -59,8 +59,8 @@
                 selectedId={$projectsStore.selectedProjectId}
                 onSelect={(id) => projectsStore.selectProject(id)}
                 onDelete={handleDeleteProject}
-                onReorder={(draggedId, targetId) =>
-                    projectsStore.reorderProjects(draggedId, targetId)}
+                onReorderAll={(orderedIds) =>
+                    projectsStore.reorderProjectsByOrder(orderedIds)}
             />
         </div>
     </div>

@@ -1,4 +1,12 @@
 <script lang="ts">
+    import { flip } from "svelte/animate";
+    import { cubicOut } from "svelte/easing";
+    import {
+        dndzone,
+        DRAGGED_ELEMENT_ID,
+        SHADOW_ITEM_MARKER_PROPERTY_NAME,
+        type DndEvent,
+    } from "svelte-dnd-action";
     import type { Project } from "../../lib/types";
     import ProjectCard from "./ProjectCard.svelte";
 
@@ -7,7 +15,7 @@
         selectedId?: string | null;
         onSelect?: (id: string) => void;
         onDelete?: (id: string) => void;
-        onReorder?: (draggedId: string, targetId: string) => void;
+        onReorderAll?: (orderedIds: string[]) => void;
     }
 
     let {
@@ -15,65 +23,62 @@
         selectedId = null,
         onSelect,
         onDelete,
-        onReorder,
+        onReorderAll,
     }: Props = $props();
-    let dragSourceId: string | null = null;
-    let mouseDragSourceId: string | null = null;
+    let dndProjects: Project[] = $state([]);
+    const flipDurationMs = 260;
+    const dropTargetClasses = ["project-list-drop-target"];
 
-    function handleDragStart(event: DragEvent, projectId: string) {
-        dragSourceId = projectId;
-        event.dataTransfer?.setData("text/plain", projectId);
-        if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.dropEffect = "move";
-        }
+    $effect(() => {
+        dndProjects = projects;
+    });
+
+    function isShadowItem(project: Project): boolean {
+        return Boolean(
+            (project as unknown as Record<string, unknown>)[
+                SHADOW_ITEM_MARKER_PROPERTY_NAME
+            ],
+        );
     }
 
-    function handleDragOver(event: DragEvent) {
-        event.preventDefault();
-        if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = "move";
-        }
+    function syncVisualOrder(event: CustomEvent<DndEvent<Project>>) {
+        dndProjects = event.detail.items;
     }
 
-    function handleDrop(event: DragEvent, targetId: string) {
-        event.preventDefault();
-        if (!dragSourceId || dragSourceId === targetId) {
-            dragSourceId = null;
+    function commitOrder(event: CustomEvent<DndEvent<Project>>) {
+        dndProjects = event.detail.items;
+        const orderedIds = dndProjects
+            .filter((project) => !isShadowItem(project))
+            .map((project) => project.id);
+        onReorderAll?.(orderedIds);
+    }
+
+    function transformDraggedElement(element?: HTMLElement) {
+        if (!element) {
             return;
         }
-        onReorder?.(dragSourceId, targetId);
-        dragSourceId = null;
-    }
-
-    function handlePressStart(projectId: string, event: MouseEvent) {
-        if (event.button !== 0) {
+        element.id = DRAGGED_ELEMENT_ID;
+        const card = element.querySelector(".project-card");
+        if (!(card instanceof HTMLElement)) {
             return;
         }
-        const target = event.target as HTMLElement | null;
-        if (target?.closest("button")) {
-            return;
-        }
-        mouseDragSourceId = projectId;
-    }
-
-    function handleHoverWhilePressed(targetId: string) {
-        if (!mouseDragSourceId || mouseDragSourceId === targetId) {
-            return;
-        }
-        onReorder?.(mouseDragSourceId, targetId);
-        mouseDragSourceId = targetId;
-    }
-
-    function handlePressEnd() {
-        mouseDragSourceId = null;
+        card.classList.add("drag-preview-card");
     }
 </script>
 
-<svelte:window onmouseup={handlePressEnd} />
-
-<div class="project-list">
-    {#if projects.length === 0}
+<div
+    class="project-list"
+    use:dndzone={{
+        items: dndProjects,
+        flipDurationMs,
+        morphDisabled: true,
+        dropTargetClasses,
+        transformDraggedElement,
+    }}
+    onconsider={syncVisualOrder}
+    onfinalize={commitOrder}
+>
+    {#if dndProjects.length === 0}
         <div class="empty-state">
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -92,25 +97,24 @@
             <span>点击 + 按钮添加项目</span>
         </div>
     {:else}
-        {#each projects as project (project.id)}
+        {#each dndProjects as project (project.id)}
             <div
                 class="draggable-item"
-                draggable="true"
+                class:shadow-item={isShadowItem(project)}
                 role="listitem"
-                ondragstart={(event) => handleDragStart(event, project.id)}
-                ondragover={handleDragOver}
-                ondrop={(event) => handleDrop(event, project.id)}
-                ondragend={() => (dragSourceId = null)}
+                animate:flip={{
+                    duration: flipDurationMs,
+                    easing: cubicOut,
+                }}
             >
-                <ProjectCard
-                    {project}
-                    selected={project.id === selectedId}
-                    onSelect={(id) => onSelect?.(id)}
-                    onDelete={(id) => onDelete?.(id)}
-                    onPressStart={handlePressStart}
-                    onHoverWhilePressed={handleHoverWhilePressed}
-                    onPressEnd={handlePressEnd}
-                />
+                {#if !isShadowItem(project)}
+                    <ProjectCard
+                        {project}
+                        selected={project.id === selectedId}
+                        onSelect={(id) => onSelect?.(id)}
+                        onDelete={(id) => onDelete?.(id)}
+                    />
+                {/if}
             </div>
         {/each}
     {/if}
@@ -126,6 +130,37 @@
 
     .draggable-item {
         border-radius: 6px;
+        will-change: transform;
+        transition: transform 0.2s ease;
+    }
+
+    .draggable-item.shadow-item {
+        min-height: 48px;
+        border: 1px dashed rgba(var(--accent-rgb), 0.4);
+        background: rgba(var(--accent-rgb), 0.08);
+        border-radius: 8px;
+    }
+
+    .draggable-item :global(.project-card) {
+        cursor: grab;
+    }
+
+    .draggable-item :global(.project-card:active) {
+        cursor: grabbing;
+    }
+
+    .project-list :global(#dnd-action-dragged-el) {
+        z-index: 30;
+    }
+
+    .project-list :global(#dnd-action-dragged-el .project-card),
+    .project-list :global(.project-card.drag-preview-card) {
+        transform: scale(1.015);
+        border-color: rgba(var(--accent-rgb), 0.28);
+        background: color-mix(in srgb, var(--surface) 82%, white 18%);
+        box-shadow:
+            0 14px 30px rgba(0, 0, 0, 0.15),
+            0 2px 8px rgba(0, 0, 0, 0.08);
     }
 
     .empty-state {

@@ -35,6 +35,7 @@
         }
         event.preventDefault();
         isResizing = true;
+        document.body.style.cursor = "ew-resize";
         window.addEventListener("mousemove", onResizeMove);
         window.addEventListener("mouseup", stopResize);
     }
@@ -55,8 +56,23 @@
         if (typeof window === "undefined") {
             return;
         }
+        document.body.style.removeProperty("cursor");
         window.removeEventListener("mousemove", onResizeMove);
         window.removeEventListener("mouseup", stopResize);
+    }
+
+    function handleResizeHoverStart() {
+        if (typeof window === "undefined") {
+            return;
+        }
+        document.body.style.cursor = "ew-resize";
+    }
+
+    function handleResizeHoverEnd() {
+        if (typeof window === "undefined" || isResizing) {
+            return;
+        }
+        document.body.style.removeProperty("cursor");
     }
 
     onDestroy(() => {
@@ -67,10 +83,13 @@
 <div class="layout">
     <Sidebar {sidebarWidth} onOpenSettings={openSettings} />
     <button
-        class="sidebar-divider"
+        class="sidebar-resize-hitbox"
         class:active={isResizing}
         type="button"
+        style={`left: ${sidebarWidth}px;`}
         aria-label="调整侧边栏宽度"
+        onmouseenter={handleResizeHoverStart}
+        onmouseleave={handleResizeHoverEnd}
         onmousedown={startResize}
     ></button>
     <div class="main-container">
@@ -113,6 +132,7 @@
 
 <style>
     .layout {
+        position: relative;
         display: flex;
         height: 100vh;
         width: 100vw;
@@ -120,21 +140,37 @@
         overflow: hidden;
     }
 
-    .sidebar-divider {
-        width: 8px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    .sidebar-resize-hitbox {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 18px;
+        transform: translateX(-50%);
         background-color: transparent;
+        border: none;
+        padding: 0;
         cursor: ew-resize;
         user-select: none;
-        transition: background-color 0.15s;
+        z-index: 20;
     }
 
-    .sidebar-divider:hover,
-    .sidebar-divider.active {
-        background-color: rgba(var(--accent-rgb), 0.06);
+    .sidebar-resize-hitbox::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 20%;
+        width: 2px;
+        height: 60%;
+        border-radius: 999px;
+        background: rgba(var(--accent-rgb), 0.45);
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.16s ease;
+    }
+
+    .sidebar-resize-hitbox:hover::after,
+    .sidebar-resize-hitbox.active::after {
+        opacity: 1;
     }
 
     .main-container {
