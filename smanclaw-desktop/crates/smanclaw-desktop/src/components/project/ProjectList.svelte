@@ -28,6 +28,7 @@
     let dndProjects: Project[] = $state([]);
     const flipDurationMs = 260;
     const dropTargetClasses = ["project-list-drop-target"];
+    const dropTargetStyle = { outline: "none" };
 
     $effect(() => {
         dndProjects = projects;
@@ -73,6 +74,7 @@
         flipDurationMs,
         morphDisabled: true,
         dropTargetClasses,
+        dropTargetStyle,
         transformDraggedElement,
     }}
     onconsider={syncVisualOrder}
