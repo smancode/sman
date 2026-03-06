@@ -23,18 +23,18 @@
 | 任务拆解 | 基于语义理解拆分子任务 | 已接入“语义优先 + 规则兜底”拆解，仍需提升复杂需求稳定性 | ⚠️ 部分实现 |
 | DAG 管理 | 依赖分析与拓扑排序 | `TaskDag` 已实现并用于 orchestrated 命令 | ✅ 已实现 |
 | 子 Claw 执行 | 按 task.md checklist 自动执行 | `SubClawExecutor` 已接入 orchestrated 命令并执行 checklist | ✅ 已实现 |
-| 并行执行 | 无依赖任务并行执行 | 当前“分组内顺序执行”，仅结构支持并行 | ⚠️ 部分实现 |
-| 验收评估 | 按验收标准自动评估（测试/E2E/命令） | orchestrated 主流程已接入 `AcceptanceEvaluator`，当前以基础规则校验为主 | ⚠️ 部分实现 |
+| 并行执行 | 无依赖任务并行执行 | orchestrated 主流程已在 parallel group 内并发执行子任务（基于 JoinSet 聚合结果） | ✅ 已实现 |
+| 验收评估 | 按验收标准自动评估（测试/E2E/命令） | orchestrated 主流程已接入 `AcceptanceEvaluator`，并已形成“验收失败→补救子任务→再验收”闭环；仍需提升评估深度 | ⚠️ 部分实现 |
 | main-task.md 协同 | 主 Claw 输出 main-task.md 并追踪子任务 | orchestrated 主流程已接入 `MainTaskManager`（创建、子任务状态更新、完成回写） | ✅ 已实现 |
-| 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入 `ExperienceSink`，按子任务提取经验并尝试更新技能 | ✅ 已实现 |
+| 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入自动沉淀链路，支持 skills / paths / memory 生成与回流 | ✅ 已实现 |
 | ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`，桥接失败时会降级占位执行 | ⚠️ 部分实现 |
 
 ### 0.3 已确认缺口（与“核心自动化愿景”对照）
 
 1. **主链路分叉**：Desktop 当前编排主链路仍在 Tauri `execute_orchestrated_task`，尚未统一切到 `Orchestrator::handle_request`。
-2. **并行执行未落地**：虽然 DAG 有 parallel group，但组内仍按顺序执行。
+2. **并行执行策略待增强**：组内并发已落地，但仍需补充并发限流与失败短路策略细化。
 3. **拆解智能度不足**：子任务拆解仍偏规则匹配，语义泛化能力有限。
-4. **验收深度不足**：已接入 `AcceptanceEvaluator`，但当前偏基础校验，未形成失败补救再执行闭环。
+4. **验收深度不足**：已具备失败补救再验收闭环，但当前评估仍偏基础规则校验，E2E/场景化覆盖不足。
 5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需统一状态来源与一致性策略。
 6. **ZeroClaw 失败降级策略偏宽松**：桥接不可用时会降级占位执行，可能导致“执行成功”语义偏弱。
 7. **交互说明仍可增强**：已增加主 Claw 分阶段状态说明，但前端尚未提供独立“过程解说面板/时间线”。

@@ -16,6 +16,8 @@ const INDEX_VERSION: &str = "1.0";
 const INDEX_FILE: &str = "index.json";
 /// Skills directory name
 const SKILLS_DIR: &str = ".skills";
+/// Paths directory name
+const PATHS_DIR: &str = "paths";
 
 /// Skill content with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,13 +82,21 @@ impl SkillStore {
     /// # Returns
     /// A SkillStore instance or an error
     pub fn new(project_path: &std::path::Path) -> Result<Self> {
+        Self::new_with_dir(project_path, SKILLS_DIR)
+    }
+
+    pub fn for_paths(project_path: &std::path::Path) -> Result<Self> {
+        Self::new_with_dir(project_path, PATHS_DIR)
+    }
+
+    fn new_with_dir(project_path: &std::path::Path, dir_name: &str) -> Result<Self> {
         if !project_path.exists() {
             return Err(CoreError::InvalidInput(
                 "Project path does not exist".to_string(),
             ));
         }
 
-        let skills_dir = project_path.join(SKILLS_DIR);
+        let skills_dir = project_path.join(dir_name);
         let store = Self { skills_dir };
         store.ensure_directory()?;
         Ok(store)
@@ -331,6 +341,13 @@ mod tests {
     fn skill_store_create_should_succeed() {
         let temp_dir = TempDir::new().expect("temp dir");
         let store = SkillStore::new(temp_dir.path());
+        assert!(store.is_ok());
+    }
+
+    #[test]
+    fn path_store_create_should_succeed() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let store = SkillStore::for_paths(temp_dir.path());
         assert!(store.is_ok());
     }
 
