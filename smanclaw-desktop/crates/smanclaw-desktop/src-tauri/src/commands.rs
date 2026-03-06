@@ -664,6 +664,7 @@ pub async fn send_message(
     let (_conversation, project_path) = resolve_conversation_project(&state, &conversation_id)
         .await?
         .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
+    persist_user_input_experience(&project_path, &content);
     let history_store = open_project_history_store(&state.config_dir, &project_path)?;
 
     // Create user message
@@ -1317,6 +1318,21 @@ fn persist_user_memory(
     }
 }
 
+fn persist_user_input_experience(project_path: &std::path::Path, input: &str) {
+    if let Ok(skill_store) = SkillStore::new(project_path) {
+        let extractor = match SkillStore::for_paths(project_path) {
+            Ok(path_store) => UserExperienceExtractor::new(skill_store).with_path_store(path_store),
+            Err(_) => UserExperienceExtractor::new(skill_store),
+        };
+        if let Some(experience) = extractor.analyze(input) {
+            if let Err(e) = extractor.store_as_skill(&experience) {
+                tracing::error!("Failed to persist user experience: {}", e);
+            }
+            persist_user_memory(project_path, input, &experience.content, &experience.tags);
+        }
+    }
+}
+
 fn should_generate_path_from_task_experience(experience: &Experience) -> bool {
     if !experience.reusable_patterns.is_empty() {
         return true;
@@ -1510,18 +1526,7 @@ pub async fn execute_orchestrated_task(
         (path, settings)
     };
 
-    if let Ok(skill_store) = SkillStore::new(&project_path) {
-        let extractor = match SkillStore::for_paths(&project_path) {
-            Ok(path_store) => UserExperienceExtractor::new(skill_store).with_path_store(path_store),
-            Err(_) => UserExperienceExtractor::new(skill_store),
-        };
-        if let Some(experience) = extractor.analyze(&input) {
-            if let Err(e) = extractor.store_as_skill(&experience) {
-                tracing::error!("Failed to persist user experience: {}", e);
-            }
-            persist_user_memory(&project_path, &input, &experience.content, &experience.tags);
-        }
-    }
+    persist_user_input_experience(&project_path, &input);
 
     // Create task
     let task = {
@@ -2415,7 +2420,8 @@ mod tests {
     use super::{
         build_remediation_subtasks, extract_json_payload, fallback_decompose_subtasks,
         is_simple_requirement, normalize_requirement_summary, normalize_semantic_subtasks,
-        parse_semantic_subtasks, persist_path_from_task_experience, persist_user_memory,
+        parse_semantic_subtasks, persist_path_from_task_experience, persist_user_input_experience,
+        persist_user_memory,
         sanitize_path_fragment, sanitize_task_id, should_generate_path_from_task_experience,
         SemanticDecomposeResponse, SemanticSubTask,
     };
@@ -2565,6 +2571,34 @@ mod tests {
         let content = fs::read_to_string(memory_path).expect("read memory");
         assert!(content.contains("user-input"));
         assert!(content.contains("trace_id"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persist_user_input_experience_creates_skill_memory_and_path() {
+        let root = std::env::temp_dir().join(format!(
+            "smanclaw-user-exp-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&root).expect("create temp root");
+
+        persist_user_input_experience(&root, "接口返回必须包含trace_id");
+
+        let memory_path = root.join("MEMORY.md");
+        let memory = fs::read_to_string(memory_path).expect("read memory");
+        assert!(memory.contains("trace_id"));
+
+        let skill_store = SkillStore::new(&root).expect("skill store");
+        let skill_metas = skill_store.list().expect("list skills");
+        assert!(!skill_metas.is_empty());
+
+        let path_store = SkillStore::for_paths(&root).expect("path store");
+        let path_metas = path_store.list().expect("list paths");
+        assert!(!path_metas.is_empty());
+        assert!(path_metas
+            .iter()
+            .any(|meta| meta.tags.contains(&"path".to_string())));
 
         let _ = fs::remove_dir_all(root);
     }
