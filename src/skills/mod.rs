@@ -117,7 +117,53 @@ fn load_skills_with_open_skills_config(
         allow_scripts,
         &trusted_skill_roots,
     ));
+    merge_system_skills(skills)
+}
+
+fn merge_system_skills(mut skills: Vec<Skill>) -> Vec<Skill> {
+    let existing: HashSet<String> = skills
+        .iter()
+        .map(|skill| skill.name.to_lowercase())
+        .collect();
+    for system_skill in built_in_system_skills() {
+        if !existing.contains(&system_skill.name.to_lowercase()) {
+            skills.push(system_skill);
+        }
+    }
     skills
+}
+
+fn built_in_system_skills() -> Vec<Skill> {
+    vec![
+        Skill {
+            name: "skill-creator".to_string(),
+            description: "Create and evolve reusable skills from repeated workflows.".to_string(),
+            version: "1.0.0".to_string(),
+            author: Some("smanclaw-system".to_string()),
+            tags: vec!["system".to_string(), "skills".to_string()],
+            tools: Vec::new(),
+            prompts: vec![
+                "When users ask to create or add a skill, structure the capability as a reusable skill package with clear scope, inputs, outputs, and verification guidance.".to_string(),
+                "Prefer skill names in kebab-case and keep one focused responsibility per skill.".to_string(),
+            ],
+            location: None,
+            always: true,
+        },
+        Skill {
+            name: "web_search".to_string(),
+            description: "Use web search intentionally for up-to-date or external knowledge.".to_string(),
+            version: "1.0.0".to_string(),
+            author: Some("smanclaw-system".to_string()),
+            tags: vec!["system".to_string(), "research".to_string()],
+            tools: Vec::new(),
+            prompts: vec![
+                "Use web search when information is time-sensitive, externally sourced, or missing from the workspace.".to_string(),
+                "Synthesize concise findings and cite the key evidence before acting.".to_string(),
+            ],
+            location: None,
+            always: true,
+        },
+    ]
 }
 
 fn load_workspace_skills(
@@ -2637,6 +2683,35 @@ command = "echo hello"
         assert!(prompt.contains("<tools>"));
         assert!(prompt.contains("<name>run</name>"));
         assert!(prompt.contains("<kind>shell</kind>"));
+    }
+
+    #[test]
+    fn built_in_system_skills_include_required_skills() {
+        let names: HashSet<String> = built_in_system_skills()
+            .into_iter()
+            .map(|skill| skill.name)
+            .collect();
+        assert!(names.contains("skill-creator"));
+        assert!(names.contains("web_search"));
+    }
+
+    #[test]
+    fn merge_system_skills_preserves_existing_and_adds_missing() {
+        let existing = vec![Skill {
+            name: "skill-creator".to_string(),
+            description: "existing".to_string(),
+            version: "1.0.0".to_string(),
+            author: None,
+            tags: vec![],
+            tools: vec![],
+            prompts: vec![],
+            location: None,
+            always: true,
+        }];
+        let merged = merge_system_skills(existing);
+        let names: HashSet<String> = merged.into_iter().map(|skill| skill.name).collect();
+        assert!(names.contains("skill-creator"));
+        assert!(names.contains("web_search"));
     }
 
     #[test]

@@ -4,8 +4,9 @@ use chrono::Utc;
 use smanclaw_core::{
     AcceptanceEvaluator, AgentsGenerator, Experience, ExperienceSink, IdentityFiles, LearnedItem,
     MainTaskManager, MainTaskResult, MainTaskStatus, Orchestrator, ProjectExplorer, Skill,
-    SkillMeta, SkillStore, SubClawExecutor, SubTask, SubTaskRef, SubTaskStatus, TaskDag,
-    TaskGenerator, TaskResultForExperience, UserExperienceExtractor, VerificationMethod,
+    SkillMeta, SkillStore, SqliteHistoryStore, SubClawExecutor, SubTask, SubTaskRef,
+    SubTaskStatus, TaskDag, TaskGenerator, TaskResultForExperience, UserExperienceExtractor,
+    VerificationMethod,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::{
@@ -63,6 +64,57 @@ fn ensure_default_identity_files(project_path: &Path) -> TauriResult<()> {
     }
 
     Ok(())
+}
+
+fn ensure_project_runtime_dir(project_path: &Path) -> TauriResult<PathBuf> {
+    let runtime_dir = project_path.join(".smanclaw");
+    std::fs::create_dir_all(&runtime_dir)?;
+    Ok(runtime_dir)
+}
+
+fn open_project_history_store(project_path: &Path) -> TauriResult<SqliteHistoryStore> {
+    let runtime_dir = ensure_project_runtime_dir(project_path)?;
+    let history_db = runtime_dir.join("history.db");
+    Ok(SqliteHistoryStore::new(&history_db)?)
+}
+
+async fn get_project_path(state: &State<'_, AppState>, project_id: &str) -> TauriResult<PathBuf> {
+    let pm = state.project_manager.lock().await;
+    let project = pm
+        .get_project(project_id)?
+        .ok_or_else(|| TauriError::ProjectNotFound(project_id.to_string()))?;
+    Ok(PathBuf::from(project.path))
+}
+
+async fn resolve_conversation_project(
+    state: &State<'_, AppState>,
+    conversation_id: &str,
+) -> TauriResult<Option<(Conversation, PathBuf)>> {
+    let projects = {
+        let pm = state.project_manager.lock().await;
+        pm.list_projects()?
+    };
+
+    for project in projects {
+        let project_path = PathBuf::from(&project.path);
+        let store = match open_project_history_store(&project_path) {
+            Ok(store) => store,
+            Err(err) => {
+                tracing::warn!(
+                    project_id = %project.id,
+                    project_path = %project.path,
+                    error = %err,
+                    "Failed to open project history store"
+                );
+                continue;
+            }
+        };
+        if let Some(conversation) = store.get_conversation(conversation_id)? {
+            return Ok(Some((conversation, project_path)));
+        }
+    }
+
+    Ok(None)
 }
 
 /// Get all projects
@@ -382,9 +434,8 @@ pub async fn get_conversation(
         ));
     }
 
-    let hs = state.history_store.lock().await;
-    let conversation = hs.get_conversation(&conversation_id)?;
-    Ok(conversation)
+    let resolved = resolve_conversation_project(&state, &conversation_id).await?;
+    Ok(resolved.map(|(conversation, _)| conversation))
 }
 
 /// Get conversation messages
@@ -399,8 +450,11 @@ pub async fn get_conversation_messages(
         ));
     }
 
-    let hs = state.history_store.lock().await;
-    let entries = hs.load_conversation(&conversation_id)?;
+    let (_, project_path) = resolve_conversation_project(&state, &conversation_id)
+        .await?
+        .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
+    let history_store = open_project_history_store(&project_path)?;
+    let entries = history_store.load_conversation(&conversation_id)?;
     Ok(entries)
 }
 
@@ -416,8 +470,9 @@ pub async fn list_conversations(
         ));
     }
 
-    let hs = state.history_store.lock().await;
-    let conversations = hs.list_conversations(&project_id)?;
+    let project_path = get_project_path(&state, &project_id).await?;
+    let history_store = open_project_history_store(&project_path)?;
+    let conversations = history_store.list_conversations(&project_id)?;
     Ok(conversations)
 }
 
@@ -439,8 +494,9 @@ pub async fn create_conversation(
         ));
     }
 
-    let mut hs = state.history_store.lock().await;
-    let conversation = hs.create_conversation(&project_id, &title)?;
+    let project_path = get_project_path(&state, &project_id).await?;
+    let history_store = open_project_history_store(&project_path)?;
+    let conversation = history_store.create_conversation(&project_id, &title)?;
     Ok(conversation)
 }
 
@@ -463,20 +519,10 @@ pub async fn send_message(
         ));
     }
 
-    // Get conversation and project path
-    let (conversation, project_path) = {
-        let hs = state.history_store.lock().await;
-        let conversation = hs
-            .get_conversation(&conversation_id)?
-            .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
-        drop(hs);
-
-        let pm = state.project_manager.lock().await;
-        let project = pm
-            .get_project(&conversation.project_id)?
-            .ok_or_else(|| TauriError::ProjectNotFound(conversation.project_id.clone()))?;
-        (conversation, PathBuf::from(&project.path))
-    };
+    let (_conversation, project_path) = resolve_conversation_project(&state, &conversation_id)
+        .await?
+        .ok_or_else(|| TauriError::ConversationNotFound(conversation_id.clone()))?;
+    let history_store = open_project_history_store(&project_path)?;
 
     // Create user message
     let user_entry = HistoryEntry {
@@ -487,7 +533,7 @@ pub async fn send_message(
         timestamp: Utc::now(),
     };
 
-    state.history_store.lock().await.save_entry(&user_entry)?;
+    history_store.save_entry(&user_entry)?;
 
     // Get settings for LLM configuration
     let settings = state.settings_store.lock().await.load()?;
@@ -497,7 +543,7 @@ pub async fn send_message(
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     let app_handle_clone = app_handle.clone();
-    let history_store = state.history_store.clone();
+    let project_path_for_save = project_path.clone();
     let conv_id = conversation_id.clone();
     let content_clone = content.clone();
 
@@ -529,7 +575,14 @@ pub async fn send_message(
                     timestamp: Utc::now(),
                 };
 
-                if let Err(e) = history_store.lock().await.save_entry(&assistant_entry) {
+                let save_store = match open_project_history_store(&project_path_for_save) {
+                    Ok(store) => store,
+                    Err(e) => {
+                        tracing::error!("Failed to open project history store: {}", e);
+                        return;
+                    }
+                };
+                if let Err(e) = save_store.save_entry(&assistant_entry) {
                     tracing::error!("Failed to save assistant message: {}", e);
                 }
             }
@@ -881,9 +934,10 @@ fn build_semantic_decompose_prompt(input: &str) -> String {
 规则：\n\
 1) id 唯一，使用 kebab-case。\n\
 2) depends_on 只能引用已有 id，不允许自依赖。\n\
-3) 复杂需求子任务要覆盖：实现、验证、回归。\n\
-4) 如果需求很小，可以只拆成 1 个子任务。\n\
-5) 不要使用 markdown 代码块包裹。\n\
+3) 所有测试案例都必须放在 tests 目录中管理。\n\
+4) 复杂需求子任务要覆盖：实现、验证、回归。\n\
+5) 如果需求很小，可以只拆成 1 个子任务。\n\
+6) 不要使用 markdown 代码块包裹。\n\
 用户需求：{}",
         input
     )

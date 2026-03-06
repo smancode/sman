@@ -116,13 +116,14 @@ impl TaskGenerator {
 
         // TDD strategy section
         md.push_str("## TDD 执行策略\n\n");
-        md.push_str("1. 先写或补充测试，明确失败行为（Red）\n");
-        md.push_str("2. 最小实现使测试通过（Green）\n");
-        md.push_str("3. 重构并保持测试持续通过（Refactor）\n\n");
+        md.push_str("1. 所有测试案例必须放在 tests 目录中管理\n");
+        md.push_str("2. 先写或补充测试，明确失败行为（Red）\n");
+        md.push_str("3. 最小实现使测试通过（Green）\n");
+        md.push_str("4. 重构并保持测试持续通过（Refactor）\n\n");
 
         // Execution checklist section (Sub-Claw updates this)
         md.push_str("## 执行清单 (Sub-Claw 更新此区域)\n\n");
-        md.push_str("- [ ] 明确失败测试场景并补充/编写测试（Red）\n");
+        md.push_str("- [ ] 在 tests 目录中补充/编写失败测试（Red）\n");
         md.push_str("- [ ] 运行测试并确认失败符合预期（Red）\n");
         md.push_str("- [ ] 以最小改动实现功能直至测试通过（Green）\n");
         md.push_str("- [ ] 重构代码并保持测试通过（Refactor）\n");
@@ -371,7 +372,7 @@ mod tests {
 
         // Update a specific item
         generator
-            .update_status("test-task-1", "明确失败测试场景并补充/编写测试（Red）", true)
+            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
             .expect("update status");
 
         // Verify the item is now marked as done
@@ -381,7 +382,7 @@ mod tests {
         // Verify the file content was updated
         let path = generator.tasks_dir.join("test-task-1.md");
         let content = fs::read_to_string(&path).expect("read file");
-        assert!(content.contains("- [x] 明确失败测试场景并补充/编写测试（Red）"));
+        assert!(content.contains("- [x] 在 tests 目录中补充/编写失败测试（Red）"));
     }
 
     #[test]
@@ -392,19 +393,19 @@ mod tests {
 
         // First mark as done
         generator
-            .update_status("test-task-1", "明确失败测试场景并补充/编写测试（Red）", true)
+            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
             .expect("update status");
 
         // Then mark as not done
         generator
-            .update_status("test-task-1", "明确失败测试场景并补充/编写测试（Red）", false)
+            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", false)
             .expect("update status");
 
         // Verify the item is back to not done
         let path = generator.tasks_dir.join("test-task-1.md");
         let content = fs::read_to_string(&path).expect("read file");
-        assert!(content.contains("- [ ] 明确失败测试场景并补充/编写测试（Red）"));
-        assert!(!content.contains("- [x] 明确失败测试场景并补充/编写测试（Red）"));
+        assert!(content.contains("- [ ] 在 tests 目录中补充/编写失败测试（Red）"));
+        assert!(!content.contains("- [x] 在 tests 目录中补充/编写失败测试（Red）"));
     }
 
     #[test]
@@ -497,7 +498,7 @@ mod tests {
 
         // Mark some items as done
         generator
-            .update_status("test-task-1", "明确失败测试场景并补充/编写测试（Red）", true)
+            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
             .expect("update status");
         generator
             .update_status("test-task-1", "以最小改动实现功能直至测试通过（Green）", true)

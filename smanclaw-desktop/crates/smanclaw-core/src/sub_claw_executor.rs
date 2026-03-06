@@ -399,7 +399,7 @@ impl SubClawExecutor {
         if let Some(ref client) = self.step_executor {
             let task = self.read_task_md()?;
             let prompt = format!(
-                "你是子 Claw 执行器，必须严格按 TDD 进行当前步骤。\n\n任务标题：{}\n任务目标：{}\n当前步骤：{}\n\n执行要求：\n1. 先补充或编写测试，先看到失败（Red）\n2. 再做最小实现使测试通过（Green）\n3. 必要时重构并保持测试通过（Refactor）\n4. 输出本步骤的执行结果、测试命令与通过/失败证据\n\n只返回执行结果，不要省略验证信息。",
+                "你是子 Claw 执行器，必须严格按 TDD 进行当前步骤。\n\n任务标题：{}\n任务目标：{}\n当前步骤：{}\n\n执行要求：\n1. 所有测试案例必须放在 tests 目录中管理\n2. 先补充或编写测试，先看到失败（Red）\n3. 再做最小实现使测试通过（Green）\n4. 必要时重构并保持测试通过（Refactor）\n5. 输出本步骤的执行结果、测试命令与通过/失败证据\n\n只返回执行结果，不要省略验证信息。",
                 task.title, task.description, step.content
             );
             match client.execute(&prompt).await {
