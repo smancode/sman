@@ -107,6 +107,45 @@ impl SqliteHistoryStore {
         Ok(())
     }
 
+    pub fn upsert_conversation(&self, conversation: &Conversation) -> CoreResult<()> {
+        self.conn.execute(
+            r#"
+            INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(id) DO UPDATE SET
+                project_id = excluded.project_id,
+                title = excluded.title,
+                updated_at = excluded.updated_at
+            "#,
+            [
+                &conversation.id,
+                &conversation.project_id,
+                &conversation.title,
+                &conversation.created_at.to_rfc3339(),
+                &conversation.updated_at.to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_entry(&self, entry: &HistoryEntry) -> CoreResult<()> {
+        self.conn.execute(
+            r#"
+            INSERT INTO history_entries (id, conversation_id, role, content, timestamp)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(id) DO NOTHING
+            "#,
+            [
+                &entry.id,
+                &entry.conversation_id,
+                &entry.role.to_string(),
+                &entry.content,
+                &entry.timestamp.to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Load conversation history
     pub fn load_conversation(&self, conversation_id: &str) -> CoreResult<Vec<HistoryEntry>> {
         let mut stmt = self.conn.prepare(
@@ -135,13 +174,13 @@ impl SqliteHistoryStore {
     }
 
     /// List conversations for a project
-    pub fn list_conversations(&self, project_id: &str) -> CoreResult<Vec<Conversation>> {
+    pub fn list_conversations(&self, _project_id: &str) -> CoreResult<Vec<Conversation>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, project_id, title, created_at, updated_at FROM conversations WHERE project_id = ?1 ORDER BY updated_at DESC"
+            "SELECT id, project_id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
         )?;
 
         let conversations = stmt
-            .query_map([project_id], |row| {
+            .query_map([], |row| {
                 let created_at_str: String = row.get(3)?;
                 let updated_at_str: String = row.get(4)?;
 
@@ -240,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn list_conversations_by_project() {
+    fn list_conversations_returns_all_in_project_scoped_database() {
         let store = SqliteHistoryStore::in_memory().expect("create store");
         store
             .create_conversation("proj-a", "Conv A1")
@@ -252,14 +291,8 @@ mod tests {
             .create_conversation("proj-b", "Conv B1")
             .expect("create");
 
-        let convs_a = store.list_conversations("proj-a").expect("list");
-        assert_eq!(convs_a.len(), 2);
-
-        let convs_b = store.list_conversations("proj-b").expect("list");
-        assert_eq!(convs_b.len(), 1);
-
-        let convs_c = store.list_conversations("proj-c").expect("list");
-        assert!(convs_c.is_empty());
+        let convs = store.list_conversations("proj-any").expect("list");
+        assert_eq!(convs.len(), 3);
     }
 
     #[test]

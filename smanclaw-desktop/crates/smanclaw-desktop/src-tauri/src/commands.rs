@@ -134,23 +134,43 @@ fn ensure_project_runtime_dir(config_dir: &Path, project_path: &Path) -> TauriRe
     }
 }
 
-fn copy_history_db_if_needed(primary_db: &Path, fallback_db: &Path) -> TauriResult<()> {
-    if primary_db.exists() || !fallback_db.exists() {
+fn copy_sqlite_bundle_if_needed(target_db: &Path, source_db: &Path) -> TauriResult<()> {
+    if target_db.exists() || !source_db.exists() {
         return Ok(());
     }
 
-    std::fs::copy(fallback_db, primary_db)?;
+    std::fs::copy(source_db, target_db)?;
 
-    let fallback_wal = fallback_db.with_extension("db-wal");
-    let fallback_shm = fallback_db.with_extension("db-shm");
-    let primary_wal = primary_db.with_extension("db-wal");
-    let primary_shm = primary_db.with_extension("db-shm");
+    let source_wal = source_db.with_extension("db-wal");
+    let source_shm = source_db.with_extension("db-shm");
+    let target_wal = target_db.with_extension("db-wal");
+    let target_shm = target_db.with_extension("db-shm");
 
-    if fallback_wal.exists() && !primary_wal.exists() {
-        let _ = std::fs::copy(&fallback_wal, &primary_wal);
+    if source_wal.exists() && !target_wal.exists() {
+        let _ = std::fs::copy(&source_wal, &target_wal);
     }
-    if fallback_shm.exists() && !primary_shm.exists() {
-        let _ = std::fs::copy(&fallback_shm, &primary_shm);
+    if source_shm.exists() && !target_shm.exists() {
+        let _ = std::fs::copy(&source_shm, &target_shm);
+    }
+
+    Ok(())
+}
+
+fn merge_history_db_into_active(active_db: &Path, source_db: &Path) -> TauriResult<()> {
+    if active_db == source_db || !source_db.exists() {
+        return Ok(());
+    }
+
+    let active_store = SqliteHistoryStore::new(active_db)?;
+    let source_store = SqliteHistoryStore::new(source_db)?;
+    let conversations = source_store.list_conversations("")?;
+
+    for conversation in conversations {
+        active_store.upsert_conversation(&conversation)?;
+        let entries = source_store.load_conversation(&conversation.id)?;
+        for entry in entries {
+            active_store.upsert_entry(&entry)?;
+        }
     }
 
     Ok(())
@@ -162,16 +182,54 @@ fn open_project_history_store(
 ) -> TauriResult<SqliteHistoryStore> {
     let runtime_dir = ensure_project_runtime_dir(config_dir, project_path)?;
     let history_db = runtime_dir.join("history.db");
+    let project_db = project_path.join(".smanclaw").join("history.db");
     let fallback_db = fallback_project_runtime_dir(config_dir, project_path).join("history.db");
-    if let Err(err) = copy_history_db_if_needed(&history_db, &fallback_db) {
-        tracing::warn!(
-            project_path = %project_path.display(),
-            history_db = %history_db.display(),
-            fallback_db = %fallback_db.display(),
-            error = %err,
-            "Failed to migrate fallback history database into project runtime directory"
-        );
+
+    if history_db != project_db {
+        if let Err(err) = copy_sqlite_bundle_if_needed(&history_db, &project_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %project_db.display(),
+                error = %err,
+                "Failed to migrate project history database into active runtime directory"
+            );
+        }
     }
+    if history_db != fallback_db {
+        if let Err(err) = copy_sqlite_bundle_if_needed(&history_db, &fallback_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %fallback_db.display(),
+                error = %err,
+                "Failed to migrate fallback history database into active runtime directory"
+            );
+        }
+    }
+    if history_db != project_db {
+        if let Err(err) = merge_history_db_into_active(&history_db, &project_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %project_db.display(),
+                error = %err,
+                "Failed to merge project history database into active runtime database"
+            );
+        }
+    }
+    if history_db != fallback_db {
+        if let Err(err) = merge_history_db_into_active(&history_db, &fallback_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %fallback_db.display(),
+                error = %err,
+                "Failed to merge fallback history database into active runtime database"
+            );
+        }
+    }
+
     match SqliteHistoryStore::new(&history_db) {
         Ok(store) => Ok(store),
         Err(primary_error) => {
