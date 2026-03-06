@@ -56,11 +56,26 @@
         return "user";
     }
 
+    function sanitizeAssistantContent(content: string): string {
+        const withoutToolCallBlocks = content
+            .replace(/<tool_calls?>[\s\S]*?<\/tool_calls?>/gi, "")
+            .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+            .replace(/<\/?tool_calls?\b[^>]*>/gi, "")
+            .trim();
+        if (withoutToolCallBlocks.length > 0) {
+            return withoutToolCallBlocks;
+        }
+        return "任务已执行，但本次回复仅返回了工具调用片段。请再试一次，我会直接给你结果。";
+    }
+
     function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
         return entries.map((entry) => ({
             id: entry.id,
             role: normalizeRole(entry.role),
-            content: entry.content,
+            content:
+                normalizeRole(entry.role) === "assistant"
+                    ? sanitizeAssistantContent(entry.content)
+                    : entry.content,
             timestamp: new Date(entry.timestamp).getTime(),
         }));
     }
