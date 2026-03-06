@@ -145,7 +145,8 @@
 <style>
     .code-block {
         margin: 0.5rem 0;
-        background-color: #f8f8fa;
+        background-color: color-mix(in srgb, var(--background) 72%, #000 28%);
+        border: 1px solid var(--border);
         border-radius: 10px;
         overflow: hidden;
     }
@@ -155,7 +156,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.5rem 1rem;
-        background-color: #f0f1f4;
+        background-color: color-mix(in srgb, var(--surface) 86%, #000 14%);
+        border-bottom: 1px solid var(--border);
     }
 
     .language {
@@ -192,6 +194,7 @@
         font-size: 0.8125rem;
         line-height: 1.6;
         color: var(--text-primary);
+        background-color: transparent;
     }
 
     pre code {

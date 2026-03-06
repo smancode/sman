@@ -191,6 +191,11 @@ impl SkillStore {
                 "Skill path cannot be empty".to_string(),
             ));
         }
+        if skill.content.trim().is_empty() {
+            return Err(CoreError::InvalidInput(
+                "Skill content cannot be empty".to_string(),
+            ));
+        }
 
         let mut index = self.load_index()?;
 
@@ -224,6 +229,11 @@ impl SkillStore {
     /// # Returns
     /// An error if the skill does not exist
     pub fn update(&self, skill: &Skill) -> Result<()> {
+        if skill.content.trim().is_empty() {
+            return Err(CoreError::InvalidInput(
+                "Skill content cannot be empty".to_string(),
+            ));
+        }
         let mut index = self.load_index()?;
 
         // Find and update the skill
@@ -538,5 +548,29 @@ mod tests {
         let loaded = store.get("skill-013").expect("get skill").unwrap();
         assert_eq!(loaded.content, "Moved content");
         assert_eq!(loaded.meta.path, "new/location.md");
+    }
+
+    #[test]
+    fn skill_store_create_rejects_empty_content() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let store = SkillStore::new(temp_dir.path()).expect("create store");
+        let mut skill = create_test_skill("skill-empty", "coding/empty.md", vec!["coding"]);
+        skill.content = " \n\t ".to_string();
+
+        let result = store.create(&skill);
+        assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn skill_store_update_rejects_empty_content() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let store = SkillStore::new(temp_dir.path()).expect("create store");
+        let skill = create_test_skill("skill-update-empty", "coding/update-empty.md", vec!["coding"]);
+        store.create(&skill).expect("create skill");
+
+        let mut updated = skill.clone();
+        updated.content = "\n".to_string();
+        let result = store.update(&updated);
+        assert!(matches!(result, Err(CoreError::InvalidInput(_))));
     }
 }

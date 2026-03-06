@@ -14,12 +14,15 @@
         try {
             const path = await invoke<string | null>("select_folder");
             if (path) {
-                // createProject now only takes path - backend extracts name from path
                 await projectsStore.createProject(path);
             }
         } catch (error) {
             console.error("Failed to add project:", error);
         }
+    }
+
+    async function handleDeleteProject(projectId: string) {
+        await projectsStore.deleteProject(projectId);
     }
 
     function navigateToSettings() {
@@ -55,6 +58,9 @@
                 projects={$sortedProjects}
                 selectedId={$projectsStore.selectedProjectId}
                 onSelect={(id) => projectsStore.selectProject(id)}
+                onDelete={handleDeleteProject}
+                onReorder={(draggedId, targetId) =>
+                    projectsStore.reorderProjects(draggedId, targetId)}
             />
         </div>
     </div>

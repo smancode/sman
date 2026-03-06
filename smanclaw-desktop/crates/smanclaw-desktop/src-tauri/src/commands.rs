@@ -134,12 +134,44 @@ fn ensure_project_runtime_dir(config_dir: &Path, project_path: &Path) -> TauriRe
     }
 }
 
+fn copy_history_db_if_needed(primary_db: &Path, fallback_db: &Path) -> TauriResult<()> {
+    if primary_db.exists() || !fallback_db.exists() {
+        return Ok(());
+    }
+
+    std::fs::copy(fallback_db, primary_db)?;
+
+    let fallback_wal = fallback_db.with_extension("db-wal");
+    let fallback_shm = fallback_db.with_extension("db-shm");
+    let primary_wal = primary_db.with_extension("db-wal");
+    let primary_shm = primary_db.with_extension("db-shm");
+
+    if fallback_wal.exists() && !primary_wal.exists() {
+        let _ = std::fs::copy(&fallback_wal, &primary_wal);
+    }
+    if fallback_shm.exists() && !primary_shm.exists() {
+        let _ = std::fs::copy(&fallback_shm, &primary_shm);
+    }
+
+    Ok(())
+}
+
 fn open_project_history_store(
     config_dir: &Path,
     project_path: &Path,
 ) -> TauriResult<SqliteHistoryStore> {
     let runtime_dir = ensure_project_runtime_dir(config_dir, project_path)?;
     let history_db = runtime_dir.join("history.db");
+    let fallback_db = fallback_project_runtime_dir(config_dir, project_path).join("history.db");
+    if let Err(err) = copy_history_db_if_needed(&history_db, &fallback_db) {
+        tracing::warn!(
+            project_path = %project_path.display(),
+            history_db = %history_db.display(),
+            fallback_db = %fallback_db.display(),
+            error = %err,
+            "Failed to migrate fallback history database into project runtime directory"
+        );
+    }
     match SqliteHistoryStore::new(&history_db) {
         Ok(store) => Ok(store),
         Err(primary_error) => {
@@ -1318,7 +1350,71 @@ fn persist_user_memory(
     }
 }
 
+fn is_quick_agent_note_candidate(input: &str) -> bool {
+    let text = input.trim();
+    if text.is_empty() {
+        return false;
+    }
+    let lowered = text.to_lowercase();
+    let is_question = lowered.contains("是哪个")
+        || lowered.contains("在哪")
+        || lowered.contains("在哪里")
+        || lowered.contains("怎么找")
+        || lowered.contains("哪个文件")
+        || lowered.contains("哪个接口")
+        || lowered.contains("接口是");
+    let has_locator = lowered.contains("接口")
+        || lowered.contains("路径")
+        || lowered.contains(".xml")
+        || lowered.contains(".java")
+        || lowered.contains(".sql")
+        || lowered.contains(".yaml")
+        || lowered.contains(".yml")
+        || lowered.contains(".json");
+    let is_short = text.chars().count() <= 120;
+    let is_complex = lowered.contains("完整流程")
+        || lowered.contains("跨模块")
+        || lowered.contains("端到端")
+        || lowered.contains("会计核算")
+        || lowered.contains("业务流程");
+    is_short && is_question && has_locator && !is_complex
+}
+
+fn persist_agent_quick_note(project_path: &std::path::Path, input: &str) {
+    let identity = IdentityFiles::new(project_path);
+    let mut content = identity.read_agents().unwrap_or_default();
+    let note = input.trim().replace('\n', " ");
+    if note.is_empty() {
+        return;
+    }
+    let note_line = format!("- {note}\n");
+    if content.contains(&note_line) {
+        return;
+    }
+    let section_title = "## 业务快速索引";
+    if !content.contains(section_title) {
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push('\n');
+        content.push_str(section_title);
+        content.push_str("\n\n");
+    } else if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(&note_line);
+    if let Err(e) = identity.write_agents(&content) {
+        tracing::error!("Failed to persist AGENTS quick note: {}", e);
+    }
+}
+
 fn persist_user_input_experience(project_path: &std::path::Path, input: &str) {
+    if is_quick_agent_note_candidate(input) {
+        persist_agent_quick_note(project_path, input);
+        let tags = vec!["quick-note".to_string(), "agents".to_string()];
+        persist_user_memory(project_path, input, input, &tags);
+        return;
+    }
     if let Ok(skill_store) = SkillStore::new(project_path) {
         let extractor = match SkillStore::for_paths(project_path) {
             Ok(path_store) => UserExperienceExtractor::new(skill_store).with_path_store(path_store),

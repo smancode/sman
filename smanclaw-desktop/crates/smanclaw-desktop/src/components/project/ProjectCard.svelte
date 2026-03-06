@@ -86,6 +86,7 @@
         width: 100%;
         padding: 0.625rem 0.75rem;
         background-color: transparent;
+        border: 1px solid transparent;
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.15s;

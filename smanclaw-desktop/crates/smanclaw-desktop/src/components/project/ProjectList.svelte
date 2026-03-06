@@ -7,9 +7,43 @@
         selectedId?: string | null;
         onSelect?: (id: string) => void;
         onDelete?: (id: string) => void;
+        onReorder?: (draggedId: string, targetId: string) => void;
     }
 
-    let { projects, selectedId = null, onSelect, onDelete }: Props = $props();
+    let {
+        projects,
+        selectedId = null,
+        onSelect,
+        onDelete,
+        onReorder,
+    }: Props = $props();
+    let dragSourceId: string | null = null;
+
+    function handleDragStart(event: DragEvent, projectId: string) {
+        dragSourceId = projectId;
+        event.dataTransfer?.setData("text/plain", projectId);
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.dropEffect = "move";
+        }
+    }
+
+    function handleDragOver(event: DragEvent) {
+        event.preventDefault();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "move";
+        }
+    }
+
+    function handleDrop(event: DragEvent, targetId: string) {
+        event.preventDefault();
+        if (!dragSourceId || dragSourceId === targetId) {
+            dragSourceId = null;
+            return;
+        }
+        onReorder?.(dragSourceId, targetId);
+        dragSourceId = null;
+    }
 </script>
 
 <div class="project-list">
@@ -33,12 +67,22 @@
         </div>
     {:else}
         {#each projects as project (project.id)}
-            <ProjectCard
-                {project}
-                selected={project.id === selectedId}
-                onSelect={(id) => onSelect?.(id)}
-                onDelete={(id) => onDelete?.(id)}
-            />
+            <div
+                class="draggable-item"
+                draggable="true"
+                role="listitem"
+                ondragstart={(event) => handleDragStart(event, project.id)}
+                ondragover={handleDragOver}
+                ondrop={(event) => handleDrop(event, project.id)}
+                ondragend={() => (dragSourceId = null)}
+            >
+                <ProjectCard
+                    {project}
+                    selected={project.id === selectedId}
+                    onSelect={(id) => onSelect?.(id)}
+                    onDelete={(id) => onDelete?.(id)}
+                />
+            </div>
         {/each}
     {/if}
 </div>
@@ -49,6 +93,10 @@
         flex-direction: column;
         gap: 0.25rem;
         padding: 0 0.25rem;
+    }
+
+    .draggable-item {
+        border-radius: 6px;
     }
 
     .empty-state {

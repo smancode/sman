@@ -543,13 +543,44 @@ impl UserExperienceExtractor {
             return Ok(false);
         }
 
+        let input = experience.raw_text.to_lowercase();
+        let is_quick_lookup = input.contains("是哪个")
+            || input.contains("在哪里")
+            || input.contains("在哪")
+            || input.contains("怎么找")
+            || input.contains("哪个文件")
+            || input.contains("哪个接口");
+        if is_quick_lookup {
+            return Ok(false);
+        }
+
         let tags = experience.tags.iter().map(String::as_str).collect::<Vec<_>>();
         let similar_count = self.skill_store.find_by_tags(&tags)?.len();
         if similar_count >= 1 {
             return Ok(true);
         }
 
-        let input = experience.raw_text.to_lowercase();
+        let complex_markers = [
+            "完整流程",
+            "跨模块",
+            "端到端",
+            "业务流程",
+            "客户记账",
+            "会计核算",
+            "支付给行外客户",
+            "反复迭代",
+            "沉淀为流程",
+            "包括",
+            "以及",
+        ];
+        let complex_hits = complex_markers
+            .iter()
+            .filter(|marker| input.contains(**marker))
+            .count();
+        if complex_hits >= 2 {
+            return Ok(true);
+        }
+
         Ok(input.contains("强调")
             || input.contains("默认")
             || input.contains("每次")
