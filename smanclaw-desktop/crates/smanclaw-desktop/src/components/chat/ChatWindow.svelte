@@ -65,7 +65,30 @@
         if (withoutToolCallBlocks.length > 0) {
             return withoutToolCallBlocks;
         }
-        return "任务已执行，但本次回复仅返回了工具调用片段。请再试一次，我会直接给你结果。";
+        try {
+            const parsed = JSON.parse(content) as {
+                content?: unknown;
+                reasoning_content?: unknown;
+                tool_calls?: unknown;
+            };
+            const parsedContent =
+                typeof parsed.content === "string" ? parsed.content.trim() : "";
+            if (parsedContent.length > 0) {
+                return parsedContent;
+            }
+            const reasoningContent =
+                typeof parsed.reasoning_content === "string"
+                    ? parsed.reasoning_content.trim()
+                    : "";
+            if (reasoningContent.length > 0) {
+                return reasoningContent;
+            }
+            const hasToolCalls = Array.isArray(parsed.tool_calls);
+            if (hasToolCalls) {
+                return "执行中断：模型只返回了工具调用，没有产出最终文本结果。你可以直接重试，我会基于已完成步骤继续。";
+            }
+        } catch {}
+        return "执行中断：本次回复未产出可展示文本。你可以直接重试，我会继续给出最终结果。";
     }
 
     function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
@@ -95,6 +118,58 @@
             (msg) => msg.id !== thinkingMessage.id,
         );
         return [...withoutThinking, thinkingMessage];
+    }
+
+    function updateLatestThinkingMessage(projectId: string, content: string) {
+        const projectMessages = messagesByProject[projectId];
+        if (!projectMessages || projectMessages.length === 0) {
+            return;
+        }
+        let updated = false;
+        const nextMessages = projectMessages.map((msg, index) => {
+            if (updated) {
+                return msg;
+            }
+            if (
+                index === projectMessages.length - 1 &&
+                msg.role === "assistant" &&
+                msg.taskId &&
+                (msg.content === "思考中..." ||
+                    msg.content.startsWith("处理中："))
+            ) {
+                updated = true;
+                return { ...msg, content };
+            }
+            return msg;
+        });
+        if (updated) {
+            messagesByProject[projectId] = nextMessages;
+        }
+    }
+
+    function progressHintText(payload: ProgressEvent): string | null {
+        if (payload.type === "task_started") {
+            return "处理中：任务已开始";
+        }
+        if (payload.type === "progress") {
+            const percent = Number.isFinite(payload.percent)
+                ? Math.max(0, Math.min(100, Math.round(payload.percent * 100)))
+                : 0;
+            return `处理中：${payload.message}（${percent}%）`;
+        }
+        if (payload.type === "tool_call") {
+            return `处理中：正在调用工具 ${payload.tool}`;
+        }
+        if (payload.type === "command_run") {
+            return "处理中：正在执行命令";
+        }
+        if (payload.type === "file_read") {
+            return "处理中：正在读取文件";
+        }
+        if (payload.type === "file_written") {
+            return "处理中：正在写入文件";
+        }
+        return null;
     }
 
     async function ensureProjectConversation(
@@ -215,6 +290,12 @@
                 : mappedMessages;
         }
 
+        if (thinkingMessage) {
+            updateLatestThinkingMessage(
+                projectId,
+                "执行中断：等待最终回复超时。你可以直接重试，我会继续基于当前进度处理。",
+            );
+        }
         isSending = false;
     }
 
@@ -241,24 +322,20 @@
                     if (payload.type === "task_failed" && $selectedProject) {
                         isSending = false;
                         const projectId = $selectedProject.id;
-                        const projectMessages = messagesByProject[projectId];
-                        if (!projectMessages) return;
-                        const error = payload.error;
-                        let updated = false;
-                        const updatedMessages = projectMessages.map((msg) => {
-                            if (
-                                !updated &&
-                                msg.taskId &&
-                                msg.content === "思考中..."
-                            ) {
-                                updated = true;
-                                return { ...msg, content: `错误：${error}` };
-                            }
-                            return msg;
-                        });
+                        updateLatestThinkingMessage(
+                            projectId,
+                            `执行中断：${payload.error}`,
+                        );
+                        return;
+                    }
 
-                        if (updated) {
-                            messagesByProject[projectId] = updatedMessages;
+                    if (isSending && $selectedProject) {
+                        const hint = progressHintText(payload);
+                        if (hint) {
+                            updateLatestThinkingMessage(
+                                $selectedProject.id,
+                                hint,
+                            );
                         }
                     }
                 },
