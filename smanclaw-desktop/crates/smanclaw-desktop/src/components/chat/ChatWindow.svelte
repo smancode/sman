@@ -397,7 +397,7 @@
     .messages-container {
         flex: 1;
         overflow-y: auto;
-        padding: 1rem;
+        padding: 0.5rem 1.25rem 0.75rem;
         display: flex;
         flex-direction: column;
         gap: 1rem;
@@ -407,8 +407,7 @@
         display: flex;
         flex-direction: column;
         gap: 1rem;
-        padding: 1rem;
-        background-color: var(--surface);
-        border-radius: 8px;
+        padding: 0.75rem 0;
+        background-color: transparent;
     }
 </style>

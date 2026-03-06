@@ -142,12 +142,14 @@
         flex-direction: column;
         flex: 1;
         min-width: 0;
+        background-color: var(--background);
     }
 
     .content {
         flex: 1;
         overflow: auto;
-        padding: 1rem;
+        padding: 0;
+        background-color: var(--background);
     }
 
     .settings-modal-backdrop {

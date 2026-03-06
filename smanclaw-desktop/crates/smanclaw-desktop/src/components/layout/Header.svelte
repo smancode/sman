@@ -39,9 +39,9 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: 56px;
-        padding: 0 1rem;
-        background-color: var(--surface);
+        height: 64px;
+        padding: 0 1.25rem;
+        background-color: transparent;
     }
 
     .header-left {

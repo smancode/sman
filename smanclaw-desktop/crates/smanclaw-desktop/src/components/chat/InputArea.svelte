@@ -54,7 +54,7 @@
         if (textareaRef) {
             textareaRef.style.height = "auto";
             textareaRef.style.height =
-                Math.min(textareaRef.scrollHeight, 200) + "px";
+                Math.min(textareaRef.scrollHeight, 260) + "px";
         }
     }
 </script>
@@ -103,18 +103,18 @@
     .input-area {
         display: flex;
         flex-direction: column;
-        padding: 0.85rem 1rem;
-        background-color: var(--surface);
+        padding: 0.75rem 1.25rem 1.25rem;
+        background-color: transparent;
     }
 
     .input-container {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.45rem 0.45rem 0.45rem 0.75rem;
-        background-color: var(--background);
+        gap: 0.625rem;
+        padding: 0.6rem 0.6rem 0.6rem 0.95rem;
+        background-color: rgba(255, 255, 255, 0.03);
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: 14px;
         transition:
             border-color 0.15s,
             box-shadow 0.15s;
@@ -134,14 +134,14 @@
         flex: 1;
         resize: none;
         color: var(--text-primary);
-        font-size: 0.92rem;
-        line-height: 1.45;
-        padding: 0.42rem 0;
+        font-size: 1rem;
+        line-height: 1.6;
+        padding: 0.48rem 0;
         background: transparent;
         border: none;
         outline: none;
-        min-height: 38px;
-        max-height: 200px;
+        min-height: 52px;
+        max-height: 260px;
     }
 
     textarea::placeholder {
@@ -156,11 +156,11 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         color: white;
         background-color: var(--accent);
-        border-radius: 10px;
+        border-radius: 11px;
         transition: all 0.15s;
         flex-shrink: 0;
     }
