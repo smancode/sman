@@ -5,6 +5,7 @@
 pub mod commands;
 pub mod error;
 pub mod events;
+pub(crate) mod orchestration;
 pub mod setup;
 pub mod state;
 

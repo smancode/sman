@@ -69,7 +69,7 @@ pub async fn add_project(state: State<'_, AppState>, path: String) -> TauriResul
         )));
     }
 
-    let mut pm = state.project_manager.lock().await;
+    let pm = state.project_manager.lock().await;
     let project = pm.add_project(&project_path)?;
     drop(pm);
     ensure_default_identity_files(&project_path)?;
@@ -85,7 +85,7 @@ pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> T
         ));
     }
 
-    let mut pm = state.project_manager.lock().await;
+    let pm = state.project_manager.lock().await;
     pm.remove_project(&project_id)?;
     Ok(())
 }
@@ -117,7 +117,7 @@ pub async fn update_project_config(
         ));
     }
 
-    let mut pm = state.project_manager.lock().await;
+    let pm = state.project_manager.lock().await;
     pm.update_project_config(&config)?;
     Ok(())
 }

@@ -4,9 +4,11 @@ use smanclaw_types::{HistoryEntry, ProgressEvent, Role};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
+use crate::commands::utility_commands::persist_user_input_experience;
+use crate::events::emit_progress_event;
+
 use super::{
-    emit_progress_event, open_project_history_store, persist_user_input_experience,
-    resolve_conversation_project, AppState, TauriError, TauriResult,
+    open_project_history_store, resolve_conversation_project, AppState, TauriError, TauriResult,
 };
 
 const CHAT_EXECUTION_HEARTBEAT_SECS: u64 = 300;

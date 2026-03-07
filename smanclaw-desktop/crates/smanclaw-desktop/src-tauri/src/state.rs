@@ -2,14 +2,13 @@
 
 use smanclaw_core::{ProjectManager, SettingsStore, SqliteHistoryStore, TaskManager};
 use smanclaw_ffi::ZeroclawBridge;
-use smanclaw_types::AppSettings;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::error::{TauriError, TauriResult};
+use crate::error::TauriResult;
 
 /// Application state shared across all Tauri commands
 pub struct AppState {

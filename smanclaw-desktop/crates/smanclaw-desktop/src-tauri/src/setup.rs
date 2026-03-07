@@ -52,14 +52,14 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::project_commands::get_project_config,
             crate::commands::project_commands::update_project_config,
             // Task commands
-            crate::commands::execute_task,
-            crate::commands::get_task,
-            crate::commands::list_tasks,
-            crate::commands::cancel_task,
+            crate::commands::task_commands::execute_task,
+            crate::commands::task_commands::get_task,
+            crate::commands::task_commands::list_tasks,
+            crate::commands::task_commands::cancel_task,
             // Orchestration commands
-            crate::commands::execute_orchestrated_task,
-            crate::commands::get_task_dag,
-            crate::commands::get_orchestration_status,
+            crate::orchestration::execute_orchestrated_task,
+            crate::orchestration::get_task_dag,
+            crate::orchestration::get_orchestration_status,
             // Conversation commands
             crate::commands::conversation_commands::get_conversation,
             crate::commands::conversation_commands::get_conversation_messages,
@@ -74,9 +74,9 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::settings_commands::test_embedding_connection,
             crate::commands::settings_commands::test_qdrant_connection,
             // Utility commands
-            crate::commands::get_version,
-            crate::commands::path_exists,
-            crate::commands::select_folder,
+            crate::commands::utility_commands::get_version,
+            crate::commands::utility_commands::path_exists,
+            crate::commands::utility_commands::select_folder,
         ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
