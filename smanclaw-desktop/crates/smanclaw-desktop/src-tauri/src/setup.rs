@@ -2,7 +2,6 @@
 
 use tauri::Manager;
 
-use crate::error::TauriError;
 use crate::state::{default_config_dir, AppState};
 
 /// Setup the Tauri application
@@ -47,11 +46,11 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
         })
         .invoke_handler(tauri::generate_handler![
             // Project commands
-            crate::commands::get_projects,
-            crate::commands::add_project,
-            crate::commands::remove_project,
-            crate::commands::get_project_config,
-            crate::commands::update_project_config,
+            crate::commands::project_commands::get_projects,
+            crate::commands::project_commands::add_project,
+            crate::commands::project_commands::remove_project,
+            crate::commands::project_commands::get_project_config,
+            crate::commands::project_commands::update_project_config,
             // Task commands
             crate::commands::execute_task,
             crate::commands::get_task,
@@ -62,18 +61,18 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::get_task_dag,
             crate::commands::get_orchestration_status,
             // Conversation commands
-            crate::commands::get_conversation,
-            crate::commands::get_conversation_messages,
-            crate::commands::list_conversations,
-            crate::commands::create_conversation,
-            crate::commands::send_message,
+            crate::commands::conversation_commands::get_conversation,
+            crate::commands::conversation_commands::get_conversation_messages,
+            crate::commands::conversation_commands::list_conversations,
+            crate::commands::conversation_commands::create_conversation,
+            crate::commands::conversation_commands::send_message,
             // Settings commands
-            crate::commands::get_app_settings,
-            crate::commands::update_app_settings,
-            crate::commands::test_llm_connection,
-            crate::commands::test_llm_direct_chat,
-            crate::commands::test_embedding_connection,
-            crate::commands::test_qdrant_connection,
+            crate::commands::settings_commands::get_app_settings,
+            crate::commands::settings_commands::update_app_settings,
+            crate::commands::settings_commands::test_llm_connection,
+            crate::commands::settings_commands::test_llm_direct_chat,
+            crate::commands::settings_commands::test_embedding_connection,
+            crate::commands::settings_commands::test_qdrant_connection,
             // Utility commands
             crate::commands::get_version,
             crate::commands::path_exists,
