@@ -370,7 +370,7 @@ impl UserExperienceExtractor {
     pub fn generate_confirmation(&self, experience: &UserExperience) -> String {
         let type_name = experience.experience_type.display_name();
         let path = format!(
-            ".skills/{}/experience-*.md",
+            ".smanclaw/skills/{}/experience-*.md",
             experience.category
         );
 
@@ -814,7 +814,7 @@ mod tests {
 
         assert!(confirmation.contains("好的，我记住了"));
         assert!(confirmation.contains("约束"));
-        assert!(confirmation.contains(".skills/"));
+        assert!(confirmation.contains(".smanclaw/skills/"));
     }
 
     #[test]

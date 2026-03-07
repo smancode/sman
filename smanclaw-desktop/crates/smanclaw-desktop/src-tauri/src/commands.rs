@@ -134,6 +134,14 @@ fn ensure_project_runtime_dir(config_dir: &Path, project_path: &Path) -> TauriRe
     }
 }
 
+fn subtask_file_stem(main_task_id: &str, sequence: usize) -> String {
+    format!("task-{}-{:03}", main_task_id, sequence)
+}
+
+fn subtask_relative_path(file_stem: &str) -> String {
+    format!(".smanclaw/tasks/{}.md", file_stem)
+}
+
 fn copy_sqlite_bundle_if_needed(target_db: &Path, source_db: &Path) -> TauriResult<()> {
     if target_db.exists() || !source_db.exists() {
         return Ok(());
@@ -1745,6 +1753,16 @@ pub async fn execute_orchestrated_task(
 
     let main_task_manager = MainTaskManager::new(&project_path)?;
     let main_task = main_task_manager.create(&input)?;
+    let subtask_file_stems: HashMap<String, String> = subtasks
+        .iter()
+        .enumerate()
+        .map(|(index, task)| {
+            (
+                task.id.clone(),
+                subtask_file_stem(&main_task.id, index.saturating_add(1)),
+            )
+        })
+        .collect();
     main_task_manager.update_status(&main_task.id, MainTaskStatus::Planning)?;
     for task in &subtasks {
         let mut sub_task_ref = SubTaskRef::new(&task.id, &task.description);
@@ -1755,9 +1773,13 @@ pub async fn execute_orchestrated_task(
     }
     if let Some(mut loaded_main_task) = main_task_manager.load(&main_task.id)? {
         for task in &subtasks {
+            let file_stem = subtask_file_stems
+                .get(&task.id)
+                .cloned()
+                .unwrap_or_else(|| task.id.clone());
             loaded_main_task.add_acceptance_criterion(format!(
-                "content: .smanclaw/tasks/{}.md contains '- [x]'",
-                task.id
+                "content: {} contains '- [x]'",
+                subtask_relative_path(&file_stem)
             ));
         }
         main_task_manager.update(&loaded_main_task)?;
@@ -1785,6 +1807,7 @@ pub async fn execute_orchestrated_task(
     let main_task_id = main_task.id.clone();
     let settings_clone = settings.clone();
     let input_clone = input.clone();
+    let subtask_file_stems_clone = subtask_file_stems.clone();
 
     tokio::spawn(async move {
         let main_task_manager = match MainTaskManager::new(&project_path) {
@@ -1833,6 +1856,8 @@ pub async fn execute_orchestrated_task(
 
         let mut total_tasks = dag.len();
         let mut completed_count = 0;
+        let mut subtask_file_stems = subtask_file_stems_clone;
+        let mut next_subtask_sequence = subtask_file_stems.len() + 1;
 
         // Collect parallel groups upfront to avoid borrow issues
         let parallel_groups: Vec<Vec<_>> = dag
@@ -1879,13 +1904,21 @@ pub async fn execute_orchestrated_task(
                 }
 
                 let task_md_path = if let Some(generator) = &task_generator {
-                    match generator.generate(task) {
+                    let file_stem = subtask_file_stems
+                        .entry(task.id.clone())
+                        .or_insert_with(|| {
+                            let stem = subtask_file_stem(&main_task_id, next_subtask_sequence);
+                            next_subtask_sequence += 1;
+                            stem
+                        })
+                        .clone();
+                    match generator.generate_named(task, &file_stem) {
                         Ok(path) => path,
                         Err(e) => {
-                            tracing::error!("Failed to generate task.md for {}: {}", task.id, e);
+                            tracing::error!("Failed to generate task file for {}: {}", task.id, e);
                             if let Some(t) = dag.get_task_mut(&task.id) {
                                 t.status = SubTaskStatus::Failed;
-                                t.result = Some(format!("task.md 生成失败: {}", e));
+                                t.result = Some(format!("task 文件生成失败: {}", e));
                             }
                             if let Err(update_err) = main_task_manager.update_sub_task_status(
                                 &main_task_id,
@@ -1893,7 +1926,7 @@ pub async fn execute_orchestrated_task(
                                 SubTaskStatus::Failed,
                             ) {
                                 tracing::error!(
-                                    "Failed to update subtask failed status after task.md generation failure: {}",
+                                    "Failed to update subtask failed status after task file generation failure: {}",
                                     update_err
                                 );
                             }
@@ -1905,7 +1938,7 @@ pub async fn execute_orchestrated_task(
                                 total_tasks,
                             ) {
                                 tracing::error!(
-                                    "Failed to emit progress after task.md generation failure: {}",
+                                    "Failed to emit progress after task file generation failure: {}",
                                     progress_err
                                 );
                             }
@@ -1915,10 +1948,10 @@ pub async fn execute_orchestrated_task(
                                 &task.id,
                                 false,
                                 "",
-                                Some(format!("task.md 生成失败: {}", e)),
+                                Some(format!("task 文件生成失败: {}", e)),
                             ) {
                                 tracing::error!(
-                                    "Failed to emit subtask completion after task.md generation failure: {}",
+                                    "Failed to emit subtask completion after task file generation failure: {}",
                                     emit_err
                                 );
                             }
@@ -2161,7 +2194,15 @@ pub async fn execute_orchestrated_task(
             .iter()
             .map(|task| smanclaw_core::AcceptanceCriteria::Functional {
                 id: format!("subtask-{}", task.id),
-                description: format!("content: .smanclaw/tasks/{}.md contains '- [x]'", task.id),
+                description: format!(
+                    "content: {} contains '- [x]'",
+                    subtask_relative_path(
+                        subtask_file_stems
+                            .get(&task.id)
+                            .map(std::string::String::as_str)
+                            .unwrap_or(task.id.as_str())
+                    )
+                ),
                 verification_method: VerificationMethod::ContentMatch,
             })
             .collect::<Vec<_>>();
@@ -2221,11 +2262,14 @@ pub async fn execute_orchestrated_task(
                 }
 
                 let task_md_path = if let Some(generator) = &task_generator {
-                    match generator.generate(&remediation_task) {
+                    let file_stem = subtask_file_stem(&main_task_id, next_subtask_sequence);
+                    next_subtask_sequence += 1;
+                    subtask_file_stems.insert(remediation_task.id.clone(), file_stem.clone());
+                    match generator.generate_named(&remediation_task, &file_stem) {
                         Ok(path) => path,
                         Err(e) => {
                             tracing::error!(
-                                "Failed to generate remediation task.md for {}: {}",
+                                "Failed to generate remediation task file for {}: {}",
                                 remediation_task.id,
                                 e
                             );
@@ -2350,7 +2394,15 @@ pub async fn execute_orchestrated_task(
                 .iter()
                 .map(|task| smanclaw_core::AcceptanceCriteria::Functional {
                     id: format!("subtask-{}", task.id),
-                    description: format!("content: .smanclaw/tasks/{}.md contains '- [x]'", task.id),
+                    description: format!(
+                        "content: {} contains '- [x]'",
+                        subtask_relative_path(
+                            subtask_file_stems
+                                .get(&task.id)
+                                .map(std::string::String::as_str)
+                                .unwrap_or(task.id.as_str())
+                        )
+                    ),
                     verification_method: VerificationMethod::ContentMatch,
                 })
                 .collect::<Vec<_>>();
@@ -2432,7 +2484,14 @@ pub async fn execute_orchestrated_task(
                 format!("Completed {} subtasks and passed acceptance", total_tasks),
                 dag.tasks_in_order()
                     .iter()
-                    .map(|task| format!(".smanclaw/tasks/{}.md", task.id))
+                    .map(|task| {
+                        subtask_relative_path(
+                            subtask_file_stems
+                                .get(&task.id)
+                                .map(std::string::String::as_str)
+                                .unwrap_or(task.id.as_str()),
+                        )
+                    })
                     .collect(),
             )
         } else {
@@ -2575,7 +2634,7 @@ mod tests {
         build_remediation_subtasks, extract_json_payload, fallback_decompose_subtasks,
         is_simple_requirement, normalize_requirement_summary, normalize_semantic_subtasks,
         parse_semantic_subtasks, persist_path_from_task_experience, persist_user_input_experience,
-        persist_user_memory,
+        persist_user_memory, subtask_file_stem, subtask_relative_path,
         sanitize_path_fragment, sanitize_task_id, should_generate_path_from_task_experience,
         SemanticDecomposeResponse, SemanticSubTask,
     };
@@ -2721,7 +2780,7 @@ mod tests {
             &["api".to_string(), "constraint".to_string()],
         );
 
-        let memory_path = root.join("MEMORY.md");
+        let memory_path = root.join(".smanclaw").join("MEMORY.md");
         let content = fs::read_to_string(memory_path).expect("read memory");
         assert!(content.contains("user-input"));
         assert!(content.contains("trace_id"));
@@ -2739,7 +2798,7 @@ mod tests {
 
         persist_user_input_experience(&root, "接口返回必须包含trace_id");
 
-        let memory_path = root.join("MEMORY.md");
+        let memory_path = root.join(".smanclaw").join("MEMORY.md");
         let memory = fs::read_to_string(memory_path).expect("read memory");
         assert!(memory.contains("trace_id"));
 
@@ -2784,5 +2843,20 @@ mod tests {
         let summary = normalize_requirement_summary(&long_input);
         assert!(summary.chars().count() <= 75);
         assert!(summary.ends_with("..."));
+    }
+
+    #[test]
+    fn subtask_file_stem_preserves_main_task_relation() {
+        let stem = subtask_file_stem("main-2603071250-A1B2", 1);
+        assert_eq!(stem, "task-main-2603071250-A1B2-001");
+
+        let second = subtask_file_stem("main-2603071250-A1B2", 12);
+        assert_eq!(second, "task-main-2603071250-A1B2-012");
+    }
+
+    #[test]
+    fn subtask_relative_path_uses_named_markdown() {
+        let path = subtask_relative_path("task-main-2603071250-A1B2-001");
+        assert_eq!(path, ".smanclaw/tasks/task-main-2603071250-A1B2-001.md");
     }
 }

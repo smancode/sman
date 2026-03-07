@@ -68,6 +68,14 @@ impl TaskGenerator {
         Ok(Self { tasks_dir })
     }
 
+    fn task_dir(&self, task_id: &str) -> PathBuf {
+        self.tasks_dir.join(task_id)
+    }
+
+    fn task_file(&self, task_id: &str) -> PathBuf {
+        self.task_dir(task_id).join("task.md")
+    }
+
     /// Generate a task.md file for a given subtask
     ///
     /// # Arguments
@@ -76,13 +84,23 @@ impl TaskGenerator {
     /// # Returns
     /// Path to the generated task.md file
     pub fn generate(&self, task: &SubTask) -> Result<PathBuf> {
-        let task_file = self.tasks_dir.join(format!("{}.md", task.id));
+        let task_dir = self.task_dir(&task.id);
+        fs::create_dir_all(&task_dir).map_err(CoreError::Io)?;
+        let task_file = task_dir.join("task.md");
 
         let content = self.render_task_markdown(task);
 
         let mut file = fs::File::create(&task_file).map_err(CoreError::Io)?;
         file.write_all(content.as_bytes()).map_err(CoreError::Io)?;
 
+        Ok(task_file)
+    }
+
+    pub fn generate_named(&self, task: &SubTask, file_stem: &str) -> Result<PathBuf> {
+        let task_file = self.tasks_dir.join(format!("{}.md", file_stem));
+        let content = self.render_task_markdown(task);
+        let mut file = fs::File::create(&task_file).map_err(CoreError::Io)?;
+        file.write_all(content.as_bytes()).map_err(CoreError::Io)?;
         Ok(task_file)
     }
 
@@ -149,7 +167,7 @@ impl TaskGenerator {
     /// # Returns
     /// TaskStatus containing completion information
     pub fn parse_status(&self, task_id: &str) -> Result<TaskStatus> {
-        let task_file = self.tasks_dir.join(format!("{}.md", task_id));
+        let task_file = self.task_file(task_id);
 
         if !task_file.exists() {
             return Err(CoreError::TaskNotFound(task_id.to_string()));
@@ -196,7 +214,7 @@ impl TaskGenerator {
     /// * `item` - The text of the checklist item to update (partial match)
     /// * `done` - Whether to mark as done (true) or not done (false)
     pub fn update_status(&self, task_id: &str, item: &str, done: bool) -> Result<()> {
-        let task_file = self.tasks_dir.join(format!("{}.md", task_id));
+        let task_file = self.task_file(task_id);
 
         if !task_file.exists() {
             return Err(CoreError::TaskNotFound(task_id.to_string()));
@@ -302,7 +320,14 @@ mod tests {
         assert!(path.exists());
         assert_eq!(
             path.file_name().unwrap().to_str().unwrap(),
-            "test-task-1.md"
+            "task.md"
+        );
+        assert_eq!(
+            path.parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
+            "test-task-1"
         );
     }
 
@@ -322,6 +347,21 @@ mod tests {
         assert!(content.contains("## 执行清单 (Sub-Claw 更新此区域)"));
         assert!(content.contains("## 经验沉淀区域 (Sub-Claw 完成后填写)"));
         assert!(content.contains("cargo test login"));
+    }
+
+    #[test]
+    fn test_generate_named_creates_file_with_custom_name() {
+        let (_temp_dir, generator) = create_test_generator();
+        let task = create_test_task();
+
+        let path = generator
+            .generate_named(&task, "task-main-2603071250-AB12-001")
+            .expect("generate named task");
+        assert!(path.exists());
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("task-main-2603071250-AB12-001.md")
+        );
     }
 
     #[test]
@@ -380,7 +420,7 @@ mod tests {
         assert!(status.completed_items > 0);
 
         // Verify the file content was updated
-        let path = generator.tasks_dir.join("test-task-1.md");
+        let path = generator.tasks_dir.join("test-task-1").join("task.md");
         let content = fs::read_to_string(&path).expect("read file");
         assert!(content.contains("- [x] 在 tests 目录中补充/编写失败测试（Red）"));
     }
@@ -402,7 +442,7 @@ mod tests {
             .expect("update status");
 
         // Verify the item is back to not done
-        let path = generator.tasks_dir.join("test-task-1.md");
+        let path = generator.tasks_dir.join("test-task-1").join("task.md");
         let content = fs::read_to_string(&path).expect("read file");
         assert!(content.contains("- [ ] 在 tests 目录中补充/编写失败测试（Red）"));
         assert!(!content.contains("- [x] 在 tests 目录中补充/编写失败测试（Red）"));
@@ -448,7 +488,7 @@ mod tests {
         let initial_status = generator.parse_status("test-task-1").expect("parse status");
 
         // Mark all items as done
-        let path = generator.tasks_dir.join("test-task-1.md");
+        let path = generator.tasks_dir.join("test-task-1").join("task.md");
         let content = fs::read_to_string(&path).expect("read file");
 
         let updated_content = content.replace("- [ ]", "- [x]");

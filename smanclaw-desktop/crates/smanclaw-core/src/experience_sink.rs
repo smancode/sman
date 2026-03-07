@@ -550,7 +550,9 @@ impl ExperienceSink {
     ///
     /// This updates the main Claw's memory file with the new experience
     pub fn update_memory(&self, project_path: &Path, experience: &Experience) -> Result<()> {
-        let memory_path = project_path.join("MEMORY.md");
+        let runtime_dir = project_path.join(".smanclaw");
+        std::fs::create_dir_all(&runtime_dir)?;
+        let memory_path = runtime_dir.join("MEMORY.md");
 
         // Read existing content or create new
         let existing_content = if memory_path.exists() {
@@ -839,7 +841,7 @@ mod tests {
         sink.update_memory(temp_dir.path(), &experience)
             .expect("update memory");
 
-        let memory_path = temp_dir.path().join("MEMORY.md");
+        let memory_path = temp_dir.path().join(".smanclaw").join("MEMORY.md");
         assert!(memory_path.exists());
 
         let content = std::fs::read_to_string(&memory_path).expect("read memory");
@@ -852,7 +854,9 @@ mod tests {
     fn update_memory_appends_to_existing_file() {
         let sink = create_sink();
         let temp_dir = TempDir::new().expect("create temp dir");
-        let memory_path = temp_dir.path().join("MEMORY.md");
+        let runtime_dir = temp_dir.path().join(".smanclaw");
+        std::fs::create_dir_all(&runtime_dir).expect("create runtime dir");
+        let memory_path = runtime_dir.join("MEMORY.md");
 
         // Create existing file
         std::fs::write(&memory_path, "# Project Memory\n\nExisting content\n").expect("write");

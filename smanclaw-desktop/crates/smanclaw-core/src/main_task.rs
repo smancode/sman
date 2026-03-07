@@ -288,7 +288,7 @@ impl MainTask {
     pub fn new(project_path: &Path, user_request: impl Into<String>) -> Self {
         let now = Utc::now().timestamp();
         Self {
-            id: format!("main-{}", Uuid::new_v4()),
+            id: generate_main_task_id(),
             user_request: user_request.into(),
             project_path: project_path.to_path_buf(),
             sub_tasks: Vec::new(),
@@ -480,10 +480,25 @@ impl MainTask {
     }
 }
 
+fn generate_main_task_id() -> String {
+    let timestamp = Local::now().format("%y%m%d%H%M").to_string();
+    let charset = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let mut value = (Uuid::new_v4().as_u128() % 36u128.pow(4)) as u32;
+    let mut suffix = ['0'; 4];
+    for index in (0..4).rev() {
+        let digit = (value % 36) as usize;
+        suffix[index] = charset[digit] as char;
+        value /= 36;
+    }
+    format!("main-{}-{}", timestamp, suffix.iter().collect::<String>())
+}
+
 /// Manager for main tasks
 pub struct MainTaskManager {
     /// Directory to store main task files
     main_tasks_dir: PathBuf,
+    /// Runtime directory (.smanclaw)
+    runtime_dir: PathBuf,
     /// Project path
     project_path: PathBuf,
 }
@@ -497,10 +512,12 @@ impl MainTaskManager {
     /// # Returns
     /// A MainTaskManager instance with main-tasks directory set to `{project_path}/.smanclaw/main-tasks`
     pub fn new(project_path: &Path) -> Result<Self> {
-        let main_tasks_dir = project_path.join(".smanclaw").join("main-tasks");
+        let runtime_dir = project_path.join(".smanclaw");
+        let main_tasks_dir = runtime_dir.join("main-tasks");
         fs::create_dir_all(&main_tasks_dir).map_err(CoreError::Io)?;
         Ok(Self {
             main_tasks_dir,
+            runtime_dir,
             project_path: project_path.to_path_buf(),
         })
     }
@@ -531,6 +548,12 @@ impl MainTaskManager {
         let md_content = task.to_markdown();
         let mut file = fs::File::create(&path).map_err(CoreError::Io)?;
         file.write_all(md_content.as_bytes())
+            .map_err(CoreError::Io)?;
+
+        let latest_main_path = self.runtime_dir.join(format!("{}.md", task.id));
+        let mut latest_main_file = fs::File::create(&latest_main_path).map_err(CoreError::Io)?;
+        latest_main_file
+            .write_all(md_content.as_bytes())
             .map_err(CoreError::Io)?;
 
         // Also save JSON version for programmatic access
@@ -708,12 +731,16 @@ impl MainTaskManager {
     pub fn delete(&self, task_id: &str) -> Result<()> {
         let md_path = self.task_file_path(task_id);
         let json_path = md_path.with_extension("json");
+        let latest_main_path = self.runtime_dir.join(format!("{}.md", task_id));
 
         if md_path.exists() {
             fs::remove_file(&md_path).map_err(CoreError::Io)?;
         }
         if json_path.exists() {
             fs::remove_file(&json_path).map_err(CoreError::Io)?;
+        }
+        if latest_main_path.exists() {
+            fs::remove_file(&latest_main_path).map_err(CoreError::Io)?;
         }
 
         Ok(())
@@ -859,6 +886,16 @@ mod tests {
         let task = MainTask::new(temp_dir.path(), "Implement user login");
 
         assert!(task.id.starts_with("main-"));
+        let parts: Vec<&str> = task.id.split('-').collect();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[1].len(), 10);
+        assert_eq!(parts[2].len(), 4);
+        assert!(parts[1].chars().all(|ch| ch.is_ascii_digit()));
+        assert!(
+            parts[2]
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || (ch.is_ascii_uppercase() && ch.is_ascii_alphabetic()))
+        );
         assert_eq!(task.user_request, "Implement user login");
         assert_eq!(task.status, MainTaskStatus::Analyzing);
         assert!(task.sub_tasks.is_empty());
@@ -941,6 +978,7 @@ mod tests {
         let expected_dir = project_path.join(".smanclaw").join("main-tasks");
         assert!(expected_dir.exists());
         assert_eq!(manager.main_tasks_dir, expected_dir);
+        assert_eq!(manager.runtime_dir, project_path.join(".smanclaw"));
     }
 
     #[test]
@@ -955,8 +993,10 @@ mod tests {
         // Verify files were created
         let md_path = manager.main_tasks_dir.join(format!("{}.md", task.id));
         let json_path = manager.main_tasks_dir.join(format!("{}.json", task.id));
+        let latest_path = manager.runtime_dir.join(format!("{}.md", task.id));
         assert!(md_path.exists());
         assert!(json_path.exists());
+        assert!(latest_path.exists());
     }
 
     #[test]
