@@ -18,8 +18,10 @@
     import type { Message } from "../../lib/types";
     import { onMount } from "svelte";
     import {
+        extractDisplayableAssistantContent,
         latestDisplayableAssistantEntry,
         sanitizeAssistantContent,
+        stripToolCallBlocks,
         shouldFinalizeAssistantReply,
     } from "../../lib/chat/assistantContent";
 
@@ -222,6 +224,18 @@
         return `${title}\n\n${timeline.map((line) => `- ${line}`).join("\n")}`;
     }
 
+    function resolveCompletedOutput(content: string): string {
+        const extracted = extractDisplayableAssistantContent(content);
+        if (extracted && extracted.trim().length > 0) {
+            return extracted.trim();
+        }
+        const stripped = stripToolCallBlocks(content).trim();
+        if (stripped.length > 0) {
+            return stripped;
+        }
+        return "执行完成：未生成可展示的最终答复，你可以直接重试。";
+    }
+
     function clearProgressTimeline(projectId: string) {
         if (!progressTimelineByProject[projectId]) {
             return;
@@ -306,6 +320,9 @@
         let stableAssistantPollCount = 0;
         let latestAssistantSignature: string | null = null;
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            if (!isSending) {
+                return;
+            }
             await new Promise((resolve) =>
                 setTimeout(resolve, replyPollIntervalMs),
             );
@@ -451,10 +468,20 @@
                     if (payload.type === "task_completed" && $selectedProject) {
                         const projectId = $selectedProject.id;
                         appendProgressTimeline(projectId, payload);
-                        updateLatestThinkingMessage(
-                            projectId,
-                            renderThinkingContent(projectId),
-                        );
+                        const output = payload.result.output?.trim();
+                        if (output && output.length > 0) {
+                            updateLatestThinkingMessage(
+                                projectId,
+                                resolveCompletedOutput(output),
+                            );
+                            clearProgressTimeline(projectId);
+                            isSending = false;
+                        } else {
+                            updateLatestThinkingMessage(
+                                projectId,
+                                renderThinkingContent(projectId),
+                            );
+                        }
                         completionSignalAtByProject[projectId] = Date.now();
                     }
 

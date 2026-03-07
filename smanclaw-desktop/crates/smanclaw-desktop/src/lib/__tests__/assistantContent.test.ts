@@ -51,6 +51,13 @@ describe("assistantContent", () => {
         expect(value).toBe("处理中：模型正在整理最终结果。");
     });
 
+    it("长文本交付内容不应被误判为中间态", () => {
+        const value = sanitizeAssistantContent(
+            "我来帮你增加气球贷还款方式。需要添加以下内容：\n1. 枚举定义\n2. 还款计划脚本\n3. 验收测试",
+        );
+        expect(value).toContain("气球贷还款方式");
+    });
+
     it("仅将可展示 assistant 记录视为完成", () => {
         const waitingEntry: HistoryEntryRecord = {
             id: "1",
@@ -85,6 +92,18 @@ describe("assistantContent", () => {
             timestamp: new Date().toISOString(),
         };
         expect(hasDisplayableAssistantEntry(entry, normalizeRole)).toBe(false);
+    });
+
+    it("结构化交付文本应触发完成判定", () => {
+        const entry: HistoryEntryRecord = {
+            id: "a-final",
+            conversation_id: "c1",
+            role: "Assistant",
+            content:
+                "我来帮你增加气球贷还款方式。需要添加以下内容：\n1. 枚举\n2. 计算逻辑\n3. 测试",
+            timestamp: new Date().toISOString(),
+        };
+        expect(hasDisplayableAssistantEntry(entry, normalizeRole)).toBe(true);
     });
 
     it("返回最后一条可展示 assistant 记录", () => {

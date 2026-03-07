@@ -113,6 +113,7 @@ function isLikelyInterimAssistantText(content: string): boolean {
     if (normalized.length === 0) {
         return true;
     }
+    const compact = normalized.replace(/\s+/g, " ");
     const startsWithInterimPrefix = [
         "让我",
         "我来",
@@ -139,5 +140,25 @@ function isLikelyInterimAssistantText(content: string): boolean {
         normalized.endsWith("：") ||
         normalized.endsWith("...") ||
         normalized.endsWith("…");
-    return (startsWithInterimPrefix && hasInterimVerb) || endsAsLeadIn;
+    const hasDeliveryCue = [
+        "已完成",
+        "完成了",
+        "需要添加以下内容",
+        "验收",
+        "测试",
+        "方案",
+        "```",
+        "1.",
+        "2.",
+        "###",
+        "|",
+    ].some((token) => compact.includes(token));
+    if (hasDeliveryCue) {
+        return false;
+    }
+    const isShortLeadIn = compact.length <= 120;
+    return (
+        ((startsWithInterimPrefix && hasInterimVerb) || endsAsLeadIn) &&
+        isShortLeadIn
+    );
 }
