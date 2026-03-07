@@ -17,13 +17,23 @@
     import FileTree from "../task/FileTree.svelte";
     import type { Message } from "../../lib/types";
     import { onMount } from "svelte";
+    import {
+        latestDisplayableAssistantEntry,
+        sanitizeAssistantContent,
+        shouldFinalizeAssistantReply,
+    } from "../../lib/chat/assistantContent";
 
     // Messages per project (projectId -> messages)
     let messagesByProject = $state<Record<string, Message[]>>({});
     let conversationByProject = $state<Record<string, string>>({});
+    let completionSignalAtByProject = $state<Record<string, number | null>>({});
+    let progressTimelineByProject = $state<Record<string, string[]>>({});
     let isSending = $state(false);
     let initializedProjectId = $state<string | null>(null);
     let messagesContainer: HTMLDivElement = $state()!;
+    const replyPollIntervalMs = 1500;
+    const replyMaxWaitMs = 10 * 60 * 1000;
+    const maxConsecutivePollFailures = 8;
 
     // Get current project's messages
     let messages = $derived<Message[]>(
@@ -54,41 +64,6 @@
             return "system";
         }
         return "user";
-    }
-
-    function sanitizeAssistantContent(content: string): string {
-        const withoutToolCallBlocks = content
-            .replace(/<tool_calls?>[\s\S]*?<\/tool_calls?>/gi, "")
-            .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
-            .replace(/<\/?tool_calls?\b[^>]*>/gi, "")
-            .trim();
-        if (withoutToolCallBlocks.length > 0) {
-            return withoutToolCallBlocks;
-        }
-        try {
-            const parsed = JSON.parse(content) as {
-                content?: unknown;
-                reasoning_content?: unknown;
-                tool_calls?: unknown;
-            };
-            const parsedContent =
-                typeof parsed.content === "string" ? parsed.content.trim() : "";
-            if (parsedContent.length > 0) {
-                return parsedContent;
-            }
-            const reasoningContent =
-                typeof parsed.reasoning_content === "string"
-                    ? parsed.reasoning_content.trim()
-                    : "";
-            if (reasoningContent.length > 0) {
-                return reasoningContent;
-            }
-            const hasToolCalls = Array.isArray(parsed.tool_calls);
-            if (hasToolCalls) {
-                return "执行中断：模型只返回了工具调用，没有产出最终文本结果。你可以直接重试，我会基于已完成步骤继续。";
-            }
-        } catch {}
-        return "执行中断：本次回复未产出可展示文本。你可以直接重试，我会继续给出最终结果。";
     }
 
     function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
@@ -166,29 +141,95 @@
         }
     }
 
-    function progressHintText(payload: ProgressEvent): string | null {
+    function truncateValue(value: string, maxLength = 80): string {
+        if (value.length <= maxLength) {
+            return value;
+        }
+        return `${value.slice(0, maxLength)}…`;
+    }
+
+    function progressTimelineLine(payload: ProgressEvent): string | null {
         if (payload.type === "task_started") {
-            return "处理中：任务已开始";
+            return "任务已开始";
         }
         if (payload.type === "progress") {
             const percent = Number.isFinite(payload.percent)
                 ? Math.max(0, Math.min(100, Math.round(payload.percent * 100)))
                 : 0;
-            return `处理中：${payload.message}（${percent}%）`;
+            return `${payload.message}（${percent}%）`;
         }
         if (payload.type === "tool_call") {
-            return `处理中：正在调用工具 ${payload.tool}`;
+            const argsText =
+                payload.args === undefined
+                    ? ""
+                    : truncateValue(JSON.stringify(payload.args));
+            return argsText
+                ? `调用工具：${payload.tool} ${argsText}`
+                : `调用工具：${payload.tool}`;
         }
         if (payload.type === "command_run") {
-            return "处理中：正在执行命令";
+            return `执行命令：${truncateValue(payload.command)}`;
         }
         if (payload.type === "file_read") {
-            return "处理中：正在读取文件";
+            return `读取文件：${payload.path}`;
         }
         if (payload.type === "file_written") {
-            return "处理中：正在写入文件";
+            const actionLabel =
+                payload.action === "created"
+                    ? "创建"
+                    : payload.action === "deleted"
+                      ? "删除"
+                      : "修改";
+            return `${actionLabel}文件：${payload.path}`;
+        }
+        if (payload.type === "task_completed") {
+            return "任务执行完成，正在整理最终答案";
+        }
+        if (payload.type === "task_failed") {
+            return `任务失败：${payload.error}`;
         }
         return null;
+    }
+
+    function appendProgressTimeline(projectId: string, payload: ProgressEvent) {
+        const line = progressTimelineLine(payload);
+        if (!line) {
+            return;
+        }
+        const current = progressTimelineByProject[projectId] || [];
+        if (current[current.length - 1] === line) {
+            return;
+        }
+        const next = [...current, line].slice(-8);
+        progressTimelineByProject = {
+            ...progressTimelineByProject,
+            [projectId]: next,
+        };
+    }
+
+    function renderThinkingContent(
+        projectId: string,
+        elapsedSeconds?: number,
+    ): string {
+        const title =
+            typeof elapsedSeconds === "number" && elapsedSeconds > 0
+                ? `处理中：等待模型响应（${elapsedSeconds}s）`
+                : "处理中：任务执行中";
+        const timeline = progressTimelineByProject[projectId] || [];
+        if (timeline.length === 0) {
+            return title;
+        }
+        return `${title}\n\n${timeline.map((line) => `- ${line}`).join("\n")}`;
+    }
+
+    function clearProgressTimeline(projectId: string) {
+        if (!progressTimelineByProject[projectId]) {
+            return;
+        }
+        progressTimelineByProject = {
+            ...progressTimelineByProject,
+            [projectId]: [],
+        };
     }
 
     async function ensureProjectConversation(
@@ -259,12 +300,15 @@
         userEntryId?: string,
         thinkingMessage?: Message,
     ) {
-        const pollIntervalMs = 1500;
-        const maxWaitMs = 30 * 60 * 1000;
-        const maxAttempts = Math.ceil(maxWaitMs / pollIntervalMs);
+        const maxAttempts = Math.ceil(replyMaxWaitMs / replyPollIntervalMs);
         const startedAt = Date.now();
+        let consecutivePollFailures = 0;
+        let stableAssistantPollCount = 0;
+        let latestAssistantSignature: string | null = null;
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            await new Promise((resolve) =>
+                setTimeout(resolve, replyPollIntervalMs),
+            );
             if (thinkingMessage) {
                 const elapsedSeconds = Math.max(
                     1,
@@ -272,13 +316,26 @@
                 );
                 updateLatestThinkingMessage(
                     projectId,
-                    `处理中：等待模型响应（${elapsedSeconds}s）`,
+                    renderThinkingContent(projectId, elapsedSeconds),
                 );
             }
             const response = await conversationApi.getMessages(conversationId);
             if (!response.success || !response.data) {
+                consecutivePollFailures += 1;
+                if (consecutivePollFailures >= maxConsecutivePollFailures) {
+                    if (thinkingMessage) {
+                        updateLatestThinkingMessage(
+                            projectId,
+                            `通讯异常：${response.error || "轮询会话失败"}。已停止等待，你可以直接重试。`,
+                        );
+                    }
+                    clearProgressTimeline(projectId);
+                    isSending = false;
+                    return;
+                }
                 continue;
             }
+            consecutivePollFailures = 0;
 
             const mappedMessages =
                 response.data.length > 0
@@ -286,11 +343,13 @@
                     : getDemoMessages(projectName);
 
             if (!userEntryId) {
-                const hasAssistant = response.data.some(
-                    (entry) => normalizeRole(entry.role) === "assistant",
+                const latestAssistant = latestDisplayableAssistantEntry(
+                    response.data,
+                    normalizeRole,
                 );
-                if (hasAssistant) {
+                if (latestAssistant) {
                     messagesByProject[projectId] = mappedMessages;
+                    clearProgressTimeline(projectId);
                     isSending = false;
                     return;
                 }
@@ -310,30 +369,72 @@
                 continue;
             }
 
-            const hasAssistantAfterUser = response.data
-                .slice(userIndex + 1)
-                .some((entry) => normalizeRole(entry.role) === "assistant");
+            const entriesAfterUser = response.data.slice(userIndex + 1);
+            const latestAssistantAfterUser = latestDisplayableAssistantEntry(
+                entriesAfterUser,
+                normalizeRole,
+            );
+            const assistantEntriesAfterUser = entriesAfterUser.filter(
+                (entry) => normalizeRole(entry.role) === "assistant",
+            );
 
-            if (hasAssistantAfterUser) {
-                messagesByProject[projectId] = mappedMessages;
-                isSending = false;
-                return;
+            if (latestAssistantAfterUser) {
+                const signature = [
+                    latestAssistantAfterUser.id,
+                    latestAssistantAfterUser.timestamp,
+                    latestAssistantAfterUser.content,
+                ].join("|");
+                if (latestAssistantSignature === signature) {
+                    stableAssistantPollCount += 1;
+                } else {
+                    latestAssistantSignature = signature;
+                    stableAssistantPollCount = 1;
+                }
+                const latestAssistantTimestampMs = new Date(
+                    latestAssistantAfterUser.timestamp,
+                ).getTime();
+                const completionSignalAt =
+                    completionSignalAtByProject[projectId] ?? null;
+                const shouldFinalize = shouldFinalizeAssistantReply({
+                    latestAssistantTimestampMs,
+                    completionSignalAtMs: completionSignalAt,
+                    stableAssistantPollCount,
+                    elapsedMs: Date.now() - startedAt,
+                });
+                if (shouldFinalize) {
+                    messagesByProject[projectId] = mappedMessages;
+                    clearProgressTimeline(projectId);
+                    isSending = false;
+                    return;
+                }
+            } else {
+                stableAssistantPollCount = 0;
+                latestAssistantSignature = null;
             }
+
+            const pendingAssistantIds = new Set(
+                assistantEntriesAfterUser.map((entry) => entry.id),
+            );
+            const mappedMessagesWithoutPendingAssistants =
+                mappedMessages.filter(
+                    (message) => !pendingAssistantIds.has(message.id),
+                );
 
             messagesByProject[projectId] = thinkingMessage
                 ? withThinkingMessage(
-                      mappedMessages,
+                      mappedMessagesWithoutPendingAssistants,
                       resolveThinkingMessage(projectId, thinkingMessage),
                   )
-                : mappedMessages;
+                : mappedMessagesWithoutPendingAssistants;
         }
 
         if (thinkingMessage) {
             updateLatestThinkingMessage(
                 projectId,
-                "执行中断：等待最终回复超时。你可以直接重试，我会继续基于当前进度处理。",
+                "执行中断：等待最终回复超时。已停止等待，你可以直接重试。",
             );
         }
+        clearProgressTimeline(projectId);
         isSending = false;
     }
 
@@ -348,31 +449,35 @@
                     const payload = event.payload;
 
                     if (payload.type === "task_completed" && $selectedProject) {
-                        if (isSending) {
-                            isSending = false;
-                            void loadConversationMessages(
-                                $selectedProject.id,
-                                $selectedProject.name,
-                            );
-                        }
+                        const projectId = $selectedProject.id;
+                        appendProgressTimeline(projectId, payload);
+                        updateLatestThinkingMessage(
+                            projectId,
+                            renderThinkingContent(projectId),
+                        );
+                        completionSignalAtByProject[projectId] = Date.now();
                     }
 
                     if (payload.type === "task_failed" && $selectedProject) {
                         isSending = false;
                         const projectId = $selectedProject.id;
+                        appendProgressTimeline(projectId, payload);
+                        completionSignalAtByProject[projectId] = Date.now();
                         updateLatestThinkingMessage(
                             projectId,
                             `执行中断：${payload.error}`,
                         );
+                        clearProgressTimeline(projectId);
                         return;
                     }
 
                     if (isSending && $selectedProject) {
-                        const hint = progressHintText(payload);
-                        if (hint) {
+                        const projectId = $selectedProject.id;
+                        appendProgressTimeline(projectId, payload);
+                        if (progressTimelineLine(payload)) {
                             updateLatestThinkingMessage(
-                                $selectedProject.id,
-                                hint,
+                                projectId,
+                                renderThinkingContent(projectId),
                             );
                         }
                     }
@@ -415,6 +520,8 @@
         if (!$selectedProject) return;
 
         const projectId = $selectedProject.id;
+        completionSignalAtByProject[projectId] = null;
+        clearProgressTimeline(projectId);
         const currentMessages =
             messagesByProject[projectId] ||
             getDemoMessages($selectedProject.name);

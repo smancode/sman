@@ -10,6 +10,7 @@
         "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
         "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
         "test": "vitest run",
+        "test:events": "vitest run src/lib/__tests__/tasksStoreEvents.test.ts",
         "test:watch": "vitest",
         "lint": "prettier --plugin prettier-plugin-svelte --check \"src/**/*.{svelte,ts,js,css}\" \"*.{json,js,ts}\"",
         "format": "prettier --plugin prettier-plugin-svelte --write \"src/**/*.{svelte,ts,js,css}\" \"*.{json,js,ts}\"",

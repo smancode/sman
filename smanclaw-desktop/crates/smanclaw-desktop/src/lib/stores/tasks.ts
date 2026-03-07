@@ -5,8 +5,21 @@ import type {
     FileChange,
     SubTaskInfo,
     OrchestrationProgress,
+    SubTaskStartedEvent,
+    SubTaskCompletedEvent,
+    OrchestrationProgressEvent,
+    TaskDagEvent,
+    TestResultEvent,
 } from "../types";
-import { taskApi, orchestrationApi } from "../api/tauri";
+import {
+    taskApi,
+    orchestrationApi,
+    onSubTaskStarted,
+    onSubTaskCompleted,
+    onOrchestrationProgress,
+    onTaskDag,
+    onTestResult,
+} from "../api/tauri";
 import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -159,31 +172,54 @@ function createTasksStore() {
                 const { task_id, status, message } = event.payload;
 
                 update((state) => {
-                    const tasks = state.tasks.map((t) =>
-                        t.id === task_id
-                            ? {
-                                  ...t,
+                    const hasTask = state.tasks.some((t) => t.id === task_id);
+                    const tasks = hasTask
+                        ? state.tasks.map((t) =>
+                              t.id === task_id
+                                  ? {
+                                        ...t,
+                                        status: status as TaskStatus,
+                                        output: message || t.output,
+                                        error:
+                                            status === "failed"
+                                                ? message
+                                                : t.error,
+                                    }
+                                  : t,
+                          )
+                        : [
+                              {
+                                  id: task_id,
+                                  projectId: "",
+                                  input: "",
                                   status: status as TaskStatus,
-                                  output: message || t.output,
+                                  output: message,
                                   error:
-                                      status === "failed" ? message : t.error,
-                              }
-                            : t,
-                    );
+                                      status === "failed"
+                                          ? (message ?? "Task failed")
+                                          : undefined,
+                                  createdAt: new Date().toISOString(),
+                                  updatedAt: new Date().toISOString(),
+                                  progress: 0,
+                                  steps: [],
+                                  fileChanges: [],
+                              },
+                              ...state.tasks,
+                          ];
 
-                    // If task completed or failed, clear active task
                     const activeTaskId =
-                        state.activeTaskId === task_id &&
-                        (status === "completed" ||
-                            status === "failed" ||
-                            status === "cancelled")
-                            ? null
-                            : state.activeTaskId;
+                        status === "running"
+                            ? (state.activeTaskId ?? task_id)
+                            : state.activeTaskId === task_id &&
+                                (status === "completed" ||
+                                    status === "failed" ||
+                                    status === "cancelled")
+                              ? null
+                              : state.activeTaskId;
 
                     return { ...state, tasks, activeTaskId };
                 });
 
-                // Stop polling if task is done
                 if (status !== "running") {
                     stopPolling();
                 }
@@ -226,6 +262,138 @@ function createTasksStore() {
                 });
             });
             eventUnlisteners.push(unlistenFileChange);
+
+            const unlistenTaskDag = await onTaskDag((event: TaskDagEvent) => {
+                update((state) => {
+                    const subtasks = new Map(state.subtasks);
+                    const parallelGroups = new Map(state.parallelGroups);
+                    subtasks.set(event.task_id, event.tasks);
+                    parallelGroups.set(event.task_id, event.parallel_groups);
+                    const activeTaskId = state.activeTaskId ?? event.task_id;
+                    return { ...state, subtasks, parallelGroups, activeTaskId };
+                });
+            });
+            eventUnlisteners.push(unlistenTaskDag);
+
+            const unlistenSubTaskStarted = await onSubTaskStarted(
+                (event: SubTaskStartedEvent) => {
+                    update((state) => {
+                        const subtasks = new Map(state.subtasks);
+                        const current = subtasks.get(event.task_id) || [];
+                        const exists = current.some(
+                            (task) => task.id === event.subtask_id,
+                        );
+                        const next = exists
+                            ? current.map((task) =>
+                                  task.id === event.subtask_id
+                                      ? {
+                                            ...task,
+                                            status: "running" as const,
+                                        }
+                                      : task,
+                              )
+                            : [
+                                  ...current,
+                                  {
+                                      id: event.subtask_id,
+                                      description: event.description,
+                                      status: "running" as const,
+                                      depends_on: [],
+                                  },
+                              ];
+                        subtasks.set(event.task_id, next);
+                        return { ...state, subtasks };
+                    });
+                },
+            );
+            eventUnlisteners.push(unlistenSubTaskStarted);
+
+            const unlistenSubTaskCompleted = await onSubTaskCompleted(
+                (event: SubTaskCompletedEvent) => {
+                    update((state) => {
+                        const subtasks = new Map(state.subtasks);
+                        const current = subtasks.get(event.task_id) || [];
+                        const next = current.map((task) =>
+                            task.id === event.subtask_id
+                                ? {
+                                      ...task,
+                                      status: event.success
+                                          ? ("completed" as const)
+                                          : ("failed" as const),
+                                  }
+                                : task,
+                        );
+                        if (
+                            !next.some((task) => task.id === event.subtask_id)
+                        ) {
+                            next.push({
+                                id: event.subtask_id,
+                                description: event.subtask_id,
+                                status: event.success
+                                    ? ("completed" as const)
+                                    : ("failed" as const),
+                                depends_on: [],
+                            });
+                        }
+                        subtasks.set(event.task_id, next);
+                        return { ...state, subtasks };
+                    });
+                },
+            );
+            eventUnlisteners.push(unlistenSubTaskCompleted);
+
+            const unlistenOrchestrationProgress = await onOrchestrationProgress(
+                (event: OrchestrationProgressEvent) => {
+                    update((state) => {
+                        const orchestrationProgress = new Map(
+                            state.orchestrationProgress,
+                        );
+                        orchestrationProgress.set(event.task_id, {
+                            completed: event.completed,
+                            total: event.total,
+                            percent: event.percent,
+                        });
+                        const tasks = state.tasks.map((task) =>
+                            task.id === event.task_id
+                                ? {
+                                      ...task,
+                                      progress: event.percent,
+                                      updatedAt: new Date().toISOString(),
+                                  }
+                                : task,
+                        );
+                        const activeTaskId =
+                            state.activeTaskId ?? event.task_id;
+                        return {
+                            ...state,
+                            orchestrationProgress,
+                            tasks,
+                            activeTaskId,
+                        };
+                    });
+                },
+            );
+            eventUnlisteners.push(unlistenOrchestrationProgress);
+
+            const unlistenTestResult = await onTestResult(
+                (event: TestResultEvent) => {
+                    update((state) => ({
+                        ...state,
+                        tasks: state.tasks.map((task) =>
+                            task.id === event.task_id
+                                ? {
+                                      ...task,
+                                      output: event.output,
+                                      error: event.passed
+                                          ? task.error
+                                          : event.output,
+                                  }
+                                : task,
+                        ),
+                    }));
+                },
+            );
+            eventUnlisteners.push(unlistenTestResult);
         } catch (e) {
             // Event listeners may fail during development hot reload
             // This is not critical - log but don't crash

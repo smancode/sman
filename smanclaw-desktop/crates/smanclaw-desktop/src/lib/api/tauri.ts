@@ -37,9 +37,25 @@ function isTauri(): boolean {
 async function safeInvoke<T>(
     command: string,
     args?: Record<string, unknown>,
+    timeoutMs?: number,
 ): Promise<ApiResponse<T>> {
     try {
-        const data = await invoke<T>(command, args);
+        const invokePromise = invoke<T>(command, args);
+        const data =
+            typeof timeoutMs === "number" && timeoutMs > 0
+                ? await Promise.race<T>([
+                      invokePromise,
+                      new Promise<T>((_, reject) => {
+                          setTimeout(() => {
+                              reject(
+                                  new Error(
+                                      `请求超时（${command}，${timeoutMs}ms）`,
+                                  ),
+                              );
+                          }, timeoutMs);
+                      }),
+                  ])
+                : await invokePromise;
         return { success: true, data };
     } catch (error) {
         return {
@@ -116,37 +132,53 @@ export const taskApi = {
 
 export const conversationApi = {
     async list(projectId: string): Promise<ApiResponse<ConversationRecord[]>> {
-        return safeInvoke<ConversationRecord[]>("list_conversations", {
-            project_id: projectId,
-        });
+        return safeInvoke<ConversationRecord[]>(
+            "list_conversations",
+            {
+                project_id: projectId,
+            },
+            10000,
+        );
     },
 
     async create(
         projectId: string,
         title: string,
     ): Promise<ApiResponse<ConversationRecord>> {
-        return safeInvoke<ConversationRecord>("create_conversation", {
-            project_id: projectId,
-            title,
-        });
+        return safeInvoke<ConversationRecord>(
+            "create_conversation",
+            {
+                project_id: projectId,
+                title,
+            },
+            12000,
+        );
     },
 
     async getMessages(
         conversationId: string,
     ): Promise<ApiResponse<HistoryEntryRecord[]>> {
-        return safeInvoke<HistoryEntryRecord[]>("get_conversation_messages", {
-            conversation_id: conversationId,
-        });
+        return safeInvoke<HistoryEntryRecord[]>(
+            "get_conversation_messages",
+            {
+                conversation_id: conversationId,
+            },
+            10000,
+        );
     },
 
     async sendMessage(
         conversationId: string,
         content: string,
     ): Promise<ApiResponse<HistoryEntryRecord>> {
-        return safeInvoke<HistoryEntryRecord>("send_message", {
-            conversation_id: conversationId,
-            content,
-        });
+        return safeInvoke<HistoryEntryRecord>(
+            "send_message",
+            {
+                conversation_id: conversationId,
+                content,
+            },
+            15000,
+        );
     },
 };
 
