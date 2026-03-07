@@ -22,6 +22,33 @@ pub struct TaskStatusEvent {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskEventStatus {
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl TaskEventStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+pub fn task_event_status_from_success(success: bool) -> TaskEventStatus {
+    if success {
+        TaskEventStatus::Completed
+    } else {
+        TaskEventStatus::Failed
+    }
+}
+
 /// Emit a task status event to the frontend
 pub fn emit_task_status(
     app_handle: &AppHandle,
@@ -37,6 +64,15 @@ pub fn emit_task_status(
             message,
         },
     )
+}
+
+pub fn emit_task_status_event(
+    app_handle: &AppHandle,
+    task_id: &str,
+    status: TaskEventStatus,
+    message: Option<String>,
+) -> Result<(), tauri::Error> {
+    emit_task_status(app_handle, task_id, status.as_str(), message)
 }
 
 /// Event payload for file changes
@@ -246,4 +282,29 @@ pub fn emit_task_dag(
             parallel_groups,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{task_event_status_from_success, TaskEventStatus};
+
+    #[test]
+    fn task_event_status_strings_are_stable() {
+        assert_eq!(TaskEventStatus::Running.as_str(), "running");
+        assert_eq!(TaskEventStatus::Completed.as_str(), "completed");
+        assert_eq!(TaskEventStatus::Failed.as_str(), "failed");
+        assert_eq!(TaskEventStatus::Cancelled.as_str(), "cancelled");
+    }
+
+    #[test]
+    fn task_event_status_maps_from_success_flag() {
+        assert_eq!(
+            task_event_status_from_success(true),
+            TaskEventStatus::Completed
+        );
+        assert_eq!(
+            task_event_status_from_success(false),
+            TaskEventStatus::Failed
+        );
+    }
 }

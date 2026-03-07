@@ -57,9 +57,9 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::task_commands::list_tasks,
             crate::commands::task_commands::cancel_task,
             // Orchestration commands
-            crate::orchestration::execute_orchestrated_task,
-            crate::orchestration::get_task_dag,
-            crate::orchestration::get_orchestration_status,
+            crate::orchestration::api::execute_orchestrated_task,
+            crate::orchestration::status::get_task_dag,
+            crate::orchestration::status::get_orchestration_status,
             // Conversation commands
             crate::commands::conversation_commands::get_conversation,
             crate::commands::conversation_commands::get_conversation_messages,

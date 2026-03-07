@@ -13,7 +13,8 @@ use tokio::sync::Mutex;
 use crate::commands::task_commands::subtask_file_stem;
 use crate::commands::utility_commands::persist_task_experience_artifacts;
 use crate::events::{
-    emit_orchestration_progress, emit_subtask_completed, emit_subtask_started, emit_task_status,
+    emit_orchestration_progress, emit_subtask_completed, emit_subtask_started,
+    emit_task_status_event, TaskEventStatus,
 };
 
 use super::{remediation::finalize_orchestration, ORCHESTRATION_DAGS};
@@ -77,10 +78,10 @@ pub(crate) fn spawn_orchestration_execution(
             .collect();
 
         for (group_index, group_tasks) in parallel_groups.iter().enumerate() {
-            if let Err(e) = emit_task_status(
+            if let Err(e) = emit_task_status_event(
                 &app_handle,
                 &task_id,
-                "running",
+                TaskEventStatus::Running,
                 Some(format!(
                     "主 Claw 正在执行第 {}/{} 批子任务...",
                     group_index + 1,
@@ -218,10 +219,10 @@ pub(crate) fn spawn_orchestration_execution(
                     }
                 }
                 completed_count += 1;
-                if let Err(e) = emit_task_status(
+                if let Err(e) = emit_task_status_event(
                     &app_handle,
                     &task_id,
-                    "running",
+                    TaskEventStatus::Running,
                     Some(format!(
                         "主 Claw 验证中：已完成 {}/{} 个子任务",
                         completed_count, total_tasks

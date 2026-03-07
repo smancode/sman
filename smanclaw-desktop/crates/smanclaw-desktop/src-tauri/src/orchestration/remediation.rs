@@ -14,8 +14,8 @@ use tokio::sync::Mutex;
 use crate::commands::task_commands::{build_remediation_subtasks, subtask_file_stem, subtask_relative_path};
 use crate::commands::utility_commands::persist_task_experience_artifacts;
 use crate::events::{
-    emit_orchestration_progress, emit_subtask_completed, emit_subtask_started, emit_task_status,
-    emit_test_result,
+    emit_orchestration_progress, emit_subtask_completed, emit_subtask_started,
+    emit_task_status_event, emit_test_result, task_event_status_from_success, TaskEventStatus,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -57,10 +57,10 @@ pub(crate) async fn finalize_orchestration(
         remediation_round += 1;
         let remediation_tasks =
             build_remediation_subtasks(dag, evaluation.as_ref().ok(), remediation_round);
-        if let Err(e) = emit_task_status(
+        if let Err(e) = emit_task_status_event(
             app_handle,
             task_id,
-            "running",
+            TaskEventStatus::Running,
             Some(format!(
                 "主 Claw 验收未通过，开始第 {}/{} 轮自动补救执行（{} 个补救任务）...",
                 remediation_round,
@@ -308,14 +308,13 @@ pub(crate) async fn finalize_orchestration(
     if let Err(e) = main_task_manager.complete(main_task_id, &main_task_result) {
         tracing::error!("Failed to complete main task: {}", e);
     }
-    let (status_str, message) = match final_passed {
-        true => (
-            "completed",
-            Some(format!("All {} subtasks completed and accepted", total_tasks)),
-        ),
-        false => ("failed", final_error),
+    let status = task_event_status_from_success(final_passed);
+    let message = if final_passed {
+        Some(format!("All {} subtasks completed and accepted", total_tasks))
+    } else {
+        final_error
     };
-    if let Err(e) = emit_task_status(app_handle, task_id, status_str, message) {
+    if let Err(e) = emit_task_status_event(app_handle, task_id, status, message) {
         tracing::error!("Failed to emit final task status event: {}", e);
     }
 }

@@ -7,7 +7,10 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::error::{TauriError, TauriResult};
-use crate::events::{emit_file_change, emit_progress_event, emit_task_status};
+use crate::events::{
+    emit_file_change, emit_progress_event, emit_task_status_event, task_event_status_from_success,
+    TaskEventStatus,
+};
 use crate::state::AppState;
 
 #[tauri::command(rename_all = "snake_case")]
@@ -60,7 +63,7 @@ pub async fn execute_task(
         tracing::error!("Failed to update task status to running: {}", e);
     }
 
-    emit_task_status(&app_handle, &task_id, "running", None)?;
+    emit_task_status_event(&app_handle, &task_id, TaskEventStatus::Running, None)?;
 
     let bridge = {
         let mut bridges = state.zeroclaw_bridges.lock().await;
@@ -136,17 +139,21 @@ pub async fn execute_task(
                     }
                 }
 
-                let (status_str, message) = match result.success {
-                    true => ("completed", Some(result.output.clone())),
-                    false => ("failed", result.error.clone()),
+                let status = task_event_status_from_success(result.success);
+                let message = if result.success {
+                    Some(result.output.clone())
+                } else {
+                    result.error.clone()
                 };
                 tracing::info!(
                     "Emitting task status: task_id={}, status={}, message={}",
                     task_id,
-                    status_str,
+                    status.as_str(),
                     message.as_deref().unwrap_or("")
                 );
-                if let Err(e) = emit_task_status(&app_handle_clone, &task_id, status_str, message) {
+                if let Err(e) =
+                    emit_task_status_event(&app_handle_clone, &task_id, status, message)
+                {
                     tracing::error!("Failed to emit task status event: {}", e);
                 }
             }
@@ -159,9 +166,12 @@ pub async fn execute_task(
                 {
                     tracing::error!("Failed to update task result: {}", update_err);
                 }
-                if let Err(emit_err) =
-                    emit_task_status(&app_handle_clone, &task_id, "failed", Some(e.to_string()))
-                {
+                if let Err(emit_err) = emit_task_status_event(
+                    &app_handle_clone,
+                    &task_id,
+                    TaskEventStatus::Failed,
+                    Some(e.to_string()),
+                ) {
                     tracing::error!("Failed to emit task status event: {}", emit_err);
                 }
             }
@@ -212,10 +222,10 @@ pub async fn cancel_task(
         let tm = state.task_manager.lock().await;
         tm.update_task_status(&task_id, TaskStatus::Failed)?;
     }
-    emit_task_status(
+    emit_task_status_event(
         &app_handle,
         &task_id,
-        "cancelled",
+        TaskEventStatus::Cancelled,
         Some("Task cancelled by user".to_string()),
     )?;
     Ok(())
