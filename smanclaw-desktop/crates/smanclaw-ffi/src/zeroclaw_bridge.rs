@@ -85,8 +85,10 @@ pub async fn test_llm_direct(settings: &AppSettings) -> Result<String> {
     }
 
     let provider_name = detect_provider_from_url(&settings.llm.api_url);
-    eprintln!("Testing LLM: provider={}, model={}, url={}",
-        provider_name, settings.llm.default_model, settings.llm.api_url);
+    eprintln!(
+        "Testing LLM: provider={}, model={}, url={}",
+        provider_name, settings.llm.default_model, settings.llm.api_url
+    );
 
     // Create provider using ZeroClaw's factory
     let provider = providers::create_provider_with_url(
@@ -180,8 +182,13 @@ impl ZeroclawBridge {
                 // Auto-detect provider from API URL
                 let provider_name = detect_provider_from_url(&settings.llm.api_url);
 
-                eprintln!("ZeroclawBridge.build_config: provider={}, url={}, model={}, api_key_len={}",
-                    provider_name, settings.llm.api_url, settings.llm.default_model, settings.llm.api_key.len());
+                eprintln!(
+                    "ZeroclawBridge.build_config: provider={}, url={}, model={}, api_key_len={}",
+                    provider_name,
+                    settings.llm.api_url,
+                    settings.llm.default_model,
+                    settings.llm.api_key.len()
+                );
 
                 config.default_provider = Some(provider_name);
                 config.api_url = Some(settings.llm.api_url.clone());
@@ -213,11 +220,17 @@ impl ZeroclawBridge {
             config.web_search.fallback_providers.clear();
             if !settings.web_search.brave_api_key.trim().is_empty() {
                 config.web_search.brave_api_key = Some(settings.web_search.brave_api_key.clone());
-                config.web_search.fallback_providers.push("brave".to_string());
+                config
+                    .web_search
+                    .fallback_providers
+                    .push("brave".to_string());
             }
             if !settings.web_search.tavily_api_key.trim().is_empty() {
                 config.web_search.api_key = Some(settings.web_search.tavily_api_key.clone());
-                config.web_search.fallback_providers.push("tavily".to_string());
+                config
+                    .web_search
+                    .fallback_providers
+                    .push("tavily".to_string());
             }
         }
 
@@ -252,7 +265,10 @@ impl ZeroclawBridge {
 
         // Execute the turn - Agent maintains history internally
         let output = agent.turn(input).await?;
-        tracing::info!("execute_task_async: agent.turn() succeeded, output length: {}", output.len());
+        tracing::info!(
+            "execute_task_async: agent.turn() succeeded, output length: {}",
+            output.len()
+        );
 
         // Extract file changes from history
         let files_changed = self.extract_file_changes(agent.history());
@@ -460,44 +476,86 @@ mod tests {
     #[test]
     fn test_detect_provider_from_url() {
         // MiniMax
-        assert_eq!(detect_provider_from_url("https://api.minimax.io/v1"), "minimax");
+        assert_eq!(
+            detect_provider_from_url("https://api.minimax.io/v1"),
+            "minimax"
+        );
         assert_eq!(
             detect_provider_from_url("https://api.minimaxi.com/v1"),
             "minimax-cn"
         );
 
         // GLM / Zhipu
-        assert_eq!(detect_provider_from_url("https://open.bigmodel.cn/api/paas/v4"), "glm");
-        assert_eq!(detect_provider_from_url("https://api.z.ai/api/paas/v4"), "glm");
+        assert_eq!(
+            detect_provider_from_url("https://open.bigmodel.cn/api/paas/v4"),
+            "glm"
+        );
+        assert_eq!(
+            detect_provider_from_url("https://api.z.ai/api/paas/v4"),
+            "glm"
+        );
 
         // Moonshot / Kimi
-        assert_eq!(detect_provider_from_url("https://api.moonshot.cn/v1"), "moonshot");
-        assert_eq!(detect_provider_from_url("https://api.moonshot.ai/v1"), "moonshot");
-        assert_eq!(detect_provider_from_url("https://api.kimi.com/v1"), "moonshot");
+        assert_eq!(
+            detect_provider_from_url("https://api.moonshot.cn/v1"),
+            "moonshot"
+        );
+        assert_eq!(
+            detect_provider_from_url("https://api.moonshot.ai/v1"),
+            "moonshot"
+        );
+        assert_eq!(
+            detect_provider_from_url("https://api.kimi.com/v1"),
+            "moonshot"
+        );
 
         // Qwen / DashScope
-        assert_eq!(detect_provider_from_url("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen");
-        assert_eq!(detect_provider_from_url("https://dashscope-intl.aliyuncs.com/compatible-mode/v1"), "qwen");
+        assert_eq!(
+            detect_provider_from_url("https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            "qwen"
+        );
+        assert_eq!(
+            detect_provider_from_url("https://dashscope-intl.aliyuncs.com/compatible-mode/v1"),
+            "qwen"
+        );
 
         // DeepSeek
-        assert_eq!(detect_provider_from_url("https://api.deepseek.com"), "deepseek");
+        assert_eq!(
+            detect_provider_from_url("https://api.deepseek.com"),
+            "deepseek"
+        );
 
         // SiliconFlow
-        assert_eq!(detect_provider_from_url("https://api.siliconflow.cn/v1"), "siliconflow");
+        assert_eq!(
+            detect_provider_from_url("https://api.siliconflow.cn/v1"),
+            "siliconflow"
+        );
 
         // StepFun
-        assert_eq!(detect_provider_from_url("https://api.stepfun.com/v1"), "stepfun");
+        assert_eq!(
+            detect_provider_from_url("https://api.stepfun.com/v1"),
+            "stepfun"
+        );
 
         // OpenRouter
-        assert_eq!(detect_provider_from_url("https://openrouter.ai/api/v1"), "openrouter");
+        assert_eq!(
+            detect_provider_from_url("https://openrouter.ai/api/v1"),
+            "openrouter"
+        );
 
         // Anthropic
-        assert_eq!(detect_provider_from_url("https://api.anthropic.com/v1"), "anthropic");
+        assert_eq!(
+            detect_provider_from_url("https://api.anthropic.com/v1"),
+            "anthropic"
+        );
 
         // Ollama
         assert_eq!(detect_provider_from_url("http://localhost:11434"), "ollama");
 
         // Default to openai
-        assert_eq!(detect_provider_from_url("https://api.example.com/v1"), "openai");
+        assert_eq!(
+            detect_provider_from_url("https://api.example.com/v1"),
+            "openai"
+        );
     }
 }

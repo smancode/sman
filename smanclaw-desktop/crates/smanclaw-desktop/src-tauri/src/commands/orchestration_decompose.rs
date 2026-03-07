@@ -54,7 +54,8 @@ pub(crate) async fn try_semantic_decompose_with_zeroclaw(
             return None;
         }
     };
-    let parsed = enforce_subtask_context_independence(parse_semantic_subtasks(&result.output)?, input);
+    let parsed =
+        enforce_subtask_context_independence(parse_semantic_subtasks(&result.output)?, input);
     if Orchestrator::build_dag(parsed.clone()).is_err() {
         return None;
     }
@@ -181,7 +182,10 @@ pub(crate) fn normalize_semantic_subtasks(
         if description.is_empty() {
             continue;
         }
-        let id = ids.get(idx).cloned().unwrap_or_else(|| format!("task-{}", idx + 1));
+        let id = ids
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| format!("task-{}", idx + 1));
         let mut subtask = SubTask::new(id.clone(), description);
         for dep in task.depends_on {
             let dep_id = sanitize_task_id(&dep, idx);
@@ -254,16 +258,14 @@ pub(crate) fn fallback_decompose_subtasks(input: &str) -> Vec<SubTask> {
         return enforce_subtask_context_independence(rule_based, input);
     }
     let summary = normalize_requirement_summary(input);
-    vec![
-        SubTask::new(
-            "task-context-serial",
-            format!(
-                "在单一子Claw上下文内完成需求分析、实现、验证与回归，避免跨子任务上下文依赖：{}",
-                summary
-            ),
-        )
-        .with_test_command("cargo test"),
-    ]
+    vec![SubTask::new(
+        "task-context-serial",
+        format!(
+            "在单一子Claw上下文内完成需求分析、实现、验证与回归，避免跨子任务上下文依赖：{}",
+            summary
+        ),
+    )
+    .with_test_command("cargo test")]
 }
 
 pub(crate) fn is_simple_requirement(input: &str) -> bool {

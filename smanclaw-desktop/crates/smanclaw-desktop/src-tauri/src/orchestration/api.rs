@@ -151,7 +151,10 @@ pub async fn execute_orchestrated_task(
         &app_handle,
         &task_id,
         TaskEventStatus::Running,
-        Some(format!("主 Claw 已生成 {} 个子任务，准备分发执行...", subtasks.len())),
+        Some(format!(
+            "主 Claw 已生成 {} 个子任务，准备分发执行...",
+            subtasks.len()
+        )),
     )?;
 
     runtime::spawn_orchestration_execution(

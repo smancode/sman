@@ -558,8 +558,7 @@ impl MainTaskManager {
 
         // Also save JSON version for programmatic access
         let json_path = path.with_extension("json");
-        let json_content =
-            serde_json::to_string_pretty(task).map_err(CoreError::Serialization)?;
+        let json_content = serde_json::to_string_pretty(task).map_err(CoreError::Serialization)?;
         let mut json_file = fs::File::create(&json_path).map_err(CoreError::Io)?;
         json_file
             .write_all(json_content.as_bytes())
@@ -894,7 +893,8 @@ mod tests {
         assert!(
             parts[2]
                 .chars()
-                .all(|ch| ch.is_ascii_digit() || (ch.is_ascii_uppercase() && ch.is_ascii_alphabetic()))
+                .all(|ch| ch.is_ascii_digit()
+                    || (ch.is_ascii_uppercase() && ch.is_ascii_alphabetic()))
         );
         assert_eq!(task.user_request, "Implement user login");
         assert_eq!(task.status, MainTaskStatus::Analyzing);
@@ -985,7 +985,9 @@ mod tests {
     fn test_manager_create_task() {
         let (_temp_dir, manager) = create_test_manager();
 
-        let task = manager.create("Implement login feature").expect("create task");
+        let task = manager
+            .create("Implement login feature")
+            .expect("create task");
 
         assert!(task.id.starts_with("main-"));
         assert_eq!(task.user_request, "Implement login feature");

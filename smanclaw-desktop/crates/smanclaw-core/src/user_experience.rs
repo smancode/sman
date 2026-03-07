@@ -14,12 +14,27 @@ use crate::skill_store::{Skill, SkillMeta, SkillStore};
 
 /// Keywords for identifying constraint experiences
 const CONSTRAINT_KEYWORDS: &[&str] = &[
-    "必须", "一定要", "要求", "规定", "规范要求", "不允许", "禁止", "不能", "不可以",
+    "必须",
+    "一定要",
+    "要求",
+    "规定",
+    "规范要求",
+    "不允许",
+    "禁止",
+    "不能",
+    "不可以",
 ];
 
 /// Keywords for identifying convention experiences
 const CONVENTION_KEYWORDS: &[&str] = &[
-    "我们用", "我们项目", "约定", "习惯", "风格", "命名", "格式", "写法",
+    "我们用",
+    "我们项目",
+    "约定",
+    "习惯",
+    "风格",
+    "命名",
+    "格式",
+    "写法",
 ];
 
 /// Keywords for identifying preference experiences
@@ -38,7 +53,13 @@ const KNOWLEDGE_KEYWORDS: &[&str] = &[
 
 /// Keywords for identifying warning experiences
 const WARNING_KEYWORDS: &[&str] = &[
-    "不要用", "有 bug", "有问题", "不建议", "避免", "踩坑", "血的教训",
+    "不要用",
+    "有 bug",
+    "有问题",
+    "不建议",
+    "避免",
+    "踩坑",
+    "血的教训",
 ];
 
 /// Experience type enumeration
@@ -207,13 +228,9 @@ impl UserExperienceExtractor {
             let content = self.extract_content(input, experience_type);
             let tags = self.extract_tags(input, experience_type);
 
-            let experience = UserExperience::new(
-                input.to_string(),
-                experience_type,
-                content,
-                confidence,
-            )
-            .with_category(experience_type.default_category());
+            let experience =
+                UserExperience::new(input.to_string(), experience_type, content, confidence)
+                    .with_category(experience_type.default_category());
 
             let mut experience = experience;
             experience.tags = tags;
@@ -257,8 +274,9 @@ impl UserExperienceExtractor {
         tags.sort();
         tags.dedup();
 
-        let mut experience = UserExperience::new(input.to_string(), experience_type, content, confidence)
-            .with_category(experience_type.default_category());
+        let mut experience =
+            UserExperience::new(input.to_string(), experience_type, content, confidence)
+                .with_category(experience_type.default_category());
         experience.tags = tags;
         Some(experience)
     }
@@ -303,7 +321,11 @@ impl UserExperienceExtractor {
         Ok(meta)
     }
 
-    pub fn store_dialogue_skill(&self, dialogue: &[DialogueTurn], topic: &str) -> Result<Option<SkillMeta>> {
+    pub fn store_dialogue_skill(
+        &self,
+        dialogue: &[DialogueTurn],
+        topic: &str,
+    ) -> Result<Option<SkillMeta>> {
         if dialogue.len() < 3 {
             return Ok(None);
         }
@@ -352,7 +374,11 @@ impl UserExperienceExtractor {
             };
             let path_skill = Skill {
                 meta: path_meta,
-                content: format!("# Path: {}\n\n{}\n", topic, self.build_reusable_steps(dialogue)),
+                content: format!(
+                    "# Path: {}\n\n{}\n",
+                    topic,
+                    self.build_reusable_steps(dialogue)
+                ),
             };
             let _ = path_store.create(&path_skill);
         }
@@ -369,19 +395,14 @@ impl UserExperienceExtractor {
     /// A Chinese confirmation message
     pub fn generate_confirmation(&self, experience: &UserExperience) -> String {
         let type_name = experience.experience_type.display_name();
-        let path = format!(
-            ".smanclaw/skills/{}/experience-*.md",
-            experience.category
-        );
+        let path = format!(".smanclaw/skills/{}/experience-*.md", experience.category);
 
         format!(
             "好的，我记住了：\n\
              \u{2022} {}：{}\n\
              \u{2022} 已保存到 {}\n\
              后续开发我会自动遵守这个规范。",
-            type_name,
-            experience.content,
-            path
+            type_name, experience.content, path
         )
     }
 
@@ -554,7 +575,11 @@ impl UserExperienceExtractor {
             return Ok(false);
         }
 
-        let tags = experience.tags.iter().map(String::as_str).collect::<Vec<_>>();
+        let tags = experience
+            .tags
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
         let similar_count = self.skill_store.find_by_tags(&tags)?.len();
         if similar_count >= 1 {
             return Ok(true);
@@ -847,7 +872,10 @@ mod tests {
             ExperienceType::Knowledge.default_category(),
             "domain/knowledge"
         );
-        assert_eq!(ExperienceType::Warning.default_category(), "coding/warnings");
+        assert_eq!(
+            ExperienceType::Warning.default_category(),
+            "coding/warnings"
+        );
     }
 
     #[test]
@@ -933,7 +961,9 @@ mod tests {
         let path_store = SkillStore::for_paths(_temp_dir.path()).expect("path store");
         let paths = path_store.list().expect("list paths");
         assert!(!paths.is_empty());
-        assert!(paths.iter().any(|meta| meta.tags.contains(&"path".to_string())));
+        assert!(paths
+            .iter()
+            .any(|meta| meta.tags.contains(&"path".to_string())));
     }
 
     #[test]

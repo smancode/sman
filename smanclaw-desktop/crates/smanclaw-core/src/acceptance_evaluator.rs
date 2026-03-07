@@ -249,7 +249,12 @@ impl TestRunner {
     /// Run a specific test by name
     pub fn run_specific_test(&self, test_name: &str) -> Result<bool> {
         let output = Command::new("cargo")
-            .args(["test", "--no-fail-fast", "--", &format!("--filter={}", test_name)])
+            .args([
+                "test",
+                "--no-fail-fast",
+                "--",
+                &format!("--filter={}", test_name),
+            ])
             .current_dir(&self.project_path)
             .output()
             .map_err(|e| CoreError::CommandExecution(format!("Failed to run test: {}", e)))?;
@@ -337,7 +342,11 @@ impl FileChecker {
     }
 
     /// Check if file content matches a regex pattern
-    pub fn check_content_matches(&self, path: &std::path::Path, regex_pattern: &str) -> Result<bool> {
+    pub fn check_content_matches(
+        &self,
+        path: &std::path::Path,
+        regex_pattern: &str,
+    ) -> Result<bool> {
         let full_path = self.project_path.join(path);
         let content = std::fs::read_to_string(&full_path).map_err(CoreError::Io)?;
         let re = Regex::new(regex_pattern)?;
@@ -372,7 +381,9 @@ impl CommandExecutor {
             .args(args)
             .current_dir(&self.project_path)
             .output()
-            .map_err(|e| CoreError::CommandExecution(format!("Failed to execute command: {}", e)))?;
+            .map_err(|e| {
+                CoreError::CommandExecution(format!("Failed to execute command: {}", e))
+            })?;
 
         Ok(CommandResult {
             exit_code: output.status.code().unwrap_or(-1),
@@ -417,15 +428,23 @@ impl CompositeVerifier {
                 description,
                 verification_method,
             } => (id.clone(), description.clone(), verification_method.clone()),
-            AcceptanceCriteria::Performance { id, description, .. } => {
-                (id.clone(), description.clone(), VerificationMethod::Manual)
-            }
-            AcceptanceCriteria::CodeQuality { id, description, .. } => {
-                (id.clone(), description.clone(), VerificationMethod::CodeReview)
-            }
-            AcceptanceCriteria::TestCoverage { id, description, .. } => {
-                (id.clone(), description.clone(), VerificationMethod::UnitTest)
-            }
+            AcceptanceCriteria::Performance {
+                id, description, ..
+            } => (id.clone(), description.clone(), VerificationMethod::Manual),
+            AcceptanceCriteria::CodeQuality {
+                id, description, ..
+            } => (
+                id.clone(),
+                description.clone(),
+                VerificationMethod::CodeReview,
+            ),
+            AcceptanceCriteria::TestCoverage {
+                id, description, ..
+            } => (
+                id.clone(),
+                description.clone(),
+                VerificationMethod::UnitTest,
+            ),
         };
 
         let (status, evidence) = match verification_method {
@@ -434,15 +453,9 @@ impl CompositeVerifier {
             VerificationMethod::CommandOutput => self.verify_command(&description)?,
             VerificationMethod::UnitTest => self.verify_tests()?,
             VerificationMethod::E2ETest => self.verify_e2e_tests()?,
-            VerificationMethod::CodeReview => {
-                (CriteriaStatus::Pending, "待代码审查".to_string())
-            }
-            VerificationMethod::Manual => {
-                (CriteriaStatus::Pending, "待人工验证".to_string())
-            }
-            VerificationMethod::LLMJudge => {
-                (CriteriaStatus::Pending, "待LLM评估".to_string())
-            }
+            VerificationMethod::CodeReview => (CriteriaStatus::Pending, "待代码审查".to_string()),
+            VerificationMethod::Manual => (CriteriaStatus::Pending, "待人工验证".to_string()),
+            VerificationMethod::LLMJudge => (CriteriaStatus::Pending, "待LLM评估".to_string()),
         };
 
         Ok(CriteriaResult {
@@ -492,7 +505,10 @@ impl CompositeVerifier {
         if result.success {
             Ok((
                 CriteriaStatus::Passed,
-                format!("命令执行成功: {} (exit_code: {})", command, result.exit_code),
+                format!(
+                    "命令执行成功: {} (exit_code: {})",
+                    command, result.exit_code
+                ),
             ))
         } else {
             Ok((
@@ -533,8 +549,15 @@ impl CompositeVerifier {
         // Try to find something that looks like a path
         let words: Vec<&str> = description.split_whitespace().collect();
         for word in &words {
-            if word.contains('/') || word.contains('\\') || word.ends_with(".rs") || word.ends_with(".ts") || word.ends_with(".js") {
-                return PathBuf::from(word.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '\\' && c != '.' && c != '_'));
+            if word.contains('/')
+                || word.contains('\\')
+                || word.ends_with(".rs")
+                || word.ends_with(".ts")
+                || word.ends_with(".js")
+            {
+                return PathBuf::from(word.trim_matches(|c: char| {
+                    !c.is_alphanumeric() && c != '/' && c != '\\' && c != '.' && c != '_'
+                }));
             }
         }
         PathBuf::from(description)
@@ -547,7 +570,9 @@ impl CompositeVerifier {
             let after = &description[contains_idx + 8..].trim();
 
             let path = self.extract_path_from_description(before);
-            let pattern = after.trim_matches(|c| c == '\'' || c == '"' || c == '`').to_string();
+            let pattern = after
+                .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+                .to_string();
 
             return (path, pattern);
         }
@@ -613,13 +638,25 @@ impl AcceptanceEvaluator {
             VerificationMethod::E2ETest
         } else if desc_lower.contains("测试") || desc_lower.contains("test") {
             VerificationMethod::UnitTest
-        } else if desc_lower.contains("文件存在") || desc_lower.contains("file exists") || desc_lower.contains("file:") {
+        } else if desc_lower.contains("文件存在")
+            || desc_lower.contains("file exists")
+            || desc_lower.contains("file:")
+        {
             VerificationMethod::FileExists
-        } else if desc_lower.contains("内容") || desc_lower.contains("content") || desc_lower.contains("包含") {
+        } else if desc_lower.contains("内容")
+            || desc_lower.contains("content")
+            || desc_lower.contains("包含")
+        {
             VerificationMethod::ContentMatch
-        } else if desc_lower.contains("运行") || desc_lower.contains("run") || desc_lower.contains("command") {
+        } else if desc_lower.contains("运行")
+            || desc_lower.contains("run")
+            || desc_lower.contains("command")
+        {
             VerificationMethod::CommandOutput
-        } else if desc_lower.contains("代码") || desc_lower.contains("code") || desc_lower.contains("审查") {
+        } else if desc_lower.contains("代码")
+            || desc_lower.contains("code")
+            || desc_lower.contains("审查")
+        {
             VerificationMethod::CodeReview
         } else if desc_lower.contains("llm") || desc_lower.contains("ai判断") {
             VerificationMethod::LLMJudge
@@ -645,7 +682,9 @@ impl AcceptanceEvaluator {
 
         // Generate recommendations if not fully passed
         if !result.overall_passed {
-            result.recommendations.push("请检查未通过的验收标准".to_string());
+            result
+                .recommendations
+                .push("请检查未通过的验收标准".to_string());
         }
 
         result.evaluated_at = Utc::now().timestamp();
@@ -706,10 +745,27 @@ impl AcceptanceEvaluator {
         // Overview
         let status_icon = if result.overall_passed { "✅" } else { "❌" };
         report.push_str(&format!("## 概述\n\n"));
-        report.push_str(&format!("- 状态: {} {}\n", status_icon, if result.overall_passed { "通过" } else { "未通过" }));
-        report.push_str(&format!("- 完成率: {:.1}%\n", result.completion_percentage()));
-        report.push_str(&format!("- 测试: {}/{} 通过\n", result.test_summary.passed, result.test_summary.total));
-        report.push_str(&format!("- 代码质量: {} 警告, {} 错误\n\n", result.quality_report.warnings, result.quality_report.errors));
+        report.push_str(&format!(
+            "- 状态: {} {}\n",
+            status_icon,
+            if result.overall_passed {
+                "通过"
+            } else {
+                "未通过"
+            }
+        ));
+        report.push_str(&format!(
+            "- 完成率: {:.1}%\n",
+            result.completion_percentage()
+        ));
+        report.push_str(&format!(
+            "- 测试: {}/{} 通过\n",
+            result.test_summary.passed, result.test_summary.total
+        ));
+        report.push_str(&format!(
+            "- 代码质量: {} 警告, {} 错误\n\n",
+            result.quality_report.warnings, result.quality_report.errors
+        ));
 
         // Criteria results table
         report.push_str("## 验收标准检查\n\n");
@@ -723,7 +779,10 @@ impl AcceptanceEvaluator {
                 CriteriaStatus::Pending => "⏳",
                 CriteriaStatus::Skipped => "⏭️",
             };
-            report.push_str(&format!("| {} | {} | {} |\n", cr.criteria_id, status, cr.evidence));
+            report.push_str(&format!(
+                "| {} | {} | {} |\n",
+                cr.criteria_id, status, cr.evidence
+            ));
         }
 
         report.push_str("\n");
@@ -876,7 +935,8 @@ mod tests {
         let (temp_dir, checker) = create_file_checker();
         let file_path = temp_dir.path().join("test.txt");
         std::fs::write(&file_path, "hello world").expect("write file");
-        let result = checker.check_content_contains(PathBuf::from("test.txt").as_path(), "notfound");
+        let result =
+            checker.check_content_contains(PathBuf::from("test.txt").as_path(), "notfound");
         assert!(!result.expect("check content"));
     }
 
@@ -885,7 +945,8 @@ mod tests {
         let (temp_dir, checker) = create_file_checker();
         let file_path = temp_dir.path().join("test.txt");
         std::fs::write(&file_path, "fn main() {}").expect("write file");
-        let result = checker.check_content_matches(PathBuf::from("test.txt").as_path(), r"fn\s+\w+\s*\(\)");
+        let result =
+            checker.check_content_matches(PathBuf::from("test.txt").as_path(), r"fn\s+\w+\s*\(\)");
         assert!(result.expect("check content matches"));
     }
 
@@ -917,7 +978,9 @@ mod tests {
     fn test_command_executor_execute_failure() {
         let (_temp_dir, executor) = create_command_executor();
         // Use a command that will fail
-        let result = executor.execute("ls /nonexistent_directory_12345").expect("execute");
+        let result = executor
+            .execute("ls /nonexistent_directory_12345")
+            .expect("execute");
         assert!(!result.success);
         assert_ne!(result.exit_code, 0);
     }
@@ -1167,10 +1230,8 @@ mod tests {
     fn test_extract_criteria() {
         let (_temp_dir, evaluator) = create_evaluator();
         let mut main_task = MainTask::new(PathBuf::from("/tmp").as_path(), "实现登录");
-        main_task.acceptance_criteria = vec![
-            "用户可以登录".to_string(),
-            "登录失败有提示".to_string(),
-        ];
+        main_task.acceptance_criteria =
+            vec!["用户可以登录".to_string(), "登录失败有提示".to_string()];
 
         let criteria = evaluator.extract_criteria(&main_task);
         assert_eq!(criteria.len(), 2);
@@ -1188,15 +1249,13 @@ mod tests {
         let (_temp_dir, evaluator) = create_evaluator();
         let result = EvaluationResult::new("task-1".to_string());
 
-        let satisfaction = evaluator.evaluate_requirement_satisfaction(
-            "实现登录",
-            3,
-            3,
-            &result,
-        );
+        let satisfaction = evaluator.evaluate_requirement_satisfaction("实现登录", 3, 3, &result);
 
         // Need criteria to be passed for fully satisfied
-        assert!(matches!(satisfaction, RequirementSatisfaction::PartiallySatisfied(_)));
+        assert!(matches!(
+            satisfaction,
+            RequirementSatisfaction::PartiallySatisfied(_)
+        ));
     }
 
     #[test]

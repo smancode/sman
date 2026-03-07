@@ -8,16 +8,16 @@ pub(crate) mod project_commands;
 pub(crate) mod settings_commands;
 pub(crate) mod task_commands;
 pub(crate) mod utility_commands;
+pub(crate) use crate::error::{TauriError, TauriResult};
 pub use crate::orchestration::{
-    execute_orchestrated_task, get_orchestration_status, get_task_dag, OrchestrationProgress,
-    OrchestratedTaskResult, TaskDagResponse,
+    execute_orchestrated_task, get_orchestration_status, get_task_dag, OrchestratedTaskResult,
+    OrchestrationProgress, TaskDagResponse,
 };
+pub(crate) use crate::state::AppState;
+pub(crate) use history_runtime::{open_project_history_store, resolve_conversation_project};
 pub use project_commands::{
     add_project, get_project_config, get_projects, remove_project, update_project_config,
 };
-pub(crate) use crate::error::{TauriError, TauriResult};
-pub(crate) use crate::state::AppState;
-pub(crate) use history_runtime::{open_project_history_store, resolve_conversation_project};
 
 #[cfg(test)]
 mod tests {
@@ -33,12 +33,15 @@ mod tests {
         persist_path_from_task_experience, persist_user_input_experience, persist_user_memory,
         sanitize_path_fragment, should_generate_path_from_task_experience,
     };
-    use smanclaw_core::{EvaluationResult, Experience, LearnedItem, SkillStore, SubTask, SubTaskStatus, TaskDag};
+    use smanclaw_core::{
+        EvaluationResult, Experience, LearnedItem, SkillStore, SubTask, SubTaskStatus, TaskDag,
+    };
     use std::fs;
 
     #[test]
     fn extracts_json_from_markdown_block() {
-        let output = "text\n```json\n{\"subtasks\":[{\"id\":\"task-1\",\"description\":\"a\"}]}\n```\nend";
+        let output =
+            "text\n```json\n{\"subtasks\":[{\"id\":\"task-1\",\"description\":\"a\"}]}\n```\nend";
         let payload = extract_json_payload(output).expect("json payload");
         assert!(payload.contains("\"subtasks\""));
     }
@@ -249,7 +252,9 @@ mod tests {
         let store = SkillStore::for_paths(&root).expect("path store");
         let metas = store.list().expect("list path skills");
         assert!(!metas.is_empty());
-        assert!(metas.iter().any(|meta| meta.tags.contains(&"path".to_string())));
+        assert!(metas
+            .iter()
+            .any(|meta| meta.tags.contains(&"path".to_string())));
 
         let _ = fs::remove_dir_all(root);
     }

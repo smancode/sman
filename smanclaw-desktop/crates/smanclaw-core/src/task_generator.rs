@@ -318,10 +318,7 @@ mod tests {
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.exists());
-        assert_eq!(
-            path.file_name().unwrap().to_str().unwrap(),
-            "task.md"
-        );
+        assert_eq!(path.file_name().unwrap().to_str().unwrap(), "task.md");
         assert_eq!(
             path.parent()
                 .and_then(|parent| parent.file_name())
@@ -412,7 +409,11 @@ mod tests {
 
         // Update a specific item
         generator
-            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
+            .update_status(
+                "test-task-1",
+                "在 tests 目录中补充/编写失败测试（Red）",
+                true,
+            )
             .expect("update status");
 
         // Verify the item is now marked as done
@@ -433,12 +434,20 @@ mod tests {
 
         // First mark as done
         generator
-            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
+            .update_status(
+                "test-task-1",
+                "在 tests 目录中补充/编写失败测试（Red）",
+                true,
+            )
             .expect("update status");
 
         // Then mark as not done
         generator
-            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", false)
+            .update_status(
+                "test-task-1",
+                "在 tests 目录中补充/编写失败测试（Red）",
+                false,
+            )
             .expect("update status");
 
         // Verify the item is back to not done
@@ -538,10 +547,18 @@ mod tests {
 
         // Mark some items as done
         generator
-            .update_status("test-task-1", "在 tests 目录中补充/编写失败测试（Red）", true)
+            .update_status(
+                "test-task-1",
+                "在 tests 目录中补充/编写失败测试（Red）",
+                true,
+            )
             .expect("update status");
         generator
-            .update_status("test-task-1", "以最小改动实现功能直至测试通过（Green）", true)
+            .update_status(
+                "test-task-1",
+                "以最小改动实现功能直至测试通过（Green）",
+                true,
+            )
             .expect("update status");
 
         // Verify updated count

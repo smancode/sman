@@ -174,7 +174,10 @@ mod tests {
     #[test]
     fn llm_settings_defaults() {
         let settings = LlmSettings::default();
-        assert_eq!(settings.api_url, "https://open.bigmodel.cn/api/coding/paas/v4");
+        assert_eq!(
+            settings.api_url,
+            "https://open.bigmodel.cn/api/coding/paas/v4"
+        );
         assert_eq!(settings.default_model, "GLM-5");
         assert!(settings.api_key.is_empty());
     }

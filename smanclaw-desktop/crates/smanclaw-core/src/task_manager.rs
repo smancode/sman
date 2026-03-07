@@ -104,7 +104,8 @@ impl TaskManager {
                 updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(|_| Utc::now()),
-                completed_at: row.get::<_, Option<String>>(8)?
+                completed_at: row
+                    .get::<_, Option<String>>(8)?
                     .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
                     .map(|dt| dt.with_timezone(&Utc)),
             })
@@ -139,7 +140,8 @@ impl TaskManager {
                     updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(7)?)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
-                    completed_at: row.get::<_, Option<String>>(8)?
+                    completed_at: row
+                        .get::<_, Option<String>>(8)?
                         .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc)),
                 })
@@ -288,7 +290,12 @@ mod tests {
         let task = manager.create_task("proj-123", "Test").expect("create");
 
         manager
-            .update_task_result(&task.id, TaskStatus::Completed, Some("Done!".to_string()), None)
+            .update_task_result(
+                &task.id,
+                TaskStatus::Completed,
+                Some("Done!".to_string()),
+                None,
+            )
             .expect("update");
 
         let updated = manager
@@ -307,7 +314,12 @@ mod tests {
         let task = manager.create_task("proj-123", "Test").expect("create");
 
         manager
-            .update_task_result(&task.id, TaskStatus::Failed, None, Some("Something went wrong".to_string()))
+            .update_task_result(
+                &task.id,
+                TaskStatus::Failed,
+                None,
+                Some("Something went wrong".to_string()),
+            )
             .expect("update");
 
         let updated = manager

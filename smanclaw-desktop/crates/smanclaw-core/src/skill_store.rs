@@ -565,7 +565,11 @@ mod tests {
     fn skill_store_update_rejects_empty_content() {
         let temp_dir = TempDir::new().expect("temp dir");
         let store = SkillStore::new(temp_dir.path()).expect("create store");
-        let skill = create_test_skill("skill-update-empty", "coding/update-empty.md", vec!["coding"]);
+        let skill = create_test_skill(
+            "skill-update-empty",
+            "coding/update-empty.md",
+            vec!["coding"],
+        );
         store.create(&skill).expect("create skill");
 
         let mut updated = skill.clone();

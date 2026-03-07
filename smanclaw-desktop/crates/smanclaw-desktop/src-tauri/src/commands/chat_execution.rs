@@ -46,7 +46,10 @@ pub async fn send_message(
     history_store.save_entry(&user_entry)?;
 
     let settings = state.settings_store.lock().await.load()?;
-    let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(&project_path, &settings)?);
+    let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(
+        &project_path,
+        &settings,
+    )?);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     let app_handle_clone = app_handle.clone();
@@ -237,14 +240,16 @@ pub async fn send_message(
                     timestamp: Utc::now(),
                 };
 
-                let save_store =
-                    match open_project_history_store(&config_dir_for_save, &project_path_for_save) {
-                        Ok(store) => store,
-                        Err(e) => {
-                            tracing::error!("Failed to open project history store: {}", e);
-                            return;
-                        }
-                    };
+                let save_store = match open_project_history_store(
+                    &config_dir_for_save,
+                    &project_path_for_save,
+                ) {
+                    Ok(store) => store,
+                    Err(e) => {
+                        tracing::error!("Failed to open project history store: {}", e);
+                        return;
+                    }
+                };
                 if let Err(e) = save_store.save_entry(&assistant_entry) {
                     tracing::error!("Failed to save assistant message: {}", e);
                 }
@@ -261,7 +266,10 @@ pub async fn send_message(
                 match open_project_history_store(&config_dir_for_save, &project_path_for_save) {
                     Ok(store) => {
                         if let Err(save_error) = store.save_entry(&assistant_entry) {
-                            tracing::error!("Failed to save assistant error message: {}", save_error);
+                            tracing::error!(
+                                "Failed to save assistant error message: {}",
+                                save_error
+                            );
                         }
                     }
                     Err(open_error) => {

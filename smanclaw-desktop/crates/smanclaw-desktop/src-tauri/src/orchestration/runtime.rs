@@ -1,6 +1,6 @@
 use smanclaw_core::{
     ExperienceSink, MainTaskManager, MainTaskStatus, SkillStore, SubClawExecutor, SubTaskStatus,
-    TaskDag, TaskGenerator, TaskManager, TaskResultForExperience,
+    TaskDag, TaskGenerator, TaskManager,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::AppSettings;
@@ -11,12 +11,15 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 use crate::commands::task_commands::subtask_file_stem;
-use crate::commands::utility_commands::persist_task_experience_artifacts;
 use crate::events::{
     emit_orchestration_progress, emit_subtask_completed, emit_subtask_started,
     emit_task_status_event, TaskEventStatus,
 };
 
+use super::task_outcome::{
+    apply_execution_outcome, emit_progress_and_completion, persist_execution_experience,
+    subtask_status_from_success,
+};
 use super::{remediation::finalize_orchestration, ORCHESTRATION_DAGS};
 
 pub(crate) fn spawn_orchestration_execution(
@@ -92,7 +95,8 @@ pub(crate) fn spawn_orchestration_execution(
             }
 
             for task in group_tasks {
-                if let Err(e) = emit_subtask_started(&app_handle, &task_id, &task.id, &task.description)
+                if let Err(e) =
+                    emit_subtask_started(&app_handle, &task_id, &task.id, &task.description)
                 {
                     tracing::error!("Failed to emit subtask started event: {}", e);
                 }
@@ -136,8 +140,9 @@ pub(crate) fn spawn_orchestration_execution(
                         Ok(skill_store) => {
                             let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
                             if let Some(bridge) = bridge_for_task {
-                                executor
-                                    .set_step_executor(Arc::new(ZeroclawStepExecutor::from_bridge(bridge)));
+                                executor.set_step_executor(Arc::new(
+                                    ZeroclawStepExecutor::from_bridge(bridge),
+                                ));
                             }
                             executor.run().await.map_err(|e| e.to_string())
                         }
@@ -174,50 +179,31 @@ pub(crate) fn spawn_orchestration_execution(
                     }
                 };
 
-                if let Some(t) = dag.get_task_mut(&task.id) {
-                    t.status = if result.success {
-                        SubTaskStatus::Completed
-                    } else {
-                        SubTaskStatus::Failed
-                    };
-                    t.result = result.error.clone().or(Some(format!(
-                        "Completed {}/{} steps",
-                        result.steps_completed, result.steps_total
-                    )));
-                }
+                let output_text = apply_execution_outcome(
+                    &mut dag,
+                    &task.id,
+                    result.success,
+                    result.error.clone(),
+                    result.steps_completed,
+                    result.steps_total,
+                );
                 if let Err(e) = main_task_manager.update_sub_task_status(
                     &main_task_id,
                     &task.id,
-                    if result.success {
-                        SubTaskStatus::Completed
-                    } else {
-                        SubTaskStatus::Failed
-                    },
+                    subtask_status_from_success(result.success),
                 ) {
                     tracing::error!("Failed to update subtask final status: {}", e);
                 }
-                if let Some(sink) = experience_sink.as_ref() {
-                    let task_md_content = std::fs::read_to_string(&task_md_path).ok();
-                    let output_text = result.error.clone().unwrap_or_else(|| {
-                        format!(
-                            "Completed {}/{} steps",
-                            result.steps_completed, result.steps_total
-                        )
-                    });
-                    let mut task_result = TaskResultForExperience::new(
-                        task.id.clone(),
-                        task.description.clone(),
-                        output_text,
-                        result.success,
-                    )
-                    .with_files(vec![task_md_path.display().to_string()]);
-                    if let Some(content) = task_md_content {
-                        task_result = task_result.with_task_md(content);
-                    }
-                    if let Ok(experience) = sink.extract_experience(&task_result) {
-                        persist_task_experience_artifacts(&project_path, sink, &experience);
-                    }
-                }
+                let experience_output = result.error.as_deref().unwrap_or(output_text.as_str());
+                persist_execution_experience(
+                    &project_path,
+                    experience_sink.as_ref(),
+                    &task.id,
+                    &task.description,
+                    &task_md_path,
+                    experience_output,
+                    result.success,
+                );
                 completed_count += 1;
                 if let Err(e) = emit_task_status_event(
                     &app_handle,
@@ -230,21 +216,16 @@ pub(crate) fn spawn_orchestration_execution(
                 ) {
                     tracing::error!("Failed to emit running status event: {}", e);
                 }
-                if let Err(e) =
-                    emit_orchestration_progress(&app_handle, &task_id, completed_count, total_tasks)
-                {
-                    tracing::error!("Failed to emit progress event: {}", e);
-                }
-                if let Err(emit_err) = emit_subtask_completed(
+                emit_progress_and_completion(
                     &app_handle,
                     &task_id,
                     &task.id,
                     result.success,
-                    &format!("Completed {}/{} steps", result.steps_completed, result.steps_total),
+                    &output_text,
                     result.error.clone(),
-                ) {
-                    tracing::error!("Failed to emit subtask completed event: {}", emit_err);
-                }
+                    completed_count,
+                    total_tasks,
+                );
             }
 
             {
@@ -356,9 +337,12 @@ fn mark_subtask_failed(
         tracing::error!("{}: {}", status_error, update_err);
     }
     *completed_count += 1;
-    if let Err(progress_err) =
-        emit_orchestration_progress(app_handle, orchestration_task_id, *completed_count, total_tasks)
-    {
+    if let Err(progress_err) = emit_orchestration_progress(
+        app_handle,
+        orchestration_task_id,
+        *completed_count,
+        total_tasks,
+    ) {
         tracing::error!("Failed to emit progress after failure: {}", progress_err);
     }
     if let Err(emit_err) = emit_subtask_completed(
@@ -369,6 +353,9 @@ fn mark_subtask_failed(
         "",
         Some(message),
     ) {
-        tracing::error!("Failed to emit subtask completion after failure: {}", emit_err);
+        tracing::error!(
+            "Failed to emit subtask completion after failure: {}",
+            emit_err
+        );
     }
 }

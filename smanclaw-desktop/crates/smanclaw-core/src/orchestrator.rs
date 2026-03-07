@@ -369,7 +369,8 @@ impl Orchestrator {
                 main_task_manager.update_status(&main_task.id, MainTaskStatus::Failed)?;
             }
             OrchestratorPollResult::TaskFailed { task_id, error } => {
-                self.state = OrchestratorState::Failed(format!("Task {} failed: {}", task_id, error));
+                self.state =
+                    OrchestratorState::Failed(format!("Task {} failed: {}", task_id, error));
                 main_task_manager.update_status(&main_task.id, MainTaskStatus::Failed)?;
             }
         }
@@ -510,8 +511,8 @@ impl Orchestrator {
         let mut paths = Vec::new();
 
         for spec in &specs {
-            let subtask = SubTask::new(&spec.title, &spec.description)
-                .with_test_command("cargo test");
+            let subtask =
+                SubTask::new(&spec.title, &spec.description).with_test_command("cargo test");
 
             let path = self.task_generator.generate(&subtask)?;
             paths.push(path);
@@ -537,10 +538,7 @@ impl Orchestrator {
             .collect();
 
         // Create task poller for monitoring
-        self.task_poller = Some(TaskPoller::new(
-            &self.project_path,
-            Duration::from_secs(1),
-        )?);
+        self.task_poller = Some(TaskPoller::new(&self.project_path, Duration::from_secs(1))?);
 
         Ok(())
     }
@@ -561,7 +559,11 @@ impl Orchestrator {
 
         // For testing, we do a single check rather than waiting
         // In production, this would use poller.wait_all()
-        let task_ids: Vec<&str> = self.dispatched_task_ids.iter().map(String::as_str).collect();
+        let task_ids: Vec<&str> = self
+            .dispatched_task_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
 
         let statuses = poller.check_all(&task_ids)?;
 
@@ -577,7 +579,10 @@ impl Orchestrator {
             Ok(OrchestratorPollResult::AllCompleted)
         } else if completed == 0 {
             // Simulate in-progress for testing
-            Ok(OrchestratorPollResult::InProgress { completed: 0, total })
+            Ok(OrchestratorPollResult::InProgress {
+                completed: 0,
+                total,
+            })
         } else {
             Ok(OrchestratorPollResult::InProgress { completed, total })
         }
@@ -673,9 +678,12 @@ impl Orchestrator {
         vec![
             SubTask::new("login-1", "Define user login related data models and types")
                 .with_test_command("cargo check"),
-            SubTask::new("login-2", "Implement user authentication service (password verification, token generation)")
-                .depends_on("login-1")
-                .with_test_command("cargo test auth"),
+            SubTask::new(
+                "login-2",
+                "Implement user authentication service (password verification, token generation)",
+            )
+            .depends_on("login-1")
+            .with_test_command("cargo test auth"),
             SubTask::new("login-3", "Implement login API interface")
                 .depends_on("login-2")
                 .with_test_command("cargo test login_api"),
@@ -692,9 +700,12 @@ impl Orchestrator {
         vec![
             SubTask::new("register-1", "Define user registration related data models")
                 .with_test_command("cargo check"),
-            SubTask::new("register-2", "Implement user registration service (input validation, password encryption)")
-                .depends_on("register-1")
-                .with_test_command("cargo test register_service"),
+            SubTask::new(
+                "register-2",
+                "Implement user registration service (input validation, password encryption)",
+            )
+            .depends_on("register-1")
+            .with_test_command("cargo test register_service"),
             SubTask::new("register-3", "Implement registration API interface")
                 .depends_on("register-2")
                 .with_test_command("cargo test register_api"),
@@ -907,7 +918,11 @@ mod tests {
     fn create_test_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
         // Create minimal project structure
-        std::fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"test\"\nversion = \"0.1.0\"").unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"test\"\nversion = \"0.1.0\"",
+        )
+        .unwrap();
         std::fs::create_dir(dir.path().join("src")).unwrap();
         std::fs::write(dir.path().join("src/main.rs"), "fn main() {}").unwrap();
         dir
@@ -951,14 +966,19 @@ mod tests {
         let context = orchestrator.build_context();
         assert!(context.is_ok());
         let context = context.unwrap();
-        assert_eq!(context.project_info.project_type, smanclaw_types::ProjectType::Rust);
+        assert_eq!(
+            context.project_info.project_type,
+            smanclaw_types::ProjectType::Rust
+        );
     }
 
     #[test]
     fn test_analyze_request_returns_subtask_specs() {
         let dir = create_test_project();
         let mut orchestrator = Orchestrator::new(dir.path()).unwrap();
-        let specs = orchestrator.analyze_request("Implement login feature").unwrap();
+        let specs = orchestrator
+            .analyze_request("Implement login feature")
+            .unwrap();
         assert!(!specs.is_empty());
         assert!(specs.iter().any(|s| s.title.contains("login")));
     }
@@ -967,7 +987,9 @@ mod tests {
     fn test_analyze_request_login_decomposition() {
         let dir = create_test_project();
         let mut orchestrator = Orchestrator::new(dir.path()).unwrap();
-        let specs = orchestrator.analyze_request("Implement user login").unwrap();
+        let specs = orchestrator
+            .analyze_request("Implement user login")
+            .unwrap();
         assert!(specs.len() >= 3);
     }
 
@@ -975,7 +997,9 @@ mod tests {
     fn test_analyze_request_register_decomposition() {
         let dir = create_test_project();
         let mut orchestrator = Orchestrator::new(dir.path()).unwrap();
-        let specs = orchestrator.analyze_request("Implement user register").unwrap();
+        let specs = orchestrator
+            .analyze_request("Implement user register")
+            .unwrap();
         assert!(specs.len() >= 3);
     }
 
@@ -1019,7 +1043,8 @@ mod tests {
         let dir = create_test_project();
         let mut orchestrator = Orchestrator::new(dir.path()).unwrap();
         // Create poller but no dispatched tasks
-        orchestrator.task_poller = Some(TaskPoller::new(dir.path(), Duration::from_secs(1)).unwrap());
+        orchestrator.task_poller =
+            Some(TaskPoller::new(dir.path(), Duration::from_secs(1)).unwrap());
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(orchestrator.poll_completion()).unwrap();
         assert!(matches!(result, OrchestratorPollResult::AllCompleted));
@@ -1041,7 +1066,10 @@ mod tests {
         let specs = orchestrator.handle_failure("Test failure reason").unwrap();
         assert!(!specs.is_empty());
         assert!(specs.iter().any(|s| s.title.contains("remediation")));
-        assert_eq!(orchestrator.state(), &OrchestratorState::Failed("Test failure reason".to_string()));
+        assert_eq!(
+            orchestrator.state(),
+            &OrchestratorState::Failed("Test failure reason".to_string())
+        );
     }
 
     #[test]
@@ -1084,8 +1112,7 @@ mod tests {
 
     #[test]
     fn test_subtask_with_test_command() {
-        let task = SubTask::new("task-1", "Test task")
-            .with_test_command("cargo test");
+        let task = SubTask::new("task-1", "Test task").with_test_command("cargo test");
         assert_eq!(task.test_command, Some("cargo test".to_string()));
     }
 
@@ -1131,7 +1158,9 @@ mod tests {
 
         assert!(!tasks.is_empty());
         assert!(tasks.iter().any(|t| t.description.contains("data models")));
-        assert!(tasks.iter().any(|t| t.description.contains("authentication")));
+        assert!(tasks
+            .iter()
+            .any(|t| t.description.contains("authentication")));
         assert!(tasks.iter().any(|t| t.description.contains("API")));
     }
 
@@ -1172,10 +1201,7 @@ mod tests {
 
     #[test]
     fn test_dag_from_tasks() {
-        let tasks = vec![
-            SubTask::new("a", "Task A"),
-            SubTask::new("b", "Task B"),
-        ];
+        let tasks = vec![SubTask::new("a", "Task A"), SubTask::new("b", "Task B")];
         let dag = TaskDag::from_tasks(tasks);
         assert!(dag.is_ok());
         assert_eq!(dag.unwrap().len(), 2);

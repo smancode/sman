@@ -42,7 +42,10 @@ pub enum RuntimeEvent {
     /// User submitted a new request
     UserRequest { content: String },
     /// A subtask completed successfully
-    SubTaskCompleted { task_id: String, result: ExecutionResult },
+    SubTaskCompleted {
+        task_id: String,
+        result: ExecutionResult,
+    },
     /// A subtask failed
     SubTaskFailed { task_id: String, error: String },
     /// Evaluation completed
@@ -491,7 +494,9 @@ mod tests {
     async fn test_handle_evaluation_completed() {
         let (_temp_dir, mut runtime) = create_runtime();
         let eval_result = EvaluationResult::new("task-1".to_string());
-        let event = RuntimeEvent::EvaluationCompleted { result: eval_result };
+        let event = RuntimeEvent::EvaluationCompleted {
+            result: eval_result,
+        };
         let result = runtime.handle_event(event).await;
         assert!(result.is_ok());
         assert_eq!(runtime.stats().evaluations_completed, 1);
@@ -586,7 +591,9 @@ mod tests {
 
         // EvaluationCompleted should transition back to Idle
         let eval_result = EvaluationResult::new("task-1".to_string());
-        let event = RuntimeEvent::EvaluationCompleted { result: eval_result };
+        let event = RuntimeEvent::EvaluationCompleted {
+            result: eval_result,
+        };
         runtime.handle_event(event).await.unwrap();
         assert_eq!(runtime.state(), RuntimeState::Idle);
     }
@@ -769,7 +776,11 @@ mod tests {
 
         for stage in stages {
             let msg = runtime.format_feedback(stage.clone());
-            assert!(!msg.is_empty(), "Message for {:?} should not be empty", stage);
+            assert!(
+                !msg.is_empty(),
+                "Message for {:?} should not be empty",
+                stage
+            );
         }
     }
 }

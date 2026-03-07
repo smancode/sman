@@ -1,5 +1,7 @@
 use smanclaw_ffi::test_llm_direct;
-use smanclaw_types::{AppSettings, ConnectionTestResult, EmbeddingSettings, LlmSettings, QdrantSettings};
+use smanclaw_types::{
+    AppSettings, ConnectionTestResult, EmbeddingSettings, LlmSettings, QdrantSettings,
+};
 use tauri::State;
 
 use crate::error::TauriResult;

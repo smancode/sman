@@ -166,12 +166,21 @@ mod tests {
         println!("Serialized JSON: {}", json);
 
         // Verify output is present
-        assert!(json.contains("output"), "JSON should contain 'output' field");
-        assert!(json.contains("Hi there"), "JSON should contain output value");
+        assert!(
+            json.contains("output"),
+            "JSON should contain 'output' field"
+        );
+        assert!(
+            json.contains("Hi there"),
+            "JSON should contain output value"
+        );
 
         let deserialized: Task = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(task, deserialized);
-        assert_eq!(deserialized.output, Some("Hi there! How can I help?".to_string()));
+        assert_eq!(
+            deserialized.output,
+            Some("Hi there! How can I help?".to_string())
+        );
     }
 
     #[test]
@@ -214,7 +223,11 @@ mod tests {
         };
 
         let json = serde_json::to_string(&task).expect("serialize");
-        assert!(json.contains(r#""status":"running""#), "Status should be lowercase 'running', got: {}", json);
+        assert!(
+            json.contains(r#""status":"running""#),
+            "Status should be lowercase 'running', got: {}",
+            json
+        );
     }
 
     #[test]

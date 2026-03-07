@@ -166,7 +166,11 @@ impl ProjectExplorer {
             }
         });
 
-        let prefix = if depth == 0 { String::new() } else { "│   ".repeat(depth - 1) };
+        let prefix = if depth == 0 {
+            String::new()
+        } else {
+            "│   ".repeat(depth - 1)
+        };
 
         for (i, entry) in dirs.iter().enumerate() {
             let name = entry.file_name().to_string_lossy().to_string();
@@ -181,7 +185,11 @@ impl ProjectExplorer {
                     }
 
                     if depth == 0 {
-                        tree.push(format!("{}{}", name, if name.ends_with('/') { "" } else { "/" }));
+                        tree.push(format!(
+                            "{}{}",
+                            name,
+                            if name.ends_with('/') { "" } else { "/" }
+                        ));
                     } else {
                         tree.push(format!("{}{}{}/", prefix, connector, name));
                     }
@@ -309,7 +317,9 @@ impl ProjectExplorer {
                     config.build_cmd = Some("mvn compile".to_string());
                     config.test_cmd = Some("mvn test".to_string());
                     config.lint_cmd = Some("mvn checkstyle:check".to_string());
-                } else if path.join("build.gradle").exists() || path.join("build.gradle.kts").exists() {
+                } else if path.join("build.gradle").exists()
+                    || path.join("build.gradle.kts").exists()
+                {
                     config.build_cmd = Some("gradle build".to_string());
                     config.test_cmd = Some("gradle test".to_string());
                     config.lint_cmd = Some("gradle spotlessCheck".to_string());
@@ -322,7 +332,10 @@ impl ProjectExplorer {
     }
 
     /// Extract dependencies from project configuration files
-    fn extract_dependencies(path: &Path, project_type: &ProjectType) -> Result<HashMap<String, String>> {
+    fn extract_dependencies(
+        path: &Path,
+        project_type: &ProjectType,
+    ) -> Result<HashMap<String, String>> {
         let mut deps = HashMap::new();
 
         match project_type {
@@ -330,8 +343,7 @@ impl ProjectExplorer {
                 if let Ok(content) = fs::read_to_string(path.join("Cargo.toml")) {
                     // Simple parsing for [dependencies] section
                     let in_deps = content.lines().any(|line| {
-                        line.starts_with("[dependencies]")
-                            || line.starts_with("[dev-dependencies]")
+                        line.starts_with("[dependencies]") || line.starts_with("[dev-dependencies]")
                     });
 
                     if in_deps {
@@ -353,7 +365,10 @@ impl ProjectExplorer {
             ProjectType::NodeJs => {
                 if let Ok(content) = fs::read_to_string(path.join("package.json")) {
                     if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
-                        fn extract_deps(obj: &serde_json::Value, deps: &mut HashMap<String, String>) {
+                        fn extract_deps(
+                            obj: &serde_json::Value,
+                            deps: &mut HashMap<String, String>,
+                        ) {
                             if let Some(deps_obj) = obj.as_object() {
                                 for (name, version) in deps_obj {
                                     if let Some(v) = version.as_str() {
@@ -481,8 +496,12 @@ impl ProjectExplorer {
                     "Constants: SCREAMING_SNAKE_CASE (e.g., MAX_RETRIES)".to_string(),
                     "Modules: snake_case (e.g., my_module)".to_string(),
                 ],
-                error_handling: Some("Use Result<T, E> and thiserror for custom errors".to_string()),
-                import_style: Some("Group imports: std -> external -> crate (use rustfmt)".to_string()),
+                error_handling: Some(
+                    "Use Result<T, E> and thiserror for custom errors".to_string(),
+                ),
+                import_style: Some(
+                    "Group imports: std -> external -> crate (use rustfmt)".to_string(),
+                ),
                 formatting_rules: vec!["Use rustfmt for consistent formatting".to_string()],
             },
             ProjectType::NodeJs => CodeStyle {
@@ -576,10 +595,8 @@ impl ProjectExplorer {
                     if let Ok(entries) = fs::read_dir(path.join("cmd")) {
                         for entry in entries.filter_map(|e| e.ok()) {
                             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                                let main_path = format!(
-                                    "cmd/{}/main.go",
-                                    entry.file_name().to_string_lossy()
-                                );
+                                let main_path =
+                                    format!("cmd/{}/main.go", entry.file_name().to_string_lossy());
                                 if path.join(&main_path).exists() {
                                     entry_points.push(main_path);
                                 }
@@ -596,10 +613,7 @@ impl ProjectExplorer {
                             if file_path.extension().map(|e| e == "java").unwrap_or(false) {
                                 let name = entry.file_name().to_string_lossy().to_string();
                                 if name.starts_with("Main") || name.starts_with("Application") {
-                                    entry_points.push(format!(
-                                        "src/main/java/{}",
-                                        name
-                                    ));
+                                    entry_points.push(format!("src/main/java/{}", name));
                                 }
                             }
                         }
@@ -627,7 +641,9 @@ mod tests {
 
     fn create_rust_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
-        fs::write(dir.path().join("Cargo.toml"), r#"
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
 [package]
 name = "test-project"
 version = "0.1.0"
@@ -635,7 +651,9 @@ version = "0.1.0"
 [dependencies]
 serde = "1.0"
 tokio = "1.0"
-"#).expect("write Cargo.toml");
+"#,
+        )
+        .expect("write Cargo.toml");
         fs::create_dir(dir.path().join("src")).expect("create src dir");
         fs::write(dir.path().join("src/main.rs"), "fn main() {}").expect("write main.rs");
         fs::write(dir.path().join("src/lib.rs"), "pub fn lib() {}").expect("write lib.rs");
@@ -644,7 +662,9 @@ tokio = "1.0"
 
     fn create_nodejs_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
-        fs::write(dir.path().join("package.json"), r#"
+        fs::write(
+            dir.path().join("package.json"),
+            r#"
 {
     "name": "test-project",
     "version": "1.0.0",
@@ -660,7 +680,9 @@ tokio = "1.0"
         "typescript": "^5.0.0"
     }
 }
-"#).expect("write package.json");
+"#,
+        )
+        .expect("write package.json");
         fs::create_dir(dir.path().join("src")).expect("create src dir");
         fs::write(dir.path().join("src/index.js"), "console.log('hello')").expect("write index.js");
         dir
@@ -668,19 +690,29 @@ tokio = "1.0"
 
     fn create_python_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
-        fs::write(dir.path().join("pyproject.toml"), r#"
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            r#"
 [project]
 name = "test-project"
 version = "0.1.0"
-"#).expect("write pyproject.toml");
-        fs::write(dir.path().join("requirements.txt"), "requests>=2.28.0\nflask==2.0.0").expect("write requirements.txt");
+"#,
+        )
+        .expect("write pyproject.toml");
+        fs::write(
+            dir.path().join("requirements.txt"),
+            "requests>=2.28.0\nflask==2.0.0",
+        )
+        .expect("write requirements.txt");
         fs::write(dir.path().join("main.py"), "print('hello')").expect("write main.py");
         dir
     }
 
     fn create_go_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
-        fs::write(dir.path().join("go.mod"), r#"
+        fs::write(
+            dir.path().join("go.mod"),
+            r#"
 module test-project
 
 go 1.21
@@ -688,14 +720,19 @@ go 1.21
 require (
     github.com/gin-gonic/gin v1.9.0
 )
-"#).expect("write go.mod");
-        fs::write(dir.path().join("main.go"), "package main\n\nfunc main() {}").expect("write main.go");
+"#,
+        )
+        .expect("write go.mod");
+        fs::write(dir.path().join("main.go"), "package main\n\nfunc main() {}")
+            .expect("write main.go");
         dir
     }
 
     fn create_java_project() -> TempDir {
         let dir = TempDir::new().expect("create temp dir");
-        fs::write(dir.path().join("pom.xml"), r#"
+        fs::write(
+            dir.path().join("pom.xml"),
+            r#"
 <project>
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.example</groupId>
@@ -709,7 +746,9 @@ require (
         </dependency>
     </dependencies>
 </project>
-"#).expect("write pom.xml");
+"#,
+        )
+        .expect("write pom.xml");
         dir
     }
 
@@ -755,7 +794,9 @@ require (
     fn detect_nodejs_project() {
         let dir = create_nodejs_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore nodejs project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore nodejs project");
 
         assert_eq!(knowledge.project_type, ProjectType::NodeJs);
     }
@@ -764,7 +805,9 @@ require (
     fn detect_python_project() {
         let dir = create_python_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore python project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore python project");
 
         assert_eq!(knowledge.project_type, ProjectType::Python);
     }
@@ -793,27 +836,49 @@ require (
         let explorer = ProjectExplorer::new();
         let knowledge = explorer.explore(dir.path()).expect("explore rust project");
 
-        assert_eq!(knowledge.build_config.build_cmd, Some("cargo build".to_string()));
-        assert_eq!(knowledge.build_config.test_cmd, Some("cargo test".to_string()));
-        assert_eq!(knowledge.build_config.lint_cmd, Some("cargo clippy".to_string()));
-        assert_eq!(knowledge.build_config.format_cmd, Some("cargo fmt".to_string()));
+        assert_eq!(
+            knowledge.build_config.build_cmd,
+            Some("cargo build".to_string())
+        );
+        assert_eq!(
+            knowledge.build_config.test_cmd,
+            Some("cargo test".to_string())
+        );
+        assert_eq!(
+            knowledge.build_config.lint_cmd,
+            Some("cargo clippy".to_string())
+        );
+        assert_eq!(
+            knowledge.build_config.format_cmd,
+            Some("cargo fmt".to_string())
+        );
     }
 
     #[test]
     fn extract_nodejs_build_commands() {
         let dir = create_nodejs_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore nodejs project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore nodejs project");
 
-        assert_eq!(knowledge.build_config.build_cmd, Some("npm run build".to_string()));
-        assert_eq!(knowledge.build_config.test_cmd, Some("npm test".to_string()));
+        assert_eq!(
+            knowledge.build_config.build_cmd,
+            Some("npm run build".to_string())
+        );
+        assert_eq!(
+            knowledge.build_config.test_cmd,
+            Some("npm test".to_string())
+        );
     }
 
     #[test]
     fn extract_python_build_commands() {
         let dir = create_python_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore python project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore python project");
 
         assert!(knowledge.build_config.test_cmd.is_some());
         assert!(knowledge.build_config.lint_cmd.is_some());
@@ -823,7 +888,9 @@ require (
     fn extract_nodejs_dependencies() {
         let dir = create_nodejs_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore nodejs project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore nodejs project");
 
         assert!(knowledge.dependencies.contains_key("express"));
         assert!(knowledge.dependencies.contains_key("typescript"));
@@ -833,7 +900,9 @@ require (
     fn extract_python_dependencies() {
         let dir = create_python_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore python project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore python project");
 
         assert!(knowledge.dependencies.contains_key("requests"));
         assert!(knowledge.dependencies.contains_key("flask"));
@@ -853,7 +922,9 @@ require (
     fn find_nodejs_entry_points() {
         let dir = create_nodejs_project();
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore nodejs project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore nodejs project");
 
         assert!(knowledge.entry_points.contains(&"src/index.js".to_string()));
     }
@@ -861,10 +932,16 @@ require (
     #[test]
     fn find_existing_rules() {
         let dir = create_rust_project();
-        fs::write(dir.path().join("CLAUDE.md"), "# Project Rules\n\nAlways write tests.").expect("write CLAUDE.md");
+        fs::write(
+            dir.path().join("CLAUDE.md"),
+            "# Project Rules\n\nAlways write tests.",
+        )
+        .expect("write CLAUDE.md");
 
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore project with rules");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore project with rules");
 
         assert!(!knowledge.existing_rules.is_empty());
         assert!(knowledge.existing_rules[0].contains("CLAUDE.md"));
@@ -878,7 +955,9 @@ require (
         fs::create_dir_all(dir.path().join("node_modules/lodash")).expect("create lodash");
 
         let explorer = ProjectExplorer::new();
-        let knowledge = explorer.explore(dir.path()).expect("explore nodejs project");
+        let knowledge = explorer
+            .explore(dir.path())
+            .expect("explore nodejs project");
 
         // Check that node_modules is not in the directory tree
         for line in &knowledge.directory_structure {
@@ -927,7 +1006,15 @@ require (
         let knowledge = explorer.explore(dir.path()).expect("explore rust project");
 
         assert!(!knowledge.code_style.naming_conventions.is_empty());
-        assert!(knowledge.code_style.naming_conventions.iter().any(|c| c.contains("PascalCase")));
-        assert!(knowledge.code_style.naming_conventions.iter().any(|c| c.contains("snake_case")));
+        assert!(knowledge
+            .code_style
+            .naming_conventions
+            .iter()
+            .any(|c| c.contains("PascalCase")));
+        assert!(knowledge
+            .code_style
+            .naming_conventions
+            .iter()
+            .any(|c| c.contains("snake_case")));
     }
 }

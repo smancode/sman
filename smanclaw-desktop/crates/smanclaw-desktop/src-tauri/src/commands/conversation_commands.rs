@@ -57,14 +57,16 @@ pub async fn list_conversations(
             "Project ID cannot be empty".to_string(),
         ));
     }
-    let project_path = get_project_path(&state, &project_id).await.map_err(|error| {
-        tracing::error!(
-            project_id = %project_id,
-            error = %error,
-            "Failed to resolve project path when listing conversations"
-        );
-        error
-    })?;
+    let project_path = get_project_path(&state, &project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                project_id = %project_id,
+                error = %error,
+                "Failed to resolve project path when listing conversations"
+            );
+            error
+        })?;
     let history_store =
         open_project_history_store(&state.config_dir, &project_path).map_err(|error| {
             tracing::error!(
@@ -75,15 +77,17 @@ pub async fn list_conversations(
             );
             error
         })?;
-    let conversations = history_store.list_conversations(&project_id).map_err(|error| {
-        tracing::error!(
-            project_id = %project_id,
-            project_path = %project_path.display(),
-            error = %error,
-            "Failed to list conversations from history store"
-        );
-        TauriError::from(error)
-    })?;
+    let conversations = history_store
+        .list_conversations(&project_id)
+        .map_err(|error| {
+            tracing::error!(
+                project_id = %project_id,
+                project_path = %project_path.display(),
+                error = %error,
+                "Failed to list conversations from history store"
+            );
+            TauriError::from(error)
+        })?;
     Ok(conversations)
 }
 
@@ -103,14 +107,16 @@ pub async fn create_conversation(
             "Conversation title cannot be empty".to_string(),
         ));
     }
-    let project_path = get_project_path(&state, &project_id).await.map_err(|error| {
-        tracing::error!(
-            project_id = %project_id,
-            error = %error,
-            "Failed to resolve project path when creating conversation"
-        );
-        error
-    })?;
+    let project_path = get_project_path(&state, &project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                project_id = %project_id,
+                error = %error,
+                "Failed to resolve project path when creating conversation"
+            );
+            error
+        })?;
     let history_store =
         open_project_history_store(&state.config_dir, &project_path).map_err(|error| {
             tracing::error!(

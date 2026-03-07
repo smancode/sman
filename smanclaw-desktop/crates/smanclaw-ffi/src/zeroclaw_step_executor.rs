@@ -25,7 +25,10 @@ impl ZeroclawStepExecutor {
 
     /// Create a new ZeroClaw step executor with settings
     pub fn with_settings(project_path: &Path, settings: &AppSettings) -> anyhow::Result<Self> {
-        let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(project_path, settings)?);
+        let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(
+            project_path,
+            settings,
+        )?);
         Ok(Self { bridge })
     }
 

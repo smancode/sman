@@ -1,6 +1,6 @@
+use smanclaw_core::{SubTask, SubTaskStatus, TaskDag};
 use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::{FileAction, Task, TaskStatus};
-use smanclaw_core::{SubTask, SubTaskStatus, TaskDag};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -151,19 +151,19 @@ pub async fn execute_task(
                     status.as_str(),
                     message.as_deref().unwrap_or("")
                 );
-                if let Err(e) =
-                    emit_task_status_event(&app_handle_clone, &task_id, status, message)
+                if let Err(e) = emit_task_status_event(&app_handle_clone, &task_id, status, message)
                 {
                     tracing::error!("Failed to emit task status event: {}", e);
                 }
             }
             Err(e) => {
                 tracing::error!("Task execution failed: {}", e);
-                if let Err(update_err) = task_manager
-                    .lock()
-                    .await
-                    .update_task_result(&task_id, TaskStatus::Failed, None, Some(e.to_string()))
-                {
+                if let Err(update_err) = task_manager.lock().await.update_task_result(
+                    &task_id,
+                    TaskStatus::Failed,
+                    None,
+                    Some(e.to_string()),
+                ) {
                     tracing::error!("Failed to update task result: {}", update_err);
                 }
                 if let Err(emit_err) = emit_task_status_event(

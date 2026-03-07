@@ -527,7 +527,10 @@ mod tests {
     #[tokio::test]
     async fn test_mock_llm_client_chat_with_system() {
         let client = MockLLMClient::new("Response");
-        let result = client.chat_with_system("Be helpful", "Hello").await.expect("chat");
+        let result = client
+            .chat_with_system("Be helpful", "Hello")
+            .await
+            .expect("chat");
         assert_eq!(result, "Response");
     }
 

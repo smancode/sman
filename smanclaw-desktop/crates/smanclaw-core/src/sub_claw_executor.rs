@@ -150,7 +150,11 @@ impl TaskExperience {
     }
 
     /// Add a problem-solution pair
-    pub fn add_problem_solution(&mut self, problem: impl Into<String>, solution: impl Into<String>) {
+    pub fn add_problem_solution(
+        &mut self,
+        problem: impl Into<String>,
+        solution: impl Into<String>,
+    ) {
         self.problems_solved.push((problem.into(), solution.into()));
     }
 
@@ -203,7 +207,12 @@ impl ExecutionResult {
     }
 
     /// Create a failed execution result
-    pub fn failure(task_path: PathBuf, steps_completed: usize, steps_total: usize, error: String) -> Self {
+    pub fn failure(
+        task_path: PathBuf,
+        steps_completed: usize,
+        steps_total: usize,
+        error: String,
+    ) -> Self {
         Self {
             task_path,
             success: false,
@@ -380,11 +389,7 @@ impl SubClawExecutor {
     /// # Returns
     /// The next ChecklistItem or None if all steps are completed
     fn find_next_step(&self, content: &TaskContent) -> Option<ChecklistItem> {
-        content
-            .checklist
-            .iter()
-            .find(|item| !item.checked)
-            .cloned()
+        content.checklist.iter().find(|item| !item.checked).cloned()
     }
 
     /// Execute a single step
@@ -536,10 +541,7 @@ impl SubClawExecutor {
                         steps_completed += 1;
 
                         // Collect experience from successful step
-                        experience.add_learned(format!(
-                            "Completed step: {}",
-                            step.content
-                        ));
+                        experience.add_learned(format!("Completed step: {}", step.content));
                     } else {
                         // Step failed
                         experience.add_problem_solution(
@@ -889,7 +891,10 @@ It can span multiple lines.
 
         experience.add_problem_solution("Problem", "Solution");
         assert_eq!(experience.problems_solved.len(), 1);
-        assert_eq!(experience.problems_solved[0], ("Problem".to_string(), "Solution".to_string()));
+        assert_eq!(
+            experience.problems_solved[0],
+            ("Problem".to_string(), "Solution".to_string())
+        );
 
         experience.add_pattern("Pattern found");
         assert_eq!(experience.patterns_found.len(), 1);

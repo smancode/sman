@@ -63,7 +63,10 @@ pub async fn get_task_dag(task_id: String) -> TauriResult<Option<TaskDagResponse
         .iter()
         .map(|group| group.iter().map(|t| t.id.clone()).collect())
         .collect();
-    let progress = calculate_progress(tasks.iter().filter(|t| t.status == "completed").count(), tasks.len());
+    let progress = calculate_progress(
+        tasks.iter().filter(|t| t.status == "completed").count(),
+        tasks.len(),
+    );
 
     Ok(Some(TaskDagResponse {
         task_id,
