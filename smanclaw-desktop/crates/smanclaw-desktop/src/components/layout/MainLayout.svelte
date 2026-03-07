@@ -162,15 +162,21 @@
         width: 2px;
         height: 60%;
         border-radius: 999px;
-        background: rgba(var(--accent-rgb), 0.45);
+        background: rgba(var(--accent-rgb), 0.34);
         transform: translateX(-50%);
         opacity: 0;
-        transition: opacity 0.16s ease;
+        transition:
+            opacity 0.16s ease,
+            background-color 0.16s ease;
     }
 
     .sidebar-resize-hitbox:hover::after,
     .sidebar-resize-hitbox.active::after {
         opacity: 1;
+    }
+
+    .sidebar-resize-hitbox.active::after {
+        background: rgba(var(--accent-rgb), 0.62);
     }
 
     .main-container {
@@ -203,9 +209,10 @@
         width: min(900px, 100%);
         max-height: calc(100vh - 3rem);
         overflow: auto;
-        background: var(--background);
-        border-radius: 12px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+        background: var(--surface);
+        border: 1px solid var(--line-soft);
+        border-radius: 14px;
+        box-shadow: var(--shadow-floating);
     }
 
     .settings-modal-header {
@@ -214,20 +221,30 @@
         display: flex;
         justify-content: flex-end;
         padding: 0.75rem 1rem;
-        background: var(--surface);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        border-bottom: 1px solid var(--line-soft);
         z-index: 1;
     }
 
     .settings-close-btn {
         padding: 0.4rem 0.85rem;
-        border-radius: 6px;
+        border-radius: 8px;
         color: var(--text-secondary);
-        background: var(--background);
-        transition: all 0.15s;
+        border: 1px solid var(--line-soft);
+        background: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        transition:
+            color 0.15s ease,
+            background-color 0.15s ease,
+            border-color 0.15s ease;
     }
 
     .settings-close-btn:hover {
         color: var(--text-primary);
-        background: var(--surface);
+        border-color: var(--line-strong);
+        background: var(--surface-hover);
     }
 </style>

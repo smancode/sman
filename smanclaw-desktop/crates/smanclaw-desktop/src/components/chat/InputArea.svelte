@@ -103,7 +103,7 @@
     .input-area {
         display: flex;
         flex-direction: column;
-        padding: 0.75rem 1.25rem 1.25rem;
+        padding: 0.9rem 1.25rem 1.25rem;
         background-color: transparent;
     }
 
@@ -111,18 +111,24 @@
         display: flex;
         align-items: center;
         gap: 0.625rem;
-        padding: 0.6rem 0.6rem 0.6rem 0.95rem;
-        background-color: rgba(255, 255, 255, 0.03);
-        border: 1px solid var(--border);
-        border-radius: 14px;
+        padding: 0.58rem 0.58rem 0.58rem 0.9rem;
+        background-color: color-mix(in srgb, var(--surface) 84%, transparent);
+        border: 1px solid var(--line-soft);
+        border-radius: 16px;
         transition:
             border-color 0.15s,
-            box-shadow 0.15s;
+            box-shadow 0.15s,
+            background-color 0.15s;
     }
 
     .input-container:focus-within {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+        border-color: rgba(var(--accent-rgb), 0.55);
+        background-color: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
     }
 
     .input-container.disabled {
@@ -135,7 +141,7 @@
         resize: none;
         color: var(--text-primary);
         font-size: 1rem;
-        line-height: 1.6;
+        line-height: 1.55;
         padding: 0.48rem 0;
         background: transparent;
         border: none;
@@ -156,17 +162,20 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 40px;
-        height: 40px;
+        width: 38px;
+        height: 38px;
         color: white;
         background-color: var(--accent);
-        border-radius: 11px;
-        transition: all 0.15s;
+        border-radius: 10px;
+        transition:
+            background-color 0.15s ease,
+            transform 0.15s ease;
         flex-shrink: 0;
     }
 
     .send-btn:hover:not(:disabled) {
         background-color: var(--accent-hover);
+        transform: translateY(-1px);
     }
 
     .send-btn:disabled {

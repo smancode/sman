@@ -145,9 +145,10 @@
 <style>
     .code-block {
         margin: 0.5rem 0;
-        background-color: color-mix(in srgb, var(--background) 72%, #000 28%);
-        border: 1px solid var(--border);
-        border-radius: 10px;
+        background-color: color-mix(in srgb, var(--surface) 90%, transparent);
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        box-shadow: var(--shadow-soft);
         overflow: hidden;
     }
 
@@ -156,8 +157,12 @@
         align-items: center;
         justify-content: space-between;
         padding: 0.5rem 1rem;
-        background-color: color-mix(in srgb, var(--surface) 86%, #000 14%);
-        border-bottom: 1px solid var(--border);
+        background-color: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        border-bottom: 1px solid var(--line-soft);
     }
 
     .language {
@@ -174,13 +179,22 @@
         font-size: 0.75rem;
         color: var(--text-secondary);
         background-color: transparent;
-        border-radius: 4px;
-        transition: all 0.15s;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        transition:
+            color 0.15s ease,
+            border-color 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .copy-btn:hover {
         color: var(--text-primary);
-        background-color: rgba(var(--accent-rgb), 0.08);
+        border-color: var(--line-strong);
+        background-color: color-mix(
+            in srgb,
+            var(--surface-hover) 88%,
+            transparent
+        );
     }
 
     .content {

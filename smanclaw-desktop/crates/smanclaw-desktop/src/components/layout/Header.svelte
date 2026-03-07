@@ -41,7 +41,13 @@
         justify-content: space-between;
         height: 64px;
         padding: 0 1.25rem;
-        background-color: transparent;
+        background-color: color-mix(
+            in srgb,
+            var(--background) 92%,
+            transparent
+        );
+        border-bottom: 1px solid var(--line-soft);
+        backdrop-filter: blur(10px);
     }
 
     .header-left {
@@ -86,11 +92,13 @@
         padding: 0.375rem 0.75rem;
         border-radius: 9999px;
         font-size: 0.875rem;
+        border: 1px solid transparent;
     }
 
     .task-status.running {
-        color: var(--accent);
-        background-color: rgba(var(--accent-rgb), 0.1);
+        color: var(--accent-light);
+        border-color: rgba(var(--accent-rgb), 0.36);
+        background-color: rgba(var(--accent-rgb), 0.12);
     }
 
     .spinner {
@@ -113,8 +121,10 @@
         font-size: 0.75rem;
         color: var(--error);
         background-color: transparent;
-        border-radius: 4px;
-        transition: background-color 0.15s;
+        border-radius: 6px;
+        transition:
+            color 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .cancel-btn:hover {

@@ -126,21 +126,23 @@
     .project-list {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
+        gap: 0.375rem;
         padding: 0 0.25rem;
     }
 
     .draggable-item {
-        border-radius: 6px;
+        border-radius: 10px;
         will-change: transform;
-        transition: transform 0.2s ease;
+        transition:
+            transform 0.2s ease,
+            opacity 0.2s ease;
     }
 
     .draggable-item.shadow-item {
-        min-height: 48px;
-        border: 1px dashed rgba(var(--accent-rgb), 0.4);
-        background: rgba(var(--accent-rgb), 0.08);
-        border-radius: 8px;
+        min-height: 52px;
+        border: 1px dashed rgba(var(--accent-rgb), 0.46);
+        background: rgba(var(--accent-rgb), 0.1);
+        border-radius: 10px;
     }
 
     .draggable-item :global(.project-card) {
@@ -157,12 +159,12 @@
 
     .project-list :global(#dnd-action-dragged-el .project-card),
     .project-list :global(.project-card.drag-preview-card) {
-        transform: scale(1.015);
-        border-color: rgba(var(--accent-rgb), 0.28);
-        background: color-mix(in srgb, var(--surface) 82%, white 18%);
+        transform: scale(1.01);
+        border-color: rgba(var(--accent-rgb), 0.48);
+        background: color-mix(in srgb, var(--surface-elevated) 94%, white 6%);
         box-shadow:
-            0 14px 30px rgba(0, 0, 0, 0.15),
-            0 2px 8px rgba(0, 0, 0, 0.08);
+            0 18px 36px rgba(0, 0, 0, 0.22),
+            0 4px 10px rgba(0, 0, 0, 0.12);
     }
 
     .empty-state {

@@ -191,8 +191,13 @@
         flex-direction: column;
         gap: 0.5rem;
         padding: 0.5rem;
-        background-color: var(--background);
-        border-radius: 6px;
+        background-color: color-mix(
+            in srgb,
+            var(--background) 92%,
+            transparent
+        );
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
         max-height: 200px;
         overflow-y: auto;
     }
@@ -218,12 +223,16 @@
         gap: 0.5rem;
         padding: 0.25rem 0.5rem;
         margin-left: 1rem;
-        border-radius: 4px;
-        transition: background-color 0.15s;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        transition:
+            border-color 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .file:hover {
-        background-color: var(--surface);
+        border-color: var(--line-soft);
+        background-color: color-mix(in srgb, var(--surface) 92%, transparent);
     }
 
     .action-icon {

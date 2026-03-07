@@ -95,12 +95,13 @@
         display: flex;
         flex-direction: column;
         background-color: var(--surface);
+        border-right: 1px solid var(--line-soft);
     }
 
     .sidebar-content {
         flex: 1;
         overflow-y: auto;
-        padding: 0.5rem;
+        padding: 0.75rem 0.625rem 0.5rem;
     }
 
     .section {
@@ -111,14 +112,14 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.5rem;
+        padding: 0.5rem 0.5rem 0.45rem;
     }
 
     .section-title {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.1em;
         color: var(--text-secondary);
     }
 
@@ -126,38 +127,50 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 24px;
-        height: 24px;
+        width: 26px;
+        height: 26px;
         color: var(--text-secondary);
-        border-radius: 4px;
-        transition: all 0.15s;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        transition:
+            color 0.16s ease,
+            background-color 0.16s ease,
+            border-color 0.16s ease;
     }
 
     .add-btn:hover {
-        color: var(--accent);
-        background-color: var(--border);
+        color: var(--text-primary);
+        border-color: var(--line-strong);
+        background-color: var(--surface-hover);
     }
 
     .sidebar-footer {
         display: flex;
         align-items: center;
         justify-content: flex-start;
-        padding: 1rem;
+        padding: 0.9rem 1rem;
+        border-top: 1px solid var(--line-soft);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
     }
 
     .settings-btn {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
         color: var(--text-secondary);
-        border-radius: 6px;
-        transition: all 0.15s;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        transition:
+            color 0.16s ease,
+            background-color 0.16s ease,
+            border-color 0.16s ease;
     }
 
     .settings-btn:hover {
         color: var(--text-primary);
-        background-color: var(--border);
+        border-color: var(--line-strong);
+        background-color: var(--surface-hover);
     }
 </style>

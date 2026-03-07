@@ -106,16 +106,27 @@
         align-items: center;
         gap: 0.75rem;
         width: 100%;
-        padding: 0.625rem 0.75rem;
-        background-color: transparent;
-        border: 1px solid transparent;
-        border-radius: 6px;
+        padding: 0.65rem 0.72rem;
+        background-color: color-mix(in srgb, var(--surface) 90%, transparent);
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
         cursor: pointer;
-        transition: all 0.15s;
+        transition:
+            border-color 0.18s ease,
+            background-color 0.18s ease,
+            box-shadow 0.18s ease,
+            transform 0.18s ease;
     }
 
     .project-card:hover {
-        background-color: var(--border);
+        border-color: var(--line-strong);
+        background-color: color-mix(
+            in srgb,
+            var(--surface-elevated) 94%,
+            transparent
+        );
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+        transform: translateY(-1px);
     }
 
     .project-card:focus-visible {
@@ -124,8 +135,9 @@
     }
 
     .project-card.selected {
-        background-color: rgba(var(--accent-rgb), 0.13);
-        border: 1px solid var(--accent);
+        background-color: rgba(var(--accent-rgb), 0.12);
+        border: 1px solid rgba(var(--accent-rgb), 0.56);
+        box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.2) inset;
     }
 
     .project-card.selected .icon {
@@ -139,8 +151,13 @@
         width: 32px;
         height: 32px;
         color: var(--text-secondary);
-        background-color: var(--background);
-        border-radius: 6px;
+        background-color: color-mix(
+            in srgb,
+            var(--surface-elevated) 88%,
+            transparent
+        );
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
         flex-shrink: 0;
     }
 
@@ -173,9 +190,12 @@
         width: 24px;
         height: 24px;
         color: var(--text-secondary);
-        border-radius: 4px;
+        border-radius: 6px;
         opacity: 0;
-        transition: all 0.15s;
+        transition:
+            opacity 0.14s ease,
+            color 0.14s ease,
+            background-color 0.14s ease;
     }
 
     .project-card:hover .delete-btn,

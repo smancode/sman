@@ -252,21 +252,23 @@
     }
 
     .subtitle {
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
         font-size: 0.9rem;
     }
 
     .loading {
         text-align: center;
         padding: 2rem;
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
     }
 
     .settings-section {
-        background: var(--surface, #1a1a1f);
-        border-radius: 8px;
+        background: color-mix(in srgb, var(--surface) 96%, transparent);
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
+        box-shadow: var(--shadow-soft);
     }
 
     .settings-section h2 {
@@ -277,11 +279,11 @@
     .settings-section h3 {
         font-size: 1rem;
         margin-bottom: 0.5rem;
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
     }
 
     .section-desc {
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
         font-size: 0.85rem;
         margin-bottom: 1.5rem;
     }
@@ -294,7 +296,7 @@
         display: block;
         margin-bottom: 0.5rem;
         font-size: 0.9rem;
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
     }
 
     .required {
@@ -304,24 +306,33 @@
     .form-group input {
         width: 100%;
         padding: 0.75rem;
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-radius: 6px;
+        background: color-mix(in srgb, var(--background) 92%, transparent);
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
         color: var(--text-primary);
         font-size: 0.9rem;
+        transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .form-group input:focus {
         outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+        border-color: rgba(var(--accent-rgb), 0.48);
+        background: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
     }
 
     .hint {
         display: block;
         margin-top: 0.25rem;
         font-size: 0.8rem;
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
     }
 
     .input-with-button {
@@ -335,41 +346,64 @@
 
     .btn-icon {
         padding: 0.5rem 0.75rem;
-        background: var(--surface);
-        border-radius: 6px;
+        border: 1px solid var(--line-soft);
+        background: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        border-radius: 10px;
         cursor: pointer;
+        transition:
+            color 0.15s ease,
+            border-color 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .btn-icon:hover {
-        background: var(--background);
+        border-color: var(--line-strong);
+        background: var(--surface-hover);
     }
 
     .btn-secondary {
         padding: 0.5rem 1rem;
-        background: var(--surface);
-        border-radius: 6px;
+        border: 1px solid var(--line-soft);
+        background: color-mix(
+            in srgb,
+            var(--surface-elevated) 92%,
+            transparent
+        );
+        border-radius: 10px;
         color: var(--text-primary);
         cursor: pointer;
         font-size: 0.85rem;
+        transition:
+            border-color 0.15s ease,
+            background-color 0.15s ease;
     }
 
     .btn-secondary:hover {
-        background: var(--background);
+        border-color: var(--line-strong);
+        background: var(--surface-hover);
     }
 
     .btn-primary {
         padding: 0.75rem 1.5rem;
         background: var(--accent);
         border: none;
-        border-radius: 6px;
-        color: white;
+        border-radius: 10px;
+        color: var(--text-primary);
         cursor: pointer;
         font-size: 0.9rem;
         font-weight: 500;
+        transition:
+            background-color 0.15s ease,
+            transform 0.15s ease;
     }
 
     .btn-primary:hover {
-        opacity: 0.9;
+        background: var(--accent-hover);
+        transform: translateY(-1px);
     }
 
     .btn-primary:disabled,
@@ -380,27 +414,35 @@
 
     .test-result {
         margin-top: 0.5rem;
-        padding: 0.5rem;
-        border-radius: 4px;
+        padding: 0.625rem 0.75rem;
+        border: 1px solid transparent;
+        border-radius: 10px;
         font-size: 0.85rem;
     }
 
     .test-result.success {
-        background: rgba(36, 138, 61, 0.1);
+        background: rgba(63, 185, 128, 0.14);
+        border-color: rgba(63, 185, 128, 0.36);
         color: var(--success);
     }
 
     .test-result.error {
-        background: rgba(201, 52, 47, 0.1);
+        background: rgba(218, 101, 101, 0.14);
+        border-color: rgba(218, 101, 101, 0.32);
         color: var(--error);
     }
 
     .info-section {
-        background: rgba(var(--accent-rgb), 0.05);
+        background: color-mix(
+            in srgb,
+            var(--surface-elevated) 90%,
+            transparent
+        );
+        border-color: rgba(var(--accent-rgb), 0.22);
     }
 
     .info-text {
-        color: var(--text-secondary, #888);
+        color: var(--text-secondary);
         font-size: 0.85rem;
         line-height: 1.5;
     }

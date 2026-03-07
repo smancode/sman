@@ -2,18 +2,24 @@
 @import "highlight.js/styles/github-dark.css";
 
 :root {
-    --background: #121417;
-    --surface: #181b20;
-    --border: #2a2f38;
-    --text-primary: #eceef2;
-    --text-secondary: #9aa3af;
-    --accent: #3b82f6;
-    --accent-hover: #2f6fe0;
-    --accent-light: #60a5fa;
-    --accent-rgb: 59, 130, 246;
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --error: #ef4444;
+    --background: #0f1114;
+    --surface: #161a20;
+    --surface-elevated: #1c2129;
+    --surface-hover: #212733;
+    --border: #2b323d;
+    --line-soft: #252c36;
+    --line-strong: #394252;
+    --text-primary: #edf1f7;
+    --text-secondary: #a4afbe;
+    --accent: #4a86f8;
+    --accent-hover: #3d77e4;
+    --accent-light: #75a3ff;
+    --accent-rgb: 74, 134, 248;
+    --success: #3fb980;
+    --warning: #d9a34f;
+    --error: #da6565;
+    --shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.22);
+    --shadow-floating: 0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -38,6 +44,7 @@ body {
     background-color: var(--background);
     color: var(--text-primary);
     line-height: 1.5;
+    letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -53,12 +60,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--border);
+    background: var(--line-soft);
     border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
+    background: var(--line-strong);
 }
 
 /* Selection styling */
@@ -69,7 +76,7 @@ body {
 
 /* Focus styling */
 :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid rgba(var(--accent-rgb), 0.95);
     outline-offset: 2px;
 }
 
