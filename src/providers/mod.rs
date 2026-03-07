@@ -1246,14 +1246,20 @@ fn create_provider_with_url_and_options(
             key,
             AuthStyle::Bearer,
         ))),
-        name if glm_base_url(name).is_some() => Ok(Box::new(
-            OpenAiCompatibleProvider::new_no_responses_fallback(
+        name if glm_base_url(name).is_some() => {
+            // Use user-provided URL if available, otherwise fall back to default
+            let base_url = api_url
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(ToString::to_string)
+                .unwrap_or_else(|| glm_base_url(name).expect("checked in guard").to_string());
+            Ok(Box::new(OpenAiCompatibleProvider::new_no_responses_fallback(
                 "GLM",
-                glm_base_url(name).expect("checked in guard"),
+                &base_url,
                 key,
                 AuthStyle::Bearer,
-            ),
-        )),
+            )))
+        }
         name if minimax_base_url(name).is_some() => Ok(Box::new(
             OpenAiCompatibleProvider::new_merge_system_into_user(
                 "MiniMax",

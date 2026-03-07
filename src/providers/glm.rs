@@ -14,6 +14,7 @@ pub struct GlmProvider {
     api_key_id: String,
     api_key_secret: String,
     base_url: String,
+    max_tokens_override: Option<u32>,
     /// Cached JWT token + expiry timestamp (ms)
     token_cache: Mutex<Option<(String, u64)>>,
 }
@@ -23,6 +24,8 @@ struct ChatRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +83,10 @@ fn base64url_encode_str(s: &str) -> String {
 
 impl GlmProvider {
     pub fn new(api_key: Option<&str>) -> Self {
+        Self::new_with_max_tokens(api_key, None)
+    }
+
+    pub fn new_with_max_tokens(api_key: Option<&str>, max_tokens_override: Option<u32>) -> Self {
         let (id, secret) = api_key
             .and_then(|k| k.split_once('.'))
             .map(|(id, secret)| (id.to_string(), secret.to_string()))
@@ -89,6 +96,7 @@ impl GlmProvider {
             api_key_id: id,
             api_key_secret: secret,
             base_url: "https://api.z.ai/api/paas/v4".to_string(),
+            max_tokens_override: max_tokens_override.filter(|value| *value > 0),
             token_cache: Mutex::new(None),
         }
     }
@@ -178,6 +186,7 @@ impl Provider for GlmProvider {
             model: model.to_string(),
             messages,
             temperature,
+            max_tokens: self.max_tokens_override,
         };
 
         let url = format!("{}/chat/completions", self.base_url);
@@ -225,12 +234,13 @@ impl Provider for GlmProvider {
             model: model.to_string(),
             messages: api_messages,
             temperature,
+            max_tokens: self.max_tokens_override,
         };
 
         let url = format!("{}/chat/completions", self.base_url);
 
         let response = self
-            .client
+            .http_client()
             .post(&url)
             .header("Authorization", format!("Bearer {token}"))
             .json(&request)
@@ -262,7 +272,7 @@ impl Provider for GlmProvider {
         let url = format!("{}/chat/completions", self.base_url);
         // GET will likely return 405 but establishes the TLS + HTTP/2 connection pool.
         let _ = self
-            .client
+            .http_client()
             .get(&url)
             .header("Authorization", format!("Bearer {token}"))
             .send()

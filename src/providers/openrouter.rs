@@ -353,7 +353,7 @@ impl Provider for OpenRouterProvider {
         temperature: f64,
     ) -> anyhow::Result<String> {
         let credential = self.credential.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("OpenRouter API key not set. Run `zeroclaw onboard` or set OPENROUTER_API_KEY env var."))?;
+            .ok_or_else(|| anyhow::anyhow!("请先配置大模型 API Key。\n\n方法1: 在设置页面点击「Onboard」引导配置\n方法2: 设置环境变量 OPENROUTER_API_KEY\n\n获取 API Key: https://openrouter.ai/settings\n\n(当前使用 OpenRouter + Claude Sonnet 4)"))?;
 
         let mut messages = Vec::new();
 
@@ -410,7 +410,7 @@ impl Provider for OpenRouterProvider {
         temperature: f64,
     ) -> anyhow::Result<String> {
         let credential = self.credential.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("OpenRouter API key not set. Run `zeroclaw onboard` or set OPENROUTER_API_KEY env var."))?;
+            .ok_or_else(|| anyhow::anyhow!("请先配置大模型 API Key。\n\n方法1: 在设置页面点击「Onboard」引导配置\n方法2: 设置环境变量 OPENROUTER_API_KEY\n\n获取 API Key: https://openrouter.ai/settings\n\n(当前使用 OpenRouter + Claude Sonnet 4)"))?;
 
         let api_messages: Vec<Message> = messages
             .iter()
@@ -462,7 +462,7 @@ impl Provider for OpenRouterProvider {
     ) -> anyhow::Result<ProviderChatResponse> {
         let credential = self.credential.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-            "OpenRouter API key not set. Run `zeroclaw onboard` or set OPENROUTER_API_KEY env var."
+            "请先配置大模型 API Key。\n\n方法1: 在设置页面点击「Onboard」引导配置\n方法2: 设置环境变量 OPENROUTER_API_KEY\n\n获取 API Key: https://openrouter.ai/settings\n\n(当前使用 OpenRouter + Claude Sonnet 4)"
         )
         })?;
 
@@ -521,7 +521,7 @@ impl Provider for OpenRouterProvider {
     ) -> anyhow::Result<ProviderChatResponse> {
         let credential = self.credential.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
-                "OpenRouter API key not set. Run `zeroclaw onboard` or set OPENROUTER_API_KEY env var."
+                "请先配置大模型 API Key。\n\n方法1: 在设置页面点击「Onboard」引导配置\n方法2: 设置环境变量 OPENROUTER_API_KEY\n\n获取 API Key: https://openrouter.ai/settings\n\n(当前使用 OpenRouter + Claude Sonnet 4)"
             )
         })?;
 
@@ -646,7 +646,7 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("API key not set"));
+        assert!(result.unwrap_err().to_string().contains("请先配置"));
     }
 
     #[tokio::test]
@@ -668,7 +668,7 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("API key not set"));
+        assert!(result.unwrap_err().to_string().contains("请先配置"));
     }
 
     #[test]
@@ -784,7 +784,7 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("API key not set"));
+        assert!(result.unwrap_err().to_string().contains("请先配置"));
     }
 
     #[test]
