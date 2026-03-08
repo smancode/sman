@@ -284,6 +284,34 @@ pub fn emit_task_dag(
     )
 }
 
+// ============================================================================
+// Message Events
+// ============================================================================
+
+/// Event payload for sending a message from backend to frontend
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SendMessageEvent {
+    /// Conversation ID
+    pub conversation_id: String,
+    /// Message content to send
+    pub content: String,
+}
+
+/// Emit a send message event to frontend
+pub fn emit_send_message(
+    app_handle: &AppHandle,
+    conversation_id: &str,
+    content: &str,
+) -> Result<(), tauri::Error> {
+    app_handle.emit(
+        "send-message",
+        SendMessageEvent {
+            conversation_id: conversation_id.to_string(),
+            content: content.to_string(),
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{task_event_status_from_success, TaskEventStatus};
@@ -307,4 +335,30 @@ mod tests {
             TaskEventStatus::Failed
         );
     }
+}
+
+/// Event payload for chat messages from backend to frontend
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChatMessageEvent {
+    /// Project ID
+    pub project_id: String,
+    /// Message content
+    pub content: String,
+    /// Message role (user or assistant)
+    pub role: String,
+}
+
+/// Emit a chat message to the frontend
+pub fn emit_chat_message(
+    app_handle: &AppHandle,
+    project_id: &str,
+    content: &str,
+    role: &str,
+) -> Result<(), tauri::Error> {
+    let event = ChatMessageEvent {
+        project_id: project_id.to_string(),
+        content: content.to_string(),
+        role: role.to_string(),
+    };
+    app_handle.emit("chat-message", event)
 }

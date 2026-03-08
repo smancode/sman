@@ -6,7 +6,8 @@ use smanclaw_core::{
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-use crate::error::TauriResult;
+use crate::error::{TauriError, TauriResult};
+use crate::state::AppState;
 
 #[tauri::command]
 pub fn get_version() -> String {
@@ -251,4 +252,43 @@ pub(crate) fn persist_task_experience_artifacts(
         }
         persist_path_from_task_experience(project_path, experience);
     }
+}
+
+use crate::events::emit_chat_message;
+use tauri::State;
+
+/// Send a chat message to the frontend chat window
+///
+/// This command allows sending a message to the chat interface from external sources
+/// (like skills or background processes)
+#[tauri::command]
+pub async fn send_chat_message(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+    content: String,
+    role: String,
+) -> TauriResult<()> {
+    if project_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
+    }
+    if content.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Message content cannot be empty".to_string(),
+        ));
+    }
+
+    // Default to assistant if role is not specified
+    let role = if role.is_empty() {
+        "assistant".to_string()
+    } else {
+        role
+    };
+
+    emit_chat_message(&app_handle, &project_id, &content, &role)
+        .map_err(|e| TauriError::Internal(e.to_string()))?;
+
+    Ok(())
 }

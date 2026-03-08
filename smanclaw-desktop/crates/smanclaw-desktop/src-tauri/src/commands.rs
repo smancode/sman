@@ -16,6 +16,7 @@ pub use crate::orchestration::{
 pub(crate) use crate::state::AppState;
 pub(crate) use history_runtime::{open_project_history_store, resolve_conversation_project};
 pub use project_commands::{
+    get_project_skills,
     add_project, get_project_config, get_projects, remove_project, update_project_config,
 };
 

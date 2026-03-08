@@ -8,7 +8,7 @@
         activeParallelGroups,
     } from "../../lib/stores/tasks";
     import { listen } from "@tauri-apps/api/event";
-    import { conversationApi } from "../../lib/api/tauri";
+    import { conversationApi, projectApi } from "../../lib/api/tauri";
     import type { ProgressEvent, HistoryEntryRecord } from "../../lib/types";
     import MessageBubble from "./MessageBubble.svelte";
     import InputArea from "./InputArea.svelte";
@@ -17,6 +17,8 @@
     import FileTree from "../task/FileTree.svelte";
     import type { Message } from "../../lib/types";
     import { onMount } from "svelte";
+    import { get } from "svelte/store";
+    import { projectsStore } from "../../lib/stores/projects";
     import {
         extractDisplayableAssistantContent,
         latestDisplayableAssistantEntry,
@@ -194,6 +196,7 @@
     }
 
     function appendProgressTimeline(projectId: string, payload: ProgressEvent) {
+        console.log("[Chat] appendProgressTimeline:", projectId, payload);
         const line = progressTimelineLine(payload);
         if (!line) {
             return;
@@ -458,12 +461,36 @@
     onMount(() => {
         tasksStore.initialize();
         let unlistenProgress: (() => void) | null = null;
+        let unlistenChatMessage: (() => void) | null = null;
 
         void (async () => {
+            // Listen for chat messages from backend
+            unlistenChatMessage = await listen<any>(
+                "chat-message",
+                (event) => {
+                    console.log("[ChatMessage] Received:", event.payload);
+                    const payload = event.payload;
+                    if (!$selectedProject) return;
+                    const projectId = $selectedProject.id;
+                    
+                    const role = payload.role === "user" ? "user" : "assistant";
+                    const newMessage: Message = {
+                        id: crypto.randomUUID(),
+                        role: role,
+                        content: payload.content,
+                        timestamp: Date.now(),
+                    };
+                    
+                    const currentMessages = messagesByProject[projectId] || [];
+                    messagesByProject[projectId] = [...currentMessages, newMessage];
+                },
+            );
+
             unlistenProgress = await listen<ProgressEvent>(
                 "progress",
                 (event) => {
                     const payload = event.payload;
+                    console.log("[Progress] Received progress event:", JSON.stringify(payload));
 
                     if (payload.type === "task_completed" && $selectedProject) {
                         const projectId = $selectedProject.id;
@@ -512,8 +539,32 @@
             );
         })();
 
+        // Auto-send test skill on mount
+        void (async () => {
+            // Wait for project to be available
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const store = get(projectsStore);
+            console.log("[Chat] Auto-send check - projects:", store.projects.length, "selected:", store.selectedProjectId);
+            if (store.projects.length > 0) {
+                const pid = store.selectedProjectId || store.projects[0].id;
+                console.log("[Chat] Auto-sending to project:", pid);
+                let convId = conversationByProject[pid];
+                if (!convId) {
+                    const result = await conversationApi.create(pid);
+                    if (result.success && result.data) {
+                        convId = result.data.id;
+                        conversationByProject[pid] = convId;
+                    }
+                }
+                // if (convId) {
+                //     handleSubmit("/caijing");
+                // }
+            }
+        })();
+
         return () => {
             unlistenProgress?.();
+            unlistenChatMessage?.();
             tasksStore.destroy();
         };
     });
@@ -642,10 +693,10 @@
     </div>
 
     <InputArea
-        disabled={!$selectedProject || isSending}
+        disabled={isSending}
         placeholder={$selectedProject
             ? "请描述你要构建的内容..."
-            : "请先选择项目..."}
+            : "输入 / 或 \ 触发技能 (请先添加项目 D:\\work\\aipro\\H5)"}
         onSubmit={handleSubmit}
     />
 </div>

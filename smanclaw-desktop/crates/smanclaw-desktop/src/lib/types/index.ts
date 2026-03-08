@@ -8,6 +8,15 @@ export interface Project {
     lastAccessed: string;
 }
 
+// Skill types
+export interface SkillMeta {
+    id: string;
+    path: string;
+    tags: string[];
+    learnedFrom: string;
+    updatedAt: number;
+}
+
 // Task types - Must match smanclaw-types/src/task.rs
 export type TaskStatus = "pending" | "running" | "completed" | "failed";
 

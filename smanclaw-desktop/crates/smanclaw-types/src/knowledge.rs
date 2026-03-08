@@ -3,6 +3,22 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Skill metadata for skill picker
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillMeta {
+    /// Unique identifier
+    pub id: String,
+    /// Relative path from skills directory (e.g., "caijing")
+    pub path: String,
+    /// Tags for categorization and search
+    pub tags: Vec<String>,
+    /// Source of the skill (e.g., "project" or "global")
+    pub learned_from: String,
+    /// Last update timestamp (Unix timestamp in seconds)
+    pub updated_at: i64,
+}
+
 /// Project type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]

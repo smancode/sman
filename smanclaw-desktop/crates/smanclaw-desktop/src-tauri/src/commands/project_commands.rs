@@ -1,5 +1,5 @@
 use smanclaw_core::{AgentsGenerator, IdentityFiles, ProjectExplorer};
-use smanclaw_types::{Project, ProjectConfig};
+use smanclaw_types::{Project, ProjectConfig, SkillMeta};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -120,4 +120,125 @@ pub async fn update_project_config(
     let pm = state.project_manager.lock().await;
     pm.update_project_config(&config)?;
     Ok(())
+}
+
+/// Read skills from the project's .claude/skills directory
+fn read_project_skills(project_path: &Path) -> TauriResult<Vec<SkillMeta>> {
+    let skills_dir = project_path.join(".claude").join("skills");
+
+    if !skills_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut skills = Vec::new();
+
+    // Read each subdirectory as a skill
+    if let Ok(entries) = std::fs::read_dir(&skills_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let skill_name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                // Skip hidden directories
+                if skill_name.starts_with('.') {
+                    continue;
+                }
+
+                // Try to read tags from skill.md or SUMMARY.md
+                let tags = read_skill_tags(&path);
+
+                // Get modification time
+                let updated_at = std::fs::metadata(&path)
+                    .and_then(|m| m.modified())
+                    .map(|t| {
+                        t.duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0)
+                    })
+                    .unwrap_or(0);
+
+                skills.push(SkillMeta {
+                    id: skill_name.clone(),
+                    path: skill_name,
+                    tags,
+                    learned_from: "project".to_string(),
+                    updated_at,
+                });
+            }
+        }
+    }
+
+    Ok(skills)
+}
+
+/// Read tags from skill.md or SUMMARY.md files
+fn read_skill_tags(skill_dir: &Path) -> Vec<String> {
+    let mut tags = Vec::new();
+
+    // Try skill.md
+    let skill_md_path = skill_dir.join("skill.md");
+    if let Ok(content) = std::fs::read_to_string(&skill_md_path) {
+        // Extract tags from content (look for tag patterns)
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("## ") {
+                break; // Stop at first section header
+            }
+            // Look for tag-like content
+            if line.starts_with("- **") && line.contains("**:") {
+                if let Some(tag) = line
+                    .strip_prefix("- **")
+                    .and_then(|s| s.split("**").next())
+                {
+                    let tag = tag.trim().to_string();
+                    if !tag.is_empty() {
+                        tags.push(tag);
+                    }
+                }
+            }
+        }
+    }
+
+    // Try SUMMARY.md for additional tags
+    let summary_path = skill_dir.join("SUMMARY.md");
+    if let Ok(content) = std::fs::read_to_string(&summary_path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("- **") {
+                if let Some(tag) = line.strip_prefix("- **").and_then(|s| s.split(':').next()) {
+                    let tag = tag.trim().to_string();
+                    if !tags.contains(&tag) && !tag.is_empty() {
+                        tags.push(tag);
+                    }
+                }
+            }
+        }
+    }
+
+    tags
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_project_skills(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> TauriResult<Vec<SkillMeta>> {
+    if project_id.is_empty() {
+        return Err(TauriError::InvalidInput(
+            "Project ID cannot be empty".to_string(),
+        ));
+    }
+
+    let pm = state.project_manager.lock().await;
+    let project = pm.get_project(&project_id)?;
+    let project = project.ok_or_else(|| {
+        TauriError::InvalidInput(format!("Project not found: {}", project_id))
+    })?;
+    let project_path = PathBuf::from(&project.path);
+
+    let skills = read_project_skills(&project_path)?;
+    Ok(skills)
 }

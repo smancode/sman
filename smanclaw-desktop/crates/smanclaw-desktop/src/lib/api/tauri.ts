@@ -6,6 +6,7 @@ import type {
     ExecuteTaskResponse,
     GetTaskStatusResponse,
     Project,
+    SkillMeta,
     Task,
     Message,
     ConversationRecord,
@@ -77,6 +78,18 @@ export const projectApi = {
 
     async delete(projectId: string): Promise<ApiResponse<void>> {
         return safeInvoke<void>("remove_project", { project_id: projectId });
+    },
+
+    async getSkills(projectId: string): Promise<ApiResponse<SkillMeta[]>> {
+        return safeInvoke<SkillMeta[]>("get_project_skills", { project_id: projectId });
+    },
+
+    async getGlobalSkills(): Promise<ApiResponse<SkillMeta[]>> {
+        return safeInvoke<SkillMeta[]>("get_global_skills");
+    },
+
+    async testSendMessage(projectId: string, message: string): Promise<ApiResponse<string>> {
+        return safeInvoke<string>("test_send_message", { project_id: projectId, content: message });
     },
 
     async openDialog(): Promise<ApiResponse<string>> {
