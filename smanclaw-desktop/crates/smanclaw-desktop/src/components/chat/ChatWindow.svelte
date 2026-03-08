@@ -25,6 +25,7 @@
         sanitizeAssistantContent,
         stripToolCallBlocks,
         shouldFinalizeAssistantReply,
+        shouldStopWaitingAfterCompletion,
     } from "../../lib/chat/assistantContent";
 
     // Messages per project (projectId -> messages)
@@ -33,6 +34,7 @@
     let completionSignalAtByProject = $state<Record<string, number | null>>({});
     let progressTimelineByProject = $state<Record<string, string[]>>({});
     let isSending = $state(false);
+    let sendingProjectId = $state<string | null>(null);
     let initializedProjectId = $state<string | null>(null);
     let messagesContainer: HTMLDivElement = $state()!;
     const replyPollIntervalMs = 1500;
@@ -249,6 +251,13 @@
         };
     }
 
+    function stopSending(projectId: string) {
+        isSending = false;
+        if (sendingProjectId === projectId) {
+            sendingProjectId = null;
+        }
+    }
+
     async function ensureProjectConversation(
         projectId: string,
         projectName: string,
@@ -322,8 +331,12 @@
         let consecutivePollFailures = 0;
         let stableAssistantPollCount = 0;
         let latestAssistantSignature: string | null = null;
+        let pollsWithoutAssistantAfterCompletion = 0;
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
             if (!isSending) {
+                return;
+            }
+            if (sendingProjectId && sendingProjectId !== projectId) {
                 return;
             }
             await new Promise((resolve) =>
@@ -350,7 +363,7 @@
                         );
                     }
                     clearProgressTimeline(projectId);
-                    isSending = false;
+                    stopSending(projectId);
                     return;
                 }
                 continue;
@@ -370,7 +383,7 @@
                 if (latestAssistant) {
                     messagesByProject[projectId] = mappedMessages;
                     clearProgressTimeline(projectId);
-                    isSending = false;
+                    stopSending(projectId);
                     return;
                 }
                 messagesByProject[projectId] = thinkingMessage
@@ -399,6 +412,7 @@
             );
 
             if (latestAssistantAfterUser) {
+                pollsWithoutAssistantAfterCompletion = 0;
                 const signature = [
                     latestAssistantAfterUser.id,
                     latestAssistantAfterUser.timestamp,
@@ -424,12 +438,34 @@
                 if (shouldFinalize) {
                     messagesByProject[projectId] = mappedMessages;
                     clearProgressTimeline(projectId);
-                    isSending = false;
+                    stopSending(projectId);
                     return;
                 }
             } else {
                 stableAssistantPollCount = 0;
                 latestAssistantSignature = null;
+                const completionSignalAt =
+                    completionSignalAtByProject[projectId] ?? null;
+                if (completionSignalAt !== null) {
+                    pollsWithoutAssistantAfterCompletion += 1;
+                    if (
+                        shouldStopWaitingAfterCompletion({
+                            completionSignalAtMs: completionSignalAt,
+                            pollsWithoutAssistantAfterCompletion,
+                            elapsedMs: Date.now() - startedAt,
+                        })
+                    ) {
+                        if (thinkingMessage) {
+                            updateLatestThinkingMessage(
+                                projectId,
+                                "执行完成，但暂未收到可展示的最终答复。你可以直接重试，我会保留已完成进度。",
+                            );
+                        }
+                        clearProgressTimeline(projectId);
+                        stopSending(projectId);
+                        return;
+                    }
+                }
             }
 
             const pendingAssistantIds = new Set(
@@ -455,7 +491,7 @@
             );
         }
         clearProgressTimeline(projectId);
-        isSending = false;
+        stopSending(projectId);
     }
 
     onMount(() => {
@@ -465,35 +501,36 @@
 
         void (async () => {
             // Listen for chat messages from backend
-            unlistenChatMessage = await listen<any>(
-                "chat-message",
-                (event) => {
-                    console.log("[ChatMessage] Received:", event.payload);
-                    const payload = event.payload;
-                    if (!$selectedProject) return;
-                    const projectId = $selectedProject.id;
-                    
-                    const role = payload.role === "user" ? "user" : "assistant";
-                    const newMessage: Message = {
-                        id: crypto.randomUUID(),
-                        role: role,
-                        content: payload.content,
-                        timestamp: Date.now(),
-                    };
-                    
-                    const currentMessages = messagesByProject[projectId] || [];
-                    messagesByProject[projectId] = [...currentMessages, newMessage];
-                },
-            );
+            unlistenChatMessage = await listen<any>("chat-message", (event) => {
+                console.log("[ChatMessage] Received:", event.payload);
+                const payload = event.payload;
+                if (!$selectedProject) return;
+                const projectId = $selectedProject.id;
+
+                const role = payload.role === "user" ? "user" : "assistant";
+                const newMessage: Message = {
+                    id: crypto.randomUUID(),
+                    role: role,
+                    content: payload.content,
+                    timestamp: Date.now(),
+                };
+
+                const currentMessages = messagesByProject[projectId] || [];
+                messagesByProject[projectId] = [...currentMessages, newMessage];
+            });
 
             unlistenProgress = await listen<ProgressEvent>(
                 "progress",
                 (event) => {
                     const payload = event.payload;
-                    console.log("[Progress] Received progress event:", JSON.stringify(payload));
+                    console.log(
+                        "[Progress] Received progress event:",
+                        JSON.stringify(payload),
+                    );
 
                     if (payload.type === "task_completed" && $selectedProject) {
-                        const projectId = $selectedProject.id;
+                        const projectId =
+                            sendingProjectId ?? $selectedProject.id;
                         appendProgressTimeline(projectId, payload);
                         const output = payload.result.output?.trim();
                         if (output && output.length > 0) {
@@ -502,7 +539,7 @@
                                 resolveCompletedOutput(output),
                             );
                             clearProgressTimeline(projectId);
-                            isSending = false;
+                            stopSending(projectId);
                         } else {
                             updateLatestThinkingMessage(
                                 projectId,
@@ -513,8 +550,8 @@
                     }
 
                     if (payload.type === "task_failed" && $selectedProject) {
-                        isSending = false;
-                        const projectId = $selectedProject.id;
+                        const projectId =
+                            sendingProjectId ?? $selectedProject.id;
                         appendProgressTimeline(projectId, payload);
                         completionSignalAtByProject[projectId] = Date.now();
                         updateLatestThinkingMessage(
@@ -522,11 +559,13 @@
                             `执行中断：${payload.error}`,
                         );
                         clearProgressTimeline(projectId);
+                        stopSending(projectId);
                         return;
                     }
 
                     if (isSending && $selectedProject) {
-                        const projectId = $selectedProject.id;
+                        const projectId =
+                            sendingProjectId ?? $selectedProject.id;
                         appendProgressTimeline(projectId, payload);
                         if (progressTimelineLine(payload)) {
                             updateLatestThinkingMessage(
@@ -542,15 +581,23 @@
         // Auto-send test skill on mount
         void (async () => {
             // Wait for project to be available
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             const store = get(projectsStore);
-            console.log("[Chat] Auto-send check - projects:", store.projects.length, "selected:", store.selectedProjectId);
+            console.log(
+                "[Chat] Auto-send check - projects:",
+                store.projects.length,
+                "selected:",
+                store.selectedProjectId,
+            );
             if (store.projects.length > 0) {
                 const pid = store.selectedProjectId || store.projects[0].id;
                 console.log("[Chat] Auto-sending to project:", pid);
                 let convId = conversationByProject[pid];
                 if (!convId) {
-                    const result = await conversationApi.create(pid);
+                    const result = await conversationApi.create(
+                        pid,
+                        `${store.projects.find((project) => project.id === pid)?.name || "项目"} 对话`,
+                    );
                     if (result.success && result.data) {
                         convId = result.data.id;
                         conversationByProject[pid] = convId;
@@ -612,6 +659,7 @@
         const updatedMessages = [...currentMessages, userMessage];
         messagesByProject[projectId] = updatedMessages;
         isSending = true;
+        sendingProjectId = projectId;
 
         const assistantMessage: Message = {
             id: createLocalMessageId(),
@@ -636,7 +684,7 @@
                 prompt,
             );
             if (!response.success) {
-                isSending = false;
+                stopSending(projectId);
                 messagesByProject[projectId] = [
                     ...updatedMessages,
                     {
@@ -655,7 +703,7 @@
                 { ...assistantMessage, taskId: conversationId },
             );
         } catch (error) {
-            isSending = false;
+            stopSending(projectId);
             messagesByProject[projectId] = [
                 ...updatedMessages,
                 {

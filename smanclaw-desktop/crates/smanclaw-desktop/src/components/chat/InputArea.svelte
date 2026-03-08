@@ -1,6 +1,6 @@
 <script lang="ts">
     import { activeTask } from "../../lib/stores/tasks";
-    import { projectsStore, selectedProject, type Project } from "../../lib/stores/projects";
+    import { projectsStore } from "../../lib/stores/projects";
     import { projectApi } from "../../lib/api/tauri";
     import type { SkillMeta } from "../../lib/types";
     import SkillPicker from "./SkillPicker.svelte";
@@ -102,25 +102,31 @@
             // Get projects from store
             const store = get(projectsStore);
             console.log("[SkillPicker] Store state:", store);
-            
+
             // Try selected project first
             let projectId = store.selectedProjectId;
-            
+
             // If no selected project, use first available project
             if (!projectId && store.projects.length > 0) {
                 projectId = store.projects[0].id;
-                console.log("[SkillPicker] No selected project, using first:", projectId);
+                console.log(
+                    "[SkillPicker] No selected project, using first:",
+                    projectId,
+                );
             }
-            
+
             // If still no project, use hardcoded test project path for debugging
             if (!projectId) {
                 console.log("[SkillPicker] Using hardcoded test project");
                 // Directly check skills from filesystem via API
                 // For now, we'll return empty and let user add project
             }
-            
+
             if (projectId) {
-                console.log("[SkillPicker] Loading skills for project ID:", projectId);
+                console.log(
+                    "[SkillPicker] Loading skills for project ID:",
+                    projectId,
+                );
                 const response = await projectApi.getSkills(projectId);
                 console.log("[SkillPicker] API response:", response);
                 if (response.success && response.data) {
@@ -128,7 +134,9 @@
                     console.log("[SkillPicker] Skills loaded:", skills.length);
                 }
             } else {
-                console.log("[SkillPicker] No projects available - please add project D:\work\aipro\H5");
+                console.log(
+                    "[SkillPicker] No projects available - please add project D:\work\aipro\H5",
+                );
             }
         } catch (e) {
             console.error("Failed to load skills:", e);
@@ -178,7 +186,7 @@
             oncompositionstart={handleCompositionStart}
             oncompositionend={handleCompositionEnd}
         ></textarea>
-<button
+        <button
             class="send-btn"
             onclick={handleSubmit}
             disabled={disabled || !inputValue.trim()}

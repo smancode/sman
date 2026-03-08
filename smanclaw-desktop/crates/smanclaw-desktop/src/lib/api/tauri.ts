@@ -81,15 +81,23 @@ export const projectApi = {
     },
 
     async getSkills(projectId: string): Promise<ApiResponse<SkillMeta[]>> {
-        return safeInvoke<SkillMeta[]>("get_project_skills", { project_id: projectId });
+        return safeInvoke<SkillMeta[]>("get_project_skills", {
+            project_id: projectId,
+        });
     },
 
     async getGlobalSkills(): Promise<ApiResponse<SkillMeta[]>> {
         return safeInvoke<SkillMeta[]>("get_global_skills");
     },
 
-    async testSendMessage(projectId: string, message: string): Promise<ApiResponse<string>> {
-        return safeInvoke<string>("test_send_message", { project_id: projectId, content: message });
+    async testSendMessage(
+        projectId: string,
+        message: string,
+    ): Promise<ApiResponse<string>> {
+        return safeInvoke<string>("test_send_message", {
+            project_id: projectId,
+            content: message,
+        });
     },
 
     async openDialog(): Promise<ApiResponse<string>> {

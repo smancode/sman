@@ -108,6 +108,22 @@ export function shouldFinalizeAssistantReply(params: {
     return stableAssistantPollCount >= 3 && elapsedMs >= 8000;
 }
 
+export function shouldStopWaitingAfterCompletion(params: {
+    completionSignalAtMs: number | null;
+    pollsWithoutAssistantAfterCompletion: number;
+    elapsedMs: number;
+}): boolean {
+    const {
+        completionSignalAtMs,
+        pollsWithoutAssistantAfterCompletion,
+        elapsedMs,
+    } = params;
+    if (completionSignalAtMs === null) {
+        return false;
+    }
+    return pollsWithoutAssistantAfterCompletion >= 6 && elapsedMs >= 15000;
+}
+
 function isLikelyInterimAssistantText(content: string): boolean {
     const normalized = content.trim().toLowerCase();
     if (normalized.length === 0) {

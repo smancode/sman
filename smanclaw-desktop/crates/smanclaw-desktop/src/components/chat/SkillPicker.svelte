@@ -1,21 +1,23 @@
 <script lang="ts">
+    import type { SkillMeta } from "../../lib/types";
+
     interface Props {
-        skills: Array<{id: string; path: string; tags: string[]}>;
+        skills: SkillMeta[];
         query: string;
-        onSelect: (skill: {id: string; path: string; tags: string[]}) => void;
+        onSelect: (skill: SkillMeta) => void;
         onClose: () => void;
     }
 
     let { skills, query, onSelect, onClose }: Props = $props();
 
     let filteredSkills = $derived(
-        skills.filter(skill => {
+        skills.filter((skill) => {
             const q = query.toLowerCase();
             return (
                 skill.path.toLowerCase().includes(q) ||
-                skill.tags.some(tag => tag.toLowerCase().includes(q))
+                skill.tags.some((tag) => tag.toLowerCase().includes(q))
             );
-        })
+        }),
     );
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -31,7 +33,15 @@
     <div class="skill-picker-header">
         <span class="title">技能</span>
         <button class="close-btn" onclick={onClose} aria-label="关闭">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
                 <path d="M18 6L6 18M6 6l12 12" />
             </svg>
         </button>
@@ -42,10 +52,7 @@
             <div class="no-results">没有找到匹配的技能</div>
         {:else}
             {#each filteredSkills as skill}
-                <button
-                    class="skill-item"
-                    onclick={() => onSelect(skill)}
-                >
+                <button class="skill-item" onclick={() => onSelect(skill)}>
                     <span class="skill-path">/{skill.path}</span>
                     {#if skill.tags.length > 0}
                         <span class="skill-tags">

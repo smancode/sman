@@ -5,6 +5,7 @@ import {
     latestDisplayableAssistantEntry,
     sanitizeAssistantContent,
     shouldFinalizeAssistantReply,
+    shouldStopWaitingAfterCompletion,
     stripToolCallBlocks,
 } from "../chat/assistantContent";
 import type { HistoryEntryRecord } from "../types";
@@ -154,5 +155,29 @@ describe("assistantContent", () => {
                 elapsedMs: 3000,
             }),
         ).toBe(true);
+    });
+
+    it("完成信号后长时间无最终消息应停止等待", () => {
+        expect(
+            shouldStopWaitingAfterCompletion({
+                completionSignalAtMs: Date.parse("2026-03-07T10:00:10.000Z"),
+                pollsWithoutAssistantAfterCompletion: 5,
+                elapsedMs: 16000,
+            }),
+        ).toBe(false);
+        expect(
+            shouldStopWaitingAfterCompletion({
+                completionSignalAtMs: Date.parse("2026-03-07T10:00:10.000Z"),
+                pollsWithoutAssistantAfterCompletion: 6,
+                elapsedMs: 15000,
+            }),
+        ).toBe(true);
+        expect(
+            shouldStopWaitingAfterCompletion({
+                completionSignalAtMs: null,
+                pollsWithoutAssistantAfterCompletion: 99,
+                elapsedMs: 60000,
+            }),
+        ).toBe(false);
     });
 });
