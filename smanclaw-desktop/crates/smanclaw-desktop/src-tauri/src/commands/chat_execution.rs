@@ -1,5 +1,6 @@
 use chrono::Utc;
 use smanclaw_ffi::ZeroclawBridge;
+use smanclaw_core::skill_store::find_claude_skill_run_script;
 use smanclaw_types::{HistoryEntry, ProgressEvent, Role};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -44,6 +45,99 @@ pub async fn send_message(
         timestamp: Utc::now(),
     };
     history_store.save_entry(&user_entry)?;
+
+    // Check if this is a skill command (starts with /)
+    let content_trimmed = content.trim();
+    if content_trimmed.starts_with('/') {
+        // Extract skill name (e.g., /war fetch -> war)
+        let skill_input = content_trimmed.trim_start_matches('/');
+        let skill_name = skill_input.split_whitespace().next().unwrap_or(&skill_input);
+
+        // Try to find and execute the skill
+        if let Some(skill_script) = smanclaw_core::skill_store::find_claude_skill_run_script(&project_path, skill_name) {
+            tracing::info!("Executing skill: {} with script: {:?}", skill_name, skill_script);
+
+            // Emit progress event: skill started
+            let start_event = ProgressEvent::Progress {
+                message: format!("正在启动技能: {}", skill_name),
+                percent: 0.0,
+            };
+            let _ = emit_progress_event(&app_handle, &start_event);
+
+            // Parse skill arguments (e.g., /war fetch -> args: ["fetch"])
+            let skill_args: Vec<&str> = skill_input.split_whitespace().skip(1).collect();
+
+            // Build command with arguments - add verbose mode for detailed output
+            let mut cmd = std::process::Command::new("python");
+            cmd.arg("-u");  // Unbuffered output
+            cmd.arg(skill_script);
+            for arg in &skill_args {
+                cmd.arg(arg);
+            }
+            // cmd.arg("--verbose");  // Disabled: run.py doesn't support this
+            cmd.current_dir(&project_path);
+
+            // Capture both stdout and stderr
+            let output = cmd.output();
+
+            let skill_result = match output {
+                Ok(out) => {
+                    // Combine stdout and stderr for full output
+                    let mut full_output = String::new();
+                    if !out.stderr.is_empty() {
+                        full_output.push_str(&String::from_utf8_lossy(&out.stderr));
+                    }
+                    if !out.stdout.is_empty() {
+                        if !full_output.is_empty() {
+                            full_output.push('\n');
+                        }
+                        full_output.push_str(&String::from_utf8_lossy(&out.stdout));
+                    }
+
+                    // Emit progress events for each line of output
+                    for line in full_output.lines() {
+                        if line.contains("步骤") || line.contains("search") || line.contains("搜索") || line.contains("生成") || line.contains("导入") {
+                            let progress_event = ProgressEvent::Progress {
+                                message: line.to_string(),
+                                percent: 0.5,
+                            };
+                            let _ = emit_progress_event(&app_handle, &progress_event);
+                        }
+                    }
+
+                    if out.status.success() {
+                        if full_output.is_empty() {
+                            "技能执行完成".to_string()
+                        } else {
+                            full_output
+                        }
+                    } else {
+                        format!("Skill execution failed: {}", full_output)
+                    }
+                }
+                Err(e) => format!("Failed to execute skill: {}", e),
+            };
+
+            // Emit completion event
+            let complete_event = ProgressEvent::Progress {
+                message: "技能执行完成".to_string(),
+                percent: 1.0,
+            };
+            let _ = emit_progress_event(&app_handle, &complete_event);
+
+            // Save assistant response
+            let assistant_entry = HistoryEntry {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.clone(),
+                role: Role::Assistant,
+                content: skill_result.clone(),
+                timestamp: Utc::now(),
+            };
+            history_store.save_entry(&assistant_entry)?;
+
+            return Ok(assistant_entry);
+        }
+    }
 
     let settings = state.settings_store.lock().await.load()?;
     let bridge = Arc::new(ZeroclawBridge::from_project_with_settings(

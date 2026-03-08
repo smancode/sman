@@ -4,7 +4,7 @@ use tauri::Manager;
 use axum::{Router, routing::get, Json};
 use std::sync::Arc;
 
-use crate::events::{emit_chat_message, emit_send_message};
+use crate::commands::chat_execution;
 
 use crate::state::{default_config_dir, AppState};
 
@@ -22,7 +22,7 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
     // 启动 HTTP 服务器
     let app_handle = app.handle().clone();
-    let app_handle_arc = Arc::new(std::sync::Mutex::new(app_handle));
+    let app_handle_arc = Arc::new(tokio::sync::Mutex::new(app_handle));
     std::thread::spawn(move || {
         println!("[HTTP Server] Starting HTTP server thread...");
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -131,9 +131,10 @@ pub fn init_permissions() {
     // See: src-tauri/capabilities/
 }
 
-/// HTTP handler for sending messages
+/// HTTP handler for sending messages - directly calls skill execution
+/// Uses the project ID and conversation ID from the request
 async fn send_http_message(
-    app_handle: Arc<std::sync::Mutex<tauri::AppHandle>>,
+    app_handle: Arc<tokio::sync::Mutex<tauri::AppHandle>>,
     Json(payload): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
     let content = payload.get("content")
@@ -143,28 +144,55 @@ async fn send_http_message(
 
     let conversation_id = payload.get("conversation_id")
         .and_then(|v: &serde_json::Value| v.as_str())
-        .unwrap_or("test")
+        .unwrap_or("default")
         .to_string();
 
-    println!("[HTTP] Received message: {} for conversation: {}", content, conversation_id);
+    // Get project_id from payload, or use default project
+    let project_id = payload.get("project_id")
+        .and_then(|v: &serde_json::Value| v.as_str())
+        .unwrap_or("7950de30-bd9d-4bd7-ab10-4f73eaff2c27");
 
-    // Emit chat-message event to frontend
-    // Use first project ID (7950de30-bd9d-4bd7-ab10-4f73eaff2c27) as default
-    let project_id = "7950de30-bd9d-4bd7-ab10-4f73eaff2c27";
-    if let Ok(handle) = app_handle.lock() {
-        if let Err(e) = emit_chat_message(&handle, project_id, &content, "user") {
-            eprintln!("[HTTP] Failed to emit chat-message event: {}", e);
-            return Json(serde_json::json!({
+    println!("[HTTP] Received message: {} for conversation: {}, project: {}", content, conversation_id, project_id);
+
+    // Get app handle with async lock
+    let handle = app_handle.lock().await;
+
+    // Get state from app handle
+    let state = handle.state::<AppState>();
+
+    // Call send_message to execute skill or normal conversation
+    let result = chat_execution::send_message(
+        handle.clone(),
+        state.clone(),
+        conversation_id.clone(),
+        content.clone(),
+    ).await;
+
+    // Release the lock before returning
+    drop(handle);
+
+    match result {
+        Ok(response) => {
+            let response_preview = if response.content.len() > 200 {
+                format!("{}...", &response.content[..200])
+            } else {
+                response.content.clone()
+            };
+            println!("[HTTP] Skill execution completed: {}", response_preview);
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Message processed",
+                "content": content,
+                "conversation_id": conversation_id,
+                "response": response.content
+            }))
+        }
+        Err(e) => {
+            eprintln!("[HTTP] Failed to execute message: {}", e);
+            Json(serde_json::json!({
                 "success": false,
-                "error": format!("Failed to emit event: {}", e)
-            }));
+                "error": format!("Failed to execute message: {}", e)
+            }))
         }
     }
-
-    Json(serde_json::json!({
-        "success": true,
-        "message": "Message sent to frontend",
-        "content": content,
-        "conversation_id": conversation_id
-    }))
 }

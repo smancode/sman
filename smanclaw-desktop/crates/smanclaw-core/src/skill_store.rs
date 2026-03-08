@@ -18,6 +18,8 @@ const INDEX_FILE: &str = "index.json";
 const SKILLS_DIR: &str = ".smanclaw/skills";
 /// Paths directory name
 const PATHS_DIR: &str = ".smanclaw/paths";
+/// Claude Code compatible skills directory name
+const CLAUDE_SKILLS_DIR: &str = ".claude/skills";
 
 /// Skill content with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +89,11 @@ impl SkillStore {
 
     pub fn for_paths(project_path: &std::path::Path) -> Result<Self> {
         Self::new_with_dir(project_path, PATHS_DIR)
+    }
+
+    /// Create a SkillStore for Claude Code compatible skills
+    pub fn for_claude_skills(project_path: &std::path::Path) -> Result<Self> {
+        Self::new_with_dir(project_path, CLAUDE_SKILLS_DIR)
     }
 
     fn new_with_dir(project_path: &std::path::Path, dir_name: &str) -> Result<Self> {
@@ -327,6 +334,33 @@ impl SkillStore {
 
         Ok(matching)
     }
+}
+
+
+
+/// Find a Claude Code compatible skill by name and return its run script path
+pub fn find_claude_skill_run_script(project_path: &std::path::Path, skill_name: &str) -> Option<std::path::PathBuf> {
+    let skill_dir = project_path.join(CLAUDE_SKILLS_DIR).join(skill_name);
+    
+    // Check for run.py
+    let run_py = skill_dir.join("run.py");
+    if run_py.exists() {
+        return Some(run_py);
+    }
+    
+    // Check for run.sh
+    let run_sh = skill_dir.join("run.sh");
+    if run_sh.exists() {
+        return Some(run_sh);
+    }
+    
+    // Check for run script without extension
+    let run = skill_dir.join("run");
+    if run.exists() {
+        return Some(run);
+    }
+    
+    None
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! Tauri commands for frontend communication
 
-mod chat_execution;
+pub(crate) mod chat_execution;
 pub(crate) mod conversation_commands;
 mod history_runtime;
 pub(crate) mod orchestration_decompose;
