@@ -95,16 +95,25 @@ pub async fn send_message(
                     }
 
                     // Emit progress events for each line of output
+                    let mut line_count = 0;
+                    let total_lines = full_output.lines().count();
                     for line in full_output.lines() {
-                        if line.contains("步骤") || line.contains("search") || line.contains("搜索") || line.contains("生成") || line.contains("导入") {
+                        // Emit all non-empty lines as progress events
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            line_count += 1;
+                            let percent = if total_lines > 0 {
+                                (line_count as f64 / total_lines as f64 * 0.8) as f32
+                            } else {
+                                0.5
+                            };
                             let progress_event = ProgressEvent::Progress {
-                                message: line.to_string(),
-                                percent: 0.5,
+                                message: trimmed.to_string(),
+                                percent,
                             };
                             let _ = emit_progress_event(&app_handle, &progress_event);
                         }
                     }
-
                     if out.status.success() {
                         if full_output.is_empty() {
                             "技能执行完成".to_string()
