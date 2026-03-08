@@ -5,6 +5,7 @@ use axum::{Router, routing::get, Json};
 use std::sync::Arc;
 
 use crate::commands::chat_execution;
+use crate::events::emit_chat_message;
 
 use crate::state::{default_config_dir, AppState};
 
@@ -157,6 +158,9 @@ async fn send_http_message(
     // Get app handle with async lock
     let handle = app_handle.lock().await;
 
+    // Emit user message event to frontend
+    let _ = emit_chat_message(&handle, project_id, &content, "user");
+
     // Get state from app handle
     let state = handle.state::<AppState>();
 
@@ -168,11 +172,11 @@ async fn send_http_message(
         content.clone(),
     ).await;
 
-    // Release the lock before returning
-    drop(handle);
-
     match result {
         Ok(response) => {
+            // Emit assistant response event to frontend
+            let _ = emit_chat_message(&handle, project_id, &response.content, "assistant");
+
             let response_preview = if response.content.len() > 200 {
                 format!("{}...", &response.content[..200])
             } else {
@@ -189,6 +193,10 @@ async fn send_http_message(
         }
         Err(e) => {
             eprintln!("[HTTP] Failed to execute message: {}", e);
+            // Emit error message to frontend
+            let error_msg = format!("Error: {}", e);
+            let _ = emit_chat_message(&handle, project_id, &error_msg, "assistant");
+
             Json(serde_json::json!({
                 "success": false,
                 "error": format!("Failed to execute message: {}", e)
