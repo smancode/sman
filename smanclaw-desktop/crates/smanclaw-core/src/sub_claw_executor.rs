@@ -392,6 +392,50 @@ impl SubClawExecutor {
         content.checklist.iter().find(|item| !item.checked).cloned()
     }
 
+    fn validate_context_independence(&self, content: &TaskContent) -> Result<()> {
+        let communication_verbs = ["联系", "询问", "确认", "同步", "沟通", "等待", "要求"];
+        let subtask_targets = [
+            "子任务",
+            "其他任务",
+            "其它任务",
+            "主claw",
+            "主 claw",
+            "其他claw",
+            "其它claw",
+            "上游任务",
+            "下游任务",
+            "task-",
+        ];
+        let negation_markers = [
+            "不",
+            "禁止",
+            "不得",
+            "无需",
+            "不可",
+            "仅可读取",
+            "只读",
+            "避免",
+        ];
+
+        for item in &content.checklist {
+            let text = item.content.trim();
+            if text.is_empty() {
+                continue;
+            }
+            let has_target = subtask_targets.iter().any(|target| text.contains(target));
+            let has_verb = communication_verbs.iter().any(|verb| text.contains(verb));
+            let has_negation = negation_markers.iter().any(|marker| text.contains(marker));
+            if has_target && has_verb && !has_negation {
+                return Err(CoreError::InvalidInput(format!(
+                    "子任务执行清单包含跨子任务通信要求，违反独立上下文约束: {}",
+                    text
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Execute a single step
     ///
     /// # Arguments
@@ -521,6 +565,7 @@ impl SubClawExecutor {
     /// ExecutionResult with the final status
     pub async fn run(&mut self) -> Result<ExecutionResult> {
         let content = self.read_task_md()?;
+        self.validate_context_independence(&content)?;
         let total_steps = content.checklist.len();
 
         if total_steps == 0 {
@@ -1019,5 +1064,42 @@ No checklist here.
         assert_eq!(result.steps_completed, 0); // First step fails
         assert_eq!(result.steps_total, 3);
         assert!(result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_run_rejects_cross_subtask_communication_step() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let content = r#"# Task
+- [ ] 联系 task-2 确认接口细节
+- [ ] 完成当前模块实现
+"#;
+        let task_path = create_test_task_file(&temp_dir, content);
+        let skill_store = create_test_skill_store(&temp_dir);
+        let mut executor = SubClawExecutor::new(&task_path, skill_store);
+
+        let result = executor.run().await;
+        assert!(result.is_err());
+        match result {
+            Err(CoreError::InvalidInput(message)) => {
+                assert!(message.contains("跨子任务通信要求"));
+                assert!(message.contains("联系 task-2"));
+            }
+            other => panic!("Expected InvalidInput, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_allows_negative_constraint_statement() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let content = r#"# Task
+- [ ] 不要联系其他子任务，直接基于当前代码补齐测试
+"#;
+        let task_path = create_test_task_file(&temp_dir, content);
+        let skill_store = create_test_skill_store(&temp_dir);
+        let mut executor = SubClawExecutor::new(&task_path, skill_store);
+
+        let result = executor.run().await.expect("run executor");
+        assert!(result.success);
+        assert_eq!(result.steps_completed, 1);
     }
 }

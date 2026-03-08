@@ -1,6 +1,6 @@
 use smanclaw_core::{
-    ExperienceSink, MainTaskManager, MainTaskStatus, SkillStore, SubClawExecutor, SubTaskStatus,
-    TaskDag, TaskGenerator, TaskManager,
+    DependencyInput, ExperienceSink, MainTaskManager, MainTaskStatus, SkillStore, SubClawExecutor,
+    SubTaskContextContract, SubTaskStatus, TaskDag, TaskGenerator, TaskManager,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::AppSettings;
@@ -271,6 +271,7 @@ fn generate_task_md_path(
     total_tasks: usize,
 ) -> Option<PathBuf> {
     if let Some(generator) = task_generator {
+        let contract = build_subtask_context_contract(dag, task);
         let file_stem = subtask_file_stems
             .entry(task_id.to_string())
             .or_insert_with(|| {
@@ -279,7 +280,7 @@ fn generate_task_md_path(
                 stem
             })
             .clone();
-        match generator.generate_named(task, &file_stem) {
+        match generator.generate_named_with_contract(task, &file_stem, &contract) {
             Ok(path) => Some(path),
             Err(e) => {
                 mark_subtask_failed(
@@ -312,6 +313,67 @@ fn generate_task_md_path(
         );
         None
     }
+}
+
+fn build_subtask_context_contract(
+    dag: &TaskDag,
+    task: &smanclaw_core::SubTask,
+) -> SubTaskContextContract {
+    let mut readonly_context = vec!["项目既有架构与公共约束".to_string()];
+    if !task.depends_on.is_empty() {
+        readonly_context.push(format!(
+            "仅可读取依赖任务输出，不可要求依赖任务进行额外沟通: {}",
+            task.depends_on.join(", ")
+        ));
+    }
+    let mut dependency_inputs = Vec::new();
+    for dep_id in &task.depends_on {
+        let summary = dag
+            .get_task(dep_id)
+            .and_then(|dep| dep.result.clone())
+            .map(|text| summarize_dependency_output(&text))
+            .unwrap_or_else(|| "依赖任务尚未产生输出，按契约仅可读取已落盘结果".to_string());
+        dependency_inputs.push(DependencyInput {
+            task_id: dep_id.clone(),
+            summary,
+        });
+    }
+    let mut acceptance_checks = vec![
+        "确保实现结果满足子任务目标并可复现".to_string(),
+        "确保新增或更新测试放在 tests 目录并通过".to_string(),
+    ];
+    if let Some(test_command) = task.test_command.as_ref() {
+        acceptance_checks.push(format!("执行并通过 `{}`", test_command));
+    } else {
+        acceptance_checks.push("执行与任务相关的验证命令并记录结果".to_string());
+    }
+    SubTaskContextContract {
+        writable_scope: vec![
+            "仅修改与当前子任务直接相关的源码文件".to_string(),
+            "仅修改 tests/ 下与当前子任务相关的测试文件".to_string(),
+        ],
+        readonly_context,
+        dependency_inputs,
+        acceptance_checks,
+        constraints: vec![
+            "必须在独立上下文内完成，不依赖其他子任务的实时对话".to_string(),
+            "禁止要求其他子任务补充口头说明；仅基于已提供输入与代码现状执行".to_string(),
+            "若信息不足，先在当前任务内补齐最小必要上下文再继续实现".to_string(),
+        ],
+    }
+}
+
+fn summarize_dependency_output(raw: &str) -> String {
+    let compact = raw
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('\n', " ");
+    let char_count = compact.chars().count();
+    if char_count <= 180 {
+        return compact;
+    }
+    format!("{}...", compact.chars().take(180).collect::<String>())
 }
 
 #[allow(clippy::too_many_arguments)]

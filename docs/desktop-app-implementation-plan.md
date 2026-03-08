@@ -4,54 +4,66 @@
 
 基于 ZeroClaw 开发跨平台桌面应用（Windows + macOS），支持可视化管理项目和执行编码任务。
 
-## 0. 当前实现对照（2026-03-05）
+## 0. 当前实现对照（2026-03-08）
 
 ### 0.1 Desktop → 主/子 Claw 实际调用链路
 
-1. 前端通过 `orchestrationApi.executeTask` 调用 Tauri 命令 `execute_orchestrated_task`
-2. `execute_orchestrated_task` 在 Tauri 层直接调用 `Orchestrator::parse_requirement` 与 `Orchestrator::build_dag`
-3. Tauri 层按 DAG 分组循环执行，每个子任务先写入 `.smanclaw/tasks/<subtask-id>.md`
-4. 每个子任务由 `SubClawExecutor::run()` 执行 checklist 循环，完成后回写 `- [x]`
-5. 执行进度通过事件 `subtask-started` / `subtask-completed` / `orchestration-progress` 推送到前端
-6. 全部子任务结束后更新 Task 状态为 completed/failed，并可通过 `get_task_dag` / `get_orchestration_status` 查询
+1. 前端存在两条入口：  
+   - 聊天入口：`conversationApi.sendMessage` → Tauri `send_message` → `chat_execution::send_message`  
+   - 编排入口：`orchestrationApi.executeTask` → Tauri `execute_orchestrated_task`
+2. `execute_orchestrated_task` 在 Tauri 层完成子任务拆解（语义拆解优先，规则兜底）并调用 `Orchestrator::build_dag`
+3. Tauri 运行时按并行组执行 DAG：为每个子任务生成 `.smanclaw/tasks/task-<main-task>-<seq>.md`，并用 `SubClawExecutor::run()` 执行 checklist
+4. 执行过程会同步更新 `MainTaskManager` 状态（Planning → Executing → Verifying → Completed/Failed）并落库 `TaskManager`
+5. 编排进度通过 `subtask-started` / `subtask-completed` / `orchestration-progress` / `task-dag` / `test-result` 推送到前端
+6. 聊天执行过程通过 `progress` 事件推送 `tool_call`/`file_read`/`file_written`/`command_run`/`progress`，并包含 5 分钟心跳播报
+7. 验收阶段由 `AcceptanceEvaluator` 执行；失败会自动生成补救子任务并最多进行 2 轮补救，再写回最终状态
 
 ### 0.2 蓝图完成度评估（按主子 Claw 自动化目标）
 
 | 能力项 | 蓝图目标 | 当前状态 | 完成度 |
 |---|---|---|---|
-| 主控状态机 | Analyzing→Splitting→Dispatching→Polling→Evaluating 闭环 | `smanclaw-core::Orchestrator::handle_request` 已实现，但 desktop 主链路仍走 `execute_orchestrated_task` | ⚠️ 部分实现 |
-| 任务拆解 | 基于语义理解拆分子任务 | 已接入“语义优先 + 规则兜底”拆解，仍需提升复杂需求稳定性 | ⚠️ 部分实现 |
+| 主控状态机 | Analyzing→Splitting→Dispatching→Polling→Evaluating 闭环 | Desktop 端已形成 Planning/Executing/Verifying 与补救闭环，但尚未统一到 `Orchestrator::handle_request` 单入口 | ⚠️ 部分实现 |
+| 任务拆解 | 基于语义理解拆分子任务 | 已接入“语义优先 + 规则兜底”拆解，并进行 DAG 可执行性校验 | ✅ 已实现 |
 | DAG 管理 | 依赖分析与拓扑排序 | `TaskDag` 已实现并用于 orchestrated 命令 | ✅ 已实现 |
 | 子 Claw 执行 | 按 task.md checklist 自动执行 | `SubClawExecutor` 已接入 orchestrated 命令并执行 checklist | ✅ 已实现 |
 | 并行执行 | 无依赖任务并行执行 | orchestrated 主流程已在 parallel group 内并发执行子任务（基于 JoinSet 聚合结果） | ✅ 已实现 |
-| 验收评估 | 按验收标准自动评估（测试/E2E/命令） | orchestrated 主流程已接入 `AcceptanceEvaluator`，并已形成“验收失败→补救子任务→再验收”闭环；仍需提升评估深度 | ⚠️ 部分实现 |
+| 验收评估 | 按验收标准自动评估（测试/E2E/命令） | 已接入 `AcceptanceEvaluator`，并形成“验收失败→补救子任务→再验收”闭环；校验维度仍偏基础规则 | ⚠️ 部分实现 |
 | main-task.md 协同 | 主 Claw 输出 main-task.md 并追踪子任务 | orchestrated 主流程已接入 `MainTaskManager`（创建、子任务状态更新、完成回写） | ✅ 已实现 |
 | 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入自动沉淀链路，支持 skills / paths / memory 生成与回流 | ✅ 已实现 |
-| ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`，桥接失败时会降级占位执行 | ⚠️ 部分实现 |
+| ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`；桥接初始化失败时对应任务会失败并上报 | ⚠️ 部分实现 |
+| 进度反馈 | 长任务过程可见且避免“无响应等待” | 聊天链路已展示工具调用/文件/命令/心跳，并在 `task_completed` 时优先收敛最终输出 | ✅ 已实现 |
 
 ### 0.3 已确认缺口（与“核心自动化愿景”对照）
 
-1. **主链路分叉**：Desktop 当前编排主链路仍在 Tauri `execute_orchestrated_task`，尚未统一切到 `Orchestrator::handle_request`。
-2. **并行执行策略待增强**：组内并发已落地，但仍需补充并发限流与失败短路策略细化。
-3. **拆解智能度不足**：子任务拆解仍偏规则匹配，语义泛化能力有限。
-4. **验收深度不足**：已具备失败补救再验收闭环，但当前评估仍偏基础规则校验，E2E/场景化覆盖不足。
-5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需统一状态来源与一致性策略。
-6. **ZeroClaw 失败降级策略偏宽松**：桥接不可用时会降级占位执行，可能导致“执行成功”语义偏弱。
-7. **交互说明仍可增强**：已增加主 Claw 分阶段状态说明，但前端尚未提供独立“过程解说面板/时间线”。
+1. **主链路仍分叉**：聊天入口与编排入口并存，尚未统一到同一个主控状态机入口。
+2. **并发控制待增强**：组内并行已落地，但并发上限、失败短路和资源隔离策略仍可细化。
+3. **拆解泛化能力待提升**：复杂需求下语义拆解稳定性仍需增强。
+4. **验收深度待增强**：当前以内容匹配为主，端到端与场景化验证覆盖不足。
+5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需明确权威来源与一致性策略。
+6. **过程可视化待结构化**：已具备事件流，但“阶段说明 + 证据汇总”展示仍可继续优化。
 
 ### 0.5 交互待办（暂缓项）
 
-- 在前端增加“主 Claw 过程说明时间线”，按分析/拆解/分发/执行/验收分阶段展示细节。
-- 将子任务测试证据（命令、通过/失败摘要）结构化展示，避免用户只看到最终一句话。
-- 支持长任务中的心跳播报与预计剩余步骤提示，降低“无响应等待”感知。
+- 在前端补齐“主 Claw 分阶段时间线”，将分析/拆解/分发/执行/验收拆开展示。
+- 将补救轮次与验收证据（命令、通过/失败摘要）结构化展示，避免只显示最终一句话。
+- 给长任务增加“预计剩余步骤”提示，目前已具备心跳播报。
 
 ### 0.4 建议的收敛路径（按落地优先级）
 
-1. 将 Desktop orchestrated 入口统一切换到 `Orchestrator::handle_request`，Tauri 层仅做命令与事件编排。
-2. 在 DAG 的同组任务引入真正并发执行（`join_all` / `FuturesUnordered`），并保留失败短路策略。
-3. 将验收失败结果转成补救子任务并回流 DAG，形成“执行→验收→补救→再验收”闭环。
+1. 统一聊天与编排入口，收敛到同一个主控状态机（建议汇入 `Orchestrator::handle_request`）。
+2. 细化并行执行策略，补充并发限流、失败短路与重试策略。
+3. 强化验收深度，将内容校验扩展到命令执行、回归测试与关键场景验证。
 4. 统一 `tasks.db` 与 `main-task.md` 的状态主数据源，避免双写漂移。
-5. 收紧 ZeroClaw 降级策略：桥接失败时显式失败或进入重试，而非占位成功。
+5. 加强过程可视化，输出阶段、证据与补救轨迹的结构化摘要。
+
+### 0.6 复杂编码任务的落地原则（主 Claw 调子 Claw）
+
+1. **主 Claw 只做编排，不做实现细节**：负责需求理解、任务拆解、依赖分析、验收与补救。
+2. **子任务必须是独立上下文可完成单元**：每个子任务包含明确输入、输出、边界和验收标准，不依赖与其他子 Claw 的实时对话。
+3. **允许顺序与依赖，不要求子 Claw 相互通信**：通过 DAG 关系表达先后依赖，依赖结果通过主 Claw 汇总后再下发。
+4. **上下文最小化下发**：子 Claw 仅接收完成当前任务必需信息（目标、相关文件、约束、测试命令、验收标准）。
+5. **确定性监控优先**：主 Claw 用事件、任务状态、测试结果、分支/文件变化做客观监控，减少无效轮询和高成本追问。
+6. **失败重试必须带“原因修正”**：补救轮次不是原样重跑，而是基于失败证据重写子任务说明并缩小问题边界。
 
 ### 设计原则
 
@@ -348,15 +360,16 @@ pub struct ZeroclawBridge {
 }
 
 impl ZeroclawBridge {
-    /// 从项目目录创建桥接
-    pub fn from_project(project_path: &Path) -> Result<Self>;
-
-    /// 执行任务（同步）
-    pub fn execute_task(&self, input: &str) -> Result<TaskResult>;
+    /// 从项目目录和设置创建桥接
+    pub fn from_project_with_settings(
+        project_path: &Path,
+        settings: &AppSettings,
+    ) -> Result<Self>;
 
     /// 执行任务（流式，返回进度事件）
     pub fn execute_task_stream(
         &self,
+        task_id: &str,
         input: &str,
         event_tx: mpsc::Sender<ProgressEvent>,
     ) -> impl Future<Output = Result<TaskResult>>;
@@ -366,46 +379,41 @@ impl ZeroclawBridge {
 ### 3.4 Tauri 命令（前端接口）
 
 ```rust
-// crates/smanclaw-desktop/src-tauri/src/commands.rs
+// crates/smanclaw-desktop/src-tauri/src/setup.rs
 use tauri::State;
 
 /// 获取所有项目
 #[tauri::command]
-pub async fn get_projects(
-    project_manager: State<'_, Arc<ProjectManager>>,
-) -> Result<Vec<Project>, String>;
+pub async fn get_projects(...) -> TauriResult<Vec<Project>>;
 
 /// 添加项目
 #[tauri::command]
-pub async fn add_project(
-    path: String,
-    project_manager: State<'_, Arc<ProjectManager>>,
-) -> Result<Project, String>;
+pub async fn add_project(...) -> TauriResult<Project>;
 
-/// 执行任务
+/// 单任务执行（直接 Agent）
 #[tauri::command]
-pub async fn execute_task(
-    project_id: String,
-    input: String,
-    task_manager: State<'_, Arc<TaskManager>>,
-    bridge: State<'_, Arc<ZeroclawBridge>>,
-    app: tauri::AppHandle,
-) -> Result<Task, String>;
+pub async fn execute_task(...) -> TauriResult<Task>;
 
-/// 获取对话历史
+/// 编排任务执行（主/子 Claw）
 #[tauri::command]
-pub async fn get_conversation(
-    conversation_id: String,
-    store: State<'_, Arc<SqliteHistoryStore>>,
-) -> Result<Vec<HistoryEntry>, String>;
+pub async fn execute_orchestrated_task(...) -> TauriResult<OrchestratedTaskResult>;
 
-/// 发送消息（追加到对话）
+/// 编排状态查询
 #[tauri::command]
-pub async fn send_message(
-    conversation_id: String,
-    content: String,
-    store: State<'_, Arc<SqliteHistoryStore>>,
-) -> Result<HistoryEntry, String>;
+pub async fn get_task_dag(...) -> TauriResult<Option<TaskDagResponse>>;
+
+#[tauri::command]
+pub async fn get_orchestration_status(...) -> TauriResult<Option<OrchestrationProgress>>;
+
+/// 对话相关
+#[tauri::command]
+pub async fn list_conversations(...) -> TauriResult<Vec<Conversation>>;
+
+#[tauri::command]
+pub async fn create_conversation(...) -> TauriResult<Conversation>;
+
+#[tauri::command]
+pub async fn send_message(...) -> TauriResult<HistoryEntry>;
 ```
 
 ---
@@ -488,34 +496,44 @@ Light Theme:
 ### 4.5 API 层
 
 ```typescript
-// src/lib/api/tauri.ts
-import { invoke } from '@tauri-apps/api/tauri';
-import { listen } from '@tauri-apps/api/event';
-import type { Task, Project, HistoryEntry, ProgressEvent } from '$lib/types';
-
-export const api = {
-  // 项目管理
-  getProjects: () => invoke<Project[]>('get_projects'),
-  addProject: (path: string) => invoke<Project>('add_project', { path }),
-  removeProject: (id: string) => invoke<void>('remove_project', { id }),
-
-  // 任务管理
-  executeTask: (projectId: string, input: string) =>
-    invoke<Task>('execute_task', { projectId, input }),
-  getTask: (taskId: string) => invoke<Task>('get_task', { taskId }),
-  listTasks: (projectId: string) => invoke<Task[]>('list_tasks', { projectId }),
-
-  // 对话管理
-  getConversation: (conversationId: string) =>
-    invoke<HistoryEntry[]>('get_conversation', { conversationId }),
-  sendMessage: (conversationId: string, content: string) =>
-    invoke<HistoryEntry>('send_message', { conversationId, content }),
+// src/lib/api/tauri.ts（节选）
+export const taskApi = {
+  execute: (request: ExecuteTaskRequest) =>
+    safeInvoke<ExecuteTaskResponse>("execute_task", {
+      project_id: request.projectId,
+      input: request.prompt,
+    }),
 };
 
-// 进度事件监听
-export function onProgressEvent(callback: (event: ProgressEvent) => void) {
-  return listen<ProgressEvent>('progress-event', (e) => callback(e.payload));
-}
+export const conversationApi = {
+  sendMessage: (conversationId: string, content: string) =>
+    safeInvoke<HistoryEntryRecord>("send_message", {
+      conversation_id: conversationId,
+      content,
+    }),
+};
+
+export const orchestrationApi = {
+  executeTask: (projectId: string, input: string) =>
+    safeInvoke<OrchestratedTaskResult>("execute_orchestrated_task", {
+      project_id: projectId,
+      input,
+    }),
+  getTaskDag: (taskId: string) =>
+    safeInvoke<TaskDagResponse | null>("get_task_dag", { task_id: taskId }),
+  getStatus: (taskId: string) =>
+    safeInvoke<OrchestrationProgress | null>("get_orchestration_status", {
+      task_id: taskId,
+    }),
+};
+
+// 事件监听（实际事件名）
+listen<ProgressEvent>("progress", ...);
+listen<OrchestrationProgressEvent>("orchestration-progress", ...);
+listen<SubTaskStartedEvent>("subtask-started", ...);
+listen<SubTaskCompletedEvent>("subtask-completed", ...);
+listen<TestResultEvent>("test-result", ...);
+listen<TaskDagEvent>("task-dag", ...);
 ```
 
 ---
@@ -541,7 +559,7 @@ export function onProgressEvent(callback: (event: ProgressEvent) => void) {
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                         Tauri 命令层 (Rust)                               │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                   │
-│  │get_projects │    │execute_task │    │send_message │                   │
+│  │get_projects │ │execute_orchestrated_task│ │send_message│              │
 │  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘                   │
 └─────────┼──────────────────┼──────────────────┼──────────────────────────┘
           │                  │                  │
@@ -558,7 +576,7 @@ export function onProgressEvent(callback: (event: ProgressEvent) => void) {
 │                        FFI 桥接层 (smanclaw-ffi)                          │
 │  ┌─────────────────────────────────────────────────────┐                 │
 │  │              ZeroclawBridge                         │                 │
-│  │  • execute_task() → Agent::turn()                   │                 │
+│  │  • execute_task_stream() → Agent::turn()            │                 │
 │  │  • progress_stream → ProgressEvent                  │                 │
 │  └────────────────────────┬────────────────────────────┘                 │
 └───────────────────────────┼──────────────────────────────────────────────┘
@@ -725,6 +743,12 @@ SmanClaw Desktop 的核心价值是**全自动化的编码 Agent 系统**：
 ┌─────────────────────────────────────────────────────────────┐
 │ 3. 子 Claw 执行（自动单元测试）                                │
 │                                                              │
+│    每个子任务均生成独立任务包:                                 │
+│    • 目标定义（要完成什么）                                    │
+│    • 上下文边界（可读/可改文件）                                │
+│    • 依赖输入（来自前置任务的结果摘要）                          │
+│    • 验收标准（测试命令/行为标准）                              │
+│                                                              │
 │    子 Claw 1 执行 Task 1:                                     │
 │    • 读取项目结构                                             │
 │    • 编写 User 实体                                           │
@@ -779,52 +803,47 @@ SmanClaw Desktop 的核心价值是**全自动化的编码 Agent 系统**：
 | **多项目管理** | UI 可加载/切换多个项目 | ✅ 已实现 |
 | **需求输入** | UI 输入框发送需求 | ✅ 已实现 |
 | **ZeroClaw 后端复用** | 调用 Agent::turn() API | ✅ 已实现 |
-| **主控 Claw（任务编排）** | 拆解任务、分配子任务 | ❌ **未实现** |
-| **子 Claw 并行执行** | 多个 Agent 实例并行工作 | ❌ **未实现** |
-| **自动单元测试** | 子 Claw 完成后自动运行测试 | ❌ **未实现** |
-| **E2E 验收 Claw** | 专门的验收测试 Agent | ❌ **未实现** |
-| **需求评估与补全** | 主控 Claw 评估并迭代 | ❌ **未实现** |
-| **进度实时反馈** | UI 实时展示任务进度 | ⚠️ 部分实现 |
+| **主控 Claw（任务编排）** | 拆解任务、分配子任务 | ✅ 已实现（入口：`execute_orchestrated_task`） |
+| **子 Claw 并行执行** | 多个子任务并行工作 | ✅ 已实现（DAG 并行组 + JoinSet） |
+| **自动验收与补救** | 验收失败后自动补救并再验收 | ✅ 已实现（最多 2 轮补救） |
+| **需求评估与补全** | 主控 Claw 评估并迭代 | ⚠️ 部分实现（已补救闭环，评估深度待加强） |
+| **进度实时反馈** | UI 实时展示任务进度 | ✅ 已实现（聊天进度流 + 编排事件流） |
+
+### 10.4 子任务独立上下文契约（新增）
+
+每个子 Claw 接到的任务必须满足以下契约：
+
+- **目标**：单一可验证目标，不混入多个语义目标。
+- **边界**：限定可修改路径与禁止变更范围。
+- **输入**：仅包含必要背景、前置结果摘要、关键约束。
+- **输出**：必须产出变更摘要、测试结果、风险说明。
+- **验收**：至少一个可执行验证（lint/typecheck/test/命令断言）。
+
+该契约保证“子任务可独立完成 + 主 Claw 可组合验收”，从而实现复杂任务的稳定并行化。
 
 ---
 
 ## 十一、实现进度
 
-### 已完成
+### 11.1 已落地能力（截至 2026-03-08）
 
-| Task ID | 任务 | 状态 |
-|---------|------|------|
-| T1 | 创建 workspace 结构 | ✅ 完成 |
-| T2 | smanclaw-types 测试 | ✅ 16 tests passed |
-| T3 | smanclaw-core 测试 | ✅ 21 tests passed |
-| T4 | smanclaw-ffi 测试 | ✅ 编译通过 |
-| T5 | 初始化 Tauri 项目 | ✅ 完成 |
-| T6 | 初始化 Svelte 前端 | ✅ 完成 |
-| T7 | ZeroClaw 真实集成 | ✅ 完成 - 使用真实 Agent::turn() API |
-| T8 | 前后端联调 | ✅ cargo check/workspace test 通过 |
-| T9 | 前端构建 | ✅ vite build 成功，输出到 src-tauri/web |
-| T10 | **API Key 配置功能** | ✅ 完成 - 支持配置 LLM/Embedding/Qdrant |
-| T11 | **打包构建** | ✅ 完成 - macOS .app 和 .dmg 已生成 |
+| 模块 | 关键能力 | 当前状态 |
+|------|---------|---------|
+| Tauri 命令层 | `execute_task` + `execute_orchestrated_task` 双执行模式 | ✅ 已实现 |
+| 编排执行层 | 语义拆解 + DAG + 并行组执行 + 子任务事件 | ✅ 已实现 |
+| 验收闭环 | `AcceptanceEvaluator` + 自动补救子任务 + 再验收 | ✅ 已实现 |
+| 经验沉淀 | 用户输入经验、子任务执行经验回流 Skill | ✅ 已实现 |
+| 前端可视化 | 子任务状态、并行分组、编排进度展示 | ✅ 已实现 |
+| 聊天进度体验 | 工具调用/文件/命令过程展示 + 心跳播报 + 完成收敛 | ✅ 已实现 |
 
-### 待完成（基础设施）
+### 11.2 仍需增强项
 
-| Task ID | 任务 | 说明 |
-|---------|------|------|
-| T12 | 完整 E2E 测试 | 需要配置 API key 后测试完整流程 |
-| T13 | 应用图标 | 当前使用默认图标，需要替换为正式图标 |
-
-### 待实现（核心自动化能力）
-
-| Task ID | 任务 | 优先级 | 说明 |
-|---------|------|--------|------|
-| **T14** | **主控 Claw（Orchestrator）** | P0 | 实现 `OrchestratorClaw` 负责需求分析、任务拆解、编排调度 |
-| **T15** | **任务 DAG 构建** | P0 | 将用户需求拆解为有依赖关系的任务 DAG |
-| **T16** | **子 Claw 执行器** | P0 | 实现 `SubClawExecutor` 支持并行执行多个子任务 |
-| **T17** | **自动单元测试集成** | P0 | 子 Claw 完成代码后自动运行 `cargo test`/`npm test` |
-| **T18** | **E2E 验收 Claw** | P1 | 专门的验收 Agent，运行集成测试验证功能完整性 |
-| **T19** | **需求评估与补全循环** | P0 | 主控 Claw 评估结果，不满足则生成补全任务继续执行 |
-| **T20** | **进度事件细化** | P1 | 细化 ProgressEvent 支持子任务状态、测试结果等 |
-| **T21** | **UI 任务可视化** | P1 | 前端展示任务 DAG、子任务进度、测试结果 |
+| 项目 | 说明 | 优先级 |
+|------|------|------|
+| 拆解质量 | 复杂需求场景下语义拆解稳定性与泛化能力 | P0 |
+| 验收深度 | 由内容匹配扩展到命令级与场景级验证 | P0 |
+| 主链路统一 | 聊天入口与编排入口的主状态机统一 | P1 |
+| 过程面板 | 结构化展示阶段、证据、补救轨迹 | P1 |
 
 ---
 
@@ -834,12 +853,11 @@ SmanClaw Desktop 的核心价值是**全自动化的编码 Agent 系统**：
 
 | 层级 | 目标状态 | 当前实现 | 差距 |
 |------|----------|----------|------|
-| **前端** | 多项目管理、任务可视化 | ✅ 多项目、对话界面 | ❌ 缺少任务 DAG 可视化 |
-| **Tauri 命令** | 执行任务、进度订阅 | ✅ execute_task、事件推送 | ⚠️ 单任务，无子任务概念 |
-| **FFI 桥接** | 多 Agent 实例管理 | ⚠️ 单 Agent 调用 | ❌ 无多 Agent 编排 |
-| **ZeroClaw Agent** | 复用现有能力 | ✅ Agent::turn() 可用 | ⚠️ team_orchestration 未集成 |
-| **任务编排** | 主控 Claw + 子 Claw | ❌ 未实现 | ❌ 需要新建 orchestrator 模块 |
-| **自动测试** | 子任务完成后自动测试 | ❌ 未实现 | ❌ 需要集成测试运行器 |
+| **前端** | 多项目管理、任务可视化 | ✅ 多项目、对话、DAG/子任务进度 | ⚠️ 缺少更细颗粒阶段面板 |
+| **Tauri 命令** | 执行任务、进度订阅 | ✅ 双执行模式 + 事件流 | ⚠️ 主链路仍双入口 |
+| **FFI 桥接** | 复用 ZeroClaw 能力 | ✅ `ZeroclawBridge` + `ZeroclawStepExecutor` | ⚠️ 多模型/多代理策略仍可增强 |
+| **任务编排** | 主控 Claw + 子 Claw | ✅ 已实现并落地到 orchestrated 路径 | ⚠️ 统一到单入口尚未完成 |
+| **自动验收** | 子任务完成后自动验证 | ✅ 已实现且支持补救重试 | ⚠️ 验收维度仍偏基础 |
 
 ### 12.2 ZeroClaw 已有但未集成的能力
 
@@ -848,23 +866,21 @@ ZeroClaw 的 `src/agent/team_orchestration.rs` 已实现：
 - **ExecutionPlan**: 任务拓扑排序、并行批次、预算估算
 - **OrchestrationBundle**: 完整的编排报告
 
-**但 SmanClaw Desktop 当前未使用这些能力！**
-
-当前 `ZeroclawBridge` 只调用了 `Agent::turn()`，是单 Agent 模式。
+SmanClaw Desktop 当前主要采用 `Agent::turn()` 与 `ZeroclawStepExecutor` 驱动执行，尚未直接集成 team orchestration 全套拓扑能力。
 
 ### 12.3 需要新增的核心模块
 
 ```
 smanclaw-desktop/crates/
 ├── smanclaw-core/
-│   ├── orchestrator.rs      # 【新增】主控 Claw 逻辑
-│   ├── task_dag.rs          # 【新增】任务 DAG 构建
-│   ├── sub_claw_executor.rs # 【新增】子 Claw 执行器
-│   └── test_runner.rs       # 【新增】自动测试运行器
+│   ├── orchestrator.rs      # 已存在并被编排链路使用
+│   ├── task_dag.rs          # 已存在并被编排链路使用
+│   ├── sub_claw_executor.rs # 已存在并被编排链路使用
+│   └── acceptance_evaluator.rs # 已存在并被验收链路使用
 │
 └── smanclaw-ffi/
-    ├── multi_agent_bridge.rs # 【新增】多 Agent 桥接
-    └── orchestration_bridge.rs # 【新增】编排能力桥接
+    ├── zeroclaw_bridge.rs        # 已存在
+    └── zeroclaw_step_executor.rs # 已存在
 ```
 
 ---
@@ -1408,7 +1424,7 @@ pub fn find_user(id: u64) -> Result<Option<User>> {
 
 ---
 
-## 十五、待实现任务清单（更新）
+## 十五、落地进展与后续增强（更新）
 
 ### 基础设施（已完成）
 
@@ -1438,19 +1454,19 @@ pub fn find_user(id: u64) -> Result<Option<User>> {
 | **T27** | Skill 更新工具 | 已完成 | 通过 experience_sink.rs 实现 |
 | **T28** | 主 Claw 轮询机制 | 已完成 | task_poller.rs 已实现 |
 | **T29** | task.md 生成器 | 已完成 | task_generator.rs 已实现 |
-| **T30** | 验收评估模块 | 已完成 | acceptance_evaluator.rs 结构完整 |
+| **T30** | 验收评估模块 | 已完成 | acceptance_evaluator.rs 已接入主流程并参与补救闭环 |
 
-### 核心运行时（待实现）
+### 核心运行时（待增强）
 
 | Task ID | 任务 | 优先级 | 说明 |
 |---------|------|--------|------|
-| **T31** | E2E 验收 Claw | P1 | 专门的验收测试 Agent |
-| **T35** | llm_client.rs | P0 | 统一的 LLM 调用层 |
-| **T36** | orchestrator.rs 重写 | P0 | 真正的编排逻辑 |
-| **T37** | sub_claw_executor.rs 重写 | P0 | 真正的执行逻辑 |
-| **T38** | runtime.rs | P1 | 事件驱动的主循环 |
-| **T39** | 验收逻辑增强 | P1 | acceptance_evaluator 真实验证 |
-| **T40** | 身份定义文件 | P2 | SOUL/USER/AGENTS.md |
+| **T31** | 主链路统一 | P0 | 聊天与编排入口收敛到统一状态机入口 |
+| **T35** | 验收深度增强 | P0 | 增加命令级、回归测试级、场景级验证能力 |
+| **T36** | 任务拆解增强 | P0 | 提升复杂需求下语义拆解稳定性 |
+| **T37** | 并发执行策略增强 | P1 | 并发限流、失败短路、重试策略 |
+| **T38** | 过程可视化增强 | P1 | 阶段时间线、证据摘要、补救轨迹 |
+| **T39** | 状态单一事实源收敛 | P1 | 明确 tasks.db 与 main-task.md 的权威状态来源 |
+| **T40** | Team Orchestration 评估接入 | P2 | 评估并引入 ZeroClaw 多代理拓扑能力 |
 
 ---
 
@@ -1511,19 +1527,19 @@ cargo tauri build
 
 | 环节 | 模块 | 实现状态 | 问题 |
 |------|------|---------|------|
-| 主Claw编排 | orchestrator.rs | 框架占位 | 无真正的编排逻辑 |
-| 子Claw执行 | sub_claw_executor.rs | 框架占位 | 无实际调用LLM的逻辑 |
-| 主Claw评估 | acceptance_evaluator.rs | 结构完整 | evaluate_criterion() 返回 Pending |
+| 主Claw编排 | orchestrator.rs + `execute_orchestrated_task` | 已落地 | 入口仍未与聊天链路统一 |
+| 子Claw执行 | sub_claw_executor.rs + zeroclaw_step_executor.rs | 已落地 | 复杂任务稳定性仍需提升 |
+| 主Claw评估 | acceptance_evaluator.rs | 已落地 | 校验维度仍偏基础内容匹配 |
 
 ### 18.2 小循环状态
 
-task_poller.rs 设计合理，可以工作。
+`task_poller.rs` 与 `SubClawExecutor::run()` 已形成可执行小循环：读取 task.md → 定位未勾选步骤 → 执行 → 回写勾选。
 
 ### 18.3 核心缺失
 
-- 事件驱动的主循环
-- LLM 调用层
-- 状态机（MainTask 状态流转）
+- 聊天入口与编排入口的统一主循环
+- 验收阶段的深度验证能力（命令级/场景级）
+- 复杂需求下的高质量语义拆解能力
 
 ---
 
@@ -1540,21 +1556,21 @@ task_poller.rs 设计合理，可以工作。
 | 任务轮询 | task_poller.rs | 完整 | - |
 | 经验提取 | experience_sink.rs | 完整 | - |
 | 用户偏好 | user_experience.rs | 完整 | - |
-| 验收评估 | acceptance_evaluator.rs | 部分实现 | 无真实验证逻辑 |
-| **编排器** | orchestrator.rs | 未实现 | 核心编排逻辑 |
-| **LLM调用** | - | 未实现 | 调用模型的能力 |
-| **子Claw执行** | sub_claw_executor.rs | 未实现 | 实际执行逻辑 |
+| 验收评估 | acceptance_evaluator.rs | 部分实现 | 真实命令/场景验证覆盖不足 |
+| **编排器** | orchestrator.rs | 已实现 | 需统一为单入口主链路 |
+| **LLM调用** | zeroclaw_bridge.rs / zeroclaw_step_executor.rs | 已实现 | 失败重试与策略编排可继续增强 |
+| **子Claw执行** | sub_claw_executor.rs | 已实现 | 复杂拆解任务下成功率需提升 |
 
 ### 19.2 补齐计划
 
 | 优先级 | 模块 | 说明 |
 |--------|------|------|
-| P0 | llm_client.rs | 统一的LLM调用层 |
-| P0 | orchestrator.rs 重写 | 真正的编排逻辑 |
-| P0 | sub_claw_executor.rs 重写 | 真正的执行逻辑 |
-| P1 | runtime.rs | 事件驱动的主循环 |
-| P1 | 验收增强 | 实际的验证逻辑 |
-| P2 | SOUL/USER/AGENTS.md | 身份定义文件 |
+| P0 | 编排主链路统一 | 将聊天/编排入口收敛到统一状态机入口 |
+| P0 | 验收增强 | 引入命令执行、测试结果、场景验证证据 |
+| P0 | 拆解增强 | 提升复杂需求下语义拆解稳定性 |
+| P1 | 并发策略增强 | 增加并发限流、失败短路、重试策略 |
+| P1 | 过程可视化增强 | 前端展示阶段、证据、补救轨迹 |
+| P2 | Team Orchestration 集成 | 评估并接入 ZeroClaw 多代理拓扑能力 |
 
 ---
 

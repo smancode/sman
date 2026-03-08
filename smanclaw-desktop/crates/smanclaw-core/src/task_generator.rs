@@ -54,6 +54,21 @@ pub struct TaskGenerator {
     tasks_dir: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyInput {
+    pub task_id: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubTaskContextContract {
+    pub writable_scope: Vec<String>,
+    pub readonly_context: Vec<String>,
+    pub dependency_inputs: Vec<DependencyInput>,
+    pub acceptance_checks: Vec<String>,
+    pub constraints: Vec<String>,
+}
+
 impl TaskGenerator {
     /// Create a new TaskGenerator
     ///
@@ -104,8 +119,29 @@ impl TaskGenerator {
         Ok(task_file)
     }
 
+    pub fn generate_named_with_contract(
+        &self,
+        task: &SubTask,
+        file_stem: &str,
+        contract: &SubTaskContextContract,
+    ) -> Result<PathBuf> {
+        let task_file = self.tasks_dir.join(format!("{}.md", file_stem));
+        let content = self.render_task_markdown_with_contract(task, contract);
+        let mut file = fs::File::create(&task_file).map_err(CoreError::Io)?;
+        file.write_all(content.as_bytes()).map_err(CoreError::Io)?;
+        Ok(task_file)
+    }
+
     /// Render task to markdown format
     fn render_task_markdown(&self, task: &SubTask) -> String {
+        self.render_task_markdown_with_contract(task, &SubTaskContextContract::default())
+    }
+
+    fn render_task_markdown_with_contract(
+        &self,
+        task: &SubTask,
+        contract: &SubTaskContextContract,
+    ) -> String {
         let mut md = String::new();
 
         // Title
@@ -125,6 +161,60 @@ impl TaskGenerator {
             md.push_str("- 必须补充并通过针对本任务的测试\n");
         }
         md.push_str("- 代码需通过项目既有质量门禁（lint/类型检查）\n\n");
+
+        md.push_str("## 子任务上下文契约\n\n");
+        md.push_str("### 可写范围\n\n");
+        if contract.writable_scope.is_empty() {
+            md.push_str("- 与本子任务直接相关的源码文件\n");
+            md.push_str("- tests/ 下与本任务相关的测试文件\n\n");
+        } else {
+            for item in &contract.writable_scope {
+                md.push_str(&format!("- {}\n", item));
+            }
+            md.push('\n');
+        }
+        md.push_str("### 只读上下文\n\n");
+        if contract.readonly_context.is_empty() {
+            md.push_str("- 项目现有架构与公共约束\n");
+            md.push_str("- 依赖任务的最终输出摘要\n\n");
+        } else {
+            for item in &contract.readonly_context {
+                md.push_str(&format!("- {}\n", item));
+            }
+            md.push('\n');
+        }
+        md.push_str("### 依赖输入\n\n");
+        if contract.dependency_inputs.is_empty() {
+            md.push_str("- 无前置依赖输入\n\n");
+        } else {
+            for dep in &contract.dependency_inputs {
+                md.push_str(&format!("- {}: {}\n", dep.task_id, dep.summary));
+            }
+            md.push('\n');
+        }
+        md.push_str("### 子任务约束\n\n");
+        if contract.constraints.is_empty() {
+            md.push_str("- 本子任务必须在独立上下文内完成，不依赖与其他子任务实时沟通\n");
+            md.push_str("- 遇到缺失信息时，先在当前任务范围内补齐再执行\n\n");
+        } else {
+            for item in &contract.constraints {
+                md.push_str(&format!("- {}\n", item));
+            }
+            md.push('\n');
+        }
+        md.push_str("### 验收检查\n\n");
+        if contract.acceptance_checks.is_empty() {
+            if let Some(ref test_cmd) = task.test_command {
+                md.push_str(&format!("- 执行并通过 `{}`\n", test_cmd));
+            } else {
+                md.push_str("- 执行与任务相关的测试并通过\n");
+            }
+        } else {
+            for item in &contract.acceptance_checks {
+                md.push_str(&format!("- {}\n", item));
+            }
+        }
+        md.push('\n');
 
         // Context section
         md.push_str("## 上下文\n\n");
@@ -359,6 +449,35 @@ mod tests {
             path.file_name().and_then(|name| name.to_str()),
             Some("task-main-2603071250-AB12-001.md")
         );
+    }
+
+    #[test]
+    fn test_generate_named_with_contract_includes_contract_sections() {
+        let (_temp_dir, generator) = create_test_generator();
+        let task = create_test_task();
+        let contract = SubTaskContextContract {
+            writable_scope: vec!["src/auth".to_string(), "tests/auth".to_string()],
+            readonly_context: vec!["src/lib/shared".to_string()],
+            dependency_inputs: vec![DependencyInput {
+                task_id: "task-1".to_string(),
+                summary: "用户实体与仓储接口已完成".to_string(),
+            }],
+            acceptance_checks: vec!["cargo test auth_login".to_string()],
+            constraints: vec!["禁止依赖其他子任务的临时口头同步".to_string()],
+        };
+
+        let path = generator
+            .generate_named_with_contract(&task, "task-with-contract", &contract)
+            .expect("generate task with contract");
+        let content = fs::read_to_string(path).expect("read file");
+
+        assert!(content.contains("## 子任务上下文契约"));
+        assert!(content.contains("### 可写范围"));
+        assert!(content.contains("- src/auth"));
+        assert!(content.contains("### 依赖输入"));
+        assert!(content.contains("task-1: 用户实体与仓储接口已完成"));
+        assert!(content.contains("### 验收检查"));
+        assert!(content.contains("cargo test auth_login"));
     }
 
     #[test]
