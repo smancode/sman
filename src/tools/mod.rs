@@ -490,6 +490,7 @@ pub fn all_tools_with_runtime(
             root_config.web_search.perplexity_api_key.clone(),
             root_config.web_search.exa_api_key.clone(),
             root_config.web_search.jina_api_key.clone(),
+            root_config.web_search.bing_api_key.clone(),
             root_config.web_search.api_url.clone(),
             root_config.web_search.max_results,
             root_config.web_search.timeout_secs,

@@ -117,6 +117,7 @@ export interface QdrantSettings {
 export interface WebSearchSettings {
     braveApiKey: string;
     tavilyApiKey: string;
+    bingApiKey: string;
 }
 
 // Application Settings

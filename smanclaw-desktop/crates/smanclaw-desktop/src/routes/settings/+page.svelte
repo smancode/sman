@@ -18,6 +18,7 @@
         webSearch: {
             braveApiKey: "",
             tavilyApiKey: "",
+            bingApiKey: "",
         },
     });
 
@@ -46,7 +47,11 @@
                 settings.llm.defaultModel = DEFAULT_MODEL;
             }
             if (!settings.webSearch) {
-                settings.webSearch = { braveApiKey: "", tavilyApiKey: "" };
+                settings.webSearch = {
+                    braveApiKey: "",
+                    tavilyApiKey: "",
+                    bingApiKey: "",
+                };
             }
         }
         isLoading = false;
@@ -172,8 +177,8 @@
             <section class="settings-section">
                 <h2>Web Search</h2>
                 <p class="section-desc">
-                    默认使用 DuckDuckGo（免费免 key）。可选配置 Brave/Tavily
-                    付费 key 作为回退。
+                    默认使用 DuckDuckGo（免费免 key）。可选配置
+                    Brave/Tavily/Bing 付费 key 作为回退。
                 </p>
                 <div class="form-group">
                     <label for="brave-key">Brave API Key（可选）</label>
@@ -201,6 +206,15 @@
                         id="tavily-key"
                         bind:value={settings.webSearch.tavilyApiKey}
                         placeholder="未配置则不启用 Tavily 回退"
+                    />
+                </div>
+                <div class="form-group">
+                    <label for="bing-key">Bing API Key（可选）</label>
+                    <input
+                        type={showWebSearchApiKeys ? "text" : "password"}
+                        id="bing-key"
+                        bind:value={settings.webSearch.bingApiKey}
+                        placeholder="未配置则不启用 Bing 回退"
                     />
                 </div>
             </section>

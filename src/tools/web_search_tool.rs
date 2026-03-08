@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Web search tool for searching the internet.
-/// Supports providers: DuckDuckGo (free), Brave, Firecrawl, Tavily, Perplexity, Exa, and Jina.
+/// Supports providers: DuckDuckGo (free), Brave, Firecrawl, Tavily, Perplexity, Exa, Jina, and Bing.
 pub struct WebSearchTool {
     security: Arc<SecurityPolicy>,
     provider: String,
@@ -20,6 +20,7 @@ pub struct WebSearchTool {
     perplexity_api_keys: Vec<String>,
     exa_api_keys: Vec<String>,
     jina_api_keys: Vec<String>,
+    bing_api_keys: Vec<String>,
     api_url: Option<String>,
     max_results: usize,
     timeout_secs: u64,
@@ -40,6 +41,7 @@ pub struct WebSearchTool {
     perplexity_key_index: Arc<AtomicUsize>,
     exa_key_index: Arc<AtomicUsize>,
     jina_key_index: Arc<AtomicUsize>,
+    bing_key_index: Arc<AtomicUsize>,
 }
 
 impl WebSearchTool {
@@ -72,6 +74,7 @@ impl WebSearchTool {
             None,
             None,
             None,
+            None,
             api_url,
             max_results,
             timeout_secs,
@@ -100,6 +103,7 @@ impl WebSearchTool {
         perplexity_api_key: Option<String>,
         exa_api_key: Option<String>,
         jina_api_key: Option<String>,
+        bing_api_key: Option<String>,
         api_url: Option<String>,
         max_results: usize,
         timeout_secs: u64,
@@ -122,6 +126,7 @@ impl WebSearchTool {
         let perplexity_api_keys = Self::parse_api_keys(perplexity_api_key.as_deref());
         let exa_api_keys = Self::parse_api_keys(exa_api_key.as_deref());
         let jina_api_keys = Self::parse_api_keys(jina_api_key.as_deref());
+        let bing_api_keys = Self::parse_api_keys(bing_api_key.as_deref());
         Self {
             security,
             provider: provider.trim().to_lowercase(),
@@ -131,6 +136,7 @@ impl WebSearchTool {
             perplexity_api_keys,
             exa_api_keys,
             jina_api_keys,
+            bing_api_keys,
             api_url,
             max_results: max_results.clamp(1, 10),
             timeout_secs: timeout_secs.max(1),
@@ -151,6 +157,7 @@ impl WebSearchTool {
             perplexity_key_index: Arc::new(AtomicUsize::new(0)),
             exa_key_index: Arc::new(AtomicUsize::new(0)),
             jina_key_index: Arc::new(AtomicUsize::new(0)),
+            bing_key_index: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -198,6 +205,11 @@ impl WebSearchTool {
             .or_else(|| self.get_next_api_key())
     }
 
+    fn get_next_bing_api_key(&self) -> Option<String> {
+        Self::get_next_key_from(&self.bing_api_keys, &self.bing_key_index)
+            .or_else(|| self.get_next_api_key())
+    }
+
     fn normalize_provider(raw: &str) -> Option<&'static str> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "duckduckgo" | "ddg" => Some("duckduckgo"),
@@ -207,6 +219,7 @@ impl WebSearchTool {
             "perplexity" => Some("perplexity"),
             "exa" => Some("exa"),
             "jina" => Some("jina"),
+            "bing" => Some("bing"),
             _ => None,
         }
     }
@@ -222,7 +235,7 @@ impl WebSearchTool {
         ) {
             let normalized = Self::normalize_provider(raw).ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Unknown search provider '{raw}'. Supported: duckduckgo, brave, firecrawl, tavily, perplexity, exa, jina"
+                    "Unknown search provider '{raw}'. Supported: duckduckgo, brave, firecrawl, tavily, perplexity, exa, jina, bing"
                 )
             })?;
             if seen.insert(normalized) {
@@ -809,6 +822,98 @@ impl WebSearchTool {
         ))
     }
 
+    async fn search_bing(&self, query: &str) -> anyhow::Result<String> {
+        let api_key = self.get_next_bing_api_key().ok_or_else(|| {
+            anyhow::anyhow!(
+                "web_search provider 'bing' requires [web_search].bing_api_key or [web_search].api_key in config.toml"
+            )
+        })?;
+
+        let api_url = self
+            .api_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("https://api.bing.microsoft.com");
+        let endpoint = format!("{}/v7.0/search", api_url.trim_end_matches('/'));
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(self.timeout_secs))
+            .user_agent(self.user_agent.as_str())
+            .build()?;
+
+        let mut request = client
+            .get(&endpoint)
+            .query(&[
+                ("q", query),
+                ("count", &self.max_results.to_string()),
+                ("responseFilter", "Webpages"),
+                ("textDecorations", "false"),
+                ("textFormat", "Raw"),
+            ])
+            .header("Ocp-Apim-Subscription-Key", api_key);
+
+        if let Some(country) = self
+            .country
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            request = request.query(&[("mkt", country)]);
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Bing search failed: {e}"))?;
+        let status = response.status();
+        let raw = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!(
+                "Bing search failed with status {}: {}",
+                status.as_u16(),
+                raw
+            );
+        }
+
+        let parsed: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| anyhow::anyhow!("Invalid Bing response JSON: {e}"))?;
+        let results = parsed
+            .get("webPages")
+            .and_then(|value| value.get("value"))
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("Bing response missing webPages.value array"))?;
+
+        if results.is_empty() {
+            return Ok(format!("No results found for: {}", query));
+        }
+
+        let mut lines = vec![format!("Search results for: {} (via Bing)", query)];
+        for (i, result) in results.iter().take(self.max_results).enumerate() {
+            let title = result
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("No title");
+            let url = result
+                .get("url")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let snippet = result
+                .get("snippet")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim();
+
+            lines.push(format!("{}. {}", i + 1, title));
+            lines.push(format!("   {}", url));
+            if !snippet.is_empty() {
+                lines.push(format!("   {}", snippet));
+            }
+        }
+
+        Ok(lines.join("\n"))
+    }
+
     async fn search_with_provider(&self, provider: &str, query: &str) -> anyhow::Result<String> {
         match provider {
             "duckduckgo" => self.search_duckduckgo(query).await,
@@ -818,6 +923,7 @@ impl WebSearchTool {
             "perplexity" => self.search_perplexity(query).await,
             "exa" => self.search_exa(query).await,
             "jina" => self.search_jina(query).await,
+            "bing" => self.search_bing(query).await,
             _ => anyhow::bail!("Unknown search provider: {provider}"),
         }
     }
@@ -1224,6 +1330,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             5,
             15,
             "test".to_string(),
@@ -1252,6 +1359,7 @@ mod tests {
         let tool = WebSearchTool::new_with_options(
             test_security(),
             "duckduckgo".to_string(),
+            None,
             None,
             None,
             None,

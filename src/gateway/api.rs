@@ -657,6 +657,7 @@ fn mask_sensitive_fields(config: &crate::config::Config) -> crate::config::Confi
     mask_optional_secret(&mut masked.web_search.perplexity_api_key);
     mask_optional_secret(&mut masked.web_search.exa_api_key);
     mask_optional_secret(&mut masked.web_search.jina_api_key);
+    mask_optional_secret(&mut masked.web_search.bing_api_key);
     mask_optional_secret(&mut masked.storage.provider.config.db_url);
     if let Some(cloudflare) = masked.tunnel.cloudflare.as_mut() {
         mask_required_secret(&mut cloudflare.token);
@@ -787,6 +788,10 @@ fn restore_masked_sensitive_fields(
     restore_optional_secret(
         &mut incoming.web_search.jina_api_key,
         &current.web_search.jina_api_key,
+    );
+    restore_optional_secret(
+        &mut incoming.web_search.bing_api_key,
+        &current.web_search.bing_api_key,
     );
     restore_optional_secret(
         &mut incoming.storage.provider.config.db_url,
@@ -1059,6 +1064,7 @@ mod tests {
         cfg.web_search.perplexity_api_key = Some("web-search-perplexity-key".to_string());
         cfg.web_search.exa_api_key = Some("web-search-exa-key".to_string());
         cfg.web_search.jina_api_key = Some("web-search-jina-key".to_string());
+        cfg.web_search.bing_api_key = Some("web-search-bing-key".to_string());
         cfg.tunnel.cloudflare = Some(CloudflareTunnelConfig {
             token: "cloudflare-real-token".to_string(),
         });
@@ -1110,6 +1116,10 @@ mod tests {
         );
         assert_eq!(
             masked.web_search.jina_api_key.as_deref(),
+            Some(MASKED_SECRET)
+        );
+        assert_eq!(
+            masked.web_search.bing_api_key.as_deref(),
             Some(MASKED_SECRET)
         );
         assert_eq!(
@@ -1176,6 +1186,7 @@ mod tests {
         current.web_search.perplexity_api_key = Some("web-search-perplexity-key".to_string());
         current.web_search.exa_api_key = Some("web-search-exa-key".to_string());
         current.web_search.jina_api_key = Some("web-search-jina-key".to_string());
+        current.web_search.bing_api_key = Some("web-search-bing-key".to_string());
         current.tunnel.cloudflare = Some(CloudflareTunnelConfig {
             token: "cloudflare-real-token".to_string(),
         });
@@ -1241,6 +1252,10 @@ mod tests {
         assert_eq!(
             restored.web_search.jina_api_key.as_deref(),
             Some("web-search-jina-key")
+        );
+        assert_eq!(
+            restored.web_search.bing_api_key.as_deref(),
+            Some("web-search-bing-key")
         );
         assert_eq!(
             restored

@@ -225,6 +225,10 @@ impl ZeroclawBridge {
                     .fallback_providers
                     .push("brave".to_string());
             }
+            if !settings.web_search.bing_api_key.trim().is_empty() {
+                config.web_search.bing_api_key = Some(settings.web_search.bing_api_key.clone());
+                config.web_search.fallback_providers.push("bing".to_string());
+            }
             if !settings.web_search.tavily_api_key.trim().is_empty() {
                 config.web_search.api_key = Some(settings.web_search.tavily_api_key.clone());
                 config

@@ -119,6 +119,7 @@ pub struct QdrantSettings {
 pub struct WebSearchSettings {
     pub brave_api_key: String,
     pub tavily_api_key: String,
+    pub bing_api_key: String,
 }
 
 impl Default for QdrantSettings {
@@ -231,6 +232,7 @@ mod tests {
             web_search: WebSearchSettings {
                 brave_api_key: "brave-key".to_string(),
                 tavily_api_key: "tavily-key".to_string(),
+                bing_api_key: "bing-key".to_string(),
             },
         };
 
@@ -241,5 +243,6 @@ mod tests {
         assert!(deserialized.embedding.is_some());
         assert!(deserialized.qdrant.is_none());
         assert_eq!(deserialized.web_search.brave_api_key, "brave-key");
+        assert_eq!(deserialized.web_search.bing_api_key, "bing-key");
     }
 }

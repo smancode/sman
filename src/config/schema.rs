@@ -2178,7 +2178,7 @@ pub struct WebSearchConfig {
     #[serde(default)]
     pub enabled: bool,
     /// Search provider: "duckduckgo"/"ddg" (free, no API key), "brave", "firecrawl",
-    /// "tavily", "perplexity", "exa", or "jina"
+    /// "tavily", "perplexity", "exa", "jina", or "bing"
     #[serde(default = "default_web_search_provider")]
     pub provider: String,
     /// Generic provider API key (used by firecrawl, tavily, and as fallback for brave).
@@ -2200,8 +2200,11 @@ pub struct WebSearchConfig {
     /// Jina API key (optional; can raise limits for provider = "jina")
     #[serde(default)]
     pub jina_api_key: Option<String>,
+    /// Bing Search API key (used when provider is "bing")
+    #[serde(default)]
+    pub bing_api_key: Option<String>,
     /// Fallback providers attempted after primary provider fails.
-    /// Supported values: duckduckgo (or ddg), brave, firecrawl, tavily, perplexity, exa, jina
+    /// Supported values: duckduckgo (or ddg), brave, firecrawl, tavily, perplexity, exa, jina, bing
     #[serde(default)]
     pub fallback_providers: Vec<String>,
     /// Retry count per provider before falling back to next provider
@@ -2288,6 +2291,7 @@ const WEB_SEARCH_PROVIDER_ALLOWED_VALUES: &[&str] = &[
     "perplexity",
     "exa",
     "jina",
+    "bing",
 ];
 const WEB_SEARCH_EXA_SEARCH_TYPE_ALLOWED_VALUES: &[&str] = &["auto", "keyword", "neural"];
 
@@ -2331,6 +2335,7 @@ fn normalize_web_search_provider(raw: &str) -> Option<&'static str> {
         "perplexity" => Some("perplexity"),
         "exa" => Some("exa"),
         "jina" => Some("jina"),
+        "bing" => Some("bing"),
         _ => None,
     }
 }
@@ -2346,6 +2351,7 @@ impl Default for WebSearchConfig {
             perplexity_api_key: None,
             exa_api_key: None,
             jina_api_key: None,
+            bing_api_key: None,
             fallback_providers: Vec::new(),
             retries_per_provider: default_web_search_retries_per_provider(),
             retry_backoff_ms: default_web_search_retry_backoff_ms(),
@@ -7597,6 +7603,11 @@ impl Config {
                 &mut config.web_search.jina_api_key,
                 "config.web_search.jina_api_key",
             )?;
+            decrypt_optional_secret(
+                &store,
+                &mut config.web_search.bing_api_key,
+                "config.web_search.bing_api_key",
+            )?;
 
             decrypt_optional_secret(
                 &store,
@@ -8874,6 +8885,16 @@ impl Config {
             }
         }
 
+        // Bing API key: ZEROCLAW_BING_API_KEY or BING_API_KEY
+        if let Ok(api_key) =
+            std::env::var("ZEROCLAW_BING_API_KEY").or_else(|_| std::env::var("BING_API_KEY"))
+        {
+            let api_key = api_key.trim();
+            if !api_key.is_empty() {
+                self.web_search.bing_api_key = Some(api_key.to_string());
+            }
+        }
+
         // Web search max results: ZEROCLAW_WEB_SEARCH_MAX_RESULTS or WEB_SEARCH_MAX_RESULTS
         if let Ok(max_results) = std::env::var("ZEROCLAW_WEB_SEARCH_MAX_RESULTS")
             .or_else(|_| std::env::var("WEB_SEARCH_MAX_RESULTS"))
@@ -9295,6 +9316,11 @@ impl Config {
             &store,
             &mut config_to_save.web_search.jina_api_key,
             "config.web_search.jina_api_key",
+        )?;
+        encrypt_optional_secret(
+            &store,
+            &mut config_to_save.web_search.bing_api_key,
+            "config.web_search.bing_api_key",
         )?;
 
         encrypt_optional_secret(
@@ -10552,6 +10578,7 @@ tool_dispatcher = "xml"
         config.web_search.perplexity_api_key = Some("perplexity-credential".into());
         config.web_search.exa_api_key = Some("exa-credential".into());
         config.web_search.jina_api_key = Some("jina-credential".into());
+        config.web_search.bing_api_key = Some("bing-credential".into());
         config.storage.provider.config.db_url = Some("postgres://user:pw@host/db".into());
         config.reliability.api_keys = vec!["backup-credential".into()];
         config.gateway.paired_tokens = vec!["zc_0123456789abcdef".into()];
@@ -10672,6 +10699,9 @@ tool_dispatcher = "xml"
         let jina_encrypted = stored.web_search.jina_api_key.as_deref().unwrap();
         assert!(crate::security::SecretStore::is_encrypted(jina_encrypted));
         assert_eq!(store.decrypt(jina_encrypted).unwrap(), "jina-credential");
+        let bing_encrypted = stored.web_search.bing_api_key.as_deref().unwrap();
+        assert!(crate::security::SecretStore::is_encrypted(bing_encrypted));
+        assert_eq!(store.decrypt(bing_encrypted).unwrap(), "bing-credential");
 
         let worker = stored.agents.get("worker").unwrap();
         let worker_encrypted = worker.api_key.as_deref().unwrap();
@@ -11794,6 +11824,7 @@ default_temperature = 0.7
         assert_eq!(ws.exa_search_type, "auto");
         assert!(!ws.exa_include_text);
         assert!(ws.jina_site_filters.is_empty());
+        assert!(ws.bing_api_key.is_none());
     }
 
     #[test]
@@ -13291,6 +13322,7 @@ default_model = "legacy-model"
         std::env::set_var("PERPLEXITY_API_KEY", "perplexity-test-key");
         std::env::set_var("EXA_API_KEY", "exa-test-key");
         std::env::set_var("JINA_API_KEY", "jina-test-key");
+        std::env::set_var("BING_API_KEY", "bing-test-key");
 
         config.apply_env_overrides();
 
@@ -13338,6 +13370,10 @@ default_model = "legacy-model"
             config.web_search.jina_api_key.as_deref(),
             Some("jina-test-key")
         );
+        assert_eq!(
+            config.web_search.bing_api_key.as_deref(),
+            Some("bing-test-key")
+        );
 
         std::env::remove_var("WEB_SEARCH_ENABLED");
         std::env::remove_var("WEB_SEARCH_PROVIDER");
@@ -13359,6 +13395,7 @@ default_model = "legacy-model"
         std::env::remove_var("PERPLEXITY_API_KEY");
         std::env::remove_var("EXA_API_KEY");
         std::env::remove_var("JINA_API_KEY");
+        std::env::remove_var("BING_API_KEY");
     }
 
     #[test]

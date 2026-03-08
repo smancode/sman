@@ -1253,12 +1253,14 @@ fn create_provider_with_url_and_options(
                 .filter(|v| !v.is_empty())
                 .map(ToString::to_string)
                 .unwrap_or_else(|| glm_base_url(name).expect("checked in guard").to_string());
-            Ok(Box::new(OpenAiCompatibleProvider::new_no_responses_fallback(
-                "GLM",
-                &base_url,
-                key,
-                AuthStyle::Bearer,
-            )))
+            Ok(Box::new(
+                OpenAiCompatibleProvider::new_no_responses_fallback(
+                    "GLM",
+                    &base_url,
+                    key,
+                    AuthStyle::Bearer,
+                ),
+            ))
         }
         name if minimax_base_url(name).is_some() => Ok(Box::new(
             OpenAiCompatibleProvider::new_merge_system_into_user(

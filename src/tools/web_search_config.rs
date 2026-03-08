@@ -133,6 +133,7 @@ impl WebSearchConfigTool {
             "perplexity",
             "exa",
             "jina",
+            "bing",
         ]
     }
 
@@ -145,6 +146,7 @@ impl WebSearchConfigTool {
             "perplexity" => Some("perplexity"),
             "exa" => Some("exa"),
             "jina" => Some("jina"),
+            "bing" => Some("bing"),
             _ => None,
         }
     }
@@ -189,7 +191,8 @@ impl WebSearchConfigTool {
                 "brave_api_key": cfg.brave_api_key.as_ref().is_some_and(|v| !v.trim().is_empty()),
                 "perplexity_api_key": cfg.perplexity_api_key.as_ref().is_some_and(|v| !v.trim().is_empty()),
                 "exa_api_key": cfg.exa_api_key.as_ref().is_some_and(|v| !v.trim().is_empty()),
-                "jina_api_key": cfg.jina_api_key.as_ref().is_some_and(|v| !v.trim().is_empty())
+                "jina_api_key": cfg.jina_api_key.as_ref().is_some_and(|v| !v.trim().is_empty()),
+                "bing_api_key": cfg.bing_api_key.as_ref().is_some_and(|v| !v.trim().is_empty())
             }
         })
     }
@@ -386,6 +389,12 @@ impl WebSearchConfigTool {
             MaybeSet::Unset => {}
         }
 
+        match Self::parse_optional_string_update(args, "bing_api_key")? {
+            MaybeSet::Set(value) => cfg.web_search.bing_api_key = Some(value),
+            MaybeSet::Null => cfg.web_search.bing_api_key = None,
+            MaybeSet::Unset => {}
+        }
+
         cfg.save().await?;
 
         Ok(ToolResult {
@@ -431,6 +440,7 @@ impl Tool for WebSearchConfigTool {
                 "perplexity_api_key": {"type": ["string", "null"]},
                 "exa_api_key": {"type": ["string", "null"]},
                 "jina_api_key": {"type": ["string", "null"]},
+                "bing_api_key": {"type": ["string", "null"]},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
                 "timeout_secs": {"type": "integer", "minimum": 1},
                 "retries_per_provider": {"type": "integer", "minimum": 0, "maximum": 5},

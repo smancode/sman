@@ -135,7 +135,7 @@
                 msg.role === "assistant" &&
                 msg.taskId &&
                 (msg.content === "思考中..." ||
-                    msg.content.startsWith("处理中："))
+                    msg.content.startsWith("处理中"))
             ) {
                 updated = true;
                 return { ...msg, content };
@@ -220,13 +220,14 @@
     ): string {
         const title =
             typeof elapsedSeconds === "number" && elapsedSeconds > 0
-                ? `处理中：等待模型响应（${elapsedSeconds}s）`
-                : "处理中：任务执行中";
+                ? `处理中（${elapsedSeconds}s）...`
+                : "处理中...";
         const timeline = progressTimelineByProject[projectId] || [];
         if (timeline.length === 0) {
             return title;
         }
-        return `${title}\n\n${timeline.map((line) => `- ${line}`).join("\n")}`;
+        const latestTimeline = timeline[timeline.length - 1];
+        return `${title} ${latestTimeline}`;
     }
 
     function resolveCompletedOutput(content: string): string {
@@ -249,6 +250,14 @@
             ...progressTimelineByProject,
             [projectId]: [],
         };
+    }
+
+    function latestTimelineLine(projectId: string): string | null {
+        const timeline = progressTimelineByProject[projectId] || [];
+        if (timeline.length === 0) {
+            return null;
+        }
+        return timeline[timeline.length - 1];
     }
 
     function stopSending(projectId: string) {
@@ -456,9 +465,12 @@
                         })
                     ) {
                         if (thinkingMessage) {
+                            const latestLine = latestTimelineLine(projectId);
                             updateLatestThinkingMessage(
                                 projectId,
-                                "执行完成，但暂未收到可展示的最终答复。你可以直接重试，我会保留已完成进度。",
+                                latestLine
+                                    ? `执行完成，但暂未收到可展示的最终答复。最新进展：${latestLine}`
+                                    : "执行完成，但暂未收到可展示的最终答复。你可以直接重试，我会保留已完成进度。",
                             );
                         }
                         clearProgressTimeline(projectId);
@@ -485,9 +497,12 @@
         }
 
         if (thinkingMessage) {
+            const latestLine = latestTimelineLine(projectId);
             updateLatestThinkingMessage(
                 projectId,
-                "执行中断：等待最终回复超时。已停止等待，你可以直接重试。",
+                latestLine
+                    ? `执行中断：等待最终回复超时。最后进展：${latestLine}`
+                    : "执行中断：等待最终回复超时。已停止等待，你可以直接重试。",
             );
         }
         clearProgressTimeline(projectId);
