@@ -4,25 +4,28 @@
 
 基于 ZeroClaw 开发跨平台桌面应用（Windows + macOS），支持可视化管理项目和执行编码任务。
 
-## 0. 当前实现对照（2026-03-08）
+## 0. 当前实现对照（2026-03-09）
 
 ### 0.1 Desktop → 主/子 Claw 实际调用链路
 
-1. 前端存在两条入口：  
-   - 聊天入口：`conversationApi.sendMessage` → Tauri `send_message` → `chat_execution::send_message`  
-   - 编排入口：`orchestrationApi.executeTask` → Tauri `execute_orchestrated_task`
+1. 前端已接入自动路由决策链路：  
+   - 路由判定入口：`conversationApi.decideRoute` → Tauri `decide_message_route`（LLM + fallback）  
+   - direct 执行：`conversationApi.sendMessage` → Tauri `send_message` → `chat_execution::send_message`  
+   - orchestrated 执行：`orchestrationApi.executeTask` → Tauri `execute_orchestrated_task`
 2. `execute_orchestrated_task` 在 Tauri 层完成子任务拆解（语义拆解优先，规则兜底）并调用 `Orchestrator::build_dag`
-3. Tauri 运行时按并行组执行 DAG：为每个子任务生成 `.smanclaw/tasks/task-<main-task>-<seq>.md`，并用 `SubClawExecutor::run()` 执行 checklist
+3. Tauri 运行时按并行组执行 DAG：为每个子任务生成 `.sman/tasks/task-<main-task>-<seq>.md`，并用 `SubClawExecutor::run()` 执行 checklist
 4. 执行过程会同步更新 `MainTaskManager` 状态（Planning → Executing → Verifying → Completed/Failed）并落库 `TaskManager`
 5. 编排进度通过 `subtask-started` / `subtask-completed` / `orchestration-progress` / `task-dag` / `test-result` 推送到前端
 6. 聊天执行过程通过 `progress` 事件推送 `tool_call`/`file_read`/`file_written`/`command_run`/`progress`，并包含 5 分钟心跳播报
 7. 验收阶段由 `AcceptanceEvaluator` 执行；失败会自动生成补救子任务并最多进行 2 轮补救，再写回最终状态
+8. 编排拆解和路由提示词已接入项目知识注入：自动读取 `.sman/skills` 与 `.sman/paths` 相关内容参与决策
+9. 运行目录已迁移为 `.sman`，历史会话库对 `.smanclaw/history.db` 保留兼容迁移
 
 ### 0.2 蓝图完成度评估（按主子 Claw 自动化目标）
 
 | 能力项 | 蓝图目标 | 当前状态 | 完成度 |
 |---|---|---|---|
-| 主控状态机 | Analyzing→Splitting→Dispatching→Polling→Evaluating 闭环 | Desktop 端已形成 Planning/Executing/Verifying 与补救闭环，但尚未统一到 `Orchestrator::handle_request` 单入口 | ⚠️ 部分实现 |
+| 主控状态机 | Analyzing→Splitting→Dispatching→Polling→Evaluating 闭环 | Desktop 端已形成 Planning/Executing/Verifying 与补救闭环，并新增自动路由判定；但仍未统一到单一后端状态机入口 | ⚠️ 部分实现 |
 | 任务拆解 | 基于语义理解拆分子任务 | 已接入“语义优先 + 规则兜底”拆解，并进行 DAG 可执行性校验 | ✅ 已实现 |
 | DAG 管理 | 依赖分析与拓扑排序 | `TaskDag` 已实现并用于 orchestrated 命令 | ✅ 已实现 |
 | 子 Claw 执行 | 按 task.md checklist 自动执行 | `SubClawExecutor` 已接入 orchestrated 命令并执行 checklist | ✅ 已实现 |
@@ -30,27 +33,50 @@
 | 验收评估 | 按验收标准自动评估（测试/E2E/命令） | 已接入 `AcceptanceEvaluator`，并形成“验收失败→补救子任务→再验收”闭环；校验维度仍偏基础规则 | ⚠️ 部分实现 |
 | main-task.md 协同 | 主 Claw 输出 main-task.md 并追踪子任务 | orchestrated 主流程已接入 `MainTaskManager`（创建、子任务状态更新、完成回写） | ✅ 已实现 |
 | 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入自动沉淀链路，支持 skills / paths / memory 生成与回流 | ✅ 已实现 |
+| 路由决策 | 自动判断 direct / orchestrated | 已接入 LLM 路由提示词与 fallback 规则，前端按路由结果切换执行链路 | ✅ 已实现 |
+| 项目知识注入 | skills/paths 参与执行上下文 | 已接入 `.sman/skills` 与 `.sman/paths` 检索并拼接到提示词上下文 | ✅ 已实现 |
 | ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`；桥接初始化失败时对应任务会失败并上报 | ⚠️ 部分实现 |
 | 进度反馈 | 长任务过程可见且避免“无响应等待” | 聊天链路已展示工具调用/文件/命令/心跳，并在 `task_completed` 时优先收敛最终输出 | ✅ 已实现 |
 
 ### 0.3 已确认缺口（与“核心自动化愿景”对照）
 
-1. **主链路仍分叉**：聊天入口与编排入口并存，尚未统一到同一个主控状态机入口。
+1. **后端执行入口仍分叉**：虽然前端已自动路由，但 direct 与 orchestrated 仍是两条后端执行路径，尚未收敛为单一状态机入口。
 2. **并发控制待增强**：组内并行已落地，但并发上限、失败短路和资源隔离策略仍可细化。
 3. **拆解泛化能力待提升**：复杂需求下语义拆解稳定性仍需增强。
 4. **验收深度待增强**：当前以内容匹配为主，端到端与场景化验证覆盖不足。
 5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需明确权威来源与一致性策略。
 6. **过程可视化待结构化**：已具备事件流，但“阶段说明 + 证据汇总”展示仍可继续优化。
 
-### 0.5 交互待办（暂缓项）
+### 0.4 TODO 清单（按优先级，含完成定义）
 
-- 在前端补齐“主 Claw 分阶段时间线”，将分析/拆解/分发/执行/验收拆开展示。
-- 将补救轮次与验收证据（命令、通过/失败摘要）结构化展示，避免只显示最终一句话。
-- 给长任务增加“预计剩余步骤”提示，目前已具备心跳播报。
+#### P0（本周应完成）
 
-### 0.4 建议的收敛路径（按落地优先级）
+- [ ] **统一后端入口状态机**：将 direct 与 orchestrated 收敛到统一入口（建议单一 `handle_request` 语义入口），避免双路径漂移。  
+  **完成定义**：同一入口内完成路由、执行、状态更新和失败收敛；旧入口仅保留兼容转发层。
+- [ ] **定义状态主数据源**：明确 `tasks.db` 与 `main-task.md` 的权威关系与同步方向。  
+  **完成定义**：写入策略文档化并落地到代码，出现冲突时有确定性仲裁规则与回放策略。
+- [ ] **验收增强到命令级与场景级**：将当前“文本匹配验收”升级为“命令执行 + 关键场景回归”。  
+  **完成定义**：至少覆盖成功、失败、超时、补救后再验收 4 类场景，并能输出结构化证据。
 
-1. 统一聊天与编排入口，收敛到同一个主控状态机（建议汇入 `Orchestrator::handle_request`）。
+#### P1（下一迭代）
+
+- [ ] **并行执行策略加固**：补充并发上限、失败短路、重试与资源隔离策略。  
+  **完成定义**：可配置并发上限，失败策略可选（立即短路/继续执行），并有回归测试覆盖。
+- [ ] **前端过程可视化结构化**：补齐主 Claw 分阶段时间线与证据面板。  
+  **完成定义**：展示分析/拆解/分发/执行/验收阶段，且每阶段有可追溯证据摘要。
+- [ ] **补救轮次可解释化**：显示每轮失败原因、修正点和回归结果。  
+  **完成定义**：用户可在 UI 上看到“第 N 轮为何失败、如何修复、修复后验证结果”。
+
+#### P2（优化项）
+
+- [ ] **路由质量观测**：统计 `decide_message_route` 命中率与误判样本。  
+  **完成定义**：形成可追踪指标（direct/orchestrated 分布、回退率、人工纠偏率）。
+- [ ] **长任务预估反馈**：在现有心跳基础上增加“剩余步骤/阶段”预估。  
+  **完成定义**：预估文案不与真实状态冲突，任务结束时自动清理。
+
+### 0.5 建议的收敛路径（按落地优先级）
+
+1. 统一后端执行入口，收敛到同一个主控状态机（建议汇入 `Orchestrator::handle_request` 语义入口）。
 2. 细化并行执行策略，补充并发限流、失败短路与重试策略。
 3. 强化验收深度，将内容校验扩展到命令执行、回归测试与关键场景验证。
 4. 统一 `tasks.db` 与 `main-task.md` 的状态主数据源，避免双写漂移。
