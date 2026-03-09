@@ -262,10 +262,12 @@ export const orchestrationApi = {
     async executeTask(
         projectId: string,
         input: string,
+        conversationId?: string,
     ): Promise<ApiResponse<OrchestratedTaskResult>> {
         return safeInvoke<OrchestratedTaskResult>("execute_orchestrated_task", {
             project_id: projectId,
             input,
+            conversation_id: conversationId,
         });
     },
 

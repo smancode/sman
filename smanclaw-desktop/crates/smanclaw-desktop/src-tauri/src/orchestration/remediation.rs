@@ -1,10 +1,11 @@
+use chrono::Utc;
 use smanclaw_core::{
     AcceptanceEvaluator, ExperienceSink, MainTaskManager, MainTaskResult, SkillStore,
     SubClawExecutor, SubTaskRef, SubTaskStatus, TaskDag, TaskGenerator, TaskManager,
     VerificationMethod,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
-use smanclaw_types::{TaskResult, TaskStatus};
+use smanclaw_types::{HistoryEntry, Role, TaskResult, TaskStatus};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -18,6 +19,7 @@ use super::task_outcome::{
 use crate::commands::task_commands::{
     build_remediation_subtasks, subtask_file_stem, subtask_relative_path,
 };
+use crate::commands::open_project_history_store;
 use crate::events::{
     emit_progress_event, emit_subtask_started, emit_task_status_event, emit_test_result,
     task_event_status_from_success,
@@ -28,9 +30,11 @@ use crate::events::{
 pub(crate) async fn finalize_orchestration(
     app_handle: &AppHandle,
     task_manager: &Arc<Mutex<TaskManager>>,
+    config_dir: &Path,
     project_path: &Path,
     input: &str,
     task_id: &str,
+    conversation_id: Option<&str>,
     main_task_id: &str,
     main_task_manager: &MainTaskManager,
     dag: &mut TaskDag,
@@ -322,6 +326,45 @@ pub(crate) async fn finalize_orchestration(
     };
     if let Err(e) = emit_task_status_event(app_handle, task_id, status, message) {
         tracing::error!("Failed to emit final task status event: {}", e);
+    }
+    if let Some(conversation_id) = conversation_id.filter(|id| !id.trim().is_empty()) {
+        let summary = if final_passed {
+            format!("任务完成：{}", final_output.clone().unwrap_or_default())
+        } else {
+            format!(
+                "任务失败：{}",
+                final_error
+                    .clone()
+                    .unwrap_or_else(|| "Orchestration failed".to_string())
+            )
+        };
+        match open_project_history_store(config_dir, project_path) {
+            Ok(store) => {
+                let assistant_entry = HistoryEntry {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    conversation_id: conversation_id.to_string(),
+                    role: Role::Assistant,
+                    content: summary,
+                    timestamp: Utc::now(),
+                };
+                if let Err(error) = store.save_entry(&assistant_entry) {
+                    tracing::error!(
+                        task_id = %task_id,
+                        conversation_id = %conversation_id,
+                        error = %error,
+                        "Failed to save orchestration summary into conversation history"
+                    );
+                }
+            }
+            Err(error) => {
+                tracing::error!(
+                    task_id = %task_id,
+                    conversation_id = %conversation_id,
+                    error = %error,
+                    "Failed to open history store for orchestration summary persistence"
+                );
+            }
+        }
     }
     if final_passed {
         let result = TaskResult {

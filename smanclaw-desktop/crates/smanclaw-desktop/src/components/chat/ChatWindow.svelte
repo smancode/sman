@@ -519,8 +519,12 @@
             unlistenChatMessage = await listen<any>("chat-message", (event) => {
                 console.log("[ChatMessage] Received:", event.payload);
                 const payload = event.payload;
-                if (!$selectedProject) return;
-                const projectId = $selectedProject.id;
+                const projectId =
+                    typeof payload?.project_id === "string" &&
+                    payload.project_id.length > 0
+                        ? payload.project_id
+                        : $selectedProject?.id;
+                if (!projectId) return;
 
                 const role = payload.role === "user" ? "user" : "assistant";
                 const newMessage: Message = {
@@ -695,9 +699,14 @@
             if (shouldOrchestrate) {
                 const reasonText =
                     routeDecision.data?.reason?.trim() || "已判定为复杂需求";
+                const conversationId = await ensureProjectConversation(
+                    projectId,
+                    $selectedProject.name,
+                );
                 const taskId = await tasksStore.executeOrchestratedTask(
                     projectId,
                     prompt,
+                    conversationId,
                 );
                 if (!taskId) {
                     stopSending(projectId);
@@ -715,12 +724,12 @@
                     {
                         ...assistantMessage,
                         taskId,
-                        content: `已切换编排模式：${reasonText}`,
+                        content: `处理中...（已切换编排模式：${reasonText}）`,
                     },
                 ];
                 updateLatestThinkingMessage(
                     projectId,
-                    `已切换编排模式：${reasonText}`,
+                    `处理中...（已切换编排模式：${reasonText}）`,
                 );
                 return;
             }

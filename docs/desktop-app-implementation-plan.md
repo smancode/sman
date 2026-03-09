@@ -18,8 +18,11 @@
 5. 编排进度通过 `subtask-started` / `subtask-completed` / `orchestration-progress` / `task-dag` / `test-result` 推送到前端
 6. 聊天执行过程通过 `progress` 事件推送 `tool_call`/`file_read`/`file_written`/`command_run`/`progress`，并包含 5 分钟心跳播报
 7. 验收阶段由 `AcceptanceEvaluator` 执行；失败会自动生成补救子任务并最多进行 2 轮补救，再写回最终状态
-8. 编排拆解和路由提示词已接入项目知识注入：自动读取 `.sman/skills` 与 `.sman/paths` 相关内容参与决策
-9. 运行目录已迁移为 `.sman`，历史会话库对 `.smanclaw/history.db` 保留兼容迁移
+8. 编排拆解和路由提示词已接入项目知识注入：自动读取 `.sman/skills`、`.sman/paths`、`CLAUDE.md`、`.claude/skills` 与 `.sman/AGENT.md` 参与决策
+9. 首次扫描项目时会自动生成 `.sman/AGENT.md`（若不存在），后续执行复用该缓存，避免重复全量分析
+10. 编排任务已绑定会话 ID：提交 orchestrated 任务时写入用户消息，任务收敛后写入“任务完成/任务失败”摘要，保证会话连续性
+11. 聊天窗口已按项目维度维护消息缓存与切换回填，修复“切换项目后历史记录丢失”问题
+12. 运行目录已迁移为 `.sman`，历史会话库对 `.smanclaw/history.db` 保留兼容迁移
 
 ### 0.2 蓝图完成度评估（按主子 Claw 自动化目标）
 
@@ -34,7 +37,7 @@
 | main-task.md 协同 | 主 Claw 输出 main-task.md 并追踪子任务 | orchestrated 主流程已接入 `MainTaskManager`（创建、子任务状态更新、完成回写） | ✅ 已实现 |
 | 经验沉淀 | 子任务经验回流并更新技能库 | orchestrated 主流程已接入自动沉淀链路，支持 skills / paths / memory 生成与回流 | ✅ 已实现 |
 | 路由决策 | 自动判断 direct / orchestrated | 已接入 LLM 路由提示词与 fallback 规则，前端按路由结果切换执行链路 | ✅ 已实现 |
-| 项目知识注入 | skills/paths 参与执行上下文 | 已接入 `.sman/skills` 与 `.sman/paths` 检索并拼接到提示词上下文 | ✅ 已实现 |
+| 项目知识注入 | skills/paths 参与执行上下文 | 已接入 `.sman/skills`、`.sman/paths`、`CLAUDE.md`、`.claude/skills`、`.sman/AGENT.md` 检索与提示词注入 | ✅ 已实现 |
 | ZeroClaw 驱动子任务 | 子 Claw 通过真实 LLM 执行步骤 | orchestrated 主流程已接入 `ZeroclawStepExecutor`；桥接初始化失败时对应任务会失败并上报 | ⚠️ 部分实现 |
 | 进度反馈 | 长任务过程可见且避免“无响应等待” | 聊天链路已展示工具调用/文件/命令/心跳，并在 `task_completed` 时优先收敛最终输出 | ✅ 已实现 |
 
@@ -46,6 +49,7 @@
 4. **验收深度待增强**：当前以内容匹配为主，端到端与场景化验证覆盖不足。
 5. **状态单一事实源未统一**：`tasks.db` 与 `main-task.md` 均在更新，仍需明确权威来源与一致性策略。
 6. **过程可视化待结构化**：已具备事件流，但“阶段说明 + 证据汇总”展示仍可继续优化。
+7. **执行入口统一仍待完成**：虽已补齐会话持久化与编排状态收敛，但 direct/orchestrated 后端入口尚未统一。
 
 ### 0.4 TODO 清单（按优先级，含完成定义）
 

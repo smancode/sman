@@ -25,12 +25,14 @@ use super::{remediation::finalize_orchestration, ORCHESTRATION_DAGS};
 pub(crate) fn spawn_orchestration_execution(
     app_handle: AppHandle,
     task_manager: Arc<Mutex<TaskManager>>,
+    config_dir: PathBuf,
     task_id: String,
     main_task_id: String,
     settings: AppSettings,
     input: String,
     project_path: PathBuf,
     subtask_file_stems: HashMap<String, String>,
+    conversation_id: Option<String>,
 ) {
     tokio::spawn(async move {
         let main_task_manager = match MainTaskManager::new(&project_path) {
@@ -269,9 +271,11 @@ pub(crate) fn spawn_orchestration_execution(
         finalize_orchestration(
             &app_handle,
             &task_manager,
+            &config_dir,
             &project_path,
             &input,
             &task_id,
+            conversation_id.as_deref(),
             &main_task_id,
             &main_task_manager,
             &mut dag,

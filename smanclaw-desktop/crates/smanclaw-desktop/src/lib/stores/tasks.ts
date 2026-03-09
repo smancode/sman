@@ -484,12 +484,17 @@ function createTasksStore() {
         },
 
         // Execute an orchestrated task with automatic decomposition
-        async executeOrchestratedTask(projectId: string, prompt: string) {
+        async executeOrchestratedTask(
+            projectId: string,
+            prompt: string,
+            conversationId?: string,
+        ) {
             update((state) => ({ ...state, isLoading: true, error: null }));
 
             const response = await orchestrationApi.executeTask(
                 projectId,
                 prompt,
+                conversationId,
             );
 
             if (response.success && response.data) {

@@ -1,5 +1,6 @@
+use chrono::Utc;
 use smanclaw_core::{MainTaskManager, MainTaskStatus, Orchestrator, ProjectExplorer, SubTask, SubTaskRef};
-use smanclaw_types::TaskStatus;
+use smanclaw_types::{HistoryEntry, Role, TaskStatus};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -7,6 +8,7 @@ use tauri::{AppHandle, State};
 use crate::commands::orchestration_decompose;
 use crate::commands::task_commands::{subtask_file_stem, subtask_relative_path};
 use crate::commands::utility_commands::persist_user_input_experience;
+use crate::commands::open_project_history_store;
 use crate::error::{TauriError, TauriResult};
 use crate::events::{emit_task_dag, emit_task_status_event, SubTaskInfo, TaskEventStatus};
 use crate::state::AppState;
@@ -20,6 +22,7 @@ pub async fn execute_orchestrated_task(
     state: State<'_, AppState>,
     project_id: String,
     input: String,
+    conversation_id: Option<String>,
 ) -> TauriResult<OrchestratedTaskResult> {
     if project_id.is_empty() {
         return Err(TauriError::InvalidInput(
@@ -45,6 +48,24 @@ pub async fn execute_orchestrated_task(
     };
 
     persist_user_input_experience(&project_path, &input);
+    if let Some(conversation_id) = conversation_id.clone().filter(|id| !id.trim().is_empty()) {
+        if let Ok(history_store) = open_project_history_store(&state.config_dir, &project_path) {
+            let user_entry = HistoryEntry {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id,
+                role: Role::User,
+                content: input.clone(),
+                timestamp: Utc::now(),
+            };
+            if let Err(error) = history_store.save_entry(&user_entry) {
+                tracing::error!(
+                    project_id = %project_id,
+                    error = %error,
+                    "Failed to save orchestrated user message into conversation history"
+                );
+            }
+        }
+    }
 
     let task = {
         let tm = state.task_manager.lock().await;
@@ -172,12 +193,14 @@ pub async fn execute_orchestrated_task(
     runtime::spawn_orchestration_execution(
         app_handle,
         state.task_manager.clone(),
+        state.config_dir.clone(),
         task_id.clone(),
         main_task.id.clone(),
         settings.clone(),
         input.clone(),
         project_path,
         subtask_file_stems,
+        conversation_id,
     );
 
     Ok(OrchestratedTaskResult {

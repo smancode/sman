@@ -42,7 +42,72 @@ fn ensure_default_identity_files(project_path: &Path) -> TauriResult<()> {
         };
         identity.write_agents(&agents_content)?;
     }
+    ensure_project_agent_cache(project_path)?;
 
+    Ok(())
+}
+
+fn ensure_project_agent_cache(project_path: &Path) -> TauriResult<()> {
+    let sman_dir = project_path.join(".sman");
+    let cache_path = sman_dir.join("AGENT.md");
+    if cache_path.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&sman_dir)?;
+    let explorer = ProjectExplorer::new();
+    let content = match explorer.explore(project_path) {
+        Ok(knowledge) => {
+            let mut lines = vec![
+                format!("# AGENT Cache - {}", knowledge.name),
+                String::new(),
+                "## Working Rules".to_string(),
+                "- 优先复用 .sman/paths 与 .sman/skills".to_string(),
+                "- 执行前优先读取 CLAUDE.md 与 AGENTS.md".to_string(),
+                "- .claude/skills 中已有技能可直接复用".to_string(),
+                String::new(),
+                "## Build Commands".to_string(),
+            ];
+            lines.push(format!(
+                "- test: {}",
+                knowledge
+                    .build_config
+                    .test_cmd
+                    .unwrap_or_else(|| "unknown".to_string())
+            ));
+            lines.push(format!(
+                "- lint: {}",
+                knowledge
+                    .build_config
+                    .lint_cmd
+                    .unwrap_or_else(|| "unknown".to_string())
+            ));
+            lines.push(format!(
+                "- build: {}",
+                knowledge
+                    .build_config
+                    .build_cmd
+                    .unwrap_or_else(|| "unknown".to_string())
+            ));
+            let skill_names = read_project_skills(project_path)?
+                .into_iter()
+                .map(|skill| skill.id)
+                .collect::<Vec<_>>();
+            lines.push(String::new());
+            lines.push("## Claude Skills".to_string());
+            if skill_names.is_empty() {
+                lines.push("- none".to_string());
+            } else {
+                for name in skill_names {
+                    lines.push(format!("- {}", name));
+                }
+            }
+            lines.join("\n") + "\n"
+        }
+        Err(_) => {
+            "# AGENT Cache\n\n## Working Rules\n- 优先复用 .sman/paths 与 .sman/skills\n- 执行前优先读取 CLAUDE.md 与 AGENTS.md\n- .claude/skills 中已有技能可直接复用\n".to_string()
+        }
+    };
+    std::fs::write(cache_path, content)?;
     Ok(())
 }
 

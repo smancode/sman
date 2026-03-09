@@ -3,7 +3,7 @@ use smanclaw_core::{
     Experience, ExperienceSink, IdentityFiles, LearnedItem, Skill, SkillMeta, SkillStore,
     UserExperienceExtractor,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 use crate::error::{TauriError, TauriResult};
@@ -337,6 +337,83 @@ fn load_store_prompt_items(
     }
 }
 
+fn load_file_prompt_section(
+    project_path: &Path,
+    relative_path: &str,
+    section_title: &str,
+    max_chars: usize,
+) -> Option<Vec<String>> {
+    let file_path = project_path.join(relative_path);
+    let content = std::fs::read_to_string(file_path).ok()?;
+    let compact = compact_prompt_text(&content);
+    if compact.is_empty() {
+        return None;
+    }
+    Some(vec![
+        format!("## {}", section_title),
+        format!("- path={} content={}", relative_path, truncate_for_prompt(&compact, max_chars)),
+    ])
+}
+
+fn load_claude_skill_prompt_items(project_path: &Path, input: &str, limit: usize) -> Vec<String> {
+    let skills_dir = project_path.join(".claude").join("skills");
+    let entries = match std::fs::read_dir(skills_dir) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let input_lower = input.to_lowercase();
+    let mut scored = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) else {
+            continue;
+        };
+        if name.starts_with('.') {
+            continue;
+        }
+        let mut summary = String::new();
+        for candidate in ["skill.md", "SUMMARY.md"] {
+            let text = std::fs::read_to_string(path.join(candidate)).unwrap_or_default();
+            if !text.trim().is_empty() {
+                summary = text;
+                break;
+            }
+        }
+        let summary_compact = compact_prompt_text(&summary);
+        let mut score = if input_lower.contains(&name.to_lowercase()) { 8 } else { 0 };
+        if !summary_compact.is_empty() {
+            let summary_lower = summary_compact.to_lowercase();
+            for token in input_lower.split_whitespace() {
+                if token.len() >= 2 && summary_lower.contains(token) {
+                    score += 1;
+                }
+            }
+        }
+        scored.push((score, name, summary_compact));
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    scored.truncate(limit);
+    if scored.is_empty() {
+        return Vec::new();
+    }
+    let mut section = vec!["## Claude Skills".to_string()];
+    for (_, name, summary) in scored {
+        let summary_text = if summary.is_empty() {
+            "no-summary".to_string()
+        } else {
+            truncate_for_prompt(&summary, 220)
+        };
+        section.push(format!(
+            "- [{}] path=.claude/skills/{}/ skill_summary={}",
+            name, name, summary_text
+        ));
+    }
+    section
+}
+
 pub(crate) fn build_project_knowledge_block(project_path: &std::path::Path, input: &str) -> String {
     let mut sections = Vec::new();
     if let Ok(skill_store) = SkillStore::new(project_path) {
@@ -355,6 +432,15 @@ pub(crate) fn build_project_knowledge_block(project_path: &std::path::Path, inpu
             4,
         ));
     }
+    if let Some(agent_cache) =
+        load_file_prompt_section(project_path, ".sman/AGENT.md", "Project Agent Cache", 520)
+    {
+        sections.extend(agent_cache);
+    }
+    if let Some(claude_rules) = load_file_prompt_section(project_path, "CLAUDE.md", "Project CLAUDE Rules", 420) {
+        sections.extend(claude_rules);
+    }
+    sections.extend(load_claude_skill_prompt_items(project_path, input, 5));
     if sections.is_empty() {
         String::new()
     } else {
@@ -372,7 +458,7 @@ pub(crate) fn wrap_prompt_with_project_knowledge(
         prompt_body.to_string()
     } else {
         format!(
-            "{}\n\n你必须优先复用以上 Project Skills 和 Project Paths 中的可复用做法，并在执行中遵循其约束。\n\n{}",
+            "{}\n\n你必须优先复用以上 Project Skills、Project Paths、Claude Skills、Project Agent Cache 与 Project CLAUDE Rules 中的约束与可复用做法。\n\n{}",
             knowledge, prompt_body
         )
     }
