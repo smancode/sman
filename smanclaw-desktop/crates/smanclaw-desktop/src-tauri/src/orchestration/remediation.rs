@@ -16,15 +16,149 @@ use super::task_outcome::{
     apply_execution_outcome, emit_progress_and_completion, persist_execution_experience,
     subtask_status_from_success,
 };
+use crate::commands::open_project_history_store;
 use crate::commands::task_commands::{
     build_remediation_subtasks, subtask_file_stem, subtask_relative_path,
 };
-use crate::commands::open_project_history_store;
 use crate::events::{
     emit_progress_event, emit_subtask_started, emit_task_status_event, emit_test_result,
-    task_event_status_from_success,
-    TaskEventStatus,
+    task_event_status_from_success, TaskEventStatus,
 };
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let count = cleaned.chars().count();
+    if count <= max_chars {
+        cleaned
+    } else {
+        format!("{}...", cleaned.chars().take(max_chars).collect::<String>())
+    }
+}
+
+fn summarize_subtasks(dag: &TaskDag) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut completed = Vec::new();
+    let mut failed = Vec::new();
+    let mut unfinished = Vec::new();
+    for task in dag.tasks_in_order() {
+        let desc = truncate_text(&task.description, 80);
+        match task.status {
+            SubTaskStatus::Completed => {
+                completed.push(format!("{}：{}", task.id, desc));
+            }
+            SubTaskStatus::Failed => {
+                let reason = task
+                    .result
+                    .as_deref()
+                    .map(|value| truncate_text(value, 120))
+                    .unwrap_or_else(|| "未返回明确错误信息".to_string());
+                failed.push(format!("{}：{}（失败原因：{}）", task.id, desc, reason));
+            }
+            SubTaskStatus::Pending | SubTaskStatus::Running => {
+                unfinished.push(format!("{}：{}（状态：{:?}）", task.id, desc, task.status));
+            }
+        }
+    }
+    (completed, failed, unfinished)
+}
+
+fn summarize_acceptance_failures(
+    evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
+) -> (usize, usize, Vec<String>) {
+    match evaluation {
+        Ok(result) => {
+            let total = result.criteria_results.len();
+            let passed = result
+                .criteria_results
+                .iter()
+                .filter(|item| item.status == smanclaw_core::CriteriaStatus::Passed)
+                .count();
+            let failed_items = result
+                .criteria_results
+                .iter()
+                .filter(|item| item.status != smanclaw_core::CriteriaStatus::Passed)
+                .map(|item| {
+                    format!(
+                        "{}：{}",
+                        item.criteria_id,
+                        truncate_text(item.message.as_str(), 120)
+                    )
+                })
+                .collect::<Vec<_>>();
+            (total, passed, failed_items)
+        }
+        Err(_) => (0, 0, Vec::new()),
+    }
+}
+
+fn format_failure_summary(
+    dag: &TaskDag,
+    evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
+    remediation_round: usize,
+) -> String {
+    let total = dag.tasks_in_order().len();
+    let (completed, failed, unfinished) = summarize_subtasks(dag);
+    let (criteria_total, criteria_passed, failed_criteria) =
+        summarize_acceptance_failures(evaluation);
+    let mut lines = vec![
+        format!(
+            "任务未完全完成：已完成 {}/{} 个子任务，失败 {} 个，未收敛 {} 个。",
+            completed.len(),
+            total,
+            failed.len(),
+            unfinished.len()
+        ),
+        format!(
+            "已执行自动补救轮次：{} 轮（最多 2 轮）。",
+            remediation_round
+        ),
+    ];
+    if criteria_total > 0 {
+        lines.push(format!(
+            "验收结果：通过 {}/{} 条，未通过 {} 条。",
+            criteria_passed,
+            criteria_total,
+            criteria_total.saturating_sub(criteria_passed)
+        ));
+    }
+    if !completed.is_empty() {
+        lines.push("已完成子任务：".to_string());
+        lines.extend(
+            completed
+                .into_iter()
+                .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    if !failed.is_empty() {
+        lines.push("失败子任务：".to_string());
+        lines.extend(failed.into_iter().take(6).map(|item| format!("- {}", item)));
+    }
+    if !unfinished.is_empty() {
+        lines.push("未收敛子任务：".to_string());
+        lines.extend(
+            unfinished
+                .into_iter()
+                .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    if !failed_criteria.is_empty() {
+        lines.push("未通过验收项：".to_string());
+        lines.extend(
+            failed_criteria
+                .into_iter()
+                .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    if let Err(error) = evaluation {
+        lines.push(format!(
+            "验收器异常：{}",
+            truncate_text(&error.to_string(), 160)
+        ));
+    }
+    lines.join("\n")
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn finalize_orchestration(
@@ -265,21 +399,7 @@ pub(crate) async fn finalize_orchestration(
     let final_error = if final_passed {
         None
     } else {
-        let mut errors = Vec::new();
-        let current_all_completed = dag
-            .tasks_in_order()
-            .iter()
-            .all(|t| t.status == SubTaskStatus::Completed);
-        if !current_all_completed {
-            errors.push("Some subtasks failed".to_string());
-        }
-        if !evaluation_passed {
-            errors.push("Acceptance criteria not fully passed".to_string());
-        }
-        if let Err(e) = &evaluation {
-            errors.push(format!("Acceptance evaluator error: {}", e));
-        }
-        Some(errors.join("; "))
+        Some(format_failure_summary(dag, &evaluation, remediation_round))
     };
     if let Err(e) = task_manager.lock().await.update_task_result(
         task_id,
@@ -331,12 +451,9 @@ pub(crate) async fn finalize_orchestration(
         let summary = if final_passed {
             format!("任务完成：{}", final_output.clone().unwrap_or_default())
         } else {
-            format!(
-                "任务失败：{}",
-                final_error
-                    .clone()
-                    .unwrap_or_else(|| "Orchestration failed".to_string())
-            )
+            final_error
+                .clone()
+                .unwrap_or_else(|| "任务失败：未获取到可展示的失败摘要".to_string())
         };
         match open_project_history_store(config_dir, project_path) {
             Ok(store) => {
@@ -374,10 +491,14 @@ pub(crate) async fn finalize_orchestration(
             error: None,
             files_changed: vec![],
         };
-        if let Err(e) =
-            emit_progress_event(app_handle, &smanclaw_types::ProgressEvent::TaskCompleted { result })
-        {
-            tracing::error!("Failed to emit orchestration completion progress event: {}", e);
+        if let Err(e) = emit_progress_event(
+            app_handle,
+            &smanclaw_types::ProgressEvent::TaskCompleted { result },
+        ) {
+            tracing::error!(
+                "Failed to emit orchestration completion progress event: {}",
+                e
+            );
         }
     } else if let Some(error) = final_error.clone() {
         if let Err(e) = emit_progress_event(
@@ -409,4 +530,67 @@ fn build_acceptance_criteria(
             verification_method: VerificationMethod::ContentMatch,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_failure_summary_contains_completed_failed_and_acceptance_sections() {
+        let mut task_a = smanclaw_core::SubTask::new("task-a", "更新还款方式核心逻辑");
+        task_a.status = smanclaw_core::SubTaskStatus::Completed;
+        let mut task_b = smanclaw_core::SubTask::new("task-b", "补充接口参数校验");
+        task_b.status = smanclaw_core::SubTaskStatus::Failed;
+        task_b.result = Some("单测失败：repayment_method 枚举未覆盖".to_string());
+        let mut task_c = smanclaw_core::SubTask::new("task-c", "联调并回归前端展示");
+        task_c.status = smanclaw_core::SubTaskStatus::Running;
+
+        let dag = smanclaw_core::TaskDag::from_tasks(vec![task_a, task_b, task_c])
+            .expect("dag should be built");
+
+        let mut evaluation = smanclaw_core::EvaluationResult::new("main-1".to_string());
+        evaluation
+            .criteria_results
+            .push(smanclaw_core::CriteriaResult {
+                criteria_id: "subtask-task-a".to_string(),
+                status: smanclaw_core::CriteriaStatus::Passed,
+                evidence: "task-a.md contains - [x]".to_string(),
+                message: "通过".to_string(),
+            });
+        evaluation
+            .criteria_results
+            .push(smanclaw_core::CriteriaResult {
+                criteria_id: "subtask-task-b".to_string(),
+                status: smanclaw_core::CriteriaStatus::Failed,
+                evidence: "task-b.md contains - [ ]".to_string(),
+                message: "仍有未勾选项".to_string(),
+            });
+
+        let summary = format_failure_summary(&dag, &Ok(evaluation), 2);
+
+        assert!(summary.contains("已完成 1/3 个子任务"));
+        assert!(summary.contains("失败子任务："));
+        assert!(summary.contains("task-b"));
+        assert!(summary.contains("未收敛子任务："));
+        assert!(summary.contains("task-c"));
+        assert!(summary.contains("未通过验收项："));
+        assert!(summary.contains("subtask-task-b"));
+    }
+
+    #[test]
+    fn format_failure_summary_contains_evaluator_error_when_present() {
+        let mut task = smanclaw_core::SubTask::new("task-x", "执行核心变更");
+        task.status = smanclaw_core::SubTaskStatus::Failed;
+        let dag = smanclaw_core::TaskDag::from_tasks(vec![task]).expect("dag should be built");
+        let evaluation_error: Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError> =
+            Err(smanclaw_core::CoreError::InvalidInput(
+                "验收指令配置错误".to_string(),
+            ));
+
+        let summary = format_failure_summary(&dag, &evaluation_error, 1);
+
+        assert!(summary.contains("验收器异常"));
+        assert!(summary.contains("验收指令配置错误"));
+    }
 }

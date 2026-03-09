@@ -267,6 +267,13 @@
         }
     }
 
+    function resolveProgressProjectId(): string | null {
+        if (sendingProjectId) {
+            return sendingProjectId;
+        }
+        return $selectedProject?.id ?? null;
+    }
+
     async function ensureProjectConversation(
         projectId: string,
         projectName: string,
@@ -307,25 +314,43 @@
         projectId: string,
         projectName: string,
     ) {
+        const existingMessages = messagesByProject[projectId] || [];
+        if (
+            isSending &&
+            sendingProjectId === projectId &&
+            existingMessages.length > 0
+        ) {
+            return;
+        }
         const conversationId = await ensureProjectConversation(
             projectId,
             projectName,
         );
         if (!conversationId) {
-            messagesByProject[projectId] = getDemoMessages(projectName);
+            messagesByProject[projectId] =
+                existingMessages.length > 0
+                    ? existingMessages
+                    : getDemoMessages(projectName);
             return;
         }
 
         const response = await conversationApi.getMessages(conversationId);
         if (response.success && response.data) {
-            messagesByProject[projectId] =
-                response.data.length > 0
-                    ? mapHistoryEntries(response.data)
-                    : getDemoMessages(projectName);
+            if (response.data.length > 0) {
+                messagesByProject[projectId] = mapHistoryEntries(response.data);
+            } else {
+                messagesByProject[projectId] =
+                    existingMessages.length > 0
+                        ? existingMessages
+                        : getDemoMessages(projectName);
+            }
             return;
         }
 
-        messagesByProject[projectId] = getDemoMessages(projectName);
+        messagesByProject[projectId] =
+            existingMessages.length > 0
+                ? existingMessages
+                : getDemoMessages(projectName);
     }
 
     async function waitForAssistantReply(
@@ -534,6 +559,15 @@
                     timestamp: Date.now(),
                 };
 
+                if (
+                    role === "assistant" &&
+                    isSending &&
+                    sendingProjectId === projectId
+                ) {
+                    updateLatestThinkingMessage(projectId, payload.content);
+                    return;
+                }
+
                 const currentMessages = messagesByProject[projectId] || [];
                 messagesByProject[projectId] = [...currentMessages, newMessage];
             });
@@ -547,9 +581,11 @@
                         JSON.stringify(payload),
                     );
 
-                    if (payload.type === "task_completed" && $selectedProject) {
-                        const projectId =
-                            sendingProjectId ?? $selectedProject.id;
+                    if (payload.type === "task_completed") {
+                        const projectId = resolveProgressProjectId();
+                        if (!projectId) {
+                            return;
+                        }
                         appendProgressTimeline(projectId, payload);
                         const output = payload.result.output?.trim();
                         if (output && output.length > 0) {
@@ -568,9 +604,11 @@
                         completionSignalAtByProject[projectId] = Date.now();
                     }
 
-                    if (payload.type === "task_failed" && $selectedProject) {
-                        const projectId =
-                            sendingProjectId ?? $selectedProject.id;
+                    if (payload.type === "task_failed") {
+                        const projectId = resolveProgressProjectId();
+                        if (!projectId) {
+                            return;
+                        }
                         appendProgressTimeline(projectId, payload);
                         completionSignalAtByProject[projectId] = Date.now();
                         updateLatestThinkingMessage(
@@ -582,9 +620,11 @@
                         return;
                     }
 
-                    if (isSending && $selectedProject) {
-                        const projectId =
-                            sendingProjectId ?? $selectedProject.id;
+                    if (isSending) {
+                        const projectId = resolveProgressProjectId();
+                        if (!projectId) {
+                            return;
+                        }
                         appendProgressTimeline(projectId, payload);
                         if (progressTimelineLine(payload)) {
                             updateLatestThinkingMessage(
