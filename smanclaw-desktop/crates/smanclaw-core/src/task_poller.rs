@@ -169,7 +169,7 @@ impl TaskPoller {
     /// # Errors
     /// Returns error if the tasks directory cannot be determined
     pub fn new(project_path: &Path, poll_interval: Duration) -> Result<Self> {
-        let tasks_dir = project_path.join(".smanclaw").join("tasks");
+        let tasks_dir = project_path.join(".sman").join("tasks");
         Ok(Self {
             tasks_dir,
             poll_interval,
@@ -314,7 +314,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn setup_task_file(dir: &TempDir, task_id: &str, content: &str) -> PathBuf {
-        let task_dir = dir.path().join(".smanclaw").join("tasks").join(task_id);
+        let task_dir = dir.path().join(".sman").join("tasks").join(task_id);
         fs::create_dir_all(&task_dir).unwrap();
         let file_path = task_dir.join("task.md");
         fs::write(&file_path, content).unwrap();

@@ -254,6 +254,130 @@ pub(crate) fn persist_task_experience_artifacts(
     }
 }
 
+fn truncate_for_prompt(input: &str, max_chars: usize) -> String {
+    let mut output = String::new();
+    for ch in input.chars().take(max_chars) {
+        output.push(ch);
+    }
+    if input.chars().count() > max_chars {
+        output.push('…');
+    }
+    output
+}
+
+fn compact_prompt_text(input: &str) -> String {
+    input
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn relevance_score(input_lower: &str, meta: &SkillMeta) -> i64 {
+    let mut score = 0i64;
+    if input_lower.contains(&meta.id.to_lowercase()) {
+        score += 6;
+    }
+    if input_lower.contains(&meta.learned_from.to_lowercase()) {
+        score += 4;
+    }
+    for tag in &meta.tags {
+        if input_lower.contains(&tag.to_lowercase()) {
+            score += 3;
+        }
+    }
+    score
+}
+
+fn load_store_prompt_items(
+    store: &SkillStore,
+    section_title: &str,
+    input: &str,
+    limit: usize,
+) -> Vec<String> {
+    let mut metas = match store.list() {
+        Ok(items) => items,
+        Err(_) => return Vec::new(),
+    };
+    let input_lower = input.to_lowercase();
+    metas.sort_by(|a, b| {
+        let score_b = relevance_score(&input_lower, b);
+        let score_a = relevance_score(&input_lower, a);
+        score_b
+            .cmp(&score_a)
+            .then_with(|| b.updated_at.cmp(&a.updated_at))
+    });
+    metas.truncate(limit);
+    let mut items = Vec::new();
+    for meta in metas {
+        if let Ok(Some(skill)) = store.get(&meta.id) {
+            let content = truncate_for_prompt(&compact_prompt_text(&skill.content), 280);
+            let tags = if meta.tags.is_empty() {
+                "none".to_string()
+            } else {
+                meta.tags.join(",")
+            };
+            items.push(format!(
+                "- [{}] from={} tags={} content={}",
+                meta.id,
+                truncate_for_prompt(&meta.learned_from, 80),
+                truncate_for_prompt(&tags, 80),
+                content
+            ));
+        }
+    }
+    if items.is_empty() {
+        Vec::new()
+    } else {
+        let mut section = Vec::new();
+        section.push(format!("## {}", section_title));
+        section.extend(items);
+        section
+    }
+}
+
+pub(crate) fn build_project_knowledge_block(project_path: &std::path::Path, input: &str) -> String {
+    let mut sections = Vec::new();
+    if let Ok(skill_store) = SkillStore::new(project_path) {
+        sections.extend(load_store_prompt_items(
+            &skill_store,
+            "Project Skills",
+            input,
+            4,
+        ));
+    }
+    if let Ok(path_store) = SkillStore::for_paths(project_path) {
+        sections.extend(load_store_prompt_items(
+            &path_store,
+            "Project Paths",
+            input,
+            4,
+        ));
+    }
+    if sections.is_empty() {
+        String::new()
+    } else {
+        sections.join("\n")
+    }
+}
+
+pub(crate) fn wrap_prompt_with_project_knowledge(
+    project_path: &std::path::Path,
+    input: &str,
+    prompt_body: &str,
+) -> String {
+    let knowledge = build_project_knowledge_block(project_path, input);
+    if knowledge.is_empty() {
+        prompt_body.to_string()
+    } else {
+        format!(
+            "{}\n\n你必须优先复用以上 Project Skills 和 Project Paths 中的可复用做法，并在执行中遵循其约束。\n\n{}",
+            knowledge, prompt_body
+        )
+    }
+}
+
 use crate::events::emit_chat_message;
 use tauri::State;
 

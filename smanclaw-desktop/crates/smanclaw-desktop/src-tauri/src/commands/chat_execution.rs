@@ -5,7 +5,9 @@ use smanclaw_types::{HistoryEntry, ProgressEvent, Role};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
-use crate::commands::utility_commands::persist_user_input_experience;
+use crate::commands::utility_commands::{
+    persist_user_input_experience, wrap_prompt_with_project_knowledge,
+};
 use crate::events::emit_progress_event;
 
 use super::{
@@ -159,7 +161,7 @@ pub async fn send_message(
     let project_path_for_save = project_path.clone();
     let config_dir_for_save = state.config_dir.clone();
     let conv_id = conversation_id.clone();
-    let content_clone = content.clone();
+    let content_clone = wrap_prompt_with_project_knowledge(&project_path, &content, &content);
 
     tokio::spawn(async move {
         let mut execution_future =

@@ -497,7 +497,7 @@ fn generate_main_task_id() -> String {
 pub struct MainTaskManager {
     /// Directory to store main task files
     main_tasks_dir: PathBuf,
-    /// Runtime directory (.smanclaw)
+    /// Runtime directory (.sman)
     runtime_dir: PathBuf,
     /// Project path
     project_path: PathBuf,
@@ -510,9 +510,9 @@ impl MainTaskManager {
     /// * `project_path` - The root path of the project
     ///
     /// # Returns
-    /// A MainTaskManager instance with main-tasks directory set to `{project_path}/.smanclaw/main-tasks`
+    /// A MainTaskManager instance with main-tasks directory set to `{project_path}/.sman/main-tasks`
     pub fn new(project_path: &Path) -> Result<Self> {
-        let runtime_dir = project_path.join(".smanclaw");
+        let runtime_dir = project_path.join(".sman");
         let main_tasks_dir = runtime_dir.join("main-tasks");
         fs::create_dir_all(&main_tasks_dir).map_err(CoreError::Io)?;
         Ok(Self {
@@ -975,10 +975,10 @@ mod tests {
 
         let manager = MainTaskManager::new(project_path).expect("create manager");
 
-        let expected_dir = project_path.join(".smanclaw").join("main-tasks");
+        let expected_dir = project_path.join(".sman").join("main-tasks");
         assert!(expected_dir.exists());
         assert_eq!(manager.main_tasks_dir, expected_dir);
-        assert_eq!(manager.runtime_dir, project_path.join(".smanclaw"));
+        assert_eq!(manager.runtime_dir, project_path.join(".sman"));
     }
 
     #[test]

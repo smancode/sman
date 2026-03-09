@@ -236,7 +236,7 @@ pub(crate) fn subtask_file_stem(main_task_id: &str, sequence: usize) -> String {
 }
 
 pub(crate) fn subtask_relative_path(file_stem: &str) -> String {
-    format!(".smanclaw/tasks/{}.md", file_stem)
+    format!(".sman/tasks/{}.md", file_stem)
 }
 
 pub(crate) fn build_remediation_subtasks(

@@ -395,7 +395,7 @@ impl UserExperienceExtractor {
     /// A Chinese confirmation message
     pub fn generate_confirmation(&self, experience: &UserExperience) -> String {
         let type_name = experience.experience_type.display_name();
-        let path = format!(".smanclaw/skills/{}/experience-*.md", experience.category);
+        let path = format!(".sman/skills/{}/experience-*.md", experience.category);
 
         format!(
             "好的，我记住了：\n\
@@ -839,7 +839,7 @@ mod tests {
 
         assert!(confirmation.contains("好的，我记住了"));
         assert!(confirmation.contains("约束"));
-        assert!(confirmation.contains(".smanclaw/skills/"));
+        assert!(confirmation.contains(".sman/skills/"));
     }
 
     #[test]

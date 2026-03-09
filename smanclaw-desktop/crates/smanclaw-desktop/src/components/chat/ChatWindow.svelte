@@ -685,6 +685,45 @@
         messagesByProject[projectId] = [...updatedMessages, assistantMessage];
 
         try {
+            const routeDecision = await conversationApi.decideRoute(
+                projectId,
+                prompt,
+            );
+            const shouldOrchestrate =
+                routeDecision.success &&
+                routeDecision.data?.route === "orchestrated";
+            if (shouldOrchestrate) {
+                const reasonText =
+                    routeDecision.data?.reason?.trim() || "已判定为复杂需求";
+                const taskId = await tasksStore.executeOrchestratedTask(
+                    projectId,
+                    prompt,
+                );
+                if (!taskId) {
+                    stopSending(projectId);
+                    messagesByProject[projectId] = [
+                        ...updatedMessages,
+                        {
+                            ...assistantMessage,
+                            content: "错误：编排任务启动失败",
+                        },
+                    ];
+                    return;
+                }
+                messagesByProject[projectId] = [
+                    ...updatedMessages,
+                    {
+                        ...assistantMessage,
+                        taskId,
+                        content: `已切换编排模式：${reasonText}`,
+                    },
+                ];
+                updateLatestThinkingMessage(
+                    projectId,
+                    `已切换编排模式：${reasonText}`,
+                );
+                return;
+            }
             const conversationId = await ensureProjectConversation(
                 projectId,
                 $selectedProject.name,

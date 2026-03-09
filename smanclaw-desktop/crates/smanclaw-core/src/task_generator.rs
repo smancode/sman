@@ -76,9 +76,9 @@ impl TaskGenerator {
     /// * `project_path` - The root path of the project
     ///
     /// # Returns
-    /// A TaskGenerator instance with tasks directory set to `{project_path}/.smanclaw/tasks`
+    /// A TaskGenerator instance with tasks directory set to `{project_path}/.sman/tasks`
     pub fn new(project_path: &std::path::Path) -> Result<Self> {
-        let tasks_dir = project_path.join(".smanclaw").join("tasks");
+        let tasks_dir = project_path.join(".sman").join("tasks");
         fs::create_dir_all(&tasks_dir).map_err(CoreError::Io)?;
         Ok(Self { tasks_dir })
     }
@@ -393,7 +393,7 @@ mod tests {
 
         let generator = TaskGenerator::new(project_path).expect("create generator");
 
-        let expected_dir = project_path.join(".smanclaw").join("tasks");
+        let expected_dir = project_path.join(".sman").join("tasks");
         assert!(expected_dir.exists());
         assert_eq!(generator.tasks_dir, expected_dir);
     }

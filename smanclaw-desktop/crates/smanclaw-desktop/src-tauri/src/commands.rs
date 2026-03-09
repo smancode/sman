@@ -201,7 +201,7 @@ mod tests {
             &["api".to_string(), "constraint".to_string()],
         );
 
-        let memory_path = root.join(".smanclaw").join("MEMORY.md");
+        let memory_path = root.join(".sman").join("MEMORY.md");
         let content = fs::read_to_string(memory_path).expect("read memory");
         assert!(content.contains("user-input"));
         assert!(content.contains("trace_id"));
@@ -219,7 +219,7 @@ mod tests {
 
         persist_user_input_experience(&root, "接口返回必须包含trace_id");
 
-        let memory_path = root.join(".smanclaw").join("MEMORY.md");
+        let memory_path = root.join(".sman").join("MEMORY.md");
         let memory = fs::read_to_string(memory_path).expect("read memory");
         assert!(memory.contains("trace_id"));
 
@@ -280,6 +280,6 @@ mod tests {
     #[test]
     fn subtask_relative_path_uses_named_markdown() {
         let path = subtask_relative_path("task-main-2603071250-A1B2-001");
-        assert_eq!(path, ".smanclaw/tasks/task-main-2603071250-A1B2-001.md");
+        assert_eq!(path, ".sman/tasks/task-main-2603071250-A1B2-001.md");
     }
 }

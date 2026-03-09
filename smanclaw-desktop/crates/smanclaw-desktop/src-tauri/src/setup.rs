@@ -109,6 +109,7 @@ pub fn create_app_builder() -> tauri::Builder<tauri::Wry> {
             crate::commands::conversation_commands::list_conversations,
             crate::commands::conversation_commands::create_conversation,
             crate::commands::conversation_commands::send_message,
+            crate::commands::conversation_commands::decide_message_route,
             // Settings commands
             crate::commands::settings_commands::get_app_settings,
             crate::commands::settings_commands::update_app_settings,

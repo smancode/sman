@@ -90,6 +90,15 @@ export interface HistoryEntryRecord {
     timestamp: string;
 }
 
+export type MessageRoute = "direct" | "orchestrated";
+
+export interface MessageRouteDecision {
+    route: MessageRoute;
+    reason: string;
+    complexity: number;
+    confidence: number;
+}
+
 // Settings types
 
 // LLM Settings (OpenAI Compatible)

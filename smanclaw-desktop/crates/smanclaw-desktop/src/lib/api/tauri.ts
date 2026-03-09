@@ -11,6 +11,7 @@ import type {
     Message,
     ConversationRecord,
     HistoryEntryRecord,
+    MessageRouteDecision,
     AppSettings,
     LlmSettings,
     EmbeddingSettings,
@@ -199,6 +200,20 @@ export const conversationApi = {
                 content,
             },
             15000,
+        );
+    },
+
+    async decideRoute(
+        projectId: string,
+        content: string,
+    ): Promise<ApiResponse<MessageRouteDecision>> {
+        return safeInvoke<MessageRouteDecision>(
+            "decide_message_route",
+            {
+                project_id: projectId,
+                content,
+            },
+            20000,
         );
     },
 };

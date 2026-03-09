@@ -1,6 +1,6 @@
 //! Skill store for managing project experience knowledge
 //!
-//! Skills are stored in the project's `.smanclaw/skills/` directory as Markdown files
+//! Skills are stored in the project's `.sman/skills/` directory as Markdown files
 //! with an index.json file for metadata tracking.
 
 use chrono::Utc;
@@ -15,9 +15,9 @@ const INDEX_VERSION: &str = "1.0";
 /// Index file name
 const INDEX_FILE: &str = "index.json";
 /// Skills directory name
-const SKILLS_DIR: &str = ".smanclaw/skills";
+const SKILLS_DIR: &str = ".sman/skills";
 /// Paths directory name
-const PATHS_DIR: &str = ".smanclaw/paths";
+const PATHS_DIR: &str = ".sman/paths";
 /// Claude Code compatible skills directory name
 const CLAUDE_SKILLS_DIR: &str = ".claude/skills";
 
@@ -71,7 +71,7 @@ impl Default for SkillIndex {
 
 /// Store for managing skills in a project
 pub struct SkillStore {
-    /// Path to the skills directory (.smanclaw/skills/)
+    /// Path to the skills directory (.sman/skills/)
     skills_dir: PathBuf,
 }
 

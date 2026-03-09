@@ -15,7 +15,7 @@ fn fallback_project_runtime_dir(config_dir: &Path, project_path: &Path) -> PathB
 }
 
 fn ensure_project_runtime_dir(config_dir: &Path, project_path: &Path) -> TauriResult<PathBuf> {
-    let runtime_dir = project_path.join(".smanclaw");
+    let runtime_dir = project_path.join(".sman");
     match std::fs::create_dir_all(&runtime_dir) {
         Ok(()) => {
             let probe_file = runtime_dir.join(".write_probe");
@@ -115,7 +115,8 @@ pub(crate) fn open_project_history_store(
 ) -> TauriResult<SqliteHistoryStore> {
     let runtime_dir = ensure_project_runtime_dir(config_dir, project_path)?;
     let history_db = runtime_dir.join("history.db");
-    let project_db = project_path.join(".smanclaw").join("history.db");
+    let project_db = project_path.join(".sman").join("history.db");
+    let legacy_project_db = project_path.join(".smanclaw").join("history.db");
     let fallback_db = fallback_project_runtime_dir(config_dir, project_path).join("history.db");
 
     if history_db != project_db {
@@ -126,6 +127,17 @@ pub(crate) fn open_project_history_store(
                 source_db = %project_db.display(),
                 error = %err,
                 "Failed to migrate project history database into active runtime directory"
+            );
+        }
+    }
+    if history_db != legacy_project_db {
+        if let Err(err) = copy_sqlite_bundle_if_needed(&history_db, &legacy_project_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %legacy_project_db.display(),
+                error = %err,
+                "Failed to migrate legacy project history database into active runtime directory"
             );
         }
     }
@@ -148,6 +160,17 @@ pub(crate) fn open_project_history_store(
                 source_db = %project_db.display(),
                 error = %err,
                 "Failed to merge project history database into active runtime database"
+            );
+        }
+    }
+    if history_db != legacy_project_db {
+        if let Err(err) = merge_history_db_into_active(&history_db, &legacy_project_db) {
+            tracing::warn!(
+                project_path = %project_path.display(),
+                history_db = %history_db.display(),
+                source_db = %legacy_project_db.display(),
+                error = %err,
+                "Failed to merge legacy project history database into active runtime database"
             );
         }
     }

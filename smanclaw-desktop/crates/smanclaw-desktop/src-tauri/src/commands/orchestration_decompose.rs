@@ -2,6 +2,7 @@ use smanclaw_core::{Orchestrator, SubTask};
 use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::AppSettings;
 use std::collections::HashSet;
+use crate::commands::utility_commands::wrap_prompt_with_project_knowledge;
 
 const SEMANTIC_DECOMPOSE_TIMEOUT_SECS: u64 = 60;
 
@@ -29,7 +30,11 @@ pub(crate) async fn try_semantic_decompose_with_zeroclaw(
         return None;
     }
     let bridge = ZeroclawBridge::from_project_with_settings(project_path, settings).ok()?;
-    let prompt = build_semantic_decompose_prompt(input);
+    let prompt = wrap_prompt_with_project_knowledge(
+        project_path,
+        input,
+        &build_semantic_decompose_prompt(input),
+    );
     let result = match tokio::time::timeout(
         std::time::Duration::from_secs(SEMANTIC_DECOMPOSE_TIMEOUT_SECS),
         bridge.execute_task_async(&prompt),
