@@ -534,6 +534,7 @@ function createTasksStore() {
                     };
                 });
 
+                pollTaskUntilComplete(task_id);
                 return task_id;
             }
 

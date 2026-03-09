@@ -4,7 +4,7 @@ use smanclaw_types::AppSettings;
 use std::collections::HashSet;
 use crate::commands::utility_commands::wrap_prompt_with_project_knowledge;
 
-const SEMANTIC_DECOMPOSE_TIMEOUT_SECS: u64 = 60;
+const SEMANTIC_DECOMPOSE_TIMEOUT_SECS: u64 = 20;
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SemanticDecomposeResponse {
@@ -46,7 +46,7 @@ pub(crate) async fn try_semantic_decompose_with_zeroclaw(
             tracing::warn!(
                 project_path = %project_path.display(),
                 error = %error,
-                "Semantic decompose request failed, falling back to rule-based decomposition"
+                "Semantic decompose request failed, falling back to single-context decomposition"
             );
             return None;
         }
@@ -54,7 +54,7 @@ pub(crate) async fn try_semantic_decompose_with_zeroclaw(
             tracing::warn!(
                 project_path = %project_path.display(),
                 timeout_secs = SEMANTIC_DECOMPOSE_TIMEOUT_SECS,
-                "Semantic decompose request timed out, falling back to rule-based decomposition"
+                "Semantic decompose request timed out, falling back to single-context decomposition"
             );
             return None;
         }
@@ -214,54 +214,12 @@ pub(crate) fn normalize_semantic_subtasks(
 
 pub(crate) fn enforce_subtask_context_independence(
     subtasks: Vec<SubTask>,
-    input: &str,
+    _input: &str,
 ) -> Vec<SubTask> {
-    if subtasks.len() <= 1 {
-        return subtasks;
-    }
-    let ids = subtasks
-        .iter()
-        .map(|task| task.id.as_str())
-        .collect::<Vec<_>>();
-    let has_cross_context_reference = subtasks.iter().any(|task| {
-        let desc = task.description.to_lowercase();
-        if desc.contains("上一子任务")
-            || desc.contains("前一子任务")
-            || desc.contains("上个子任务")
-            || desc.contains("基于前序任务")
-            || desc.contains("依赖其他子任务上下文")
-        {
-            return true;
-        }
-        ids.iter().any(|id| desc.contains(id))
-    });
-    let strongly_coupled = has_cross_context_reference
-        || subtasks
-            .windows(2)
-            .all(|pair| pair[1].depends_on == vec![pair[0].id.clone()]);
-    if !strongly_coupled {
-        return subtasks;
-    }
-    let summary = normalize_requirement_summary(input);
-    let test_command = subtasks.iter().find_map(|task| task.test_command.clone());
-    let mut merged = SubTask::new(
-        "task-context-serial",
-        format!(
-            "在单一子Claw上下文内串行完成强关联需求，确保无需其他子任务上下文：{}",
-            summary
-        ),
-    );
-    if let Some(cmd) = test_command {
-        merged = merged.with_test_command(cmd);
-    }
-    vec![merged]
+    subtasks
 }
 
 pub(crate) fn fallback_decompose_subtasks(input: &str) -> Vec<SubTask> {
-    let rule_based = Orchestrator::parse_requirement(input);
-    if rule_based.len() >= 2 || is_simple_requirement(input) {
-        return enforce_subtask_context_independence(rule_based, input);
-    }
     let summary = normalize_requirement_summary(input);
     vec![SubTask::new(
         "task-context-serial",
@@ -269,23 +227,7 @@ pub(crate) fn fallback_decompose_subtasks(input: &str) -> Vec<SubTask> {
             "在单一子Claw上下文内完成需求分析、实现、验证与回归，避免跨子任务上下文依赖：{}",
             summary
         ),
-    )
-    .with_test_command("cargo test")]
-}
-
-pub(crate) fn is_simple_requirement(input: &str) -> bool {
-    let compact = input.split_whitespace().collect::<Vec<_>>().join(" ");
-    let lowered = compact.to_lowercase();
-    let length = compact.chars().count();
-    let has_joiners = [
-        "并且", "同时", "以及", "然后", "并", " and ", " then ", " also ", " with ",
-    ]
-    .iter()
-    .any(|token| lowered.contains(token));
-    let has_delimiters = ['，', ',', '；', ';', '、', '\n']
-        .iter()
-        .any(|ch| compact.contains(*ch));
-    length <= 28 && !has_joiners && !has_delimiters
+    )]
 }
 
 pub(crate) fn normalize_requirement_summary(input: &str) -> String {

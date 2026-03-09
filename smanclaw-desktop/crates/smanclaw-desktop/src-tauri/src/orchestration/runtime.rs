@@ -3,7 +3,7 @@ use smanclaw_core::{
     SubTaskContextContract, SubTaskStatus, TaskDag, TaskGenerator, TaskManager,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
-use smanclaw_types::AppSettings;
+use smanclaw_types::{AppSettings, ProgressEvent};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use crate::commands::task_commands::subtask_file_stem;
 use crate::events::{
-    emit_orchestration_progress, emit_subtask_completed, emit_subtask_started,
+    emit_orchestration_progress, emit_progress_event, emit_subtask_completed, emit_subtask_started,
     emit_task_status_event, TaskEventStatus,
 };
 
@@ -81,6 +81,24 @@ pub(crate) fn spawn_orchestration_execution(
             .collect();
 
         for (group_index, group_tasks) in parallel_groups.iter().enumerate() {
+            let milestone_percent = if parallel_groups.is_empty() {
+                0.0
+            } else {
+                group_index as f32 / parallel_groups.len() as f32
+            };
+            if let Err(e) = emit_progress_event(
+                &app_handle,
+                &ProgressEvent::Progress {
+                    message: format!(
+                        "里程碑：开始执行第 {}/{} 批子任务",
+                        group_index + 1,
+                        parallel_groups.len()
+                    ),
+                    percent: milestone_percent,
+                },
+            ) {
+                tracing::error!("Failed to emit milestone progress event: {}", e);
+            }
             if let Err(e) = emit_task_status_event(
                 &app_handle,
                 &task_id,
@@ -135,31 +153,45 @@ pub(crate) fn spawn_orchestration_execution(
             for (task, task_md_path) in runnable_tasks {
                 let bridge_for_task = bridge.clone();
                 let project_path_for_task = project_path.clone();
+                let settings_for_task = settings.clone();
                 join_set.spawn(async move {
+                    let started_at = std::time::Instant::now();
                     let result = match SkillStore::new(&project_path_for_task) {
                         Ok(skill_store) => {
                             let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
-                            if let Some(bridge) = bridge_for_task {
-                                executor.set_step_executor(Arc::new(
-                                    ZeroclawStepExecutor::from_bridge(bridge),
-                                ));
+                            let isolated_bridge = ZeroclawBridge::from_project_with_settings(
+                                &project_path_for_task,
+                                &settings_for_task,
+                            )
+                            .ok()
+                            .map(Arc::new);
+                            if let Some(bridge) = isolated_bridge.or(bridge_for_task) {
+                                executor
+                                    .set_step_executor(Arc::new(ZeroclawStepExecutor::from_bridge(
+                                        bridge,
+                                    )));
                             }
                             executor.run().await.map_err(|e| e.to_string())
                         }
                         Err(e) => Err(e.to_string()),
                     };
-                    (task, task_md_path, result)
+                    (task, task_md_path, result, started_at.elapsed().as_millis())
                 });
             }
 
             while let Some(join_result) = join_set.join_next().await {
-                let (task, task_md_path, result) = match join_result {
+                let (task, task_md_path, result, duration_ms) = match join_result {
                     Ok(value) => value,
                     Err(e) => {
                         tracing::error!("Subtask execution join error: {}", e);
                         continue;
                     }
                 };
+                tracing::info!(
+                    task_id = %task.id,
+                    duration_ms = duration_ms,
+                    "Subtask execution finished"
+                );
                 let result = match result {
                     Ok(exec_result) => exec_result,
                     Err(e) => {

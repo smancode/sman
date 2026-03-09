@@ -1,4 +1,4 @@
-use smanclaw_core::{MainTaskManager, MainTaskStatus, Orchestrator, SubTaskRef};
+use smanclaw_core::{MainTaskManager, MainTaskStatus, Orchestrator, ProjectExplorer, SubTask, SubTaskRef};
 use smanclaw_types::TaskStatus;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -75,6 +75,11 @@ pub async fn execute_orchestrated_task(
         tracing::error!("Failed to emit decomposition status event: {}", e);
     }
 
+    let project_test_command = ProjectExplorer::new()
+        .explore(&project_path)
+        .ok()
+        .and_then(|knowledge| knowledge.build_config.test_cmd);
+    let decomposition_started_at = std::time::Instant::now();
     let subtasks = match orchestration_decompose::try_semantic_decompose_with_zeroclaw(
         &project_path,
         &settings,
@@ -85,6 +90,13 @@ pub async fn execute_orchestrated_task(
         Some(tasks) => tasks,
         None => orchestration_decompose::fallback_decompose_subtasks(&input),
     };
+    tracing::info!(
+        task_id = %task_id,
+        duration_ms = decomposition_started_at.elapsed().as_millis(),
+        subtask_count = subtasks.len(),
+        "Orchestration decomposition finished"
+    );
+    let subtasks = normalize_subtask_test_commands(subtasks, project_test_command.as_deref());
     let dag = Orchestrator::build_dag(subtasks.clone())?;
     let parallel_groups: Vec<Vec<String>> = dag
         .get_parallel_groups()
@@ -173,4 +185,41 @@ pub async fn execute_orchestrated_task(
         subtask_count: subtasks.len(),
         parallel_groups,
     })
+}
+
+fn normalize_subtask_test_commands(
+    subtasks: Vec<SubTask>,
+    project_test_command: Option<&str>,
+) -> Vec<SubTask> {
+    let normalized_project_test_command = project_test_command
+        .map(str::trim)
+        .filter(|cmd| !cmd.is_empty());
+    let project_uses_cargo = normalized_project_test_command
+        .map(|cmd| cmd.to_lowercase().contains("cargo test"))
+        .unwrap_or(false);
+
+    subtasks
+        .into_iter()
+        .map(|mut task| {
+            let current_cmd = task
+                .test_command
+                .as_deref()
+                .map(str::trim)
+                .filter(|cmd| !cmd.is_empty());
+            let should_replace_rust_hardcode = current_cmd
+                .map(|cmd| {
+                    let lower = cmd.to_lowercase();
+                    (lower == "cargo test" || lower.starts_with("cargo test ")) && !project_uses_cargo
+                })
+                .unwrap_or(false);
+            if should_replace_rust_hardcode {
+                task.test_command = normalized_project_test_command.map(ToString::to_string);
+                return task;
+            }
+            if current_cmd.is_none() {
+                task.test_command = normalized_project_test_command.map(ToString::to_string);
+            }
+            task
+        })
+        .collect()
 }

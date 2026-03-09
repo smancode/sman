@@ -24,8 +24,8 @@ pub use project_commands::{
 mod tests {
     use crate::commands::orchestration_decompose::{
         enforce_subtask_context_independence, extract_json_payload, fallback_decompose_subtasks,
-        is_simple_requirement, normalize_requirement_summary, normalize_semantic_subtasks,
-        parse_semantic_subtasks, sanitize_task_id, SemanticDecomposeResponse, SemanticSubTask,
+        normalize_requirement_summary, normalize_semantic_subtasks, parse_semantic_subtasks,
+        sanitize_task_id, SemanticDecomposeResponse, SemanticSubTask,
     };
     use crate::commands::task_commands::{
         build_remediation_subtasks, subtask_file_stem, subtask_relative_path,
@@ -124,34 +124,33 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].id, "task-context-serial");
         assert!(tasks[0].description.contains("单一子Claw上下文"));
-        assert_eq!(tasks[0].test_command.as_deref(), Some("cargo test"));
+        assert!(tasks[0].test_command.is_none());
     }
 
     #[test]
-    fn fallback_decompose_prefers_existing_rule_based_result() {
+    fn fallback_decompose_uses_single_context_for_non_llm_fallback() {
         let tasks = fallback_decompose_subtasks("Implement user login feature");
-        assert!(!tasks.is_empty());
-        assert!(tasks
-            .iter()
-            .any(|t| t.id.contains("login") || t.id == "task-context-serial"));
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "task-context-serial");
     }
 
     #[test]
-    fn fallback_decompose_keeps_single_task_for_simple_requirement() {
+    fn fallback_decompose_keeps_single_context_for_simple_requirement() {
         let tasks = fallback_decompose_subtasks("修复按钮颜色");
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, "task-0");
+        assert_eq!(tasks[0].id, "task-context-serial");
     }
 
     #[test]
-    fn context_independence_merges_cross_context_subtasks() {
+    fn context_independence_preserves_semantic_subtasks() {
         let subtasks = vec![
             SubTask::new("task-1", "完成数据模型设计"),
             SubTask::new("task-2", "基于 task-1 的上下文完成接口实现").depends_on("task-1"),
         ];
         let merged = enforce_subtask_context_independence(subtasks, "实现支付流程");
-        assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].id, "task-context-serial");
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].id, "task-1");
+        assert_eq!(merged[1].id, "task-2");
     }
 
     #[test]
@@ -164,12 +163,6 @@ mod tests {
         assert_eq!(kept.len(), 2);
         assert_eq!(kept[0].id, "task-ui");
         assert_eq!(kept[1].id, "task-api");
-    }
-
-    #[test]
-    fn simple_requirement_heuristic_distinguishes_complex_input() {
-        assert!(is_simple_requirement("修复按钮颜色"));
-        assert!(!is_simple_requirement("重构任务编排，并补齐回归验证"));
     }
 
     #[test]

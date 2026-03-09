@@ -4,7 +4,7 @@ use smanclaw_core::{
     VerificationMethod,
 };
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
-use smanclaw_types::TaskStatus;
+use smanclaw_types::{TaskResult, TaskStatus};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +19,8 @@ use crate::commands::task_commands::{
     build_remediation_subtasks, subtask_file_stem, subtask_relative_path,
 };
 use crate::events::{
-    emit_subtask_started, emit_task_status_event, emit_test_result, task_event_status_from_success,
+    emit_progress_event, emit_subtask_started, emit_task_status_event, emit_test_result,
+    task_event_status_from_success,
     TaskEventStatus,
 };
 
@@ -76,6 +77,18 @@ pub(crate) async fn finalize_orchestration(
             )),
         ) {
             tracing::error!("Failed to emit remediation status: {}", e);
+        }
+        if let Err(e) = emit_progress_event(
+            app_handle,
+            &smanclaw_types::ProgressEvent::Progress {
+                message: format!(
+                    "里程碑：进入第 {}/{} 轮自动补救",
+                    remediation_round, MAX_REMEDIATION_ROUNDS
+                ),
+                percent: 0.75,
+            },
+        ) {
+            tracing::error!("Failed to emit remediation milestone progress: {}", e);
         }
 
         for remediation_task in remediation_tasks {
@@ -305,10 +318,31 @@ pub(crate) async fn finalize_orchestration(
             total_tasks
         ))
     } else {
-        final_error
+        final_error.clone()
     };
     if let Err(e) = emit_task_status_event(app_handle, task_id, status, message) {
         tracing::error!("Failed to emit final task status event: {}", e);
+    }
+    if final_passed {
+        let result = TaskResult {
+            task_id: task_id.to_string(),
+            success: true,
+            output: final_output.unwrap_or_default(),
+            error: None,
+            files_changed: vec![],
+        };
+        if let Err(e) =
+            emit_progress_event(app_handle, &smanclaw_types::ProgressEvent::TaskCompleted { result })
+        {
+            tracing::error!("Failed to emit orchestration completion progress event: {}", e);
+        }
+    } else if let Some(error) = final_error.clone() {
+        if let Err(e) = emit_progress_event(
+            app_handle,
+            &smanclaw_types::ProgressEvent::TaskFailed { error },
+        ) {
+            tracing::error!("Failed to emit orchestration failure progress event: {}", e);
+        }
     }
 }
 

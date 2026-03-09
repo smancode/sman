@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, State};
 
 use crate::commands::chat_execution;
-use crate::commands::orchestration_decompose::{extract_json_payload, is_simple_requirement};
+use crate::commands::orchestration_decompose::extract_json_payload;
 use crate::commands::utility_commands::wrap_prompt_with_project_knowledge;
 use crate::commands::history_runtime::{open_project_history_store, resolve_conversation_project};
 use crate::error::{TauriError, TauriResult};
@@ -68,40 +68,12 @@ fn build_route_prompt(content: &str) -> String {
 }
 
 fn fallback_route_decision(content: &str) -> MessageRouteDecision {
-    let normalized = content.split_whitespace().collect::<Vec<_>>().join(" ");
-    let lowered = normalized.to_lowercase();
-    let has_multi_goal_signal = [
-        "并且",
-        "同时",
-        "以及",
-        "然后",
-        "逐个",
-        "调研并计划",
-        "端到端",
-        "重构",
-        "回归",
-        "orchestr",
-    ]
-    .iter()
-    .any(|token| lowered.contains(token));
-    let has_delimiters = ['，', ',', '；', ';', '、', '\n']
-        .iter()
-        .any(|ch| normalized.contains(*ch));
-    let complex = !is_simple_requirement(content) || has_multi_goal_signal || has_delimiters;
-    if complex {
-        MessageRouteDecision {
-            route: MessageRoute::Orchestrated,
-            reason: "需求包含多步骤或多目标，适合拆分编排执行".to_string(),
-            complexity: 0.78,
-            confidence: 0.62,
-        }
-    } else {
-        MessageRouteDecision {
-            route: MessageRoute::Direct,
-            reason: "需求单一且范围小，直接执行成本更低".to_string(),
-            complexity: 0.24,
-            confidence: 0.7,
-        }
+    let _ = content;
+    MessageRouteDecision {
+        route: MessageRoute::Direct,
+        reason: "LLM 路由不可用，使用 direct 保守兜底".to_string(),
+        complexity: 0.5,
+        confidence: 0.2,
     }
 }
 
@@ -352,9 +324,9 @@ mod tests {
     }
 
     #[test]
-    fn fallback_route_prefers_orchestrated_for_multi_goal_input() {
+    fn fallback_route_uses_direct_for_multi_goal_input() {
         let decision = fallback_route_decision("重构任务编排，并且补齐测试与回归");
-        assert!(matches!(decision.route, MessageRoute::Orchestrated));
+        assert!(matches!(decision.route, MessageRoute::Direct));
     }
 
     #[test]

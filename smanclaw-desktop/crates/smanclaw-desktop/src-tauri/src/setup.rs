@@ -3,6 +3,7 @@
 use tauri::Manager;
 use axum::{Router, routing::get, Json};
 use std::sync::Arc;
+use tracing_subscriber::fmt::time::FormatTime;
 
 use crate::commands::chat_execution;
 use crate::events::emit_chat_message;
@@ -71,11 +72,23 @@ fn setup_logging() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new(filter))
+        .with_timer(East8Timer)
         .with_file(true)
         .with_line_number(true)
         .init();
 
     Ok(())
+}
+
+struct East8Timer;
+
+impl FormatTime for East8Timer {
+    fn format_time(
+        &self,
+        w: &mut tracing_subscriber::fmt::format::Writer<'_>,
+    ) -> std::fmt::Result {
+        write!(w, "{}", chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f%:z"))
+    }
 }
 
 /// Create the Tauri app builder with all configurations

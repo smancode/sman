@@ -246,6 +246,10 @@ pub(crate) fn build_remediation_subtasks(
 ) -> Vec<SubTask> {
     let mut remediation_tasks = Vec::new();
     let mut seen_descriptions = HashSet::new();
+    let preferred_test_command = dag
+        .tasks_in_order()
+        .iter()
+        .find_map(|task| task.test_command.clone());
 
     for task in dag
         .tasks_in_order()
@@ -255,7 +259,11 @@ pub(crate) fn build_remediation_subtasks(
         let id = format!("remediate-r{}-{}", round, task.id);
         let description = format!("修复子任务 {} 的失败原因并补齐验证", task.id);
         if seen_descriptions.insert(description.clone()) {
-            remediation_tasks.push(SubTask::new(id, description).with_test_command("cargo test"));
+            let mut remediation_task = SubTask::new(id, description);
+            if let Some(cmd) = preferred_test_command.as_ref() {
+                remediation_task = remediation_task.with_test_command(cmd);
+            }
+            remediation_tasks.push(remediation_task);
         }
     }
 
@@ -264,20 +272,24 @@ pub(crate) fn build_remediation_subtasks(
             let id = format!("remediate-r{}-eval-{}", round, idx + 1);
             let description = format!("根据验收建议补救: {}", recommendation);
             if seen_descriptions.insert(description.clone()) {
-                remediation_tasks
-                    .push(SubTask::new(id, description).with_test_command("cargo test"));
+                let mut remediation_task = SubTask::new(id, description);
+                if let Some(cmd) = preferred_test_command.as_ref() {
+                    remediation_task = remediation_task.with_test_command(cmd);
+                }
+                remediation_tasks.push(remediation_task);
             }
         }
     }
 
     if remediation_tasks.is_empty() {
-        remediation_tasks.push(
-            SubTask::new(
-                format!("remediate-r{}-general", round),
-                "补充失败场景测试并修复未通过验收项",
-            )
-            .with_test_command("cargo test"),
+        let mut remediation_task = SubTask::new(
+            format!("remediate-r{}-general", round),
+            "补充失败场景测试并修复未通过验收项",
         );
+        if let Some(cmd) = preferred_test_command.as_ref() {
+            remediation_task = remediation_task.with_test_command(cmd);
+        }
+        remediation_tasks.push(remediation_task);
     }
 
     crate::commands::orchestration_decompose::enforce_subtask_context_independence(
