@@ -189,6 +189,9 @@ pub(crate) fn persist_path_from_task_experience(
             pattern_lines
         },
     );
+    if path_content_already_exists(&path_store, &experience.source_task, &content) {
+        return;
+    }
     let mut tags = vec![
         "path".to_string(),
         "auto-generated".to_string(),
@@ -216,6 +219,30 @@ pub(crate) fn persist_path_from_task_experience(
     if let Err(e) = path_store.create(&skill) {
         tracing::error!("Failed to persist path from task experience: {}", e);
     }
+}
+
+fn path_content_already_exists(path_store: &SkillStore, source_task: &str, content: &str) -> bool {
+    let metas = match path_store.list() {
+        Ok(items) => items,
+        Err(e) => {
+            tracing::warn!("Failed to list existing paths for deduplication: {}", e);
+            return false;
+        }
+    };
+    let expected = content.trim();
+    for meta in metas {
+        if meta.learned_from != source_task {
+            continue;
+        }
+        match path_store.get(&meta.id) {
+            Ok(Some(skill)) if skill.content.trim() == expected => return true,
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("Failed to load path skill for deduplication: {}", e);
+            }
+        }
+    }
+    false
 }
 
 pub(crate) fn sanitize_path_fragment(raw: &str) -> String {

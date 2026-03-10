@@ -6,6 +6,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 use crate::error::{CoreError, Result};
@@ -135,16 +136,53 @@ impl SkillStore {
         }
 
         let content = fs::read_to_string(&index_path)?;
-        let index: SkillIndex = serde_json::from_str(&content)?;
-        Ok(index)
+        match serde_json::from_str::<SkillIndex>(&content) {
+            Ok(index) => Ok(index),
+            Err(err) => {
+                self.quarantine_corrupted_index(&index_path, &content);
+                eprintln!("Skill index is corrupted and has been quarantined: {}", err);
+                Ok(SkillIndex::default())
+            }
+        }
     }
 
     /// Save the skill index to disk
     fn save_index(&self, index: &SkillIndex) -> Result<()> {
         let index_path = self.index_path();
         let content = serde_json::to_string_pretty(index)?;
-        fs::write(&index_path, content)?;
+        let tmp_path =
+            index_path.with_extension(format!("json.tmp-{}", Utc::now().timestamp_millis()));
+        let mut tmp_file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&tmp_path)?;
+        if let Err(err) = tmp_file.write_all(content.as_bytes()) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.into());
+        }
+        if let Err(err) = tmp_file.sync_all() {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.into());
+        }
+        drop(tmp_file);
+        if let Err(err) = fs::rename(&tmp_path, &index_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.into());
+        }
         Ok(())
+    }
+
+    fn quarantine_corrupted_index(&self, index_path: &std::path::Path, raw: &str) {
+        let backup_path = self.skills_dir.join(format!(
+            "index.corrupt-{}.json",
+            Utc::now().timestamp_millis()
+        ));
+        if fs::rename(index_path, &backup_path).is_ok() {
+            return;
+        }
+        if fs::write(&backup_path, raw).is_ok() {
+            let _ = fs::remove_file(index_path);
+        }
     }
 
     /// List all skills (metadata only)
@@ -610,5 +648,27 @@ mod tests {
         updated.content = "\n".to_string();
         let result = store.update(&updated);
         assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn skill_store_recovers_from_corrupted_index() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let store = SkillStore::new(temp_dir.path()).expect("create store");
+        fs::write(store.index_path(), "{broken json").expect("write corrupted index");
+
+        let skills = store.list().expect("list with corrupted index");
+        assert!(skills.is_empty());
+
+        let backups = fs::read_dir(temp_dir.path().join(".sman").join("skills"))
+            .expect("read skills dir")
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("index.corrupt-")
+            })
+            .count();
+        assert_eq!(backups, 1);
     }
 }

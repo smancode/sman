@@ -254,6 +254,28 @@ mod tests {
     }
 
     #[test]
+    fn persist_task_experience_skips_duplicate_path_skill() {
+        let root = std::env::temp_dir().join(format!(
+            "smanclaw-path-dedupe-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&root).expect("create temp root");
+
+        let mut experience = Experience::new("task-api-hardening");
+        experience.add_learned(LearnedItem::new("workflow", "发布前必须执行回归"));
+        experience.add_pattern("先 lint，再 test，最后部署");
+
+        persist_path_from_task_experience(&root, &experience);
+        persist_path_from_task_experience(&root, &experience);
+
+        let store = SkillStore::for_paths(&root).expect("path store");
+        let metas = store.list().expect("list path skills");
+        assert_eq!(metas.len(), 1);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn requirement_summary_is_trimmed_to_stable_length() {
         let long_input = "这是一个非常长的需求描述，需要在多模块中实现并保持可回滚、可观测、可测试，同时要求失败自动补救、再次验收和经验沉淀流程完整闭环".repeat(2);
         let summary = normalize_requirement_summary(&long_input);

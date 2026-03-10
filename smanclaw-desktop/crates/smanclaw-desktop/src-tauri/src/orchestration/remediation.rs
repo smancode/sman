@@ -61,6 +61,15 @@ fn summarize_subtasks(dag: &TaskDag) -> (Vec<String>, Vec<String>, Vec<String>) 
     (completed, failed, unfinished)
 }
 
+fn summarize_completed_deliverables(dag: &TaskDag, max_items: usize) -> Vec<String> {
+    dag.tasks_in_order()
+        .iter()
+        .filter(|task| task.status == SubTaskStatus::Completed)
+        .map(|task| truncate_text(&task.description, 40))
+        .take(max_items)
+        .collect()
+}
+
 fn summarize_acceptance_failures(
     evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
 ) -> (usize, usize, Vec<String>) {
@@ -157,6 +166,64 @@ fn format_failure_summary(
             truncate_text(&error.to_string(), 160)
         ));
     }
+    lines.join("\n")
+}
+
+fn format_success_summary(
+    dag: &TaskDag,
+    evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
+    remediation_round: usize,
+) -> String {
+    let total = dag.tasks_in_order().len();
+    let (completed, failed, unfinished) = summarize_subtasks(dag);
+    let (criteria_total, criteria_passed, failed_criteria) =
+        summarize_acceptance_failures(evaluation);
+    let deliverables = summarize_completed_deliverables(dag, 3);
+    let deliverables_text = if deliverables.is_empty() {
+        "未提取到明确交付项".to_string()
+    } else {
+        deliverables.join("；")
+    };
+    let mut lines = vec![
+        format!(
+            "任务完成：已完成 {}/{} 个子任务，失败 {} 个，未收敛 {} 个。已交付：{}。",
+            completed.len(),
+            total,
+            failed.len(),
+            unfinished.len(),
+            deliverables_text
+        ),
+        format!("自动补救执行轮次：{} 轮。", remediation_round),
+    ];
+    if criteria_total > 0 {
+        lines.push(format!(
+            "验收结果：通过 {}/{} 条，未通过 {} 条。",
+            criteria_passed,
+            criteria_total,
+            criteria_total.saturating_sub(criteria_passed)
+        ));
+    } else {
+        lines.push("验收结果：本次未返回可统计的验收条目。".to_string());
+    }
+    if !completed.is_empty() {
+        lines.push("已完成子任务：".to_string());
+        lines.extend(
+            completed
+                .into_iter()
+                .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    if !failed_criteria.is_empty() {
+        lines.push("验收未通过项（已由补救收敛）：".to_string());
+        lines.extend(
+            failed_criteria
+                .into_iter()
+                .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    lines.push("交付结论：主任务与验收均已通过，可以继续下一步操作。".to_string());
     lines.join("\n")
 }
 
@@ -389,10 +456,7 @@ pub(crate) async fn finalize_orchestration(
         TaskStatus::Failed
     };
     let final_output = if final_passed {
-        Some(format!(
-            "All {} subtasks completed and accepted",
-            total_tasks
-        ))
+        Some(format_success_summary(dag, &evaluation, remediation_round))
     } else {
         None
     };
@@ -437,10 +501,7 @@ pub(crate) async fn finalize_orchestration(
     }
     let status = task_event_status_from_success(final_passed);
     let message = if final_passed {
-        Some(format!(
-            "All {} subtasks completed and accepted",
-            total_tasks
-        ))
+        final_output.clone()
     } else {
         final_error.clone()
     };
@@ -449,7 +510,7 @@ pub(crate) async fn finalize_orchestration(
     }
     if let Some(conversation_id) = conversation_id.filter(|id| !id.trim().is_empty()) {
         let summary = if final_passed {
-            format!("任务完成：{}", final_output.clone().unwrap_or_default())
+            final_output.clone().unwrap_or_default()
         } else {
             final_error
                 .clone()
@@ -592,5 +653,42 @@ mod tests {
 
         assert!(summary.contains("验收器异常"));
         assert!(summary.contains("验收指令配置错误"));
+    }
+
+    #[test]
+    fn format_success_summary_contains_structured_sections() {
+        let mut task_a = smanclaw_core::SubTask::new("task-a", "更新还款方式核心逻辑");
+        task_a.status = smanclaw_core::SubTaskStatus::Completed;
+        let mut task_b = smanclaw_core::SubTask::new("task-b", "补充接口参数校验");
+        task_b.status = smanclaw_core::SubTaskStatus::Completed;
+        let dag = smanclaw_core::TaskDag::from_tasks(vec![task_a, task_b])
+            .expect("dag should be built");
+
+        let mut evaluation = smanclaw_core::EvaluationResult::new("main-1".to_string());
+        evaluation
+            .criteria_results
+            .push(smanclaw_core::CriteriaResult {
+                criteria_id: "subtask-task-a".to_string(),
+                status: smanclaw_core::CriteriaStatus::Passed,
+                evidence: "task-a.md contains - [x]".to_string(),
+                message: "通过".to_string(),
+            });
+        evaluation
+            .criteria_results
+            .push(smanclaw_core::CriteriaResult {
+                criteria_id: "subtask-task-b".to_string(),
+                status: smanclaw_core::CriteriaStatus::Passed,
+                evidence: "task-b.md contains - [x]".to_string(),
+                message: "通过".to_string(),
+            });
+
+        let summary = format_success_summary(&dag, &Ok(evaluation), 1);
+        assert!(summary.contains("任务完成：已完成 2/2 个子任务"));
+        assert!(summary.contains("已交付："));
+        assert!(summary.contains("更新还款方式核心逻辑"));
+        assert!(summary.contains("验收结果：通过 2/2 条"));
+        assert!(summary.contains("已完成子任务："));
+        assert!(summary.contains("task-a"));
+        assert!(summary.contains("交付结论：主任务与验收均已通过"));
     }
 }

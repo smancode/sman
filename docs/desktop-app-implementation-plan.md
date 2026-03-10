@@ -985,14 +985,14 @@ npm run tauri:dev
 | `USER.md` | 用户偏好、习惯 | ✅ 读取 | ❌ 不读取 |
 | `HEARTBEAT.md` | 心跳/周期性行为 | ✅ 读取 | ❌ 不读取 |
 | `BOOTSTRAP.md` | 启动引导 | ✅ 读取 | ❌ 不读取 |
-| `MEMORY.md` | 记忆/经验 | ✅ 读写 | ❌ 不读取 |
-| `.skills/` | 技能库 | ✅ 读写 | ✅ 可更新 |
+| `.sman/MEMORY.md` | 记忆/经验 | ✅ 读写 | ❌ 不读取 |
+| `.sman/skills` + `.sman/paths` | 技能与流程库 | ✅ 读写 | ✅ 可更新 |
 
 **子 Claw 的输入**：
 - 只接收 `task.md` 文件
 - task.md 包含：任务描述、上下文、验收标准、执行清单
 - 子 Claw 完成后更新 task.md 的执行清单状态 `[ ]` → `[x]`
-- 子 Claw 可以更新 `.skills/` 中的技能
+- 子 Claw 可以更新 `.sman/skills` 与 `.sman/paths` 中的内容
 
 ### 14.3 项目经验体系架构
 
@@ -1004,8 +1004,8 @@ npm run tauri:dev
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                      经验存储层 (Knowledge Store)                    │    │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │    │
-│  │  │ AGENTS.md    │  │ .skills/     │  │ user_wisdom/ │              │    │
-│  │  │ (项目结构)   │  │ (技能库)     │  │ (用户经验)   │              │    │
+│  │  │ AGENTS.md    │  │ .sman/       │  │ user_wisdom/ │              │    │
+│  │  │ (项目结构)   │  │ (skills/paths)│ │ (用户经验)   │              │    │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘              │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                    ▲                                         │
@@ -1071,11 +1071,11 @@ npm run tauri:dev
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ 阶段 0: 检查项目经验                                 │   │
 │  │                                                      │   │
-│  │   if (AGENTS.md 存在 && .skills/ 存在) {             │   │
+│  │   if (AGENTS.md 存在 && .sman/skills 存在) {         │   │
 │  │     → 加载现有经验，进入阶段 1                       │   │
 │  │   } else {                                           │   │
 │  │     → 触发项目探索，生成基础经验 (参考 opencode /init)│   │
-│  │     → 存储到 AGENTS.md 和 .skills/                   │   │
+│  │     → 存储到 AGENTS.md 和 .sman/skills               │   │
 │  │     → 然后进入阶段 1                                 │   │
 │  │   }                                                  │   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -1085,7 +1085,7 @@ npm run tauri:dev
 │  │ 阶段 1: 需求分析 (基于项目经验)                      │   │
 │  │                                                      │   │
 │  │   • 读取 AGENTS.md 了解项目结构                      │   │
-│  │   • 读取 .skills/ 了解已有能力                       │   │
+│  │   • 读取 .sman/skills 与 .sman/paths 了解已有能力    │   │
 │  │   • 分析需求影响范围                                 │   │
 │  │   • 定义验收标准 (测试用例、验收条件)                │   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -1198,19 +1198,16 @@ npm run tauri:dev
 
 ```
 project-root/
-├── .skills/
-│   ├── index.json              # Skill 索引
-│   ├── coding/
-│   │   ├── rust-style.md       # Rust 编码风格
-│   │   ├── error-handling.md   # 错误处理模式
-│   │   └── testing.md          # 测试规范
-│   ├── architecture/
-│   │   ├── module-structure.md # 模块结构
-│   │   └── dependencies.md     # 依赖管理
-│   └── domain/
-│       ├── user-module.md      # 用户模块领域知识
-│       └── auth-flow.md        # 认证流程
-└── AGENTS.md                   # 项目总览 (参考 opencode)
+├── .sman/
+│   ├── skills/
+│   │   ├── index.json              # 技能索引（原子写）
+│   │   ├── coding/rust-style.md
+│   │   └── architecture/module-structure.md
+│   ├── paths/
+│   │   ├── index.json              # 流程索引（原子写）
+│   │   └── auto/operation-task-api-hardening-*.md
+│   └── MEMORY.md                   # 对话经验汇总
+└── AGENTS.md                       # 项目总览 (参考 opencode)
 ```
 
 #### 14.6.2 Skill 索引格式
@@ -1219,21 +1216,21 @@ project-root/
 {
   "version": "1.0",
   "project_name": "smanclaw",
-  "last_updated": "2024-03-04T10:00:00Z",
+  "last_updated": 1709546400,
   "skills": [
     {
       "id": "rust-style",
       "path": "coding/rust-style.md",
       "tags": ["coding", "rust", "style"],
       "learned_from": "initial-exploration",
-      "updated_at": "2024-03-04T10:00:00Z"
+      "updated_at": 1709546400
     },
     {
       "id": "user-auth",
       "path": "domain/auth-flow.md",
       "tags": ["domain", "auth", "user"],
       "learned_from": "task-123",
-      "updated_at": "2024-03-04T12:30:00Z"
+      "updated_at": 1709555400
     }
   ]
 }
@@ -1336,9 +1333,9 @@ pub fn find_user(id: u64) -> Result<Option<User>> {
 │  │ 步骤 5: 初始化 Skill 库                              │   │
 │  │                                                      │   │
 │  │   创建基础 Skills:                                   │   │
-│  │   • .skills/coding/{lang}-style.md                   │   │
-│  │   • .skills/architecture/module-structure.md         │   │
-│  │   • .skills/index.json                               │   │
+│  │   • .sman/skills/coding/{lang}-style.md              │   │
+│  │   • .sman/skills/architecture/module-structure.md    │   │
+│  │   • .sman/skills/index.json                          │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -1374,7 +1371,7 @@ pub fn find_user(id: u64) -> Result<Option<User>> {
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ 3. 存储/更新 Skill                                   │   │
 │  │                                                      │   │
-│  │    创建/更新: .skills/coding/api-guidelines.md       │   │
+│  │    创建/更新: .sman/skills/coding/api-guidelines.md  │   │
 │  │    记录来源: user-input-2024-03-04                   │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                    │                                        │
