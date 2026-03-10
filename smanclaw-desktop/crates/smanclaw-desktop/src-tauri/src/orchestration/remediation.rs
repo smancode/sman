@@ -4,8 +4,8 @@ use smanclaw_core::{
     SubClawExecutor, SubTaskRef, SubTaskStatus, TaskDag, TaskGenerator, TaskManager,
     VerificationMethod,
 };
-use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
-use smanclaw_types::{HistoryEntry, Role, TaskResult, TaskStatus};
+use smanclaw_ffi::{build_step_executor, ZeroclawBridge};
+use smanclaw_types::{AppSettings, HistoryEntry, Role, TaskResult, TaskStatus};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -400,6 +400,7 @@ pub(crate) async fn finalize_orchestration(
     main_task_id: &str,
     main_task_manager: &MainTaskManager,
     dag: &mut TaskDag,
+    settings: &AppSettings,
     bridge: &Option<Arc<ZeroclawBridge>>,
     task_generator: Option<&TaskGenerator>,
     experience_sink: &Option<ExperienceSink>,
@@ -517,10 +518,10 @@ pub(crate) async fn finalize_orchestration(
                 }
             };
             let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
-            if let Some(current_bridge) = bridge {
-                executor.set_step_executor(Arc::new(ZeroclawStepExecutor::from_bridge(
-                    current_bridge.clone(),
-                )));
+            if let Ok(step_executor) =
+                build_step_executor(project_path, settings, bridge.as_ref().map(Arc::clone))
+            {
+                executor.set_step_executor(step_executor);
             }
             let result = executor.run().await;
 

@@ -2,6 +2,7 @@
 
 use tauri::Manager;
 use axum::{Router, routing::get, Json};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing_subscriber::fmt::time::FormatTime;
 
@@ -21,6 +22,7 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
     let state = AppState::new(config_dir)?;
     app.manage(state);
+    configure_packaged_claudecode_runtime();
 
     // 启动 HTTP 服务器
     let app_handle = app.handle().clone();
@@ -62,6 +64,47 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
     tracing::info!("SmanClaw Desktop initialized successfully");
 
     Ok(())
+}
+
+fn configure_packaged_claudecode_runtime() {
+    if std::env::var("SMANCLAW_CLAUDE_CODE_CMD")
+        .ok()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return;
+    }
+    if let Some(path) = discover_packaged_claudecode_binary() {
+        if let Some(path_str) = path.to_str() {
+            std::env::set_var("SMANCLAW_CLAUDE_CODE_CMD", path_str);
+            tracing::info!("Configured packaged ClaudeCode binary: {}", path.display());
+        }
+    }
+}
+
+fn discover_packaged_claudecode_binary() -> Option<PathBuf> {
+    let current_exe = std::env::current_exe().ok()?;
+    let exe_dir = current_exe.parent()?;
+    let mut candidates = vec![
+        exe_dir.join("claudecode"),
+        exe_dir.join("claudecode-cli"),
+        exe_dir.join("claude"),
+        exe_dir.join("../Resources/claudecode"),
+        exe_dir.join("../Resources/claudecode-cli"),
+        exe_dir.join("../Resources/claude"),
+    ];
+    if let Ok(bundle_path) = std::env::var("SMANCLAW_BUNDLED_CLAUDE_PATH") {
+        let custom = bundle_path.trim();
+        if !custom.is_empty() {
+            candidates.insert(0, PathBuf::from(custom));
+        }
+    }
+    for candidate in candidates {
+        if candidate.exists() {
+            return std::fs::canonicalize(candidate).ok();
+        }
+    }
+    None
 }
 
 /// Setup logging infrastructure
@@ -216,5 +259,24 @@ async fn send_http_message(
                 "error": format!("Failed to execute message: {}", e)
             }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discover_packaged_binary_respects_custom_env_path() {
+        let binary_path = std::env::temp_dir().join(format!("claudecode-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&binary_path, "placeholder").expect("write placeholder");
+        std::env::set_var(
+            "SMANCLAW_BUNDLED_CLAUDE_PATH",
+            binary_path.to_string_lossy().to_string(),
+        );
+        let discovered = discover_packaged_claudecode_binary();
+        std::env::remove_var("SMANCLAW_BUNDLED_CLAUDE_PATH");
+        let _ = std::fs::remove_file(&binary_path);
+        assert!(discovered.is_some());
     }
 }

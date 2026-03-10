@@ -2,7 +2,7 @@ use smanclaw_core::{
     DependencyInput, ExperienceSink, MainTaskManager, MainTaskStatus, SkillStore, SubClawExecutor,
     SubTaskContextContract, SubTaskStatus, TaskDag, TaskGenerator, TaskManager,
 };
-use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
+use smanclaw_ffi::{build_step_executor, ZeroclawBridge};
 use smanclaw_types::{AppSettings, ProgressEvent};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -161,17 +161,19 @@ pub(crate) fn spawn_orchestration_execution(
                     let result = match SkillStore::new(&project_path_for_task) {
                         Ok(skill_store) => {
                             let mut executor = SubClawExecutor::new(&task_md_path, skill_store);
-                            let isolated_bridge = ZeroclawBridge::from_project_with_settings(
+                            let isolated_bridge =
+                                ZeroclawBridge::from_project_with_settings(
+                                    &project_path_for_task,
+                                    &settings_for_task,
+                                )
+                                .ok()
+                                .map(Arc::new);
+                            if let Ok(step_executor) = build_step_executor(
                                 &project_path_for_task,
                                 &settings_for_task,
-                            )
-                            .ok()
-                            .map(Arc::new);
-                            if let Some(bridge) = isolated_bridge.or(bridge_for_task) {
-                                executor
-                                    .set_step_executor(Arc::new(ZeroclawStepExecutor::from_bridge(
-                                        bridge,
-                                    )));
+                                isolated_bridge.or(bridge_for_task),
+                            ) {
+                                executor.set_step_executor(step_executor);
                             }
                             executor.run().await.map_err(|e| e.to_string())
                         }
@@ -279,6 +281,7 @@ pub(crate) fn spawn_orchestration_execution(
             &main_task_id,
             &main_task_manager,
             &mut dag,
+            &settings,
             &bridge,
             task_generator.as_ref(),
             &experience_sink,
