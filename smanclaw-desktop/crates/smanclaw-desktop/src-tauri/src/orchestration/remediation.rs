@@ -7,6 +7,7 @@ use smanclaw_core::{
 use smanclaw_ffi::{ZeroclawBridge, ZeroclawStepExecutor};
 use smanclaw_types::{HistoryEntry, Role, TaskResult, TaskStatus};
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tauri::AppHandle;
@@ -61,6 +62,146 @@ fn summarize_subtasks(dag: &TaskDag) -> (Vec<String>, Vec<String>, Vec<String>) 
     (completed, failed, unfinished)
 }
 
+#[derive(Clone, Copy)]
+enum ExecutionPhase {
+    Analysis,
+    Design,
+    Development,
+    Testing,
+}
+
+#[derive(Default, Clone, Copy)]
+struct PhaseProgress {
+    completed: usize,
+    total: usize,
+}
+
+fn parse_checklist_items(markdown: &str) -> Vec<(bool, String)> {
+    markdown
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if let Some(content) = trimmed.strip_prefix("- [x]") {
+                return Some((true, content.trim().to_string()));
+            }
+            if let Some(content) = trimmed.strip_prefix("- [X]") {
+                return Some((true, content.trim().to_string()));
+            }
+            if let Some(content) = trimmed.strip_prefix("- [ ]") {
+                return Some((false, content.trim().to_string()));
+            }
+            None
+        })
+        .collect()
+}
+
+fn detect_phase(item: &str) -> ExecutionPhase {
+    let text = item.to_lowercase();
+    let contains_any = |keywords: &[&str]| keywords.iter().any(|keyword| text.contains(keyword));
+    if contains_any(&["实现", "开发", "编码", "改动", "重构", "green", "refactor"]) {
+        return ExecutionPhase::Development;
+    }
+    if contains_any(&[
+        "测试",
+        "验证",
+        "验收",
+        "回归",
+        "red",
+        "命令",
+        "check",
+        "lint",
+        "typecheck",
+    ]) {
+        return ExecutionPhase::Testing;
+    }
+    if contains_any(&["设计", "方案", "架构", "建模", "接口"]) {
+        return ExecutionPhase::Design;
+    }
+    if contains_any(&["分析", "需求", "上下文", "调研", "梳理"]) {
+        return ExecutionPhase::Analysis;
+    }
+    ExecutionPhase::Development
+}
+
+fn summarize_execution_for_subtask(
+    task_id: &str,
+    checklist_items: &[(bool, String)],
+    max_pending_items: usize,
+) -> String {
+    let mut analysis = PhaseProgress::default();
+    let mut design = PhaseProgress::default();
+    let mut development = PhaseProgress::default();
+    let mut testing = PhaseProgress::default();
+    let mut pending_items = Vec::new();
+    for (done, item) in checklist_items {
+        let phase_progress = match detect_phase(item) {
+            ExecutionPhase::Analysis => &mut analysis,
+            ExecutionPhase::Design => &mut design,
+            ExecutionPhase::Development => &mut development,
+            ExecutionPhase::Testing => &mut testing,
+        };
+        phase_progress.total += 1;
+        if *done {
+            phase_progress.completed += 1;
+        } else if pending_items.len() < max_pending_items {
+            pending_items.push(truncate_text(item, 50));
+        }
+    }
+    let total = checklist_items.len();
+    let completed = checklist_items.iter().filter(|(done, _)| *done).count();
+    let phase_text = |name: &str, progress: PhaseProgress| -> String {
+        if progress.total == 0 {
+            format!("{name} 未覆盖")
+        } else {
+            format!("{name} {}/{}", progress.completed, progress.total)
+        }
+    };
+    let mut summary = format!(
+        "{}：{}；{}；{}；{}；清单 {}/{}",
+        task_id,
+        phase_text("分析", analysis),
+        phase_text("设计", design),
+        phase_text("开发", development),
+        phase_text("测试", testing),
+        completed,
+        total
+    );
+    if !pending_items.is_empty() {
+        summary.push_str("；未完成：");
+        summary.push_str(&pending_items.join("；"));
+    }
+    summary
+}
+
+fn build_subtask_execution_summaries(
+    dag: &TaskDag,
+    project_path: &Path,
+    subtask_file_stems: &HashMap<String, String>,
+) -> Vec<String> {
+    dag.tasks_in_order()
+        .iter()
+        .map(|task| {
+            let file_stem = subtask_file_stems
+                .get(&task.id)
+                .map(std::string::String::as_str)
+                .unwrap_or(task.id.as_str());
+            let relative_path = subtask_relative_path(file_stem);
+            let absolute_path = project_path.join(&relative_path);
+            match fs::read_to_string(&absolute_path) {
+                Ok(markdown) => {
+                    let checklist = parse_checklist_items(&markdown);
+                    if checklist.is_empty() {
+                        format!("{}：未解析到执行清单项（{}）", task.id, relative_path)
+                    } else {
+                        summarize_execution_for_subtask(&task.id, &checklist, 2)
+                    }
+                }
+                Err(_) => format!("{}：未找到 task.md（{}）", task.id, relative_path),
+            }
+        })
+        .collect()
+}
+
 fn summarize_completed_deliverables(dag: &TaskDag, max_items: usize) -> Vec<String> {
     dag.tasks_in_order()
         .iter()
@@ -103,6 +244,7 @@ fn format_failure_summary(
     dag: &TaskDag,
     evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
     remediation_round: usize,
+    execution_summaries: &[String],
 ) -> String {
     let total = dag.tasks_in_order().len();
     let (completed, failed, unfinished) = summarize_subtasks(dag);
@@ -160,6 +302,15 @@ fn format_failure_summary(
                 .map(|item| format!("- {}", item)),
         );
     }
+    if !execution_summaries.is_empty() {
+        lines.push("子任务步骤进度（分析/设计/开发/测试）：".to_string());
+        lines.extend(
+            execution_summaries
+                .iter()
+                .take(8)
+                .map(|item| format!("- {}", item)),
+        );
+    }
     if let Err(error) = evaluation {
         lines.push(format!(
             "验收器异常：{}",
@@ -173,6 +324,7 @@ fn format_success_summary(
     dag: &TaskDag,
     evaluation: &Result<smanclaw_core::EvaluationResult, smanclaw_core::CoreError>,
     remediation_round: usize,
+    execution_summaries: &[String],
 ) -> String {
     let total = dag.tasks_in_order().len();
     let (completed, failed, unfinished) = summarize_subtasks(dag);
@@ -220,6 +372,15 @@ fn format_success_summary(
             failed_criteria
                 .into_iter()
                 .take(6)
+                .map(|item| format!("- {}", item)),
+        );
+    }
+    if !execution_summaries.is_empty() {
+        lines.push("子任务步骤进度（分析/设计/开发/测试）：".to_string());
+        lines.extend(
+            execution_summaries
+                .iter()
+                .take(8)
                 .map(|item| format!("- {}", item)),
         );
     }
@@ -455,15 +616,26 @@ pub(crate) async fn finalize_orchestration(
     } else {
         TaskStatus::Failed
     };
+    let execution_summaries = build_subtask_execution_summaries(dag, project_path, subtask_file_stems);
     let final_output = if final_passed {
-        Some(format_success_summary(dag, &evaluation, remediation_round))
+        Some(format_success_summary(
+            dag,
+            &evaluation,
+            remediation_round,
+            &execution_summaries,
+        ))
     } else {
         None
     };
     let final_error = if final_passed {
         None
     } else {
-        Some(format_failure_summary(dag, &evaluation, remediation_round))
+        Some(format_failure_summary(
+            dag,
+            &evaluation,
+            remediation_round,
+            &execution_summaries,
+        ))
     };
     if let Err(e) = task_manager.lock().await.update_task_result(
         task_id,
@@ -628,7 +800,7 @@ mod tests {
                 message: "仍有未勾选项".to_string(),
             });
 
-        let summary = format_failure_summary(&dag, &Ok(evaluation), 2);
+        let summary = format_failure_summary(&dag, &Ok(evaluation), 2, &[]);
 
         assert!(summary.contains("已完成 1/3 个子任务"));
         assert!(summary.contains("失败子任务："));
@@ -649,7 +821,7 @@ mod tests {
                 "验收指令配置错误".to_string(),
             ));
 
-        let summary = format_failure_summary(&dag, &evaluation_error, 1);
+        let summary = format_failure_summary(&dag, &evaluation_error, 1, &[]);
 
         assert!(summary.contains("验收器异常"));
         assert!(summary.contains("验收指令配置错误"));
@@ -682,7 +854,7 @@ mod tests {
                 message: "通过".to_string(),
             });
 
-        let summary = format_success_summary(&dag, &Ok(evaluation), 1);
+        let summary = format_success_summary(&dag, &Ok(evaluation), 1, &[]);
         assert!(summary.contains("任务完成：已完成 2/2 个子任务"));
         assert!(summary.contains("已交付："));
         assert!(summary.contains("更新还款方式核心逻辑"));
@@ -690,5 +862,24 @@ mod tests {
         assert!(summary.contains("已完成子任务："));
         assert!(summary.contains("task-a"));
         assert!(summary.contains("交付结论：主任务与验收均已通过"));
+    }
+
+    #[test]
+    fn summarize_execution_for_subtask_outputs_phase_breakdown() {
+        let checklist = vec![
+            (true, "需求分析并明确边界".to_string()),
+            (false, "完成方案设计".to_string()),
+            (true, "以最小改动实现功能直至测试通过（Green）".to_string()),
+            (true, "运行测试并确认失败符合预期（Red）".to_string()),
+            (false, "运行验证命令并记录结果".to_string()),
+        ];
+        let summary = summarize_execution_for_subtask("task-demo", &checklist, 2);
+
+        assert!(summary.contains("分析 1/1"));
+        assert!(summary.contains("设计 0/1"));
+        assert!(summary.contains("开发 1/1"));
+        assert!(summary.contains("测试 1/2"));
+        assert!(summary.contains("清单 3/5"));
+        assert!(summary.contains("未完成"));
     }
 }

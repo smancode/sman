@@ -75,76 +75,56 @@
         checkForSkillTrigger();
     }
 
+    function resolveProjectId(): string {
+        const store = get(projectsStore);
+        if (store.selectedProjectId) {
+            return store.selectedProjectId;
+        }
+        if (store.projects.length > 0) {
+            return store.projects[0].id;
+        }
+        return "";
+    }
+
     function checkForSkillTrigger() {
         const value = inputValue;
-
-        // Check if input starts with / or \
         if (value.startsWith("/") || value.startsWith("\\")) {
-            // Extract query after the trigger character
             skillQuery = value.slice(1);
-
-            // If we don't have skills yet, load them
-            if (skills.length === 0) {
-                loadSkills();
+            const projectId = resolveProjectId();
+            const shouldReload =
+                skills.length === 0 || projectId !== currentProjectId;
+            if (shouldReload) {
+                void loadSkills(projectId);
             }
-
             showSkillPicker = true;
         } else {
-            // Close picker if user deletes the trigger character
-            if (showSkillPicker && value.length === 0) {
+            if (showSkillPicker) {
                 closeSkillPicker();
             }
         }
     }
 
-    async function loadSkills() {
+    async function loadSkills(projectId: string) {
+        if (!projectId) {
+            skills = [];
+            currentProjectId = "";
+            return;
+        }
         try {
-            // Get projects from store
-            const store = get(projectsStore);
-            console.log("[SkillPicker] Store state:", store);
-
-            // Try selected project first
-            let projectId = store.selectedProjectId;
-
-            // If no selected project, use first available project
-            if (!projectId && store.projects.length > 0) {
-                projectId = store.projects[0].id;
-                console.log(
-                    "[SkillPicker] No selected project, using first:",
-                    projectId,
-                );
-            }
-
-            // If still no project, use hardcoded test project path for debugging
-            if (!projectId) {
-                console.log("[SkillPicker] Using hardcoded test project");
-                // Directly check skills from filesystem via API
-                // For now, we'll return empty and let user add project
-            }
-
-            if (projectId) {
-                console.log(
-                    "[SkillPicker] Loading skills for project ID:",
-                    projectId,
-                );
-                const response = await projectApi.getSkills(projectId);
-                console.log("[SkillPicker] API response:", response);
-                if (response.success && response.data) {
-                    skills = response.data;
-                    console.log("[SkillPicker] Skills loaded:", skills.length);
-                }
+            const response = await projectApi.getSkills(projectId);
+            if (response.success && response.data) {
+                skills = response.data;
+                currentProjectId = projectId;
             } else {
-                console.log(
-                    "[SkillPicker] No projects available - please add project D:\work\aipro\H5",
-                );
+                skills = [];
             }
         } catch (e) {
+            skills = [];
             console.error("Failed to load skills:", e);
         }
     }
 
     function handleSkillSelect(skill: SkillMeta) {
-        // Replace the trigger with the skill path
         inputValue = `/${skill.path} `;
         closeSkillPicker();
         textareaRef?.focus();

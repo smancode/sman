@@ -1,7 +1,9 @@
 use chrono::Utc;
-use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_core::skill_store::find_claude_skill_run_script;
+use smanclaw_ffi::ZeroclawBridge;
 use smanclaw_types::{HistoryEntry, ProgressEvent, Role};
+use std::path::Path;
+use std::process::{Command, Output};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
@@ -15,6 +17,46 @@ use super::{
 };
 
 const CHAT_EXECUTION_HEARTBEAT_SECS: u64 = 300;
+
+fn execute_skill_script(
+    skill_script: &Path,
+    project_path: &Path,
+    skill_args: &[&str],
+) -> std::io::Result<Output> {
+    let extension = skill_script
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let run = |program: &str, needs_unbuffered: bool| -> std::io::Result<Output> {
+        let mut cmd = Command::new(program);
+        if needs_unbuffered {
+            cmd.arg("-u");
+        }
+        cmd.arg(skill_script);
+        for arg in skill_args {
+            cmd.arg(arg);
+        }
+        cmd.current_dir(project_path);
+        cmd.output()
+    };
+    if extension == "py" {
+        match run("python3", true) {
+            Ok(output) => Ok(output),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => run("python", true),
+            Err(error) => Err(error),
+        }
+    } else if extension == "sh" {
+        run("bash", false)
+    } else {
+        let mut cmd = Command::new(skill_script);
+        for arg in skill_args {
+            cmd.arg(arg);
+        }
+        cmd.current_dir(project_path);
+        cmd.output()
+    }
+}
 
 pub async fn send_message(
     app_handle: AppHandle,
@@ -48,43 +90,21 @@ pub async fn send_message(
     };
     history_store.save_entry(&user_entry)?;
 
-    // Check if this is a skill command (starts with /)
     let content_trimmed = content.trim();
     if content_trimmed.starts_with('/') {
-        // Extract skill name (e.g., /war fetch -> war)
         let skill_input = content_trimmed.trim_start_matches('/');
         let skill_name = skill_input.split_whitespace().next().unwrap_or(&skill_input);
-
-        // Try to find and execute the skill
-        if let Some(skill_script) = smanclaw_core::skill_store::find_claude_skill_run_script(&project_path, skill_name) {
+        if let Some(skill_script) = find_claude_skill_run_script(&project_path, skill_name) {
             tracing::info!("Executing skill: {} with script: {:?}", skill_name, skill_script);
-
-            // Emit progress event: skill started
             let start_event = ProgressEvent::Progress {
                 message: format!("正在启动技能: {}", skill_name),
                 percent: 0.0,
             };
             let _ = emit_progress_event(&app_handle, &start_event);
-
-            // Parse skill arguments (e.g., /war fetch -> args: ["fetch"])
             let skill_args: Vec<&str> = skill_input.split_whitespace().skip(1).collect();
-
-            // Build command with arguments - add verbose mode for detailed output
-            let mut cmd = std::process::Command::new("python");
-            cmd.arg("-u");  // Unbuffered output
-            cmd.arg(skill_script);
-            for arg in &skill_args {
-                cmd.arg(arg);
-            }
-            // cmd.arg("--verbose");  // Disabled: run.py doesn't support this
-            cmd.current_dir(&project_path);
-
-            // Capture both stdout and stderr
-            let output = cmd.output();
-
+            let output = execute_skill_script(&skill_script, &project_path, &skill_args);
             let skill_result = match output {
                 Ok(out) => {
-                    // Combine stdout and stderr for full output
                     let mut full_output = String::new();
                     if !out.stderr.is_empty() {
                         full_output.push_str(&String::from_utf8_lossy(&out.stderr));
@@ -95,12 +115,9 @@ pub async fn send_message(
                         }
                         full_output.push_str(&String::from_utf8_lossy(&out.stdout));
                     }
-
-                    // Emit progress events for each line of output
                     let mut line_count = 0;
                     let total_lines = full_output.lines().count();
                     for line in full_output.lines() {
-                        // Emit all non-empty lines as progress events
                         let trimmed = line.trim();
                         if !trimmed.is_empty() {
                             line_count += 1;
@@ -128,15 +145,11 @@ pub async fn send_message(
                 }
                 Err(e) => format!("Failed to execute skill: {}", e),
             };
-
-            // Emit completion event
             let complete_event = ProgressEvent::Progress {
                 message: "技能执行完成".to_string(),
                 percent: 1.0,
             };
             let _ = emit_progress_event(&app_handle, &complete_event);
-
-            // Save assistant response
             let assistant_entry = HistoryEntry {
                 id: uuid::Uuid::new_v4().to_string(),
                 conversation_id: conversation_id.clone(),
@@ -145,9 +158,22 @@ pub async fn send_message(
                 timestamp: Utc::now(),
             };
             history_store.save_entry(&assistant_entry)?;
-
-            return Ok(assistant_entry);
+            return Ok(user_entry.clone());
         }
+        let assistant_entry = HistoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.clone(),
+            role: Role::Assistant,
+            content: format!("未找到技能：{}", skill_name),
+            timestamp: Utc::now(),
+        };
+        history_store.save_entry(&assistant_entry)?;
+        let complete_event = ProgressEvent::Progress {
+            message: "技能执行结束".to_string(),
+            percent: 1.0,
+        };
+        let _ = emit_progress_event(&app_handle, &complete_event);
+        return Ok(user_entry.clone());
     }
 
     let settings = state.settings_store.lock().await.load()?;

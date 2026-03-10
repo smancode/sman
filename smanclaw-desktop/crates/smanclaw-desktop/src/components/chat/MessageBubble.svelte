@@ -166,7 +166,8 @@
 
     .message.user .avatar {
         color: var(--text-primary);
-        background-color: var(--accent);
+        background-color: var(--surface-elevated);
+        border: 1px solid var(--line-strong);
     }
 
     .message.assistant .avatar {
@@ -213,9 +214,18 @@
     }
 
     .message.user .body {
-        background-color: var(--accent);
-        color: white;
-        border-bottom-right-radius: 4px;
+        background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-elevated) 96%, transparent),
+            color-mix(in srgb, var(--surface) 94%, transparent)
+        );
+        color: var(--text-primary);
+        border: 1px solid var(--line-strong);
+        border-bottom-right-radius: 12px;
+        border-top-right-radius: 18px;
+        border-top-left-radius: 18px;
+        border-bottom-left-radius: 18px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
     .message.assistant .body {
