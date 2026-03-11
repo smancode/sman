@@ -256,3 +256,9 @@ export type WSClientState =
   | "connecting"
   | "connected"
   | "reconnecting";
+
+/** 连接选项 */
+export interface ConnectOptions {
+  token?: string;
+  password?: string;
+}

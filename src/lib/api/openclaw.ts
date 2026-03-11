@@ -38,16 +38,8 @@ export async function initializeOpenClaw(): Promise<void> {
   _apiInstance = null;
 
   try {
-    // Get token from sidecar
-    console.log("[OpenClaw] Getting auth token...");
-    const tokenResponse = await openclawApi.getToken();
-    if (!tokenResponse.success || !tokenResponse.data) {
-      throw new Error("Failed to get OpenClaw auth token");
-    }
-    const token = tokenResponse.data;
-    console.log("[OpenClaw] Got token:", token.substring(0, 8) + "...");
-
     // Connect WebSocket - assumes sidecar is already running
+    // Device authentication is handled automatically by client-ws.ts
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
 
@@ -63,8 +55,8 @@ export async function initializeOpenClaw(): Promise<void> {
     });
 
     connectionState.set("connecting");
-    // Connect with token
-    await api.connect({ token });
+    // Connect with device authentication (no token needed - uses challenge-response)
+    await api.connect();
     // Only set instance after successful connection
     _apiInstance = api;
     connectionState.set("connected");

@@ -10,11 +10,8 @@ import { getOpenClawWSClient, OpenClawWSClient } from "./client-ws";
 import type {
   ChatEventPayload,
   ChatHistoryMessage,
-  HealthResult,
   EventHandler,
-  ConnectResult,
-  ChatSendResult,
-  ChatHistoryResult,
+  ConnectOptions,
 } from "./types";
 
 export class OpenClawAPI {
@@ -30,25 +27,9 @@ export class OpenClawAPI {
     });
   }
 
-  /** Connect to Gateway and authenticate */
-  async connect(options?: { token?: string; password?: string }): Promise<void> {
-    await this.client.connect();
-
-    // First request must be "connect" with required protocol params
-    const params: Record<string, unknown> = {
-      minProtocol: 3,
-      maxProtocol: 3,
-      client: {
-        id: "gateway-client",
-        version: "1.0.0",
-        platform: "desktop",
-        mode: "ui",
-      },
-    };
-    if (options?.token) params.token = options.token;
-    if (options?.password) params.password = options.password;
-
-    await this.client.request<ConnectResult>("connect", params);
+  /** Connect to Gateway with optional auth token */
+  async connect(options?: ConnectOptions): Promise<void> {
+    await this.client.connect(options);
     this.connected = true;
   }
 
@@ -64,7 +45,7 @@ export class OpenClawAPI {
     options?: {
       thinking?: string;
       timeoutMs?: number;
-    },
+    }
   ): Promise<{ runId: string }> {
     const params: Record<string, unknown> = {
       sessionKey,
@@ -75,8 +56,8 @@ export class OpenClawAPI {
     if (options?.thinking) params.thinking = options.thinking;
     if (options?.timeoutMs) params.timeoutMs = options.timeoutMs;
 
-    const result = await this.client.request<ChatSendResult>("chat.send", params);
-    return { runId: result.runId };
+    const result = await this.client.request<{ runId: string }>("chat.send", params);
+    return result;
   }
 
   /** Subscribe to chat events */
@@ -86,8 +67,10 @@ export class OpenClawAPI {
 
   /** Get chat history */
   async getHistory(sessionKey: string, limit = 100): Promise<ChatHistoryMessage[]> {
-    const params: Record<string, unknown> = { sessionKey, limit };
-    const result = await this.client.request<ChatHistoryResult>("chat.history", params);
+    const result = await this.client.request<{ messages?: ChatHistoryMessage[] }>(
+      "chat.history",
+      { sessionKey, limit }
+    );
     return result.messages || [];
   }
 
@@ -99,7 +82,7 @@ export class OpenClawAPI {
   /** Health check */
   async healthCheck(): Promise<boolean> {
     try {
-      const result = await this.client.request<HealthResult>("health");
+      const result = await this.client.request<{ status: string }>("health");
       return result.status === "ok";
     } catch {
       return false;

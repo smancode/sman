@@ -239,7 +239,7 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             "--port".to_string(),
             OPENCLAW_PORT.to_string(),
             "--auth".to_string(),
-            "token".to_string(),  // Use token auth
+            "none".to_string(),  // No auth for local development
             "--dev".to_string(),  // Use dev mode for auto config
         ])
         .env("HOME", isolated_home.to_string_lossy().to_string())  // Critical: isolate HOME

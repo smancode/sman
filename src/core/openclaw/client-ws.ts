@@ -3,22 +3,31 @@
  * OpenClaw WebSocket Gateway Client
  *
  * Manages WebSocket connection to OpenClaw Gateway with:
+ * - Challenge-response device authentication
  * - Automatic request-response matching
  * - Event subscription
  * - Exponential backoff reconnection
- * - Heartbeat health check
+ *
+ * Based on OpenClaw UI's GatewayBrowserClient
  */
 
 import type {
-  GatewayRequest,
-  GatewayResponse,
-  GatewayEvent,
-  GatewayMessage,
   PendingRequest,
   EventHandler,
   WSClientConfig,
   WSClientState,
+  GatewayResponse,
+  GatewayEvent,
+  ConnectOptions,
 } from "./types";
+import {
+  loadOrCreateDeviceIdentity,
+  buildDeviceAuthPayload,
+  signDevicePayload,
+  loadDeviceAuthToken,
+  storeDeviceAuthToken,
+  clearDeviceAuthToken,
+} from "./device-auth";
 
 const DEFAULT_CONFIG: WSClientConfig = {
   url: "ws://127.0.0.1:18790",
@@ -36,6 +45,34 @@ const DEFAULT_CONFIG: WSClientConfig = {
   },
 };
 
+// Gateway client constants
+const GATEWAY_CLIENT_NAMES = {
+  GATEWAY_CLIENT: "gateway-client",
+  CONTROL_UI: "openclaw-control-ui",
+  WEBCHAT: "webchat",
+} as const;
+
+const GATEWAY_CLIENT_MODES = {
+  UI: "ui",
+  WEBCHAT: "webchat",
+  CLI: "cli",
+  NODE: "node",
+} as const;
+
+export type HelloOk = {
+  type: "hello-ok";
+  protocol: number;
+  server?: {
+    version?: string;
+    connId?: string;
+  };
+  auth?: {
+    deviceToken?: string;
+    role?: string;
+    scopes?: string[];
+  };
+};
+
 export class OpenClawWSClient {
   private ws: WebSocket | null = null;
   private config: WSClientConfig;
@@ -45,56 +82,53 @@ export class OpenClawWSClient {
   private reconnectAttempts = 0;
   private requestId = 0;
 
+  // Connection state
+  private connectNonce: string | null = null;
+  private connectSent = false;
+  private connectResolve?: () => void;
+  private connectReject?: (err: Error) => void;
+
   // Health check
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-  private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
-  private lastHeartbeatTime = 0;
 
   // Reconnect
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldAutoReconnect = true;
 
-  // State change callbacks
+  // State change callback
   private onStateChange?: (state: WSClientState) => void;
 
   constructor(config: Partial<WSClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  /** Get current connection state */
   get state(): WSClientState {
     return this._state;
   }
 
-  /** Set state change callback */
   setStateChangeCallback(callback: (state: WSClientState) => void): void {
     this.onStateChange = callback;
   }
 
-  /** Update state and notify */
   private setState(state: WSClientState): void {
     this._state = state;
     this.onStateChange?.(state);
   }
 
-  /** Check if connected */
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  /** Get current WebSocket URL */
   getUrl(): string {
     return this.config.url;
   }
 
-  /** Calculate reconnect delay with exponential backoff */
   private getReconnectDelay(): number {
     const { baseDelayMs, maxDelayMs, backoffFactor } = this.config.reconnect;
     const delay = baseDelayMs * Math.pow(backoffFactor, this.reconnectAttempts);
     return Math.min(delay, maxDelayMs);
   }
 
-  /** Reset reconnect state after successful connection */
   private resetReconnectState(): void {
     this.reconnectAttempts = 0;
     if (this.reconnectTimer) {
@@ -103,85 +137,18 @@ export class OpenClawWSClient {
     }
   }
 
-  /** Start heartbeat health check */
-  private startHealthCheck(): void {
-    if (!this.config.healthCheck.enabled || !this.ws) return;
-
-    this.stopHealthCheck();
-    this.lastHeartbeatTime = Date.now();
-
-    // Start heartbeat interval
-    this.heartbeatInterval = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.sendHeartbeat();
-      }
-    }, this.config.healthCheck.heartbeatIntervalMs);
-  }
-
-  /** Send heartbeat and start timeout */
-  private sendHeartbeat(): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    this.lastHeartbeatTime = Date.now();
-
-    // Send heartbeat frame (OpenClaw uses ping/pong or custom heartbeat)
-    // For browser WebSocket, we use a simple approach
-    try {
-      this.ws.send(JSON.stringify({ type: "heartbeat", timestamp: Date.now() }));
-    } catch (err) {
-      console.error("[OpenClawWS] Failed to send heartbeat:", err);
-    }
-
-    // Start heartbeat timeout
-    this.startHeartbeatTimeout();
-  }
-
-  /** Start heartbeat timeout */
-  private startHeartbeatTimeout(): void {
-    if (this.heartbeatTimeout) {
-      clearTimeout(this.heartbeatTimeout);
-    }
-    this.heartbeatTimeout = setTimeout(() => {
-      const elapsed = Date.now() - this.lastHeartbeatTime;
-      if (elapsed > this.config.healthCheck.heartbeatTimeoutMs) {
-        console.warn("[OpenClawWS] Heartbeat timeout, triggering reconnect");
-        this.triggerReconnect("heartbeat_timeout");
-      }
-    }, this.config.healthCheck.heartbeatTimeoutMs);
-  }
-
-  /** Stop health check */
-  private stopHealthCheck(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-    if (this.heartbeatTimeout) {
-      clearTimeout(this.heartbeatTimeout);
-      this.heartbeatTimeout = null;
-    }
-  }
-
-  /** Trigger reconnection */
-  private triggerReconnect(reason: string): void {
-    console.log(`[OpenClawWS] Triggering reconnect: ${reason}`);
-    this.stopHealthCheck();
-
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-
-    this.handleDisconnect();
-  }
-
-  /** Connect to Gateway */
-  async connect(): Promise<void> {
+  /** Connect to Gateway with optional auth token */
+  async connect(options?: ConnectOptions): Promise<void> {
     if (this.isConnected()) {
       return;
     }
 
     return new Promise((resolve, reject) => {
+      this.connectResolve = resolve;
+      this.connectReject = reject;
+      this.connectSent = false;
+      this.connectNonce = null;
+
       this.setState("connecting");
 
       try {
@@ -193,44 +160,27 @@ export class OpenClawWSClient {
       }
 
       this.ws.onopen = () => {
-        this.setState("connected");
-        this.resetReconnectState();
-        this.startHealthCheck();
-        resolve();
+        // Wait for connect.challenge event
+        console.log("[OpenClawWS] WebSocket opened, waiting for challenge...");
       };
 
       this.ws.onerror = (err) => {
         console.error("[OpenClawWS] WebSocket error:", err);
-        // Don't reject immediately - let onclose handle reconnection logic
-        // This prevents double-handling of connection failures
       };
 
       this.ws.onclose = () => {
-        this.stopHealthCheck();
-
-        // If we were connecting/reconnecting, reject the promise first
-        if (this._state === "connecting" || this._state === "reconnecting") {
-          reject(new Error("WebSocket connection failed"));
-        }
-
         this.handleDisconnect();
       };
 
       this.ws.onmessage = (event) => {
-        // Reset heartbeat timeout on any message
-        this.lastHeartbeatTime = Date.now();
-        if (this.heartbeatTimeout) {
-          clearTimeout(this.heartbeatTimeout);
-          this.heartbeatTimeout = null;
-        }
-        this.handleMessage(event.data);
+        this.handleMessage(event.data, options);
       };
     });
   }
 
   /** Handle incoming message */
-  private handleMessage(data: string): void {
-    let message: GatewayMessage;
+  private handleMessage(data: string, options?: ConnectOptions): void {
+    let message: { type?: string; [key: string]: unknown };
     try {
       message = JSON.parse(data);
     } catch {
@@ -238,50 +188,237 @@ export class OpenClawWSClient {
       return;
     }
 
-    // Ignore heartbeat responses
-    const msg = message as unknown as Record<string, unknown>;
-    if (msg && msg.type === "heartbeat") {
+    if (message.type === "event") {
+      const evt = message as unknown as GatewayEvent;
+      if (evt.event === "connect.challenge") {
+        // Extract nonce from challenge
+        const payload = evt.payload as { nonce?: string } | undefined;
+        const nonce = payload?.nonce;
+        if (nonce) {
+          this.connectNonce = nonce;
+          console.log("[OpenClawWS] Received challenge with nonce:", nonce.substring(0, 8));
+          void this.sendConnect(options);
+        }
+        return;
+      }
+
+      // Dispatch other events to listeners
+      const listeners = this.eventListeners.get(evt.event);
+      if (listeners) {
+        for (const handler of listeners) {
+          try {
+            handler(evt.payload);
+          } catch (err) {
+            console.error(`[OpenClawWS] Event handler error for ${evt.event}:`, err);
+          }
+        }
+      }
       return;
     }
 
     if (message.type === "res") {
-      this.handleResponse(message as GatewayResponse);
-    } else if (message.type === "event") {
-      this.handleEvent(message as GatewayEvent);
-    }
-  }
+      const res = message as unknown as GatewayResponse;
+      const pending = this.pendingRequests.get(res.id);
+      if (!pending) {
+        return;
+      }
 
-  /** Handle response message */
-  private handleResponse(response: GatewayResponse): void {
-    const pending = this.pendingRequests.get(response.id);
-    if (!pending) {
+      clearTimeout(pending.timeout);
+      this.pendingRequests.delete(res.id);
+
+      if (res.ok) {
+        pending.resolve(res.payload);
+      } else {
+        const error = res.error
+          ? new Error(`${res.error.code}: ${res.error.message}`)
+          : new Error("Unknown error");
+        pending.reject(error);
+      }
       return;
     }
 
-    clearTimeout(pending.timeout);
-    this.pendingRequests.delete(response.id);
+    if (message.type === "hello-ok") {
+      console.log("[OpenClawWS] Connected successfully!");
+      this.setState("connected");
+      this.resetReconnectState();
+      this.startHealthCheck();
 
-    if (response.ok) {
-      pending.resolve(response.payload);
-    } else {
-      const error = response.error
-        ? new Error(`${response.error.code}: ${response.error.message}`)
-        : new Error("Unknown error");
-      pending.reject(error);
+      // Store device token if provided
+      const hello = message as HelloOk;
+      // TODO: store device token if needed
+
+      this.connectResolve?.();
+      this.connectResolve = undefined;
+      this.connectReject = undefined;
     }
   }
 
-  /** Handle event message */
-  private handleEvent(event: GatewayEvent): void {
-    const listeners = this.eventListeners.get(event.event);
-    if (listeners) {
-      for (const handler of listeners) {
-        try {
-          handler(event.payload);
-        } catch (err) {
-          console.error(`[OpenClawWS] Event handler error for ${event.event}:`, err);
+  /** Send connect request after receiving challenge */
+  private async sendConnect(options?: ConnectOptions): Promise<void> {
+    if (this.connectSent) return;
+    this.connectSent = true;
+
+    const isSecureContext = typeof crypto !== "undefined" && !!crypto.subtle;
+    const role = "operator";
+    const scopes = ["operator.admin", "operator.approvals", "operator.pairing"];
+
+    let device: {
+      id: string;
+      publicKey: string;
+      signature: string;
+      signedAt: number;
+      nonce: string;
+    } | undefined;
+
+    let authToken = options?.token;
+
+    if (isSecureContext) {
+      try {
+        const deviceIdentity = await loadOrCreateDeviceIdentity();
+
+        // Check for stored device token
+        const storedToken = loadDeviceAuthToken({
+          deviceId: deviceIdentity.deviceId,
+          role,
+        });
+
+        // Use stored token if no explicit token provided
+        if (!authToken && storedToken) {
+          authToken = storedToken.token;
         }
+
+        // Build and sign the device auth payload
+        const signedAtMs = Date.now();
+        const nonce = this.connectNonce ?? "";
+        const payload = buildDeviceAuthPayload({
+          deviceId: deviceIdentity.deviceId,
+          clientId: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+          clientMode: GATEWAY_CLIENT_MODES.UI,
+          role,
+          scopes,
+          signedAtMs,
+          token: authToken ?? null,
+          nonce,
+        });
+
+        const signature = await signDevicePayload(deviceIdentity.privateKey, payload);
+
+        device = {
+          id: deviceIdentity.deviceId,
+          publicKey: deviceIdentity.publicKey,
+          signature,
+          signedAt: signedAtMs,
+          nonce,
+        };
+
+        console.log("[OpenClawWS] Device signed:", deviceIdentity.deviceId);
+      } catch (err) {
+        console.error("[OpenClawWS] Device auth failed:", err);
+        // Fall through without device identity
       }
+    } else {
+      console.warn("[OpenClawWS] Not secure context, skipping device identity");
+    }
+
+    // Build connect params
+    const params: Record<string, unknown> = {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+        version: "1.0.0",
+        platform: "desktop",
+        mode: GATEWAY_CLIENT_MODES.UI,
+      },
+      role,
+      scopes,
+    };
+
+    if (device) {
+      params.device = device;
+    }
+
+    if (authToken || options?.password) {
+      params.auth = {
+        token: authToken,
+        password: options?.password,
+      };
+    }
+
+    console.log("[OpenClawWS] Sending connect request...");
+
+    try {
+      await this.request<HelloOk>("connect", params);
+      // Success handled in handleMessage via hello-ok
+    } catch (err) {
+      console.error("[OpenClawWS] Connect failed:", err);
+      this.connectReject?.(err instanceof Error ? err : new Error("Connect failed"));
+      this.ws?.close();
+    }
+  }
+
+  /** Send RPC request */
+  async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+    if (!this.isConnected()) {
+      throw new Error("Not connected to OpenClaw Gateway");
+    }
+
+    const id = `${++this.requestId}`;
+
+    return new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`Request timeout: ${method}`));
+      }, this.config.requestTimeoutMs);
+
+      this.pendingRequests.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const frame = { type: "req", id, method, params };
+      this.ws!.send(JSON.stringify(frame));
+    });
+  }
+
+  /** Subscribe to event */
+  on<T = unknown>(event: string, handler: EventHandler<T>): () => void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(handler as EventHandler);
+
+    return () => {
+      this.off(event, handler);
+    };
+  }
+
+  /** Unsubscribe from event */
+  off<T = unknown>(event: string, handler: EventHandler<T>): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.delete(handler as EventHandler);
+    }
+  }
+
+  /** Start heartbeat health check */
+  private startHealthCheck(): void {
+    if (!this.config.healthCheck.enabled || !this.ws) return;
+
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        // OpenClaw Gateway doesn't require explicit heartbeat
+        // Connection state is managed by the protocol
+      }
+    }, this.config.healthCheck.heartbeatIntervalMs);
+  }
+
+  /** Stop health check */
+  private stopHealthCheck(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
     }
   }
 
@@ -297,11 +434,18 @@ export class OpenClawWSClient {
     // Clear health check
     this.stopHealthCheck();
 
+    // Reject connect promise if pending
+    if (this.connectReject) {
+      this.connectReject(new Error("Connection closed"));
+      this.connectResolve = undefined;
+      this.connectReject = undefined;
+    }
+
     // Check if we should auto-reconnect
     const { maxAttempts } = this.config.reconnect;
     if (!this.shouldAutoReconnect || this.reconnectAttempts >= maxAttempts) {
       console.log(
-        `[OpenClawWS] Stopping reconnect (attempts: ${this.reconnectAttempts}/${maxAttempts})`,
+        `[OpenClawWS] Stopping reconnect (attempts: ${this.reconnectAttempts}/${maxAttempts})`
       );
       this.setState("disconnected");
       return;
@@ -311,7 +455,7 @@ export class OpenClawWSClient {
     this.reconnectAttempts++;
     const delay = this.getReconnectDelay();
     console.log(
-      `[OpenClawWS] Scheduling reconnect ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`,
+      `[OpenClawWS] Scheduling reconnect ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`
     );
 
     this.setState("reconnecting");
@@ -319,63 +463,8 @@ export class OpenClawWSClient {
       this.reconnectTimer = null;
       this.connect().catch((err) => {
         console.error("[OpenClawWS] Reconnect failed:", err);
-        // handleDisconnect will be called again by onclose
       });
     }, delay);
-  }
-
-  /** Send RPC request */
-  async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
-    if (!this.isConnected()) {
-      throw new Error("Not connected to OpenClaw Gateway");
-    }
-
-    const id = `${++this.requestId}`;
-    const request: GatewayRequest = {
-      type: "req",
-      id,
-      method,
-      params,
-    };
-
-    return new Promise<T>((resolve, reject) => {
-      // Set up timeout
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(id);
-        reject(new Error(`Request timeout: ${method}`));
-      }, this.config.requestTimeoutMs);
-
-      // Store pending request
-      this.pendingRequests.set(id, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      // Send request
-      this.ws!.send(JSON.stringify(request));
-    });
-  }
-
-  /** Subscribe to event */
-  on<T = unknown>(event: string, handler: EventHandler<T>): () => void {
-    if (!this.eventListeners.has(event)) {
-      this.eventListeners.set(event, new Set());
-    }
-    this.eventListeners.get(event)!.add(handler as EventHandler);
-
-    // Return unsubscribe function
-    return () => {
-      this.off(event, handler);
-    };
-  }
-
-  /** Unsubscribe from event */
-  off<T = unknown>(event: string, handler: EventHandler<T>): void {
-    const listeners = this.eventListeners.get(event);
-    if (listeners) {
-      listeners.delete(handler as EventHandler);
-    }
   }
 
   /** Disconnect from Gateway */
