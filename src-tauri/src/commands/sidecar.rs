@@ -270,6 +270,11 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
 
 #[tauri::command]
 pub async fn stop_openclaw_server() -> Result<String, String> {
+    stop_openclaw_server_sync()
+}
+
+/// Sync version for use in window close handler
+pub fn stop_openclaw_server_sync() -> Result<String, String> {
     if !SERVER_RUNNING.load(Ordering::SeqCst) {
         return Ok("OpenClaw server not running".to_string());
     }
@@ -278,11 +283,14 @@ pub async fn stop_openclaw_server() -> Result<String, String> {
     {
         let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
         if let Some(child) = child_lock.take() {
-            child.kill().map_err(|e| format!("Failed to kill OpenClaw: {}", e))?;
+            if let Err(e) = child.kill() {
+                eprintln!("[Sidecar] Failed to kill OpenClaw: {}", e);
+            }
         }
     }
 
     SERVER_RUNNING.store(false, Ordering::SeqCst);
+    println!("[Sidecar] OpenClaw server stopped");
     Ok("OpenClaw server stopped".to_string())
 }
 

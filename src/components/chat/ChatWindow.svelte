@@ -7,7 +7,7 @@
     activeOrchestrationProgress,
     activeParallelGroups,
   } from "../../lib/stores/tasks";
-  import { conversationApi } from "../../lib/api/tauri";
+  import { conversationApi, appSettingsApi, openclawApi } from "../../lib/api/tauri";
   import {
     initializeOpenClaw,
     connectionError,
@@ -36,6 +36,9 @@
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
   let messagesContainer: HTMLDivElement = $state()!;
+  let llmConfigured = $state(false);
+  let isInitializing = $state(true);
+  let initError = $state<string | null>(null);
 
   // Derived
   let messages = $derived<Message[]>(
@@ -80,6 +83,18 @@
       globalThis.crypto?.randomUUID?.() ??
       `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
     );
+  }
+
+  function getInputPlaceholder(): string {
+    if (isInitializing) return "正在初始化 AI 服务...";
+    if (initError) return initError;
+    if (!$selectedProject) return "请先添加项目";
+    if (!llmConfigured) return "请先在设置中配置 LLM API Key";
+    return "输入 / 使用命令";
+  }
+
+  function isInputDisabled(): boolean {
+    return isSending || !$selectedProject || !$isConnected || !llmConfigured || isInitializing;
   }
 
   function updateLatestThinkingMessage(projectId: string, content: string) {
@@ -171,6 +186,28 @@
     let unsubscribeOpenClaw: (() => void) | null = null;
 
     void (async () => {
+      // Step 1: Check if LLM is configured
+      const configResponse = await appSettingsApi.isLlmConfigured();
+      if (!configResponse.success || !configResponse.data) {
+        console.log("[Chat] LLM not configured");
+        llmConfigured = false;
+        initError = "请先在设置中配置 LLM API Key";
+        return;
+      }
+
+      llmConfigured = true;
+
+      // Step 2: Start OpenClaw sidecar
+      const startResponse = await openclawApi.start();
+      if (!startResponse.success) {
+        console.error("[Chat] Failed to start OpenClaw:", startResponse.error);
+        initError = startResponse.error || "启动 AI 服务失败";
+        return;
+      }
+
+      console.log("[Chat] OpenClaw sidecar started:", startResponse.data);
+
+      // Step 3: Connect WebSocket
       try {
         await initializeOpenClaw();
         console.log("[Chat] OpenClaw WebSocket connected");
@@ -198,6 +235,9 @@
       } catch (err) {
         console.error("[Chat] Failed to initialize OpenClaw:", err);
         connectionError.set(err instanceof Error ? err.message : "Connection failed");
+        initError = err instanceof Error ? err.message : "连接 AI 服务失败";
+      } finally {
+        isInitializing = false;
       }
     })();
 
@@ -324,12 +364,8 @@
   </div>
 
   <InputArea
-    disabled={isSending || !$selectedProject || !$isConnected}
-    placeholder={$selectedProject
-      ? $isConnected
-        ? "输入 / 使用命令"
-        : "正在连接 AI 服务..."
-      : "请先添加项目"}
+    disabled={isInputDisabled()}
+    placeholder={getInputPlaceholder()}
     onSubmit={handleSubmit}
   />
 </div>
