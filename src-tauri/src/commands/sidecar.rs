@@ -51,6 +51,135 @@ fn get_openclaw_path() -> PathBuf {
     PathBuf::from("/Users/nasakim/projects/openclaw/openclaw.mjs")
 }
 
+/// Configure OpenClaw with LLM settings from SMAN settings
+fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<(), String> {
+    let settings = crate::commands::settings::get_app_settings().unwrap_or_default();
+
+    // Read existing openclaw.json or create new config
+    let config_path = openclaw_dir.join("openclaw.json");
+    let mut config: serde_json::Value = if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read openclaw.json: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    // Configure auth profile for the LLM provider
+    let api_url = settings.llm.apiUrl.clone();
+    let api_key = settings.llm.apiKey.clone();
+    let model = settings.llm.defaultModel.clone();
+
+    if api_key.is_empty() {
+        return Err("LLM API Key not configured. Please configure in Settings.".to_string());
+    }
+
+    // Determine provider from API URL
+    let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
+        "zhipu"
+    } else if api_url.contains("openai") {
+        "openai"
+    } else if api_url.contains("anthropic") {
+        "anthropic"
+    } else {
+        "custom"
+    };
+
+    // Build auth profile
+    let profile_key = format!("{}:default", provider_id);
+
+    // Ensure auth.profiles exists
+    if config.get("auth").is_none() {
+        config["auth"] = serde_json::json!({});
+    }
+    if config["auth"].get("profiles").is_none() {
+        config["auth"]["profiles"] = serde_json::json!({});
+    }
+
+    config["auth"]["profiles"][&profile_key] = serde_json::json!({
+        "provider": provider_id,
+        "mode": "api_key"
+    });
+
+    // Configure models
+    if config.get("models").is_none() {
+        config["models"] = serde_json::json!({
+            "mode": "merge",
+            "providers": {}
+        });
+    }
+    if config["models"].get("providers").is_none() {
+        config["models"]["providers"] = serde_json::json!({});
+    }
+
+    // Add provider config
+    config["models"]["providers"][provider_id] = serde_json::json!({
+        "baseUrl": api_url,
+        "api": "anthropic-messages",
+        "models": [{
+            "id": model,
+            "name": model,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 8192
+        }]
+    });
+
+    // Configure agent defaults to use this model
+    if config.get("agents").is_none() {
+        config["agents"] = serde_json::json!({});
+    }
+    if config["agents"].get("defaults").is_none() {
+        config["agents"]["defaults"] = serde_json::json!({});
+    }
+
+    let model_ref = format!("{}/{}", provider_id, model);
+    config["agents"]["defaults"]["model"] = serde_json::json!({
+        "primary": model_ref
+    });
+
+    // Write config
+    let content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(&config_path, content)
+        .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
+
+    Ok(())
+}
+
+/// Get LLM environment variables for OpenClaw sidecar
+fn get_llm_env_vars() -> Vec<(String, String)> {
+    let settings = crate::commands::settings::get_app_settings().unwrap_or_default();
+    let mut vars = Vec::new();
+
+    let api_url = settings.llm.apiUrl.clone();
+    let api_key = settings.llm.apiKey.clone();
+
+    if !api_key.is_empty() {
+        // Determine provider from API URL
+        let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
+            "zhipu"
+        } else if api_url.contains("openai") {
+            "openai"
+        } else if api_url.contains("anthropic") {
+            "anthropic"
+        } else {
+            "custom"
+        };
+
+        // Set API key env var: <PROVIDER>_API_KEY
+        let env_key = format!("{}_API_KEY", provider_id.to_uppercase());
+        vars.push((env_key, api_key));
+
+        // Also set OPENCLAW_LLM_API_URL for custom providers
+        if provider_id == "custom" {
+            vars.push(("OPENCLAW_LLM_API_URL".to_string(), api_url));
+        }
+    }
+
+    vars
+}
+
 #[tauri::command]
 pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, String> {
     if SERVER_RUNNING.load(Ordering::SeqCst) {
@@ -64,6 +193,9 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     // Ensure directories exist
     std::fs::create_dir_all(&openclaw_dir)
         .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
+
+    // Configure OpenClaw with LLM settings
+    configure_openclaw_llm(&openclaw_dir)?;
 
     // Get OpenClaw path
     let openclaw_path = get_openclaw_path();
@@ -92,6 +224,12 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     // Get WebSearch API keys from settings and add to environment
     let web_search_vars = crate::commands::settings::get_web_search_env_vars();
     for (key, value) in web_search_vars {
+        command = command.env(&key, value);
+    }
+
+    // Get LLM API key and add to environment
+    let llm_vars = get_llm_env_vars();
+    for (key, value) in llm_vars {
         command = command.env(&key, value);
     }
 
