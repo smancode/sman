@@ -8,7 +8,6 @@
 
 import { writable, derived } from "svelte/store";
 import { getOpenClawAPI, OpenClawAPI } from "../../core/openclaw/api";
-import { openclawApi } from "./tauri";
 import type { WSClientState, ChatEventPayload } from "../../core/openclaw/types";
 
 // Connection state store
@@ -26,31 +25,14 @@ export const isConnected = derived(
   ($state) => $state === "connected",
 );
 
-/** Initialize OpenClaw connection */
+/** Initialize OpenClaw WebSocket connection (does NOT start sidecar) */
 export async function initializeOpenClaw(): Promise<void> {
   if (_apiInstance) {
     return; // Already initialized
   }
 
   try {
-    // Step 1: Start OpenClaw sidecar via Tauri
-    console.log("[OpenClaw] Starting sidecar...");
-    const startResult = await openclawApi.start();
-    console.log("[OpenClaw] Sidecar start result:", startResult);
-
-    if (!startResult.success) {
-      const errMsg = `Failed to start OpenClaw sidecar: ${startResult.error}`;
-      console.error("[OpenClaw]", errMsg);
-      connectionError.set(errMsg);
-      connectionState.set("disconnected");
-      return; // Don't throw, just return
-    }
-    console.log("[OpenClaw] Sidecar started:", startResult.data);
-
-    // Wait a moment for the sidecar to be ready
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Step 2: Connect WebSocket
+    // Connect WebSocket - assumes sidecar is already running
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
     _apiInstance = api;
