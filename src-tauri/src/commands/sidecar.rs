@@ -130,10 +130,19 @@ fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<bool, String> {
         config["models"]["providers"] = serde_json::json!({});
     }
 
+    // Determine API type based on provider
+    let api_type = if provider_id == "zhipu" {
+        "openai-chat"  // Zhipu uses OpenAI-compatible /chat/completions endpoint
+    } else if provider_id == "openai" {
+        "openai-chat"
+    } else {
+        "anthropic-messages"  // Anthropic and custom use native format
+    };
+
     // Add provider config
     config["models"]["providers"][provider_id] = serde_json::json!({
         "baseUrl": api_url,
-        "api": "anthropic-messages",
+        "api": api_type,
         "models": [{
             "id": model,
             "name": model,

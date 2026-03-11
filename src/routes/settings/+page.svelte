@@ -4,7 +4,7 @@
   import type { AppSettings, ConnectionTestResult } from "$lib/types";
 
   // Default LLM settings
-  const DEFAULT_LLM_URL = "https://open.bigmodel.cn/api/paas/v4";
+  const DEFAULT_LLM_URL = "https://open.bigmodel.cn/api/coding/paas/v4";
   const DEFAULT_MODEL = "GLM-5";
 
   let settings: AppSettings = $state({
