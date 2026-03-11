@@ -1,20 +1,27 @@
-import type { HistoryEntryRecord } from "../types";
+/**
+ * Assistant content utilities for sanitizing and extracting displayable content
+ */
 
+/**
+ * Strip tool call blocks from content
+ */
 export function stripToolCallBlocks(content: string): string {
   return content
     .replace(/<tool_calls?>[\s\S]*?<\/tool_calls?>/gi, "")
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/```[\s\S]*?<\/tool_call>/gi, "")
     .replace(/<\/?tool_calls?\b[^>]*>/gi, "")
     .trim();
 }
 
-export function extractDisplayableAssistantContent(
-  content: string,
-): string | null {
+/**
+ * Extract displayable content from assistant message
+ */
+export function extractDisplayableAssistantContent(content: string): string | null {
   const trimmed = content.trim();
   const maybeJson =
     (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
     (trimmed.startsWith("[") && trimmed.endsWith("]"));
+
   if (maybeJson) {
     try {
       const parsed = JSON.parse(trimmed) as {
@@ -23,37 +30,36 @@ export function extractDisplayableAssistantContent(
         message?: unknown;
         tool_calls?: unknown;
       };
+
       const parsedContent =
         typeof parsed.content === "string" ? parsed.content.trim() : "";
-      if (parsedContent.length > 0) {
-        return parsedContent;
-      }
+      if (parsedContent.length > 0) return parsedContent;
+
       const reasoningContent =
         typeof parsed.reasoning_content === "string"
           ? parsed.reasoning_content.trim()
           : "";
-      if (reasoningContent.length > 0) {
-        return reasoningContent;
-      }
+      if (reasoningContent.length > 0) return reasoningContent;
+
       const messageContent =
         typeof parsed.message === "string" ? parsed.message.trim() : "";
-      if (messageContent.length > 0) {
-        return messageContent;
-      }
-      if (Array.isArray(parsed.tool_calls)) {
-        return null;
-      }
+      if (messageContent.length > 0) return messageContent;
+
+      if (Array.isArray(parsed.tool_calls)) return null;
       return null;
-    } catch {}
+    } catch {
+      // Not valid JSON, continue
+    }
   }
 
   const withoutToolCallBlocks = stripToolCallBlocks(content);
-  if (withoutToolCallBlocks.length > 0) {
-    return withoutToolCallBlocks;
-  }
+  if (withoutToolCallBlocks.length > 0) return withoutToolCallBlocks;
   return null;
 }
 
+/**
+ * Sanitize assistant content for display
+ */
 export function sanitizeAssistantContent(content: string): string {
   const extracted = extractDisplayableAssistantContent(content);
   if (extracted === null) {
@@ -65,70 +71,13 @@ export function sanitizeAssistantContent(content: string): string {
   return extracted;
 }
 
-export function hasDisplayableAssistantEntry(
-  entry: HistoryEntryRecord,
-  normalizeRole: (role: HistoryEntryRecord["role"]) => string,
-): boolean {
-  const extracted = extractDisplayableAssistantContent(entry.content);
-  return (
-    normalizeRole(entry.role) === "assistant" &&
-    extracted !== null &&
-    !isLikelyInterimAssistantText(extracted)
-  );
-}
-
-export function latestDisplayableAssistantEntry(
-  entries: HistoryEntryRecord[],
-  normalizeRole: (role: HistoryEntryRecord["role"]) => string,
-): HistoryEntryRecord | null {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (hasDisplayableAssistantEntry(entry, normalizeRole)) {
-      return entry;
-    }
-  }
-  return null;
-}
-
-export function shouldFinalizeAssistantReply(params: {
-  latestAssistantTimestampMs: number;
-  completionSignalAtMs: number | null;
-  stableAssistantPollCount: number;
-  elapsedMs: number;
-}): boolean {
-  const {
-    latestAssistantTimestampMs,
-    completionSignalAtMs,
-    stableAssistantPollCount,
-    elapsedMs,
-  } = params;
-  if (completionSignalAtMs !== null) {
-    return latestAssistantTimestampMs >= completionSignalAtMs - 1500;
-  }
-  return stableAssistantPollCount >= 3 && elapsedMs >= 8000;
-}
-
-export function shouldStopWaitingAfterCompletion(params: {
-  completionSignalAtMs: number | null;
-  pollsWithoutAssistantAfterCompletion: number;
-  elapsedMs: number;
-}): boolean {
-  const {
-    completionSignalAtMs,
-    pollsWithoutAssistantAfterCompletion,
-    elapsedMs,
-  } = params;
-  if (completionSignalAtMs === null) {
-    return false;
-  }
-  return pollsWithoutAssistantAfterCompletion >= 6 && elapsedMs >= 15000;
-}
-
+/**
+ * Check if content is likely interim text (not final answer)
+ */
 function isLikelyInterimAssistantText(content: string): boolean {
   const normalized = content.trim().toLowerCase();
-  if (normalized.length === 0) {
-    return true;
-  }
+  if (normalized.length === 0) return true;
+
   const compact = normalized.replace(/\s+/g, " ");
   const startsWithInterimPrefix = [
     "让我",
@@ -139,6 +88,7 @@ function isLikelyInterimAssistantText(content: string): boolean {
     "i will",
     "i'll",
   ].some((prefix) => normalized.startsWith(prefix));
+
   const hasInterimVerb = [
     "查看",
     "检查",
@@ -151,11 +101,13 @@ function isLikelyInterimAssistantText(content: string): boolean {
     "analyze",
     "inspect",
   ].some((verb) => normalized.includes(verb));
+
   const endsAsLeadIn =
     normalized.endsWith(":") ||
     normalized.endsWith("：") ||
     normalized.endsWith("...") ||
     normalized.endsWith("…");
+
   const hasDeliveryCue = [
     "已完成",
     "完成了",
@@ -169,12 +121,9 @@ function isLikelyInterimAssistantText(content: string): boolean {
     "###",
     "|",
   ].some((token) => compact.includes(token));
-  if (hasDeliveryCue) {
-    return false;
-  }
+
+  if (hasDeliveryCue) return false;
+
   const isShortLeadIn = compact.length <= 120;
-  return (
-    ((startsWithInterimPrefix && hasInterimVerb) || endsAsLeadIn) &&
-    isShortLeadIn
-  );
+  return ((startsWithInterimPrefix && hasInterimVerb) || endsAsLeadIn) && isShortLeadIn;
 }

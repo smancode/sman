@@ -7,11 +7,9 @@
     activeOrchestrationProgress,
     activeParallelGroups,
   } from "../../lib/stores/tasks";
-  import { listen } from "@tauri-apps/api/event";
-  import { conversationApi, projectApi } from "../../lib/api/tauri";
+  import { conversationApi } from "../../lib/api/tauri";
   import {
     initializeOpenClaw,
-    connectionState,
     connectionError,
     isConnected,
     sendChatMessage,
@@ -19,7 +17,7 @@
     disconnectOpenClaw,
   } from "../../lib/api/openclaw";
   import type { ChatEventPayload } from "../../core/openclaw/types";
-  import type { ProgressEvent, HistoryEntryRecord } from "../../lib/types";
+  import type { HistoryEntryRecord } from "../../lib/types";
   import MessageBubble from "./MessageBubble.svelte";
   import InputArea from "./InputArea.svelte";
   import TaskProgress from "../task/TaskProgress.svelte";
@@ -29,29 +27,17 @@
   import { onMount } from "svelte";
   import { get } from "svelte/store";
   import { projectsStore } from "../../lib/stores/projects";
-  import {
-    extractDisplayableAssistantContent,
-    latestDisplayableAssistantEntry,
-    sanitizeAssistantContent,
-    stripToolCallBlocks,
-    shouldFinalizeAssistantReply,
-    shouldStopWaitingAfterCompletion,
-  } from "../../lib/chat/assistantContent";
+  import { sanitizeAssistantContent } from "../../lib/chat/assistantContent";
 
-  // Messages per project (projectId -> messages)
+  // State
   let messagesByProject = $state<Record<string, Message[]>>({});
   let conversationByProject = $state<Record<string, string>>({});
-  let completionSignalAtByProject = $state<Record<string, number | null>>({});
-  let progressTimelineByProject = $state<Record<string, string[]>>({});
   let isSending = $state(false);
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
   let messagesContainer: HTMLDivElement = $state()!;
-  const replyPollIntervalMs = 1500;
-  const replyMaxWaitMs = 10 * 60 * 1000;
-  const maxConsecutivePollFailures = 8;
 
-  // Get current project's messages
+  // Derived
   let messages = $derived<Message[]>(
     $selectedProject
       ? messagesByProject[$selectedProject.id] ||
@@ -59,7 +45,6 @@
       : [],
   );
 
-  // Demo message for new projects
   function getDemoMessages(projectName: string): Message[] {
     return [
       {
@@ -73,12 +58,8 @@
 
   function normalizeRole(role: HistoryEntryRecord["role"]): Message["role"] {
     const normalized = role.toLowerCase();
-    if (normalized === "assistant") {
-      return "assistant";
-    }
-    if (normalized === "system") {
-      return "system";
-    }
+    if (normalized === "assistant") return "assistant";
+    if (normalized === "system") return "system";
     return "user";
   }
 
@@ -101,50 +82,18 @@
     );
   }
 
-  function withThinkingMessage(
-    baseMessages: Message[],
-    thinkingMessage: Message,
-  ): Message[] {
-    const withoutThinking = baseMessages.filter(
-      (msg) => msg.id !== thinkingMessage.id,
-    );
-    return [...withoutThinking, thinkingMessage];
-  }
-
-  function resolveThinkingMessage(
-    projectId: string,
-    fallbackMessage: Message,
-  ): Message {
-    const projectMessages = messagesByProject[projectId];
-    if (!projectMessages || projectMessages.length === 0) {
-      return fallbackMessage;
-    }
-    const lastMessage = projectMessages[projectMessages.length - 1];
-    if (
-      lastMessage.role === "assistant" &&
-      fallbackMessage.taskId &&
-      lastMessage.taskId === fallbackMessage.taskId
-    ) {
-      return lastMessage;
-    }
-    return fallbackMessage;
-  }
-
   function updateLatestThinkingMessage(projectId: string, content: string) {
     const projectMessages = messagesByProject[projectId];
-    if (!projectMessages || projectMessages.length === 0) {
-      return;
-    }
+    if (!projectMessages || projectMessages.length === 0) return;
+
     let updated = false;
     const nextMessages = projectMessages.map((msg, index) => {
-      if (updated) {
-        return msg;
-      }
+      if (updated) return msg;
       if (
         index === projectMessages.length - 1 &&
         msg.role === "assistant" &&
         msg.taskId &&
-        (msg.content === "思考中..." || msg.content.startsWith("处理中"))
+        (msg.content === "思考中..." || msg.content.startsWith("处理中") || msg.content.startsWith("思考"))
       ) {
         updated = true;
         return { ...msg, content };
@@ -156,131 +105,11 @@
     }
   }
 
-  function truncateValue(value: string, maxLength = 80): string {
-    if (value.length <= maxLength) {
-      return value;
-    }
-    return `${value.slice(0, maxLength)}…`;
-  }
-
-  function progressTimelineLine(payload: ProgressEvent): string | null {
-    if (payload.type === "task_started") {
-      return "任务已开始";
-    }
-    if (payload.type === "progress") {
-      const percent = Number.isFinite(payload.percent)
-        ? Math.max(0, Math.min(100, Math.round(payload.percent * 100)))
-        : 0;
-      return `${payload.message}（${percent}%）`;
-    }
-    if (payload.type === "tool_call") {
-      const argsText =
-        payload.args === undefined
-          ? ""
-          : truncateValue(JSON.stringify(payload.args));
-      return argsText
-        ? `调用工具：${payload.tool} ${argsText}`
-        : `调用工具：${payload.tool}`;
-    }
-    if (payload.type === "command_run") {
-      return `执行命令：${truncateValue(payload.command)}`;
-    }
-    if (payload.type === "file_read") {
-      return `读取文件：${payload.path}`;
-    }
-    if (payload.type === "file_written") {
-      const actionLabel =
-        payload.action === "created"
-          ? "创建"
-          : payload.action === "deleted"
-            ? "删除"
-            : "修改";
-      return `${actionLabel}文件：${payload.path}`;
-    }
-    if (payload.type === "task_completed") {
-      return "任务执行完成，正在整理最终答案";
-    }
-    if (payload.type === "task_failed") {
-      return `任务失败：${payload.error}`;
-    }
-    return null;
-  }
-
-  function appendProgressTimeline(projectId: string, payload: ProgressEvent) {
-    console.log("[Chat] appendProgressTimeline:", projectId, payload);
-    const line = progressTimelineLine(payload);
-    if (!line) {
-      return;
-    }
-    const current = progressTimelineByProject[projectId] || [];
-    if (current[current.length - 1] === line) {
-      return;
-    }
-    const next = [...current, line].slice(-8);
-    progressTimelineByProject = {
-      ...progressTimelineByProject,
-      [projectId]: next,
-    };
-  }
-
-  function renderThinkingContent(
-    projectId: string,
-    elapsedSeconds?: number,
-  ): string {
-    const title =
-      typeof elapsedSeconds === "number" && elapsedSeconds > 0
-        ? `处理中（${elapsedSeconds}s）...`
-        : "处理中...";
-    const timeline = progressTimelineByProject[projectId] || [];
-    if (timeline.length === 0) {
-      return title;
-    }
-    const latestTimeline = timeline[timeline.length - 1];
-    return `${title} ${latestTimeline}`;
-  }
-
-  function resolveCompletedOutput(content: string): string {
-    const extracted = extractDisplayableAssistantContent(content);
-    if (extracted && extracted.trim().length > 0) {
-      return extracted.trim();
-    }
-    const stripped = stripToolCallBlocks(content).trim();
-    if (stripped.length > 0) {
-      return stripped;
-    }
-    return "执行完成：未生成可展示的最终答复，你可以直接重试。";
-  }
-
-  function clearProgressTimeline(projectId: string) {
-    if (!progressTimelineByProject[projectId]) {
-      return;
-    }
-    progressTimelineByProject = {
-      ...progressTimelineByProject,
-      [projectId]: [],
-    };
-  }
-
-  function latestTimelineLine(projectId: string): string | null {
-    const timeline = progressTimelineByProject[projectId] || [];
-    if (timeline.length === 0) {
-      return null;
-    }
-    return timeline[timeline.length - 1];
-  }
-
   function stopSending(projectId: string) {
     isSending = false;
     if (sendingProjectId === projectId) {
       sendingProjectId = null;
     }
-  }
-
-  function resolveProgressProjectId(): string | null {
-    if (sendingProjectId) {
-      return sendingProjectId;
-    }
-    return $selectedProject?.id ?? null;
   }
 
   async function ensureProjectConversation(
@@ -292,23 +121,15 @@
     }
 
     const listResponse = await conversationApi.list(projectId);
-    if (
-      listResponse.success &&
-      listResponse.data &&
-      listResponse.data.length > 0
-    ) {
-      const currentConversationId = listResponse.data[0].id;
-      conversationByProject[projectId] = currentConversationId;
-      return currentConversationId;
+    if (listResponse.success && listResponse.data && listResponse.data.length > 0) {
+      conversationByProject[projectId] = listResponse.data[0].id;
+      return listResponse.data[0].id;
     }
     if (!listResponse.success) {
       throw new Error(`加载会话失败: ${listResponse.error || "未知错误"}`);
     }
 
-    const createResponse = await conversationApi.create(
-      projectId,
-      `${projectName} 对话`,
-    );
+    const createResponse = await conversationApi.create(projectId, `${projectName} 对话`);
     if (createResponse.success && createResponse.data) {
       conversationByProject[projectId] = createResponse.data.id;
       return createResponse.data.id;
@@ -317,27 +138,16 @@
     throw new Error(`创建会话失败: ${createResponse.error || "未知错误"}`);
   }
 
-  async function loadConversationMessages(
-    projectId: string,
-    projectName: string,
-  ) {
+  async function loadConversationMessages(projectId: string, projectName: string) {
     const existingMessages = messagesByProject[projectId] || [];
-    if (
-      isSending &&
-      sendingProjectId === projectId &&
-      existingMessages.length > 0
-    ) {
+    if (isSending && sendingProjectId === projectId && existingMessages.length > 0) {
       return;
     }
-    const conversationId = await ensureProjectConversation(
-      projectId,
-      projectName,
-    );
+
+    const conversationId = await ensureProjectConversation(projectId, projectName);
     if (!conversationId) {
       messagesByProject[projectId] =
-        existingMessages.length > 0
-          ? existingMessages
-          : getDemoMessages(projectName);
+        existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
       return;
     }
 
@@ -347,369 +157,69 @@
         messagesByProject[projectId] = mapHistoryEntries(response.data);
       } else {
         messagesByProject[projectId] =
-          existingMessages.length > 0
-            ? existingMessages
-            : getDemoMessages(projectName);
+          existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
       }
       return;
     }
 
     messagesByProject[projectId] =
-      existingMessages.length > 0
-        ? existingMessages
-        : getDemoMessages(projectName);
-  }
-
-  async function waitForAssistantReply(
-    projectId: string,
-    projectName: string,
-    conversationId: string,
-    userEntryId?: string,
-    thinkingMessage?: Message,
-  ) {
-    const maxAttempts = Math.ceil(replyMaxWaitMs / replyPollIntervalMs);
-    const startedAt = Date.now();
-    let consecutivePollFailures = 0;
-    let stableAssistantPollCount = 0;
-    let latestAssistantSignature: string | null = null;
-    let pollsWithoutAssistantAfterCompletion = 0;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (!isSending) {
-        return;
-      }
-      if (sendingProjectId && sendingProjectId !== projectId) {
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, replyPollIntervalMs));
-      if (thinkingMessage) {
-        const elapsedSeconds = Math.max(
-          1,
-          Math.floor((Date.now() - startedAt) / 1000),
-        );
-        updateLatestThinkingMessage(
-          projectId,
-          renderThinkingContent(projectId, elapsedSeconds),
-        );
-      }
-      const response = await conversationApi.getMessages(conversationId);
-      if (!response.success || !response.data) {
-        consecutivePollFailures += 1;
-        if (consecutivePollFailures >= maxConsecutivePollFailures) {
-          if (thinkingMessage) {
-            updateLatestThinkingMessage(
-              projectId,
-              `通讯异常：${response.error || "轮询会话失败"}。已停止等待，你可以直接重试。`,
-            );
-          }
-          clearProgressTimeline(projectId);
-          stopSending(projectId);
-          return;
-        }
-        continue;
-      }
-      consecutivePollFailures = 0;
-
-      const mappedMessages =
-        response.data.length > 0
-          ? mapHistoryEntries(response.data)
-          : getDemoMessages(projectName);
-
-      if (!userEntryId) {
-        const latestAssistant = latestDisplayableAssistantEntry(
-          response.data,
-          normalizeRole,
-        );
-        if (latestAssistant) {
-          messagesByProject[projectId] = mappedMessages;
-          clearProgressTimeline(projectId);
-          stopSending(projectId);
-          return;
-        }
-        messagesByProject[projectId] = thinkingMessage
-          ? withThinkingMessage(
-              mappedMessages,
-              resolveThinkingMessage(projectId, thinkingMessage),
-            )
-          : mappedMessages;
-        continue;
-      }
-
-      const userIndex = response.data.findIndex(
-        (entry) => entry.id === userEntryId,
-      );
-      if (userIndex < 0) {
-        continue;
-      }
-
-      const entriesAfterUser = response.data.slice(userIndex + 1);
-      const latestAssistantAfterUser = latestDisplayableAssistantEntry(
-        entriesAfterUser,
-        normalizeRole,
-      );
-      const assistantEntriesAfterUser = entriesAfterUser.filter(
-        (entry) => normalizeRole(entry.role) === "assistant",
-      );
-
-      if (latestAssistantAfterUser) {
-        pollsWithoutAssistantAfterCompletion = 0;
-        const signature = [
-          latestAssistantAfterUser.id,
-          latestAssistantAfterUser.timestamp,
-          latestAssistantAfterUser.content,
-        ].join("|");
-        if (latestAssistantSignature === signature) {
-          stableAssistantPollCount += 1;
-        } else {
-          latestAssistantSignature = signature;
-          stableAssistantPollCount = 1;
-        }
-        const latestAssistantTimestampMs = new Date(
-          latestAssistantAfterUser.timestamp,
-        ).getTime();
-        const completionSignalAt =
-          completionSignalAtByProject[projectId] ?? null;
-        const shouldFinalize = shouldFinalizeAssistantReply({
-          latestAssistantTimestampMs,
-          completionSignalAtMs: completionSignalAt,
-          stableAssistantPollCount,
-          elapsedMs: Date.now() - startedAt,
-        });
-        if (shouldFinalize) {
-          messagesByProject[projectId] = mappedMessages;
-          clearProgressTimeline(projectId);
-          stopSending(projectId);
-          return;
-        }
-      } else {
-        stableAssistantPollCount = 0;
-        latestAssistantSignature = null;
-        const completionSignalAt =
-          completionSignalAtByProject[projectId] ?? null;
-        if (completionSignalAt !== null) {
-          pollsWithoutAssistantAfterCompletion += 1;
-          if (
-            shouldStopWaitingAfterCompletion({
-              completionSignalAtMs: completionSignalAt,
-              pollsWithoutAssistantAfterCompletion,
-              elapsedMs: Date.now() - startedAt,
-            })
-          ) {
-            if (thinkingMessage) {
-              const latestLine = latestTimelineLine(projectId);
-              updateLatestThinkingMessage(
-                projectId,
-                latestLine
-                  ? `执行完成，但暂未收到可展示的最终答复。最新进展：${latestLine}`
-                  : "执行完成，但暂未收到可展示的最终答复。你可以直接重试，我会保留已完成进度。",
-              );
-            }
-            clearProgressTimeline(projectId);
-            stopSending(projectId);
-            return;
-          }
-        }
-      }
-
-      const pendingAssistantIds = new Set(
-        assistantEntriesAfterUser.map((entry) => entry.id),
-      );
-      const mappedMessagesWithoutPendingAssistants = mappedMessages.filter(
-        (message) => !pendingAssistantIds.has(message.id),
-      );
-
-      messagesByProject[projectId] = thinkingMessage
-        ? withThinkingMessage(
-            mappedMessagesWithoutPendingAssistants,
-            resolveThinkingMessage(projectId, thinkingMessage),
-          )
-        : mappedMessagesWithoutPendingAssistants;
-    }
-
-    if (thinkingMessage) {
-      const latestLine = latestTimelineLine(projectId);
-      updateLatestThinkingMessage(
-        projectId,
-        latestLine
-          ? `执行中断：等待最终回复超时。最后进展：${latestLine}`
-          : "执行中断：等待最终回复超时。已停止等待，你可以直接重试。",
-      );
-    }
-    clearProgressTimeline(projectId);
-    stopSending(projectId);
+      existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
   }
 
   onMount(() => {
     tasksStore.initialize();
-    let unlistenProgress: (() => void) | null = null;
-    let unlistenChatMessage: (() => void) | null = null;
     let unsubscribeOpenClaw: (() => void) | null = null;
 
     void (async () => {
-      // Initialize OpenClaw WebSocket connection
       try {
         await initializeOpenClaw();
         console.log("[Chat] OpenClaw WebSocket connected");
 
-        // Subscribe to chat events
-        unsubscribeOpenClaw = subscribeToChatEvents(
-          (event: ChatEventPayload) => {
-            console.log("[Chat] Received OpenClaw event:", event);
-            const projectId = event.sessionKey;
+        // Subscribe to chat events from OpenClaw
+        unsubscribeOpenClaw = subscribeToChatEvents((event: ChatEventPayload) => {
+          console.log("[Chat] Received OpenClaw event:", event);
+          const projectId = event.sessionKey;
 
-            if (event.state === "delta" && event.message?.content) {
+          if (event.state === "delta" && event.message?.content) {
+            updateLatestThinkingMessage(projectId, event.message.content);
+          } else if (event.state === "final") {
+            if (event.message?.content) {
               updateLatestThinkingMessage(projectId, event.message.content);
-            } else if (event.state === "final") {
-              if (event.message?.content) {
-                updateLatestThinkingMessage(projectId, event.message.content);
-              }
-              clearProgressTimeline(projectId);
-              stopSending(projectId);
-            } else if (event.state === "error") {
-              updateLatestThinkingMessage(
-                projectId,
-                `错误：${event.errorMessage || "未知错误"}`,
-              );
-              clearProgressTimeline(projectId);
-              stopSending(projectId);
-            } else if (event.state === "aborted") {
-              updateLatestThinkingMessage(projectId, "对话已中止");
-              clearProgressTimeline(projectId);
-              stopSending(projectId);
             }
-          },
-        );
+            stopSending(projectId);
+          } else if (event.state === "error") {
+            updateLatestThinkingMessage(projectId, `错误：${event.errorMessage || "未知错误"}`);
+            stopSending(projectId);
+          } else if (event.state === "aborted") {
+            updateLatestThinkingMessage(projectId, "对话已中止");
+            stopSending(projectId);
+          }
+        });
       } catch (err) {
         console.error("[Chat] Failed to initialize OpenClaw:", err);
-        connectionError.set(
-          err instanceof Error ? err.message : "Connection failed",
-        );
+        connectionError.set(err instanceof Error ? err.message : "Connection failed");
       }
-
-      // Listen for chat messages from backend (legacy Tauri events)
-      unlistenChatMessage = await listen<any>("chat-message", (event) => {
-        console.log("[ChatMessage] Received:", event.payload);
-        const payload = event.payload;
-        const projectId =
-          typeof payload?.project_id === "string" &&
-          payload.project_id.length > 0
-            ? payload.project_id
-            : $selectedProject?.id;
-        if (!projectId) return;
-
-        const role = payload.role === "user" ? "user" : "assistant";
-        const newMessage: Message = {
-          id: crypto.randomUUID(),
-          role: role,
-          content: payload.content,
-          timestamp: Date.now(),
-        };
-
-        if (
-          role === "assistant" &&
-          isSending &&
-          sendingProjectId === projectId
-        ) {
-          updateLatestThinkingMessage(projectId, payload.content);
-          return;
-        }
-
-        const currentMessages = messagesByProject[projectId] || [];
-        messagesByProject[projectId] = [...currentMessages, newMessage];
-      });
-
-      unlistenProgress = await listen<ProgressEvent>("progress", (event) => {
-        const payload = event.payload;
-        console.log(
-          "[Progress] Received progress event:",
-          JSON.stringify(payload),
-        );
-
-        if (payload.type === "task_completed") {
-          const projectId = resolveProgressProjectId();
-          if (!projectId) {
-            return;
-          }
-          appendProgressTimeline(projectId, payload);
-          const output = payload.result.output?.trim();
-          if (output && output.length > 0) {
-            updateLatestThinkingMessage(
-              projectId,
-              resolveCompletedOutput(output),
-            );
-            clearProgressTimeline(projectId);
-            stopSending(projectId);
-          } else {
-            updateLatestThinkingMessage(
-              projectId,
-              renderThinkingContent(projectId),
-            );
-          }
-          completionSignalAtByProject[projectId] = Date.now();
-        }
-
-        if (payload.type === "task_failed") {
-          const projectId = resolveProgressProjectId();
-          if (!projectId) {
-            return;
-          }
-          appendProgressTimeline(projectId, payload);
-          completionSignalAtByProject[projectId] = Date.now();
-          updateLatestThinkingMessage(projectId, `执行中断：${payload.error}`);
-          clearProgressTimeline(projectId);
-          stopSending(projectId);
-          return;
-        }
-
-        if (isSending) {
-          const projectId = resolveProgressProjectId();
-          if (!projectId) {
-            return;
-          }
-          appendProgressTimeline(projectId, payload);
-          if (progressTimelineLine(payload)) {
-            updateLatestThinkingMessage(
-              projectId,
-              renderThinkingContent(projectId),
-            );
-          }
-        }
-      });
     })();
 
-    // Auto-send test skill on mount
+    // Initialize conversation for first project
     void (async () => {
-      // Wait for project to be available
       await new Promise((resolve) => setTimeout(resolve, 500));
       const store = get(projectsStore);
-      console.log(
-        "[Chat] Auto-send check - projects:",
-        store.projects.length,
-        "selected:",
-        store.selectedProjectId,
-      );
       if (store.projects.length > 0) {
         const pid = store.selectedProjectId || store.projects[0].id;
-        console.log("[Chat] Auto-sending to project:", pid);
-        let convId = conversationByProject[pid];
-        if (!convId) {
+        if (!conversationByProject[pid]) {
           const result = await conversationApi.create(
             pid,
-            `${store.projects.find((project) => project.id === pid)?.name || "项目"} 对话`,
+            `${store.projects.find((p) => p.id === pid)?.name || "项目"} 对话`,
           );
           if (result.success && result.data) {
-            convId = result.data.id;
-            conversationByProject[pid] = convId;
+            conversationByProject[pid] = result.data.id;
           }
         }
-        // if (convId) {
-        //     handleSubmit("/caijing");
-        // }
       }
     })();
 
     return () => {
-      unlistenProgress?.();
-      unlistenChatMessage?.();
       unsubscribeOpenClaw?.();
       disconnectOpenClaw();
       tasksStore.destroy();
@@ -721,10 +231,7 @@
       initializedProjectId = null;
       return;
     }
-
-    if (initializedProjectId === $selectedProject.id) {
-      return;
-    }
+    if (initializedProjectId === $selectedProject.id) return;
 
     initializedProjectId = $selectedProject.id;
     tasksStore.setActiveTask(null);
@@ -742,109 +249,46 @@
     if (!$selectedProject) return;
 
     const projectId = $selectedProject.id;
-    completionSignalAtByProject[projectId] = null;
-    clearProgressTimeline(projectId);
     const currentMessages =
       messagesByProject[projectId] || getDemoMessages($selectedProject.name);
+
+    // Add user message
     const userMessage: Message = {
       id: createLocalMessageId(),
       role: "user",
       content: prompt,
       timestamp: Date.now(),
     };
-    const updatedMessages = [...currentMessages, userMessage];
-    messagesByProject[projectId] = updatedMessages;
-    isSending = true;
-    sendingProjectId = projectId;
+    messagesByProject[projectId] = [...currentMessages, userMessage];
 
+    // Add thinking message
     const assistantMessage: Message = {
       id: createLocalMessageId(),
       role: "assistant",
       content: "思考中...",
       timestamp: Date.now(),
     };
-    messagesByProject[projectId] = [...updatedMessages, assistantMessage];
+    messagesByProject[projectId] = [...currentMessages, userMessage, assistantMessage];
+
+    isSending = true;
+    sendingProjectId = projectId;
 
     try {
-      const routeDecision = await conversationApi.decideRoute(
-        projectId,
-        prompt,
-      );
-      const shouldOrchestrate =
-        routeDecision.success && routeDecision.data?.route === "orchestrated";
-      if (shouldOrchestrate) {
-        const reasonText =
-          routeDecision.data?.reason?.trim() || "已判定为复杂需求";
-        const conversationId = await ensureProjectConversation(
-          projectId,
-          $selectedProject.name,
-        );
-        const taskId = await tasksStore.executeOrchestratedTask(
-          projectId,
-          prompt,
-          conversationId,
-        );
-        if (!taskId) {
-          stopSending(projectId);
-          messagesByProject[projectId] = [
-            ...updatedMessages,
-            {
-              ...assistantMessage,
-              content: "错误：编排任务启动失败",
-            },
-          ];
-          return;
-        }
-        messagesByProject[projectId] = [
-          ...updatedMessages,
-          {
-            ...assistantMessage,
-            taskId,
-            content: `处理中...（已切换编排模式：${reasonText}）`,
-          },
-        ];
-        updateLatestThinkingMessage(
-          projectId,
-          `处理中...（已切换编排模式：${reasonText}）`,
-        );
-        return;
-      }
-      const conversationId = await ensureProjectConversation(
-        projectId,
-        $selectedProject.name,
-      );
+      const conversationId = await ensureProjectConversation(projectId, $selectedProject.name);
       messagesByProject[projectId] = [
-        ...updatedMessages,
+        ...currentMessages,
+        userMessage,
         { ...assistantMessage, taskId: conversationId },
       ];
 
-      const response = await conversationApi.sendMessage(
-        conversationId,
-        prompt,
-      );
-      if (!response.success) {
-        stopSending(projectId);
-        messagesByProject[projectId] = [
-          ...updatedMessages,
-          {
-            ...assistantMessage,
-            content: `错误：${response.error || "发送消息失败"}`,
-          },
-        ];
-        return;
-      }
-
-      void waitForAssistantReply(
-        projectId,
-        $selectedProject.name,
-        conversationId,
-        response.data?.id,
-        { ...assistantMessage, taskId: conversationId },
-      );
+      // Send via OpenClaw WebSocket
+      const result = await sendChatMessage(conversationId, prompt);
+      console.log("[Chat] Message sent, runId:", result.runId);
     } catch (error) {
       stopSending(projectId);
       messagesByProject[projectId] = [
-        ...updatedMessages,
+        ...currentMessages,
+        userMessage,
         {
           ...assistantMessage,
           content: `错误：${error instanceof Error ? error.message : "发送消息失败"}`,
