@@ -9,6 +9,16 @@
   } from "../../lib/stores/tasks";
   import { listen } from "@tauri-apps/api/event";
   import { conversationApi, projectApi } from "../../lib/api/tauri";
+  import {
+    initializeOpenClaw,
+    connectionState,
+    connectionError,
+    isConnected,
+    sendChatMessage,
+    subscribeToChatEvents,
+    disconnectOpenClaw,
+  } from "../../lib/api/openclaw";
+  import type { ChatEventPayload } from "../../core/openclaw/types";
   import type { ProgressEvent, HistoryEntryRecord } from "../../lib/types";
   import MessageBubble from "./MessageBubble.svelte";
   import InputArea from "./InputArea.svelte";
@@ -532,9 +542,50 @@
     tasksStore.initialize();
     let unlistenProgress: (() => void) | null = null;
     let unlistenChatMessage: (() => void) | null = null;
+    let unsubscribeOpenClaw: (() => void) | null = null;
 
     void (async () => {
-      // Listen for chat messages from backend
+      // Initialize OpenClaw WebSocket connection
+      try {
+        await initializeOpenClaw();
+        console.log("[Chat] OpenClaw WebSocket connected");
+
+        // Subscribe to chat events
+        unsubscribeOpenClaw = subscribeToChatEvents(
+          (event: ChatEventPayload) => {
+            console.log("[Chat] Received OpenClaw event:", event);
+            const projectId = event.sessionKey;
+
+            if (event.state === "delta" && event.message?.content) {
+              updateLatestThinkingMessage(projectId, event.message.content);
+            } else if (event.state === "final") {
+              if (event.message?.content) {
+                updateLatestThinkingMessage(projectId, event.message.content);
+              }
+              clearProgressTimeline(projectId);
+              stopSending(projectId);
+            } else if (event.state === "error") {
+              updateLatestThinkingMessage(
+                projectId,
+                `错误：${event.errorMessage || "未知错误"}`,
+              );
+              clearProgressTimeline(projectId);
+              stopSending(projectId);
+            } else if (event.state === "aborted") {
+              updateLatestThinkingMessage(projectId, "对话已中止");
+              clearProgressTimeline(projectId);
+              stopSending(projectId);
+            }
+          },
+        );
+      } catch (err) {
+        console.error("[Chat] Failed to initialize OpenClaw:", err);
+        connectionError.set(
+          err instanceof Error ? err.message : "Connection failed",
+        );
+      }
+
+      // Listen for chat messages from backend (legacy Tauri events)
       unlistenChatMessage = await listen<any>("chat-message", (event) => {
         console.log("[ChatMessage] Received:", event.payload);
         const payload = event.payload;
@@ -659,6 +710,8 @@
     return () => {
       unlistenProgress?.();
       unlistenChatMessage?.();
+      unsubscribeOpenClaw?.();
+      disconnectOpenClaw();
       tasksStore.destroy();
     };
   });
@@ -827,9 +880,11 @@
   </div>
 
   <InputArea
-    disabled={isSending || !$selectedProject}
+    disabled={isSending || !$selectedProject || !$isConnected}
     placeholder={$selectedProject
-      ? "输入 / 使用命令"
+      ? $isConnected
+        ? "输入 / 使用命令"
+        : "正在连接 AI 服务..."
       : "请先添加项目"}
     onSubmit={handleSubmit}
   />

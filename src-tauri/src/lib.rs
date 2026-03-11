@@ -20,6 +20,8 @@ pub fn run() {
             commands::sidecar::stop_openclaw_server,
             commands::sidecar::check_openclaw_health,
             commands::sidecar::is_server_running,
+            commands::sidecar::get_sman_local_path,
+            commands::sidecar::get_openclaw_port,
             // Shell
             commands::shell::minimize_window,
             commands::shell::maximize_window,

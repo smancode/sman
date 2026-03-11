@@ -3,8 +3,12 @@
  * OpenClaw API Type Definitions
  *
  * These types define the interface between SMAN and OpenClaw Sidecar.
- * OpenClaw runs as a sidecar process and exposes HTTP API.
+ * OpenClaw runs as a sidecar process and exposes WebSocket RPC Gateway.
  */
+
+// ============================================
+// Legacy Types (保持向后兼容)
+// ============================================
 
 export interface OpenClawConfig {
   skills?: {
@@ -63,3 +67,156 @@ export interface OpenClawHealth {
   version?: string;
   uptime?: number;
 }
+
+// ============================================
+// WebSocket Gateway Protocol Types
+// ============================================
+
+/** Gateway 请求消息 */
+export interface GatewayRequest {
+  type: "req";
+  id: string;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+/** Gateway 响应消息 */
+export interface GatewayResponse<T = unknown> {
+  type: "res";
+  id: string;
+  ok: boolean;
+  payload?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+/** Gateway 事件消息 */
+export interface GatewayEvent<T = unknown> {
+  type: "event";
+  event: string;
+  payload: T;
+  seq: number;
+}
+
+/** Gateway 消息联合类型 */
+export type GatewayMessage = GatewayRequest | GatewayResponse | GatewayEvent;
+
+// ============================================
+// Chat Method Types
+// ============================================
+
+/** chat.send 参数 */
+export interface ChatSendParams {
+  sessionKey: string;
+  message: string;
+  idempotencyKey: string;
+  thinking?: string;
+  deliver?: boolean;
+  attachments?: ChatAttachment[];
+  timeoutMs?: number;
+}
+
+/** chat.send 响应 */
+export interface ChatSendResult {
+  runId: string;
+  status: "started" | "in_flight";
+}
+
+/** chat.event 载荷 */
+export interface ChatEventPayload {
+  runId: string;
+  sessionKey: string;
+  seq: number;
+  state: "delta" | "final" | "error" | "aborted";
+  message?: {
+    role: string;
+    content: string;
+  };
+  errorMessage?: string;
+  stopReason?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+/** chat.history 参数 */
+export interface ChatHistoryParams {
+  sessionKey: string;
+  limit?: number;
+}
+
+/** chat.history 响应 */
+export interface ChatHistoryResult {
+  messages: ChatHistoryMessage[];
+}
+
+/** 聊天历史消息 */
+export interface ChatHistoryMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp?: string;
+}
+
+/** chat.abort 参数 */
+export interface ChatAbortParams {
+  sessionKey: string;
+  runId?: string;
+}
+
+/** 附件类型 */
+export interface ChatAttachment {
+  type?: string;
+  mimeType?: string;
+  fileName?: string;
+  content?: unknown;
+}
+
+// ============================================
+// Connection Types
+// ============================================
+
+/** connect 参数 */
+export interface ConnectParams {
+  token?: string;
+  password?: string;
+}
+
+/** connect 响应 */
+export interface ConnectResult {
+  sessionId: string;
+  role: string;
+}
+
+/** health 响应 */
+export interface HealthResult {
+  status: "ok" | "error";
+  durationMs?: number;
+}
+
+// ============================================
+// Client Types
+// ============================================
+
+/** WebSocket 客户端配置 */
+export interface WSClientConfig {
+  url: string;
+  reconnectIntervalMs: number;
+  maxReconnectAttempts: number;
+  requestTimeoutMs: number;
+}
+
+/** 待处理请求 */
+export interface PendingRequest<T = unknown> {
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
+/** 事件处理器 */
+export type EventHandler<T = unknown> = (payload: T) => void;
+
+/** 客户端状态 */
+export type WSClientState = "disconnected" | "connecting" | "connected" | "error";

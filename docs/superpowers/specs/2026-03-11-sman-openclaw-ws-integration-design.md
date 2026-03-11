@@ -500,15 +500,92 @@ export const conversationApi = {
 
 ## 6. Sidecar 管理
 
-### 6.1 启动流程
+### 6.1 配置打包策略（环境隔离）
+
+**重要**：SMAN 使用环境变量隔离配置，不会影响用户本地的 OpenClaw 环境。
+
+| 环境 | 配置目录 | 说明 |
+|------|---------|------|
+| 用户本地 OpenClaw | `~/.openclaw/` | 用户自己的开发环境，不受影响 |
+| SMAN Sidecar | `~/.smanlocal/` | SMAN 专属目录，完全隔离 |
+
+**隔离机制**：OpenClaw 源码支持环境变量覆盖：
+
+```typescript
+// OpenClaw paths.ts
+export function resolveStateDir(env = process.env) {
+  const override = env.OPENCLAW_STATE_DIR?.trim();
+  if (override) return override;  // 环境变量优先
+  return path.join(homedir(), ".openclaw");  // 默认
+}
+```
+
+**SMAN Sidecar 启动命令**：
+```bash
+OPENCLAW_STATE_DIR=~/.smanlocal \
+OPENCLAW_CONFIG_PATH=~/.smanlocal/openclaw.json \
+./openclaw-server gateway --port 18789
+```
+
+**SMAN 专属目录结构** (`~/.smanlocal/`):
+├── openclaw.json          # 主配置文件
+├── workspace/             # 工作区（提示词、技能）
+│   ├── AGENTS.md          # Agent 人格提示词
+│   ├── SOUL.md            # 核心人格
+│   ├── USER.md            # 用户信息
+│   ├── TOOLS.md           # 工具说明
+│   └── skills/            # 技能包目录
+│       └── xxx/SKILL.md
+└── agents/
+    └── main/
+        ├── agent/         # Agent 配置
+        │   ├── auth-profiles.json
+        │   └── models.json
+        └── sessions/      # 会话数据（运行时生成）
+```
+
+**环境变量配置**：
+
+| 变量 | 值 | 说明 |
+|-----|---|------|
+| `OPENCLAW_CONFIG_PATH` | `~/.smanlocal/openclaw.json` | 配置文件路径 |
+| `OPENCLAW_STATE_DIR` | `~/.smanlocal` | 状态目录 |
+
+**隔离保证**：
+- 两个环境同时运行互不干扰
+- 用户本地 `~/.openclaw/` 保持原样
+- SMAN 卸载时只需删除 `~/.smanlocal/`
+
+**跨平台支持**：
+
+| 平台 | Home 目录 | SMAN 配置目录 |
+|------|----------|--------------|
+| macOS | `/Users/{user}` | `/Users/{user}/.smanlocal` |
+| Linux | `/home/{user}` | `/home/{user}/.smanlocal` |
+| Windows | `C:\Users\{user}` | `C:\Users\{user}\.smanlocal` |
+
+**OpenClaw 跨平台支持**（源码验证）：
+```typescript
+// OpenClaw home-dir.ts
+const envHome = normalize(env.HOME);           // macOS/Linux
+const userProfile = normalize(env.USERPROFILE); // Windows
+```
+
+**配置初始化流程**：
+1. Tauri 启动时检查 `~/.smanlocal/` 是否存在
+2. 不存在则从内置模板创建默认配置
+3. 启动 Sidecar 时传入环境变量
+
+### 6.2 启动流程
 
 1. Tauri 应用启动
-2. 调用 `start_openclaw_server` 命令
-3. Sidecar 进程启动，监听 `127.0.0.1:18789`
-4. 前端建立 WebSocket 连接
-5. 发送 `connect` 认证
+2. 调用 `initialize_sman_config` 创建配置目录（如不存在）
+3. 调用 `start_openclaw_server` 命令（带环境变量）
+4. Sidecar 进程启动，监听 `127.0.0.1:18789`
+5. 前端建立 WebSocket 连接
+6. 发送 `connect` 认证
 
-### 6.2 健康检查
+### 6.3 健康检查
 
 ```typescript
 // 定期健康检查
@@ -558,13 +635,16 @@ setInterval(async () => {
 | `src/core/openclaw/api.ts` | 高级 API 封装 |
 | `src/core/openclaw/types.ts` | 类型定义（更新） |
 | `src/lib/api/openclaw.ts` | Svelte Store 集成 |
+| `src-tauri/src/commands/config.rs` | 配置初始化命令 |
+| `src-tauri/resources/openclaw-default-config/` | 默认配置模板 |
 
 ### 8.2 修改文件
 
 | 文件路径 | 修改内容 |
 |---------|---------|
-| `src-tauri/src/commands/sidecar.rs` | 端口改为 18789 |
+| `src-tauri/src/commands/sidecar.rs` | 端口改为 18789，添加环境变量 |
 | `src-tauri/src/commands/conversation.rs` | `send_message` 调用 OpenClaw |
+| `src-tauri/src/main.rs` | 注册配置命令 |
 | `src/lib/api/tauri.ts` | conversationApi 更新 |
 | `src/components/chat/ChatWindow.svelte` | 使用新的 API |
 
@@ -578,19 +658,24 @@ setInterval(async () => {
 
 ## 9. 实施顺序
 
-1. **阶段 1**: WebSocket 客户端基础
+1. **阶段 0**: Sidecar 编译与配置打包
+   - 编译 OpenClaw 为 Sidecar
+   - 创建默认配置模板
+   - 实现配置初始化逻辑
+
+2. **阶段 1**: WebSocket 客户端基础
    - 实现 `OpenClawWSClient`
    - 更新类型定义
 
-2. **阶段 2**: 高级 API
+3. **阶段 2**: 高级 API
    - 实现 `OpenClawAPI`
    - 测试基本功能
 
-3. **阶段 3**: 前端集成
+4. **阶段 3**: 前端集成
    - 修改 `ChatWindow.svelte`
    - 更新 `conversationApi`
 
-4. **阶段 4**: Sidecar 配置
+5. **阶段 4**: Sidecar 配置
    - 更新端口配置
    - 测试完整流程
 
@@ -598,9 +683,25 @@ setInterval(async () => {
 
 ## 10. 验收标准
 
+### 10.1 配置打包
+
+- [ ] `~/.smanlocal/` 目录在首次启动时自动创建
+- [ ] 默认 `openclaw.json` 配置正确生成
+- [ ] 默认 Workspace 提示词文件正确创建
+- [ ] Sidecar 启动时使用正确的环境变量
+
+### 10.2 WebSocket 连接
+
 - [ ] WebSocket 连接正常建立
 - [ ] `chat.send` 发送消息成功
 - [ ] `chat.event` 流式响应正常接收
 - [ ] UI 正确显示增量更新
 - [ ] 错误处理正常工作
 - [ ] 断线重连机制有效
+
+### 10.3 Sidecar 打包
+
+- [ ] OpenClaw 编译为独立可执行文件
+- [ ] Sidecar 随 Tauri 应用打包
+- [ ] 首次启动时自动初始化配置
+- [ ] 业务人员无需额外安装即可使用
