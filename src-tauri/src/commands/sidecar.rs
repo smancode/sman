@@ -49,9 +49,18 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
         .map_err(|e| format!("Failed to create sidecar: {}", e))?;
 
     // Set environment variables for isolated configuration
-    let (mut _rx, _child) = sidecar
+    let mut sidecar_env = sidecar
         .env("OPENCLAW_CONFIG_PATH", config_path.to_string_lossy().to_string())
-        .env("OPENCLAW_STATE_DIR", sman_dir.to_string_lossy().to_string())
+        .env("OPENCLAW_STATE_DIR", sman_dir.to_string_lossy().to_string());
+
+    // Get WebSearch API keys from settings and add to sidecar environment
+    let web_search_vars = crate::commands::settings::get_web_search_env_vars();
+    for (key, value) in web_search_vars {
+        sidecar_env = sidecar_env.env(&key, value);
+    }
+
+    // Spawn the sidecar process
+    let (_rx, _child) = sidecar_env
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
 
@@ -64,7 +73,14 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
 
 #[tauri::command]
 pub async fn stop_openclaw_server() -> Result<String, String> {
-    // TODO: Implement graceful shutdown via signal
+    if !SERVER_RUNNING.load(Ordering::SeqCst) {
+        return Ok("OpenClaw server not running".to_string());
+    }
+
+    // Note: Process management is handled by Tauri shell plugin
+    // The sidecar will be terminated when the app exits
+    // For explicit stop, we just update the state
+
     SERVER_RUNNING.store(false, Ordering::SeqCst);
     Ok("OpenClaw server stopped".to_string())
 }

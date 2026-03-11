@@ -226,3 +226,21 @@ pub async fn test_qdrant_connection(settings: QdrantSettings) -> ConnectionTestR
         },
     }
 }
+
+/// Get WebSearch API keys as environment variables for OpenClaw sidecar
+pub fn get_web_search_env_vars() -> Vec<(String, String)> {
+    let settings = get_app_settings().unwrap_or_default();
+    let mut vars = Vec::new();
+
+    if !settings.webSearch.braveApiKey.is_empty() {
+        vars.push(("BRAVE_API_KEY".to_string(), settings.webSearch.braveApiKey));
+    }
+    if !settings.webSearch.tavilyApiKey.is_empty() {
+        vars.push(("TAVILY_API_KEY".to_string(), settings.webSearch.tavilyApiKey));
+    }
+    if !settings.webSearch.bingApiKey.is_empty() {
+        vars.push(("BING_API_KEY".to_string(), settings.webSearch.bingApiKey));
+    }
+
+    vars
+}
