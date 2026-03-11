@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+
+# SvelteKit generated files
+.svelte-kit/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Tauri build
+src-tauri/target/
+
+# Temporary files
+*.tmp
+*.temp

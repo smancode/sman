@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@import "highlight.js/styles/github-dark.css";
+
+:root {
+    --background: #0f1114;
+    --surface: #161a20;
+    --surface-elevated: #1c2129;
+    --surface-hover: #212733;
+    --border: #2b323d;
+    --line-soft: #252c36;
+    --line-strong: #394252;
+    --text-primary: #edf1f7;
+    --text-secondary: #a4afbe;
+    --accent: #6e7786;
+    --accent-hover: #626b79;
+    --accent-light: #9099a8;
+    --accent-rgb: 110, 119, 134;
+    --success: #3fb980;
+    --warning: #d9a34f;
+    --error: #da6565;
+    --shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.22);
+    --shadow-floating: 0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family:
+        "Inter",
+        system-ui,
+        -apple-system,
+        sans-serif;
+    background-color: var(--background);
+    color: var(--text-primary);
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--line-soft);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--line-strong);
+}
+
+/* Selection styling */
+::selection {
+    background-color: rgba(var(--accent-rgb), 0.2);
+    color: var(--text-primary);
+}
+
+/* Focus styling */
+:focus-visible {
+    outline: 2px solid rgba(var(--accent-rgb), 0.95);
+    outline-offset: 2px;
+}
+
+/* Button base styles */
+button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    background: none;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Input base styles */
+input,
+textarea {
+    font-family: inherit;
+    border: none;
+    background: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-secondary);
+}
+
+/* Code styling */
+code,
+pre {
+    font-family: "JetBrains Mono", Menlo, Monaco, monospace;
+}
+
+/* Link styling */
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--accent-light);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+.animate-pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
