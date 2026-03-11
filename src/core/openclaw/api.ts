@@ -31,16 +31,33 @@ export class OpenClawAPI {
   }
 
   /** Connect to Gateway and authenticate */
-  async connect(options?: { token?: string; password?: string }): Promise<void> {
+  async connect(options?: { token?: string; password?: string; skipAuth?: boolean }): Promise<void> {
     await this.client.connect();
 
-    // Authenticate
+    // Skip authentication if requested (for --auth none mode)
+    if (options?.skipAuth) {
+      this.connected = true;
+      return;
+    }
+
+    // Authenticate with token or password
     const params: Record<string, unknown> = {};
     if (options?.token) params.token = options.token;
     if (options?.password) params.password = options.password;
 
-    await this.client.request<ConnectResult>("connect", params);
-    this.connected = true;
+    try {
+      await this.client.request<ConnectResult>("connect", params);
+      this.connected = true;
+    } catch (err) {
+      // If auth fails and no credentials were provided, try without auth
+      // (for --auth none mode where connect RPC might not be needed)
+      if (!options?.token && !options?.password) {
+        console.warn("[OpenClawAPI] connect RPC failed, assuming --auth none mode");
+        this.connected = true;
+      } else {
+        throw err;
+      }
+    }
   }
 
   /** Check if connected */

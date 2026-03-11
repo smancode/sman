@@ -53,7 +53,8 @@ export async function initializeOpenClaw(): Promise<void> {
     });
 
     connectionState.set("connecting");
-    await api.connect();
+    // Use skipAuth since OpenClaw Gateway runs with --auth none
+    await api.connect({ skipAuth: true });
     // Only set instance after successful connection
     _apiInstance = api;
     connectionState.set("connected");
