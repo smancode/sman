@@ -47,6 +47,12 @@ pub fn run() {
             commands::project::add_project,
             commands::project::remove_project,
             commands::project::get_project_skills,
+            // Conversation
+            commands::conversation::list_conversations,
+            commands::conversation::create_conversation,
+            commands::conversation::get_conversation_messages,
+            commands::conversation::send_message,
+            commands::conversation::decide_message_route,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
