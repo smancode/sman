@@ -362,13 +362,31 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
     std::fs::write(&config_path, content)
         .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
 
-    // Also write API key to env file (OpenClaw reads this)
-    let env_path = openclaw_dir.join(".env");
-    let env_content = format!("{}_API_KEY={}\n", provider_id.to_uppercase(), api_key);
-    std::fs::write(&env_path, env_content)
-        .map_err(|e| format!("Failed to write .env: {}", e))?;
+    // CRITICAL: Write auth-profiles.json to agent directory
+    // OpenClaw looks for this file at: .openclaw/agents/dev/agent/auth-profiles.json
+    let agent_dir = openclaw_dir.join("agents").join("dev").join("agent");
+    std::fs::create_dir_all(&agent_dir)
+        .map_err(|e| format!("Failed to create agent dir: {}", e))?;
+
+    let auth_profiles_path = agent_dir.join("auth-profiles.json");
+    let auth_profiles = serde_json::json!({
+        "profiles": {
+            &profile_key: {
+                "provider": provider_id,
+                "mode": "api_key",
+                "apiKey": api_key
+            }
+        },
+        "defaultProfile": &profile_key
+    });
+
+    let auth_content = serde_json::to_string_pretty(&auth_profiles)
+        .map_err(|e| format!("Failed to serialize auth-profiles: {}", e))?;
+    std::fs::write(&auth_profiles_path, auth_content)
+        .map_err(|e| format!("Failed to write auth-profiles.json: {}", e))?;
 
     println!("[Settings] Synced LLM config to OpenClaw: provider={}, model={}", provider_id, model);
+    println!("[Settings] Auth profiles written to: {:?}", auth_profiles_path);
     Ok(())
 }
 
