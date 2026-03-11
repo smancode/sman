@@ -52,7 +52,8 @@ fn get_openclaw_path() -> PathBuf {
 }
 
 /// Configure OpenClaw with LLM settings from SMAN settings
-fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<(), String> {
+/// Returns Ok(false) if API key not configured (but still starts server)
+fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<bool, String> {
     let settings = crate::commands::settings::get_app_settings().unwrap_or_default();
 
     // Read existing openclaw.json or create new config
@@ -70,8 +71,25 @@ fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<(), String> {
     let api_key = settings.llm.apiKey.clone();
     let model = settings.llm.defaultModel.clone();
 
+    // If no API key, just create minimal config and return
     if api_key.is_empty() {
-        return Err("LLM API Key not configured. Please configure in Settings.".to_string());
+        println!("[Sidecar] Warning: No LLM API Key configured. Server will start but chat won't work.");
+
+        // Ensure basic config exists
+        if config.get("agents").is_none() {
+            config["agents"] = serde_json::json!({
+                "defaults": {
+                    "identity": { "name": "SMAN Assistant" }
+                }
+            });
+        }
+
+        let content = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        std::fs::write(&config_path, content)
+            .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
+
+        return Ok(false); // Started but not fully configured
     }
 
     // Determine provider from API URL
@@ -144,7 +162,7 @@ fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<(), String> {
     std::fs::write(&config_path, content)
         .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
 
-    Ok(())
+    Ok(true) // Fully configured
 }
 
 /// Get LLM environment variables for OpenClaw sidecar
@@ -194,8 +212,11 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     std::fs::create_dir_all(&openclaw_dir)
         .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
 
-    // Configure OpenClaw with LLM settings
-    configure_openclaw_llm(&openclaw_dir)?;
+    // Configure OpenClaw with LLM settings (returns false if no API key, but still starts)
+    let llm_configured = configure_openclaw_llm(&openclaw_dir)?;
+    if !llm_configured {
+        println!("[Sidecar] Warning: LLM not configured. Please set API Key in Settings and restart.");
+    }
 
     // Get OpenClaw path
     let openclaw_path = get_openclaw_path();

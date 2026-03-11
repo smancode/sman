@@ -130,9 +130,9 @@ pub fn update_app_settings(settings: AppSettings) -> Result<AppSettings, String>
         .map_err(|e| format!("Failed to write settings: {}", e))?;
 
     // Sync LLM settings to OpenClaw config
+    // Note: User needs to restart SMAN for changes to take effect
     if let Err(e) = sync_to_openclaw(&settings) {
         eprintln!("[Settings] Warning: Failed to sync to OpenClaw: {}", e);
-        // Don't fail the whole operation, just log the warning
     }
 
     Ok(settings)
