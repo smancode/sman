@@ -6,7 +6,7 @@
  * and automatic initialization.
  */
 
-import { writable, derived } from "svelte/store";
+import { writable, derived, get } from "svelte/store";
 import { getOpenClawAPI, OpenClawAPI } from "../../core/openclaw/api";
 import type { WSClientState, ChatEventPayload } from "../../core/openclaw/types";
 
@@ -29,8 +29,12 @@ export const isConnected = derived(
 export async function initializeOpenClaw(): Promise<void> {
   // If already initialized and connected, return
   if (_apiInstance && _apiInstance.isConnected()) {
+    console.log("[OpenClaw] Already connected");
     return;
   }
+
+  // Reset instance if it exists but is not connected
+  _apiInstance = null;
 
   try {
     // Connect WebSocket - assumes sidecar is already running
@@ -55,11 +59,18 @@ export async function initializeOpenClaw(): Promise<void> {
     connectionState.set("connected");
     console.log("[OpenClaw] WebSocket connected successfully");
   } catch (err) {
-    console.error("[OpenClaw] Initialization failed:", err);
+    const errorMsg = err instanceof Error ? err.message : "Connection failed";
+    console.error("[OpenClaw] Initialization failed:", errorMsg);
     connectionState.set("disconnected");
-    connectionError.set(err instanceof Error ? err.message : "Connection failed");
-    // Don't throw, allow UI to show error state
+    connectionError.set(errorMsg);
+    // Throw to let caller know connection failed
+    throw err;
   }
+}
+
+/** Get current connection error */
+export function getConnectionError(): string | null {
+  return get(connectionError);
 }
 
 /** Subscribe to chat events with auto-reconnect handling */
