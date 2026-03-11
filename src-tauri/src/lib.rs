@@ -40,6 +40,8 @@ pub fn run() {
             // Settings
             commands::settings::get_app_settings,
             commands::settings::update_app_settings,
+            commands::settings::save_settings_and_sync,
+            commands::settings::is_llm_configured,
             commands::settings::test_llm_connection,
             commands::settings::test_llm_direct_chat,
             commands::settings::test_embedding_connection,

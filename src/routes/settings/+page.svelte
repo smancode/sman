@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { appSettingsApi } from "$lib/api/tauri";
+  import { appSettingsApi, openclawApi } from "$lib/api/tauri";
   import type { AppSettings, ConnectionTestResult } from "$lib/types";
 
   // Default LLM settings
@@ -26,6 +26,7 @@
   let isSaving = $state(false);
   let showApiKey = $state(false);
   let showWebSearchApiKeys = $state(false);
+  let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
 
   // Test results
   let llmTestResult: ConnectionTestResult | null = $state(null);
@@ -59,25 +60,63 @@
 
   async function saveSettings() {
     isSaving = true;
+    saveMessage = null;
+    llmTestResult = null;
 
-    // Vector settings are optional - keep them as-is if already configured
-    // If not configured, they remain undefined
+    // Check if API key is provided
+    if (!settings.llm.apiKey.trim()) {
+      // Just save without testing (no API key)
+      const response = await appSettingsApi.update(settings);
+      if (response.success) {
+        saveMessage = { type: "success", text: "设置已保存（未配置 API Key）" };
+      } else {
+        saveMessage = { type: "error", text: `保存失败: ${response.error}` };
+      }
+      isSaving = false;
+      return;
+    }
 
-    const response = await appSettingsApi.update(settings);
-    if (response.success) {
-      // Show success in test result area
-      llmTestResult = {
-        success: true,
-        error: undefined,
-        latencyMs: undefined,
-      };
-    } else {
+    // Test LLM connection first
+    llmTestResult = null;
+    const testResponse = await appSettingsApi.testLlm(settings.llm);
+
+    if (!testResponse.success || !testResponse.data?.success) {
       llmTestResult = {
         success: false,
-        error: response.error,
+        error: testResponse.data?.error || testResponse.error || "连接测试失败",
         latencyMs: undefined,
       };
+      saveMessage = { type: "error", text: "API 连接测试失败，请检查配置" };
+      isSaving = false;
+      return;
     }
+
+    llmTestResult = testResponse.data!;
+
+    // Save settings
+    const saveResponse = await appSettingsApi.update(settings);
+    if (!saveResponse.success) {
+      saveMessage = { type: "error", text: `保存失败: ${saveResponse.error}` };
+      isSaving = false;
+      return;
+    }
+
+    // Try to restart OpenClaw server to pick up new config
+    try {
+      // Stop existing server if running
+      await openclawApi.stop();
+
+      // Start new server with new config
+      const startResponse = await openclawApi.start();
+      if (startResponse.success) {
+        saveMessage = { type: "success", text: "设置保存成功！OpenClaw 已重启" };
+      } else {
+        saveMessage = { type: "success", text: "设置保存成功！请重启应用使配置生效" };
+      }
+    } catch (err) {
+      saveMessage = { type: "success", text: "设置保存成功！请重启应用使配置生效" };
+    }
+
     isSaving = false;
   }
 
@@ -224,6 +263,11 @@
 
       <!-- Action Buttons -->
       <div class="actions">
+        {#if saveMessage}
+          <div class="save-message {saveMessage.type}">
+            {saveMessage.text}
+          </div>
+        {/if}
         <button
           class="btn-secondary"
           onclick={loadSettings}
@@ -438,7 +482,27 @@
   .actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 1rem;
     margin-top: 2rem;
+  }
+
+  .save-message {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+
+  .save-message.success {
+    background: rgba(63, 185, 128, 0.14);
+    border: 1px solid rgba(63, 185, 128, 0.36);
+    color: var(--success);
+  }
+
+  .save-message.error {
+    background: rgba(218, 101, 101, 0.14);
+    border: 1px solid rgba(218, 101, 101, 0.32);
+    color: var(--error);
   }
 </style>

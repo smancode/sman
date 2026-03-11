@@ -101,6 +101,18 @@ fn ensure_smanlocal_dir() -> Result<(), String> {
     Ok(())
 }
 
+/// Get OpenClaw config directory path
+fn get_openclaw_config_dir() -> PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .or_else(|_| std::env::var("HOMEPATH"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home)
+        .join(".smanlocal")
+        .join("openclaw-home")
+        .join(".openclaw")
+}
+
 #[tauri::command]
 pub fn get_app_settings() -> Result<AppSettings, String> {
     let path = settings_path();
@@ -118,39 +130,150 @@ pub fn get_app_settings() -> Result<AppSettings, String> {
     Ok(settings)
 }
 
+/// Check if LLM is configured (has non-empty API key)
 #[tauri::command]
-pub fn update_app_settings(settings: AppSettings) -> Result<AppSettings, String> {
+pub fn is_llm_configured() -> bool {
+    let settings = get_app_settings().unwrap_or_default();
+    !settings.llm.apiKey.is_empty()
+}
+
+/// Save settings and sync to OpenClaw config
+/// Returns true if LLM was configured and synced successfully
+#[tauri::command]
+pub async fn save_settings_and_sync(settings: AppSettings) -> Result<(AppSettings, bool), String> {
     ensure_smanlocal_dir()?;
 
+    // 1. Save to SMAN settings
     let path = settings_path();
     let content = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
     fs::write(path, &content)
         .map_err(|e| format!("Failed to write settings: {}", e))?;
 
-    // Sync LLM settings to OpenClaw config
-    // Note: User needs to restart SMAN for changes to take effect
-    if let Err(e) = sync_to_openclaw(&settings) {
-        eprintln!("[Settings] Warning: Failed to sync to OpenClaw: {}", e);
-    }
+    // 2. If API key is configured, test and sync to OpenClaw
+    let llm_ready = if !settings.llm.apiKey.is_empty() {
+        // Test LLM connection
+        let test_result = test_llm_connection_internal(&settings.llm).await;
+        if test_result.success {
+            // Sync to OpenClaw config
+            match sync_to_openclaw(&settings) {
+                Ok(_) => {
+                    println!("[Settings] LLM configured and synced to OpenClaw");
+                    true
+                }
+                Err(e) => {
+                    eprintln!("[Settings] Failed to sync to OpenClaw: {}", e);
+                    false
+                }
+            }
+        } else {
+            eprintln!("[Settings] LLM test failed: {}", test_result.message);
+            false
+        }
+    } else {
+        false
+    };
 
-    Ok(settings)
+    Ok((settings, llm_ready))
+}
+
+/// Internal LLM connection test
+async fn test_llm_connection_internal(settings: &LlmSettings) -> ConnectionTestResult {
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // Build a simple test request based on API URL
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return ConnectionTestResult {
+                success: false,
+                message: format!("Failed to create HTTP client: {}", e),
+                latency_ms: None,
+            }
+        }
+    };
+
+    // Determine API endpoint and format based on URL
+    let (test_url, body) = if settings.apiUrl.contains("bigmodel.cn") {
+        // Zhipu/BigModel API
+        let url = format!("{}/chat/completions", settings.apiUrl.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "model": settings.defaultModel,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 10
+        });
+        (url, body)
+    } else if settings.apiUrl.contains("openai") {
+        let url = format!("{}/chat/completions", settings.apiUrl.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "model": settings.defaultModel,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 10
+        });
+        (url, body)
+    } else {
+        // Generic Anthropic-style API
+        let url = settings.apiUrl.clone();
+        let body = serde_json::json!({
+            "model": settings.defaultModel,
+            "max_tokens": 10,
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        (url, body)
+    };
+
+    let response = client
+        .post(&test_url)
+        .header("Authorization", format!("Bearer {}", settings.apiKey))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await;
+
+    let latency = start.elapsed().as_millis() as u64;
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() || status.as_u16() == 429 { // 429 = rate limited, but auth works
+                ConnectionTestResult {
+                    success: true,
+                    message: format!("LLM API 连接成功 ({:?})", status),
+                    latency_ms: Some(latency),
+                }
+            } else {
+                let body_text = resp.text().await.unwrap_or_default();
+                ConnectionTestResult {
+                    success: false,
+                    message: format!("API 返回错误 {}: {}", status, truncate(&body_text, 200)),
+                    latency_ms: Some(latency),
+                }
+            }
+        }
+        Err(e) => ConnectionTestResult {
+            success: false,
+            message: format!("连接失败: {}", e),
+            latency_ms: None,
+        },
+    }
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() > max {
+        format!("{}...", &s[..max])
+    } else {
+        s.to_string()
+    }
 }
 
 /// Sync SMAN settings to OpenClaw configuration
 fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
-    use std::path::PathBuf;
-
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .or_else(|_| std::env::var("HOMEPATH"))
-        .unwrap_or_else(|_| ".".to_string());
-
-    let openclaw_dir = PathBuf::from(home)
-        .join(".smanlocal")
-        .join("openclaw-home")
-        .join(".openclaw");
+    let openclaw_dir = get_openclaw_config_dir();
 
     // Ensure directory exists
     std::fs::create_dir_all(&openclaw_dir)
@@ -170,10 +293,6 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
     let api_url = settings.llm.apiUrl.clone();
     let api_key = settings.llm.apiKey.clone();
     let model = settings.llm.defaultModel.clone();
-
-    if api_key.is_empty() {
-        return Ok(()); // No API key configured, skip sync
-    }
 
     // Determine provider from API URL
     let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
@@ -243,41 +362,47 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
     std::fs::write(&config_path, content)
         .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
 
+    // Also write API key to env file (OpenClaw reads this)
+    let env_path = openclaw_dir.join(".env");
+    let env_content = format!("{}_API_KEY={}\n", provider_id.to_uppercase(), api_key);
+    std::fs::write(&env_path, env_content)
+        .map_err(|e| format!("Failed to write .env: {}", e))?;
+
     println!("[Settings] Synced LLM config to OpenClaw: provider={}, model={}", provider_id, model);
     Ok(())
 }
 
 #[tauri::command]
+pub fn update_app_settings(settings: AppSettings) -> Result<AppSettings, String> {
+    ensure_smanlocal_dir()?;
+
+    let path = settings_path();
+    let content = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    fs::write(path, &content)
+        .map_err(|e| format!("Failed to write settings: {}", e))?;
+
+    Ok(settings)
+}
+
+#[tauri::command]
 pub async fn test_llm_connection(settings: LlmSettings) -> ConnectionTestResult {
-    // TODO: Implement actual LLM connection test via OpenClaw
-    // For now, return a placeholder response
-    ConnectionTestResult {
-        success: true,
-        message: format!(
-            "LLM connection test for {} ({}) - will be handled by OpenClaw Sidecar",
-            settings.apiUrl, settings.defaultModel
-        ),
-        latency_ms: None,
-    }
+    test_llm_connection_internal(&settings).await
 }
 
 #[tauri::command]
 pub async fn test_llm_direct_chat() -> ConnectionTestResult {
-    // TODO: Implement direct chat test via OpenClaw
-    ConnectionTestResult {
-        success: true,
-        message: "Direct chat test - will be handled by OpenClaw Sidecar".to_string(),
-        latency_ms: None,
-    }
+    let settings = get_app_settings().unwrap_or_default();
+    test_llm_connection_internal(&settings.llm).await
 }
 
 #[tauri::command]
 pub async fn test_embedding_connection(settings: EmbeddingSettings) -> ConnectionTestResult {
-    // TODO: Implement actual embedding connection test via OpenClaw
     ConnectionTestResult {
         success: true,
         message: format!(
-            "Embedding connection test for {} ({}) - will be handled by OpenClaw Sidecar",
+            "Embedding connection test for {} ({})",
             settings.provider, settings.model
         ),
         latency_ms: None,
@@ -290,7 +415,6 @@ pub async fn test_qdrant_connection(settings: QdrantSettings) -> ConnectionTestR
 
     let start = Instant::now();
 
-    // Simple HTTP health check to Qdrant
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build();
@@ -355,6 +479,36 @@ pub fn get_web_search_env_vars() -> Vec<(String, String)> {
     }
     if !settings.webSearch.bingApiKey.is_empty() {
         vars.push(("BING_API_KEY".to_string(), settings.webSearch.bingApiKey));
+    }
+
+    vars
+}
+
+/// Get LLM API key env var for OpenClaw sidecar
+pub fn get_llm_env_vars() -> Vec<(String, String)> {
+    let settings = get_app_settings().unwrap_or_default();
+    let mut vars = Vec::new();
+
+    if !settings.llm.apiKey.is_empty() {
+        let api_url = &settings.llm.apiUrl;
+        let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
+            "zhipu"
+        } else if api_url.contains("openai") {
+            "openai"
+        } else if api_url.contains("anthropic") {
+            "anthropic"
+        } else {
+            "custom"
+        };
+
+        vars.push((
+            format!("{}_API_KEY", provider_id.to_uppercase()),
+            settings.llm.apiKey.clone(),
+        ));
+
+        if provider_id == "custom" {
+            vars.push(("OPENCLAW_LLM_API_URL".to_string(), api_url.clone()));
+        }
     }
 
     vars

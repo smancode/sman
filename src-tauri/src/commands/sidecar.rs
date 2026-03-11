@@ -165,43 +165,16 @@ fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<bool, String> {
     Ok(true) // Fully configured
 }
 
-/// Get LLM environment variables for OpenClaw sidecar
-fn get_llm_env_vars() -> Vec<(String, String)> {
-    let settings = crate::commands::settings::get_app_settings().unwrap_or_default();
-    let mut vars = Vec::new();
-
-    let api_url = settings.llm.apiUrl.clone();
-    let api_key = settings.llm.apiKey.clone();
-
-    if !api_key.is_empty() {
-        // Determine provider from API URL
-        let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
-            "zhipu"
-        } else if api_url.contains("openai") {
-            "openai"
-        } else if api_url.contains("anthropic") {
-            "anthropic"
-        } else {
-            "custom"
-        };
-
-        // Set API key env var: <PROVIDER>_API_KEY
-        let env_key = format!("{}_API_KEY", provider_id.to_uppercase());
-        vars.push((env_key, api_key));
-
-        // Also set OPENCLAW_LLM_API_URL for custom providers
-        if provider_id == "custom" {
-            vars.push(("OPENCLAW_LLM_API_URL".to_string(), api_url));
-        }
-    }
-
-    vars
-}
-
 #[tauri::command]
 pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, String> {
     if SERVER_RUNNING.load(Ordering::SeqCst) {
         return Ok("OpenClaw server already running".to_string());
+    }
+
+    // Check if LLM is configured first
+    let llm_configured = crate::commands::settings::is_llm_configured();
+    if !llm_configured {
+        return Err("LLM API Key 未配置，请先在设置中配置 LLM".to_string());
     }
 
     // Get isolated directories
@@ -212,11 +185,8 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     std::fs::create_dir_all(&openclaw_dir)
         .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
 
-    // Configure OpenClaw with LLM settings (returns false if no API key, but still starts)
-    let llm_configured = configure_openclaw_llm(&openclaw_dir)?;
-    if !llm_configured {
-        println!("[Sidecar] Warning: LLM not configured. Please set API Key in Settings and restart.");
-    }
+    // Configure OpenClaw with LLM settings
+    configure_openclaw_llm(&openclaw_dir)?;
 
     // Get OpenClaw path
     let openclaw_path = get_openclaw_path();
@@ -248,8 +218,8 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
         command = command.env(&key, value);
     }
 
-    // Get LLM API key and add to environment
-    let llm_vars = get_llm_env_vars();
+    // Get LLM API key from settings and add to environment
+    let llm_vars = crate::commands::settings::get_llm_env_vars();
     for (key, value) in llm_vars {
         command = command.env(&key, value);
     }

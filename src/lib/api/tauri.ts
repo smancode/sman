@@ -222,6 +222,14 @@ export const appSettingsApi = {
     return safeInvoke<AppSettings>("update_app_settings", { settings });
   },
 
+  async saveAndSync(settings: AppSettings): Promise<ApiResponse<{ settings: AppSettings; llmReady: boolean }>> {
+    return safeInvoke<{ settings: AppSettings; llmReady: boolean }>("save_settings_and_sync", { settings });
+  },
+
+  async isLlmConfigured(): Promise<ApiResponse<boolean>> {
+    return safeInvoke<boolean>("is_llm_configured");
+  },
+
   async testLlm(llm: LlmSettings): Promise<ApiResponse<ConnectionTestResult>> {
     return safeInvoke<ConnectionTestResult>("test_llm_connection", {
       settings: llm,
