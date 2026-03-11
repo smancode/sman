@@ -827,10 +827,10 @@
   </div>
 
   <InputArea
-    disabled={isSending}
+    disabled={isSending || !$selectedProject}
     placeholder={$selectedProject
-      ? "请描述你要构建的内容..."
-      : "输入 / 或 \ 触发技能 (请先添加项目 D:\\work\\aipro\\H5)"}
+      ? "输入 / 使用命令"
+      : "请先添加项目"}
     onSubmit={handleSubmit}
   />
 </div>

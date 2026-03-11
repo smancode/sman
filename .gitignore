@@ -36,3 +36,6 @@ src-tauri/target/
 # Temporary files
 *.tmp
 *.temp
+
+.VSCodeCounter/
+

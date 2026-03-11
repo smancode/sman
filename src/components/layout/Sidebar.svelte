@@ -1,7 +1,7 @@
 <script lang="ts">
   import { projectsStore, sortedProjects } from "../../lib/stores/projects";
   import ProjectList from "../project/ProjectList.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
 
   interface Props {
     sidebarWidth?: number;
@@ -12,9 +12,14 @@
 
   async function handleNewProject() {
     try {
-      const path = await invoke<string | null>("select_folder");
-      if (path) {
-        await projectsStore.createProject(path);
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "选择项目目录",
+      });
+
+      if (selected && typeof selected === "string") {
+        await projectsStore.createProject(selected);
       }
     } catch (error) {
       console.error("Failed to add project:", error);
