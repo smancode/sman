@@ -124,55 +124,55 @@ fn save_conversation_messages(conversation_id: &str, storage: &MessagesStorage) 
 }
 
 #[tauri::command]
-pub fn list_conversations(project_id: String) -> Result<Vec<ConversationRecord>, String> {
-    let storage = load_project_conversations(&project_id)?;
+pub fn list_conversations(projectId: String) -> Result<Vec<ConversationRecord>, String> {
+    let storage = load_project_conversations(&projectId)?;
     Ok(storage.conversations)
 }
 
 #[tauri::command]
-pub fn create_conversation(project_id: String, title: String) -> Result<ConversationRecord, String> {
+pub fn create_conversation(projectId: String, title: String) -> Result<ConversationRecord, String> {
     let now = Utc::now().to_rfc3339();
     let conversation = ConversationRecord {
         id: Uuid::new_v4().to_string(),
-        projectId: project_id.clone(),
+        projectId: projectId.clone(),
         title,
         createdAt: now.clone(),
         updatedAt: now,
     };
 
-    let mut storage = load_project_conversations(&project_id)?;
+    let mut storage = load_project_conversations(&projectId)?;
     storage.conversations.insert(0, conversation.clone());
-    save_project_conversations(&project_id, &storage)?;
+    save_project_conversations(&projectId, &storage)?;
 
     Ok(conversation)
 }
 
 #[tauri::command]
-pub fn get_conversation_messages(conversation_id: String) -> Result<Vec<HistoryEntryRecord>, String> {
-    let storage = load_conversation_messages(&conversation_id)?;
+pub fn get_conversation_messages(conversationId: String) -> Result<Vec<HistoryEntryRecord>, String> {
+    let storage = load_conversation_messages(&conversationId)?;
     Ok(storage.messages)
 }
 
 #[tauri::command]
-pub fn send_message(conversation_id: String, content: String) -> Result<HistoryEntryRecord, String> {
+pub fn send_message(conversationId: String, content: String) -> Result<HistoryEntryRecord, String> {
     let now = Utc::now().to_rfc3339();
     let message = HistoryEntryRecord {
         id: Uuid::new_v4().to_string(),
-        conversationId: conversation_id.clone(),
+        conversationId: conversationId.clone(),
         role: "user".to_string(),
         content,
         createdAt: now,
     };
 
-    let mut storage = load_conversation_messages(&conversation_id)?;
+    let mut storage = load_conversation_messages(&conversationId)?;
     storage.messages.push(message.clone());
-    save_conversation_messages(&conversation_id, &storage)?;
+    save_conversation_messages(&conversationId, &storage)?;
 
     Ok(message)
 }
 
 #[tauri::command]
-pub fn decide_message_route(project_id: String, content: String) -> Result<MessageRouteDecision, String> {
+pub fn decide_message_route(projectId: String, content: String) -> Result<MessageRouteDecision, String> {
     // Simple route decision based on content
     let content_lower = content.to_lowercase();
 

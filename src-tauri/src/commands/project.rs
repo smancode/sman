@@ -130,11 +130,11 @@ pub fn add_project(path: String) -> Result<Project, String> {
 }
 
 #[tauri::command]
-pub fn remove_project(project_id: String) -> Result<(), String> {
+pub fn remove_project(projectId: String) -> Result<(), String> {
     let mut storage = load_projects()?;
 
     let initial_len = storage.projects.len();
-    storage.projects.retain(|p| p.id != project_id);
+    storage.projects.retain(|p| p.id != projectId);
 
     if storage.projects.len() == initial_len {
         return Err("Project not found".to_string());
@@ -145,13 +145,13 @@ pub fn remove_project(project_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_project_skills(project_id: String) -> Result<Vec<SkillMeta>, String> {
+pub fn get_project_skills(projectId: String) -> Result<Vec<SkillMeta>, String> {
     let storage = load_projects()?;
 
     let project = storage
         .projects
         .iter()
-        .find(|p| p.id == project_id)
+        .find(|p| p.id == projectId)
         .ok_or("Project not found")?;
 
     let skills_dir = PathBuf::from(&project.path).join(".sman").join("skills");

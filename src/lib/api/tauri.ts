@@ -74,12 +74,12 @@ export const projectApi = {
   },
 
   async delete(projectId: string): Promise<ApiResponse<void>> {
-    return safeInvoke<void>("remove_project", { project_id: projectId });
+    return safeInvoke<void>("remove_project", { projectId });
   },
 
   async getSkills(projectId: string): Promise<ApiResponse<SkillMeta[]>> {
     return safeInvoke<SkillMeta[]>("get_project_skills", {
-      project_id: projectId,
+      projectId,
     });
   },
 
@@ -92,7 +92,7 @@ export const projectApi = {
     message: string,
   ): Promise<ApiResponse<string>> {
     return safeInvoke<string>("test_send_message", {
-      project_id: projectId,
+      projectId,
       content: message,
     });
   },
@@ -126,23 +126,23 @@ export const taskApi = {
     request: ExecuteTaskRequest,
   ): Promise<ApiResponse<ExecuteTaskResponse>> {
     return safeInvoke<ExecuteTaskResponse>("execute_task", {
-      project_id: request.projectId,
+      projectId: request.projectId,
       input: request.prompt,
     });
   },
 
   async getStatus(taskId: string): Promise<ApiResponse<GetTaskStatusResponse>> {
     return safeInvoke<GetTaskStatusResponse>("get_task", {
-      task_id: taskId,
+      taskId,
     });
   },
 
   async cancel(taskId: string): Promise<ApiResponse<void>> {
-    return safeInvoke<void>("cancel_task", { task_id: taskId });
+    return safeInvoke<void>("cancel_task", { taskId });
   },
 
   async list(projectId?: string): Promise<ApiResponse<Task[]>> {
-    return safeInvoke<Task[]>("list_tasks", { project_id: projectId });
+    return safeInvoke<Task[]>("list_tasks", { projectId });
   },
 };
 
@@ -151,7 +151,7 @@ export const conversationApi = {
     return safeInvoke<ConversationRecord[]>(
       "list_conversations",
       {
-        project_id: projectId,
+        projectId,
       },
       10000,
     );
@@ -164,7 +164,7 @@ export const conversationApi = {
     return safeInvoke<ConversationRecord>(
       "create_conversation",
       {
-        project_id: projectId,
+        projectId,
         title,
       },
       12000,
@@ -177,7 +177,7 @@ export const conversationApi = {
     return safeInvoke<HistoryEntryRecord[]>(
       "get_conversation_messages",
       {
-        conversation_id: conversationId,
+        conversationId,
       },
       10000,
     );
@@ -190,7 +190,7 @@ export const conversationApi = {
     return safeInvoke<HistoryEntryRecord>(
       "send_message",
       {
-        conversation_id: conversationId,
+        conversationId,
         content,
       },
       15000,
@@ -204,7 +204,7 @@ export const conversationApi = {
     return safeInvoke<MessageRouteDecision>(
       "decide_message_route",
       {
-        project_id: projectId,
+        projectId,
         content,
       },
       20000,
@@ -257,9 +257,9 @@ export const orchestrationApi = {
     conversationId?: string,
   ): Promise<ApiResponse<OrchestratedTaskResult>> {
     return safeInvoke<OrchestratedTaskResult>("execute_orchestrated_task", {
-      project_id: projectId,
+      projectId,
       input,
-      conversation_id: conversationId,
+      conversationId,
     });
   },
 
@@ -267,7 +267,7 @@ export const orchestrationApi = {
     taskId: string,
   ): Promise<ApiResponse<TaskDagResponse | null>> {
     return safeInvoke<TaskDagResponse | null>("get_task_dag", {
-      task_id: taskId,
+      taskId,
     });
   },
 
@@ -276,7 +276,7 @@ export const orchestrationApi = {
   ): Promise<ApiResponse<OrchestrationProgress | null>> {
     return safeInvoke<OrchestrationProgress | null>(
       "get_orchestration_status",
-      { task_id: taskId },
+      { taskId },
     );
   },
 };
