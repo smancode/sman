@@ -71,7 +71,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             llm: LlmSettings {
-                apiUrl: "https://open.bigmodel.cn/api/coding/paas/v4".to_string(),
+                apiUrl: "https://open.bigmodel.cn/api/paas/v4".to_string(),
                 apiKey: String::new(),
                 defaultModel: "GLM-5".to_string(),
             },
