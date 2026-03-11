@@ -27,15 +27,15 @@ export const isConnected = derived(
 
 /** Initialize OpenClaw WebSocket connection (does NOT start sidecar) */
 export async function initializeOpenClaw(): Promise<void> {
-  if (_apiInstance) {
-    return; // Already initialized
+  // If already initialized and connected, return
+  if (_apiInstance && _apiInstance.isConnected()) {
+    return;
   }
 
   try {
     // Connect WebSocket - assumes sidecar is already running
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
-    _apiInstance = api;
 
     // Set up state tracking via private client access
     const client = api["client"];
@@ -50,6 +50,8 @@ export async function initializeOpenClaw(): Promise<void> {
 
     connectionState.set("connecting");
     await api.connect();
+    // Only set instance after successful connection
+    _apiInstance = api;
     connectionState.set("connected");
     console.log("[OpenClaw] WebSocket connected successfully");
   } catch (err) {

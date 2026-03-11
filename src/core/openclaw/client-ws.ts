@@ -201,14 +201,18 @@ export class OpenClawWSClient {
 
       this.ws.onerror = (err) => {
         console.error("[OpenClawWS] WebSocket error:", err);
-        if (this._state === "connecting" || this._state === "reconnecting") {
-          this.setState("disconnected");
-          reject(new Error("WebSocket connection failed"));
-        }
+        // Don't reject immediately - let onclose handle reconnection logic
+        // This prevents double-handling of connection failures
       };
 
       this.ws.onclose = () => {
         this.stopHealthCheck();
+
+        // If we were connecting/reconnecting, reject the promise first
+        if (this._state === "connecting" || this._state === "reconnecting") {
+          reject(new Error("WebSocket connection failed"));
+        }
+
         this.handleDisconnect();
       };
 
