@@ -5,7 +5,8 @@
  * Manages WebSocket connection to OpenClaw Gateway with:
  * - Automatic request-response matching
  * - Event subscription
- * - Reconnection handling
+ * - Exponential backoff reconnection
+ * - Heartbeat health check
  */
 
 import type {
@@ -21,9 +22,18 @@ import type {
 
 const DEFAULT_CONFIG: WSClientConfig = {
   url: "ws://127.0.0.1:18789",
-  reconnectIntervalMs: 1000,
-  maxReconnectAttempts: 5,
   requestTimeoutMs: 120000,
+  reconnect: {
+    baseDelayMs: 1000,
+    maxDelayMs: 30000,
+    maxAttempts: 10,
+    backoffFactor: 1.5,
+  },
+  healthCheck: {
+    enabled: true,
+    heartbeatIntervalMs: 30000,
+    heartbeatTimeoutMs: 60000,
+  },
 };
 
 export class OpenClawWSClient {
@@ -34,6 +44,15 @@ export class OpenClawWSClient {
   private _state: WSClientState = "disconnected";
   private reconnectAttempts = 0;
   private requestId = 0;
+
+  // Health check
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimeout: ReturnType<typeof setTimeout> | null = null;
+  private lastHeartbeatTime = 0;
+
+  // Reconnect
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private shouldAutoReconnect = true;
 
   // State change callbacks
   private onStateChange?: (state: WSClientState) => void;
@@ -68,6 +87,94 @@ export class OpenClawWSClient {
     return this.config.url;
   }
 
+  /** Calculate reconnect delay with exponential backoff */
+  private getReconnectDelay(): number {
+    const { baseDelayMs, maxDelayMs, backoffFactor } = this.config.reconnect;
+    const delay = baseDelayMs * Math.pow(backoffFactor, this.reconnectAttempts);
+    return Math.min(delay, maxDelayMs);
+  }
+
+  /** Reset reconnect state after successful connection */
+  private resetReconnectState(): void {
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  /** Start heartbeat health check */
+  private startHealthCheck(): void {
+    if (!this.config.healthCheck.enabled || !this.ws) return;
+
+    this.stopHealthCheck();
+    this.lastHeartbeatTime = Date.now();
+
+    // Start heartbeat interval
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.sendHeartbeat();
+      }
+    }, this.config.healthCheck.heartbeatIntervalMs);
+  }
+
+  /** Send heartbeat and start timeout */
+  private sendHeartbeat(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    this.lastHeartbeatTime = Date.now();
+
+    // Send heartbeat frame (OpenClaw uses ping/pong or custom heartbeat)
+    // For browser WebSocket, we use a simple approach
+    try {
+      this.ws.send(JSON.stringify({ type: "heartbeat", timestamp: Date.now() }));
+    } catch (err) {
+      console.error("[OpenClawWS] Failed to send heartbeat:", err);
+    }
+
+    // Start heartbeat timeout
+    this.startHeartbeatTimeout();
+  }
+
+  /** Start heartbeat timeout */
+  private startHeartbeatTimeout(): void {
+    if (this.heartbeatTimeout) {
+      clearTimeout(this.heartbeatTimeout);
+    }
+    this.heartbeatTimeout = setTimeout(() => {
+      const elapsed = Date.now() - this.lastHeartbeatTime;
+      if (elapsed > this.config.healthCheck.heartbeatTimeoutMs) {
+        console.warn("[OpenClawWS] Heartbeat timeout, triggering reconnect");
+        this.triggerReconnect("heartbeat_timeout");
+      }
+    }, this.config.healthCheck.heartbeatTimeoutMs);
+  }
+
+  /** Stop health check */
+  private stopHealthCheck(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.heartbeatTimeout) {
+      clearTimeout(this.heartbeatTimeout);
+      this.heartbeatTimeout = null;
+    }
+  }
+
+  /** Trigger reconnection */
+  private triggerReconnect(reason: string): void {
+    console.log(`[OpenClawWS] Triggering reconnect: ${reason}`);
+    this.stopHealthCheck();
+
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+
+    this.handleDisconnect();
+  }
+
   /** Connect to Gateway */
   async connect(): Promise<void> {
     if (this.isConnected()) {
@@ -80,29 +187,38 @@ export class OpenClawWSClient {
       try {
         this.ws = new WebSocket(this.config.url);
       } catch (err) {
-        this.setState("error");
+        this.setState("disconnected");
         reject(new Error(`Failed to create WebSocket: ${err}`));
         return;
       }
 
       this.ws.onopen = () => {
         this.setState("connected");
-        this.reconnectAttempts = 0;
+        this.resetReconnectState();
+        this.startHealthCheck();
         resolve();
       };
 
-      this.ws.onerror = () => {
-        this.setState("error");
-        if (this._state === "connecting") {
+      this.ws.onerror = (err) => {
+        console.error("[OpenClawWS] WebSocket error:", err);
+        if (this._state === "connecting" || this._state === "reconnecting") {
+          this.setState("disconnected");
           reject(new Error("WebSocket connection failed"));
         }
       };
 
       this.ws.onclose = () => {
+        this.stopHealthCheck();
         this.handleDisconnect();
       };
 
       this.ws.onmessage = (event) => {
+        // Reset heartbeat timeout on any message
+        this.lastHeartbeatTime = Date.now();
+        if (this.heartbeatTimeout) {
+          clearTimeout(this.heartbeatTimeout);
+          this.heartbeatTimeout = null;
+        }
         this.handleMessage(event.data);
       };
     });
@@ -115,6 +231,12 @@ export class OpenClawWSClient {
       message = JSON.parse(data);
     } catch {
       console.error("[OpenClawWS] Failed to parse message:", data);
+      return;
+    }
+
+    // Ignore heartbeat responses
+    const msg = message as unknown as Record<string, unknown>;
+    if (msg && msg.type === "heartbeat") {
       return;
     }
 
@@ -168,18 +290,34 @@ export class OpenClawWSClient {
     }
     this.pendingRequests.clear();
 
-    // Try to reconnect
-    if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      this.setState("connecting");
-      setTimeout(() => {
-        this.connect().catch(() => {
-          // Reconnection failed, will retry
-        });
-      }, this.config.reconnectIntervalMs);
-    } else {
+    // Clear health check
+    this.stopHealthCheck();
+
+    // Check if we should auto-reconnect
+    const { maxAttempts } = this.config.reconnect;
+    if (!this.shouldAutoReconnect || this.reconnectAttempts >= maxAttempts) {
+      console.log(
+        `[OpenClawWS] Stopping reconnect (attempts: ${this.reconnectAttempts}/${maxAttempts})`,
+      );
       this.setState("disconnected");
+      return;
     }
+
+    // Schedule reconnect with exponential backoff
+    this.reconnectAttempts++;
+    const delay = this.getReconnectDelay();
+    console.log(
+      `[OpenClawWS] Scheduling reconnect ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`,
+    );
+
+    this.setState("reconnecting");
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect().catch((err) => {
+        console.error("[OpenClawWS] Reconnect failed:", err);
+        // handleDisconnect will be called again by onclose
+      });
+    }, delay);
   }
 
   /** Send RPC request */
@@ -238,11 +376,22 @@ export class OpenClawWSClient {
 
   /** Disconnect from Gateway */
   disconnect(): void {
+    this.shouldAutoReconnect = false;
+    this.stopHealthCheck();
+    this.resetReconnectState();
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this.setState("disconnected");
+  }
+
+  /** Manual reconnect after max attempts reached */
+  async manualReconnect(): Promise<void> {
+    this.reconnectAttempts = 0;
+    this.shouldAutoReconnect = true;
+    return this.connect();
   }
 }
 

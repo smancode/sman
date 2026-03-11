@@ -197,15 +197,47 @@ export interface HealthResult {
 }
 
 // ============================================
+// Reconnection & Health Check Types
+// ============================================
+
+/** 重连配置 */
+export interface ReconnectConfig {
+  /** 初始延迟（毫秒） */
+  baseDelayMs: number;
+  /** 最大延迟（毫秒） */
+  maxDelayMs: number;
+  /** 最大重试次数 */
+  maxAttempts: number;
+  /** 退避因子 */
+  backoffFactor: number;
+}
+
+/** 健康检查配置 */
+export interface HealthCheckConfig {
+  /** 是否启用 */
+  enabled: boolean;
+  /** 心跳间隔（毫秒） */
+  heartbeatIntervalMs: number;
+  /** 心跳超时（毫秒） */
+  heartbeatTimeoutMs: number;
+}
+
+// ============================================
 // Client Types
 // ============================================
 
 /** WebSocket 客户端配置 */
 export interface WSClientConfig {
   url: string;
-  reconnectIntervalMs: number;
-  maxReconnectAttempts: number;
+  /** @deprecated 使用 reconnect 替代 */
+  reconnectIntervalMs?: number;
+  /** @deprecated 使用 reconnect.maxAttempts 替代 */
+  maxReconnectAttempts?: number;
   requestTimeoutMs: number;
+  /** 重连配置 */
+  reconnect: ReconnectConfig;
+  /** 健康检查配置 */
+  healthCheck: HealthCheckConfig;
 }
 
 /** 待处理请求 */
@@ -219,4 +251,8 @@ export interface PendingRequest<T = unknown> {
 export type EventHandler<T = unknown> = (payload: T) => void;
 
 /** 客户端状态 */
-export type WSClientState = "disconnected" | "connecting" | "connected" | "error";
+export type WSClientState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "reconnecting";

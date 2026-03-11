@@ -38,9 +38,8 @@ export async function initializeOpenClaw(): Promise<void> {
   const client = api["client"];
   client.setStateChangeCallback((state: WSClientState) => {
     connectionState.set(state);
-    if (state === "error") {
-      connectionError.set("Connection failed");
-    } else {
+    // Clear error on non-disconnected states that indicate progress
+    if (state === "connected" || state === "connecting" || state === "reconnecting") {
       connectionError.set(null);
     }
   });
@@ -50,7 +49,7 @@ export async function initializeOpenClaw(): Promise<void> {
     await api.connect();
     connectionState.set("connected");
   } catch (err) {
-    connectionState.set("error");
+    connectionState.set("disconnected");
     connectionError.set(err instanceof Error ? err.message : "Connection failed");
     throw err;
   }
