@@ -188,8 +188,11 @@ export class OpenClawWSClient {
       return;
     }
 
+    console.log("[OpenClawWS] Received message:", JSON.stringify(message).substring(0, 200));
+
     if (message.type === "event") {
       const evt = message as unknown as GatewayEvent;
+      console.log("[OpenClawWS] Event:", evt.event, "payload:", JSON.stringify(evt.payload));
       if (evt.event === "connect.challenge") {
         // Extract nonce from challenge
         const payload = evt.payload as { nonce?: string } | undefined;
@@ -197,7 +200,10 @@ export class OpenClawWSClient {
         if (nonce) {
           this.connectNonce = nonce;
           console.log("[OpenClawWS] Received challenge with nonce:", nonce.substring(0, 8));
+          console.log("[OpenClawWS] WebSocket readyState:", this.ws?.readyState, "OPEN:", WebSocket.OPEN);
           void this.sendConnect(options);
+        } else {
+          console.error("[OpenClawWS] Challenge event missing nonce:", evt.payload);
         }
         return;
       }

@@ -96,8 +96,8 @@ export interface GatewayResponse<T = unknown> {
 export interface GatewayEvent<T = unknown> {
   type: "event";
   event: string;
-  payload: T;
-  seq: number;
+  payload?: T;
+  seq?: number;
 }
 
 /** Gateway 消息联合类型 */
