@@ -42,6 +42,11 @@ pub fn run() {
             commands::settings::test_llm_direct_chat,
             commands::settings::test_embedding_connection,
             commands::settings::test_qdrant_connection,
+            // Project
+            commands::project::get_projects,
+            commands::project::add_project,
+            commands::project::remove_project,
+            commands::project::get_project_skills,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
