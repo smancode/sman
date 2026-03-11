@@ -21,7 +21,7 @@ import type {
 } from "./types";
 
 const DEFAULT_CONFIG: WSClientConfig = {
-  url: "ws://127.0.0.1:18789",
+  url: "ws://127.0.0.1:18790",
   requestTimeoutMs: 120000,
   reconnect: {
     baseDelayMs: 1000,

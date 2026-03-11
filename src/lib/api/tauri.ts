@@ -330,3 +330,31 @@ export { isTauri };
 
 // Alias for backward compatibility
 export { appSettingsApi as settingsApi };
+
+// OpenClaw Sidecar API
+export const openclawApi = {
+  async start(): Promise<ApiResponse<string>> {
+    return safeInvoke<string>("start_openclaw_server");
+  },
+
+  async stop(): Promise<ApiResponse<string>> {
+    return safeInvoke<string>("stop_openclaw_server");
+  },
+
+  async checkHealth(): Promise<ApiResponse<boolean>> {
+    return safeInvoke<boolean>("check_openclaw_health");
+  },
+
+  async isRunning(): Promise<ApiResponse<boolean>> {
+    return safeInvoke<boolean>("is_server_running");
+  },
+
+  getPort(): number {
+    // Port is hardcoded on both sides, return constant
+    return 18790;
+  },
+
+  getLocalPath(): Promise<ApiResponse<string>> {
+    return safeInvoke<string>("get_sman_local_path");
+  },
+};

@@ -12,7 +12,8 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandChild;
 
 /// OpenClaw Gateway port (default for SMAN)
-const OPENCLAW_PORT: u16 = 18789;
+/// Use 18790 to avoid conflict with local OpenClaw (18789)
+const OPENCLAW_PORT: u16 = 18790;
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -73,7 +74,12 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     let mut command = app
         .shell()
         .command("node")
-        .args([openclaw_path.to_string_lossy().to_string(), "gateway".to_string()])
+        .args([
+            openclaw_path.to_string_lossy().to_string(),
+            "gateway".to_string(),
+            "--port".to_string(),
+            OPENCLAW_PORT.to_string(),
+        ])
         .env("OPENCLAW_CONFIG_PATH", config_path.to_string_lossy().to_string())
         .env("OPENCLAW_STATE_DIR", sman_dir.to_string_lossy().to_string());
 

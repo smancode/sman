@@ -8,6 +8,7 @@
 
 import { writable, derived } from "svelte/store";
 import { getOpenClawAPI, OpenClawAPI } from "../../core/openclaw/api";
+import { openclawApi } from "./tauri";
 import type { WSClientState, ChatEventPayload } from "../../core/openclaw/types";
 
 // Connection state store
@@ -31,6 +32,21 @@ export async function initializeOpenClaw(): Promise<void> {
     return; // Already initialized
   }
 
+  // Step 1: Start OpenClaw sidecar via Tauri
+  console.log("[OpenClaw] Starting sidecar...");
+  const startResult = await openclawApi.start();
+  if (!startResult.success) {
+    const errMsg = `Failed to start OpenClaw sidecar: ${startResult.error}`;
+    console.error("[OpenClaw]", errMsg);
+    connectionError.set(errMsg);
+    throw new Error(errMsg);
+  }
+  console.log("[OpenClaw] Sidecar started:", startResult.data);
+
+  // Wait a moment for the sidecar to be ready
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Step 2: Connect WebSocket
   const api = getOpenClawAPI();
   _apiInstance = api;
 
@@ -48,6 +64,7 @@ export async function initializeOpenClaw(): Promise<void> {
     connectionState.set("connecting");
     await api.connect();
     connectionState.set("connected");
+    console.log("[OpenClaw] WebSocket connected");
   } catch (err) {
     connectionState.set("disconnected");
     connectionError.set(err instanceof Error ? err.message : "Connection failed");
