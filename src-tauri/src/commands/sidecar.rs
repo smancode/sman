@@ -270,8 +270,29 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     }
 
     SERVER_RUNNING.store(true, Ordering::SeqCst);
+
+    // Wait for the server to be ready (port becomes available)
+    println!("[Sidecar] Waiting for server to be ready on port {}...", OPENCLAW_PORT);
+    let addr: SocketAddr = format!("127.0.0.1:{}", OPENCLAW_PORT)
+        .parse()
+        .map_err(|e: std::net::AddrParseError| e.to_string())?;
+
+    let max_retries = 30; // 30 * 200ms = 6 seconds max
+    for i in 0..max_retries {
+        if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(100)).is_ok() {
+            println!("[Sidecar] Server ready after {} attempts", i + 1);
+            return Ok(format!(
+                "OpenClaw server started on port {} with isolated home at {:?}",
+                OPENCLAW_PORT, isolated_home
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+
+    // Even if we couldn't verify, return success - the server might still be starting
+    println!("[Sidecar] Warning: Could not verify server readiness, but process started");
     Ok(format!(
-        "OpenClaw server started on port {} with isolated home at {:?}",
+        "OpenClaw server started on port {} (unverified) with isolated home at {:?}",
         OPENCLAW_PORT, isolated_home
     ))
 }
