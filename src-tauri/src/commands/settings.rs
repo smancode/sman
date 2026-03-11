@@ -12,34 +12,31 @@ pub struct ConnectionTestResult {
     pub latency_ms: Option<u64>,
 }
 
-/// LLM settings for testing
+/// LLM settings for testing (matches frontend LlmSettings interface)
 #[derive(Debug, Deserialize)]
 pub struct LlmSettings {
-    pub provider: String,
-    pub model: String,
-    #[serde(default)]
-    pub api_key: Option<String>,
-    #[serde(default)]
-    pub base_url: Option<String>,
+    pub apiUrl: String,
+    pub apiKey: String,
+    pub defaultModel: String,
 }
 
-/// Embedding settings for testing
+/// Embedding settings for testing (matches frontend EmbeddingSettings interface)
 #[derive(Debug, Deserialize)]
 pub struct EmbeddingSettings {
     pub provider: String,
     pub model: String,
     #[serde(default)]
-    pub api_key: Option<String>,
+    pub apiKey: Option<String>,
     #[serde(default)]
-    pub base_url: Option<String>,
+    pub apiUrl: Option<String>,
 }
 
-/// Qdrant settings for testing
+/// Qdrant settings for testing (matches frontend QdrantSettings interface)
 #[derive(Debug, Deserialize)]
 pub struct QdrantSettings {
     pub url: String,
     #[serde(default)]
-    pub api_key: Option<String>,
+    pub apiKey: Option<String>,
     #[serde(default)]
     pub collection: Option<String>,
 }
@@ -52,7 +49,7 @@ pub async fn test_llm_connection(settings: LlmSettings) -> ConnectionTestResult 
         success: true,
         message: format!(
             "LLM connection test for {} ({}) - will be handled by OpenClaw Sidecar",
-            settings.provider, settings.model
+            settings.apiUrl, settings.defaultModel
         ),
         latency_ms: None,
     }
@@ -96,7 +93,7 @@ pub async fn test_qdrant_connection(settings: QdrantSettings) -> ConnectionTestR
         Ok(client) => {
             let mut request = client.get(&format!("{}/collections", settings.url));
 
-            if let Some(api_key) = &settings.api_key {
+            if let Some(api_key) = &settings.apiKey {
                 request = request.header("api-key", api_key);
             }
 
