@@ -14,7 +14,10 @@ export class UnifiedOrchestrator {
     return this.tasks.get(taskId)?.status;
   }
 
-  async executeTask(taskId: string, preferredEngine?: string): Promise<ExecutionResult> {
+  async executeTask(
+    taskId: string,
+    preferredEngine?: string,
+  ): Promise<ExecutionResult> {
     const task = this.tasks.get(taskId);
     if (!task) {
       throw new Error(`task not found: ${taskId}`);
@@ -23,7 +26,10 @@ export class UnifiedOrchestrator {
     task.status = "running";
     try {
       const engine = this.registry.pick(preferredEngine);
-      const result = await engine.execute({ taskId: task.id, prompt: task.payload });
+      const result = await engine.execute({
+        taskId: task.id,
+        prompt: task.payload,
+      });
       task.status = result.success ? "succeeded" : "failed";
       return result;
     } catch (error) {

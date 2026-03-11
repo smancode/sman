@@ -18,7 +18,7 @@ export type SmanEvent =
   | { type: "chat:stream"; payload: ChatStreamEvent };
 
 export function subscribeToSmanEvents(
-  handler: (event: SmanEvent) => void
+  handler: (event: SmanEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<TaskProgressEvent | ChatStreamEvent>("sman-event", (event) => {
     // Cast the payload to SmanEvent

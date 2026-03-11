@@ -9,12 +9,12 @@ import type { TaskRecord, ExecutionResult } from "../types.js";
 
 export interface RuntimeGateway {
   execute(prompt: string, taskId: string): Promise<ExecutionResult>;
-  getStatus(taskId: string): "pending" | "running" | "succeeded" | "failed" | undefined;
+  getStatus(
+    taskId: string,
+  ): "pending" | "running" | "succeeded" | "failed" | undefined;
 }
 
-export function createRuntimeGateway(
-  acpxClient?: AcpxClient
-): RuntimeGateway {
+export function createRuntimeGateway(acpxClient?: AcpxClient): RuntimeGateway {
   const registry = new EngineRegistry();
 
   const runner = acpxClient

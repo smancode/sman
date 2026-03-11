@@ -9,10 +9,6 @@
     "sourceMap": true,
     "strict": true
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.svelte",
-    "src/**/*.js"
-  ],
+  "include": ["src/**/*.ts", "src/**/*.svelte", "src/**/*.js"],
   "exclude": ["node_modules", "build", "src-tauri", ".svelte-kit"]
 }
