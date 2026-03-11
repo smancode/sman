@@ -357,6 +357,10 @@ export const openclawApi = {
     return safeInvoke<boolean>("is_server_running");
   },
 
+  async getToken(): Promise<ApiResponse<string>> {
+    return safeInvoke<string>("get_gateway_token");
+  },
+
   getPort(): number {
     // Port is hardcoded on both sides, return constant
     return 18790;

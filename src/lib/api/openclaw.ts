@@ -8,6 +8,7 @@
 
 import { writable, derived, get } from "svelte/store";
 import { getOpenClawAPI, OpenClawAPI } from "../../core/openclaw/api";
+import { openclawApi } from "./tauri";
 import type { WSClientState, ChatEventPayload } from "../../core/openclaw/types";
 
 // Connection state store
@@ -37,6 +38,15 @@ export async function initializeOpenClaw(): Promise<void> {
   _apiInstance = null;
 
   try {
+    // Get token from sidecar
+    console.log("[OpenClaw] Getting auth token...");
+    const tokenResponse = await openclawApi.getToken();
+    if (!tokenResponse.success || !tokenResponse.data) {
+      throw new Error("Failed to get OpenClaw auth token");
+    }
+    const token = tokenResponse.data;
+    console.log("[OpenClaw] Got token:", token.substring(0, 8) + "...");
+
     // Connect WebSocket - assumes sidecar is already running
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
@@ -53,8 +63,8 @@ export async function initializeOpenClaw(): Promise<void> {
     });
 
     connectionState.set("connecting");
-    // Use skipAuth since OpenClaw Gateway runs with --auth none
-    await api.connect({ skipAuth: true });
+    // Connect with token
+    await api.connect({ token });
     // Only set instance after successful connection
     _apiInstance = api;
     connectionState.set("connected");

@@ -31,6 +31,7 @@ pub fn run() {
             commands::sidecar::is_server_running,
             commands::sidecar::get_sman_local_path,
             commands::sidecar::get_openclaw_port,
+            commands::sidecar::get_gateway_token,
             // Shell
             commands::shell::minimize_window,
             commands::shell::maximize_window,

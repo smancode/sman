@@ -239,7 +239,7 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             "--port".to_string(),
             OPENCLAW_PORT.to_string(),
             "--auth".to_string(),
-            "none".to_string(),  // Disable auth for local development
+            "token".to_string(),  // Use token auth
             "--dev".to_string(),  // Use dev mode for auto config
         ])
         .env("HOME", isolated_home.to_string_lossy().to_string())  // Critical: isolate HOME
@@ -352,4 +352,31 @@ pub fn get_sman_local_path() -> String {
 #[tauri::command]
 pub fn get_openclaw_port() -> u16 {
     OPENCLAW_PORT
+}
+
+/// Get the Gateway auth token from OpenClaw config
+#[tauri::command]
+pub fn get_gateway_token() -> Result<String, String> {
+    let openclaw_dir = get_openclaw_isolated_home().join(".openclaw");
+    let config_path = openclaw_dir.join("openclaw.json");
+
+    if !config_path.exists() {
+        return Err("OpenClaw config not found".to_string());
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+
+    let config: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    // Get token from gateway.auth.token
+    let token = config
+        .get("gateway")
+        .and_then(|g| g.get("auth"))
+        .and_then(|a| a.get("token"))
+        .and_then(|t| t.as_str())
+        .ok_or("Gateway token not found in config")?;
+
+    Ok(token.to_string())
 }
