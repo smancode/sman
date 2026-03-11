@@ -35,6 +35,11 @@ pub fn run() {
             commands::fs::create_directory,
             commands::fs::delete_file,
             commands::fs::append_to_file,
+            // Settings
+            commands::settings::test_llm_connection,
+            commands::settings::test_llm_direct_chat,
+            commands::settings::test_embedding_connection,
+            commands::settings::test_qdrant_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
