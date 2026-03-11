@@ -1,0 +1,26 @@
+# SMAN OpenClaw Configuration
+#
+# This file configures how OpenClaw loads skills.
+
+skills:
+  load:
+    # Additional directories to search for skills
+    extraDirs:
+      # User's global skills (highest priority for personal skills)
+      - ~/.smanlocal/skills
+
+      # Project's skills directory
+      - ./skills
+
+      # SMAN managed skills
+      - ./.sman/skills
+
+      # ClaudeCode compatibility
+      - ./.claude/skills
+
+  # Skill loading limits
+  limits:
+    # Maximum skills to load
+    maxInPrompt: 10
+    # Maximum characters for skills section
+    maxPromptChars: 15000
