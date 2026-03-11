@@ -7,12 +7,17 @@ use std::env;
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::CommandChild;
 
 /// OpenClaw Gateway port (default for SMAN)
 const OPENCLAW_PORT: u16 = 18789;
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Store the child process for graceful shutdown
+static OPENCLAW_CHILD: Mutex<Option<CommandChild>> = Mutex::new(None);
 
 /// Get SMAN local directory for isolated configuration.
 ///
@@ -25,6 +30,21 @@ fn get_sman_local_dir() -> PathBuf {
         .or_else(|_| env::var("HOMEPATH"))
         .unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".smanlocal")
+}
+
+/// Get OpenClaw installation path (relative to app or absolute)
+fn get_openclaw_path() -> PathBuf {
+    // Check environment variable first (for development)
+    if let Ok(path) = env::var("OPENCLAW_PATH") {
+        return PathBuf::from(path);
+    }
+
+    // Default: sibling directory ../openclaw
+    let mut path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    path.pop(); // Go up one level
+    path.push("openclaw");
+    path.push("openclaw.mjs");
+    path
 }
 
 #[tauri::command]
@@ -43,26 +63,36 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             .map_err(|e| format!("Failed to create config dir: {}", e))?;
     }
 
-    let sidecar = app
-        .shell()
-        .sidecar("openclaw-server")
-        .map_err(|e| format!("Failed to create sidecar: {}", e))?;
+    // Get OpenClaw path
+    let openclaw_path = get_openclaw_path();
+    if !openclaw_path.exists() {
+        return Err(format!("OpenClaw not found at {:?}", openclaw_path));
+    }
 
-    // Set environment variables for isolated configuration
-    let mut sidecar_env = sidecar
+    // Build command to run OpenClaw with node
+    let mut command = app
+        .shell()
+        .command("node")
+        .args([openclaw_path.to_string_lossy().to_string(), "gateway".to_string()])
         .env("OPENCLAW_CONFIG_PATH", config_path.to_string_lossy().to_string())
         .env("OPENCLAW_STATE_DIR", sman_dir.to_string_lossy().to_string());
 
-    // Get WebSearch API keys from settings and add to sidecar environment
+    // Get WebSearch API keys from settings and add to environment
     let web_search_vars = crate::commands::settings::get_web_search_env_vars();
     for (key, value) in web_search_vars {
-        sidecar_env = sidecar_env.env(&key, value);
+        command = command.env(&key, value);
     }
 
-    // Spawn the sidecar process
-    let (_rx, _child) = sidecar_env
+    // Spawn the process
+    let (_rx, child) = command
         .spawn()
-        .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
+        .map_err(|e| format!("Failed to spawn OpenClaw: {}", e))?;
+
+    // Store child for later termination
+    {
+        let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
+        *child_lock = Some(child);
+    }
 
     SERVER_RUNNING.store(true, Ordering::SeqCst);
     Ok(format!(
@@ -77,9 +107,13 @@ pub async fn stop_openclaw_server() -> Result<String, String> {
         return Ok("OpenClaw server not running".to_string());
     }
 
-    // Note: Process management is handled by Tauri shell plugin
-    // The sidecar will be terminated when the app exits
-    // For explicit stop, we just update the state
+    // Kill the child process
+    {
+        let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
+        if let Some(child) = child_lock.take() {
+            child.kill().map_err(|e| format!("Failed to kill OpenClaw: {}", e))?;
+        }
+    }
 
     SERVER_RUNNING.store(false, Ordering::SeqCst);
     Ok("OpenClaw server stopped".to_string())
