@@ -33,19 +33,22 @@ fn get_sman_local_dir() -> PathBuf {
     PathBuf::from(home).join(".smanlocal")
 }
 
-/// Get OpenClaw installation path (relative to app or absolute)
+/// Get isolated home directory for OpenClaw
+/// This ensures OpenClaw runs with its own independent config
+fn get_openclaw_isolated_home() -> PathBuf {
+    get_sman_local_dir().join("openclaw-home")
+}
+
+/// Get OpenClaw installation path
+/// Priority: OPENCLAW_PATH env > hardcoded development path
 fn get_openclaw_path() -> PathBuf {
-    // Check environment variable first (for development)
+    // Check environment variable first
     if let Ok(path) = env::var("OPENCLAW_PATH") {
         return PathBuf::from(path);
     }
 
-    // Default: sibling directory ../openclaw
-    let mut path = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    path.pop(); // Go up one level
-    path.push("openclaw");
-    path.push("openclaw.mjs");
-    path
+    // Development: hardcoded path (sibling to sman project)
+    PathBuf::from("/Users/nasakim/projects/openclaw/openclaw.mjs")
 }
 
 #[tauri::command]
@@ -54,15 +57,13 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
         return Ok("OpenClaw server already running".to_string());
     }
 
-    // Get isolated config directory
-    let sman_dir = get_sman_local_dir();
-    let config_path = sman_dir.join("openclaw.json");
+    // Get isolated directories
+    let isolated_home = get_openclaw_isolated_home();
+    let openclaw_dir = isolated_home.join(".openclaw");
 
-    // Ensure config directory exists
-    if !sman_dir.exists() {
-        std::fs::create_dir_all(&sman_dir)
-            .map_err(|e| format!("Failed to create config dir: {}", e))?;
-    }
+    // Ensure directories exist
+    std::fs::create_dir_all(&openclaw_dir)
+        .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
 
     // Get OpenClaw path
     let openclaw_path = get_openclaw_path();
@@ -71,6 +72,7 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     }
 
     // Build command to run OpenClaw with node
+    // Key: Override HOME to isolate OpenClaw's config directory
     let mut command = app
         .shell()
         .command("node")
@@ -79,9 +81,13 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             "gateway".to_string(),
             "--port".to_string(),
             OPENCLAW_PORT.to_string(),
+            "--auth".to_string(),
+            "none".to_string(),  // Disable auth for local development
+            "--dev".to_string(),  // Use dev mode for auto config
         ])
-        .env("OPENCLAW_CONFIG_PATH", config_path.to_string_lossy().to_string())
-        .env("OPENCLAW_STATE_DIR", sman_dir.to_string_lossy().to_string());
+        .env("HOME", isolated_home.to_string_lossy().to_string())  // Critical: isolate HOME
+        .env("USERPROFILE", isolated_home.to_string_lossy().to_string())  // Windows
+        .current_dir(&isolated_home);  // Run from isolated directory
 
     // Get WebSearch API keys from settings and add to environment
     let web_search_vars = crate::commands::settings::get_web_search_env_vars();
@@ -102,8 +108,8 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
 
     SERVER_RUNNING.store(true, Ordering::SeqCst);
     Ok(format!(
-        "OpenClaw server started on port {} with config at {:?}",
-        OPENCLAW_PORT, config_path
+        "OpenClaw server started on port {} with isolated home at {:?}",
+        OPENCLAW_PORT, isolated_home
     ))
 }
 

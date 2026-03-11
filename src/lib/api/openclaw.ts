@@ -32,43 +32,49 @@ export async function initializeOpenClaw(): Promise<void> {
     return; // Already initialized
   }
 
-  // Step 1: Start OpenClaw sidecar via Tauri
-  console.log("[OpenClaw] Starting sidecar...");
-  const startResult = await openclawApi.start();
-  if (!startResult.success) {
-    const errMsg = `Failed to start OpenClaw sidecar: ${startResult.error}`;
-    console.error("[OpenClaw]", errMsg);
-    connectionError.set(errMsg);
-    throw new Error(errMsg);
-  }
-  console.log("[OpenClaw] Sidecar started:", startResult.data);
-
-  // Wait a moment for the sidecar to be ready
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  // Step 2: Connect WebSocket
-  const api = getOpenClawAPI();
-  _apiInstance = api;
-
-  // Set up state tracking via private client access
-  const client = api["client"];
-  client.setStateChangeCallback((state: WSClientState) => {
-    connectionState.set(state);
-    // Clear error on non-disconnected states that indicate progress
-    if (state === "connected" || state === "connecting" || state === "reconnecting") {
-      connectionError.set(null);
-    }
-  });
-
   try {
+    // Step 1: Start OpenClaw sidecar via Tauri
+    console.log("[OpenClaw] Starting sidecar...");
+    const startResult = await openclawApi.start();
+    console.log("[OpenClaw] Sidecar start result:", startResult);
+
+    if (!startResult.success) {
+      const errMsg = `Failed to start OpenClaw sidecar: ${startResult.error}`;
+      console.error("[OpenClaw]", errMsg);
+      connectionError.set(errMsg);
+      connectionState.set("disconnected");
+      return; // Don't throw, just return
+    }
+    console.log("[OpenClaw] Sidecar started:", startResult.data);
+
+    // Wait a moment for the sidecar to be ready
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Step 2: Connect WebSocket
+    console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
+    const api = getOpenClawAPI();
+    _apiInstance = api;
+
+    // Set up state tracking via private client access
+    const client = api["client"];
+    client.setStateChangeCallback((state: WSClientState) => {
+      console.log("[OpenClaw] State changed to:", state);
+      connectionState.set(state);
+      // Clear error on non-disconnected states that indicate progress
+      if (state === "connected" || state === "connecting" || state === "reconnecting") {
+        connectionError.set(null);
+      }
+    });
+
     connectionState.set("connecting");
     await api.connect();
     connectionState.set("connected");
-    console.log("[OpenClaw] WebSocket connected");
+    console.log("[OpenClaw] WebSocket connected successfully");
   } catch (err) {
+    console.error("[OpenClaw] Initialization failed:", err);
     connectionState.set("disconnected");
     connectionError.set(err instanceof Error ? err.message : "Connection failed");
-    throw err;
+    // Don't throw, allow UI to show error state
   }
 }
 
