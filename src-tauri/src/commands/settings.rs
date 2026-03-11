@@ -129,7 +129,122 @@ pub fn update_app_settings(settings: AppSettings) -> Result<AppSettings, String>
     fs::write(path, &content)
         .map_err(|e| format!("Failed to write settings: {}", e))?;
 
+    // Sync LLM settings to OpenClaw config
+    if let Err(e) = sync_to_openclaw(&settings) {
+        eprintln!("[Settings] Warning: Failed to sync to OpenClaw: {}", e);
+        // Don't fail the whole operation, just log the warning
+    }
+
     Ok(settings)
+}
+
+/// Sync SMAN settings to OpenClaw configuration
+fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
+    use std::path::PathBuf;
+
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .or_else(|_| std::env::var("HOMEPATH"))
+        .unwrap_or_else(|_| ".".to_string());
+
+    let openclaw_dir = PathBuf::from(home)
+        .join(".smanlocal")
+        .join("openclaw-home")
+        .join(".openclaw");
+
+    // Ensure directory exists
+    std::fs::create_dir_all(&openclaw_dir)
+        .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
+
+    let config_path = openclaw_dir.join("openclaw.json");
+
+    // Read existing config or create new
+    let mut config: serde_json::Value = if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read openclaw.json: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    let api_url = settings.llm.apiUrl.clone();
+    let api_key = settings.llm.apiKey.clone();
+    let model = settings.llm.defaultModel.clone();
+
+    if api_key.is_empty() {
+        return Ok(()); // No API key configured, skip sync
+    }
+
+    // Determine provider from API URL
+    let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
+        "zhipu"
+    } else if api_url.contains("openai") {
+        "openai"
+    } else if api_url.contains("anthropic") {
+        "anthropic"
+    } else {
+        "custom"
+    };
+
+    let profile_key = format!("{}:default", provider_id);
+
+    // Ensure auth.profiles exists
+    if config.get("auth").is_none() {
+        config["auth"] = serde_json::json!({});
+    }
+    if config["auth"].get("profiles").is_none() {
+        config["auth"]["profiles"] = serde_json::json!({});
+    }
+
+    config["auth"]["profiles"][&profile_key] = serde_json::json!({
+        "provider": provider_id,
+        "mode": "api_key"
+    });
+
+    // Configure models
+    if config.get("models").is_none() {
+        config["models"] = serde_json::json!({
+            "mode": "merge",
+            "providers": {}
+        });
+    }
+    if config["models"].get("providers").is_none() {
+        config["models"]["providers"] = serde_json::json!({});
+    }
+
+    config["models"]["providers"][provider_id] = serde_json::json!({
+        "baseUrl": api_url,
+        "api": "anthropic-messages",
+        "models": [{
+            "id": model,
+            "name": model,
+            "input": ["text"],
+            "contextWindow": 128000,
+            "maxTokens": 8192
+        }]
+    });
+
+    // Configure agent defaults
+    if config.get("agents").is_none() {
+        config["agents"] = serde_json::json!({});
+    }
+    if config["agents"].get("defaults").is_none() {
+        config["agents"]["defaults"] = serde_json::json!({});
+    }
+
+    let model_ref = format!("{}/{}", provider_id, model);
+    config["agents"]["defaults"]["model"] = serde_json::json!({
+        "primary": model_ref
+    });
+
+    // Write config
+    let content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(&config_path, content)
+        .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
+
+    println!("[Settings] Synced LLM config to OpenClaw: provider={}, model={}", provider_id, model);
+    Ok(())
 }
 
 #[tauri::command]
