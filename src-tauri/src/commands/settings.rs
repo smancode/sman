@@ -332,12 +332,11 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
     }
 
     // Determine API type based on provider
-    let api_type = if provider_id == "zhipu" {
-        "openai-chat"  // Zhipu uses OpenAI-compatible /chat/completions endpoint
-    } else if provider_id == "openai" {
-        "openai-chat"
+    // OpenClaw supported types: openai-completions, openai-responses, anthropic-messages, etc.
+    let api_type = if provider_id == "zhipu" || provider_id == "openai" {
+        "openai-completions"  // OpenAI-compatible /chat/completions endpoint
     } else {
-        "anthropic-messages"  // Anthropic and custom use native format
+        "anthropic-messages"  // Anthropic native format
     };
 
     config["models"]["providers"][provider_id] = serde_json::json!({
