@@ -7,7 +7,11 @@
     activeOrchestrationProgress,
     activeParallelGroups,
   } from "../../lib/stores/tasks";
-  import { conversationApi, appSettingsApi, openclawApi } from "../../lib/api/tauri";
+  import {
+    conversationApi,
+    appSettingsApi,
+    openclawApi,
+  } from "../../lib/api/tauri";
   import {
     initializeOpenClaw,
     connectionError,
@@ -66,6 +70,19 @@
     return "user";
   }
 
+  function normalizeTimestamp(value: string): number {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric > 1e12 ? numeric : numeric * 1000;
+    }
+
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    return Date.now();
+  }
+
   function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
     return entries.map((entry) => ({
       id: entry.id,
@@ -74,7 +91,7 @@
         normalizeRole(entry.role) === "assistant"
           ? sanitizeAssistantContent(entry.content)
           : entry.content,
-      timestamp: new Date(entry.timestamp).getTime(),
+      timestamp: normalizeTimestamp(entry.timestamp),
     }));
   }
 
@@ -94,7 +111,13 @@
   }
 
   function isInputDisabled(): boolean {
-    return isSending || !$selectedProject || !$isConnected || !llmConfigured || isInitializing;
+    return (
+      isSending ||
+      !$selectedProject ||
+      !$isConnected ||
+      !llmConfigured ||
+      isInitializing
+    );
   }
 
   function updateLatestThinkingMessage(projectId: string, content: string) {
@@ -108,7 +131,9 @@
         index === projectMessages.length - 1 &&
         msg.role === "assistant" &&
         msg.taskId &&
-        (msg.content === "思考中..." || msg.content.startsWith("处理中") || msg.content.startsWith("思考"))
+        (msg.content === "思考中..." ||
+          msg.content.startsWith("处理中") ||
+          msg.content.startsWith("思考"))
       ) {
         updated = true;
         return { ...msg, content };
@@ -136,7 +161,11 @@
     }
 
     const listResponse = await conversationApi.list(projectId);
-    if (listResponse.success && listResponse.data && listResponse.data.length > 0) {
+    if (
+      listResponse.success &&
+      listResponse.data &&
+      listResponse.data.length > 0
+    ) {
       conversationByProject[projectId] = listResponse.data[0].id;
       return listResponse.data[0].id;
     }
@@ -144,7 +173,10 @@
       throw new Error(`加载会话失败: ${listResponse.error || "未知错误"}`);
     }
 
-    const createResponse = await conversationApi.create(projectId, `${projectName} 对话`);
+    const createResponse = await conversationApi.create(
+      projectId,
+      `${projectName} 对话`,
+    );
     if (createResponse.success && createResponse.data) {
       conversationByProject[projectId] = createResponse.data.id;
       return createResponse.data.id;
@@ -153,16 +185,28 @@
     throw new Error(`创建会话失败: ${createResponse.error || "未知错误"}`);
   }
 
-  async function loadConversationMessages(projectId: string, projectName: string) {
+  async function loadConversationMessages(
+    projectId: string,
+    projectName: string,
+  ) {
     const existingMessages = messagesByProject[projectId] || [];
-    if (isSending && sendingProjectId === projectId && existingMessages.length > 0) {
+    if (
+      isSending &&
+      sendingProjectId === projectId &&
+      existingMessages.length > 0
+    ) {
       return;
     }
 
-    const conversationId = await ensureProjectConversation(projectId, projectName);
+    const conversationId = await ensureProjectConversation(
+      projectId,
+      projectName,
+    );
     if (!conversationId) {
       messagesByProject[projectId] =
-        existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
+        existingMessages.length > 0
+          ? existingMessages
+          : getDemoMessages(projectName);
       return;
     }
 
@@ -172,13 +216,17 @@
         messagesByProject[projectId] = mapHistoryEntries(response.data);
       } else {
         messagesByProject[projectId] =
-          existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
+          existingMessages.length > 0
+            ? existingMessages
+            : getDemoMessages(projectName);
       }
       return;
     }
 
     messagesByProject[projectId] =
-      existingMessages.length > 0 ? existingMessages : getDemoMessages(projectName);
+      existingMessages.length > 0
+        ? existingMessages
+        : getDemoMessages(projectName);
   }
 
   onMount(() => {
@@ -213,28 +261,35 @@
         console.log("[Chat] OpenClaw WebSocket connected");
 
         // Subscribe to chat events from OpenClaw
-        unsubscribeOpenClaw = subscribeToChatEvents((event: ChatEventPayload) => {
-          console.log("[Chat] Received OpenClaw event:", event);
-          const projectId = event.sessionKey;
+        unsubscribeOpenClaw = subscribeToChatEvents(
+          (event: ChatEventPayload) => {
+            console.log("[Chat] Received OpenClaw event:", event);
+            const projectId = event.sessionKey;
 
-          if (event.state === "delta" && event.message?.content) {
-            updateLatestThinkingMessage(projectId, event.message.content);
-          } else if (event.state === "final") {
-            if (event.message?.content) {
+            if (event.state === "delta" && event.message?.content) {
               updateLatestThinkingMessage(projectId, event.message.content);
+            } else if (event.state === "final") {
+              if (event.message?.content) {
+                updateLatestThinkingMessage(projectId, event.message.content);
+              }
+              stopSending(projectId);
+            } else if (event.state === "error") {
+              updateLatestThinkingMessage(
+                projectId,
+                `错误：${event.errorMessage || "未知错误"}`,
+              );
+              stopSending(projectId);
+            } else if (event.state === "aborted") {
+              updateLatestThinkingMessage(projectId, "对话已中止");
+              stopSending(projectId);
             }
-            stopSending(projectId);
-          } else if (event.state === "error") {
-            updateLatestThinkingMessage(projectId, `错误：${event.errorMessage || "未知错误"}`);
-            stopSending(projectId);
-          } else if (event.state === "aborted") {
-            updateLatestThinkingMessage(projectId, "对话已中止");
-            stopSending(projectId);
-          }
-        });
+          },
+        );
       } catch (err) {
         console.error("[Chat] Failed to initialize OpenClaw:", err);
-        connectionError.set(err instanceof Error ? err.message : "Connection failed");
+        connectionError.set(
+          err instanceof Error ? err.message : "Connection failed",
+        );
         initError = err instanceof Error ? err.message : "连接 AI 服务失败";
       } finally {
         isInitializing = false;
@@ -308,13 +363,20 @@
       content: "思考中...",
       timestamp: Date.now(),
     };
-    messagesByProject[projectId] = [...currentMessages, userMessage, assistantMessage];
+    messagesByProject[projectId] = [
+      ...currentMessages,
+      userMessage,
+      assistantMessage,
+    ];
 
     isSending = true;
     sendingProjectId = projectId;
 
     try {
-      const conversationId = await ensureProjectConversation(projectId, $selectedProject.name);
+      const conversationId = await ensureProjectConversation(
+        projectId,
+        $selectedProject.name,
+      );
       messagesByProject[projectId] = [
         ...currentMessages,
         userMessage,

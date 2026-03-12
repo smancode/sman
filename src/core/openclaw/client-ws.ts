@@ -24,13 +24,11 @@ import {
   loadOrCreateDeviceIdentity,
   buildDeviceAuthPayload,
   signDevicePayload,
-  loadDeviceAuthToken,
-  storeDeviceAuthToken,
-  clearDeviceAuthToken,
+  type DeviceIdentity,
 } from "./device-auth";
 
 const DEFAULT_CONFIG: WSClientConfig = {
-  url: "ws://127.0.0.1:18790",
+  url: "ws://127.0.0.1:18790/ws",
   requestTimeoutMs: 120000,
   reconnect: {
     baseDelayMs: 1000,
@@ -46,18 +44,10 @@ const DEFAULT_CONFIG: WSClientConfig = {
 };
 
 // Gateway client constants
-const GATEWAY_CLIENT_NAMES = {
-  GATEWAY_CLIENT: "gateway-client",
-  CONTROL_UI: "openclaw-control-ui",
-  WEBCHAT: "webchat",
-} as const;
+// Use CONTROL_UI to enable silent local pairing (auto-approval without user interaction)
+const GATEWAY_CLIENT_ID = "openclaw-control-ui";
+const GATEWAY_CLIENT_MODE = "ui";
 
-const GATEWAY_CLIENT_MODES = {
-  UI: "ui",
-  WEBCHAT: "webchat",
-  CLI: "cli",
-  NODE: "node",
-} as const;
 
 export type HelloOk = {
   type: "hello-ok";
@@ -87,6 +77,7 @@ export class OpenClawWSClient {
   private connectSent = false;
   private connectResolve?: () => void;
   private connectReject?: (err: Error) => void;
+  private lastConnectOptions?: ConnectOptions;
 
   // Health check
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -97,6 +88,9 @@ export class OpenClawWSClient {
 
   // State change callback
   private onStateChange?: (state: WSClientState) => void;
+
+  // Device identity for authentication
+  private deviceIdentity: DeviceIdentity | null = null;
 
   constructor(config: Partial<WSClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -137,11 +131,28 @@ export class OpenClawWSClient {
     }
   }
 
+  /** Initialize device identity for authentication */
+  private async initDeviceIdentity(): Promise<void> {
+    if (this.deviceIdentity) return;
+    try {
+      this.deviceIdentity = await loadOrCreateDeviceIdentity();
+      console.log("[OpenClawWS] Device identity loaded:", this.deviceIdentity.deviceId.substring(0, 16));
+    } catch (err) {
+      console.warn("[OpenClawWS] Failed to load device identity:", err);
+    }
+  }
+
   /** Connect to Gateway with optional auth token */
   async connect(options?: ConnectOptions): Promise<void> {
     if (this.isConnected()) {
       return;
     }
+
+    // Initialize device identity before connecting
+    await this.initDeviceIdentity();
+
+    const resolvedOptions = options ?? this.lastConnectOptions;
+    this.lastConnectOptions = resolvedOptions;
 
     return new Promise((resolve, reject) => {
       this.connectResolve = resolve;
@@ -173,7 +184,7 @@ export class OpenClawWSClient {
       };
 
       this.ws.onmessage = (event) => {
-        this.handleMessage(event.data, options);
+        this.handleMessage(event.data, resolvedOptions);
       };
     });
   }
@@ -188,22 +199,41 @@ export class OpenClawWSClient {
       return;
     }
 
-    console.log("[OpenClawWS] Received message:", JSON.stringify(message).substring(0, 200));
+    console.log(
+      "[OpenClawWS] Received message:",
+      JSON.stringify(message).substring(0, 200),
+    );
 
     if (message.type === "event") {
       const evt = message as unknown as GatewayEvent;
-      console.log("[OpenClawWS] Event:", evt.event, "payload:", JSON.stringify(evt.payload));
+      console.log(
+        "[OpenClawWS] Event:",
+        evt.event,
+        "payload:",
+        JSON.stringify(evt.payload),
+      );
       if (evt.event === "connect.challenge") {
         // Extract nonce from challenge
         const payload = evt.payload as { nonce?: string } | undefined;
         const nonce = payload?.nonce;
         if (nonce) {
           this.connectNonce = nonce;
-          console.log("[OpenClawWS] Received challenge with nonce:", nonce.substring(0, 8));
-          console.log("[OpenClawWS] WebSocket readyState:", this.ws?.readyState, "OPEN:", WebSocket.OPEN);
+          console.log(
+            "[OpenClawWS] Received challenge with nonce:",
+            nonce.substring(0, 8),
+          );
+          console.log(
+            "[OpenClawWS] WebSocket readyState:",
+            this.ws?.readyState,
+            "OPEN:",
+            WebSocket.OPEN,
+          );
           void this.sendConnect(options);
         } else {
-          console.error("[OpenClawWS] Challenge event missing nonce:", evt.payload);
+          console.error(
+            "[OpenClawWS] Challenge event missing nonce:",
+            evt.payload,
+          );
         }
         return;
       }
@@ -215,7 +245,10 @@ export class OpenClawWSClient {
           try {
             handler(evt.payload);
           } catch (err) {
-            console.error(`[OpenClawWS] Event handler error for ${evt.event}:`, err);
+            console.error(
+              `[OpenClawWS] Event handler error for ${evt.event}:`,
+              err,
+            );
           }
         }
       }
@@ -264,82 +297,63 @@ export class OpenClawWSClient {
     if (this.connectSent) return;
     this.connectSent = true;
 
-    const isSecureContext = typeof crypto !== "undefined" && !!crypto.subtle;
     const role = "operator";
-    const scopes = ["operator.admin", "operator.approvals", "operator.pairing"];
+    const scopes = ["operator.admin"];
+    const authToken = options?.token;
+    const nonce = this.connectNonce;
 
-    let device: {
-      id: string;
-      publicKey: string;
-      signature: string;
-      signedAt: number;
-      nonce: string;
-    } | undefined;
+    // Build device auth if we have device identity and nonce
+    const device = await (async () => {
+      if (!this.deviceIdentity || !nonce) return undefined;
 
-    let authToken = options?.token;
+      const clientId = GATEWAY_CLIENT_ID;
+      const clientMode = GATEWAY_CLIENT_MODE;
+      const signedAtMs = Date.now();
 
-    if (isSecureContext) {
-      try {
-        const deviceIdentity = await loadOrCreateDeviceIdentity();
+      const payload = buildDeviceAuthPayload({
+        deviceId: this.deviceIdentity.deviceId,
+        clientId,
+        clientMode,
+        role,
+        scopes,
+        signedAtMs,
+        token: authToken ?? null,
+        nonce,
+        version: "v2",
+      });
 
-        // Check for stored device token
-        const storedToken = loadDeviceAuthToken({
-          deviceId: deviceIdentity.deviceId,
-          role,
-        });
+      const signature = await signDevicePayload(this.deviceIdentity.privateKey, payload);
 
-        // Use stored token if no explicit token provided
-        if (!authToken && storedToken) {
-          authToken = storedToken.token;
-        }
-
-        // Build and sign the device auth payload
-        const signedAtMs = Date.now();
-        const nonce = this.connectNonce ?? "";
-        const payload = buildDeviceAuthPayload({
-          deviceId: deviceIdentity.deviceId,
-          clientId: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
-          clientMode: GATEWAY_CLIENT_MODES.UI,
-          role,
-          scopes,
-          signedAtMs,
-          token: authToken ?? null,
-          nonce,
-        });
-
-        const signature = await signDevicePayload(deviceIdentity.privateKey, payload);
-
-        device = {
-          id: deviceIdentity.deviceId,
-          publicKey: deviceIdentity.publicKey,
-          signature,
-          signedAt: signedAtMs,
-          nonce,
-        };
-
-        console.log("[OpenClawWS] Device signed:", deviceIdentity.deviceId);
-      } catch (err) {
-        console.error("[OpenClawWS] Device auth failed:", err);
-        // Fall through without device identity
-      }
-    } else {
-      console.warn("[OpenClawWS] Not secure context, skipping device identity");
-    }
+      return {
+        id: this.deviceIdentity.deviceId,
+        publicKey: this.deviceIdentity.publicKey,
+        signature,
+        signedAt: signedAtMs,
+        nonce,
+      };
+    })();
 
     // Build connect params
     const params: Record<string, unknown> = {
       minProtocol: 3,
       maxProtocol: 3,
       client: {
-        id: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+        id: GATEWAY_CLIENT_ID,
+        displayName: "SMAN",
         version: "1.0.0",
-        platform: "desktop",
-        mode: GATEWAY_CLIENT_MODES.UI,
+        platform:
+          typeof navigator !== "undefined" ? navigator.platform : "desktop",
+        mode: GATEWAY_CLIENT_MODE,
       },
+      caps: ["tool-events"],
       role,
       scopes,
+      userAgent:
+        typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+      locale: typeof navigator !== "undefined" ? navigator.language : "zh-CN",
     };
 
+    // Add device authentication if available
     if (device) {
       params.device = device;
     }
@@ -349,22 +363,36 @@ export class OpenClawWSClient {
         token: authToken,
         password: options?.password,
       };
+      console.log("[DIAGNOSTIC] WebSocket connect params:");
+      console.log("  auth.token:", authToken ? `${authToken.substring(0, 32)}...` : "none");
+      console.log("  token length:", authToken?.length || 0);
+      console.log("[OpenClawWS] Sending connect request with auth token:", authToken ? `${authToken.substring(0, 16)}...` : "none");
+    } else {
+      console.error("[DIAGNOSTIC] WebSocket connect FAILED - no auth token provided");
+      this.connectReject?.(new Error("Missing gateway auth token"));
+      this.ws?.close();
+      return;
     }
 
-    console.log("[OpenClawWS] Sending connect request...");
+    console.log("[OpenClawWS] Device auth:", device ? "present" : "none");
 
     try {
       await this.request<HelloOk>("connect", params);
       // Success handled in handleMessage via hello-ok
     } catch (err) {
       console.error("[OpenClawWS] Connect failed:", err);
-      this.connectReject?.(err instanceof Error ? err : new Error("Connect failed"));
+      this.connectReject?.(
+        err instanceof Error ? err : new Error("Connect failed"),
+      );
       this.ws?.close();
     }
   }
 
   /** Send RPC request */
-  async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+  async request<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<T> {
     if (!this.isConnected()) {
       throw new Error("Not connected to OpenClaw Gateway");
     }
@@ -451,7 +479,7 @@ export class OpenClawWSClient {
     const { maxAttempts } = this.config.reconnect;
     if (!this.shouldAutoReconnect || this.reconnectAttempts >= maxAttempts) {
       console.log(
-        `[OpenClawWS] Stopping reconnect (attempts: ${this.reconnectAttempts}/${maxAttempts})`
+        `[OpenClawWS] Stopping reconnect (attempts: ${this.reconnectAttempts}/${maxAttempts})`,
       );
       this.setState("disconnected");
       return;
@@ -461,13 +489,13 @@ export class OpenClawWSClient {
     this.reconnectAttempts++;
     const delay = this.getReconnectDelay();
     console.log(
-      `[OpenClawWS] Scheduling reconnect ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`
+      `[OpenClawWS] Scheduling reconnect ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`,
     );
 
     this.setState("reconnecting");
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect().catch((err) => {
+      this.connect(this.lastConnectOptions).catch((err) => {
         console.error("[OpenClawWS] Reconnect failed:", err);
       });
     }, delay);
@@ -490,7 +518,7 @@ export class OpenClawWSClient {
   async manualReconnect(): Promise<void> {
     this.reconnectAttempts = 0;
     this.shouldAutoReconnect = true;
-    return this.connect();
+    return this.connect(this.lastConnectOptions);
   }
 }
 

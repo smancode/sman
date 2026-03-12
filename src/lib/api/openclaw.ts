@@ -9,7 +9,10 @@
 import { writable, derived, get } from "svelte/store";
 import { getOpenClawAPI, OpenClawAPI } from "../../core/openclaw/api";
 import { openclawApi } from "./tauri";
-import type { WSClientState, ChatEventPayload } from "../../core/openclaw/types";
+import type {
+  WSClientState,
+  ChatEventPayload,
+} from "../../core/openclaw/types";
 
 // Connection state store
 export const connectionState = writable<WSClientState>("disconnected");
@@ -38,8 +41,20 @@ export async function initializeOpenClaw(): Promise<void> {
   _apiInstance = null;
 
   try {
+    let gatewayToken: string | undefined;
+    const tokenResponse = await openclawApi.getToken();
+    if (tokenResponse.success && tokenResponse.data) {
+      gatewayToken = tokenResponse.data;
+      console.log("[OpenClaw] Got gateway token:", gatewayToken.substring(0, 16) + "...");
+    } else {
+      console.warn(
+        "[OpenClaw] Failed to load gateway token:",
+        tokenResponse.error,
+      );
+    }
+
     // Connect WebSocket - assumes sidecar is already running
-    // Device authentication is handled automatically by client-ws.ts
+    // Token and device authentication are handled in client-ws.ts
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
 
@@ -49,14 +64,19 @@ export async function initializeOpenClaw(): Promise<void> {
       console.log("[OpenClaw] State changed to:", state);
       connectionState.set(state);
       // Clear error on non-disconnected states that indicate progress
-      if (state === "connected" || state === "connecting" || state === "reconnecting") {
+      if (
+        state === "connected" ||
+        state === "connecting" ||
+        state === "reconnecting"
+      ) {
         connectionError.set(null);
       }
     });
 
     connectionState.set("connecting");
-    // Connect with device authentication (no token needed - uses challenge-response)
-    await api.connect();
+    await api.connect({
+      token: gatewayToken,
+    });
     // Only set instance after successful connection
     _apiInstance = api;
     connectionState.set("connected");

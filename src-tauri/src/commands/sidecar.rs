@@ -39,6 +39,112 @@ fn get_openclaw_isolated_home() -> PathBuf {
     get_sman_local_dir().join("openclaw-home")
 }
 
+/// Generate a random gateway token
+fn generate_gateway_token() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let mut hasher = DefaultHasher::new();
+    timestamp.hash(&mut hasher);
+    format!("sman-{:016x}", hasher.finish())
+}
+
+/// Configure gateway for SMAN
+/// Sets controlUi options and PRE-GENERATES token (ensures Gateway and client use same token)
+fn configure_gateway_for_sman(openclaw_dir: &PathBuf) -> Result<String, String> {
+    let config_path = openclaw_dir.join("openclaw.json");
+
+    // CRITICAL: Must re-read config here because configure_openclaw_llm may have modified it
+    // Use a retry loop to ensure we get the latest version
+    let mut config: serde_json::Value = serde_json::json!({});
+    let max_retries = 10;
+    for i in 0..max_retries {
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    match serde_json::from_str(&content) {
+                        Ok(parsed) => {
+                            config = parsed;
+                            break;
+                        }
+                        Err(e) => {
+                            println!("[Sidecar] Warning: Failed to parse config (attempt {}): {}", i + 1, e);
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("[Sidecar] Warning: Failed to read config (attempt {}): {}", i + 1, e);
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+        } else {
+            // Config doesn't exist yet, wait a bit
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    // Ensure gateway section exists
+    if config.get("gateway").is_none() {
+        config["gateway"] = serde_json::json!({});
+    }
+
+    // Ensure gateway.auth section exists
+    if config["gateway"].get("auth").is_none() {
+        config["gateway"]["auth"] = serde_json::json!({});
+    }
+
+    // Generate a random token (same format as OpenClaw Gateway)
+    let token = generate_gateway_token();
+
+    // Set gateway auth mode and token
+    // CRITICAL: Pre-generate token so Gateway and client use the SAME token
+    config["gateway"]["auth"]["mode"] = serde_json::json!("token");
+    config["gateway"]["auth"]["token"] = serde_json::json!(&token);
+
+    // Configure controlUi for Tauri WebView
+    // Use wildcard to allow all origins in local development
+    // dangerouslyDisableDeviceAuth: true skips device pairing for local development
+    config["gateway"]["controlUi"] = serde_json::json!({
+        "allowedOrigins": ["*"],
+        "dangerouslyDisableDeviceAuth": true
+    });
+
+    // Set gateway mode to local
+    config["gateway"]["mode"] = serde_json::json!("local");
+    config["gateway"]["bind"] = serde_json::json!("loopback");
+
+    // Write config
+    let content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(&config_path, content)
+        .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
+
+    // DIAGNOSTIC: Verify written token
+    let verify_content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to verify config: {}", e))?;
+    let verify_config: serde_json::Value = serde_json::from_str(&verify_content)
+        .map_err(|e| format!("Failed to parse verified config: {}", e))?;
+    let written_token = verify_config
+        .get("gateway")
+        .and_then(|g| g.get("auth"))
+        .and_then(|a| a.get("token"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("NOT_FOUND");
+
+    println!("[DIAGNOSTIC] configure_gateway_for_sman:");
+    println!("  Generated token: {}...", &token[..20.min(token.len())]);
+    println!("  Written token:   {}...", &written_token[..20.min(written_token.len())]);
+    println!("  Match: {}", if token == written_token { "YES" } else { "NO" });
+
+    Ok(token)
+}
+
 /// Get OpenClaw installation path
 /// Priority: OPENCLAW_PATH env > hardcoded development path
 fn get_openclaw_path() -> PathBuf {
@@ -49,6 +155,189 @@ fn get_openclaw_path() -> PathBuf {
 
     // Development: hardcoded path (sibling to sman project)
     PathBuf::from("/Users/nasakim/projects/openclaw/openclaw.mjs")
+}
+
+/// Configure OpenClaw with complete settings (LLM + Gateway) in a single write
+/// This avoids race conditions between multiple config writes
+fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String> {
+    let settings = crate::commands::settings::get_app_settings().unwrap_or_default();
+
+    // Generate gateway token first
+    let gateway_token = generate_gateway_token();
+
+    // Read existing openclaw.json or create new config
+    let config_path = openclaw_dir.join("openclaw.json");
+    let mut config: serde_json::Value = if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read openclaw.json: {}", e))?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    // ========== LLM Configuration ==========
+    let api_url = settings.llm.apiUrl.clone();
+    let api_key = settings.llm.apiKey.clone();
+    let model = settings.llm.defaultModel.clone();
+
+    if api_key.is_empty() {
+        println!("[Sidecar] Warning: No LLM API Key configured. Server will start but chat won't work.");
+    } else {
+        // Determine provider from API URL
+        let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
+            "zhipu"
+        } else if api_url.contains("openai") {
+            "openai"
+        } else if api_url.contains("anthropic") {
+            "anthropic"
+        } else {
+            "custom"
+        };
+
+        // Build auth profile
+        let profile_key = format!("{}:default", provider_id);
+
+        // Ensure auth.profiles exists
+        if config.get("auth").is_none() {
+            config["auth"] = serde_json::json!({});
+        }
+        if config["auth"].get("profiles").is_none() {
+            config["auth"]["profiles"] = serde_json::json!({});
+        }
+
+        config["auth"]["profiles"][&profile_key] = serde_json::json!({
+            "provider": provider_id,
+            "mode": "api_key"
+        });
+
+        // Configure models
+        if config.get("models").is_none() {
+            config["models"] = serde_json::json!({
+                "mode": "merge",
+                "providers": {}
+            });
+        }
+        if config["models"].get("providers").is_none() {
+            config["models"]["providers"] = serde_json::json!({});
+        }
+
+        // Determine API type based on provider
+        let api_type = if provider_id == "zhipu" || provider_id == "openai" {
+            "openai-completions"
+        } else {
+            "anthropic-messages"
+        };
+
+        // Add provider config
+        config["models"]["providers"][provider_id] = serde_json::json!({
+            "baseUrl": api_url,
+            "api": api_type,
+            "models": [{
+                "id": model,
+                "name": model,
+                "input": ["text"],
+                "contextWindow": 128000,
+                "maxTokens": 8192
+            }]
+        });
+
+        // Configure agent defaults to use this model
+        if config.get("agents").is_none() {
+            config["agents"] = serde_json::json!({});
+        }
+        if config["agents"].get("defaults").is_none() {
+            config["agents"]["defaults"] = serde_json::json!({});
+        }
+
+        let model_ref = format!("{}/{}", provider_id, model);
+        config["agents"]["defaults"]["model"] = serde_json::json!({
+            "primary": model_ref
+        });
+
+        // CRITICAL: Write auth-profiles.json to agent directory
+        let agent_dir = openclaw_dir.join("agents").join("dev").join("agent");
+        std::fs::create_dir_all(&agent_dir)
+            .map_err(|e| format!("Failed to create agent dir: {}", e))?;
+
+        let auth_profiles_path = agent_dir.join("auth-profiles.json");
+        let auth_profiles = serde_json::json!({
+            "profiles": {
+                &profile_key: {
+                    "provider": provider_id,
+                    "mode": "api_key",
+                    "apiKey": api_key
+                }
+            },
+            "defaultProfile": profile_key
+        });
+
+        let auth_content = serde_json::to_string_pretty(&auth_profiles)
+            .map_err(|e| format!("Failed to serialize auth-profiles: {}", e))?;
+        std::fs::write(&auth_profiles_path, auth_content)
+            .map_err(|e| format!("Failed to write auth-profiles.json: {}", e))?;
+
+        println!("[Sidecar] LLM configured: provider={}, model={}", provider_id, model);
+    }
+
+    // Ensure basic agent config exists
+    if config.get("agents").is_none() {
+        config["agents"] = serde_json::json!({
+            "defaults": {
+                "identity": { "name": "SMAN Assistant" }
+            }
+        });
+    }
+
+    // ========== Gateway Configuration ==========
+    // Ensure gateway section exists
+    if config.get("gateway").is_none() {
+        config["gateway"] = serde_json::json!({});
+    }
+
+    // Ensure gateway.auth section exists
+    if config["gateway"].get("auth").is_none() {
+        config["gateway"]["auth"] = serde_json::json!({});
+    }
+
+    // Set gateway auth mode and token
+    // CRITICAL: Pre-generate token so Gateway and client use the SAME token
+    config["gateway"]["auth"]["mode"] = serde_json::json!("token");
+    config["gateway"]["auth"]["token"] = serde_json::json!(&gateway_token);
+
+    // Configure controlUi for Tauri WebView
+    config["gateway"]["controlUi"] = serde_json::json!({
+        "allowedOrigins": ["*"],
+        "dangerouslyDisableDeviceAuth": true
+    });
+
+    // Set gateway mode to local
+    config["gateway"]["mode"] = serde_json::json!("local");
+    config["gateway"]["bind"] = serde_json::json!("loopback");
+
+    // Write config ONCE with all settings
+    let content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    std::fs::write(&config_path, content)
+        .map_err(|e| format!("Failed to write openclaw.json: {}", e))?;
+
+    // DIAGNOSTIC: Verify written token
+    let verify_content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to verify config: {}", e))?;
+    let verify_config: serde_json::Value = serde_json::from_str(&verify_content)
+        .map_err(|e| format!("Failed to parse verified config: {}", e))?;
+    let written_token = verify_config
+        .get("gateway")
+        .and_then(|g| g.get("auth"))
+        .and_then(|a| a.get("token"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("NOT_FOUND");
+
+    println!("[DIAGNOSTIC] configure_openclaw_complete:");
+    println!("  Generated token: {}...", &gateway_token[..20.min(gateway_token.len())]);
+    println!("  Written token:   {}...", &written_token[..20.min(written_token.len())]);
+    println!("  Match: {}", if gateway_token == written_token { "YES" } else { "NO" });
+
+    Ok(gateway_token)
 }
 
 /// Configure OpenClaw with LLM settings from SMAN settings
@@ -219,8 +508,10 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     std::fs::create_dir_all(&openclaw_dir)
         .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
 
-    // Configure OpenClaw with LLM settings
-    configure_openclaw_llm(&openclaw_dir)?;
+    // Configure OpenClaw with LLM and Gateway settings
+    // CRITICAL: Configure both in a single write to avoid race conditions
+    let gateway_token = configure_openclaw_complete(&openclaw_dir)?;
+    println!("[Sidecar] Pre-generated gateway token: {}...", &gateway_token[..20.min(gateway_token.len())]);
 
     // Get OpenClaw path
     let openclaw_path = get_openclaw_path();
@@ -230,6 +521,11 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
 
     // Build command to run OpenClaw with node
     // Key: Override HOME to isolate OpenClaw's config directory
+    // CRITICAL: Do NOT pass --token. Token is already written to openclaw.json.
+    // Passing --token would mark it as "override" modeSource, and Gateway won't
+    // persist it if it needs to regenerate. Instead, we rely on the config file
+    // and set OPENCLAW_GATEWAY_TOKEN env var as a fallback.
+    let isolated_home_str = isolated_home.to_string_lossy().to_string();
     let mut command = app
         .shell()
         .command("node")
@@ -238,12 +534,13 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             "gateway".to_string(),
             "--port".to_string(),
             OPENCLAW_PORT.to_string(),
-            "--auth".to_string(),
-            "none".to_string(),  // No auth for local development
+            "--allow-unconfigured".to_string(),
             "--dev".to_string(),  // Use dev mode for auto config
         ])
-        .env("HOME", isolated_home.to_string_lossy().to_string())  // Critical: isolate HOME
-        .env("USERPROFILE", isolated_home.to_string_lossy().to_string())  // Windows
+        .env("HOME", &isolated_home_str)  // Critical: isolate HOME
+        .env("USERPROFILE", &isolated_home_str)  // Windows
+        .env("OPENCLAW_HOME", &isolated_home_str)  // Explicitly set OpenClaw home
+        .env("OPENCLAW_GATEWAY_TOKEN", &gateway_token)  // Set token in env for Gateway to read
         .current_dir(&isolated_home);  // Run from isolated directory
 
     // Get WebSearch API keys from settings and add to environment
@@ -281,18 +578,15 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     for i in 0..max_retries {
         if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(100)).is_ok() {
             println!("[Sidecar] Server ready after {} attempts", i + 1);
-            return Ok(format!(
-                "OpenClaw server started on port {} with isolated home at {:?}",
-                OPENCLAW_PORT, isolated_home
-            ));
+            break;
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
 
-    // Even if we couldn't verify, return success - the server might still be starting
-    println!("[Sidecar] Warning: Could not verify server readiness, but process started");
+    // Token was pre-generated before starting Gateway, no need to wait
+    println!("[Sidecar] Gateway started with pre-configured token");
     Ok(format!(
-        "OpenClaw server started on port {} (unverified) with isolated home at {:?}",
+        "OpenClaw server started on port {} with isolated home at {:?}",
         OPENCLAW_PORT, isolated_home
     ))
 }
@@ -355,8 +649,9 @@ pub fn get_openclaw_port() -> u16 {
 }
 
 /// Get the Gateway auth token from OpenClaw config
+/// Token is pre-generated by configure_gateway_for_sman before Gateway starts
 #[tauri::command]
-pub fn get_gateway_token() -> Result<String, String> {
+pub async fn get_gateway_token() -> Result<String, String> {
     let openclaw_dir = get_openclaw_isolated_home().join(".openclaw");
     let config_path = openclaw_dir.join("openclaw.json");
 
@@ -364,6 +659,7 @@ pub fn get_gateway_token() -> Result<String, String> {
         return Err("OpenClaw config not found".to_string());
     }
 
+    // Read token from config (pre-generated by configure_gateway_for_sman)
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config: {}", e))?;
 
@@ -371,12 +667,23 @@ pub fn get_gateway_token() -> Result<String, String> {
         .map_err(|e| format!("Failed to parse config: {}", e))?;
 
     // Get token from gateway.auth.token
-    let token = config
+    if let Some(token) = config
         .get("gateway")
         .and_then(|g| g.get("auth"))
         .and_then(|a| a.get("token"))
         .and_then(|t| t.as_str())
-        .ok_or("Gateway token not found in config")?;
+    {
+        println!("[DIAGNOSTIC] get_gateway_token:");
+        println!("  Config file: {:?}", config_path);
+        println!("  Token read: {}...", &token[..32.min(token.len())]);
+        println!("  Token length: {}", token.len());
+        println!("[Sidecar] Got gateway token: {}...", &token[..20.min(token.len())]);
+        return Ok(token.to_string());
+    }
 
-    Ok(token.to_string())
+    println!("[DIAGNOSTIC] get_gateway_token: TOKEN NOT FOUND in config");
+    println!("  Config file: {:?}", config_path);
+    println!("  Config content preview: {}", &content[..200.min(content.len())]);
+
+    Err("Gateway token not found in config".to_string())
 }

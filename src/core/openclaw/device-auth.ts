@@ -2,10 +2,10 @@
 /**
  * Device identity and authentication for OpenClaw Gateway
  *
- * Based on OpenClaw UI implementation:
- * - Uses Web Crypto API for device identity
+ * Based on ClawX implementation:
+ * - Uses Ed25519 for device identity (same as ClawX)
  * - Signs connect payload with device private key
- * - Stores device token for reconnection
+ * - Device ID is SHA256 fingerprint of public key
  */
 
 const DEVICE_ID_KEY = "openclaw_device_id";
@@ -15,114 +15,173 @@ const DEVICE_PUBLIC_KEY = "openclaw_device_public_key";
 export type DeviceIdentity = {
   deviceId: string;
   privateKey: CryptoKey;
-  publicKey: string;
+  publicKey: string; // base64url encoded raw public key
+  publicKeyPem: string; // SPKI PEM format
 };
 
-export type DeviceAuthPayload = {
+export type DeviceAuthPayloadParams = {
   deviceId: string;
   clientId: string;
   clientMode: string;
   role: string;
   scopes: string[];
   signedAtMs: number;
-  token: string | null;
-  nonce: string;
+  token?: string | null;
+  nonce?: string | null;
+  version?: "v1" | "v2";
 };
 
+// Ed25519 SPKI prefix (30 2a 30 05 06 03 2b 65 70 03 21 00)
+const ED25519_SPKI_PREFIX = new Uint8Array([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00]);
+
 /**
- * Build the payload to be signed for device authentication
+ * Base64url encode a buffer
  */
-export function buildDeviceAuthPayload(params: DeviceAuthPayload): string {
-  const { deviceId, clientId, clientMode, role, scopes, signedAtMs, token, nonce } = params;
-  // Format matches OpenClaw's expected payload structure
-  const payload = {
-    deviceId,
-    clientId,
-    clientMode,
-    role,
-    scopes: scopes.sort(),
-    signedAtMs,
-    token: token || null,
-    nonce,
-  };
-  return JSON.stringify(payload);
+function base64UrlEncode(buf: Uint8Array): string {
+  const base64 = btoa(String.fromCharCode(...buf));
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /**
- * Sign the device auth payload using the private key
+ * Base64url decode to Uint8Array
  */
-export async function signDevicePayload(privateKey: CryptoKey, payload: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-
-  const signature = await crypto.subtle.sign(
-    { name: "RSASSA-PKCS1-v1_5" },
-    privateKey,
-    data
-  );
-
-  // Convert to base64
-  return btoa(String.fromCharCode(...new Uint8Array(signature)));
-}
-
-/**
- * Generate a new device identity using Web Crypto API
- */
-async function generateDeviceIdentity(): Promise<DeviceIdentity> {
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256",
-    },
-    true,
-    ["sign", "verify"]
-  );
-
-  // Export public key to base64
-  const publicKeyBuffer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-  const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer)));
-
-  // Generate device ID
-  const deviceId = crypto.randomUUID();
-
-  // Export and store private key
-  const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-  const privateKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer)));
-
-  // Store in localStorage
-  localStorage.setItem(DEVICE_ID_KEY, deviceId);
-  localStorage.setItem(DEVICE_PRIVATE_KEY, privateKeyBase64);
-  localStorage.setItem(DEVICE_PUBLIC_KEY, publicKeyBase64);
-
-  return {
-    deviceId,
-    privateKey: keyPair.privateKey,
-    publicKey: publicKeyBase64,
-  };
-}
-
-/**
- * Import a CryptoKey from base64-encoded PKCS8 data
- */
-async function importPrivateKey(base64: string): Promise<CryptoKey> {
+function base64UrlDecode(str: string): Uint8Array {
+  // Restore padding
+  const padding = 4 - (str.length % 4);
+  if (padding !== 4) {
+    str += "=".repeat(padding);
+  }
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
   const binaryString = atob(base64);
   const buffer = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     buffer[i] = binaryString.charCodeAt(i);
   }
+  return buffer;
+}
+
+/**
+ * Derive raw Ed25519 public key bytes from SPKI format
+ */
+function derivePublicKeyRaw(publicKeyBuffer: Uint8Array): Uint8Array {
+  if (
+    publicKeyBuffer.length === ED25519_SPKI_PREFIX.length + 32 &&
+    publicKeyBuffer.slice(0, ED25519_SPKI_PREFIX.length).every((b, i) => b === ED25519_SPKI_PREFIX[i])
+  ) {
+    return publicKeyBuffer.slice(ED25519_SPKI_PREFIX.length);
+  }
+  return publicKeyBuffer;
+}
+
+/**
+ * Compute SHA256 fingerprint of public key
+ */
+async function fingerprintPublicKey(publicKeyBuffer: Uint8Array): Promise<string> {
+  const raw = derivePublicKeyRaw(publicKeyBuffer);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", raw.buffer as ArrayBuffer);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Build the canonical payload string that must be signed for device auth.
+ * Format: v2|deviceId|clientId|clientMode|role|scopes|signedAtMs|token|nonce
+ */
+export function buildDeviceAuthPayload(params: DeviceAuthPayloadParams): string {
+  const version = params.version ?? (params.nonce ? "v2" : "v1");
+  const scopes = params.scopes.join(",");
+  const token = params.token ?? "";
+  const base = [
+    version,
+    params.deviceId,
+    params.clientId,
+    params.clientMode,
+    params.role,
+    scopes,
+    String(params.signedAtMs),
+    token,
+  ];
+  if (version === "v2") base.push(params.nonce ?? "");
+  return base.join("|");
+}
+
+/**
+ * Sign a payload with the Ed25519 private key, returns base64url signature.
+ */
+export async function signDevicePayload(privateKey: CryptoKey, payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(payload);
+  const signature = await crypto.subtle.sign("Ed25519", privateKey, data);
+  return base64UrlEncode(new Uint8Array(signature));
+}
+
+/**
+ * Generate a new Ed25519 device identity
+ */
+async function generateDeviceIdentity(): Promise<DeviceIdentity> {
+  const keyPair = await crypto.subtle.generateKey(
+    "Ed25519",
+    true, // extractable
+    ["sign", "verify"]
+  );
+
+  // Export public key to SPKI format
+  const publicKeyBuffer = new Uint8Array(await crypto.subtle.exportKey("spki", keyPair.publicKey));
+  const publicKeyRaw = derivePublicKeyRaw(publicKeyBuffer);
+  const publicKeyBase64Url = base64UrlEncode(publicKeyRaw);
+
+  // Generate device ID from public key fingerprint
+  const deviceId = await fingerprintPublicKey(publicKeyBuffer);
+
+  // Export private key to PKCS8 format
+  const privateKeyBuffer = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+  const privateKeyBase64Url = base64UrlEncode(privateKeyBuffer);
+
+  // Create PEM format for compatibility
+  const publicKeyPem = `-----BEGIN PUBLIC KEY-----\n${btoa(String.fromCharCode(...publicKeyBuffer)).match(/.{1,64}/g)?.join("\n")}\n-----END PUBLIC KEY-----`;
+
+  // Store in localStorage
+  localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  localStorage.setItem(DEVICE_PRIVATE_KEY, privateKeyBase64Url);
+  localStorage.setItem(DEVICE_PUBLIC_KEY, publicKeyBase64Url);
+
+  return {
+    deviceId,
+    privateKey: keyPair.privateKey,
+    publicKey: publicKeyBase64Url,
+    publicKeyPem,
+  };
+}
+
+/**
+ * Import a CryptoKey from base64url-encoded PKCS8 data
+ */
+async function importPrivateKey(base64url: string): Promise<CryptoKey> {
+  const buffer = base64UrlDecode(base64url);
 
   return crypto.subtle.importKey(
     "pkcs8",
-    buffer,
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      hash: "SHA-256",
-    },
+    buffer.buffer as ArrayBuffer,
+    "Ed25519",
     true,
     ["sign"]
   );
+}
+
+/**
+ * Import a public key from base64url-encoded raw data
+ */
+async function importPublicKey(base64url: string): Promise<CryptoKey> {
+  const raw = base64UrlDecode(base64url);
+
+  // Reconstruct SPKI format
+  const spki = new Uint8Array(ED25519_SPKI_PREFIX.length + raw.length);
+  spki.set(ED25519_SPKI_PREFIX);
+  spki.set(raw, ED25519_SPKI_PREFIX.length);
+
+  return crypto.subtle.importKey("spki", spki, "Ed25519", true, ["verify"]);
 }
 
 /**
@@ -130,13 +189,21 @@ async function importPrivateKey(base64: string): Promise<CryptoKey> {
  */
 export async function loadOrCreateDeviceIdentity(): Promise<DeviceIdentity> {
   const deviceId = localStorage.getItem(DEVICE_ID_KEY);
-  const privateKeyBase64 = localStorage.getItem(DEVICE_PRIVATE_KEY);
-  const publicKey = localStorage.getItem(DEVICE_PUBLIC_KEY);
+  const privateKeyBase64Url = localStorage.getItem(DEVICE_PRIVATE_KEY);
+  const publicKeyBase64Url = localStorage.getItem(DEVICE_PUBLIC_KEY);
 
-  if (deviceId && privateKeyBase64 && publicKey) {
+  if (deviceId && privateKeyBase64Url && publicKeyBase64Url) {
     try {
-      const privateKey = await importPrivateKey(privateKeyBase64);
-      return { deviceId, privateKey, publicKey };
+      const privateKey = await importPrivateKey(privateKeyBase64Url);
+      const publicKeyRaw = base64UrlDecode(publicKeyBase64Url);
+
+      // Reconstruct public key PEM
+      const spki = new Uint8Array(ED25519_SPKI_PREFIX.length + publicKeyRaw.length);
+      spki.set(ED25519_SPKI_PREFIX);
+      spki.set(publicKeyRaw, ED25519_SPKI_PREFIX.length);
+      const publicKeyPem = `-----BEGIN PUBLIC KEY-----\n${btoa(String.fromCharCode(...spki)).match(/.{1,64}/g)?.join("\n")}\n-----END PUBLIC KEY-----`;
+
+      return { deviceId, privateKey, publicKey: publicKeyBase64Url, publicKeyPem };
     } catch {
       // Failed to import, generate new
     }
@@ -171,10 +238,13 @@ function deviceTokenKey(deviceId: string, role: string): string {
 
 export function storeDeviceAuthToken(params: DeviceAuthToken): void {
   const key = deviceTokenKey(params.deviceId, params.role);
-  localStorage.setItem(key, JSON.stringify({
-    token: params.token,
-    scopes: params.scopes,
-  }));
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      token: params.token,
+      scopes: params.scopes,
+    })
+  );
 }
 
 export function loadDeviceAuthToken(params: { deviceId: string; role: string }): DeviceAuthToken | null {
