@@ -107,29 +107,17 @@
     if (!textContent.trim()) {
       return;
     }
-    console.log("[Chat] updateLatestThinkingMessage called:", {
-      projectId,
-      content: textContent.substring(0, 50),
-    });
-    console.log(
-      "[Chat] messagesByProject keys:",
-      Object.keys(messagesByProject),
-    );
     const projectMessages = messagesByProject[projectId];
-    console.log("[Chat] projectMessages:", projectMessages);
     const normalizedProjectMessages = projectMessages || [];
     if (normalizedProjectMessages.length === 0) {
-      messagesByProject = {
-        ...messagesByProject,
-        [projectId]: [
-          {
-            id: createLocalMessageId(),
-            role: "assistant",
-            content: textContent,
-            timestamp: Date.now(),
-          },
-        ],
-      };
+      messagesByProject[projectId] = [
+        {
+          id: createLocalMessageId(),
+          role: "assistant",
+          content: textContent,
+          timestamp: Date.now(),
+        },
+      ];
       return;
     }
 
@@ -145,25 +133,21 @@
       }
     }
     if (targetIndex < 0) {
-      messagesByProject = {
-        ...messagesByProject,
-        [projectId]: [
-          ...normalizedProjectMessages,
-          {
-            id: createLocalMessageId(),
-            role: "assistant",
-            content: textContent,
-            timestamp: Date.now(),
-          },
-        ],
-      };
+      messagesByProject[projectId] = [
+        ...normalizedProjectMessages,
+        {
+          id: createLocalMessageId(),
+          role: "assistant",
+          content: textContent,
+          timestamp: Date.now(),
+        },
+      ];
       return;
     }
     const nextMessages = normalizedProjectMessages.map((msg, index) =>
       index === targetIndex ? { ...msg, content: textContent } : msg,
     );
-    console.log("[Chat] Updating messagesByProject");
-    messagesByProject = { ...messagesByProject, [projectId]: nextMessages };
+    messagesByProject[projectId] = nextMessages;
   }
 
   async function resolveAssistantContentFromEvent(
@@ -407,63 +391,29 @@
         unsubscribeOpenClaw = subscribeToChatEvents(
           (event: ChatEventPayload) => {
             void (async () => {
-              console.log(
-                "[Chat] Received OpenClaw event:",
-                JSON.stringify(event, null, 2),
-              );
-              console.log("[Chat] Event keys:", Object.keys(event));
-              console.log("[Chat] Event state:", event.state);
-              console.log("[Chat] Event message:", event.message);
-              console.log("[Chat] Event sessionKey:", event.sessionKey);
-              console.log("[Chat] Event runId:", event.runId);
               const projectId = resolveProjectIdFromEvent(event);
-              console.log(
-                "[Chat] Resolved projectId:",
-                projectId,
-                "for runId/sessionKey:",
-                event.runId,
-                event.sessionKey,
-              );
               if (!projectId) {
-                console.warn(
-                  "[Chat] No projectId found for event:",
-                  event.runId,
-                );
                 return;
               }
               if (event.runId) {
-                runIdToProjectId = {
-                  ...runIdToProjectId,
-                  [event.runId]: projectId,
-                };
+                runIdToProjectId[event.runId] = projectId;
               }
               if (event.sessionKey) {
-                sessionKeyToProjectId = {
-                  ...sessionKeyToProjectId,
-                  [event.sessionKey]: projectId,
-                };
+                sessionKeyToProjectId[event.sessionKey] = projectId;
               }
 
-              console.log("[Chat] Event processing:", {
-                state: event.state,
-                hasMessage: !!event.message,
-                messageContent: event.message?.content,
-              });
               if (event.state === "delta" && event.message?.content) {
-                console.log("[Chat] Processing delta with content");
                 updateLatestThinkingMessage(projectId, event.message.content);
               } else if (
                 event.state === "final" ||
                 event.state === "completed"
               ) {
-                console.log("[Chat] Processing final event");
                 const sessionKey = getSessionKeyByProjectId(projectId);
                 const resolvedContent = await resolveAssistantContentFromEvent(
                   event,
                   sessionKey,
                 );
                 const finalContent = resolvedContent.trim() || "已收到回复，但内容为空";
-                console.log("[Chat] Final resolved content:", finalContent);
                 updateLatestThinkingMessage(projectId, finalContent);
                 await persistConversationMessage(
                   projectId,
@@ -555,16 +505,12 @@
     const currentMessages =
       messagesByProject[projectId] || getDemoMessages($selectedProject.name);
 
-    // Add user message
     const userMessage: Message = {
       id: createLocalMessageId(),
       role: "user",
       content: prompt,
       timestamp: Date.now(),
     };
-    messagesByProject[projectId] = [...currentMessages, userMessage];
-
-    // Add thinking message
     const assistantMessage: Message = {
       id: createLocalMessageId(),
       role: "assistant",
@@ -586,18 +532,22 @@
         $selectedProject.name,
       );
 
-      messagesByProject[projectId] = [
-        ...currentMessages,
-        userMessage,
-        { ...assistantMessage, taskId: conversationId },
-      ];
+      const latestMessages = messagesByProject[projectId] || [];
+      const assistantIndex = latestMessages.findIndex(
+        (msg) => msg.id === assistantMessage.id,
+      );
+      if (assistantIndex >= 0) {
+        const updatedMessages = [...latestMessages];
+        updatedMessages[assistantIndex] = {
+          ...updatedMessages[assistantIndex],
+          taskId: conversationId,
+        };
+        messagesByProject[projectId] = updatedMessages;
+      }
       await persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
-      sessionKeyToProjectId = {
-        ...sessionKeyToProjectId,
-        [sessionKey]: projectId,
-      };
+      sessionKeyToProjectId[sessionKey] = projectId;
       const scopedPrompt = buildProjectScopedPrompt(
         prompt,
         $selectedProject.name,
@@ -606,7 +556,7 @@
       const result = await sendChatMessage(sessionKey, scopedPrompt);
       console.log("[Chat] Message sent, runId:", result.runId);
       if (result.runId) {
-        runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
+        runIdToProjectId[result.runId] = projectId;
       }
       console.log(
         "[Chat] Stored runId mapping:",

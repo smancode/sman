@@ -144,7 +144,6 @@
     display: flex;
     gap: 0.75rem;
     max-width: 80%;
-    animation: slideIn 0.2s ease-out;
   }
 
   .message.user {
@@ -331,14 +330,4 @@
     padding: 0.1rem 0.35rem;
   }
 
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
 </style>
