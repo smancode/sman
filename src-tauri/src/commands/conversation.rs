@@ -123,6 +123,26 @@ fn save_conversation_messages(conversation_id: &str, storage: &MessagesStorage) 
     Ok(())
 }
 
+fn touch_conversation_updated_at(project_id: &str, conversation_id: &str) -> Result<(), String> {
+    let mut storage = load_project_conversations(project_id)?;
+    let now = Utc::now().to_rfc3339();
+    let mut updated = false;
+    for conversation in &mut storage.conversations {
+        if conversation.id == conversation_id {
+            conversation.updatedAt = now.clone();
+            updated = true;
+            break;
+        }
+    }
+    if !updated {
+        return Ok(());
+    }
+    storage
+        .conversations
+        .sort_by(|a, b| b.updatedAt.cmp(&a.updatedAt));
+    save_project_conversations(project_id, &storage)
+}
+
 #[tauri::command]
 pub fn list_conversations(projectId: String) -> Result<Vec<ConversationRecord>, String> {
     let storage = load_project_conversations(&projectId)?;
@@ -154,19 +174,31 @@ pub fn get_conversation_messages(conversationId: String) -> Result<Vec<HistoryEn
 }
 
 #[tauri::command]
-pub fn send_message(conversationId: String, content: String) -> Result<HistoryEntryRecord, String> {
+pub fn send_message(
+    conversationId: String,
+    content: String,
+    role: Option<String>,
+    projectId: Option<String>,
+) -> Result<HistoryEntryRecord, String> {
     let now = Utc::now().to_rfc3339();
+    let normalized_role = role
+        .unwrap_or_else(|| "user".to_string())
+        .to_lowercase();
     let message = HistoryEntryRecord {
         id: Uuid::new_v4().to_string(),
         conversationId: conversationId.clone(),
-        role: "user".to_string(),
+        role: normalized_role,
         content,
-        createdAt: now,
+        createdAt: now.clone(),
     };
 
     let mut storage = load_conversation_messages(&conversationId)?;
     storage.messages.push(message.clone());
     save_conversation_messages(&conversationId, &storage)?;
+
+    if let Some(project_id) = projectId {
+        touch_conversation_updated_at(&project_id, &conversationId)?;
+    }
 
     Ok(message)
 }

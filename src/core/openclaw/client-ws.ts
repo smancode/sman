@@ -221,6 +221,7 @@ export class OpenClawWSClient {
 
       // Dispatch other events to listeners
       const listeners = this.eventListeners.get(evt.event);
+      console.log(`[OpenClawWS] Dispatching event "${evt.event}", listeners: ${listeners?.size ?? 0}, payload:`, evt.payload);
       if (listeners) {
         for (const handler of listeners) {
           try {
@@ -232,6 +233,8 @@ export class OpenClawWSClient {
             );
           }
         }
+      } else {
+        console.log(`[OpenClawWS] No listeners for event "${evt.event}"`);
       }
       return;
     }

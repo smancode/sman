@@ -65,7 +65,7 @@ export class OpenClawAPI {
 
   /** Subscribe to chat events */
   onChatEvent(handler: EventHandler<ChatEventPayload>): () => void {
-    return this.client.on<ChatEventPayload>("chat.event", handler);
+    return this.client.on<ChatEventPayload>("chat", handler);
   }
 
   /** Get chat history */

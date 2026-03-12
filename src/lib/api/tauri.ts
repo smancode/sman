@@ -186,12 +186,15 @@ export const conversationApi = {
   async sendMessage(
     conversationId: string,
     content: string,
+    options?: { role?: "user" | "assistant" | "system"; projectId?: string },
   ): Promise<ApiResponse<HistoryEntryRecord>> {
     return safeInvoke<HistoryEntryRecord>(
       "send_message",
       {
         conversationId,
         content,
+        role: options?.role,
+        projectId: options?.projectId,
       },
       15000,
     );
@@ -222,8 +225,13 @@ export const appSettingsApi = {
     return safeInvoke<AppSettings>("update_app_settings", { settings });
   },
 
-  async saveAndSync(settings: AppSettings): Promise<ApiResponse<{ settings: AppSettings; llmReady: boolean }>> {
-    return safeInvoke<{ settings: AppSettings; llmReady: boolean }>("save_settings_and_sync", { settings });
+  async saveAndSync(
+    settings: AppSettings,
+  ): Promise<ApiResponse<{ settings: AppSettings; llmReady: boolean }>> {
+    return safeInvoke<{ settings: AppSettings; llmReady: boolean }>(
+      "save_settings_and_sync",
+      { settings },
+    );
   },
 
   async isLlmConfigured(): Promise<ApiResponse<boolean>> {

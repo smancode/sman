@@ -19,9 +19,9 @@
     sendChatMessage,
     subscribeToChatEvents,
     disconnectOpenClaw,
+    getAPI,
   } from "../../lib/api/openclaw";
   import type { ChatEventPayload } from "../../core/openclaw/types";
-  import type { HistoryEntryRecord } from "../../lib/types";
   import MessageBubble from "./MessageBubble.svelte";
   import InputArea from "./InputArea.svelte";
   import TaskProgress from "../task/TaskProgress.svelte";
@@ -31,11 +31,17 @@
   import { onMount } from "svelte";
   import { get } from "svelte/store";
   import { projectsStore } from "../../lib/stores/projects";
-  import { sanitizeAssistantContent } from "../../lib/chat/assistantContent";
+  import { mapHistoryEntriesToMessages } from "../../lib/chat/historyMapping";
+  import {
+    extractChatEventContent,
+    extractContentText,
+    getLatestAssistantMessageContent,
+  } from "../../lib/chat/eventContent";
 
   // State
   let messagesByProject = $state<Record<string, Message[]>>({});
   let conversationByProject = $state<Record<string, string>>({});
+  let runIdToProjectId = $state<Record<string, string>>({});
   let isSending = $state(false);
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
@@ -63,38 +69,6 @@
     ];
   }
 
-  function normalizeRole(role: HistoryEntryRecord["role"]): Message["role"] {
-    const normalized = role.toLowerCase();
-    if (normalized === "assistant") return "assistant";
-    if (normalized === "system") return "system";
-    return "user";
-  }
-
-  function normalizeTimestamp(value: string): number {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric > 0) {
-      return numeric > 1e12 ? numeric : numeric * 1000;
-    }
-
-    const parsed = Date.parse(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-    return Date.now();
-  }
-
-  function mapHistoryEntries(entries: HistoryEntryRecord[]): Message[] {
-    return entries.map((entry) => ({
-      id: entry.id,
-      role: normalizeRole(entry.role),
-      content:
-        normalizeRole(entry.role) === "assistant"
-          ? sanitizeAssistantContent(entry.content)
-          : entry.content,
-      timestamp: normalizeTimestamp(entry.timestamp),
-    }));
-  }
-
   function createLocalMessageId(): string {
     return (
       globalThis.crypto?.randomUUID?.() ??
@@ -120,28 +94,104 @@
     );
   }
 
-  function updateLatestThinkingMessage(projectId: string, content: string) {
+  function updateLatestThinkingMessage(projectId: string, content: unknown) {
+    const textContent = extractContentText(content);
+    console.log("[Chat] updateLatestThinkingMessage called:", {
+      projectId,
+      content: textContent.substring(0, 50),
+    });
+    console.log(
+      "[Chat] messagesByProject keys:",
+      Object.keys(messagesByProject),
+    );
     const projectMessages = messagesByProject[projectId];
-    if (!projectMessages || projectMessages.length === 0) return;
+    console.log("[Chat] projectMessages:", projectMessages);
+    if (!projectMessages || projectMessages.length === 0) {
+      console.log("[Chat] No project messages found, returning");
+      return;
+    }
 
     let updated = false;
     const nextMessages = projectMessages.map((msg, index) => {
       if (updated) return msg;
-      if (
-        index === projectMessages.length - 1 &&
-        msg.role === "assistant" &&
-        msg.taskId &&
-        (msg.content === "思考中..." ||
-          msg.content.startsWith("处理中") ||
-          msg.content.startsWith("思考"))
-      ) {
+      const isLast = index === projectMessages.length - 1;
+      const isAssistant = msg.role === "assistant";
+      const isThinking =
+        msg.content === "思考中..." ||
+        msg.content.startsWith("处理中") ||
+        msg.content.startsWith("思考");
+      console.log("[Chat] Checking msg:", {
+        index,
+        isLast,
+        isAssistant,
+        isThinking,
+        content: msg.content.substring(0, 30),
+      });
+      if (isLast && isAssistant && isThinking) {
+        console.log("[Chat] Found target message, updating");
         updated = true;
-        return { ...msg, content };
+        return { ...msg, content: textContent };
       }
       return msg;
     });
     if (updated) {
-      messagesByProject[projectId] = nextMessages;
+      console.log("[Chat] Updating messagesByProject");
+      // Use reactive assignment to trigger Svelte update
+      messagesByProject = { ...messagesByProject, [projectId]: nextMessages };
+    } else {
+      console.log("[Chat] No message was updated");
+    }
+  }
+
+  async function resolveAssistantContentFromEvent(
+    event: ChatEventPayload,
+    sessionKey: string,
+  ): Promise<string> {
+    const directContent = extractChatEventContent(event);
+    if (directContent.length > 0) {
+      return directContent;
+    }
+
+    const api = getAPI();
+    if (!api) {
+      return "";
+    }
+
+    try {
+      const history = await api.getHistory(sessionKey, 30);
+      return getLatestAssistantMessageContent(history);
+    } catch (error) {
+      console.warn("[Chat] Failed to load chat history:", error);
+      return "";
+    }
+  }
+
+  function getSessionKeyByProjectId(projectId: string): string {
+    return conversationByProject[projectId] || projectId;
+  }
+
+  async function persistConversationMessage(
+    projectId: string,
+    role: "user" | "assistant" | "system",
+    content: string,
+  ): Promise<void> {
+    if (!content.trim()) {
+      return;
+    }
+    const conversationId = conversationByProject[projectId];
+    if (!conversationId) {
+      return;
+    }
+    const response = await conversationApi.sendMessage(
+      conversationId,
+      content,
+      {
+        role,
+        projectId,
+      },
+    );
+    if (!response.success) {
+      console.warn("[Chat] Failed to persist message:", response.error);
     }
   }
 
@@ -213,7 +263,9 @@
     const response = await conversationApi.getMessages(conversationId);
     if (response.success && response.data) {
       if (response.data.length > 0) {
-        messagesByProject[projectId] = mapHistoryEntries(response.data);
+        messagesByProject[projectId] = mapHistoryEntriesToMessages(
+          response.data,
+        );
       } else {
         messagesByProject[projectId] =
           existingMessages.length > 0
@@ -263,26 +315,78 @@
         // Subscribe to chat events from OpenClaw
         unsubscribeOpenClaw = subscribeToChatEvents(
           (event: ChatEventPayload) => {
-            console.log("[Chat] Received OpenClaw event:", event);
-            const projectId = event.sessionKey;
-
-            if (event.state === "delta" && event.message?.content) {
-              updateLatestThinkingMessage(projectId, event.message.content);
-            } else if (event.state === "final") {
-              if (event.message?.content) {
-                updateLatestThinkingMessage(projectId, event.message.content);
-              }
-              stopSending(projectId);
-            } else if (event.state === "error") {
-              updateLatestThinkingMessage(
-                projectId,
-                `错误：${event.errorMessage || "未知错误"}`,
+            void (async () => {
+              console.log(
+                "[Chat] Received OpenClaw event:",
+                JSON.stringify(event, null, 2),
               );
-              stopSending(projectId);
-            } else if (event.state === "aborted") {
-              updateLatestThinkingMessage(projectId, "对话已中止");
-              stopSending(projectId);
-            }
+              console.log("[Chat] Event keys:", Object.keys(event));
+              console.log("[Chat] Event state:", event.state);
+              console.log("[Chat] Event message:", event.message);
+              console.log("[Chat] Event sessionKey:", event.sessionKey);
+              console.log("[Chat] Event runId:", event.runId);
+              // Map runId to projectId (sessionKey is transformed by Gateway)
+              const projectId = runIdToProjectId[event.runId];
+              console.log(
+                "[Chat] Mapped projectId from runId:",
+                projectId,
+                "for runId:",
+                event.runId,
+              );
+              if (!projectId) {
+                console.warn(
+                  "[Chat] No projectId found for runId:",
+                  event.runId,
+                );
+                return;
+              }
+
+              console.log("[Chat] Event processing:", {
+                state: event.state,
+                hasMessage: !!event.message,
+                messageContent: event.message?.content,
+              });
+              if (event.state === "delta" && event.message?.content) {
+                console.log("[Chat] Processing delta with content");
+                updateLatestThinkingMessage(projectId, event.message.content);
+              } else if (
+                event.state === "final" ||
+                event.state === "completed"
+              ) {
+                console.log("[Chat] Processing final event");
+                const sessionKey = getSessionKeyByProjectId(projectId);
+                const resolvedContent = await resolveAssistantContentFromEvent(
+                  event,
+                  sessionKey,
+                );
+                console.log("[Chat] Final resolved content:", resolvedContent);
+                updateLatestThinkingMessage(projectId, resolvedContent);
+                await persistConversationMessage(
+                  projectId,
+                  "assistant",
+                  resolvedContent,
+                );
+                stopSending(projectId);
+              } else if (event.state === "error") {
+                const errorText = `错误：${event.errorMessage || "未知错误"}`;
+                updateLatestThinkingMessage(projectId, errorText);
+                await persistConversationMessage(
+                  projectId,
+                  "assistant",
+                  errorText,
+                );
+                stopSending(projectId);
+              } else if (event.state === "aborted") {
+                const abortedText = "对话已中止";
+                updateLatestThinkingMessage(projectId, abortedText);
+                await persistConversationMessage(
+                  projectId,
+                  "assistant",
+                  abortedText,
+                );
+                stopSending(projectId);
+              }
+            })();
           },
         );
       } catch (err) {
@@ -377,15 +481,24 @@
         projectId,
         $selectedProject.name,
       );
+
       messagesByProject[projectId] = [
         ...currentMessages,
         userMessage,
         { ...assistantMessage, taskId: conversationId },
       ];
+      await persistConversationMessage(projectId, "user", prompt);
 
-      // Send via OpenClaw WebSocket
-      const result = await sendChatMessage(conversationId, prompt);
+      const sessionKey = getSessionKeyByProjectId(projectId);
+      const result = await sendChatMessage(sessionKey, prompt);
       console.log("[Chat] Message sent, runId:", result.runId);
+      runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
+      console.log(
+        "[Chat] Stored runId mapping:",
+        result.runId,
+        "->",
+        projectId,
+      );
     } catch (error) {
       stopSending(projectId);
       messagesByProject[projectId] = [

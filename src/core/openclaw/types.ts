@@ -129,10 +129,11 @@ export interface ChatEventPayload {
   runId: string;
   sessionKey: string;
   seq: number;
-  state: "delta" | "final" | "error" | "aborted";
+  state: "delta" | "final" | "completed" | "error" | "aborted";
   message?: {
     role: string;
-    content: string;
+    content: string | Array<{ type: string; text: string }>;
+    timestamp?: number;
   };
   errorMessage?: string;
   stopReason?: string;
