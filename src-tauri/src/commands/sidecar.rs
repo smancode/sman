@@ -8,6 +8,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandChild;
 
@@ -168,15 +169,73 @@ fn configure_gateway_for_sman(openclaw_dir: &PathBuf) -> Result<String, String> 
 }
 
 /// Get OpenClaw installation path
-/// Priority: OPENCLAW_PATH env > hardcoded development path
-fn get_openclaw_path() -> PathBuf {
+/// Priority: OPENCLAW_PATH env > bundled resource > sibling openclaw project path
+fn get_openclaw_path(app: &tauri::AppHandle) -> PathBuf {
     // Check environment variable first
     if let Ok(path) = env::var("OPENCLAW_PATH") {
         return PathBuf::from(path);
     }
 
-    // Development: hardcoded path (sibling to sman project)
-    PathBuf::from("/Users/nasakim/projects/openclaw/openclaw.mjs")
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled_paths = [
+            resource_dir.join("openclaw").join("openclaw.mjs"),
+            resource_dir.join("resources").join("openclaw").join("openclaw.mjs"),
+        ];
+        for bundled_path in bundled_paths {
+            if bundled_path.exists() {
+                return bundled_path;
+            }
+        }
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let sman_root = manifest_dir
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or(manifest_dir.clone());
+    let sibling_openclaw = sman_root
+        .parent()
+        .map(|parent| parent.join("openclaw").join("openclaw.mjs"));
+    if let Some(path) = sibling_openclaw {
+        return path;
+    }
+    sman_root.join("openclaw").join("openclaw.mjs")
+}
+
+fn get_node_command(app: &tauri::AppHandle) -> String {
+    if let Ok(path) = env::var("OPENCLAW_NODE_PATH") {
+        return path;
+    }
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidates = if cfg!(target_os = "windows") {
+            vec![
+                resource_dir
+                    .join("openclaw")
+                    .join("runtime")
+                    .join("node.exe"),
+                resource_dir
+                    .join("resources")
+                    .join("openclaw")
+                    .join("runtime")
+                    .join("node.exe"),
+            ]
+        } else {
+            vec![
+                resource_dir.join("openclaw").join("runtime").join("node"),
+                resource_dir
+                    .join("resources")
+                    .join("openclaw")
+                    .join("runtime")
+                    .join("node"),
+            ]
+        };
+        for candidate in candidates {
+            if candidate.exists() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+    }
+    "node".to_string()
 }
 
 /// Configure OpenClaw with complete settings (LLM + Gateway) in a single write
@@ -550,7 +609,7 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     println!("[Sidecar] Pre-generated gateway token: {}...", &gateway_token[..20.min(gateway_token.len())]);
 
     // Get OpenClaw path
-    let openclaw_path = get_openclaw_path();
+    let openclaw_path = get_openclaw_path(&app);
     if !openclaw_path.exists() {
         return Err(format!("OpenClaw not found at {:?}", openclaw_path));
     }
@@ -561,9 +620,10 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     // This sets modeSource="override" and ensures consistent token across all Gateway components.
     // The token is also written to openclaw.json for persistence.
     let isolated_home_str = isolated_home.to_string_lossy().to_string();
+    let node_command = get_node_command(&app);
     let mut command = app
         .shell()
-        .command("node")
+        .command(&node_command)
         .args([
             openclaw_path.to_string_lossy().to_string(),
             "gateway".to_string(),

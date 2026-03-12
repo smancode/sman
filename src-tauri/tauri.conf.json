@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.sman.desktop",
   "build": {
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run prepare:openclaw",
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../build"
@@ -37,6 +37,7 @@
       "icons/icon.ico"
     ],
     "targets": "all",
+    "resources": ["resources/openclaw"],
     "createUpdaterArtifacts": false,
     "macOS": {
       "minimumSystemVersion": "10.13",

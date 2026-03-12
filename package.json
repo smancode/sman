@@ -17,6 +17,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "prepare:openclaw": "node -e \"const fs=require('node:fs');const path=require('node:path');const root=process.cwd();const src=path.resolve(root,'../openclaw');const dst=path.resolve(root,'src-tauri/resources/openclaw');const entry=path.join(src,'openclaw.mjs');if(!fs.existsSync(entry)){throw new Error('Missing openclaw entry: '+entry);}fs.rmSync(dst,{recursive:true,force:true});fs.mkdirSync(dst,{recursive:true});const copy=(name)=>{const from=path.join(src,name);if(fs.existsSync(from)){fs.cpSync(from,path.join(dst,name),{recursive:true});}};copy('openclaw.mjs');copy('dist');copy('assets');copy('extensions');copy('skills');const runtimeDir=path.join(dst,'runtime');fs.mkdirSync(runtimeDir,{recursive:true});const nodeBin=process.execPath;const nodeName=process.platform==='win32'?'node.exe':'node';fs.copyFileSync(nodeBin,path.join(runtimeDir,nodeName));\"",
+    "package": "./package.sh",
     "restart": "./restart.sh"
   },
   "devDependencies": {

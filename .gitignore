@@ -32,10 +32,10 @@ coverage/
 
 # Tauri build
 src-tauri/target/
+src-tauri/resources/openclaw/
 
 # Temporary files
 *.tmp
 *.temp
 
 .VSCodeCounter/
-

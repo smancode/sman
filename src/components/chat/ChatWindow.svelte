@@ -96,6 +96,9 @@
 
   function updateLatestThinkingMessage(projectId: string, content: unknown) {
     const textContent = extractContentText(content);
+    if (!textContent.trim()) {
+      return;
+    }
     console.log("[Chat] updateLatestThinkingMessage called:", {
       projectId,
       content: textContent.substring(0, 50),
@@ -111,36 +114,22 @@
       return;
     }
 
-    let updated = false;
-    const nextMessages = projectMessages.map((msg, index) => {
-      if (updated) return msg;
-      const isLast = index === projectMessages.length - 1;
-      const isAssistant = msg.role === "assistant";
-      const isThinking =
-        msg.content === "思考中..." ||
-        msg.content.startsWith("处理中") ||
-        msg.content.startsWith("思考");
-      console.log("[Chat] Checking msg:", {
-        index,
-        isLast,
-        isAssistant,
-        isThinking,
-        content: msg.content.substring(0, 30),
-      });
-      if (isLast && isAssistant && isThinking) {
-        console.log("[Chat] Found target message, updating");
-        updated = true;
-        return { ...msg, content: textContent };
+    let targetIndex = -1;
+    for (let index = projectMessages.length - 1; index >= 0; index -= 1) {
+      if (projectMessages[index].role === "assistant") {
+        targetIndex = index;
+        break;
       }
-      return msg;
-    });
-    if (updated) {
-      console.log("[Chat] Updating messagesByProject");
-      // Use reactive assignment to trigger Svelte update
-      messagesByProject = { ...messagesByProject, [projectId]: nextMessages };
-    } else {
-      console.log("[Chat] No message was updated");
     }
+    if (targetIndex < 0) {
+      console.log("[Chat] No assistant message found, returning");
+      return;
+    }
+    const nextMessages = projectMessages.map((msg, index) =>
+      index === targetIndex ? { ...msg, content: textContent } : msg,
+    );
+    console.log("[Chat] Updating messagesByProject");
+    messagesByProject = { ...messagesByProject, [projectId]: nextMessages };
   }
 
   async function resolveAssistantContentFromEvent(
@@ -168,6 +157,24 @@
 
   function getSessionKeyByProjectId(projectId: string): string {
     return conversationByProject[projectId] || projectId;
+  }
+
+  function buildProjectScopedPrompt(
+    projectName: string,
+    projectPath: string,
+    prompt: string,
+  ): string {
+    const normalizedName = projectName.trim() || "当前项目";
+    const normalizedPath = projectPath.trim() || "未知路径";
+    return [
+      "【当前项目上下文】",
+      `项目名称: ${normalizedName}`,
+      `项目路径: ${normalizedPath}`,
+      "请仅基于该项目进行分析与回答；当用户说“这个项目”时，指代上面的项目。",
+      "",
+      "【用户问题】",
+      prompt,
+    ].join("\n");
   }
 
   async function persistConversationMessage(
@@ -490,7 +497,15 @@
       await persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
-      const result = await sendChatMessage(sessionKey, prompt);
+      const promptWithProjectContext = buildProjectScopedPrompt(
+        $selectedProject.name,
+        $selectedProject.path,
+        prompt,
+      );
+      const result = await sendChatMessage(
+        sessionKey,
+        promptWithProjectContext,
+      );
       console.log("[Chat] Message sent, runId:", result.runId);
       runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
       console.log(
