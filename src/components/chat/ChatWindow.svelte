@@ -45,10 +45,15 @@
   let conversationByProject = $state<Record<string, string>>({});
   let runIdToProjectId = $state<Record<string, string>>({});
   let sessionKeyToProjectId = $state<Record<string, string>>({});
+  let pendingAssistantContentByProject = $state<Record<string, string>>({});
   let isSending = $state(false);
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
   let messagesContainer: HTMLDivElement = $state()!;
+  let bottomAnchor: HTMLDivElement = $state()!;
+  let flushAssistantRafId = $state<number | null>(null);
+  let scrollRafId = $state<number | null>(null);
+  let shouldStickToBottom = $state(true);
   let llmConfigured = $state(false);
   let isInitializing = $state(true);
   let initError = $state<string | null>(null);
@@ -94,7 +99,6 @@
 
   function isInputDisabled(): boolean {
     return (
-      isSending ||
       !$selectedProject ||
       !$isConnected ||
       !llmConfigured ||
@@ -147,7 +151,36 @@
     const nextMessages = normalizedProjectMessages.map((msg, index) =>
       index === targetIndex ? { ...msg, content: textContent } : msg,
     );
+    if (
+      normalizedProjectMessages[targetIndex] &&
+      normalizedProjectMessages[targetIndex].content === textContent
+    ) {
+      return;
+    }
     messagesByProject[projectId] = nextMessages;
+  }
+
+  function flushPendingAssistantUpdates() {
+    const entries = Object.entries(pendingAssistantContentByProject);
+    pendingAssistantContentByProject = {};
+    for (const [projectId, content] of entries) {
+      updateLatestThinkingMessage(projectId, content);
+    }
+  }
+
+  function scheduleAssistantMessageUpdate(projectId: string, content: unknown) {
+    const textContent = extractContentText(content).trim();
+    if (!textContent) {
+      return;
+    }
+    pendingAssistantContentByProject[projectId] = textContent;
+    if (flushAssistantRafId !== null) {
+      return;
+    }
+    flushAssistantRafId = requestAnimationFrame(() => {
+      flushAssistantRafId = null;
+      flushPendingAssistantUpdates();
+    });
   }
 
   async function resolveAssistantContentFromEvent(
@@ -265,6 +298,44 @@
     if (sendingProjectId === projectId) {
       sendingProjectId = null;
     }
+  }
+
+  function isNearBottom(container: HTMLDivElement): boolean {
+    const distanceToBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    return distanceToBottom < 160;
+  }
+
+  function handleMessagesScroll() {
+    if (!messagesContainer) {
+      return;
+    }
+    shouldStickToBottom = isNearBottom(messagesContainer);
+  }
+
+  function scheduleScrollToBottom(force = false) {
+    if (!messagesContainer) {
+      return;
+    }
+    if (!force && !shouldStickToBottom) {
+      return;
+    }
+    if (scrollRafId !== null) {
+      cancelAnimationFrame(scrollRafId);
+    }
+    scrollRafId = requestAnimationFrame(() => {
+      scrollRafId = null;
+      if (!messagesContainer) {
+        return;
+      }
+      if (!force && !shouldStickToBottom) {
+        return;
+      }
+      if (bottomAnchor) {
+        bottomAnchor.scrollIntoView({ block: "end" });
+      }
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    });
   }
 
   async function ensureProjectConversation(
@@ -403,11 +474,12 @@
               }
 
               if (event.state === "delta" && event.message?.content) {
-                updateLatestThinkingMessage(projectId, event.message.content);
+                scheduleAssistantMessageUpdate(projectId, event.message.content);
               } else if (
                 event.state === "final" ||
                 event.state === "completed"
               ) {
+                delete pendingAssistantContentByProject[projectId];
                 const sessionKey = getSessionKeyByProjectId(projectId);
                 const resolvedContent = await resolveAssistantContentFromEvent(
                   event,
@@ -422,6 +494,7 @@
                 );
                 stopSending(projectId);
               } else if (event.state === "error") {
+                delete pendingAssistantContentByProject[projectId];
                 const errorText = `错误：${event.errorMessage || "未知错误"}`;
                 updateLatestThinkingMessage(projectId, errorText);
                 await persistConversationMessage(
@@ -431,6 +504,7 @@
                 );
                 stopSending(projectId);
               } else if (event.state === "aborted") {
+                delete pendingAssistantContentByProject[projectId];
                 const abortedText = "对话已中止";
                 updateLatestThinkingMessage(projectId, abortedText);
                 await persistConversationMessage(
@@ -474,6 +548,12 @@
 
     return () => {
       unsubscribeOpenClaw?.();
+      if (flushAssistantRafId !== null) {
+        cancelAnimationFrame(flushAssistantRafId);
+      }
+      if (scrollRafId !== null) {
+        cancelAnimationFrame(scrollRafId);
+      }
       disconnectOpenClaw();
       tasksStore.destroy();
     };
@@ -487,19 +567,19 @@
     if (initializedProjectId === $selectedProject.id) return;
 
     initializedProjectId = $selectedProject.id;
+    shouldStickToBottom = true;
     tasksStore.setActiveTask(null);
     void loadConversationMessages($selectedProject.id, $selectedProject.name);
   });
 
   $effect(() => {
     const _ = messages;
-    if (messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+    scheduleScrollToBottom();
   });
 
   async function handleSubmit(prompt: string) {
     if (!$selectedProject) return;
+    if (isSending && sendingProjectId === $selectedProject.id) return;
 
     const projectId = $selectedProject.id;
     const currentMessages =
@@ -522,6 +602,8 @@
       userMessage,
       assistantMessage,
     ];
+    shouldStickToBottom = true;
+    scheduleScrollToBottom(true);
 
     isSending = true;
     sendingProjectId = projectId;
@@ -544,7 +626,7 @@
         };
         messagesByProject[projectId] = updatedMessages;
       }
-      await persistConversationMessage(projectId, "user", prompt);
+      void persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
       sessionKeyToProjectId[sessionKey] = projectId;
@@ -579,7 +661,11 @@
 </script>
 
 <div class="chat-window">
-  <div class="messages-container" bind:this={messagesContainer}>
+  <div
+    class="messages-container"
+    bind:this={messagesContainer}
+    onscroll={handleMessagesScroll}
+  >
     {#each messages as message (message.id)}
       <MessageBubble {message} />
     {/each}
@@ -601,6 +687,7 @@
         {/if}
       </div>
     {/if}
+    <div class="bottom-anchor" bind:this={bottomAnchor}></div>
   </div>
 
   <InputArea
@@ -625,6 +712,11 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+
+  .bottom-anchor {
+    height: 1px;
+    width: 100%;
   }
 
   .task-panel {
