@@ -1,18 +1,62 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { appSettingsApi, openclawApi } from "$lib/api/tauri";
-  import type { AppSettings, ConnectionTestResult } from "$lib/types";
+  import type { AppSettings, ConnectionTestResult, LlmSettings } from "$lib/types";
 
-  // Default LLM settings
-  const DEFAULT_LLM_URL = "https://open.bigmodel.cn/api/coding/paas/v4";
-  const DEFAULT_MODEL = "GLM-5";
+  // Provider types
+  type Provider = "zhipu" | "minimax" | "custom";
 
-  let settings: AppSettings = $state({
-    llm: {
-      apiUrl: DEFAULT_LLM_URL,
-      apiKey: "",
-      defaultModel: DEFAULT_MODEL,
+  // Provider default configurations
+  const PROVIDER_DEFAULTS: Record<Provider, { name: string; url: string; defaultModel: string }> = {
+    zhipu: {
+      name: "智谱 AI",
+      url: "https://open.bigmodel.cn/api/coding/paas/v4",
+      defaultModel: "GLM-5",
     },
+    minimax: {
+      name: "MiniMax 国内版",
+      url: "https://api.minimaxi.com/v1",
+      defaultModel: "MiniMax-M2.5",
+    },
+    custom: {
+      name: "自定义",
+      url: "",
+      defaultModel: "",
+    },
+  };
+
+  // Detect provider from URL
+  function detectProvider(url: string): Provider {
+    if (url.includes("minimaxi")) return "minimax";
+    if (url.includes("bigmodel.cn") || url.includes("zhipuai")) return "zhipu";
+    return "custom";
+  }
+
+  // Per-provider settings storage
+  type ProviderSettingsMap = Record<Provider, LlmSettings>;
+
+  // Default settings for each provider
+  const DEFAULT_PROVIDER_SETTINGS: ProviderSettingsMap = {
+    zhipu: {
+      apiUrl: PROVIDER_DEFAULTS.zhipu.url,
+      apiKey: "",
+      defaultModel: PROVIDER_DEFAULTS.zhipu.defaultModel,
+    },
+    minimax: {
+      apiUrl: PROVIDER_DEFAULTS.minimax.url,
+      apiKey: "",
+      defaultModel: PROVIDER_DEFAULTS.minimax.defaultModel,
+    },
+    custom: {
+      apiUrl: "",
+      apiKey: "",
+      defaultModel: "",
+    },
+  };
+
+  // Current active settings (saved to backend)
+  let settings: AppSettings = $state({
+    llm: { ...DEFAULT_PROVIDER_SETTINGS.zhipu },
     embedding: undefined,
     qdrant: undefined,
     webSearch: {
@@ -22,13 +66,18 @@
     },
   });
 
+  // Store settings for each provider separately
+  let providerSettings: ProviderSettingsMap = $state({ ...DEFAULT_PROVIDER_SETTINGS });
+
+  // Currently selected provider
+  let selectedProvider: Provider = $state("zhipu");
+
+  // UI states
   let isLoading = $state(false);
   let isSaving = $state(false);
   let showApiKey = $state(false);
   let showWebSearchApiKeys = $state(false);
   let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(null);
-
-  // Test results
   let llmTestResult: ConnectionTestResult | null = $state(null);
 
   onMount(async () => {
@@ -39,23 +88,96 @@
     isLoading = true;
     const response = await appSettingsApi.get();
     if (response.success && response.data) {
-      settings = response.data;
-      // Ensure defaults are set if empty
-      if (!settings.llm.apiUrl) {
-        settings.llm.apiUrl = DEFAULT_LLM_URL;
-      }
-      if (!settings.llm.defaultModel) {
-        settings.llm.defaultModel = DEFAULT_MODEL;
-      }
-      if (!settings.webSearch) {
-        settings.webSearch = {
+      const loadedSettings = response.data;
+
+      // Initialize web search settings
+      if (!loadedSettings.webSearch) {
+        loadedSettings.webSearch = {
           braveApiKey: "",
           tavilyApiKey: "",
           bingApiKey: "",
         };
       }
+
+      // Detect current provider from saved URL
+      const currentUrl = loadedSettings.llm?.apiUrl || "";
+      const detectedProvider = detectProvider(currentUrl);
+      selectedProvider = detectedProvider;
+
+      // Load provider-specific settings from localStorage
+      loadProviderSettingsFromStorage();
+
+      // Update the detected provider with saved values
+      providerSettings[detectedProvider] = {
+        apiUrl: loadedSettings.llm?.apiUrl || DEFAULT_PROVIDER_SETTINGS[detectedProvider].apiUrl,
+        apiKey: loadedSettings.llm?.apiKey || "",
+        defaultModel: loadedSettings.llm?.defaultModel || DEFAULT_PROVIDER_SETTINGS[detectedProvider].defaultModel,
+      };
+
+      // Set current active settings to the detected provider
+      settings = {
+        ...loadedSettings,
+        llm: { ...providerSettings[detectedProvider] },
+      };
+    } else {
+      // No saved settings, use defaults
+      loadProviderSettingsFromStorage();
+      settings.llm = { ...providerSettings.zhipu };
     }
     isLoading = false;
+  }
+
+  // Load provider settings from localStorage
+  function loadProviderSettingsFromStorage() {
+    try {
+      const saved = localStorage.getItem("sman_provider_settings");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        providerSettings = {
+          zhipu: { ...DEFAULT_PROVIDER_SETTINGS.zhipu, ...parsed.zhipu },
+          minimax: { ...DEFAULT_PROVIDER_SETTINGS.minimax, ...parsed.minimax },
+          custom: { ...DEFAULT_PROVIDER_SETTINGS.custom, ...parsed.custom },
+        };
+      } else {
+        providerSettings = { ...DEFAULT_PROVIDER_SETTINGS };
+      }
+    } catch {
+      providerSettings = { ...DEFAULT_PROVIDER_SETTINGS };
+    }
+  }
+
+  // Save provider settings to localStorage
+  function saveProviderSettingsToStorage() {
+    try {
+      localStorage.setItem("sman_provider_settings", JSON.stringify(providerSettings));
+    } catch (e) {
+      console.error("Failed to save provider settings:", e);
+    }
+  }
+
+  // Switch to a different provider
+  function switchProvider(provider: Provider) {
+    // Save current provider's settings before switching
+    providerSettings[selectedProvider] = {
+      apiUrl: settings.llm.apiUrl,
+      apiKey: settings.llm.apiKey,
+      defaultModel: settings.llm.defaultModel,
+    };
+    saveProviderSettingsToStorage();
+
+    // Switch to new provider
+    selectedProvider = provider;
+
+    // Load the new provider's settings
+    const newSettings = providerSettings[provider];
+
+    // If provider has no URL set, use default
+    if (!newSettings.apiUrl && provider !== "custom") {
+      newSettings.apiUrl = PROVIDER_DEFAULTS[provider].url;
+      newSettings.defaultModel = PROVIDER_DEFAULTS[provider].defaultModel;
+    }
+
+    settings.llm = { ...newSettings };
   }
 
   async function saveSettings() {
@@ -63,9 +185,16 @@
     saveMessage = null;
     llmTestResult = null;
 
+    // Update current provider's settings in storage
+    providerSettings[selectedProvider] = {
+      apiUrl: settings.llm.apiUrl,
+      apiKey: settings.llm.apiKey,
+      defaultModel: settings.llm.defaultModel,
+    };
+    saveProviderSettingsToStorage();
+
     // Check if API key is provided
     if (!settings.llm.apiKey.trim()) {
-      // Just save without testing (no API key)
       const response = await appSettingsApi.update(settings);
       if (response.success) {
         saveMessage = { type: "success", text: "设置已保存（未配置 API Key）" };
@@ -101,12 +230,9 @@
       return;
     }
 
-    // Try to restart OpenClaw server to pick up new config
+    // Try to restart OpenClaw server
     try {
-      // Stop existing server if running
       await openclawApi.stop();
-
-      // Start new server with new config
       const startResponse = await openclawApi.start();
       if (startResponse.success) {
         saveMessage = { type: "success", text: "设置保存成功！OpenClaw 已重启" };
@@ -149,8 +275,32 @@
       <section class="settings-section">
         <h2>大模型配置</h2>
         <p class="section-desc">
-          配置兼容 OpenAI 的大模型 API（推荐智谱 GLM-5）
+          选择提供商，每个提供商的配置会独立保存
         </p>
+
+        <div class="form-group">
+          <span class="form-label">提供商</span>
+          <div class="provider-buttons">
+            <button
+              class="provider-btn {selectedProvider === 'zhipu' ? 'active' : ''}"
+              onclick={() => switchProvider('zhipu')}
+            >
+              智谱 AI
+            </button>
+            <button
+              class="provider-btn {selectedProvider === 'minimax' ? 'active' : ''}"
+              onclick={() => switchProvider('minimax')}
+            >
+              MiniMax
+            </button>
+            <button
+              class="provider-btn {selectedProvider === 'custom' ? 'active' : ''}"
+              onclick={() => switchProvider('custom')}
+            >
+              自定义
+            </button>
+          </div>
+        </div>
 
         <div class="form-group">
           <label for="llm-url">API 地址</label>
@@ -158,9 +308,8 @@
             type="text"
             id="llm-url"
             bind:value={settings.llm.apiUrl}
-            placeholder={DEFAULT_LLM_URL}
+            placeholder="https://..."
           />
-          <span class="hint">默认值：{DEFAULT_LLM_URL}</span>
         </div>
 
         <div class="form-group">
@@ -202,9 +351,8 @@
             type="text"
             id="llm-model"
             bind:value={settings.llm.defaultModel}
-            placeholder={DEFAULT_MODEL}
+            placeholder="例如：GLM-5"
           />
-          <span class="hint">默认值：{DEFAULT_MODEL}</span>
         </div>
       </section>
 
@@ -340,7 +488,8 @@
     margin-bottom: 1rem;
   }
 
-  .form-group label {
+  .form-group label,
+  .form-label {
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
@@ -377,6 +526,37 @@
     margin-top: 0.25rem;
     font-size: 0.8rem;
     color: var(--text-secondary);
+  }
+
+  .provider-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .provider-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--line-soft);
+    background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .provider-btn:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-hover);
+  }
+
+  .provider-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
   }
 
   .input-with-button {

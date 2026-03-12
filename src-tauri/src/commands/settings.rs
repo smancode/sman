@@ -91,6 +91,51 @@ fn settings_path() -> &'static PathBuf {
     })
 }
 
+/// Get legacy settings path (Tauri app_data_dir)
+/// Used for migration from old config location
+fn legacy_settings_path() -> PathBuf {
+    // macOS: ~/Library/Application Support/smanclaw-desktop/settings.json
+    // Linux: ~/.config/smanclaw-desktop/settings.json
+    // Windows: %APPDATA%/smanclaw-desktop/settings.json
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("smanclaw-desktop")
+        .join("settings.json")
+}
+
+/// Migrate settings from legacy path to new path if needed
+fn migrate_settings_if_needed() {
+    let new_path = settings_path();
+
+    // If new settings already exist, no migration needed
+    if new_path.exists() {
+        return;
+    }
+
+    let legacy_path = legacy_settings_path();
+
+    // If legacy settings exist, migrate them
+    if legacy_path.exists() {
+        if let Ok(content) = fs::read_to_string(&legacy_path) {
+            // Validate it's valid JSON before migrating
+            if serde_json::from_str::<AppSettings>(&content).is_ok() {
+                // Ensure target directory exists
+                if let Err(e) = ensure_smanlocal_dir() {
+                    eprintln!("[Settings] Failed to create .smanlocal dir for migration: {}", e);
+                    return;
+                }
+
+                // Copy to new location
+                if let Err(e) = fs::write(&new_path, &content) {
+                    eprintln!("[Settings] Failed to migrate settings: {}", e);
+                } else {
+                    println!("[Settings] Migrated settings from {:?} to {:?}", legacy_path, new_path);
+                }
+            }
+        }
+    }
+}
+
 /// Ensure .smanlocal directory exists
 fn ensure_smanlocal_dir() -> Result<(), String> {
     let home = dirs::home_dir().ok_or("Cannot find home directory")?;
@@ -115,6 +160,9 @@ fn get_openclaw_config_dir() -> PathBuf {
 
 #[tauri::command]
 pub fn get_app_settings() -> Result<AppSettings, String> {
+    // Try to migrate from legacy path if needed
+    migrate_settings_if_needed();
+
     let path = settings_path();
 
     if !path.exists() {
@@ -199,8 +247,8 @@ async fn test_llm_connection_internal(settings: &LlmSettings) -> ConnectionTestR
     };
 
     // Determine API endpoint and format based on URL
-    let (test_url, body) = if settings.apiUrl.contains("bigmodel.cn") {
-        // Zhipu/BigModel API
+    let (test_url, body) = if settings.apiUrl.contains("bigmodel.cn") || settings.apiUrl.contains("minimaxi") {
+        // Zhipu/BigModel API and MiniMax both use OpenAI-compatible format
         let url = format!("{}/chat/completions", settings.apiUrl.trim_end_matches('/'));
         let body = serde_json::json!({
             "model": settings.defaultModel,
@@ -297,6 +345,8 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
     // Determine provider from API URL
     let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
         "zhipu"
+    } else if api_url.contains("minimaxi") {
+        "minimax"
     } else if api_url.contains("openai") {
         "openai"
     } else if api_url.contains("anthropic") {
@@ -333,7 +383,8 @@ fn sync_to_openclaw(settings: &AppSettings) -> Result<(), String> {
 
     // Determine API type based on provider
     // OpenClaw supported types: openai-completions, openai-responses, anthropic-messages, etc.
-    let api_type = if provider_id == "zhipu" || provider_id == "openai" {
+    // MiniMax uses OpenAI-compatible /chat/completions endpoint
+    let api_type = if provider_id == "zhipu" || provider_id == "openai" || provider_id == "minimax" {
         "openai-completions"  // OpenAI-compatible /chat/completions endpoint
     } else {
         "anthropic-messages"  // Anthropic native format
@@ -519,6 +570,8 @@ pub fn get_llm_env_vars() -> Vec<(String, String)> {
         let api_url = &settings.llm.apiUrl;
         let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
             "zhipu"
+        } else if api_url.contains("minimaxi") {
+            "minimax"
         } else if api_url.contains("openai") {
             "openai"
         } else if api_url.contains("anthropic") {

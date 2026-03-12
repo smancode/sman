@@ -39,18 +39,19 @@ fn get_openclaw_isolated_home() -> PathBuf {
     get_sman_local_dir().join("openclaw-home")
 }
 
-/// Generate a random gateway token
+/// Generate a deterministic gateway token based on machine ID
+/// This ensures the same token is used across restarts, avoiding mismatches
 fn generate_gateway_token() -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
+    // Use a fixed seed based on SMAN's installation path
+    // This ensures the token is consistent across restarts
+    let machine_id = get_sman_local_dir().to_string_lossy().to_string();
     let mut hasher = DefaultHasher::new();
-    timestamp.hash(&mut hasher);
+    machine_id.hash(&mut hasher);
+    // Add a fixed salt to make it unique to SMAN
+    "sman-fixed-salt-v1".hash(&mut hasher);
     format!("sman-{:016x}", hasher.finish())
 }
 
@@ -186,6 +187,8 @@ fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String>
         // Determine provider from API URL
         let provider_id = if api_url.contains("bigmodel.cn") || api_url.contains("zhipuai") {
             "zhipu"
+        } else if api_url.contains("minimaxi") {
+            "minimax"
         } else if api_url.contains("openai") {
             "openai"
         } else if api_url.contains("anthropic") {
@@ -222,7 +225,8 @@ fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String>
         }
 
         // Determine API type based on provider
-        let api_type = if provider_id == "zhipu" || provider_id == "openai" {
+        // MiniMax uses OpenAI-compatible /chat/completions endpoint
+        let api_type = if provider_id == "zhipu" || provider_id == "openai" || provider_id == "minimax" {
             "openai-completions"
         } else {
             "anthropic-messages"
@@ -299,14 +303,16 @@ fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String>
         config["gateway"]["auth"] = serde_json::json!({});
     }
 
-    // Set gateway auth mode and token
-    // CRITICAL: Pre-generate token so Gateway and client use the SAME token
+    // Set gateway auth mode to "token" with pre-generated token
+    // Token is required for sharedAuthOk=true which allows skipping device identity
+    // when dangerouslyDisableDeviceAuth=true is set
     config["gateway"]["auth"]["mode"] = serde_json::json!("token");
     config["gateway"]["auth"]["token"] = serde_json::json!(&gateway_token);
 
     // Configure controlUi for Tauri WebView
+    // Note: Tauri apps load from file:// protocol in production, so include it in allowedOrigins
     config["gateway"]["controlUi"] = serde_json::json!({
-        "allowedOrigins": ["*"],
+        "allowedOrigins": ["*", "file://"],
         "dangerouslyDisableDeviceAuth": true
     });
 
@@ -494,6 +500,7 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
         return Ok("OpenClaw server already running".to_string());
     }
 
+
     // Check if LLM is configured first
     let llm_configured = crate::commands::settings::is_llm_configured();
     if !llm_configured {
@@ -521,10 +528,9 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
 
     // Build command to run OpenClaw with node
     // Key: Override HOME to isolate OpenClaw's config directory
-    // CRITICAL: Do NOT pass --token. Token is already written to openclaw.json.
-    // Passing --token would mark it as "override" modeSource, and Gateway won't
-    // persist it if it needs to regenerate. Instead, we rely on the config file
-    // and set OPENCLAW_GATEWAY_TOKEN env var as a fallback.
+    // CRITICAL: Must pass --token to ensure Gateway uses the same token as WebSocket client.
+    // This sets modeSource="override" and ensures consistent token across all Gateway components.
+    // The token is also written to openclaw.json for persistence.
     let isolated_home_str = isolated_home.to_string_lossy().to_string();
     let mut command = app
         .shell()
@@ -536,11 +542,13 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
             OPENCLAW_PORT.to_string(),
             "--allow-unconfigured".to_string(),
             "--dev".to_string(),  // Use dev mode for auto config
+            "--token".to_string(),
+            gateway_token.clone(),  // Explicitly pass token to ensure consistency
         ])
         .env("HOME", &isolated_home_str)  // Critical: isolate HOME
         .env("USERPROFILE", &isolated_home_str)  // Windows
         .env("OPENCLAW_HOME", &isolated_home_str)  // Explicitly set OpenClaw home
-        .env("OPENCLAW_GATEWAY_TOKEN", &gateway_token)  // Set token in env for Gateway to read
+        .env("OPENCLAW_GATEWAY_TOKEN", &gateway_token)  // Also set in env for redundancy
         .current_dir(&isolated_home);  // Run from isolated directory
 
     // Get WebSearch API keys from settings and add to environment
@@ -649,17 +657,18 @@ pub fn get_openclaw_port() -> u16 {
 }
 
 /// Get the Gateway auth token from OpenClaw config
-/// Token is pre-generated by configure_gateway_for_sman before Gateway starts
+/// Uses SMAN's isolated OpenClaw config at ~/.smanlocal/openclaw-home/.openclaw/
 #[tauri::command]
 pub async fn get_gateway_token() -> Result<String, String> {
+    // Use SMAN's isolated OpenClaw config directory
     let openclaw_dir = get_openclaw_isolated_home().join(".openclaw");
     let config_path = openclaw_dir.join("openclaw.json");
 
     if !config_path.exists() {
-        return Err("OpenClaw config not found".to_string());
+        return Err("OpenClaw config not found - server not started?".to_string());
     }
 
-    // Read token from config (pre-generated by configure_gateway_for_sman)
+    // Read token from config (pre-generated by configure_openclaw_complete)
     let content = std::fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config: {}", e))?;
 
@@ -677,7 +686,7 @@ pub async fn get_gateway_token() -> Result<String, String> {
         println!("  Config file: {:?}", config_path);
         println!("  Token read: {}...", &token[..32.min(token.len())]);
         println!("  Token length: {}", token.len());
-        println!("[Sidecar] Got gateway token: {}...", &token[..20.min(token.len())]);
+        println!("[Sidecar] Got gateway token from sidecar config: {}...", &token[..20.min(token.len())]);
         return Ok(token.to_string());
     }
 
@@ -685,5 +694,5 @@ pub async fn get_gateway_token() -> Result<String, String> {
     println!("  Config file: {:?}", config_path);
     println!("  Config content preview: {}", &content[..200.min(content.len())]);
 
-    Err("Gateway token not found in config".to_string())
+    Err("Gateway token not found in sidecar config".to_string())
 }

@@ -29,6 +29,9 @@ export class OpenClawAPI {
 
   /** Connect to Gateway with optional auth token */
   async connect(options?: ConnectOptions): Promise<void> {
+    console.log("[DIAGNOSTIC] OpenClawAPI.connect:");
+    console.log("  options.token:", options?.token ? `${options.token.substring(0, 32)}...` : "undefined");
+    console.log("  token length:", options?.token?.length || 0);
     await this.client.connect(options);
     this.connected = true;
   }

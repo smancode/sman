@@ -55,6 +55,9 @@ export async function initializeOpenClaw(): Promise<void> {
 
     // Connect WebSocket - assumes sidecar is already running
     // Token and device authentication are handled in client-ws.ts
+    console.log("[DIAGNOSTIC] initializeOpenClaw:");
+    console.log("  gatewayToken:", gatewayToken ? `${gatewayToken.substring(0, 32)}...` : "undefined");
+    console.log("  token length:", gatewayToken?.length || 0);
     console.log("[OpenClaw] Connecting WebSocket to ws://127.0.0.1:18790...");
     const api = getOpenClawAPI();
 
