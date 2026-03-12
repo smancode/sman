@@ -140,6 +140,8 @@ export class OpenClawWSClient {
       this.setState("connecting");
 
       try {
+        // Browser WebSocket doesn't support headers option
+        // Origin is automatically set by the browser based on the page origin
         this.ws = new WebSocket(this.config.url);
       } catch (err) {
         this.setState("disconnected");
@@ -148,8 +150,10 @@ export class OpenClawWSClient {
       }
 
       this.ws.onopen = () => {
-        // Wait for connect.challenge event
-        console.log("[OpenClawWS] WebSocket opened, waiting for challenge...");
+        // WebSocket opened, send connect request immediately
+        // Note: For token-based auth, Gateway returns hello-ok directly without challenge
+        console.log("[OpenClawWS] WebSocket opened, sending connect request...");
+        void this.sendConnect(options);
       };
 
       this.ws.onerror = (err) => {
@@ -235,6 +239,23 @@ export class OpenClawWSClient {
     if (message.type === "res") {
       const res = message as unknown as GatewayResponse;
 
+      // Handle connect success (hello-ok in payload)
+      if (res.ok && res.payload && (res.payload as { type?: string }).type === "hello-ok") {
+        console.log("[OpenClawWS] Connected successfully!");
+        this.setState("connected");
+        this.resetReconnectState();
+        this.startHealthCheck();
+
+        // Store device token if provided
+        const hello = res.payload as HelloOk;
+        // TODO: store device token if needed
+
+        this.connectResolve?.();
+        this.connectResolve = undefined;
+        this.connectReject = undefined;
+        return;
+      }
+
       // Handle connect error response (connect doesn't use pendingRequests)
       if (!res.ok && res.error) {
         console.error("[OpenClawWS] Gateway error:", res.error.code, res.error.message);
@@ -265,21 +286,6 @@ export class OpenClawWSClient {
         pending.reject(error);
       }
       return;
-    }
-
-    if (message.type === "hello-ok") {
-      console.log("[OpenClawWS] Connected successfully!");
-      this.setState("connected");
-      this.resetReconnectState();
-      this.startHealthCheck();
-
-      // Store device token if provided
-      const hello = message as HelloOk;
-      // TODO: store device token if needed
-
-      this.connectResolve?.();
-      this.connectResolve = undefined;
-      this.connectReject = undefined;
     }
   }
 
