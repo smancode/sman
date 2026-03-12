@@ -22,7 +22,6 @@
     getAPI,
   } from "../../lib/api/openclaw";
   import type {
-    ChatAttachment,
     ChatEventPayload,
   } from "../../core/openclaw/types";
   import MessageBubble from "./MessageBubble.svelte";
@@ -45,6 +44,7 @@
   let messagesByProject = $state<Record<string, Message[]>>({});
   let conversationByProject = $state<Record<string, string>>({});
   let runIdToProjectId = $state<Record<string, string>>({});
+  let sessionKeyToProjectId = $state<Record<string, string>>({});
   let isSending = $state(false);
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
@@ -77,6 +77,11 @@
       globalThis.crypto?.randomUUID?.() ??
       `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
     );
+  }
+
+  function buildMessageListSignature(projectId: string): string {
+    const list = messagesByProject[projectId] || [];
+    return list.map((msg) => msg.id).join("|");
   }
 
   function getInputPlaceholder(): string {
@@ -112,23 +117,49 @@
     );
     const projectMessages = messagesByProject[projectId];
     console.log("[Chat] projectMessages:", projectMessages);
-    if (!projectMessages || projectMessages.length === 0) {
-      console.log("[Chat] No project messages found, returning");
+    const normalizedProjectMessages = projectMessages || [];
+    if (normalizedProjectMessages.length === 0) {
+      messagesByProject = {
+        ...messagesByProject,
+        [projectId]: [
+          {
+            id: createLocalMessageId(),
+            role: "assistant",
+            content: textContent,
+            timestamp: Date.now(),
+          },
+        ],
+      };
       return;
     }
 
     let targetIndex = -1;
-    for (let index = projectMessages.length - 1; index >= 0; index -= 1) {
-      if (projectMessages[index].role === "assistant") {
+    for (
+      let index = normalizedProjectMessages.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      if (normalizedProjectMessages[index].role === "assistant") {
         targetIndex = index;
         break;
       }
     }
     if (targetIndex < 0) {
-      console.log("[Chat] No assistant message found, returning");
+      messagesByProject = {
+        ...messagesByProject,
+        [projectId]: [
+          ...normalizedProjectMessages,
+          {
+            id: createLocalMessageId(),
+            role: "assistant",
+            content: textContent,
+            timestamp: Date.now(),
+          },
+        ],
+      };
       return;
     }
-    const nextMessages = projectMessages.map((msg, index) =>
+    const nextMessages = normalizedProjectMessages.map((msg, index) =>
       index === targetIndex ? { ...msg, content: textContent } : msg,
     );
     console.log("[Chat] Updating messagesByProject");
@@ -166,23 +197,58 @@
     return `project:${projectId}`;
   }
 
-  function buildProjectContextAttachment(
+  function parseProjectIdFromSessionKey(sessionKey: string): string | null {
+    const matched = sessionKey.match(/project:([^:]+)/);
+    if (!matched || !matched[1]) {
+      return null;
+    }
+    return matched[1];
+  }
+
+  function resolveProjectIdFromEvent(event: ChatEventPayload): string | null {
+    const runMatched = runIdToProjectId[event.runId];
+    if (runMatched) {
+      return runMatched;
+    }
+
+    const sessionMatched = sessionKeyToProjectId[event.sessionKey];
+    if (sessionMatched) {
+      return sessionMatched;
+    }
+
+    const parsed = parseProjectIdFromSessionKey(event.sessionKey);
+    if (parsed) {
+      return parsed;
+    }
+
+    if (isSending && sendingProjectId) {
+      return sendingProjectId;
+    }
+
+    if ($selectedProject) {
+      return $selectedProject.id;
+    }
+
+    return null;
+  }
+
+  function buildProjectScopedPrompt(
+    prompt: string,
     projectName: string,
     projectPath: string,
-  ): ChatAttachment {
+  ): string {
     const normalizedName = projectName.trim() || "当前项目";
     const normalizedPath = projectPath.trim() || "未知路径";
-    return {
-      type: "text",
-      fileName: "current-project-context.txt",
-      mimeType: "text/plain",
-      content: [
-        "当前会话项目上下文",
-        `项目名称: ${normalizedName}`,
-        `项目路径: ${normalizedPath}`,
-        "要求: 回答必须以该项目为准；当用户说“这个项目”时，指代本文件中的项目。",
-      ].join("\n"),
-    };
+    const normalizedPrompt = prompt.trim();
+    return [
+      "[项目上下文]",
+      `项目名称: ${normalizedName}`,
+      `项目路径: ${normalizedPath}`,
+      "约束: 当用户说“这个项目”时，指代上述项目。",
+      "",
+      "[用户消息]",
+      normalizedPrompt,
+    ].join("\n");
   }
 
   async function persistConversationMessage(
@@ -255,6 +321,7 @@
     projectName: string,
   ) {
     const existingMessages = messagesByProject[projectId] || [];
+    const initialSignature = buildMessageListSignature(projectId);
     if (
       isSending &&
       sendingProjectId === projectId &&
@@ -276,7 +343,16 @@
     }
 
     const response = await conversationApi.getMessages(conversationId);
+    if (buildMessageListSignature(projectId) !== initialSignature) {
+      return;
+    }
     if (response.success && response.data) {
+      const hasLocalOptimisticMessages = existingMessages.some((msg) =>
+        msg.id.startsWith("msg_"),
+      );
+      if (hasLocalOptimisticMessages) {
+        return;
+      }
       if (response.data.length > 0) {
         messagesByProject[projectId] = mapHistoryEntriesToMessages(
           response.data,
@@ -340,20 +416,32 @@
               console.log("[Chat] Event message:", event.message);
               console.log("[Chat] Event sessionKey:", event.sessionKey);
               console.log("[Chat] Event runId:", event.runId);
-              // Map runId to projectId (sessionKey is transformed by Gateway)
-              const projectId = runIdToProjectId[event.runId];
+              const projectId = resolveProjectIdFromEvent(event);
               console.log(
-                "[Chat] Mapped projectId from runId:",
+                "[Chat] Resolved projectId:",
                 projectId,
-                "for runId:",
+                "for runId/sessionKey:",
                 event.runId,
+                event.sessionKey,
               );
               if (!projectId) {
                 console.warn(
-                  "[Chat] No projectId found for runId:",
+                  "[Chat] No projectId found for event:",
                   event.runId,
                 );
                 return;
+              }
+              if (event.runId) {
+                runIdToProjectId = {
+                  ...runIdToProjectId,
+                  [event.runId]: projectId,
+                };
+              }
+              if (event.sessionKey) {
+                sessionKeyToProjectId = {
+                  ...sessionKeyToProjectId,
+                  [event.sessionKey]: projectId,
+                };
               }
 
               console.log("[Chat] Event processing:", {
@@ -374,12 +462,13 @@
                   event,
                   sessionKey,
                 );
-                console.log("[Chat] Final resolved content:", resolvedContent);
-                updateLatestThinkingMessage(projectId, resolvedContent);
+                const finalContent = resolvedContent.trim() || "已收到回复，但内容为空";
+                console.log("[Chat] Final resolved content:", finalContent);
+                updateLatestThinkingMessage(projectId, finalContent);
                 await persistConversationMessage(
                   projectId,
                   "assistant",
-                  resolvedContent,
+                  finalContent,
                 );
                 stopSending(projectId);
               } else if (event.state === "error") {
@@ -505,15 +594,20 @@
       await persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
-      const projectContextAttachment = buildProjectContextAttachment(
+      sessionKeyToProjectId = {
+        ...sessionKeyToProjectId,
+        [sessionKey]: projectId,
+      };
+      const scopedPrompt = buildProjectScopedPrompt(
+        prompt,
         $selectedProject.name,
         $selectedProject.path,
       );
-      const result = await sendChatMessage(sessionKey, prompt, {
-        attachments: [projectContextAttachment],
-      });
+      const result = await sendChatMessage(sessionKey, scopedPrompt);
       console.log("[Chat] Message sent, runId:", result.runId);
-      runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
+      if (result.runId) {
+        runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
+      }
       console.log(
         "[Chat] Stored runId mapping:",
         result.runId,
