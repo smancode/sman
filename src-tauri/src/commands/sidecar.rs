@@ -16,6 +16,13 @@ use tauri_plugin_shell::process::CommandChild;
 const OPENCLAW_PORT: u16 = 18790;
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+const OPENCLAW_PRESET_FILES: [(&str, &str); 5] = [
+    ("AGENTS.md", include_str!("../../../openclaw-presets/AGENTS.md")),
+    ("SOUL.md", include_str!("../../../openclaw-presets/SOUL.md")),
+    ("TOOLS.md", include_str!("../../../openclaw-presets/TOOLS.md")),
+    ("IDENTITY.md", include_str!("../../../openclaw-presets/IDENTITY.md")),
+    ("USER.md", include_str!("../../../openclaw-presets/USER.md")),
+];
 
 /// Store the child process for graceful shutdown
 static OPENCLAW_CHILD: Mutex<Option<CommandChild>> = Mutex::new(None);
@@ -37,6 +44,20 @@ fn get_sman_local_dir() -> PathBuf {
 /// This ensures OpenClaw runs with its own independent config
 fn get_openclaw_isolated_home() -> PathBuf {
     get_sman_local_dir().join("openclaw-home")
+}
+
+fn apply_workspace_presets(openclaw_dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
+    let target_dirs = [openclaw_dir.join("workspace"), openclaw_dir.join("workspace-dev")];
+    for workspace_dir in target_dirs.iter() {
+        std::fs::create_dir_all(workspace_dir)
+            .map_err(|e| format!("Failed to create workspace preset dir {:?}: {}", workspace_dir, e))?;
+        for (file_name, content) in OPENCLAW_PRESET_FILES.iter() {
+            let target = workspace_dir.join(file_name);
+            std::fs::write(&target, content)
+                .map_err(|e| format!("Failed to write workspace preset file {:?}: {}", target, e))?;
+        }
+    }
+    Ok(target_dirs.to_vec())
 }
 
 /// Generate a deterministic gateway token based on machine ID
@@ -291,6 +312,12 @@ fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String>
             }
         });
     }
+    if config["agents"].get("defaults").is_none() {
+        config["agents"]["defaults"] = serde_json::json!({});
+    }
+    let workspace_dir = openclaw_dir.join("workspace-dev");
+    config["agents"]["defaults"]["workspace"] =
+        serde_json::json!(workspace_dir.to_string_lossy().to_string());
 
     // ========== Gateway Configuration ==========
     // Ensure gateway section exists
@@ -514,6 +541,8 @@ pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, Stri
     // Ensure directories exist
     std::fs::create_dir_all(&openclaw_dir)
         .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
+    let preset_workspace_dirs = apply_workspace_presets(&openclaw_dir)?;
+    println!("[Sidecar] Workspace presets applied to {:?}", preset_workspace_dirs);
 
     // Configure OpenClaw with LLM and Gateway settings
     // CRITICAL: Configure both in a single write to avoid race conditions
