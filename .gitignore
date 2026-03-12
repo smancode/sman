@@ -39,3 +39,4 @@ src-tauri/resources/openclaw/
 *.temp
 
 .VSCodeCounter/
+.smanlocal/
