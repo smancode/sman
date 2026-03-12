@@ -10,6 +10,7 @@ import { getOpenClawWSClient, OpenClawWSClient } from "./client-ws";
 import type {
   ChatEventPayload,
   ChatHistoryMessage,
+  ChatAttachment,
   EventHandler,
   ConnectOptions,
 } from "./types";
@@ -30,7 +31,10 @@ export class OpenClawAPI {
   /** Connect to Gateway with optional auth token */
   async connect(options?: ConnectOptions): Promise<void> {
     console.log("[DIAGNOSTIC] OpenClawAPI.connect:");
-    console.log("  options.token:", options?.token ? `${options.token.substring(0, 32)}...` : "undefined");
+    console.log(
+      "  options.token:",
+      options?.token ? `${options.token.substring(0, 32)}...` : "undefined",
+    );
     console.log("  token length:", options?.token?.length || 0);
     await this.client.connect(options);
     this.connected = true;
@@ -47,8 +51,10 @@ export class OpenClawAPI {
     message: string,
     options?: {
       thinking?: string;
+      deliver?: boolean;
+      attachments?: ChatAttachment[];
       timeoutMs?: number;
-    }
+    },
   ): Promise<{ runId: string }> {
     const params: Record<string, unknown> = {
       sessionKey,
@@ -57,9 +63,14 @@ export class OpenClawAPI {
     };
 
     if (options?.thinking) params.thinking = options.thinking;
+    if (typeof options?.deliver === "boolean") params.deliver = options.deliver;
+    if (options?.attachments) params.attachments = options.attachments;
     if (options?.timeoutMs) params.timeoutMs = options.timeoutMs;
 
-    const result = await this.client.request<{ runId: string }>("chat.send", params);
+    const result = await this.client.request<{ runId: string }>(
+      "chat.send",
+      params,
+    );
     return result;
   }
 
@@ -69,11 +80,13 @@ export class OpenClawAPI {
   }
 
   /** Get chat history */
-  async getHistory(sessionKey: string, limit = 100): Promise<ChatHistoryMessage[]> {
-    const result = await this.client.request<{ messages?: ChatHistoryMessage[] }>(
-      "chat.history",
-      { sessionKey, limit }
-    );
+  async getHistory(
+    sessionKey: string,
+    limit = 100,
+  ): Promise<ChatHistoryMessage[]> {
+    const result = await this.client.request<{
+      messages?: ChatHistoryMessage[];
+    }>("chat.history", { sessionKey, limit });
     return result.messages || [];
   }
 

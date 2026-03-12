@@ -21,7 +21,10 @@
     disconnectOpenClaw,
     getAPI,
   } from "../../lib/api/openclaw";
-  import type { ChatEventPayload } from "../../core/openclaw/types";
+  import type {
+    ChatAttachment,
+    ChatEventPayload,
+  } from "../../core/openclaw/types";
   import MessageBubble from "./MessageBubble.svelte";
   import InputArea from "./InputArea.svelte";
   import TaskProgress from "../task/TaskProgress.svelte";
@@ -156,25 +159,30 @@
   }
 
   function getSessionKeyByProjectId(projectId: string): string {
-    return conversationByProject[projectId] || projectId;
+    const conversationId = conversationByProject[projectId]?.trim();
+    if (conversationId) {
+      return `project:${projectId}:conversation:${conversationId}`;
+    }
+    return `project:${projectId}`;
   }
 
-  function buildProjectScopedPrompt(
+  function buildProjectContextAttachment(
     projectName: string,
     projectPath: string,
-    prompt: string,
-  ): string {
+  ): ChatAttachment {
     const normalizedName = projectName.trim() || "当前项目";
     const normalizedPath = projectPath.trim() || "未知路径";
-    return [
-      "【当前项目上下文】",
-      `项目名称: ${normalizedName}`,
-      `项目路径: ${normalizedPath}`,
-      "请仅基于该项目进行分析与回答；当用户说“这个项目”时，指代上面的项目。",
-      "",
-      "【用户问题】",
-      prompt,
-    ].join("\n");
+    return {
+      type: "text",
+      fileName: "current-project-context.txt",
+      mimeType: "text/plain",
+      content: [
+        "当前会话项目上下文",
+        `项目名称: ${normalizedName}`,
+        `项目路径: ${normalizedPath}`,
+        "要求: 回答必须以该项目为准；当用户说“这个项目”时，指代本文件中的项目。",
+      ].join("\n"),
+    };
   }
 
   async function persistConversationMessage(
@@ -497,15 +505,13 @@
       await persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
-      const promptWithProjectContext = buildProjectScopedPrompt(
+      const projectContextAttachment = buildProjectContextAttachment(
         $selectedProject.name,
         $selectedProject.path,
-        prompt,
       );
-      const result = await sendChatMessage(
-        sessionKey,
-        promptWithProjectContext,
-      );
+      const result = await sendChatMessage(sessionKey, prompt, {
+        attachments: [projectContextAttachment],
+      });
       console.log("[Chat] Message sent, runId:", result.runId);
       runIdToProjectId = { ...runIdToProjectId, [result.runId]: projectId };
       console.log(
