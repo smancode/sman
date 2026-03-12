@@ -55,6 +55,9 @@ export async function initializeOpenClaw(): Promise<void> {
         "[OpenClaw] Failed to load gateway token:",
         tokenResponse.error,
       );
+      throw new Error(
+        tokenResponse.error || "Failed to load gateway auth token",
+      );
     }
 
     // Connect WebSocket - assumes sidecar is already running

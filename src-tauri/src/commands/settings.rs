@@ -82,13 +82,28 @@ impl Default for AppSettings {
     }
 }
 
+fn get_sman_local_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("SMAN_LOCAL_DIR") {
+        return PathBuf::from(path);
+    }
+
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let sman_root = manifest_dir
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or(manifest_dir);
+        return sman_root.join(".smanlocal");
+    }
+
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
+    home.join(".smanlocal")
+}
+
 /// Get settings file path (~/.smanlocal/settings.json)
 fn settings_path() -> &'static PathBuf {
     static PATH: OnceLock<PathBuf> = OnceLock::new();
-    PATH.get_or_init(|| {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
-        home.join(".smanlocal").join("settings.json")
-    })
+    PATH.get_or_init(|| get_sman_local_dir().join("settings.json"))
 }
 
 /// Get legacy settings path (Tauri app_data_dir)
@@ -138,8 +153,7 @@ fn migrate_settings_if_needed() {
 
 /// Ensure .smanlocal directory exists
 fn ensure_smanlocal_dir() -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    let dir = home.join(".smanlocal");
+    let dir = get_sman_local_dir();
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| format!("Failed to create .smanlocal: {}", e))?;
     }
@@ -148,12 +162,7 @@ fn ensure_smanlocal_dir() -> Result<(), String> {
 
 /// Get OpenClaw config directory path
 fn get_openclaw_config_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .or_else(|_| std::env::var("HOMEPATH"))
-        .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".smanlocal")
+    get_sman_local_dir()
         .join("openclaw-home")
         .join(".openclaw")
 }

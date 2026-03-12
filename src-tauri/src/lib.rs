@@ -14,6 +14,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = commands::sidecar::start_openclaw_server(app_handle).await {
+                    eprintln!("[App] Auto start OpenClaw failed: {}", e);
+                } else {
+                    println!("[App] OpenClaw auto started");
+                }
+            });
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Stop OpenClaw server when window is closed

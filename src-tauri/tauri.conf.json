@@ -37,7 +37,6 @@
       "icons/icon.ico"
     ],
     "targets": "all",
-    "resources": ["resources/openclaw"],
     "createUpdaterArtifacts": false,
     "macOS": {
       "minimumSystemVersion": "10.13",

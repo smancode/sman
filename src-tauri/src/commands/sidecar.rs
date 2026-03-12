@@ -15,6 +15,7 @@ use tauri_plugin_shell::process::CommandChild;
 /// OpenClaw Gateway port (default for SMAN)
 /// Use 18790 to avoid conflict with local OpenClaw (18789)
 const OPENCLAW_PORT: u16 = 18790;
+const FIXED_GATEWAY_TOKEN: &str = "sman-31244d65207dcced";
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 const OPENCLAW_PRESET_FILES: [(&str, &str); 5] = [
@@ -34,6 +35,19 @@ static OPENCLAW_CHILD: Mutex<Option<CommandChild>> = Mutex::new(None);
 /// - macOS/Linux: $HOME/.smanlocal
 /// - Windows: %USERPROFILE%\.smanlocal
 fn get_sman_local_dir() -> PathBuf {
+    if let Ok(path) = env::var("SMAN_LOCAL_DIR") {
+        return PathBuf::from(path);
+    }
+
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let sman_root = manifest_dir
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or(manifest_dir);
+        return sman_root.join(".smanlocal");
+    }
+
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .or_else(|_| env::var("HOMEPATH"))
@@ -47,34 +61,41 @@ fn get_openclaw_isolated_home() -> PathBuf {
     get_sman_local_dir().join("openclaw-home")
 }
 
-fn apply_workspace_presets(openclaw_dir: &PathBuf) -> Result<Vec<PathBuf>, String> {
+fn apply_workspace_presets(openclaw_dir: &PathBuf) -> Vec<PathBuf> {
     let target_dirs = [openclaw_dir.join("workspace"), openclaw_dir.join("workspace-dev")];
+    let mut applied_dirs: Vec<PathBuf> = Vec::new();
     for workspace_dir in target_dirs.iter() {
-        std::fs::create_dir_all(workspace_dir)
-            .map_err(|e| format!("Failed to create workspace preset dir {:?}: {}", workspace_dir, e))?;
+        if let Err(e) = std::fs::create_dir_all(workspace_dir) {
+            eprintln!(
+                "[Sidecar] Warning: Failed to create workspace preset dir {:?}: {}",
+                workspace_dir,
+                e
+            );
+            continue;
+        }
+        let mut dir_ok = true;
         for (file_name, content) in OPENCLAW_PRESET_FILES.iter() {
             let target = workspace_dir.join(file_name);
-            std::fs::write(&target, content)
-                .map_err(|e| format!("Failed to write workspace preset file {:?}: {}", target, e))?;
+            if let Err(e) = std::fs::write(&target, content) {
+                eprintln!(
+                    "[Sidecar] Warning: Failed to write workspace preset file {:?}: {}",
+                    target,
+                    e
+                );
+                dir_ok = false;
+            }
+        }
+        if dir_ok {
+            applied_dirs.push(workspace_dir.clone());
         }
     }
-    Ok(target_dirs.to_vec())
+    applied_dirs
 }
 
 /// Generate a deterministic gateway token based on machine ID
 /// This ensures the same token is used across restarts, avoiding mismatches
 fn generate_gateway_token() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    // Use a fixed seed based on SMAN's installation path
-    // This ensures the token is consistent across restarts
-    let machine_id = get_sman_local_dir().to_string_lossy().to_string();
-    let mut hasher = DefaultHasher::new();
-    machine_id.hash(&mut hasher);
-    // Add a fixed salt to make it unique to SMAN
-    "sman-fixed-salt-v1".hash(&mut hasher);
-    format!("sman-{:016x}", hasher.finish())
+    FIXED_GATEWAY_TOKEN.to_string()
 }
 
 /// Configure gateway for SMAN
@@ -129,6 +150,12 @@ fn configure_gateway_for_sman(openclaw_dir: &PathBuf) -> Result<String, String> 
     // CRITICAL: Pre-generate token so Gateway and client use the SAME token
     config["gateway"]["auth"]["mode"] = serde_json::json!("token");
     config["gateway"]["auth"]["token"] = serde_json::json!(&token);
+    config["gateway"]["auth"]["rateLimit"] = serde_json::json!({
+        "maxAttempts": 1000,
+        "windowMs": 60000,
+        "lockoutMs": 1000,
+        "exemptLoopback": true
+    });
 
     // Configure controlUi for Tauri WebView
     // Use wildcard to allow all origins in local development
@@ -206,6 +233,11 @@ fn get_node_command(app: &tauri::AppHandle) -> String {
     if let Ok(path) = env::var("OPENCLAW_NODE_PATH") {
         return path;
     }
+
+    if cfg!(debug_assertions) {
+        return "node".to_string();
+    }
+
     if let Ok(resource_dir) = app.path().resource_dir() {
         let candidates = if cfg!(target_os = "windows") {
             vec![
@@ -394,6 +426,12 @@ fn configure_openclaw_complete(openclaw_dir: &PathBuf) -> Result<String, String>
     // when dangerouslyDisableDeviceAuth=true is set
     config["gateway"]["auth"]["mode"] = serde_json::json!("token");
     config["gateway"]["auth"]["token"] = serde_json::json!(&gateway_token);
+    config["gateway"]["auth"]["rateLimit"] = serde_json::json!({
+        "maxAttempts": 1000,
+        "windowMs": 60000,
+        "lockoutMs": 1000,
+        "exemptLoopback": true
+    });
 
     // Configure controlUi for Tauri WebView
     // Note: Tauri apps load from file:// protocol in production, so include it in allowedOrigins
@@ -582,110 +620,144 @@ fn configure_openclaw_llm(openclaw_dir: &PathBuf) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn start_openclaw_server(app: tauri::AppHandle) -> Result<String, String> {
-    if SERVER_RUNNING.load(Ordering::SeqCst) {
+    if SERVER_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Ok("OpenClaw server already running".to_string());
     }
 
+    let start_result: Result<String, String> = (|| {
+        // Get isolated directories
+        let isolated_home = get_openclaw_isolated_home();
+        let openclaw_dir = isolated_home.join(".openclaw");
 
-    // Check if LLM is configured first
-    let llm_configured = crate::commands::settings::is_llm_configured();
-    if !llm_configured {
-        return Err("LLM API Key 未配置，请先在设置中配置 LLM".to_string());
-    }
+        // Ensure directories exist
+        std::fs::create_dir_all(&openclaw_dir)
+            .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
+        let preset_workspace_dirs = apply_workspace_presets(&openclaw_dir);
+        println!("[Sidecar] Workspace presets applied to {:?}", preset_workspace_dirs);
 
-    // Get isolated directories
-    let isolated_home = get_openclaw_isolated_home();
-    let openclaw_dir = isolated_home.join(".openclaw");
+        // Configure OpenClaw with LLM and Gateway settings
+        // CRITICAL: Configure both in a single write to avoid race conditions
+        let gateway_token = configure_openclaw_complete(&openclaw_dir)?;
+        println!("[Sidecar] Pre-generated gateway token: {}...", &gateway_token[..20.min(gateway_token.len())]);
 
-    // Ensure directories exist
-    std::fs::create_dir_all(&openclaw_dir)
-        .map_err(|e| format!("Failed to create OpenClaw dir: {}", e))?;
-    let preset_workspace_dirs = apply_workspace_presets(&openclaw_dir)?;
-    println!("[Sidecar] Workspace presets applied to {:?}", preset_workspace_dirs);
+        // Get OpenClaw path - use sibling project path to access node_modules
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let sman_root = manifest_dir.parent().map(PathBuf::from).unwrap_or(manifest_dir.clone());
+        let sibling_openclaw_dir = sman_root.parent().map(|parent| parent.join("openclaw"));
+        let sibling_openclaw_mjs = sibling_openclaw_dir.as_ref().map(|d| d.join("openclaw.mjs"));
 
-    // Configure OpenClaw with LLM and Gateway settings
-    // CRITICAL: Configure both in a single write to avoid race conditions
-    let gateway_token = configure_openclaw_complete(&openclaw_dir)?;
-    println!("[Sidecar] Pre-generated gateway token: {}...", &gateway_token[..20.min(gateway_token.len())]);
+        // Always use sibling openclaw to have access to node_modules
+        let openclaw_path = sibling_openclaw_mjs.clone().unwrap_or_else(|| {
+            // Fallback to bundled if sibling doesn't exist (shouldn't happen in dev)
+            get_openclaw_path(&app)
+        });
 
-    // Get OpenClaw path
-    let openclaw_path = get_openclaw_path(&app);
-    if !openclaw_path.exists() {
-        return Err(format!("OpenClaw not found at {:?}", openclaw_path));
-    }
-
-    // Build command to run OpenClaw with node
-    // Key: Override HOME to isolate OpenClaw's config directory
-    // CRITICAL: Must pass --token to ensure Gateway uses the same token as WebSocket client.
-    // This sets modeSource="override" and ensures consistent token across all Gateway components.
-    // The token is also written to openclaw.json for persistence.
-    let isolated_home_str = isolated_home.to_string_lossy().to_string();
-    let node_command = get_node_command(&app);
-    let mut command = app
-        .shell()
-        .command(&node_command)
-        .args([
-            openclaw_path.to_string_lossy().to_string(),
-            "gateway".to_string(),
-            "--port".to_string(),
-            OPENCLAW_PORT.to_string(),
-            "--allow-unconfigured".to_string(),
-            "--dev".to_string(),  // Use dev mode for auto config
-            "--token".to_string(),
-            gateway_token.clone(),  // Explicitly pass token to ensure consistency
-        ])
-        .env("HOME", &isolated_home_str)  // Critical: isolate HOME
-        .env("USERPROFILE", &isolated_home_str)  // Windows
-        .env("OPENCLAW_HOME", &isolated_home_str)  // Explicitly set OpenClaw home
-        .env("OPENCLAW_GATEWAY_TOKEN", &gateway_token)  // Also set in env for redundancy
-        .current_dir(&isolated_home);  // Run from isolated directory
-
-    // Get WebSearch API keys from settings and add to environment
-    let web_search_vars = crate::commands::settings::get_web_search_env_vars();
-    for (key, value) in web_search_vars {
-        command = command.env(&key, value);
-    }
-
-    // Get LLM API key from settings and add to environment
-    let llm_vars = crate::commands::settings::get_llm_env_vars();
-    for (key, value) in llm_vars {
-        command = command.env(&key, value);
-    }
-
-    // Spawn the process
-    let (_rx, child) = command
-        .spawn()
-        .map_err(|e| format!("Failed to spawn OpenClaw: {}", e))?;
-
-    // Store child for later termination
-    {
-        let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
-        *child_lock = Some(child);
-    }
-
-    SERVER_RUNNING.store(true, Ordering::SeqCst);
-
-    // Wait for the server to be ready (port becomes available)
-    println!("[Sidecar] Waiting for server to be ready on port {}...", OPENCLAW_PORT);
-    let addr: SocketAddr = format!("127.0.0.1:{}", OPENCLAW_PORT)
-        .parse()
-        .map_err(|e: std::net::AddrParseError| e.to_string())?;
-
-    let max_retries = 30; // 30 * 200ms = 6 seconds max
-    for i in 0..max_retries {
-        if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(100)).is_ok() {
-            println!("[Sidecar] Server ready after {} attempts", i + 1);
-            break;
+        if let Some(ref sibling) = sibling_openclaw_dir {
+            if sibling.exists() {
+                println!("[Sidecar] Using sibling OpenClaw at {:?}", sibling);
+            }
         }
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
 
-    // Token was pre-generated before starting Gateway, no need to wait
-    println!("[Sidecar] Gateway started with pre-configured token");
-    Ok(format!(
-        "OpenClaw server started on port {} with isolated home at {:?}",
-        OPENCLAW_PORT, isolated_home
-    ))
+        // Build command to run OpenClaw with node
+        // Key: Override HOME to isolate OpenClaw's config directory
+        // CRITICAL: Must pass --token to ensure Gateway uses the same token as WebSocket client.
+        // This sets modeSource="override" and ensures consistent token across all Gateway components.
+        // The token is also written to openclaw.json for persistence.
+        let isolated_home_str = isolated_home.to_string_lossy().to_string();
+        let node_command = get_node_command(&app);
+        let mut command = app
+            .shell()
+            .command(&node_command)
+            .args([
+                openclaw_path.to_string_lossy().to_string(),
+                "gateway".to_string(),
+                "--port".to_string(),
+                OPENCLAW_PORT.to_string(),
+                "--allow-unconfigured".to_string(),
+                "--dev".to_string(),  // Use dev mode for auto config
+                "--token".to_string(),
+                gateway_token.clone(),  // Explicitly pass token to ensure consistency
+            ])
+            .env("HOME", &isolated_home_str)  // Critical: isolate HOME
+            .env("USERPROFILE", &isolated_home_str)  // Windows
+            .env("OPENCLAW_HOME", &isolated_home_str)  // Explicitly set OpenClaw home
+            .env("OPENCLAW_GATEWAY_TOKEN", &gateway_token)  // Also set in env for redundancy
+            .env("NODE_PATH", sibling_openclaw_dir.clone().map(|d| d.join("node_modules").to_string_lossy().to_string()).unwrap_or_default())  // Point to node_modules
+            .current_dir(sibling_openclaw_dir.as_ref().unwrap_or(&PathBuf::from(".")));  // Run from openclaw directory to find node_modules
+
+        // Get WebSearch API keys from settings and add to environment
+        let web_search_vars = crate::commands::settings::get_web_search_env_vars();
+        for (key, value) in web_search_vars {
+            command = command.env(&key, value);
+        }
+
+        // Get LLM API key from settings and add to environment
+        let llm_vars = crate::commands::settings::get_llm_env_vars();
+        for (key, value) in llm_vars {
+            command = command.env(&key, value);
+        }
+
+        // Spawn the process
+        let (_rx, child) = command
+            .spawn()
+            .map_err(|e| format!("Failed to spawn OpenClaw: {}", e))?;
+
+        // Store child for later termination
+        {
+            let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
+            *child_lock = Some(child);
+        }
+
+        // Wait for the server to be ready (port becomes available)
+        println!("[Sidecar] Waiting for server to be ready on port {}...", OPENCLAW_PORT);
+        let addr: SocketAddr = format!("127.0.0.1:{}", OPENCLAW_PORT)
+            .parse()
+            .map_err(|e: std::net::AddrParseError| e.to_string())?;
+
+        let max_retries = 30; // 30 * 200ms = 6 seconds max
+        let mut server_ready = false;
+        for i in 0..max_retries {
+            if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(100)).is_ok() {
+                println!("[Sidecar] Server ready after {} attempts", i + 1);
+                server_ready = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+
+        if !server_ready {
+            {
+                let mut child_lock = OPENCLAW_CHILD.lock().unwrap();
+                if let Some(child) = child_lock.take() {
+                    if let Err(e) = child.kill() {
+                        eprintln!(
+                            "[Sidecar] Failed to kill OpenClaw after startup timeout: {}",
+                            e
+                        );
+                    }
+                }
+            }
+            return Err(format!(
+                "OpenClaw failed to listen on port {} within startup timeout",
+                OPENCLAW_PORT
+            ));
+        }
+
+        // Token was pre-generated before starting Gateway, no need to wait
+        println!("[Sidecar] Gateway started with pre-configured token");
+        Ok(format!(
+            "OpenClaw server started on port {} with isolated home at {:?}",
+            OPENCLAW_PORT, isolated_home
+        ))
+    })();
+
+    if start_result.is_err() {
+        SERVER_RUNNING.store(false, Ordering::SeqCst);
+    }
+    start_result
 }
 
 #[tauri::command]

@@ -22,7 +22,7 @@ import type {
 } from "./types";
 
 const DEFAULT_CONFIG: WSClientConfig = {
-  url: "ws://127.0.0.1:18790/ws",  // Use SMAN's isolated sidecar on 18790
+  url: "ws://127.0.0.1:18790/ws", // Use SMAN's isolated sidecar on 18790
   requestTimeoutMs: 120000,
   reconnect: {
     baseDelayMs: 1000,
@@ -41,7 +41,6 @@ const DEFAULT_CONFIG: WSClientConfig = {
 // Use CONTROL_UI to enable silent local pairing (auto-approval without user interaction)
 const GATEWAY_CLIENT_ID = "openclaw-control-ui";
 const GATEWAY_CLIENT_MODE = "ui";
-
 
 export type HelloOk = {
   type: "hello-ok";
@@ -100,6 +99,36 @@ export class OpenClawWSClient {
     this.onStateChange?.(state);
   }
 
+  private shouldStopReconnectOnAuthError(error?: {
+    code?: string;
+    message?: string;
+  }): boolean {
+    const code = (error?.code ?? "").toLowerCase();
+    const message = (error?.message ?? "").toLowerCase();
+    return (
+      code.includes("unauthorized") ||
+      code.includes("auth") ||
+      message.includes("unauthorized") ||
+      message.includes("authentication") ||
+      message.includes("token mismatch") ||
+      message.includes("too many failed")
+    );
+  }
+
+  private shouldStopReconnectOnClose(closeEvent?: CloseEvent): boolean {
+    const code = closeEvent?.code ?? 0;
+    const reason = (closeEvent?.reason ?? "").toLowerCase();
+    return (
+      code === 1008 ||
+      code === 4001 ||
+      code === 4401 ||
+      reason.includes("unauthorized") ||
+      reason.includes("authentication") ||
+      reason.includes("token mismatch") ||
+      reason.includes("too many failed")
+    );
+  }
+
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -152,16 +181,18 @@ export class OpenClawWSClient {
       this.ws.onopen = () => {
         // WebSocket opened, send connect request immediately
         // Note: For token-based auth, Gateway returns hello-ok directly without challenge
-        console.log("[OpenClawWS] WebSocket opened, sending connect request...");
-        void this.sendConnect(options);
+        console.log(
+          "[OpenClawWS] WebSocket opened, sending connect request...",
+        );
+        void this.sendConnect(resolvedOptions);
       };
 
       this.ws.onerror = (err) => {
         console.error("[OpenClawWS] WebSocket error:", err);
       };
 
-      this.ws.onclose = () => {
-        this.handleDisconnect();
+      this.ws.onclose = (event) => {
+        this.handleDisconnect(event);
       };
 
       this.ws.onmessage = (event) => {
@@ -221,7 +252,10 @@ export class OpenClawWSClient {
 
       // Dispatch other events to listeners
       const listeners = this.eventListeners.get(evt.event);
-      console.log(`[OpenClawWS] Dispatching event "${evt.event}", listeners: ${listeners?.size ?? 0}, payload:`, evt.payload);
+      console.log(
+        `[OpenClawWS] Dispatching event "${evt.event}", listeners: ${listeners?.size ?? 0}, payload:`,
+        evt.payload,
+      );
       if (listeners) {
         for (const handler of listeners) {
           try {
@@ -243,7 +277,11 @@ export class OpenClawWSClient {
       const res = message as unknown as GatewayResponse;
 
       // Handle connect success (hello-ok in payload)
-      if (res.ok && res.payload && (res.payload as { type?: string }).type === "hello-ok") {
+      if (
+        res.ok &&
+        res.payload &&
+        (res.payload as { type?: string }).type === "hello-ok"
+      ) {
         console.log("[OpenClawWS] Connected successfully!");
         this.setState("connected");
         this.resetReconnectState();
@@ -261,10 +299,21 @@ export class OpenClawWSClient {
 
       // Handle connect error response (connect doesn't use pendingRequests)
       if (!res.ok && res.error) {
-        console.error("[OpenClawWS] Gateway error:", res.error.code, res.error.message);
+        console.error(
+          "[OpenClawWS] Gateway error:",
+          res.error.code,
+          res.error.message,
+        );
+        if (this.shouldStopReconnectOnAuthError(res.error)) {
+          this.shouldAutoReconnect = false;
+          this.resetReconnectState();
+          this.setState("disconnected");
+        }
         // If this is a connect error, reject the connection
         if (this.connectReject && this._state === "connecting") {
-          this.connectReject(new Error(`${res.error.code}: ${res.error.message}`));
+          this.connectReject(
+            new Error(`${res.error.code}: ${res.error.message}`),
+          );
           this.connectResolve = undefined;
           this.connectReject = undefined;
           this.ws?.close();
@@ -346,7 +395,12 @@ export class OpenClawWSClient {
     }
 
     // Send connect request directly (don't use request() as connect returns hello-ok, not res)
-    const frame = { type: "req", id: `${++this.requestId}`, method: "connect", params };
+    const frame = {
+      type: "req",
+      id: `${++this.requestId}`,
+      method: "connect",
+      params,
+    };
     this.ws!.send(JSON.stringify(frame));
     console.log("[OpenClawWS] Connect request sent, waiting for hello-ok...");
     // Success/error handled in handleMessage via hello-ok or res error
@@ -421,11 +475,17 @@ export class OpenClawWSClient {
   }
 
   /** Handle disconnection */
-  private handleDisconnect(): void {
+  private handleDisconnect(closeEvent?: CloseEvent): void {
+    const closeReason = closeEvent?.reason || "Connection closed";
+    if (this.shouldStopReconnectOnClose(closeEvent)) {
+      this.shouldAutoReconnect = false;
+      this.resetReconnectState();
+    }
+
     // Reject all pending requests
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timeout);
-      pending.reject(new Error("Connection closed"));
+      pending.reject(new Error(closeReason));
     }
     this.pendingRequests.clear();
 
@@ -434,7 +494,7 @@ export class OpenClawWSClient {
 
     // Reject connect promise if pending
     if (this.connectReject) {
-      this.connectReject(new Error("Connection closed"));
+      this.connectReject(new Error(closeReason));
       this.connectResolve = undefined;
       this.connectReject = undefined;
     }
