@@ -4,7 +4,7 @@
  * via WebSocket. Messages render with markdown + streaming.
  */
 import { useEffect, useState, useRef } from 'react';
-import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import type { RawMessage } from '@/types/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -233,7 +233,7 @@ function TypingIndicator() {
   return (
     <div className="flex gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-black/5 dark:bg-white/5 text-foreground">
-        <Sparkles className="h-4 w-4" />
+        <img src="/favicon.png" alt="AI" className="h-5 w-5" />
       </div>
       <div className="bg-black/5 dark:bg-white/5 text-foreground rounded-2xl px-4 py-3">
         <div className="flex gap-1">
@@ -253,7 +253,7 @@ function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
   return (
     <div className="flex gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-black/5 dark:bg-white/5 text-foreground">
-        <Sparkles className="h-4 w-4" />
+        <img src="/favicon.png" alt="AI" className="h-5 w-5" />
       </div>
       <div className="bg-black/5 dark:bg-white/5 text-foreground rounded-2xl px-4 py-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -72,8 +72,8 @@ export const ChatMessage = memo(function ChatMessage({
     >
       {/* Avatar */}
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-black/5 dark:bg-white/5 text-foreground">
-          <Sparkles className="h-4 w-4" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-black/5 dark:bg-white/5 text-foreground overflow-hidden">
+          <img src="/favicon.png" alt="AI" className="h-5 w-5 object-contain" />
         </div>
       )}
 
