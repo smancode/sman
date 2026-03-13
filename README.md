@@ -148,6 +148,50 @@ pnpm gateway
 - Zustand (state management)
 - React Router
 
+## Deployment
+
+### Docker Deployment (Recommended)
+
+```bash
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+### Manual Deployment
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build frontend and bundle dependencies
+pnpm build
+
+# Start server
+PORT=3000 GATEWAY_TOKEN=your-token pnpm start
+```
+
+### Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `PORT` | 3000 | Server HTTP port |
+| `GATEWAY_PORT` | 18789 | Internal OpenClaw Gateway port |
+| `GATEWAY_TOKEN` | *required* | Authentication token for gateway |
+
+### Business System Integration
+
+Mount your business system code at `/app/business-system`:
+
+```bash
+docker run -v /path/to/your/code:/app/business-system:ro smanweb
+```
+
 ## License
 
 MIT
