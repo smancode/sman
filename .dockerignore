@@ -1,42 +1,11 @@
-# Dependencies
 node_modules
-.pnpm-store
-
-# Build output
 dist
-
-# Development files
-*.log
-.env
-.env.local
-.env.*.local
-
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-
-# Git
+build
+bundled
 .git
 .gitignore
-
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Documentation
-README.md
-docs
-
-# Tests
-**/*.test.ts
-**/*.test.tsx
-**/*.spec.ts
-**/*.spec.tsx
-coverage
-
-# Misc
-.DS_Store
-*.tgz
+*.md
+.env*
+.vscode
+.idea
+*.log

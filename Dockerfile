@@ -1,10 +1,10 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+# Build stage for frontend
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
@@ -12,27 +12,40 @@ COPY package.json pnpm-lock.yaml ./
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Build application
-RUN pnpm run build
+# Build frontend and bundle OpenClaw
+RUN pnpm build
 
-# Stage 2: Production
-FROM nginx:alpine
+# Production stage
+FROM node:22-alpine
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-# Copy built assets from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Install pnpm for runtime
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Expose port
-EXPOSE 80
+# Copy built assets
+COPY --from=frontend-builder /app/dist ./dist
+COPY --from=frontend-builder /app/bundled ./bundled
+COPY --from=frontend-builder /app/node_modules ./node_modules
+COPY --from=frontend-builder /app/package.json ./
+
+# Create data directory for persistence
+RUN mkdir -p /app/data
+
+# Environment defaults
+ENV PORT=3000
+ENV GATEWAY_PORT=18789
+ENV GATEWAY_TOKEN=sman-change-me-in-production
+ENV NODE_ENV=production
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 3000
+
+# Start the server
+CMD ["node", "dist/server/index.js"]
