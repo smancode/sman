@@ -62,12 +62,16 @@ export function extractContentText(content: unknown): string {
 }
 
 export function extractChatEventContent(event: ChatEventPayload): string {
+  const eventRecord = event as unknown as UnknownRecord;
   const candidates: unknown[] = [
     event.message?.content,
-    (event as unknown as UnknownRecord).content,
-    (event as unknown as UnknownRecord).output,
-    (event as unknown as UnknownRecord).response,
-    (event as unknown as UnknownRecord).result,
+    event.message,
+    eventRecord.text,
+    eventRecord.content,
+    eventRecord.output,
+    eventRecord.response,
+    eventRecord.result,
+    eventRecord,
   ];
 
   for (const candidate of candidates) {
@@ -84,11 +88,13 @@ export function getLatestAssistantMessageContent(
   history: ChatHistoryMessage[],
 ): string {
   for (let index = history.length - 1; index >= 0; index -= 1) {
-    const entry = history[index];
-    if (entry.role !== "assistant") {
+    const entry = history[index] as ChatHistoryMessage & UnknownRecord;
+    if (entry.role?.toLowerCase() !== "assistant") {
       continue;
     }
-    const extracted = extractContentText(entry.content).trim();
+    const extracted = extractContentText(
+      entry.content ?? entry.text ?? entry.message,
+    ).trim();
     if (extracted.length > 0) {
       return extracted;
     }

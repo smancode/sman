@@ -320,6 +320,7 @@
 
   .markdown :global(a) {
     text-decoration: underline;
+    pointer-events: none;
   }
 
   .markdown :global(:not(pre) > code) {
@@ -329,5 +330,4 @@
     border-radius: 6px;
     padding: 0.1rem 0.35rem;
   }
-
 </style>

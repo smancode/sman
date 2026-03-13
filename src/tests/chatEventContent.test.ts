@@ -56,6 +56,15 @@ describe("extractChatEventContent", () => {
 
     expect(extractChatEventContent(event)).toBe("从 output 提取");
   });
+
+  it("extracts text from event root text field", () => {
+    const event = {
+      ...buildBaseEvent(),
+      text: "从 text 字段提取",
+    } as ChatEventPayload;
+
+    expect(extractChatEventContent(event)).toBe("从 text 字段提取");
+  });
 });
 
 describe("getLatestAssistantMessageContent", () => {
@@ -75,5 +84,14 @@ describe("getLatestAssistantMessageContent", () => {
     ];
 
     expect(getLatestAssistantMessageContent(history)).toBe("");
+  });
+
+  it("returns latest assistant text field from history", () => {
+    const history = [
+      { role: "assistant", content: "" },
+      { role: "assistant", text: "来自 text 字段" },
+    ] as ChatHistoryMessage[];
+
+    expect(getLatestAssistantMessageContent(history)).toBe("来自 text 字段");
   });
 });

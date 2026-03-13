@@ -76,7 +76,15 @@ export class OpenClawAPI {
 
   /** Subscribe to chat events */
   onChatEvent(handler: EventHandler<ChatEventPayload>): () => void {
-    return this.client.on<ChatEventPayload>("chat", handler);
+    const unsubscribeChat = this.client.on<ChatEventPayload>("chat", handler);
+    const unsubscribeChatEvent = this.client.on<ChatEventPayload>(
+      "chat.event",
+      handler,
+    );
+    return () => {
+      unsubscribeChat();
+      unsubscribeChatEvent();
+    };
   }
 
   /** Get chat history */
@@ -88,6 +96,25 @@ export class OpenClawAPI {
       messages?: ChatHistoryMessage[];
     }>("chat.history", { sessionKey, limit });
     return result.messages || [];
+  }
+
+  /** Wait until a run reaches terminal lifecycle or timeout */
+  async waitForRun(
+    runId: string,
+    timeoutMs = 8000,
+  ): Promise<{
+    status?: string;
+    startedAt?: number;
+    endedAt?: number;
+  }> {
+    return this.client.request<{
+      status?: string;
+      startedAt?: number;
+      endedAt?: number;
+    }>("agent.wait", {
+      runId,
+      timeoutMs,
+    });
   }
 
   /** Abort chat run */

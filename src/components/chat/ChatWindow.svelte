@@ -21,9 +21,7 @@
     disconnectOpenClaw,
     getAPI,
   } from "../../lib/api/openclaw";
-  import type {
-    ChatEventPayload,
-  } from "../../core/openclaw/types";
+  import type { ChatEventPayload } from "../../core/openclaw/types";
   import MessageBubble from "./MessageBubble.svelte";
   import InputArea from "./InputArea.svelte";
   import TaskProgress from "../task/TaskProgress.svelte";
@@ -45,13 +43,17 @@
   let conversationByProject = $state<Record<string, string>>({});
   let runIdToProjectId = $state<Record<string, string>>({});
   let sessionKeyToProjectId = $state<Record<string, string>>({});
+  let historyLoadedByProject = $state<Record<string, boolean>>({});
   let pendingAssistantContentByProject = $state<Record<string, string>>({});
+  let runIdToAssistantMessageId = $state<Record<string, string>>({});
+  let historyLoadingByProject = $state<Record<string, boolean>>({});
+  let recentChatEventAtBySignature = $state<Record<string, number>>({});
+  let fallbackReplyTimerByRunId = $state<Record<string, number>>({});
   let isSending = $state(false);
   let sendingProjectId = $state<string | null>(null);
   let initializedProjectId = $state<string | null>(null);
   let messagesContainer: HTMLDivElement = $state()!;
-  let bottomAnchor: HTMLDivElement = $state()!;
-  let flushAssistantRafId = $state<number | null>(null);
+  let flushAssistantTimerId = $state<number | null>(null);
   let scrollRafId = $state<number | null>(null);
   let shouldStickToBottom = $state(true);
   let llmConfigured = $state(false);
@@ -59,10 +61,11 @@
   let initError = $state<string | null>(null);
 
   // Derived
+  let activeProjectId = $derived($selectedProject?.id || initializedProjectId);
   let messages = $derived<Message[]>(
-    $selectedProject
-      ? messagesByProject[$selectedProject.id] ||
-          getDemoMessages($selectedProject.name)
+    activeProjectId
+      ? messagesByProject[activeProjectId] ||
+          ($selectedProject ? getDemoMessages($selectedProject.name) : [])
       : [],
   );
 
@@ -99,17 +102,96 @@
 
   function isInputDisabled(): boolean {
     return (
-      !$selectedProject ||
-      !$isConnected ||
-      !llmConfigured ||
-      isInitializing
+      !$selectedProject || !$isConnected || !llmConfigured || isInitializing
     );
   }
 
-  function updateLatestThinkingMessage(projectId: string, content: unknown) {
+  function findLatestAssistantMessageIndex(
+    projectMessages: Message[],
+    matcher?: (message: Message) => boolean,
+  ): number {
+    for (let index = projectMessages.length - 1; index >= 0; index -= 1) {
+      const message = projectMessages[index];
+      if (message.role !== "assistant") {
+        continue;
+      }
+      if (!matcher || matcher(message)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function updateAssistantMessageById(
+    projectId: string,
+    messageId: string,
+    content: unknown,
+  ): boolean {
+    const textContent = extractContentText(content);
+    if (!textContent.trim()) {
+      return false;
+    }
+    const projectMessages = messagesByProject[projectId] || [];
+    const targetIndex = projectMessages.findIndex(
+      (msg) => msg.id === messageId,
+    );
+    if (targetIndex < 0) {
+      return false;
+    }
+    if (projectMessages[targetIndex]?.content === textContent) {
+      return true;
+    }
+    const nextMessages = projectMessages.map((msg, index) =>
+      index === targetIndex ? { ...msg, content: textContent } : msg,
+    );
+    messagesByProject[projectId] = nextMessages;
+    return true;
+  }
+
+  function resolveAssistantMessageIdByRunId(
+    projectId: string,
+    runId?: string,
+  ): string | null {
+    if (runId) {
+      const matched = runIdToAssistantMessageId[runId];
+      if (matched) {
+        return matched;
+      }
+    }
+    const projectMessages = messagesByProject[projectId] || [];
+    const thinkingIndex = findLatestAssistantMessageIndex(
+      projectMessages,
+      (msg) => msg.content.includes("思考中"),
+    );
+    if (thinkingIndex >= 0) {
+      return projectMessages[thinkingIndex].id;
+    }
+    const fallbackIndex = findLatestAssistantMessageIndex(projectMessages);
+    if (fallbackIndex >= 0) {
+      return projectMessages[fallbackIndex].id;
+    }
+    return null;
+  }
+
+  function updateLatestThinkingMessage(
+    projectId: string,
+    content: unknown,
+    runId?: string,
+  ) {
     const textContent = extractContentText(content);
     if (!textContent.trim()) {
       return;
+    }
+    const targetMessageId = resolveAssistantMessageIdByRunId(projectId, runId);
+    if (targetMessageId) {
+      const updated = updateAssistantMessageById(
+        projectId,
+        targetMessageId,
+        textContent,
+      );
+      if (updated) {
+        return;
+      }
     }
     const projectMessages = messagesByProject[projectId];
     const normalizedProjectMessages = projectMessages || [];
@@ -125,16 +207,12 @@
       return;
     }
 
-    let targetIndex = -1;
-    for (
-      let index = normalizedProjectMessages.length - 1;
-      index >= 0;
-      index -= 1
-    ) {
-      if (normalizedProjectMessages[index].role === "assistant") {
-        targetIndex = index;
-        break;
-      }
+    let targetIndex = findLatestAssistantMessageIndex(
+      normalizedProjectMessages,
+      (msg) => msg.content.includes("思考中"),
+    );
+    if (targetIndex < 0) {
+      targetIndex = findLatestAssistantMessageIndex(normalizedProjectMessages);
     }
     if (targetIndex < 0) {
       messagesByProject[projectId] = [
@@ -163,24 +241,30 @@
   function flushPendingAssistantUpdates() {
     const entries = Object.entries(pendingAssistantContentByProject);
     pendingAssistantContentByProject = {};
-    for (const [projectId, content] of entries) {
-      updateLatestThinkingMessage(projectId, content);
+    for (const [key, content] of entries) {
+      const [projectId, runId] = key.split("::");
+      updateLatestThinkingMessage(projectId, content, runId || undefined);
     }
   }
 
-  function scheduleAssistantMessageUpdate(projectId: string, content: unknown) {
+  function scheduleAssistantMessageUpdate(
+    projectId: string,
+    content: unknown,
+    runId?: string,
+  ) {
     const textContent = extractContentText(content).trim();
     if (!textContent) {
       return;
     }
-    pendingAssistantContentByProject[projectId] = textContent;
-    if (flushAssistantRafId !== null) {
+    const pendingKey = `${projectId}::${runId || ""}`;
+    pendingAssistantContentByProject[pendingKey] = textContent;
+    if (flushAssistantTimerId !== null) {
       return;
     }
-    flushAssistantRafId = requestAnimationFrame(() => {
-      flushAssistantRafId = null;
+    flushAssistantTimerId = window.setTimeout(() => {
+      flushAssistantTimerId = null;
       flushPendingAssistantUpdates();
-    });
+    }, 50);
   }
 
   async function resolveAssistantContentFromEvent(
@@ -214,6 +298,53 @@
     return `project:${projectId}`;
   }
 
+  function getHistorySessionKeyCandidates(
+    projectId: string,
+    preferredSessionKey?: string,
+  ): string[] {
+    const candidates = new Set<string>();
+    const add = (key?: string) => {
+      const value = key?.trim();
+      if (value) {
+        candidates.add(value);
+      }
+    };
+    add(preferredSessionKey);
+    add(getSessionKeyByProjectId(projectId));
+    add(`project:${projectId}`);
+    Object.entries(sessionKeyToProjectId).forEach(([key, mappedProjectId]) => {
+      if (mappedProjectId === projectId) {
+        add(key);
+      }
+    });
+    return [...candidates];
+  }
+
+  function normalizeSessionKey(sessionKey: string): string {
+    return sessionKey.trim().toLowerCase();
+  }
+
+  function getSessionKeyCandidates(sessionKey: string): string[] {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) {
+      return [];
+    }
+    const candidates = new Set<string>([normalized]);
+    const agentPrefixed = normalized.match(/^agent:[^:]+:(.+)$/);
+    const stripped = agentPrefixed?.[1];
+    if (stripped?.startsWith("project:")) {
+      candidates.add(stripped);
+    }
+    return [...candidates];
+  }
+
+  function bindSessionKeyToProject(sessionKey: string, projectId: string) {
+    const candidates = getSessionKeyCandidates(sessionKey);
+    for (const candidate of candidates) {
+      sessionKeyToProjectId[candidate] = projectId;
+    }
+  }
+
   function parseProjectIdFromSessionKey(sessionKey: string): string | null {
     const matched = sessionKey.match(/project:([^:]+)/);
     if (!matched || !matched[1]) {
@@ -228,24 +359,20 @@
       return runMatched;
     }
 
-    const sessionMatched = sessionKeyToProjectId[event.sessionKey];
-    if (sessionMatched) {
-      return sessionMatched;
+    const sessionCandidates = getSessionKeyCandidates(event.sessionKey);
+    for (const candidate of sessionCandidates) {
+      const matched = sessionKeyToProjectId[candidate];
+      if (matched) {
+        return matched;
+      }
     }
 
-    const parsed = parseProjectIdFromSessionKey(event.sessionKey);
-    if (parsed) {
-      return parsed;
+    for (const candidate of sessionCandidates) {
+      const parsed = parseProjectIdFromSessionKey(candidate);
+      if (parsed) {
+        return parsed;
+      }
     }
-
-    if (isSending && sendingProjectId) {
-      return sendingProjectId;
-    }
-
-    if ($selectedProject) {
-      return $selectedProject.id;
-    }
-
     return null;
   }
 
@@ -331,10 +458,10 @@
       if (!force && !shouldStickToBottom) {
         return;
       }
-      if (bottomAnchor) {
-        bottomAnchor.scrollIntoView({ block: "end" });
-      }
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: "auto",
+      });
     });
   }
 
@@ -375,7 +502,13 @@
     projectId: string,
     projectName: string,
   ) {
+    if (historyLoadingByProject[projectId]) {
+      return;
+    }
     const existingMessages = messagesByProject[projectId] || [];
+    if (historyLoadedByProject[projectId] && existingMessages.length > 0) {
+      return;
+    }
     const initialSignature = buildMessageListSignature(projectId);
     if (
       isSending &&
@@ -385,46 +518,224 @@
       return;
     }
 
-    const conversationId = await ensureProjectConversation(
-      projectId,
-      projectName,
-    );
-    if (!conversationId) {
-      messagesByProject[projectId] =
-        existingMessages.length > 0
-          ? existingMessages
-          : getDemoMessages(projectName);
-      return;
-    }
-
-    const response = await conversationApi.getMessages(conversationId);
-    if (buildMessageListSignature(projectId) !== initialSignature) {
-      return;
-    }
-    if (response.success && response.data) {
-      const hasLocalOptimisticMessages = existingMessages.some((msg) =>
-        msg.id.startsWith("msg_"),
+    historyLoadingByProject[projectId] = true;
+    try {
+      const conversationId = await ensureProjectConversation(
+        projectId,
+        projectName,
       );
-      if (hasLocalOptimisticMessages) {
-        return;
-      }
-      if (response.data.length > 0) {
-        messagesByProject[projectId] = mapHistoryEntriesToMessages(
-          response.data,
-        );
-      } else {
+      if (!conversationId) {
         messagesByProject[projectId] =
           existingMessages.length > 0
             ? existingMessages
             : getDemoMessages(projectName);
+        historyLoadedByProject[projectId] = true;
+        return;
       }
+
+      const response = await conversationApi.getMessages(conversationId);
+      if (buildMessageListSignature(projectId) !== initialSignature) {
+        return;
+      }
+      if (response.success && response.data) {
+        const hasLocalOptimisticMessages = existingMessages.some(
+          (msg) => msg.id.startsWith("msg_") || msg.content.includes("思考中"),
+        );
+        if (hasLocalOptimisticMessages) {
+          return;
+        }
+        if (response.data.length > 0) {
+          messagesByProject[projectId] = mapHistoryEntriesToMessages(
+            response.data,
+          );
+          historyLoadedByProject[projectId] = true;
+        } else {
+          messagesByProject[projectId] =
+            existingMessages.length > 0
+              ? existingMessages
+              : getDemoMessages(projectName);
+          historyLoadedByProject[projectId] = true;
+        }
+        return;
+      }
+
+      messagesByProject[projectId] =
+        existingMessages.length > 0
+          ? existingMessages
+          : getDemoMessages(projectName);
+      historyLoadedByProject[projectId] = true;
+    } finally {
+      historyLoadingByProject[projectId] = false;
+    }
+  }
+
+  function bindRunIdToAssistantMessage(
+    projectId: string,
+    runId: string | undefined,
+    fallbackMessageId?: string,
+  ) {
+    if (!runId) {
       return;
     }
+    if (runIdToAssistantMessageId[runId]) {
+      return;
+    }
+    const resolvedMessageId =
+      fallbackMessageId || resolveAssistantMessageIdByRunId(projectId);
+    if (!resolvedMessageId) {
+      return;
+    }
+    runIdToAssistantMessageId[runId] = resolvedMessageId;
+  }
 
-    messagesByProject[projectId] =
-      existingMessages.length > 0
-        ? existingMessages
-        : getDemoMessages(projectName);
+  function createChatEventSignature(
+    projectId: string,
+    event: ChatEventPayload,
+  ): string {
+    const runId = event.runId || "";
+    const sessionKey = event.sessionKey || "";
+    const state = event.state || "";
+    const errorText = event.errorMessage || "";
+    const content = extractChatEventContent(event).trim();
+    return `${projectId}|${runId}|${sessionKey}|${state}|${errorText}|${content}`;
+  }
+
+  function shouldIgnoreDuplicatedEvent(
+    projectId: string,
+    event: ChatEventPayload,
+  ): boolean {
+    const now = Date.now();
+    const signature = createChatEventSignature(projectId, event);
+    const lastAt = recentChatEventAtBySignature[signature];
+    if (lastAt && now - lastAt < 1500) {
+      return true;
+    }
+    recentChatEventAtBySignature[signature] = now;
+    const signatures = Object.keys(recentChatEventAtBySignature);
+    if (signatures.length > 800) {
+      const nextStore: Record<string, number> = {};
+      for (const key of signatures) {
+        const timestamp = recentChatEventAtBySignature[key];
+        if (now - timestamp < 10000) {
+          nextStore[key] = timestamp;
+        }
+      }
+      recentChatEventAtBySignature = nextStore;
+    }
+    return false;
+  }
+
+  function takePendingAssistantContent(
+    projectId: string,
+    runId?: string,
+  ): string {
+    const exactKey = `${projectId}::${runId || ""}`;
+    const fallbackKey = `${projectId}::`;
+    const exactValue = pendingAssistantContentByProject[exactKey]?.trim() || "";
+    if (exactValue) {
+      delete pendingAssistantContentByProject[exactKey];
+      return exactValue;
+    }
+    if (exactKey !== fallbackKey) {
+      const fallbackValue =
+        pendingAssistantContentByProject[fallbackKey]?.trim() || "";
+      if (fallbackValue) {
+        delete pendingAssistantContentByProject[fallbackKey];
+        return fallbackValue;
+      }
+    }
+    const scopedKeys = Object.keys(pendingAssistantContentByProject).filter(
+      (key) => key.startsWith(`${projectId}::`),
+    );
+    if (scopedKeys.length === 0) {
+      return "";
+    }
+    const lastKey = scopedKeys[scopedKeys.length - 1];
+    const lastValue = pendingAssistantContentByProject[lastKey]?.trim() || "";
+    delete pendingAssistantContentByProject[lastKey];
+    return lastValue;
+  }
+
+  function clearPendingAssistantContent(projectId: string, runId?: string) {
+    const exactKey = `${projectId}::${runId || ""}`;
+    const fallbackKey = `${projectId}::`;
+    delete pendingAssistantContentByProject[exactKey];
+    delete pendingAssistantContentByProject[fallbackKey];
+  }
+
+  function clearReplyFallbackTimer(runId?: string) {
+    if (!runId) {
+      return;
+    }
+    const timerId = fallbackReplyTimerByRunId[runId];
+    if (typeof timerId === "number") {
+      clearTimeout(timerId);
+      delete fallbackReplyTimerByRunId[runId];
+    }
+  }
+
+  function scheduleReplyFallback(
+    projectId: string,
+    sessionKey: string,
+    runId?: string,
+  ) {
+    if (!runId) {
+      return;
+    }
+    clearReplyFallbackTimer(runId);
+    const timerId = window.setTimeout(() => {
+      delete fallbackReplyTimerByRunId[runId];
+      void (async () => {
+        if (!isSending || sendingProjectId !== projectId) {
+          return;
+        }
+        const projectMessages = messagesByProject[projectId] || [];
+        const assistantIndex = findLatestAssistantMessageIndex(projectMessages);
+        if (assistantIndex < 0) {
+          return;
+        }
+        const currentAssistant = projectMessages[assistantIndex];
+        if (!currentAssistant || currentAssistant.content !== "思考中...") {
+          return;
+        }
+        const api = getAPI();
+        if (!api) {
+          return;
+        }
+        try {
+          const waitResult = await api.waitForRun(runId, 10000);
+          const shouldPullHistory = waitResult.status !== "timeout";
+          if (!shouldPullHistory) {
+            return;
+          }
+          const keyCandidates = getHistorySessionKeyCandidates(
+            projectId,
+            sessionKey,
+          );
+          let latestAssistant = "";
+          for (const key of keyCandidates) {
+            const history = await api.getHistory(key, 30);
+            latestAssistant = getLatestAssistantMessageContent(history).trim();
+            if (latestAssistant) {
+              break;
+            }
+          }
+          if (!latestAssistant) {
+            return;
+          }
+          updateLatestThinkingMessage(projectId, latestAssistant, runId);
+          await persistConversationMessage(
+            projectId,
+            "assistant",
+            latestAssistant,
+          );
+          stopSending(projectId);
+        } catch (error) {
+          console.warn("[Chat] Fallback history pull failed:", error);
+        }
+      })();
+    }, 5000);
+    fallbackReplyTimerByRunId[runId] = timerId;
   }
 
   onMount(() => {
@@ -466,27 +777,48 @@
               if (!projectId) {
                 return;
               }
+              if (shouldIgnoreDuplicatedEvent(projectId, event)) {
+                return;
+              }
               if (event.runId) {
                 runIdToProjectId[event.runId] = projectId;
+                bindRunIdToAssistantMessage(projectId, event.runId);
               }
               if (event.sessionKey) {
-                sessionKeyToProjectId[event.sessionKey] = projectId;
+                bindSessionKeyToProject(event.sessionKey, projectId);
               }
 
               if (event.state === "delta" && event.message?.content) {
-                scheduleAssistantMessageUpdate(projectId, event.message.content);
+                scheduleAssistantMessageUpdate(
+                  projectId,
+                  event.message.content,
+                  event.runId,
+                );
               } else if (
                 event.state === "final" ||
                 event.state === "completed"
               ) {
-                delete pendingAssistantContentByProject[projectId];
-                const sessionKey = getSessionKeyByProjectId(projectId);
-                const resolvedContent = await resolveAssistantContentFromEvent(
-                  event,
-                  sessionKey,
+                clearReplyFallbackTimer(event.runId);
+                const pendingContent = takePendingAssistantContent(
+                  projectId,
+                  event.runId,
                 );
-                const finalContent = resolvedContent.trim() || "已收到回复，但内容为空";
-                updateLatestThinkingMessage(projectId, finalContent);
+                const fallbackSessionKey =
+                  event.sessionKey?.trim() ||
+                  getSessionKeyByProjectId(projectId);
+                const resolvedContent =
+                  pendingContent ||
+                  (await resolveAssistantContentFromEvent(
+                    event,
+                    fallbackSessionKey,
+                  ));
+                const finalContent =
+                  resolvedContent.trim() || "已收到回复，但内容为空";
+                updateLatestThinkingMessage(
+                  projectId,
+                  finalContent,
+                  event.runId,
+                );
                 await persistConversationMessage(
                   projectId,
                   "assistant",
@@ -494,9 +826,10 @@
                 );
                 stopSending(projectId);
               } else if (event.state === "error") {
-                delete pendingAssistantContentByProject[projectId];
+                clearReplyFallbackTimer(event.runId);
+                clearPendingAssistantContent(projectId, event.runId);
                 const errorText = `错误：${event.errorMessage || "未知错误"}`;
-                updateLatestThinkingMessage(projectId, errorText);
+                updateLatestThinkingMessage(projectId, errorText, event.runId);
                 await persistConversationMessage(
                   projectId,
                   "assistant",
@@ -504,9 +837,14 @@
                 );
                 stopSending(projectId);
               } else if (event.state === "aborted") {
-                delete pendingAssistantContentByProject[projectId];
+                clearReplyFallbackTimer(event.runId);
+                clearPendingAssistantContent(projectId, event.runId);
                 const abortedText = "对话已中止";
-                updateLatestThinkingMessage(projectId, abortedText);
+                updateLatestThinkingMessage(
+                  projectId,
+                  abortedText,
+                  event.runId,
+                );
                 await persistConversationMessage(
                   projectId,
                   "assistant",
@@ -528,32 +866,18 @@
       }
     })();
 
-    // Initialize conversation for first project
-    void (async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const store = get(projectsStore);
-      if (store.projects.length > 0) {
-        const pid = store.selectedProjectId || store.projects[0].id;
-        if (!conversationByProject[pid]) {
-          const result = await conversationApi.create(
-            pid,
-            `${store.projects.find((p) => p.id === pid)?.name || "项目"} 对话`,
-          );
-          if (result.success && result.data) {
-            conversationByProject[pid] = result.data.id;
-          }
-        }
-      }
-    })();
-
     return () => {
       unsubscribeOpenClaw?.();
-      if (flushAssistantRafId !== null) {
-        cancelAnimationFrame(flushAssistantRafId);
+      if (flushAssistantTimerId !== null) {
+        clearTimeout(flushAssistantTimerId);
       }
       if (scrollRafId !== null) {
         cancelAnimationFrame(scrollRafId);
       }
+      Object.values(fallbackReplyTimerByRunId).forEach((timerId) =>
+        clearTimeout(timerId),
+      );
+      fallbackReplyTimerByRunId = {};
       disconnectOpenClaw();
       tasksStore.destroy();
     };
@@ -561,7 +885,6 @@
 
   $effect(() => {
     if (!$selectedProject) {
-      initializedProjectId = null;
       return;
     }
     if (initializedProjectId === $selectedProject.id) return;
@@ -629,16 +952,20 @@
       void persistConversationMessage(projectId, "user", prompt);
 
       const sessionKey = getSessionKeyByProjectId(projectId);
-      sessionKeyToProjectId[sessionKey] = projectId;
+      bindSessionKeyToProject(sessionKey, projectId);
       const scopedPrompt = buildProjectScopedPrompt(
         prompt,
         $selectedProject.name,
         $selectedProject.path,
       );
-      const result = await sendChatMessage(sessionKey, scopedPrompt);
+      const result = await sendChatMessage(sessionKey, scopedPrompt, {
+        deliver: true,
+      });
       console.log("[Chat] Message sent, runId:", result.runId);
       if (result.runId) {
         runIdToProjectId[result.runId] = projectId;
+        runIdToAssistantMessageId[result.runId] = assistantMessage.id;
+        scheduleReplyFallback(projectId, sessionKey, result.runId);
       }
       console.log(
         "[Chat] Stored runId mapping:",
@@ -687,7 +1014,6 @@
         {/if}
       </div>
     {/if}
-    <div class="bottom-anchor" bind:this={bottomAnchor}></div>
   </div>
 
   <InputArea
@@ -708,15 +1034,12 @@
   .messages-container {
     flex: 1;
     overflow-y: auto;
+    scrollbar-gutter: stable both-edges;
+    contain: layout paint;
     padding: 0.5rem 1.25rem 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-  }
-
-  .bottom-anchor {
-    height: 1px;
-    width: 100%;
   }
 
   .task-panel {

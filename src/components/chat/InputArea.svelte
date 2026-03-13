@@ -80,9 +80,6 @@
     if (store.selectedProjectId) {
       return store.selectedProjectId;
     }
-    if (store.projects.length > 0) {
-      return store.projects[0].id;
-    }
     return "";
   }
 

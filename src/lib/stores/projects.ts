@@ -106,10 +106,7 @@ function resolveSelectedProjectId(
   ) {
     return selectedProjectId;
   }
-  const firstOrderedId = projectOrder.find((id) =>
-    projects.some((project) => project.id === id),
-  );
-  return firstOrderedId || projects[0].id;
+  return null;
 }
 
 function getVisibleProjects(
