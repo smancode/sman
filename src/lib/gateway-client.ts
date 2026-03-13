@@ -25,7 +25,6 @@ export class GatewayClient {
   private eventHandlers = new Map<string, Set<GatewayEventHandler>>()
   private connectPromise: Promise<void> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private connectNonce: string | null = null
   private closed = false
   private backoffMs = 800
 
@@ -168,12 +167,7 @@ export class GatewayClient {
 
           // Handle connect.challenge event
           if (message.type === 'event' && message.event === 'connect.challenge') {
-            const nonce = (message.payload as { nonce?: string } | undefined)?.nonce
-            if (!nonce) {
-              rejectOnce(new Error('Gateway connect.challenge missing nonce'))
-              return
-            }
-            this.connectNonce = nonce
+            // Challenge received, send connect frame (no nonce needed in params)
             this.sendConnectFrame(ws)
             return
           }
@@ -253,7 +247,7 @@ export class GatewayClient {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
-          id: 'smanweb-client',
+          id: 'gateway-client',
           displayName: 'SmanWeb',
           version: '0.1.0',
           platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
@@ -263,7 +257,6 @@ export class GatewayClient {
         caps: [],
         role: 'operator',
         scopes: ['operator.admin'],
-        nonce: this.connectNonce,
       },
     }
     ws.send(JSON.stringify(connectFrame))

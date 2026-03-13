@@ -5,14 +5,10 @@
  */
 import { NavLink } from 'react-router-dom';
 import {
-  Network,
-  Bot,
-  Puzzle,
-  Clock,
   Settings as SettingsIcon,
   PanelLeftClose,
   PanelLeft,
-  Cpu,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -62,11 +58,7 @@ export function Sidebar() {
   };
 
   const navItems = [
-    { to: '/models', icon: <Cpu className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Models' },
-    { to: '/agents', icon: <Bot className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Agents' },
-    { to: '/channels', icon: <Network className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Channels' },
-    { to: '/skills', icon: <Puzzle className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Skills' },
-    { to: '/cron', icon: <Clock className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Cron' },
+    { to: '/chat', icon: <MessageSquare className="h-[18px] w-[18px]" strokeWidth={2} />, label: 'Chat' },
   ];
 
   return (

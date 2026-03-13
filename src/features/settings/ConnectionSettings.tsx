@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { Save, Wifi, WifiOff, RefreshCw, Check, X } from 'lucide-react';
 import { useGatewayStore } from '@/stores/gateway';
-import { useGatewayConnection } from '@/hooks/use-gateway-connection';
+import { useGatewayConnection } from '@/stores/gateway-connection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

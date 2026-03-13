@@ -445,8 +445,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleChatEvent: (event: Record<string, unknown>) => {
-    const runId = String(event.runId || '')
     const eventState = String(event.state || '')
+    const runId = String(event.runId || '')
+    console.log('[ChatStore] handleChatEvent state:', eventState, 'runId:', runId, 'hasMessage:', !!event.message)
+
     const eventSessionKey = event.sessionKey != null ? String(event.sessionKey) : null
     const { activeRunId, currentSessionKey } = get()
 
@@ -474,6 +476,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const finalMsg = event.message as RawMessage | undefined
         if (finalMsg) {
           if (isToolResultRole(finalMsg.role)) {
+            // Tool result - keep waiting for final response
             set({ streamingText: '', streamingMessage: null, pendingFinal: true })
             break
           }
@@ -482,32 +485,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const hasOutput = hasNonToolAssistantContent(finalMsg)
           const msgId = finalMsg.id || `run-${runId}`
 
-          set((s) => {
-            const alreadyExists = s.messages.some((m) => m.id === msgId)
-            if (alreadyExists) {
+          // If has actual output content, we're done - clear all pending states
+          if (hasOutput && !toolOnly) {
+            console.log('[ChatStore] Final with output, clearing all states')
+            set((s) => {
+              const alreadyExists = s.messages.some((m) => m.id === msgId)
+              if (alreadyExists) {
+                return {
+                  streamingText: '',
+                  streamingMessage: null,
+                  sending: false,
+                  activeRunId: null,
+                  pendingFinal: false,
+                }
+              }
               return {
+                messages: [...s.messages, { ...finalMsg, id: msgId }],
                 streamingText: '',
                 streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
+                sending: false,
+                activeRunId: null,
+                pendingFinal: false,
               }
-            }
-            return {
-              messages: [...s.messages, { ...finalMsg, id: msgId }],
-              streamingText: '',
-              streamingMessage: null,
-              sending: hasOutput ? false : s.sending,
-              activeRunId: hasOutput ? null : s.activeRunId,
-              pendingFinal: hasOutput ? false : true,
-            }
-          })
-
-          if (hasOutput && !toolOnly) {
+            })
             get().loadHistory(true)
+          } else {
+            console.log('[ChatStore] Final without output, toolOnly:', toolOnly, 'hasOutput:', hasOutput)
+            // Tool-only or no output - keep waiting
+            set((s) => {
+              const alreadyExists = s.messages.some((m) => m.id === msgId)
+              if (alreadyExists) {
+                return { streamingText: '', streamingMessage: null, pendingFinal: true }
+              }
+              return {
+                messages: [...s.messages, { ...finalMsg, id: msgId }],
+                streamingText: '',
+                streamingMessage: null,
+                pendingFinal: true,
+              }
+            })
           }
         } else {
-          set({ streamingText: '', streamingMessage: null, pendingFinal: true })
+          // Final event without message - run is complete, clear all states
+          console.log('[ChatStore] Final without message, clearing all states')
+          set({
+            streamingText: '',
+            streamingMessage: null,
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+          })
           get().loadHistory()
         }
         break

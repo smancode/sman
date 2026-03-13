@@ -8,6 +8,7 @@ import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import type { RawMessage } from '@/types/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { getGatewayClient } from '@/lib/gateway-client';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
@@ -31,11 +32,40 @@ export function Chat() {
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const loadHistory = useChatStore((s) => s.loadHistory);
+  const handleChatEvent = useChatStore((s) => s.handleChatEvent);
 
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
+
+  // Subscribe to gateway chat events
+  useEffect(() => {
+    if (!isGatewayConnected) return;
+
+    const client = getGatewayClient();
+    if (!client) return;
+
+    console.log('[Chat] Subscribing to chat events, client connected:', client.connected);
+
+    const unsubscribe = client.on('chat', (payload) => {
+      console.log('[Chat] Received chat event:', payload);
+      handleChatEvent(payload as Record<string, unknown>);
+    });
+
+    return unsubscribe;
+  }, [isGatewayConnected, handleChatEvent]);
+
+  // Auto-connect on mount if URL is configured
+  useEffect(() => {
+    const store = useGatewayStore.getState();
+    if (store.url && store.status.state === 'disconnected') {
+      console.log('[Chat] Auto-connecting to gateway...');
+      import('@/stores/gateway-connection').then(({ gatewayConnection }) => {
+        gatewayConnection.connect().catch(console.error);
+      });
+    }
+  }, []); // Run once on mount
 
   // Load history on mount
   useEffect(() => {
