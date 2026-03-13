@@ -41,7 +41,7 @@ OPENCLAW_GATEWAY_PORT=$GATEWAY_PORT \
 OPENCLAW_GATEWAY_AUTH_MODE=token \
 OPENCLAW_GATEWAY_AUTH_TOKEN=$GATEWAY_TOKEN \
 OPENCLAW_GATEWAY_BIND=loopback \
-nohup pnpm gateway > /tmp/openclaw-gateway-18790.log 2>&1 &
+nohup pnpm start > /tmp/openclaw-gateway-18790.log 2>&1 &
 
 GATEWAY_PID=$!
 echo "  Gateway PID: $GATEWAY_PID"
@@ -56,6 +56,7 @@ if lsof -ti:$GATEWAY_PORT > /dev/null 2>&1; then
     echo "  ✅ Gateway is running on port $GATEWAY_PORT"
 else
     echo "  ❌ Gateway failed to start. Check log: /tmp/openclaw-gateway-18790.log"
+    cat /tmp/openclaw-gateway-18790.log | tail -20
     exit 1
 fi
 
@@ -81,6 +82,7 @@ if lsof -ti:5173 > /dev/null 2>&1; then
     echo "  ✅ SmanWeb is running on port 5173"
 else
     echo "  ❌ SmanWeb failed to start. Check log: /tmp/smanweb-dev.log"
+    cat /tmp/smanweb-dev.log | tail -20
     exit 1
 fi
 
