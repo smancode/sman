@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  smanweb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - sman-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: OpenClaw backend service
+  # Uncomment to enable
+  # openclaw:
+  #   image: openclaw/openclaw:latest
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+  #   volumes:
+  #     - openclaw-data:/app/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - sman-network
+
+networks:
+  sman-network:
+    driver: bridge
+
+# volumes:
+#   openclaw-data:
