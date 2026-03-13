@@ -4,6 +4,22 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { GatewayStatus } from '@/types/gateway'
 
+const BACKEND_CONFIG_URL = '/api/config';
+
+/**
+ * Fetch server-side configuration from backend
+ * Returns null if backend is not available or request fails
+ */
+export async function fetchServerConfig(): Promise<{ gateway: { url: string; token: string } } | null> {
+  try {
+    const response = await fetch(BACKEND_CONFIG_URL);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 interface GatewayState {
   // Config
   url: string
