@@ -1,15 +1,86 @@
-# SmanWeb - OpenClaw Web Interface
+# SmanWeb - 智能业务系统交互界面
 
-A modern web interface for OpenClaw built with React, TypeScript, and Tailwind CSS.
+SmanWeb 是**智能业务系统**的用户交互层，提供简单可靠的 Web/App 界面。
 
-## Features
+## 核心设计理念
 
-- Modern UI with Tailwind CSS and shadcn/ui components
-- Real-time chat interface for OpenClaw
-- Connection management and settings
-- Multi-language support (i18n)
-- Responsive design
-- Docker-ready deployment
+### 智能业务系统四层架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SmanWeb (UI Layer)                       │
+│              简单可靠的交互界面                               │
+│                    Web / App                                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ WebSocket
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  OpenClaw (Agent Platform)                   │
+│              秘书 · 能力基座 · 主动服务                        │
+│           Gateway + Skills + Multi-channel                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ Tool Calls / MCP
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Claude Code (Execution Layer)                │
+│              精细深入 · 理解和开发业务系统                      │
+│          Code Generation / Refactoring / Debugging          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ File System / API / Database
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Business System (Target)                    │
+│                   传统业务系统                                │
+│         ERP / CRM / Custom Apps / Any Domain                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 各层职责
+
+| 层级 | 角色 | 职责 |
+|------|------|------|
+| **SmanWeb** | 交互界面 | 提供简单可靠的 Web/App UI，用户与系统交互的入口 |
+| **OpenClaw** | 秘书/基座 | 智能体平台底座，管理会话、技能、多渠道，主动提供服务 |
+| **Claude Code** | 执行者 | 精细深入的工作：代码生成、重构、调试、业务理解 |
+| **Business System** | 目标系统 | 被智能化改造的业务系统 |
+
+### 与传统架构的区别
+
+**传统部署：**
+```
+用户 → 业务系统（无智能）
+```
+
+**智能业务系统部署：**
+```
+用户 → SmanWeb → OpenClaw → Claude Code → 业务系统（智能增强）
+```
+
+## 关键问题：如何将四层焊死为一个服务？
+
+这是当前需要解决的核心架构问题。
+
+### 初步思路
+
+1. **进程管理**：使用 supervisor / systemd / Docker Compose 管理多进程
+2. **服务发现**：各组件之间如何发现和连接
+3. **配置统一**：统一的配置管理和环境变量
+4. **日志聚合**：统一的日志收集和查看
+5. **健康检查**：整体服务的健康状态监控
+6. **一键部署**：单一部署单元，简化运维
+
+### 待分析方向
+
+- [ ] Docker Compose 方案
+- [ ] Kubernetes Operator 方案
+- [ ] 单一进程嵌入方案
+- [ ] Supervisor/systemd 方案
+- [ ] 混合方案
+
+---
 
 ## Quick Start
 
@@ -17,6 +88,7 @@ A modern web interface for OpenClaw built with React, TypeScript, and Tailwind C
 
 - Node.js 20+
 - pnpm (recommended) or npm
+- OpenClaw Gateway (running on port 18789/18790)
 
 ### Development
 
@@ -34,26 +106,11 @@ pnpm build
 pnpm preview
 ```
 
-### Docker
-
-```bash
-# Build image
-docker build -t smanweb .
-
-# Run container
-docker run -p 3000:80 smanweb
-
-# Or use docker-compose
-docker-compose up -d
-```
-
 ## Local Testing with OpenClaw
 
 ⚠️ **重要**: 不要修改本地默认的 OpenClaw 端口 18789！
 
 ### 启动测试用 OpenClaw Gateway
-
-为了测试 SmanWeb，需要从 `~/projects/openclaw` 启动一个独立的 Gateway 实例：
 
 ```bash
 cd ~/projects/openclaw
@@ -67,8 +124,6 @@ pnpm gateway
 ```
 
 ### SmanWeb 连接配置
-
-在 SmanWeb 设置页面配置：
 
 | 配置项 | 值 |
 |--------|---|
@@ -84,43 +139,6 @@ pnpm gateway
 | 5173 | SmanWeb Dev | Vite 开发服务器 |
 | 3000 | SmanWeb Prod | Docker/生产端口 |
 
-## Project Structure
-
-```
-smanweb/
-├── src/
-│   ├── app/             # 应用入口和路由
-│   ├── components/      # React 组件
-│   │   ├── ui/          # shadcn/ui 基础组件
-│   │   ├── common/      # 通用组件
-│   │   └── layout/      # 布局组件
-│   ├── features/        # 功能模块
-│   │   ├── chat/        # 聊天功能
-│   │   └── settings/    # 设置页面
-│   ├── hooks/           # 自定义 Hooks
-│   ├── lib/             # 核心库
-│   │   └── gateway-client.ts  # WebSocket 客户端
-│   ├── stores/          # Zustand 状态管理
-│   └── types/           # TypeScript 类型
-├── public/              # 静态资源
-├── docs/                # 文档
-└── dist/                # 构建输出
-```
-
-## Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| VITE_API_URL | OpenClaw Gateway URL | ws://127.0.0.1:18789 |
-| VITE_DEBUG | Enable debug mode | false |
-| VITE_APP_TITLE | Application title | SmanWeb |
-
 ## Tech Stack
 
 - React 19 + TypeScript
@@ -129,21 +147,6 @@ cp .env.example .env
 - shadcn/ui
 - Zustand (state management)
 - React Router
-- i18next
-
-## Architecture
-
-```
-Browser (SmanWeb React SPA)
-         │
-         │ WebSocket (wss://)
-         ▼
-OpenClaw Gateway (Remote Server)
-         │
-    ┌────┼────┐
-    ▼    ▼    ▼
-Skills  Agents  Business System
-```
 
 ## License
 

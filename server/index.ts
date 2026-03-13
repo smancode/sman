@@ -10,10 +10,15 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createLogger } from './utils/logger.js';
 import { ProcessManager, createGatewayConfig } from './process-manager.js';
 import { createGatewayProxy } from './gateway-proxy.js';
 import { DEFAULT_PORTS } from './utils/ports.js';
+
+// ES module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const log = createLogger('Server');
 
@@ -22,8 +27,8 @@ const config = {
   port: parseInt(process.env.PORT || String(DEFAULT_PORTS.server), 10),
   gatewayPort: parseInt(process.env.GATEWAY_PORT || String(DEFAULT_PORTS.gateway), 10),
   gatewayToken: process.env.GATEWAY_TOKEN || 'sman-default-token-change-in-production',
-  bundledPath: path.resolve(__dirname, '../bundled/openclaw'),
-  staticPath: path.resolve(__dirname, '../dist'),
+  bundledPath: path.resolve(__dirname, '../../bundled/openclaw'),
+  staticPath: path.resolve(__dirname, '../../dist'),
 };
 
 // Express app
