@@ -216,11 +216,12 @@ export function createGatewayConfig(options: {
       path.join(options.bundledPath, 'openclaw.mjs'),
       'gateway',
       '--port', String(options.port),
-      '--auth-mode', 'token',
-      '--auth-token', options.authToken,
-      '--bind', 'loopback',
+      '--token', options.authToken,
     ],
     cwd: options.bundledPath,
+    env: {
+      OPENCLAW_GATEWAY_BIND: 'loopback',
+    },
     restartOnExit: true,
     healthCheckInterval: 10000,
   };

@@ -9,7 +9,7 @@
  */
 
 import 'zx/globals';
-import { realpathSync, existsSync, mkdirSync, rmSync, cpSync, statSync, readdirSync, lstatSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, rmSync, cpSync, statSync, readdirSync, lstatSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -328,12 +328,52 @@ function patchBrokenModules(nodeModulesDir) {
     ].join('\n'),
   };
 
+  // Packages whose package.json "exports" field causes issues when bundled.
+  // We add a "main" field if missing, pointing to the CJS entry.
+  const EXPORTS_FIX_PACKAGES = [
+    'https-proxy-agent',
+    'socks-proxy-agent',
+    'proxy-agent',
+    'agent-base',
+  ];
+
   let count = 0;
+
+  // Apply rewrite patches
   for (const [rel, content] of Object.entries(rewritePatches)) {
     const target = path.join(nodeModulesDir, rel);
     if (existsSync(target)) {
       writeFileSync(target, content + '\n', 'utf8');
       count++;
+    }
+  }
+
+  // Fix exports field for problematic packages
+  for (const pkgName of EXPORTS_FIX_PACKAGES) {
+    const pkgDir = path.join(nodeModulesDir, pkgName);
+    const pkgJsonPath = path.join(pkgDir, 'package.json');
+    if (!existsSync(pkgJsonPath)) continue;
+
+    try {
+      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+
+      // If package has exports but no main, add main and remove exports
+      // This allows CJS require() to work properly
+      if (pkgJson.exports && !pkgJson.main) {
+        // Check for common entry points
+        const candidates = ['index.js', 'src/index.js', 'dist/index.js'];
+        for (const entry of candidates) {
+          if (existsSync(path.join(pkgDir, entry))) {
+            pkgJson.main = entry;
+            delete pkgJson.exports;  // Remove exports to allow CJS resolution
+            writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8');
+            count++;
+            break;
+          }
+        }
+      }
+    } catch {
+      // Ignore parse errors
     }
   }
 
