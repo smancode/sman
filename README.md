@@ -59,7 +59,7 @@ docker-compose up -d
 cd ~/projects/openclaw
 
 # 启动测试用 Gateway (端口 18790)
-OPENCLAW_GATEWAY_PORT=18789 \
+OPENCLAW_GATEWAY_PORT=18790 \
 OPENCLAW_GATEWAY_AUTH_MODE=token \
 OPENCLAW_GATEWAY_AUTH_TOKEN=sman-31244d65207dcced \
 OPENCLAW_GATEWAY_BIND=loopback \
@@ -72,7 +72,7 @@ pnpm gateway
 
 | 配置项 | 值 |
 |--------|---|
-| **Gateway URL** | `ws://127.0.0.1:18789` |
+| **Gateway URL** | `ws://127.0.0.1:18790` |
 | **Token** | `sman-31244d65207dcced` |
 
 ### 端口说明
@@ -80,6 +80,7 @@ pnpm gateway
 | 端口 | 用途 | 说明 |
 |------|------|------|
 | 18789 | 默认 OpenClaw | **不要修改** - 本地日常使用 |
+| 18790 | 测试用 OpenClaw | SmanWeb 测试专用 |
 | 5173 | SmanWeb Dev | Vite 开发服务器 |
 | 3000 | SmanWeb Prod | Docker/生产端口 |
 
