@@ -37,11 +37,12 @@ echo "🚀 Starting OpenClaw Gateway on port $GATEWAY_PORT..."
 cd "$OPENCLAW_DIR"
 
 # 在后台启动 Gateway
-OPENCLAW_GATEWAY_PORT=$GATEWAY_PORT \
-OPENCLAW_GATEWAY_AUTH_MODE=token \
-OPENCLAW_GATEWAY_AUTH_TOKEN=$GATEWAY_TOKEN \
-OPENCLAW_GATEWAY_BIND=loopback \
-nohup pnpm start > /tmp/openclaw-gateway-18790.log 2>&1 &
+nohup npx openclaw gateway \
+    --port $GATEWAY_PORT \
+    --auth token \
+    --token $GATEWAY_TOKEN \
+    --bind loopback \
+    > /tmp/openclaw-gateway-18790.log 2>&1 &
 
 GATEWAY_PID=$!
 echo "  Gateway PID: $GATEWAY_PID"
