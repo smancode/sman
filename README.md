@@ -1,196 +1,197 @@
-# SmanWeb - 智能业务系统交互界面
+# SmanWeb - 智能业务系统一体化部署包
 
-SmanWeb 是**智能业务系统**的用户交互层，提供简单可靠的 Web/App 界面。
+SmanWeb 是**开箱即用的智能业务系统部署包**，将四层架构焊死为一个服务，用户无需安装任何依赖即可使用。
 
-## 核心设计理念
+## 核心价值
 
-### 智能业务系统四层架构
+**传统部署 vs SmanWeb 部署：**
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    SmanWeb (UI Layer)                       │
-│              简单可靠的交互界面                               │
-│                    Web / App                                │
-└─────────────────────────────────────────────────────────────┘
+传统：用户需安装 Node.js + OpenClaw + Claude Code + LSP + ...
+SmanWeb：一键启动，全部内置
+```
+
+## 架构说明
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     SmanWeb 部署包 (约 650MB)                    │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    Node.js Backend                        │  │
+│  │  - Express 服务器 (port 3000)                            │  │
+│  │  - 进程管理 (启动 OpenClaw Gateway)                       │  │
+│  │  - WebSocket 代理 (/ws → OpenClaw)                       │  │
+│  │  - 静态文件服务 (React 前端)                               │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │ WebSocket                        │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              OpenClaw Gateway (bundled/openclaw)         │  │
+│  │  - 智能体平台底座                                          │  │
+│  │  - 会话管理、技能调度                                      │  │
+│  │  - 多渠道支持                                              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │ acpx (ACP 协议)                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Claude Code (bundled/claude-code)            │  │
+│  │  - 代码生成 / 重构 / 调试                                  │  │
+│  │  - 业务系统理解和开发                                       │  │
+│  │  - LSP 代码智能                                            │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │ File System                      │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              LSP Servers (bundled/lsp)                    │  │
+│  │  - jdtls (Java)                                          │  │
+│  │  - pyright (Python)                                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
                               │
-                              │ WebSocket
                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  OpenClaw (Agent Platform)                   │
-│              秘书 · 能力基座 · 主动服务                        │
-│           Gateway + Skills + Multi-channel                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              │ Tool Calls / MCP
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 Claude Code (Execution Layer)                │
-│              精细深入 · 理解和开发业务系统                      │
-│          Code Generation / Refactoring / Debugging          │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              │ File System / API / Database
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Business System (Target)                    │
-│                   传统业务系统                                │
-│         ERP / CRM / Custom Apps / Any Domain                │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                  Business System (挂载卷)                       │
+│              用户的业务系统代码                                   │
+│         ERP / CRM / Custom Apps / Any Domain                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 各层职责
+## 打包内容
 
-| 层级 | 角色 | 职责 |
-|------|------|------|
-| **SmanWeb** | 交互界面 | 提供简单可靠的 Web/App UI，用户与系统交互的入口 |
-| **OpenClaw** | 秘书/基座 | 智能体平台底座，管理会话、技能、多渠道，主动提供服务 |
-| **Claude Code** | 执行者 | 精细深入的工作：代码生成、重构、调试、业务理解 |
-| **Business System** | 目标系统 | 被智能化改造的业务系统 |
-
-### 与传统架构的区别
-
-**传统部署：**
-```
-用户 → 业务系统（无智能）
-```
-
-**智能业务系统部署：**
-```
-用户 → SmanWeb → OpenClaw → Claude Code → 业务系统（智能增强）
-```
-
-## 关键问题：如何将四层焊死为一个服务？
-
-这是当前需要解决的核心架构问题。
-
-### 初步思路
-
-1. **进程管理**：使用 supervisor / systemd / Docker Compose 管理多进程
-2. **服务发现**：各组件之间如何发现和连接
-3. **配置统一**：统一的配置管理和环境变量
-4. **日志聚合**：统一的日志收集和查看
-5. **健康检查**：整体服务的健康状态监控
-6. **一键部署**：单一部署单元，简化运维
-
-### 待分析方向
-
-- [ ] Docker Compose 方案
-- [ ] Kubernetes Operator 方案
-- [ ] 单一进程嵌入方案
-- [ ] Supervisor/systemd 方案
-- [ ] 混合方案
-
----
+| 组件 | 位置 | 大小 | 说明 |
+|------|------|------|------|
+| **OpenClaw Gateway** | `bundled/openclaw/` | ~489MB | Agent 平台 + 所有依赖 |
+| **Claude Code** | `bundled/claude-code/` | ~56MB | 执行层 CLI |
+| **LSP Servers** | `bundled/lsp/` | ~70MB | jdtls + pyright |
+| **自定义技能** | `bundled/skills/` | 可变 | 业务特定技能 |
+| **React 前端** | `dist/` | ~600KB | Web UI |
+| **Node.js 后端** | `dist/server/` | ~20KB | Express 服务器 |
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js 20+
-- pnpm (recommended) or npm
-- OpenClaw Gateway (running on port 18789/18790)
-
-### Development
+### 开发模式
 
 ```bash
-# Install dependencies
+# 安装依赖
 pnpm install
 
-# Start development server
+# 启动开发服务器 (前端)
 pnpm dev
 
-# Build for production
+# 启动后端 (另一个终端)
+pnpm dev:server
+
+# 或同时启动
+pnpm dev:full
+```
+
+### 生产部署
+
+```bash
+# 完整构建 (打包所有组件)
 pnpm build
 
-# Preview production build
-pnpm preview
+# 启动服务
+PORT=3000 GATEWAY_TOKEN=your-secure-token pnpm start
+
+# 健康检查
+curl http://localhost:3000/api/health
 ```
 
-## Local Testing with OpenClaw
-
-⚠️ **重要**: 不要修改本地默认的 OpenClaw 端口 18789！
-
-### 启动测试用 OpenClaw Gateway
+### Docker 部署
 
 ```bash
-cd ~/projects/openclaw
-
-# 启动测试用 Gateway (端口 18790)
-OPENCLAW_GATEWAY_PORT=18790 \
-OPENCLAW_GATEWAY_AUTH_MODE=token \
-OPENCLAW_GATEWAY_AUTH_TOKEN=sman-31244d65207dcced \
-OPENCLAW_GATEWAY_BIND=loopback \
-pnpm gateway
-```
-
-### SmanWeb 连接配置
-
-| 配置项 | 值 |
-|--------|---|
-| **Gateway URL** | `ws://127.0.0.1:18790` |
-| **Token** | `sman-31244d65207dcced` |
-
-### 端口说明
-
-| 端口 | 用途 | 说明 |
-|------|------|------|
-| 18789 | 默认 OpenClaw | **不要修改** - 本地日常使用 |
-| 18790 | 测试用 OpenClaw | SmanWeb 测试专用 |
-| 5173 | SmanWeb Dev | Vite 开发服务器 |
-| 3000 | SmanWeb Prod | Docker/生产端口 |
-
-## Tech Stack
-
-- React 19 + TypeScript
-- Vite
-- Tailwind CSS
-- shadcn/ui
-- Zustand (state management)
-- React Router
-
-## Deployment
-
-### Docker Deployment (Recommended)
-
-```bash
-# Build and run
+# 构建并启动
 docker-compose up -d
 
-# View logs
+# 查看日志
 docker-compose logs -f
 
-# Stop
+# 停止
 docker-compose down
 ```
 
-### Manual Deployment
+## 配置项
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `PORT` | 3000 | HTTP 服务端口 |
+| `GATEWAY_PORT` | 18789 | OpenClaw Gateway 内部端口 |
+| `GATEWAY_TOKEN` | *必须设置* | Gateway 认证令牌 |
+
+## 业务系统集成
+
+将业务系统代码挂载到容器中：
 
 ```bash
-# Install dependencies
-pnpm install
+docker run -v /path/to/business-system:/app/business-system:ro smanweb
+```
 
-# Build frontend and bundle dependencies
+Claude Code 将能够读取和修改业务系统代码。
+
+## 添加自定义技能
+
+1. 编辑 `resources/skills/manifest.json`：
+
+```json
+{
+  "skills": [
+    {
+      "slug": "my-business-skill",
+      "repo": "your-org/skills-repo",
+      "repoPath": "skills/my-skill",
+      "ref": "main"
+    }
+  ]
+}
+```
+
+2. 运行构建：
+
+```bash
 pnpm build
-
-# Start server
-PORT=3000 GATEWAY_TOKEN=your-token pnpm start
 ```
 
-### Configuration
+技能会自动从 GitHub 拉取并打包到 `bundled/skills/`。
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `PORT` | 3000 | Server HTTP port |
-| `GATEWAY_PORT` | 18789 | Internal OpenClaw Gateway port |
-| `GATEWAY_TOKEN` | *required* | Authentication token for gateway |
+## 项目结构
 
-### Business System Integration
-
-Mount your business system code at `/app/business-system`:
-
-```bash
-docker run -v /path/to/your/code:/app/business-system:ro smanweb
 ```
+smanweb/
+├── server/                 # Node.js 后端
+│   ├── index.ts           # 服务入口
+│   ├── process-manager.ts # 进程管理
+│   └── gateway-proxy.ts   # WebSocket 代理
+├── src/                   # React 前端
+├── scripts/               # 构建脚本
+│   ├── bundle-openclaw.mjs    # 打包 OpenClaw
+│   ├── bundle-skills.mjs      # 打包技能
+│   ├── bundle-claude-code.mjs # 打包 Claude Code
+│   └── bundle-lsp.mjs         # 打包 LSP
+├── bundled/               # 打包产物
+│   ├── openclaw/         # OpenClaw Gateway
+│   ├── claude-code/      # Claude Code CLI
+│   ├── lsp/              # LSP 服务器
+│   └── skills/           # 自定义技能
+├── resources/             # 资源文件
+│   └── skills/
+│       └── manifest.json # 技能清单
+├── Dockerfile
+└── docker-compose.yml
+```
+
+## API 端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/health` | 健康检查 (返回 OpenClaw 状态) |
+| `GET /api/config` | 获取 Gateway 配置 |
+| `WS /ws` | WebSocket 代理到 OpenClaw |
+
+## Tech Stack
+
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Node.js + Express + WebSocket
+- **Agent Platform**: OpenClaw Gateway
+- **Execution Layer**: Claude Code
+- **LSP**: jdtls (Java) + pyright (Python)
 
 ## License
 
