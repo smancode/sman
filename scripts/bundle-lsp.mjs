@@ -6,10 +6,8 @@
  * Downloads and bundles LSP servers for self-contained deployment.
  *
  * Supported LSPs:
- * - rust-analyzer (Rust)
- * - gopls (Go)
- * - typescript-language-server (TypeScript/JavaScript)
- * - jdtls (Java) - requires JDK 21+
+ * - jdtls (Java) - Eclipse JDT Language Server
+ * - pyright (Python) - Microsoft Python Language Server
  *
  * Platforms: darwin-arm64, darwin-x64, linux-x64
  */
@@ -39,31 +37,22 @@ mkdirSync(OUTPUT, { recursive: true });
 const downloaded = [];
 
 // ============================================
-// rust-analyzer
+// jdtls (Java)
 // ============================================
-async function downloadRustAnalyzer() {
-  const name = 'rust-analyzer';
-  const version = '2026-03-09';
-  const baseUrl = 'https://github.com/rust-lang/rust-analyzer/releases/download';
-
-  let binName = name;
-  if (platform === 'win32') binName = `${name}.exe`;
-
-  let archSuffix = arch;
-  if (arch === 'arm64') archSuffix = 'aarch64';
-
-  const platformName = platform === 'darwin' ? 'apple-darwin' : 'unknown-linux-gnu';
-  const url = `${baseUrl}/${version}/${name}-${archSuffix}-${platformName}`;
+async function downloadJdtls() {
+  const name = 'jdtls';
+  const version = '1.40.0';
+  const url = `https://download.eclipse.org/jdtls/milestones/${version}/jdt-language-server-${version}-202411271555.tar.gz`;
 
   const outDir = path.join(OUTPUT, name);
   mkdirSync(outDir, { recursive: true });
-  const binPath = path.join(outDir, binName);
 
-  echo`   Downloading ${name}...`;
+  echo`   Downloading ${name} ${version}...`;
   try {
-    await $`curl -sL ${url} -o ${binPath}`;
-    await $`chmod +x ${binPath}`;
-    downloaded.push({ name, version, path: binPath });
+    const tmpFile = '/tmp/jdtls.tar.gz';
+    await $`curl -sL ${url} -o ${tmpFile}`;
+    await $`tar -xzf ${tmpFile} -C ${outDir} --strip-components=1`;
+    downloaded.push({ name, version, path: outDir });
     echo`   ✓ ${name} ${version}`;
   } catch (e) {
     echo`   ⚠ Failed to download ${name}: ${e.message}`;
@@ -71,18 +60,17 @@ async function downloadRustAnalyzer() {
 }
 
 // ============================================
-// typescript-language-server
+// pyright (Python)
 // ============================================
-async function downloadTypescriptLsp() {
-  const name = 'typescript-language-server';
-  // Use npm to install
+async function downloadPyright() {
+  const name = 'pyright';
   const outDir = path.join(OUTPUT, name);
 
   echo`   Installing ${name} via npm...`;
   try {
     mkdirSync(outDir, { recursive: true });
-    await $`npm install --prefix ${outDir} ${name} typescript`;
-    downloaded.push({ name, version: 'npm', path: path.join(outDir, 'node_modules/.bin/typescript-language-server') });
+    await $`npm install --prefix ${outDir} pyright`;
+    downloaded.push({ name, version: 'npm', path: path.join(outDir, 'node_modules/.bin/pyright') });
     echo`   ✓ ${name}`;
   } catch (e) {
     echo`   ⚠ Failed to install ${name}: ${e.message}`;
@@ -90,32 +78,11 @@ async function downloadTypescriptLsp() {
 }
 
 // ============================================
-// gopls
-// ============================================
-async function downloadGopls() {
-  const name = 'gopls';
-  const outDir = path.join(OUTPUT, name);
-
-  echo`   Installing ${name}...`;
-  try {
-    mkdirSync(outDir, { recursive: true });
-    // Check if go is available
-    await $`which go`;
-    await $`GOBIN=${outDir} go install golang.org/x/tools/gopls@latest`;
-    downloaded.push({ name, version: 'latest', path: path.join(outDir, name) });
-    echo`   ✓ ${name}`;
-  } catch (e) {
-    echo`   ⚠ Failed to install ${name}: ${e.message} (requires Go)`;
-  }
-}
-
-// ============================================
 // Main
 // ============================================
 async function main() {
-  await downloadRustAnalyzer();
-  await downloadTypescriptLsp();
-  await downloadGopls();
+  await downloadJdtls();
+  await downloadPyright();
 
   // Write manifest
   const manifest = {
