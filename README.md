@@ -82,6 +82,20 @@ pnpm dev:server
 pnpm dev:full
 ```
 
+#### 本地测试
+
+开发模式下需要本地运行 OpenClaw Gateway：
+
+```bash
+# 在 OpenClaw 项目目录启动测试用 Gateway (端口 18790)
+cd /path/to/openclaw
+pnpm start:gateway:test
+
+# 然后启动 SmanWeb 后端 (会连接到 18790)
+cd /path/to/smanweb
+GATEWAY_PORT=18790 GATEWAY_TOKEN=test-token pnpm dev:server
+```
+
 ### 生产部署
 
 ```bash
@@ -110,11 +124,20 @@ docker-compose down
 
 ## 配置项
 
+### 环境变量
+
 | 环境变量 | 默认值 | 说明 |
 |---------|--------|------|
 | `PORT` | 3000 | HTTP 服务端口 |
 | `GATEWAY_PORT` | 18789 | OpenClaw Gateway 内部端口 |
 | `GATEWAY_TOKEN` | *必须设置* | Gateway 认证令牌 |
+
+### 端口使用说明
+
+| 端口 | 用途 | 说明 |
+|------|------|------|
+| 18789 | 默认 OpenClaw | **不要修改** - 本地日常使用 |
+| 18790 | 测试用 OpenClaw | SmanWeb 测试专用 |
 
 ## 业务系统集成
 
