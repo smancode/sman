@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { getGatewayClient } from '@/lib/gateway-client'
+import { useBusinessSystemsStore } from '@/stores/business-systems'
 import type {
   RawMessage,
   ChatSession,
@@ -396,6 +397,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && trimmed) {
       const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}...` : trimmed
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }))
+    }
+
+    // Also update business-systems store session label if this session is tracked there
+    const businessStore = useBusinessSystemsStore.getState()
+    const currentBusinessSession = businessStore.getCurrentSession()
+    if (currentBusinessSession && currentBusinessSession.label === '新会话' && trimmed) {
+      const newLabel = trimmed.slice(0, 6) + (trimmed.length > 6 ? '...' : '')
+      businessStore.updateSessionLabel(currentBusinessSession.id, newLabel)
     }
 
     // Mark session as active
