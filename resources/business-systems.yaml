@@ -1,0 +1,14 @@
+# 业务系统配置
+# 打包时会复制到 bundled/business-systems/
+
+version: "1.0"
+
+systems:
+  # 示例：取消注释并配置你的业务系统
+  # - id: "erp"
+  #   name: "ERP系统"
+  #   description: "企业资源管理系统"
+  #   path: "../my-erp-project/"  # 相对于 smanweb 根目录
+  #   techStack:
+  #     - "java"
+  #     - "spring"

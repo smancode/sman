@@ -7,10 +7,11 @@
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "dev:full": "concurrently \"pnpm dev\" \"pnpm dev:server\"",
-    "build": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-skills.mjs && zx scripts/bundle-claude-code.mjs && tsc -p server/tsconfig.json",
+    "build": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-skills.mjs && zx scripts/bundle-claude-code.mjs && zx scripts/bundle-business-systems.mjs && tsc -p server/tsconfig.json",
     "start": "node dist/server/index.js",
     "bundle:openclaw": "zx scripts/bundle-openclaw.mjs",
     "bundle:skills": "zx scripts/bundle-skills.mjs",
+    "bundle:business-systems": "zx scripts/bundle-business-systems.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -39,6 +40,7 @@
     "tailwind-merge": "^3.5.0",
     "uuid": "^10.0.0",
     "ws": "^8.19.0",
+    "yaml": "^2.8.2",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
