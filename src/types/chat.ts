@@ -37,14 +37,13 @@ export interface ContentBlock {
   content?: unknown
 }
 
-/** Session from sessions.list */
+/** Session from session.list */
 export interface ChatSession {
   key: string
   label?: string
-  displayName?: string
-  thinkingLevel?: string
-  model?: string
-  updatedAt?: number
+  systemId?: string
+  createdAt?: string
+  lastActiveAt?: string
 }
 
 export interface ToolStatus {
@@ -57,4 +56,3 @@ export interface ToolStatus {
   updatedAt: number
 }
 
-export const DEFAULT_SESSION_KEY = 'agent:main:main'
