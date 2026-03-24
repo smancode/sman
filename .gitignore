@@ -1,0 +1,15 @@
+node_modules/
+dist/
+bundled/
+*.db
+*.db-journal
+logs/
+.env
+.env.local
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+tmp/
+build/.tmp-*
