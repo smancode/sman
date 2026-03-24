@@ -64,15 +64,55 @@ const settingsManager = new SettingsManager(homeDir);
 // Feed config to session manager
 sessionManager.updateConfig(settingsManager.getConfig());
 
-// HTTP server
+// HTTP server with static file serving for production (Electron mode)
+const distDir = path.resolve(path.join(__dirname, 'dist'));
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+};
+
 const server = http.createServer((req, res) => {
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
     return;
   }
+
+  // WebSocket upgrade path — let WSS handle it
+  if (req.url?.startsWith('/ws')) {
+    res.writeHead(426);
+    res.end();
+    return;
+  }
+
+  // In production, serve static files from dist/
+  if (fs.existsSync(distDir)) {
+    const urlPath = req.url?.split('?')[0] || '/';
+    let filePath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath);
+
+    // SPA fallback: serve index.html for unknown paths
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+      filePath = path.join(distDir, 'index.html');
+    }
+
+    if (fs.existsSync(filePath)) {
+      const ext = path.extname(filePath);
+      const contentType = MIME[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
+  }
+
   res.writeHead(404);
-  res.end();
+  res.end('Not found');
 });
 
 // WebSocket server with broadcast support
@@ -215,6 +255,10 @@ wss.on('connection', (ws: WebSocket) => {
           const { type: _t, ...updates } = msg;
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
+          // Push updated config to all task monitors
+          for (const monitor of taskMonitors.values()) {
+            monitor.updateConfig(config);
+          }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
@@ -255,6 +299,8 @@ function startTaskMonitorForSystem(systemId: string, workspace: string): void {
     },
   );
   monitor.start();
+  // Feed current config to monitor so it passes API key/model to Claude SDK
+  monitor.updateConfig(settingsManager.getConfig());
   taskMonitors.set(systemId, monitor);
   log.info(`TaskMonitor started for system ${systemId}`);
 }

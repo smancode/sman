@@ -71,6 +71,15 @@ export class ClaudeSessionManager {
   }
 
   private buildOptions(sessionConfig: SessionConfig, abortController: AbortController): Options {
+    // Build env from config: pass API key and base URL to Claude Code subprocess
+    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    if (this.config?.llm?.apiKey) {
+      env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
+    }
+    if (this.config?.llm?.baseUrl) {
+      env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
+    }
+
     const opts: Options = {
       cwd: undefined as unknown as string, // Will be set per-session
       abortController,
@@ -78,6 +87,7 @@ export class ClaudeSessionManager {
       allowDangerouslySkipPermissions: true,
       model: sessionConfig.model,
       includePartialMessages: true,
+      env,
       systemPrompt: {
         type: 'preset',
         preset: 'claude_code',

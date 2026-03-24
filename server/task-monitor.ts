@@ -10,6 +10,8 @@
 import fs from 'fs';
 import path from 'path';
 import { createLogger, type Logger } from './utils/logger.js';
+import type { SmanConfig } from './types.js';
+import { buildMcpServers } from './mcp-config.js';
 
 interface TaskJson {
   id: string;
@@ -37,6 +39,7 @@ export class TaskMonitor {
   private log: Logger;
   private claudeLock = false;
   private runningTaskPid: number | null = null;
+  private config: SmanConfig | null = null;
 
   constructor(
     private workspacePath: string,
@@ -44,6 +47,21 @@ export class TaskMonitor {
     private notify?: TaskNotifyCallback,
   ) {
     this.log = createLogger('TaskMonitor');
+  }
+
+  updateConfig(config: SmanConfig): void {
+    this.config = config;
+  }
+
+  private buildQueryEnv(): Record<string, string | undefined> {
+    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    if (this.config?.llm?.apiKey) {
+      env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
+    }
+    if (this.config?.llm?.baseUrl) {
+      env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
+    }
+    return env;
   }
 
   start(): void {
@@ -206,6 +224,10 @@ export class TaskMonitor {
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
     const abortController = new AbortController();
+    const taskEnv = this.buildQueryEnv();
+    const taskModel = this.config?.llm?.model;
+    const taskMcpServers = this.config ? buildMcpServers(this.config) : undefined;
+
     const q = query({
       prompt,
       options: {
@@ -214,6 +236,9 @@ export class TaskMonitor {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         additionalDirectories: [path.join(task.workspace, 'docs')],
+        env: taskEnv,
+        ...(taskModel ? { model: taskModel } : {}),
+        ...(taskMcpServers && Object.keys(taskMcpServers).length > 0 ? { mcpServers: taskMcpServers } : {}),
       },
     });
 
@@ -232,12 +257,9 @@ export class TaskMonitor {
       }
     })();
 
-    // Store PID as the Node.js process PID for lock tracking
-    // The actual claude subprocess PID isn't directly accessible from SDK
     this.runningTaskPid = process.pid;
 
     task.status = 'in_progress';
-    task.startedAt = new Date().toISOString();
     task.lastChecked = new Date().toISOString();
     fs.writeFileSync(jsonPath, JSON.stringify(task, null, 2), 'utf-8');
 
@@ -270,6 +292,9 @@ export class TaskMonitor {
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
 
     const abortController = new AbortController();
+    const taskEnv = this.buildQueryEnv();
+    const taskModel = this.config?.llm?.model;
+
     const q = query({
       prompt: verifyPrompt,
       options: {
@@ -278,6 +303,8 @@ export class TaskMonitor {
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         additionalDirectories: [task.workspace],
+        env: taskEnv,
+        ...(taskModel ? { model: taskModel } : {}),
       },
     });
 
