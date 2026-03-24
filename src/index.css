@@ -1,0 +1,339 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 20% 94%;
+    --foreground: 220 15% 15%;
+    --card: 40 15% 98%;
+    --card-foreground: 220 15% 15%;
+    --popover: 40 15% 98%;
+    --popover-foreground: 220 15% 15%;
+    --primary: 220 15% 25%;
+    --primary-foreground: 40 15% 98%;
+    --secondary: 40 10% 90%;
+    --secondary-foreground: 220 15% 20%;
+    --muted: 40 10% 88%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 40 15% 85%;
+    --accent-foreground: 220 15% 15%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 10% 82%;
+    --input: 40 10% 85%;
+    --ring: 220 15% 25%;
+    --radius: 0.625rem;
+
+    /* 用户气泡配色 - 中性灰调 */
+    --user-bubble-bg: 40 5% 88%;
+    --user-bubble-fg: 220 15% 15%;
+
+    /* 侧边栏专用 */
+    --sidebar-bg: 40 15% 91%;
+    --sidebar-border: 40 10% 82%;
+  }
+
+  /* Neutral warm dark palette */
+  .dark {
+    --background: 30 6% 10%;
+    --foreground: 40 10% 95%;
+    --card: 30 5% 14%;
+    --card-foreground: 40 10% 95%;
+    --popover: 30 5% 14%;
+    --popover-foreground: 40 10% 95%;
+    --primary: 40 10% 85%;
+    --primary-foreground: 30 6% 10%;
+    --secondary: 30 5% 20%;
+    --secondary-foreground: 40 10% 90%;
+    --muted: 30 5% 22%;
+    --muted-foreground: 40 8% 60%;
+    --accent: 30 5% 25%;
+    --accent-foreground: 40 10% 95%;
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 5% 30%;
+    --input: 30 5% 20%;
+    --ring: 40 10% 70%;
+
+    /* 用户气泡配色 - 深色模式 */
+    --user-bubble-bg: 30 5% 25%;
+    --user-bubble-fg: 40 10% 95%;
+
+    /* 侧边栏专用 */
+    --sidebar-bg: 30 5% 12%;
+    --sidebar-border: 30 5% 20%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-400 dark:bg-zinc-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-500 dark:bg-zinc-500;
+}
+
+/* Smooth transitions */
+.transition-theme {
+  @apply transition-colors duration-200;
+}
+
+/* Focus ring */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+}
+
+/* Prose styling for markdown */
+.prose {
+  line-height: 1.6;
+}
+
+.prose p {
+  margin-bottom: 0.75em;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+  list-style-type: disc;
+}
+
+.prose ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+  list-style-type: decimal;
+}
+
+.prose li {
+  margin-bottom: 0.25em;
+}
+
+.prose pre {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-avatar {
+  background-color: hsl(var(--muted));
+}
+
+.dark .ai-avatar {
+  background-color: hsl(30 8% 38%);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.5em;
+  text-align: left;
+}
+
+.dark .prose th,
+.dark .prose td {
+  border-color: hsl(30 8% 38%);
+}
+
+.prose th {
+  background: hsl(var(--muted));
+}
+
+/* Typing indicator animation */
+@keyframes bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Code Block Styles */
+.code-block-wrapper {
+  position: relative;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  margin: 0.5em 0;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--muted));
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.code-block-lang {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-size: 0.6875rem;
+}
+
+.code-block-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.code-block-copy-btn:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background) / 0.5);
+}
+
+.code-block-content {
+  position: relative;
+  overflow-x: auto;
+  /* 使用 muted 背景色，与主题协调 */
+  background: hsl(var(--muted));
+}
+
+.code-block-with-line-numbers {
+  display: flex;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.line-numbers {
+  flex-shrink: 0;
+  padding: 1rem 0.75rem;
+  text-align: right;
+  /* 使用 muted-foreground 颜色，与主题协调 */
+  color: hsl(var(--muted-foreground) / 0.6);
+  background: hsl(var(--muted) / 0.8);
+  border-right: 1px solid hsl(var(--border));
+  user-select: none;
+}
+
+.line-number {
+  display: block;
+  min-width: 1.5rem;
+}
+
+.code-content {
+  flex: 1;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.code-content code,
+.code-content .shiki code {
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* Force code lines to wrap */
+.code-content .line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.code-content pre {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+}
+
+.code-content code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  background: transparent !important;
+}
+
+/* Shiki theme visibility */
+.shiki-light {
+  display: block;
+}
+
+.shiki-dark {
+  display: none;
+}
+
+.dark .shiki-light {
+  display: none;
+}
+
+.dark .shiki-dark {
+  display: block;
+}
+
+/* Fallback code styling */
+.shiki-fallback {
+  display: block;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Ensure shiki generated code doesn't have extra backgrounds */
+.code-content .shiki {
+  background: transparent !important;
+}
+
+.code-content .shiki code {
+  background: transparent !important;
+}
+
+/* Force line breaks in inline code within prose */
+.prose code {
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
