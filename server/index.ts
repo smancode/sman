@@ -9,7 +9,7 @@ import { SkillsRegistry } from './skills-registry.js';
 import { ProfileManager } from './profile-manager.js';
 import { ClaudeSessionManager } from './claude-session.js';
 
-const PORT = parseInt(process.env.PORT || '5170', 10);
+const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
 
 function getHomeDir(): string {
