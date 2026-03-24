@@ -89,7 +89,20 @@ export class ProfileManager {
   updateProfile(systemId: string, updates: UpdateProfileInput): Profile {
     const profile = this.getProfile(systemId);
     if (!profile) throw new Error(`Profile not found: ${systemId}`);
-    const updated = { ...profile, ...updates };
+
+    const updated: Profile = {
+      systemId: profile.systemId,
+      name: updates.name ?? profile.name,
+      workspace: updates.workspace ?? profile.workspace,
+      description: updates.description ?? profile.description,
+      skills: updates.skills ?? profile.skills,
+      autoTriggers: {
+        onInit: updates.autoTriggers?.onInit ?? profile.autoTriggers.onInit,
+        onConversationStart: updates.autoTriggers?.onConversationStart ?? profile.autoTriggers.onConversationStart,
+      },
+      claudeMdTemplate: updates.claudeMdTemplate ?? profile.claudeMdTemplate,
+    };
+
     const filePath = this.profilePath(systemId);
     fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
     this.log.info(`Updated profile: ${systemId}`);

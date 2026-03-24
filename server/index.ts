@@ -130,6 +130,63 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        // ── Profile (Business System) CRUD ──
+        case 'profile.list': {
+          const profiles = profileManager.listProfiles();
+          ws.send(JSON.stringify({ type: 'profile.list', profiles }));
+          break;
+        }
+
+        case 'profile.get': {
+          if (!msg.systemId) throw new Error('Missing systemId');
+          const profile = profileManager.getProfile(msg.systemId);
+          if (!profile) throw new Error(`Profile not found: ${msg.systemId}`);
+          ws.send(JSON.stringify({ type: 'profile.get', profile }));
+          break;
+        }
+
+        case 'profile.create': {
+          const required = ['systemId', 'name', 'workspace', 'description', 'skills'];
+          for (const field of required) {
+            if (!msg[field]) throw new Error(`Missing ${field}`);
+          }
+          const profile = profileManager.createProfile({
+            systemId: String(msg.systemId),
+            name: String(msg.name),
+            workspace: String(msg.workspace),
+            description: String(msg.description),
+            skills: msg.skills as string[],
+            autoTriggers: msg.autoTriggers as { onInit?: string[]; onConversationStart?: string[] } | undefined,
+            claudeMdTemplate: msg.claudeMdTemplate as string | undefined,
+          });
+          ws.send(JSON.stringify({ type: 'profile.created', profile }));
+          break;
+        }
+
+        case 'profile.update': {
+          if (!msg.systemId) throw new Error('Missing systemId');
+          const updates: Record<string, unknown> = { ...msg };
+          delete updates.type;
+          delete updates.systemId;
+          const profile = profileManager.updateProfile(String(msg.systemId), updates);
+          ws.send(JSON.stringify({ type: 'profile.updated', profile }));
+          break;
+        }
+
+        case 'profile.delete': {
+          if (!msg.systemId) throw new Error('Missing systemId');
+          profileManager.deleteProfile(String(msg.systemId));
+          ws.send(JSON.stringify({ type: 'profile.deleted', systemId: msg.systemId }));
+          break;
+        }
+
+        // ── Skills Registry ──
+        case 'skills.list': {
+          const skills = skillsRegistry.listSkills();
+          ws.send(JSON.stringify({ type: 'skills.list', skills }));
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
       }

@@ -1,30 +1,45 @@
 /**
- * 业务系统相关类型定义
+ * 业务系统相关类型定义 (SmanBase)
  */
 
+/** 业务系统 Profile — 与后端 Profile 一致 */
 export interface BusinessSystem {
+  systemId: string;
+  name: string;
+  workspace: string;
+  description: string;
+  skills: string[];
+  autoTriggers: {
+    onInit: string[];
+    onConversationStart: string[];
+  };
+  claudeMdTemplate?: string;
+}
+
+/** 创建业务系统输入 */
+export interface CreateBusinessSystemInput {
+  systemId: string;
+  name: string;
+  workspace: string;
+  description: string;
+  skills: string[];
+  autoTriggers?: {
+    onInit?: string[];
+    onConversationStart?: string[];
+  };
+  claudeMdTemplate?: string;
+}
+
+/** 更新业务系统输入 */
+export type UpdateBusinessSystemInput = Partial<Omit<CreateBusinessSystemInput, 'systemId'>>;
+
+/** Skill 条目（来自 registry） */
+export interface SkillItem {
   id: string;
   name: string;
-  description?: string;
+  description: string;
+  version: string;
   path: string;
-  techStack?: string[];
-  /** true = 用户选择的动态目录 */
-  isDynamic?: boolean;
-}
-
-export interface SystemSession {
-  /** 会话唯一标识 */
-  id: string;
-  /** 关联的业务系统 ID */
-  systemId: string;
-  /** 会话名称 ("新会话" 或用户消息前6字) */
-  label: string;
-  /** 创建时间戳 */
-  createdAt: number;
-  /** 更新时间戳 */
-  updatedAt?: number;
-}
-
-export interface SystemsListResponse {
-  systems: BusinessSystem[];
+  triggers: string[];
+  tags: string[];
 }

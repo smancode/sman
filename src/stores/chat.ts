@@ -52,6 +52,7 @@ interface ChatState {
   abortRun: () => void;
   clearError: () => void;
   toggleThinking: () => void;
+  refresh: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -270,4 +271,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
+  refresh: () => {
+    set({ messages: [], streamingText: '', error: null, sending: false });
+    get().loadHistory();
+  },
 }));
