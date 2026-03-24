@@ -8,6 +8,7 @@ import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ProfileManager } from './profile-manager.js';
 import { ClaudeSessionManager } from './claude-session.js';
+import { SettingsManager } from './settings-manager.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -57,6 +58,7 @@ const store = new SessionStore(dbPath);
 const skillsRegistry = new SkillsRegistry(homeDir);
 const profileManager = new ProfileManager(homeDir);
 const sessionManager = new ClaudeSessionManager(store, skillsRegistry, profileManager);
+const settingsManager = new SettingsManager(homeDir);
 
 // HTTP server
 const server = http.createServer((req, res) => {
@@ -184,6 +186,20 @@ wss.on('connection', (ws: WebSocket) => {
         case 'skills.list': {
           const skills = skillsRegistry.listSkills();
           ws.send(JSON.stringify({ type: 'skills.list', skills }));
+          break;
+        }
+
+        // ── Settings ──
+        case 'settings.get': {
+          const config = settingsManager.getConfig();
+          ws.send(JSON.stringify({ type: 'settings.get', config }));
+          break;
+        }
+
+        case 'settings.update': {
+          const { type: _t, ...updates } = msg;
+          const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
+          ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
 
