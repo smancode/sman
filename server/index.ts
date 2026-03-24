@@ -9,6 +9,7 @@ import { SkillsRegistry } from './skills-registry.js';
 import { ProfileManager } from './profile-manager.js';
 import { ClaudeSessionManager } from './claude-session.js';
 import { SettingsManager } from './settings-manager.js';
+import { TaskMonitor } from './task-monitor.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -60,6 +61,9 @@ const profileManager = new ProfileManager(homeDir);
 const sessionManager = new ClaudeSessionManager(store, skillsRegistry, profileManager);
 const settingsManager = new SettingsManager(homeDir);
 
+// Feed config to session manager
+sessionManager.updateConfig(settingsManager.getConfig());
+
 // HTTP server
 const server = http.createServer((req, res) => {
   if (req.url === '/api/health') {
@@ -71,8 +75,18 @@ const server = http.createServer((req, res) => {
   res.end();
 });
 
-// WebSocket server
+// WebSocket server with broadcast support
 const wss = new WebSocketServer({ server, path: '/ws' });
+const clients = new Set<WebSocket>();
+
+function broadcast(data: string): void {
+  const msg = data;
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  }
+}
 
 interface WsMessage {
   type: string;
@@ -84,6 +98,7 @@ interface WsMessage {
 
 wss.on('connection', (ws: WebSocket) => {
   log.info('WebSocket client connected');
+  clients.add(ws);
 
   ws.on('message', async (data) => {
     let msg: WsMessage;
@@ -199,6 +214,7 @@ wss.on('connection', (ws: WebSocket) => {
         case 'settings.update': {
           const { type: _t, ...updates } = msg;
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
+          sessionManager.updateConfig(config);
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
@@ -214,19 +230,58 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   ws.on('close', () => {
+    clients.delete(ws);
     log.info('WebSocket client disconnected');
   });
 });
 
+// TaskMonitor setup - one per business system workspace
+const taskMonitors = new Map<string, TaskMonitor>();
+
+function startTaskMonitorForSystem(systemId: string, workspace: string): void {
+  if (taskMonitors.has(systemId)) return;
+  const monitor = new TaskMonitor(
+    workspace,
+    60000,
+    (notification) => {
+      const { type: notifyType, task, content } = notification;
+      broadcast(JSON.stringify({
+        type: 'task.notification',
+        systemId,
+        taskType: notifyType,
+        task,
+        content,
+      }));
+    },
+  );
+  monitor.start();
+  taskMonitors.set(systemId, monitor);
+  log.info(`TaskMonitor started for system ${systemId}`);
+}
+
+// Start monitors for existing profiles
+function initTaskMonitors(): void {
+  const profiles = profileManager.listProfiles();
+  for (const profile of profiles) {
+    if (profile.workspace && fs.existsSync(profile.workspace)) {
+      startTaskMonitorForSystem(profile.systemId, profile.workspace);
+    }
+  }
+}
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down...');
+  for (const monitor of taskMonitors.values()) monitor.stop();
+  sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down...');
+  for (const monitor of taskMonitors.values()) monitor.stop();
+  sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
 });
@@ -236,4 +291,5 @@ server.listen(PORT, () => {
   log.info(`Home directory: ${homeDir}`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
   log.info(`Health check: http://localhost:${PORT}/api/health`);
+  initTaskMonitors();
 });

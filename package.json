@@ -3,10 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build && tsc -p server/tsconfig.json",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "electron:dev": "concurrently \"pnpm dev\" \"pnpm dev:server\" \"wait-on http://localhost:5880/api/health && electron .\"",
+    "electron:build": "pnpm build && pnpm build:electron && electron-builder",
+    "init:skills": "tsx scripts/init-skills.ts",
+    "init:system": "tsx scripts/init-system.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -42,6 +48,9 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/uuid": "^10.0.0",
@@ -63,5 +72,23 @@
       "better-sqlite3",
       "esbuild"
     ]
+  },
+  "build": {
+    "appId": "com.smanbase.app",
+    "productName": "SmanBase",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "directories": {
+      "output": "release"
+    }
   }
 }
