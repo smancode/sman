@@ -1,11 +1,15 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
+import http from 'http';
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
-const PORT = parseInt(process.env.PORT || '5880', 10);
-const APP_URL = `http://localhost:${PORT}`;
+
+// 开发模式用 Vite (5881)，生产模式用后端 serve (5880)
+const isDev = !app.isPackaged;
+const BACKEND_PORT = isDev ? 5880 : 5880;
+const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -21,7 +25,11 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.loadURL(APP_URL);
+  mainWindow.loadURL(FRONTEND_URL);
+
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -90,9 +98,17 @@ function buildMenu(): void {
 }
 
 function startServer(): void {
+  if (isDev) {
+    // 开发模式：后端用 tsx watch 启动，前端用 Vite 启动
+    // 两者都由 dev.sh 管理，Electron 只负责等它们就绪
+    console.log('[Electron] Dev mode — waiting for backend and frontend...');
+    return;
+  }
+
+  // 生产模式：Electron 自己启动后端
   const serverPath = path.join(__dirname, '..', 'server', 'index.js');
   serverProcess = spawn(process.execPath, [serverPath], {
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(BACKEND_PORT) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -117,30 +133,61 @@ function stopServer(): void {
   }
 }
 
-app.whenReady().then(() => {
+function waitForBackend(): Promise<void> {
+  return new Promise((resolve) => {
+    const check = setInterval(() => {
+      http.get(`http://localhost:${BACKEND_PORT}/api/health`, (res) => {
+        if (res.statusCode === 200) {
+          clearInterval(check);
+          res.resume();
+          console.log('[Electron] Backend is ready');
+          resolve();
+        } else {
+          res.resume();
+        }
+      }).on('error', () => {
+        // not ready yet
+      });
+    }, 500);
+
+    // timeout 30s
+    setTimeout(() => {
+      clearInterval(check);
+      resolve();
+    }, 30000);
+  });
+}
+
+function waitForFrontend(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isDev) {
+      resolve();
+      return;
+    }
+    const check = setInterval(() => {
+      http.get(`http://localhost:5881`, (res) => {
+        clearInterval(check);
+        res.resume();
+        console.log('[Electron] Frontend is ready');
+        resolve();
+      }).on('error', () => {
+        // not ready yet
+      });
+    }, 500);
+
+    setTimeout(() => {
+      clearInterval(check);
+      resolve();
+    }, 30000);
+  });
+}
+
+app.whenReady().then(async () => {
   startServer();
 
-  // Wait for server to start before loading URL
-  const checkServer = setInterval(() => {
-    const http = require('http');
-    http.get(`http://localhost:${PORT}/api/health`, (res: any) => {
-      if (res.statusCode === 200) {
-        clearInterval(checkServer);
-        createWindow();
-      }
-      res.resume();
-    }).on('error', () => {
-      // Server not ready yet, try again
-    });
-  }, 500);
-
-  // Timeout after 30 seconds
-  setTimeout(() => {
-    clearInterval(checkServer);
-    if (!mainWindow) {
-      createWindow();
-    }
-  }, 30000);
+  await waitForBackend();
+  await waitForFrontend();
+  createWindow();
 });
 
 app.on('window-all-closed', () => {
