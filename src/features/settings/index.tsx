@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
-import { ProfileSettings } from './ProfileSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 export function Settings() {
@@ -19,7 +18,6 @@ export function Settings() {
       </div>
 
       <div className="max-w-2xl space-y-6">
-        <ProfileSettings />
         <LLMSettings />
         <WebSearchSettings />
       </div>

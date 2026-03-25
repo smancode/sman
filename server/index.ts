@@ -10,7 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
-import { ProfileManager } from './profile-manager.js';
 import { ClaudeSessionManager } from './claude-session.js';
 import { SettingsManager } from './settings-manager.js';
 import { TaskMonitor } from './task-monitor.js';
@@ -21,11 +20,11 @@ const log = createLogger('Server');
 function getHomeDir(): string {
   const env = process.env.SMANBASE_HOME;
   if (env) return env;
-  return path.join(os.homedir(), '.smanbase');
+  return path.join(os.homedir(), '.sman');
 }
 
 function ensureHomeDir(homeDir: string): void {
-  const dirs = ['skills', 'profiles', 'logs'];
+  const dirs = ['skills', 'logs'];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(homeDir, dir), { recursive: true });
   }
@@ -58,11 +57,10 @@ function ensureHomeDir(homeDir: string): void {
 const homeDir = getHomeDir();
 ensureHomeDir(homeDir);
 
-const dbPath = path.join(homeDir, 'smanbase.db');
+const dbPath = path.join(homeDir, 'sman.db');
 const store = new SessionStore(dbPath);
 const skillsRegistry = new SkillsRegistry(homeDir);
-const profileManager = new ProfileManager(homeDir);
-const sessionManager = new ClaudeSessionManager(store, skillsRegistry, profileManager);
+const sessionManager = new ClaudeSessionManager(store, skillsRegistry);
 const settingsManager = new SettingsManager(homeDir);
 
 // Feed config to session manager
@@ -167,10 +165,9 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 const clients = new Set<WebSocket>();
 
 function broadcast(data: string): void {
-  const msg = data;
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
+      client.send(data);
     }
   }
 }
@@ -178,9 +175,36 @@ function broadcast(data: string): void {
 interface WsMessage {
   type: string;
   sessionId?: string;
-  systemId?: string;
+  workspace?: string;
   content?: string;
   [key: string]: unknown;
+}
+
+// TaskMonitor setup - one per workspace
+const taskMonitors = new Map<string, TaskMonitor>();
+
+function startTaskMonitor(workspace: string): void {
+  if (taskMonitors.has(workspace)) return;
+  if (!fs.existsSync(workspace)) return;
+
+  const monitor = new TaskMonitor(
+    workspace,
+    60000,
+    (notification) => {
+      const { type: notifyType, task, content } = notification;
+      broadcast(JSON.stringify({
+        type: 'task.notification',
+        workspace,
+        taskType: notifyType,
+        task,
+        content,
+      }));
+    },
+  );
+  monitor.start();
+  monitor.updateConfig(settingsManager.getConfig());
+  taskMonitors.set(workspace, monitor);
+  log.info(`TaskMonitor started for ${workspace}`);
 }
 
 wss.on('connection', (ws: WebSocket) => {
@@ -199,14 +223,16 @@ wss.on('connection', (ws: WebSocket) => {
     try {
       switch (msg.type) {
         case 'session.create': {
-          if (!msg.systemId) throw new Error('Missing systemId');
-          const sessionId = sessionManager.createSession(msg.systemId);
-          ws.send(JSON.stringify({ type: 'session.created', sessionId, systemId: msg.systemId }));
+          if (!msg.workspace) throw new Error('Missing workspace');
+          const sessionId = sessionManager.createSession(msg.workspace);
+          ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
+          // Start task monitor for this workspace
+          startTaskMonitor(msg.workspace);
           break;
         }
 
         case 'session.list': {
-          const sessions = sessionManager.listSessions(msg.systemId as string | undefined);
+          const sessions = sessionManager.listSessions();
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
           break;
         }
@@ -238,56 +264,6 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           sessionManager.abort(msg.sessionId);
           ws.send(JSON.stringify({ type: 'chat.aborted', sessionId: msg.sessionId }));
-          break;
-        }
-
-        // ── Profile (Business System) CRUD ──
-        case 'profile.list': {
-          const profiles = profileManager.listProfiles();
-          ws.send(JSON.stringify({ type: 'profile.list', profiles }));
-          break;
-        }
-
-        case 'profile.get': {
-          if (!msg.systemId) throw new Error('Missing systemId');
-          const profile = profileManager.getProfile(msg.systemId);
-          if (!profile) throw new Error(`Profile not found: ${msg.systemId}`);
-          ws.send(JSON.stringify({ type: 'profile.get', profile }));
-          break;
-        }
-
-        case 'profile.create': {
-          const required = ['systemId', 'name', 'workspace', 'description', 'skills'];
-          for (const field of required) {
-            if (!msg[field]) throw new Error(`Missing ${field}`);
-          }
-          const profile = profileManager.createProfile({
-            systemId: String(msg.systemId),
-            name: String(msg.name),
-            workspace: String(msg.workspace),
-            description: String(msg.description),
-            skills: msg.skills as string[],
-            autoTriggers: msg.autoTriggers as { onInit?: string[]; onConversationStart?: string[] } | undefined,
-            claudeMdTemplate: msg.claudeMdTemplate as string | undefined,
-          });
-          ws.send(JSON.stringify({ type: 'profile.created', profile }));
-          break;
-        }
-
-        case 'profile.update': {
-          if (!msg.systemId) throw new Error('Missing systemId');
-          const updates: Record<string, unknown> = { ...msg };
-          delete updates.type;
-          delete updates.systemId;
-          const profile = profileManager.updateProfile(String(msg.systemId), updates);
-          ws.send(JSON.stringify({ type: 'profile.updated', profile }));
-          break;
-        }
-
-        case 'profile.delete': {
-          if (!msg.systemId) throw new Error('Missing systemId');
-          profileManager.deleteProfile(String(msg.systemId));
-          ws.send(JSON.stringify({ type: 'profile.deleted', systemId: msg.systemId }));
           break;
         }
 
@@ -333,39 +309,12 @@ wss.on('connection', (ws: WebSocket) => {
   });
 });
 
-// TaskMonitor setup - one per business system workspace
-const taskMonitors = new Map<string, TaskMonitor>();
-
-function startTaskMonitorForSystem(systemId: string, workspace: string): void {
-  if (taskMonitors.has(systemId)) return;
-  const monitor = new TaskMonitor(
-    workspace,
-    60000,
-    (notification) => {
-      const { type: notifyType, task, content } = notification;
-      broadcast(JSON.stringify({
-        type: 'task.notification',
-        systemId,
-        taskType: notifyType,
-        task,
-        content,
-      }));
-    },
-  );
-  monitor.start();
-  // Feed current config to monitor so it passes API key/model to Claude SDK
-  monitor.updateConfig(settingsManager.getConfig());
-  taskMonitors.set(systemId, monitor);
-  log.info(`TaskMonitor started for system ${systemId}`);
-}
-
-// Start monitors for existing profiles
+// Start task monitors for existing sessions' workspaces
 function initTaskMonitors(): void {
-  const profiles = profileManager.listProfiles();
-  for (const profile of profiles) {
-    if (profile.workspace && fs.existsSync(profile.workspace)) {
-      startTaskMonitorForSystem(profile.systemId, profile.workspace);
-    }
+  const sessions = store.listSessions();
+  const workspaces = new Set(sessions.map(s => s.workspace).filter(Boolean));
+  for (const workspace of workspaces) {
+    startTaskMonitor(workspace);
   }
 }
 

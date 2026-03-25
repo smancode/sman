@@ -57,4 +57,27 @@ export class SkillsRegistry {
       .filter(id => this.hasSkill(id))
       .map(id => this.getSkillDir(id));
   }
+
+  /**
+   * Get all skill directories for a workspace:
+   * 1. Global skills from ~/.sman/skills/
+   * 2. Project-specific skills from {workspace}/.claude/skills/
+   */
+  getAllSkillDirs(workspace: string): string[] {
+    const dirs: string[] = [];
+
+    // 1. Global skills directory
+    const globalSkillsDir = path.join(this.homeDir, 'skills');
+    if (fs.existsSync(globalSkillsDir)) {
+      dirs.push(globalSkillsDir);
+    }
+
+    // 2. Project-specific skills directory
+    const projectSkillsDir = path.join(workspace, '.claude', 'skills');
+    if (fs.existsSync(projectSkillsDir)) {
+      dirs.push(projectSkillsDir);
+    }
+
+    return dirs;
+  }
 }

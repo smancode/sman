@@ -41,7 +41,7 @@ export interface ContentBlock {
 export interface ChatSession {
   key: string
   label?: string
-  systemId?: string
+  workspace?: string
   createdAt?: string
   lastActiveAt?: string
 }

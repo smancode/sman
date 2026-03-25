@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 const RESOURCES_SKILLS_DIR = path.join(ROOT, 'resources', 'skills');
 const HOME_DIR = path.join(
-  process.env.SMANBASE_HOME || path.join(require('os').homedir(), '.smanbase'),
+  process.env.SMANBASE_HOME || path.join(require('os').homedir(), '.sman'),
 );
 
 interface SkillEntry {

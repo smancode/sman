@@ -12,6 +12,11 @@ const BACKEND_PORT = 5880;
 const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
 
 function createWindow(): void {
+  // 确保 preload 路径正确
+  const preloadPath = path.join(__dirname, '../preload/preload.cjs');
+  console.log('[Electron] Preload path:', preloadPath);
+  console.log('[Electron] __dirname:', __dirname);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -21,7 +26,7 @@ function createWindow(): void {
     titleBarStyle: 'hidden',
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.mjs'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },

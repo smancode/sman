@@ -6,17 +6,39 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatStore } from '@/stores/chat';
-import { useBusinessSystemsStore } from '@/stores/business-systems';
 import { cn } from '@/lib/utils';
+import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
 import type { ChatSession } from '@/types/chat';
 
-interface SessionTreeProps {
-  onNewSession: () => void;
+// Simple local state for expanded systems (no need for a store)
+function useExpandedSystems() {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = (systemId: string, force?: boolean) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (force === true) {
+        next.add(systemId);
+      } else if (force === false) {
+        next.delete(systemId);
+      } else {
+        if (next.has(systemId)) {
+          next.delete(systemId);
+        } else {
+          next.add(systemId);
+        }
+      }
+      return next;
+    });
+  };
+
+  return { expanded, toggle };
 }
 
 function SessionItem({
@@ -40,7 +62,7 @@ function SessionItem({
     if (deleting) return;
     setDeleting(true);
     try {
-      onDelete();
+      await onDelete();
     } catch (err) {
       console.error('[SessionItem] Failed to delete session:', err);
       setDeleting(false);
@@ -89,7 +111,7 @@ function SystemGroup({
   onSessionSelect,
   onSessionDelete,
 }: {
-  system: { systemId: string; name: string };
+  system: { systemId: string; name: string; workspace: string };
   sessions: ChatSession[];
   sessionLabels: Record<string, string>;
   currentSessionId: string;
@@ -113,6 +135,7 @@ function SystemGroup({
           'hover:bg-[hsl(var(--muted))]/50',
         )}
         onClick={onToggle}
+        title={system.workspace}
       >
         <div className="flex items-center justify-center w-4 h-4">
           {expanded ? (
@@ -150,9 +173,11 @@ function SystemGroup({
   );
 }
 
-export function SessionTree({ onNewSession }: SessionTreeProps) {
+export function SessionTree() {
   const navigate = useNavigate();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [showDirSelector, setShowDirSelector] = useState(false);
+  const { expanded: expandedSystems, toggle: toggleSystemExpanded } = useExpandedSystems();
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
@@ -160,14 +185,27 @@ export function SessionTree({ onNewSession }: SessionTreeProps) {
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
+  const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
-  const systems = useBusinessSystemsStore((s) => s.systems);
-  const expandedSystems = useBusinessSystemsStore((s) => s.expandedSystems);
-  const toggleSystemExpanded = useBusinessSystemsStore((s) => s.toggleSystemExpanded);
+  // Derive systems from sessions (group by workspace)
+  const systemsMap = sessions.reduce<Map<string, { systemId: string; name: string; workspace: string }>>((acc, session) => {
+    if (!session.workspace) return acc;
+    if (!acc.has(session.workspace)) {
+      const name = session.workspace.split(/[/\\]/).pop() || session.workspace;
+      acc.set(session.workspace, {
+        systemId: session.workspace, // use workspace as systemId
+        name,
+        workspace: session.workspace,
+      });
+    }
+    return acc;
+  }, new Map());
 
-  // Group sessions by systemId
+  const systems = Array.from(systemsMap.values());
+
+  // Group sessions by workspace
   const sessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
-    const sysId = session.systemId || '__default__';
+    const sysId = session.workspace || '__default__';
     if (!acc[sysId]) acc[sysId] = [];
     acc[sysId].push(session);
     return acc;
@@ -180,8 +218,8 @@ export function SessionTree({ onNewSession }: SessionTreeProps) {
     const session = sessions.find((s) => s.key === currentSessionId);
     if (!session) return;
 
-    if (session.systemId && !expandedSystems.has(session.systemId)) {
-      toggleSystemExpanded(session.systemId, true);
+    if (session.workspace && !expandedSystems.has(session.workspace)) {
+      toggleSystemExpanded(session.workspace, true);
     }
 
     requestAnimationFrame(() => {
@@ -202,8 +240,7 @@ export function SessionTree({ onNewSession }: SessionTreeProps) {
   }, [currentSessionId, sessions, expandedSystems, toggleSystemExpanded]);
 
   const toggleSystem = (systemId: string) => {
-    const isExpanded = expandedSystems.has(systemId);
-    toggleSystemExpanded(systemId, !isExpanded);
+    toggleSystemExpanded(systemId);
   };
 
   const handleSessionSelect = (sessionId: string) => {
@@ -220,15 +257,39 @@ export function SessionTree({ onNewSession }: SessionTreeProps) {
     }
   };
 
+  const handleNewSession = () => {
+    setShowDirSelector(true);
+  };
+
+  const handleDirectorySelect = async (workspace: string) => {
+    setShowDirSelector(false);
+    try {
+      const sessionId = await createSessionWithWorkspace(workspace);
+      await loadSessions();
+      switchSession(sessionId);
+      navigate('/chat');
+    } catch (err) {
+      console.error('[SessionTree] Failed to create session:', err);
+      alert(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
+      {/* Directory Selector Dialog */}
+      <DirectorySelectorDialog
+        open={showDirSelector}
+        onOpenChange={setShowDirSelector}
+        onSelect={handleDirectorySelect}
+      />
+
       {/* New session button */}
       <div className="p-3 border-b border-[hsl(var(--sidebar-border))]">
         <Button
           variant="outline"
           size="sm"
           className="w-full justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
-          onClick={onNewSession}
+          onClick={handleNewSession}
         >
           <Plus className="h-4 w-4" />
           新建会话
@@ -241,8 +302,8 @@ export function SessionTree({ onNewSession }: SessionTreeProps) {
           <div className="p-2 pt-1">
             {systems.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
-                <p>没有可用的业务系统</p>
-                <p className="text-xs mt-1">请先在设置中创建</p>
+                <p>暂无会话</p>
+                <p className="text-xs mt-1">点击上方按钮创建新会话</p>
               </div>
             ) : (
               systems.map((system) => (

@@ -3,13 +3,13 @@ import { query, type Query, type Options, type SDKMessage, type SDKResultMessage
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SessionStore, Message } from './session-store.js';
 import type { SkillsRegistry } from './skills-registry.js';
-import type { ProfileManager } from './profile-manager.js';
 import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
+import path from 'path';
+import fs from 'fs';
 
 export interface ActiveSession {
   id: string;
-  systemId: string;
   workspace: string;
   createdAt: string;
   lastActiveAt: string;
@@ -34,7 +34,6 @@ export class ClaudeSessionManager {
   constructor(
     private store: SessionStore,
     private skillsRegistry: SkillsRegistry,
-    private profileManager: ProfileManager,
   ) {
     this.log = createLogger('ClaudeSessionManager');
   }
@@ -43,21 +42,16 @@ export class ClaudeSessionManager {
     this.config = config;
   }
 
-  private getSessionConfig(systemId: string): SessionConfig {
-    const profile = this.profileManager.getProfile(systemId);
-    if (!profile) throw new Error(`Profile not found: ${systemId}`);
-
-    const skillDirs = this.skillsRegistry.getSkillDirs(profile.skills);
+  private getSessionConfig(workspace: string): SessionConfig {
+    // Get all available skill directories (global + project-specific)
+    const skillDirs = this.skillsRegistry.getAllSkillDirs(workspace);
 
     let systemPromptAppend = '';
-    if (profile.description) {
-      systemPromptAppend += `\n## Business System\n${profile.name}: ${profile.description}\n`;
-    }
+    const projectName = path.basename(workspace);
+    systemPromptAppend += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
+
     if (skillDirs.length > 0) {
       systemPromptAppend += `\n## Available Skills\nSkills from these directories are available: ${skillDirs.join(', ')}\n`;
-    }
-    if (profile.claudeMdTemplate) {
-      systemPromptAppend += `\n${profile.claudeMdTemplate}\n`;
     }
 
     const model = this.config?.llm?.model || 'claude-sonnet-4-6';
@@ -125,29 +119,28 @@ export class ClaudeSessionManager {
     return null;
   }
 
-  createSession(systemId: string): string {
-    const profile = this.profileManager.getProfile(systemId);
-    if (!profile) {
-      throw new Error(`Profile not found: ${systemId}`);
+  createSession(workspace: string): string {
+    if (!fs.existsSync(workspace)) {
+      throw new Error(`Workspace does not exist: ${workspace}`);
     }
 
     const id = uuidv4();
+    // Use workspace path as systemId for backwards compatibility with DB schema
     this.store.createSession({
       id,
-      systemId,
-      workspace: profile.workspace,
+      systemId: workspace,
+      workspace,
     });
 
     const session: ActiveSession = {
       id,
-      systemId,
-      workspace: profile.workspace,
+      workspace,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
     };
 
     this.sessions.set(id, session);
-    this.log.info(`Session created: ${id} for system ${systemId}`);
+    this.log.info(`Session created: ${id} for workspace ${workspace}`);
     return id;
   }
 
@@ -161,7 +154,7 @@ export class ClaudeSessionManager {
 
     this.store.addMessage(sessionId, { role: 'user', content });
 
-    const sessionConfig = this.getSessionConfig(session.systemId);
+    const sessionConfig = this.getSessionConfig(session.workspace);
     const abortController = new AbortController();
     this.abortControllers.set(sessionId, abortController);
 
@@ -276,14 +269,13 @@ export class ClaudeSessionManager {
     }
   }
 
-  listSessions(systemId?: string): ActiveSession[] {
-    const allSessions = this.store.listSessions(systemId);
+  listSessions(): ActiveSession[] {
+    const allSessions = this.store.listSessions();
     return allSessions.map(s => {
       let active = this.sessions.get(s.id);
       if (!active) {
         active = {
           id: s.id,
-          systemId: s.systemId,
           workspace: s.workspace,
           createdAt: s.createdAt,
           lastActiveAt: s.lastActiveAt,

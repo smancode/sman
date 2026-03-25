@@ -30,7 +30,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # 确保 home 目录存在
-HOME_DIR="${SMANBASE_HOME:-$HOME/.smanbase}"
+HOME_DIR="${SMANBASE_HOME:-$HOME/.sman}"
 mkdir -p "$HOME_DIR"
 
 # ── 2. 端口冲突检测 ──────────────────────────────────────

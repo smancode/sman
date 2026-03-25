@@ -44,9 +44,9 @@ interface ChatState {
   showThinking: boolean;
 
   // Actions
-  createSession: (systemId: string) => Promise<string>;
+  createSessionWithWorkspace: (workspace: string) => Promise<string>;
   deleteSession: (sessionId: string) => Promise<void>;
-  loadSessions: (systemId?: string) => Promise<void>;
+  loadSessions: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
@@ -67,8 +67,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionLabels: {},
   showThinking: true,
 
-  // Create a new session via backend
-  createSession: async (systemId: string) => {
+  // Create a new session with workspace (directory path)
+  createSessionWithWorkspace: async (workspace: string) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
     if (!client.connected) throw new Error('WebSocket not connected');
@@ -93,7 +93,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubErr();
         reject(new Error(String(data.error)));
       });
-      client.send({ type: 'session.create', systemId });
+      // Use workspace path as systemId (directory name will be used as display name)
+      client.send({ type: 'session.create', workspace });
     });
   },
 
@@ -128,7 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  loadSessions: async (_systemId?: string) => {
+  loadSessions: async () => {
     const client = getWsClient();
     if (!client) return;
 
@@ -140,16 +141,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const sessions: ChatSession[] = data.sessions.map((s: Record<string, unknown>) => ({
           key: String(s.id),
           label: s.label ? String(s.label) : undefined,
-          systemId: s.systemId ? String(s.systemId) : undefined,
+          workspace: s.workspace ? String(s.workspace) : undefined,
           createdAt: s.createdAt ? String(s.createdAt) : undefined,
           lastActiveAt: s.lastActiveAt ? String(s.lastActiveAt) : undefined,
         }));
 
         const state = get();
-        // Keep current session if it still exists, otherwise pick first
+        // Keep current session if it still exists, otherwise stay empty (show welcome screen)
         const nextId = sessions.find(s => s.key === state.currentSessionId)
           ? state.currentSessionId
-          : sessions.length > 0 ? sessions[0].key : '';
+          : '';
 
         set({ sessions, currentSessionId: nextId });
 
@@ -157,7 +158,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           get().loadHistory();
         }
       });
-      // Load ALL sessions (no filter) so the tree can group by system
+      // Load ALL sessions
       client.send({ type: 'session.list' });
     } catch (err) {
       console.warn('Failed to load sessions:', err);
