@@ -38,7 +38,6 @@ interface ChatState {
   // Sessions
   sessions: ChatSession[];
   currentSessionId: string;
-  sessionLabels: Record<string, string>;
 
   // Thinking
   showThinking: boolean;
@@ -54,6 +53,7 @@ interface ChatState {
   clearError: () => void;
   toggleThinking: () => void;
   refresh: () => void;
+  updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -64,7 +64,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingText: '',
   sessions: [],
   currentSessionId: '',
-  sessionLabels: {},
   showThinking: true,
 
   // Create a new session with workspace (directory path)
@@ -180,7 +179,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadHistory: async () => {
     const client = getWsClient();
     if (!client) return;
-    const { currentSessionId } = get();
+    const { currentSessionId, sessions } = get();
     if (!currentSessionId) return;
 
     set({ loading: true, error: null });
@@ -201,13 +200,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ messages: msgs, loading: false });
 
         // Generate session label from first user message if not set
-        const state = get();
-        if (!state.sessionLabels[currentSessionId]) {
+        const session = sessions.find(s => s.key === currentSessionId);
+        if (!session?.label) {
           const firstUser = msgs.find(m => m.role === 'user' && m.content.trim());
           if (firstUser) {
             const text = firstUser.content.trim();
-            const truncated = text.length > 50 ? `${text.slice(0, 50)}...` : text;
-            set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionId]: truncated } }));
+            const truncated = text.length > 20 ? `${text.slice(0, 20)}...` : text;
+            // Update in backend
+            get().updateSessionLabel(currentSessionId, truncated);
           }
         }
       });
@@ -218,6 +218,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  updateSessionLabel: async (sessionId: string, label: string) => {
+    const client = getWsClient();
+    if (!client) return;
+
+    // Update local state immediately
+    set((state) => ({
+      sessions: state.sessions.map(s =>
+        s.key === sessionId ? { ...s, label } : s
+      )
+    }));
+
+    // Send to backend
+    client.send({ type: 'session.updateLabel', sessionId, label });
+  },
+
   sendMessage: async (content: string) => {
     const client = getWsClient();
     if (!client) return;
@@ -225,7 +240,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    const { currentSessionId, messages } = get();
+    const { currentSessionId, messages, sessions } = get();
     if (!currentSessionId) return;
 
     // Optimistic user message
@@ -244,11 +259,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
     });
 
-    // Update label from first message
-    const state = get();
-    if (!state.sessionLabels[currentSessionId] && trimmed) {
-      const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}...` : trimmed;
-      set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionId]: truncated } }));
+    // Update label from first message if not set
+    const session = sessions.find(s => s.key === currentSessionId);
+    if (!session?.label && trimmed) {
+      const truncated = trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed;
+      get().updateSessionLabel(currentSessionId, truncated);
     }
 
     try {

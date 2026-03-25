@@ -232,8 +232,22 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'session.list': {
-          const sessions = sessionManager.listSessions();
+          const sessions = sessionManager.listSessions().map(s => ({
+            id: s.id,
+            systemId: s.systemId,
+            workspace: s.workspace,
+            label: s.label,
+            createdAt: s.createdAt,
+            lastActiveAt: s.lastActiveAt,
+          }));
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
+          break;
+        }
+
+        case 'session.updateLabel': {
+          if (!msg.sessionId || !msg.label) throw new Error('Missing sessionId or label');
+          store.updateLabel(msg.sessionId, msg.label);
+          ws.send(JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
           break;
         }
 

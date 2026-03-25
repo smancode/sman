@@ -6,7 +6,6 @@ import {
   MessageSquare,
   Plus,
   Trash2,
-  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -43,13 +42,11 @@ function useExpandedSystems() {
 
 function SessionItem({
   session,
-  sessionLabel,
   isActive,
   onSelect,
   onDelete,
 }: {
   session: ChatSession;
-  sessionLabel?: string;
   isActive: boolean;
   onSelect: () => void;
   onDelete: () => void;
@@ -83,11 +80,11 @@ function SessionItem({
       onMouseLeave={() => setHovered(false)}
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate flex-1 min-w-0">{sessionLabel || '新会话'}</span>
+      <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
       <button
         className={cn(
-          'shrink-0 p-0.5 rounded transition-colors',
-          (hovered || isActive) ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          'shrink-0 p-0.5 rounded transition-all',
+          hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
           deleting
             ? 'opacity-40 cursor-not-allowed text-muted-foreground'
             : 'text-muted-foreground hover:text-destructive',
@@ -104,7 +101,6 @@ function SessionItem({
 function SystemGroup({
   system,
   sessions,
-  sessionLabels,
   currentSessionId,
   expanded,
   onToggle,
@@ -113,7 +109,6 @@ function SystemGroup({
 }: {
   system: { systemId: string; name: string; workspace: string };
   sessions: ChatSession[];
-  sessionLabels: Record<string, string>;
   currentSessionId: string;
   expanded: boolean;
   onToggle: () => void;
@@ -161,7 +156,6 @@ function SystemGroup({
             <SessionItem
               key={session.key}
               session={session}
-              sessionLabel={sessionLabels[session.key]}
               isActive={session.key === currentSessionId}
               onSelect={() => onSessionSelect(session.key)}
               onDelete={() => onSessionDelete(session.key)}
@@ -181,7 +175,6 @@ export function SessionTree() {
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
-  const sessionLabels = useChatStore((s) => s.sessionLabels);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
@@ -311,7 +304,6 @@ export function SessionTree() {
                   key={system.systemId}
                   system={system}
                   sessions={sessionsBySystem[system.systemId] || []}
-                  sessionLabels={sessionLabels}
                   currentSessionId={currentSessionId}
                   expanded={expandedSystems.has(system.systemId)}
                   onToggle={() => toggleSystem(system.systemId)}

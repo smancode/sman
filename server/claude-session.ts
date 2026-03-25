@@ -11,6 +11,7 @@ import fs from 'fs';
 export interface ActiveSession {
   id: string;
   workspace: string;
+  label?: string;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -277,6 +278,7 @@ export class ClaudeSessionManager {
         active = {
           id: s.id,
           workspace: s.workspace,
+          label: s.label,
           createdAt: s.createdAt,
           lastActiveAt: s.lastActiveAt,
         };

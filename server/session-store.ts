@@ -5,6 +5,7 @@ export interface Session {
   id: string;
   systemId: string;
   workspace: string;
+  label?: string;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -44,6 +45,7 @@ export class SessionStore {
         id TEXT PRIMARY KEY,
         system_id TEXT NOT NULL,
         workspace TEXT NOT NULL,
+        label TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_active_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -60,6 +62,15 @@ export class SessionStore {
       CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_system_id ON sessions(system_id);
     `);
+
+    // Migration: add label column if not exists
+    try {
+      this.db.prepare('SELECT label FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN label TEXT');
+      this.log.info('Migrated: added label column to sessions table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
@@ -76,7 +87,7 @@ export class SessionStore {
 
   getSession(id: string): Session | undefined {
     const row = this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
+      'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
     ).get(id) as Session | undefined;
     return row;
   }
@@ -84,11 +95,11 @@ export class SessionStore {
   listSessions(systemId?: string): Session[] {
     if (systemId) {
       return this.db.prepare(
-        'SELECT id, system_id as systemId, workspace, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? ORDER BY last_active_at DESC'
+        'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? ORDER BY last_active_at DESC'
       ).all(systemId) as Session[];
     }
     return this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, created_at as createdAt, last_active_at as lastActiveAt FROM sessions ORDER BY last_active_at DESC'
+      'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions ORDER BY last_active_at DESC'
     ).all() as Session[];
   }
 
@@ -119,6 +130,10 @@ export class SessionStore {
 
   deleteSession(id: string): void {
     this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+  }
+
+  updateLabel(id: string, label: string): void {
+    this.db.prepare('UPDATE sessions SET label = ? WHERE id = ?').run(label, id);
   }
 
   close(): void {
