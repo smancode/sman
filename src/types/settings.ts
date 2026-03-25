@@ -1,5 +1,5 @@
 /**
- * Settings 类型定义 (SmanBase)
+ * Settings 类型定义 (Sman)
  * 简化版：只有 LLM 配置 + Web Search 配置
  */
 
@@ -34,8 +34,3 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费' },
 ];
 
-export const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-];

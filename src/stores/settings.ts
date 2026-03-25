@@ -1,5 +1,5 @@
 /**
- * Settings Store (SmanBase)
+ * Settings Store (Sman)
  * Manages LLM + Web Search settings via WebSocket.
  */
 import { create } from 'zustand';

@@ -1,5 +1,5 @@
 /**
- * Business Systems Store (SmanBase)
+ * Business Systems Store (Sman)
  * Manages profiles via WebSocket — no Gateway dependency.
  */
 import { create } from 'zustand';
@@ -11,6 +11,7 @@ import type {
   UpdateBusinessSystemInput,
   SkillItem,
 } from '@/types/business-system';
+import type { ChatSession } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -47,6 +48,9 @@ interface BusinessSystemsState {
 
   // 辅助
   getSystemById: (systemId: string) => BusinessSystem | undefined;
+  getSessionsBySystem: (systemId: string) => ChatSession[];
+  getCurrentSession: () => ChatSession | undefined;
+  getCurrentSystem: () => BusinessSystem | undefined;
 }
 
 export const useBusinessSystemsStore = create<BusinessSystemsState>((set, get) => ({
@@ -78,12 +82,10 @@ export const useBusinessSystemsStore = create<BusinessSystemsState>((set, get) =
           : []) as BusinessSystem[];
         set({ systems, loading: false });
 
-        // 自动加载第一个系统的会话
-        if (systems.length > 0) {
-          const chat = useChatStore.getState();
-          if (!chat.currentSessionId) {
-            chat.loadSessions(systems[0].systemId);
-          }
+        // 加载所有系统的会话（用于树分组显示）
+        const chat = useChatStore.getState();
+        if (!chat.currentSessionId) {
+          chat.loadSessions();
         }
       });
       client.send({ type: 'profile.list' });
@@ -180,5 +182,24 @@ export const useBusinessSystemsStore = create<BusinessSystemsState>((set, get) =
 
   getSystemById: (systemId: string) => {
     return get().systems.find((s) => s.systemId === systemId);
+  },
+
+  getSessionsBySystem: (systemId: string): ChatSession[] => {
+    const chatState = useChatStore.getState();
+    return chatState.sessions.filter((s) => s.systemId === systemId);
+  },
+
+  getCurrentSession: (): ChatSession | undefined => {
+    const chatState = useChatStore.getState();
+    if (!chatState.currentSessionId) return undefined;
+    return chatState.sessions.find((s) => s.key === chatState.currentSessionId);
+  },
+
+  getCurrentSystem: (): BusinessSystem | undefined => {
+    const chatState = useChatStore.getState();
+    if (!chatState.currentSessionId) return undefined;
+    const session = chatState.sessions.find((s) => s.key === chatState.currentSessionId);
+    if (!session?.systemId) return undefined;
+    return get().systems.find((s) => s.systemId === session.systemId);
   },
 }));

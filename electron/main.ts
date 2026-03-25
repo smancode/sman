@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, globalShortcut, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import http from 'http';
@@ -8,18 +8,20 @@ let serverProcess: ChildProcess | null = null;
 
 // 开发模式用 Vite (5881)，生产模式用后端 serve (5880)
 const isDev = !app.isPackaged;
-const BACKEND_PORT = isDev ? 5880 : 5880;
+const BACKEND_PORT = 5880;
 const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: 1200,
+    height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'SmanBase',
+    title: 'Sman',
+    titleBarStyle: 'hidden',
+    show: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../preload/preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -27,15 +29,72 @@ function createWindow(): void {
 
   mainWindow.loadURL(FRONTEND_URL);
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  mainWindow.once('ready-to-show', () => {
+    mainWindow!.show();
+    mainWindow!.focus();
+  });
+
+  // 全局快捷键
+  const registerShortcuts = () => {
+    // Ctrl+Shift+R 强制刷新
+    globalShortcut.register('CommandOrControl+Shift+R', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.reloadIgnoringCache();
+      }
+    });
+
+    // Ctrl+R / F5 刷新
+    globalShortcut.register('CommandOrControl+R', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.reload();
+      }
+    });
+    globalShortcut.register('F5', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.reload();
+      }
+    });
+
+    // F12 / Ctrl+Shift+I 开发者工具（仅开发模式）
+    if (isDev) {
+      globalShortcut.register('F12', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.toggleDevTools();
+        }
+      });
+      globalShortcut.register('CommandOrControl+Shift+I', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.toggleDevTools();
+        }
+      });
+    }
+  };
+
+  registerShortcuts();
+
+  mainWindow.on('focus', () => {
+    registerShortcuts();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    globalShortcut.unregisterAll();
   });
+}
 
-  buildMenu();
+// IPC handlers
+function registerIpcHandlers(): void {
+  ipcMain.handle('dialog:selectDirectory', async () => {
+    if (!mainWindow) return null;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      title: '选择业务系统目录',
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
+  });
 }
 
 function buildMenu(): void {
@@ -62,7 +121,7 @@ function buildMenu(): void {
       label: '视图',
       submenu: [
         { role: 'reload', label: '刷新' },
-        { role: 'toggleDevTools', label: '开发者工具' },
+        { role: 'forceReload', label: '强制刷新' },
         { type: 'separator' },
         { role: 'resetZoom', label: '重置缩放' },
         { role: 'zoomIn', label: '放大' },
@@ -81,14 +140,7 @@ function buildMenu(): void {
     {
       label: '帮助',
       submenu: [
-        {
-          label: '关于 SmanBase',
-          click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send('show-about');
-            }
-          },
-        },
+        { role: 'about', label: '关于 Sman' },
       ],
     },
   ];
@@ -99,13 +151,10 @@ function buildMenu(): void {
 
 function startServer(): void {
   if (isDev) {
-    // 开发模式：后端用 tsx watch 启动，前端用 Vite 启动
-    // 两者都由 dev.sh 管理，Electron 只负责等它们就绪
     console.log('[Electron] Dev mode — waiting for backend and frontend...');
     return;
   }
 
-  // 生产模式：Electron 自己启动后端
   const serverPath = path.join(__dirname, '..', 'server', 'index.js');
   serverProcess = spawn(process.execPath, [serverPath], {
     env: { ...process.env, PORT: String(BACKEND_PORT) },
@@ -150,7 +199,6 @@ function waitForBackend(): Promise<void> {
       });
     }, 500);
 
-    // timeout 30s
     setTimeout(() => {
       clearInterval(check);
       resolve();
@@ -183,6 +231,8 @@ function waitForFrontend(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  registerIpcHandlers();
+  buildMenu();
   startServer();
 
   await waitForBackend();

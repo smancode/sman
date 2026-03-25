@@ -40,6 +40,10 @@ export class WsClient {
   }
 
   connect(): void {
+    // 已连接或正在连接中，跳过
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     this._closed = false;
     if (this.ws) {
       this.ws.close();

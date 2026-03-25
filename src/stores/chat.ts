@@ -45,6 +45,7 @@ interface ChatState {
 
   // Actions
   createSession: (systemId: string) => Promise<string>;
+  deleteSession: (sessionId: string) => Promise<void>;
   loadSessions: (systemId?: string) => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
@@ -70,15 +71,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
   createSession: async (systemId: string) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
+    if (!client.connected) throw new Error('WebSocket not connected');
 
     return new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        unsub();
+        unsubErr();
+        reject(new Error('Create session timeout'));
+      }, 10000);
+
       const unsub = wrapHandler(client, 'session.created', (data) => {
+        clearTimeout(timeout);
         if (data.sessionId) {
           unsub();
           resolve(String(data.sessionId));
         }
       });
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        clearTimeout(timeout);
         unsub();
         unsubErr();
         reject(new Error(String(data.error)));
@@ -87,7 +97,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  loadSessions: async (systemId?: string) => {
+  deleteSession: async (sessionId: string) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'session.deleted', (data) => {
+        if (String(data.sessionId) === sessionId) {
+          unsub();
+          unsubErr();
+          // Remove from local state and switch session if needed
+          const state = get();
+          const remaining = state.sessions.filter(s => s.key !== sessionId);
+          const newId = state.currentSessionId === sessionId
+            ? (remaining.length > 0 ? remaining[0].key : '')
+            : state.currentSessionId;
+          set({ sessions: remaining, currentSessionId: newId });
+          if (newId && newId !== state.currentSessionId) {
+            get().switchSession(newId);
+          }
+          resolve();
+        }
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'session.delete', sessionId });
+    });
+  },
+
+  loadSessions: async (_systemId?: string) => {
     const client = getWsClient();
     if (!client) return;
 
@@ -105,16 +146,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
 
         const state = get();
-        let nextId = state.currentSessionId || (sessions.length > 0 ? sessions[0].key : '');
-        if (!sessions.find(s => s.key === nextId) && sessions.length > 0) {
-          nextId = sessions[0].key;
-        }
+        // Keep current session if it still exists, otherwise pick first
+        const nextId = sessions.find(s => s.key === state.currentSessionId)
+          ? state.currentSessionId
+          : sessions.length > 0 ? sessions[0].key : '';
 
         set({ sessions, currentSessionId: nextId });
 
-        if (nextId) get().loadHistory();
+        if (nextId && state.currentSessionId !== nextId) {
+          get().loadHistory();
+        }
       });
-      client.send({ type: 'session.list', systemId: systemId || undefined });
+      // Load ALL sessions (no filter) so the tree can group by system
+      client.send({ type: 'session.list' });
     } catch (err) {
       console.warn('Failed to load sessions:', err);
     }

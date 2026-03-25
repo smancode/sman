@@ -1,8 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Settings as SettingsIcon,
-  PanelLeftClose,
-  PanelLeft,
+  FolderOpen,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -15,6 +14,7 @@ import { useWsConnection } from '@/stores/ws-connection';
 import { useTheme } from '@/hooks/useTheme';
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = [false, (_c: boolean) => {}];
   const { theme, toggleTheme } = useTheme();
   const connectionStatus = useWsConnection((s) => s.status);
@@ -24,16 +24,26 @@ export function Sidebar() {
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const systems = useBusinessSystemsStore((s) => s.systems);
 
-  // Find current session's system
-  const currentSession = sessions.find((s) => s.key === currentSessionId);
-  const currentSystem = currentSession?.systemId
-    ? systems.find((sys) => sys.systemId === currentSession.systemId)
-    : undefined;
+  const currentSession = useBusinessSystemsStore((s) => s.getCurrentSession());
+  const currentSystem = useBusinessSystemsStore((s) => s.getCurrentSystem());
 
   const handleNewSession = async () => {
-    const systemId = systems.length > 0 ? systems[0].systemId : undefined;
-    if (!systemId) return;
-    await useChatStore.getState().createSession(systemId);
+    // 没有业务系统，跳转设置页让用户创建
+    if (systems.length === 0) {
+      navigate('/settings');
+      return;
+    }
+    const systemId = systems[0].systemId;
+    try {
+      const sessionId = await useChatStore.getState().createSession(systemId);
+      await useChatStore.getState().loadSessions();
+      useChatStore.getState().switchSession(sessionId);
+      navigate('/chat');
+    } catch (err) {
+      console.error('[Sidebar] Failed to create session:', err);
+      // TODO: show toast notification
+      alert(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   return (
@@ -43,28 +53,14 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64',
       )}
     >
-      {/* Header */}
+      {/* Header - Draggable Area for Electron */}
       <div
         className={cn(
-          'flex items-center h-12 pt-6',
-          collapsed ? 'justify-center px-2' : 'justify-between px-3',
+          'flex items-center h-12 app-drag-region pt-6',
+          collapsed ? 'justify-center px-2' : 'justify-end px-3',
         )}
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      >
-        <Button
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? (
-            <PanelLeft className="h-[18px] w-[18px]" />
-          ) : (
-            <PanelLeftClose className="h-[18px] w-[18px]" />
-          )}
-        </Button>
-      </div>
+      />
 
       {/* Session Tree */}
       {!collapsed && (
@@ -77,6 +73,7 @@ export function Sidebar() {
       {!collapsed && currentSession && currentSystem && (
         <div className="border-t border-[hsl(var(--sidebar-border))] px-3 py-2.5 bg-[hsl(var(--sidebar-bg))]">
           <div className="flex items-center gap-2 text-xs">
+            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="font-medium truncate text-foreground/80">{currentSystem.name}</span>
             <span className="text-muted-foreground/40">&rsaquo;</span>
             <span className="truncate flex-1 text-muted-foreground">

@@ -1,7 +1,7 @@
 /**
  * TaskMonitor - Scans workspace docs/tasks/*.json periodically, executes plans via Claude Agent SDK
  *
- * Simplified architecture for SmanBase:
+ * Simplified architecture for Sman:
  * - No GatewayRpc, uses callback-based notifications
  * - Uses Claude Agent SDK query() instead of spawning CLI
  * - File-based task management with process locking

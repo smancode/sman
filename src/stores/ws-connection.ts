@@ -15,6 +15,7 @@ interface WsConnectionState {
 }
 
 let singletonClient: WsClient | null = null;
+let listenersRegistered = false;
 
 function getClient(): WsClient {
   if (!singletonClient) {
@@ -26,13 +27,18 @@ function getClient(): WsClient {
 export const useWsConnection = create<WsConnectionState>((set) => {
   const client = getClient();
 
+  // 只注册一次全局 listener
+  if (!listenersRegistered) {
+    client.on('connected', () => set({ status: 'connected' }));
+    client.on('disconnected', () => set({ status: 'disconnected' }));
+    listenersRegistered = true;
+  }
+
   return {
     status: 'disconnected',
     client,
 
     connect() {
-      client.on('connected', () => set({ status: 'connected' }));
-      client.on('disconnected', () => set({ status: 'disconnected' }));
       set({ status: 'connecting' });
       client.connect();
     },

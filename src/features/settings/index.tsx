@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
+import { ProfileSettings } from './ProfileSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 export function Settings() {
@@ -14,10 +15,11 @@ export function Settings() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
-        <p className="text-muted-foreground mt-1">配置 SmanBase</p>
+        <p className="text-muted-foreground mt-1">配置 Sman</p>
       </div>
 
       <div className="max-w-2xl space-y-6">
+        <ProfileSettings />
         <LLMSettings />
         <WebSearchSettings />
       </div>

@@ -140,7 +140,7 @@ function WelcomeScreen() {
       <div className="relative z-10 text-center px-8">
         <h1 className="text-4xl md:text-5xl tracking-wide">
           <span className="font-light italic text-foreground/80">欢迎使用</span>{' '}
-          <span className="font-black not-italic text-foreground">SmanBase</span>
+          <span className="font-black not-italic text-foreground">Sman</span>
         </h1>
         <div className="flex items-center justify-center gap-2 mt-6">
           <span className="hint-chip">选择业务系统</span>

@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/dist/main/main.js",
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build && tsc -p server/tsconfig.json",
-    "build:electron": "tsc -p electron/tsconfig.json",
-    "electron:dev": "concurrently \"pnpm dev\" \"pnpm dev:server\" \"wait-on http://localhost:5880/api/health && electron .\"",
+    "build:electron": "electron-vite build",
+    "electron:dev": "electron-vite dev",
     "electron:build": "pnpm build && pnpm build:electron && electron-builder",
     "init:skills": "tsx scripts/init-skills.ts",
     "init:system": "tsx scripts/init-system.ts",
@@ -55,8 +55,9 @@
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.27",
     "concurrently": "^9.2.1",
-    "electron": "^33.0.0",
+    "electron": "^33.4.11",
     "electron-builder": "^25.0.0",
+    "electron-vite": "^5.0.0",
     "postcss": "^8.5.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -71,15 +72,16 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",
-      "esbuild"
+      "esbuild",
+      "electron"
     ]
   },
   "build": {
     "appId": "com.smanbase.app",
-    "productName": "SmanBase",
+    "productName": "Sman",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/dist/**/*"
     ],
     "mac": {
       "target": [

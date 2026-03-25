@@ -3,16 +3,8 @@ import { Bot, Eye, EyeOff, Save, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSettingsStore } from '@/stores/settings';
-import { MODEL_OPTIONS } from '@/types/settings';
 
 export function LLMSettings() {
   const { settings, loading, error, updateLlm, clearError } = useSettingsStore();
@@ -20,9 +12,9 @@ export function LLMSettings() {
   const [saving, setSaving] = useState(false);
 
   const llm = settings?.llm;
-  const localApiKey = llm?.apiKey ?? '';
-  const localModel = llm?.model ?? 'claude-sonnet-4-6';
   const localBaseUrl = llm?.baseUrl ?? '';
+  const localApiKey = llm?.apiKey ?? '';
+  const localModel = llm?.model ?? 'GLM-5';
 
   const handleSave = async () => {
     setSaving(true);
@@ -53,22 +45,17 @@ export function LLMSettings() {
           </div>
         )}
 
+        {/* Base URL */}
         <div className="space-y-2">
-          <Label>模型</Label>
-          <Select value={localModel} onValueChange={(v) => updateLlm({ model: v }).catch(() => {})}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODEL_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>URL</Label>
+          <Input
+            value={localBaseUrl}
+            onChange={(e) => updateLlm({ baseUrl: e.target.value || undefined }).catch(() => {})}
+            placeholder="https://api.example.com"
+          />
         </div>
 
+        {/* API Key */}
         <div className="space-y-2">
           <Label>API Key</Label>
           <div className="relative">
@@ -76,7 +63,7 @@ export function LLMSettings() {
               type={showApiKey ? 'text' : 'password'}
               value={localApiKey}
               onChange={(e) => updateLlm({ apiKey: e.target.value }).catch(() => {})}
-              placeholder="sk-ant-..."
+              placeholder="sk-..."
               className="pr-10"
             />
             <button
@@ -89,12 +76,13 @@ export function LLMSettings() {
           </div>
         </div>
 
+        {/* Model */}
         <div className="space-y-2">
-          <Label>Base URL (可选)</Label>
+          <Label>Model</Label>
           <Input
-            value={localBaseUrl}
-            onChange={(e) => updateLlm({ baseUrl: e.target.value || undefined }).catch(() => {})}
-            placeholder="留空使用 Anthropic 官方端点"
+            value={localModel}
+            onChange={(e) => updateLlm({ model: e.target.value }).catch(() => {})}
+            placeholder="GLM-5"
           />
         </div>
 

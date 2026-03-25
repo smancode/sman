@@ -3,7 +3,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { createLogger, type Logger } from './utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ProfileManager } from './profile-manager.js';
@@ -85,6 +89,49 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Directory browser API
+  if (req.url?.startsWith('/api/directory/read')) {
+    const urlObj = new URL(req.url, `http://localhost:${PORT}`);
+    const dirPath = urlObj.searchParams.get('path');
+
+    if (!dirPath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing path parameter' }));
+      return;
+    }
+
+    try {
+      const normalizedPath = path.normalize(dirPath);
+      const entries = fs.readdirSync(normalizedPath, { withFileTypes: true });
+      const result = entries
+        .filter(entry => !entry.name.startsWith('.'))
+        .map(entry => ({
+          name: entry.name,
+          path: path.join(normalizedPath, entry.name),
+          isDirectory: entry.isDirectory(),
+        }))
+        .sort((a, b) => {
+          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ entries: result }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read directory', message }));
+    }
+    return;
+  }
+
+  // Home directory API - return user's home path
+  if (req.url === '/api/directory/home') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ home: os.homedir() }));
+    return;
+  }
+
   // WebSocket upgrade path — let WSS handle it
   if (req.url?.startsWith('/ws')) {
     res.writeHead(426);
@@ -159,8 +206,15 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'session.list': {
-          const sessions = sessionManager.listSessions(msg.systemId as string);
+          const sessions = sessionManager.listSessions(msg.systemId as string | undefined);
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
+          break;
+        }
+
+        case 'session.delete': {
+          if (!msg.sessionId) throw new Error('Missing sessionId');
+          store.deleteSession(msg.sessionId);
+          ws.send(JSON.stringify({ type: 'session.deleted', sessionId: msg.sessionId }));
           break;
         }
 
@@ -333,7 +387,7 @@ process.on('SIGINT', () => {
 });
 
 server.listen(PORT, () => {
-  log.info(`SmanBase server running on port ${PORT}`);
+  log.info(`Sman server running on port ${PORT}`);
   log.info(`Home directory: ${homeDir}`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
   log.info(`Health check: http://localhost:${PORT}/api/health`);
