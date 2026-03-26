@@ -216,7 +216,15 @@ export class ClaudeSessionManager {
       options.cwd = session.workspace;
 
       // Resume existing SDK session if available
-      const sdkSessionId = this.sdkSessionIds.get(sessionId);
+      let sdkSessionId = this.sdkSessionIds.get(sessionId);
+      // If not in memory (e.g., after app restart), try to load from database
+      if (!sdkSessionId) {
+        sdkSessionId = this.store.getSdkSessionId(sessionId);
+        if (sdkSessionId) {
+          this.sdkSessionIds.set(sessionId, sdkSessionId);
+          this.log.info(`[DEBUG] Loaded sdkSessionId from database: ${sdkSessionId}`);
+        }
+      }
       this.log.info(`[DEBUG] sendMessage called: sessionId=${sessionId}, sdkSessionId=${sdkSessionId || 'none'}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
       if (sdkSessionId) {
         options.resume = sdkSessionId;
@@ -250,15 +258,13 @@ export class ClaudeSessionManager {
 
         switch (sdkMsg.type) {
           case 'assistant': {
+            // Assistant message contains the complete content, but we use stream_event for incremental updates
+            // to avoid duplicate output. Only log here, don't send to client.
             const text = this.extractTextContent(sdkMsg);
-            this.log.info(`Assistant message: ${text.substring(0, 100)}...`);
+            this.log.info(`Assistant message (complete, length=${text.length})`);
+            // Update fullContent for storage, but don't send - stream_event handles the UI updates
             if (text) {
               fullContent = text;
-              wsSend(JSON.stringify({
-                type: 'chat.delta',
-                sessionId,
-                content: text,
-              }));
             }
             break;
           }
@@ -289,6 +295,7 @@ export class ClaudeSessionManager {
             // Save SDK session ID for resuming conversation
             if (result.session_id) {
               this.sdkSessionIds.set(sessionId, result.session_id);
+              this.store.updateSdkSessionId(sessionId, result.session_id);
               this.log.info(`[DEBUG] Saved session_id: ${result.session_id} for ${sessionId}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
             }
 
@@ -379,8 +386,12 @@ export class ClaudeSessionManager {
     });
   }
 
-  getHistory(sessionId: string): Message[] {
-    return this.store.getMessages(sessionId);
+  getHistory(sessionId: string): Array<Message & { timestamp: number }> {
+    const messages = this.store.getMessages(sessionId);
+    return messages.map(msg => ({
+      ...msg,
+      timestamp: new Date(msg.createdAt).getTime(),
+    }));
   }
 
   close(): void {

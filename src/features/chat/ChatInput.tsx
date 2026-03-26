@@ -119,13 +119,13 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   };
 
   const handleSkillSelect = (skill: Skill) => {
-    // Insert /skillId into input (not the full content)
+    // Insert /skillId into input (not the full content), add trailing space
     const cursorPosition = textareaRef.current?.selectionStart || input.length;
     const beforeSlash = input.slice(0, cursorPosition - 1); // Remove the "/"
     const afterCursor = input.slice(cursorPosition);
 
-    // Add /skillId
-    const newInput = beforeSlash + '/' + skill.id + afterCursor;
+    // Add /skillId with trailing space
+    const newInput = beforeSlash + '/' + skill.id + ' ' + afterCursor;
 
     setInput(newInput);
     setShowSkillPicker(false);
@@ -135,7 +135,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const newCursorPos = beforeSlash.length + 1 + skill.id.length;
+        const newCursorPos = beforeSlash.length + 1 + skill.id.length + 1; // +1 for the space
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
     }, 0);

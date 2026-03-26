@@ -46,6 +46,7 @@ export class SessionStore {
         system_id TEXT NOT NULL,
         workspace TEXT NOT NULL,
         label TEXT,
+        sdk_session_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_active_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -69,6 +70,14 @@ export class SessionStore {
     } catch {
       this.db.exec('ALTER TABLE sessions ADD COLUMN label TEXT');
       this.log.info('Migrated: added label column to sessions table');
+    }
+
+    // Migration: add sdk_session_id column if not exists
+    try {
+      this.db.prepare('SELECT sdk_session_id FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN sdk_session_id TEXT');
+      this.log.info('Migrated: added sdk_session_id column to sessions table');
     }
 
     this.db.pragma('journal_mode = WAL');
@@ -123,9 +132,10 @@ export class SessionStore {
   }
 
   getMessages(sessionId: string, limit = 1000): Message[] {
-    return this.db.prepare(
+    const rows = this.db.prepare(
       'SELECT id, session_id as sessionId, role, content, created_at as createdAt FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?'
     ).all(sessionId, limit) as Message[];
+    return rows;
   }
 
   deleteSession(id: string): void {
@@ -134,6 +144,15 @@ export class SessionStore {
 
   updateLabel(id: string, label: string): void {
     this.db.prepare('UPDATE sessions SET label = ? WHERE id = ?').run(label, id);
+  }
+
+  updateSdkSessionId(id: string, sdkSessionId: string): void {
+    this.db.prepare('UPDATE sessions SET sdk_session_id = ? WHERE id = ?').run(sdkSessionId, id);
+  }
+
+  getSdkSessionId(id: string): string | undefined {
+    const row = this.db.prepare('SELECT sdk_session_id FROM sessions WHERE id = ?').get(id) as { sdk_session_id: string } | undefined;
+    return row?.sdk_session_id;
   }
 
   close(): void {
