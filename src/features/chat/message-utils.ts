@@ -9,6 +9,7 @@ import type { RawMessage, ContentBlock } from '@/types/chat';
  * Clean Gateway metadata from user message text for display.
  * Strips: [media attached: ... | ...], [message_id: ...],
  * the timestamp prefix [Day Date Time Timezone], and [工作目录: ...].
+ * Also converts [触发skill:xxx] back to /xxx for UI display.
  */
 function cleanUserText(text: string): string {
   return text
@@ -24,6 +25,10 @@ function cleanUserText(text: string): string {
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
     // Remove [工作目录: /path/to/workspace] prefix and following newlines
     .replace(/^\[工作目录:[^\]]*\]\n\n/, '')
+    // Convert [触发skill:xxx] args back to /xxx args for UI display
+    .replace(/^\[触发skill:([^\]]+)\](.*)$/i, (match, skillId, args) => {
+      return `/${skillId}${args || ''}`;
+    })
     .trim();
 }
 
@@ -205,15 +210,26 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
 
 /**
  * Format a Unix timestamp (seconds) to relative time string.
+ * Handles both numeric timestamps and ISO date strings.
  */
 export function formatTimestamp(timestamp: unknown): string {
   if (!timestamp) return '';
-  const ts = typeof timestamp === 'number' ? timestamp : Number(timestamp);
-  if (!ts || isNaN(ts)) return '';
 
-  // OpenClaw timestamps can be in seconds or milliseconds
-  const ms = ts > 1e12 ? ts : ts * 1000;
-  const date = new Date(ms);
+  let date: Date;
+
+  if (typeof timestamp === 'number') {
+    // OpenClaw timestamps can be in seconds or milliseconds
+    const ms = timestamp > 1e12 ? timestamp : timestamp * 1000;
+    date = new Date(ms);
+  } else if (typeof timestamp === 'string') {
+    // Handle ISO date strings (e.g., "2026-03-26T10:30:00.000Z")
+    date = new Date(timestamp);
+  } else {
+    return '';
+  }
+
+  if (isNaN(date.getTime())) return '';
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
 

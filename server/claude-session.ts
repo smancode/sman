@@ -2,11 +2,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, type Query, type Options, type SDKMessage, type SDKResultMessage, type SDKAssistantMessage, type SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SessionStore, Message } from './session-store.js';
-import type { SkillsRegistry } from './skills-registry.js';
 import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
 import path from 'path';
 import fs from 'fs';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 export interface ActiveSession {
   id: string;
@@ -21,7 +23,6 @@ type WsSend = (data: string) => void;
 interface SessionConfig {
   model: string;
   systemPromptAppend: string;
-  skillDirs: string[];
   permissionMode: 'bypassPermissions' | 'default';
 }
 
@@ -29,13 +30,11 @@ export class ClaudeSessionManager {
   private sessions = new Map<string, ActiveSession>();
   private activeQueries = new Map<string, Query>();
   private abortControllers = new Map<string, AbortController>();
+  private sdkSessionIds = new Map<string, string>(); // sessionId -> SDK session_id
   private log: Logger;
   private config: SmanConfig | null = null;
 
-  constructor(
-    private store: SessionStore,
-    private skillsRegistry: SkillsRegistry,
-  ) {
+  constructor(private store: SessionStore) {
     this.log = createLogger('ClaudeSessionManager');
   }
 
@@ -43,24 +42,53 @@ export class ClaudeSessionManager {
     this.config = config;
   }
 
-  private getSessionConfig(workspace: string): SessionConfig {
-    // Get all available skill directories (global + project-specific)
-    const skillDirs = this.skillsRegistry.getAllSkillDirs(workspace);
+  /**
+   * Get the path to bundled claude-code executable
+   */
+  private getClaudeCodePath(): string {
+    // Try to find claude-code cli.js in node_modules
+    const possiblePaths: string[] = [];
 
+    // Production: bundled in Electron app (resourcesPath is set by Electron)
+    const resourcesPath = (process as any).resourcesPath;
+    if (typeof resourcesPath === 'string') {
+      possiblePaths.push(
+        path.join(resourcesPath, 'app.asar', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+      );
+    }
+
+    // Development: in project node_modules
+    possiblePaths.push(path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
+
+    // Try require.resolve as well
+    try {
+      const packagePath = require.resolve('@anthropic-ai/claude-code/package.json');
+      possiblePaths.push(path.join(path.dirname(packagePath), 'cli.js'));
+    } catch {
+      // Ignore
+    }
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        this.log.info(`Found claude-code at: ${p}`);
+        return p;
+      }
+    }
+
+    this.log.warn('Could not find bundled claude-code, will use system claude command');
+    return '';
+  }
+
+  private getSessionConfig(workspace: string): SessionConfig {
     let systemPromptAppend = '';
     const projectName = path.basename(workspace);
     systemPromptAppend += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
 
-    if (skillDirs.length > 0) {
-      systemPromptAppend += `\n## Available Skills\nSkills from these directories are available: ${skillDirs.join(', ')}\n`;
-    }
-
-    const model = this.config?.llm?.model || 'claude-sonnet-4-6';
+    const model = this.config?.llm?.model || '';
 
     return {
       model,
       systemPromptAppend,
-      skillDirs,
       permissionMode: 'bypassPermissions',
     };
   }
@@ -75,6 +103,9 @@ export class ClaudeSessionManager {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
     }
 
+    // Find bundled claude-code executable
+    const claudeCodePath = this.getClaudeCodePath();
+
     const opts: Options = {
       cwd: undefined as unknown as string, // Will be set per-session
       abortController,
@@ -88,11 +119,10 @@ export class ClaudeSessionManager {
         preset: 'claude_code',
         append: sessionConfig.systemPromptAppend || undefined,
       },
+      pathToClaudeCodeExecutable: claudeCodePath,
+      // Load project settings to enable .claude/skills/ directory
+      settingSources: ['project'],
     };
-
-    if (sessionConfig.skillDirs.length > 0) {
-      opts.additionalDirectories = sessionConfig.skillDirs;
-    }
 
     if (this.config) {
       const mcpServers = buildMcpServers(this.config);
@@ -100,6 +130,8 @@ export class ClaudeSessionManager {
         opts.mcpServers = mcpServers;
       }
     }
+
+    this.log.info(`[DEBUG] buildOptions: model=${sessionConfig.model}`);
 
     return opts;
   }
@@ -153,7 +185,27 @@ export class ClaudeSessionManager {
       throw new Error(`Session ${sessionId} already has an active query`);
     }
 
-    this.store.addMessage(sessionId, { role: 'user', content });
+    // 校验 LLM 配置
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
+    }
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    // Convert /skillId args -> [触发skill:skillId] args
+    let actualContent = content;
+    if (content.startsWith('/')) {
+      const parts = content.substring(1).split(' ');
+      const skillId = parts[0];
+      const args = parts.slice(1).join(' ');
+      actualContent = args.trim()
+        ? `[触发skill:${skillId}] ${args}`
+        : `[触发skill:${skillId}]`;
+      this.log.info(`Converted skill command: ${content} -> ${actualContent}`);
+    }
+
+    this.store.addMessage(sessionId, { role: 'user', content: actualContent });
 
     const sessionConfig = this.getSessionConfig(session.workspace);
     const abortController = new AbortController();
@@ -163,20 +215,34 @@ export class ClaudeSessionManager {
       const options = this.buildOptions(sessionConfig, abortController);
       options.cwd = session.workspace;
 
+      // Resume existing SDK session if available
+      const sdkSessionId = this.sdkSessionIds.get(sessionId);
+      this.log.info(`[DEBUG] sendMessage called: sessionId=${sessionId}, sdkSessionId=${sdkSessionId || 'none'}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
+      if (sdkSessionId) {
+        options.resume = sdkSessionId;
+      }
+
+      this.log.info(`Starting query for session ${sessionId}, resume=${sdkSessionId || 'none'}, content: ${content.substring(0, 50)}...`);
+
       const q = query({
-        prompt: content,
+        prompt: actualContent,
         options,
       });
 
       this.activeQueries.set(sessionId, q);
 
       let fullContent = '';
+      let messageCount = 0;
+      let hasResult = false;
       wsSend(JSON.stringify({
         type: 'chat.start',
         sessionId,
       }));
 
       for await (const sdkMsg of q) {
+        messageCount++;
+        this.log.info(`Received SDK message ${messageCount}: type=${sdkMsg.type}`);
+
         if (abortController.signal.aborted) {
           this.log.info(`Query aborted for session ${sessionId}`);
           break;
@@ -185,6 +251,7 @@ export class ClaudeSessionManager {
         switch (sdkMsg.type) {
           case 'assistant': {
             const text = this.extractTextContent(sdkMsg);
+            this.log.info(`Assistant message: ${text.substring(0, 100)}...`);
             if (text) {
               fullContent = text;
               wsSend(JSON.stringify({
@@ -210,9 +277,20 @@ export class ClaudeSessionManager {
           }
 
           case 'result': {
+            hasResult = true;
             const result = sdkMsg as SDKResultMessage;
             const cost = result.total_cost_usd || 0;
             const isError = result.is_error;
+
+            this.log.info(`Result message: isError=${isError}, session_id=${result.session_id}`);
+
+            this.log.info(`[DEBUG] Result received: sessionId=${sessionId}, result.session_id=${result.session_id}, isError=${isError}`);
+
+            // Save SDK session ID for resuming conversation
+            if (result.session_id) {
+              this.sdkSessionIds.set(sessionId, result.session_id);
+              this.log.info(`[DEBUG] Saved session_id: ${result.session_id} for ${sessionId}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
+            }
 
             if (fullContent) {
               this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
@@ -234,9 +312,22 @@ export class ClaudeSessionManager {
           }
 
           default:
+            this.log.info(`Ignoring message type: ${sdkMsg.type}, details: ${JSON.stringify(sdkMsg).substring(0, 200)}`);
             // Ignore system messages, user replays, etc.
             break;
         }
+      }
+
+      this.log.info(`Query loop ended for session ${sessionId}, received ${messageCount} messages, fullContent length: ${fullContent.length}`);
+
+      // If we got no result message, send an error
+      if (messageCount === 0) {
+        this.log.error(`No messages received from SDK for session ${sessionId}`);
+        wsSend(JSON.stringify({
+          type: 'chat.error',
+          sessionId,
+          error: 'No response from Claude SDK',
+        }));
       }
     } catch (err: any) {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
@@ -299,5 +390,6 @@ export class ClaudeSessionManager {
     this.abortControllers.clear();
     this.activeQueries.clear();
     this.sessions.clear();
+    this.sdkSessionIds.clear();
   }
 }

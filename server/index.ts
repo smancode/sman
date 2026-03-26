@@ -33,7 +33,7 @@ function ensureHomeDir(homeDir: string): void {
   if (!fs.existsSync(configPath)) {
     const defaultConfig = {
       port: PORT,
-      llm: { apiKey: '', model: 'claude-sonnet-4-6' },
+      llm: { apiKey: '', model: '' },
       webSearch: {
         provider: 'builtin',
         braveApiKey: '',
@@ -60,7 +60,7 @@ ensureHomeDir(homeDir);
 const dbPath = path.join(homeDir, 'sman.db');
 const store = new SessionStore(dbPath);
 const skillsRegistry = new SkillsRegistry(homeDir);
-const sessionManager = new ClaudeSessionManager(store, skillsRegistry);
+const sessionManager = new ClaudeSessionManager(store);
 const settingsManager = new SettingsManager(homeDir);
 
 // Feed config to session manager
@@ -234,7 +234,6 @@ wss.on('connection', (ws: WebSocket) => {
         case 'session.list': {
           const sessions = sessionManager.listSessions().map(s => ({
             id: s.id,
-            systemId: s.systemId,
             workspace: s.workspace,
             label: s.label,
             createdAt: s.createdAt,
@@ -245,7 +244,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'session.updateLabel': {
-          if (!msg.sessionId || !msg.label) throw new Error('Missing sessionId or label');
+          if (!msg.sessionId || typeof msg.label !== 'string') throw new Error('Missing sessionId or label');
           store.updateLabel(msg.sessionId, msg.label);
           ws.send(JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
           break;
@@ -285,6 +284,15 @@ wss.on('connection', (ws: WebSocket) => {
         case 'skills.list': {
           const skills = skillsRegistry.listSkills();
           ws.send(JSON.stringify({ type: 'skills.list', skills }));
+          break;
+        }
+
+        case 'skills.listProject': {
+          if (!msg.sessionId) throw new Error('Missing sessionId');
+          const session = store.getSession(msg.sessionId);
+          if (!session) throw new Error('Session not found');
+          const skills = skillsRegistry.getProjectSkills(session.workspace);
+          ws.send(JSON.stringify({ type: 'skills.listProject', skills }));
           break;
         }
 

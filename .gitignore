@@ -13,3 +13,4 @@ logs/
 Thumbs.db
 tmp/
 build/.tmp-*
+release/

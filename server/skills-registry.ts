@@ -3,6 +3,13 @@ import path from 'path';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SkillEntry, Registry } from './types.js';
 
+export interface ProjectSkill {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+}
+
 export class SkillsRegistry {
   private homeDir: string;
   private registryPath: string;
@@ -79,5 +86,35 @@ export class SkillsRegistry {
     }
 
     return dirs;
+  }
+
+  /**
+   * Get project-specific skills from {workspace}/.claude/skills/
+   * Only returns directory names as skill IDs (no content reading)
+   */
+  getProjectSkills(workspace: string): ProjectSkill[] {
+    const projectSkillsDir = path.join(workspace, '.claude', 'skills');
+    if (!fs.existsSync(projectSkillsDir)) {
+      return [];
+    }
+
+    const skills: ProjectSkill[] = [];
+
+    // Read only top-level directories
+    const entries = fs.readdirSync(projectSkillsDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const skillId = entry.name;
+        skills.push({
+          id: skillId,
+          name: skillId,
+          description: '',
+          content: '',
+        });
+      }
+    }
+
+    return skills;
   }
 }

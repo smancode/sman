@@ -35,7 +35,7 @@ interface SettingsState {
 
 const DEFAULT_SETTINGS: SmanSettings = {
   port: 5880,
-  llm: { apiKey: '', model: 'claude-sonnet-4-6' },
+  llm: { apiKey: '', model: '' },
   webSearch: {
     provider: 'builtin',
     braveApiKey: '',
