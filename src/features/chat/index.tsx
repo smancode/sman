@@ -5,6 +5,7 @@ import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { cn } from '@/lib/utils';
+import type { RawMessage } from '@/types/chat';
 
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
@@ -15,6 +16,9 @@ export function Chat() {
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const streamingText = useChatStore((s) => s.streamingText);
+  const streamingThinking = useChatStore((s) => s.streamingThinking);
+  const streamingTools = useChatStore((s) => s.streamingTools);
+  const showThinking = useChatStore((s) => s.showThinking);
   const error = useChatStore((s) => s.error);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearError = useChatStore((s) => s.clearError);
@@ -40,10 +44,10 @@ export function Chat() {
 
   // Scroll while streaming
   useEffect(() => {
-    if (streamingText && scrollRef.current) {
+    if ((streamingText || streamingThinking) && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [streamingText]);
+  }, [streamingText, streamingThinking]);
 
   const isEmpty = messages.length === 0 && !sending;
 
@@ -63,27 +67,35 @@ export function Chat() {
                     id: msg.id,
                     role: msg.role,
                     content: msg.content,
+                    contentBlocks: msg.contentBlocks,
                     timestamp: new Date(msg.createdAt).getTime() / 1000,
-                  }}
-                  showThinking={false}
+                  } as RawMessage}
+                  showThinking={showThinking}
                 />
               ))}
 
-              {/* Streaming text */}
-              {sending && streamingText.trim() && (
+              {/* Streaming message */}
+              {sending && (streamingText.trim() || streamingThinking.trim() || streamingTools.length > 0) && (
                 <ChatMessage
                   message={{
                     role: 'assistant',
                     content: streamingText,
                     timestamp: Date.now() / 1000,
-                  }}
-                  showThinking={false}
+                  } as RawMessage}
+                  showThinking={showThinking}
                   isStreaming
+                  streamingThinking={streamingThinking}
+                  streamingTools={streamingTools.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    status: t.status,
+                    input: t.input as unknown,
+                  }))}
                 />
               )}
 
               {/* Typing indicator */}
-              {sending && !streamingText.trim() && <TypingIndicator />}
+              {sending && !streamingText.trim() && !streamingThinking.trim() && streamingTools.length === 0 && <TypingIndicator />}
             </>
           )}
         </div>

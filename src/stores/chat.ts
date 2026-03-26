@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { ChatSession } from '@/types/chat';
+import type { ChatSession, ContentBlock } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -22,8 +22,16 @@ interface Message {
   sessionId: string;
   role: 'user' | 'assistant';
   content: string;
+  contentBlocks?: ContentBlock[];
   createdAt: string;
   timestamp?: number;
+}
+
+interface StreamingTool {
+  id: string;
+  name: string;
+  input: string;
+  status: 'running' | 'completed';
 }
 
 interface ChatState {
@@ -35,12 +43,14 @@ interface ChatState {
   // Streaming
   sending: boolean;
   streamingText: string;
+  streamingThinking: string;
+  streamingTools: StreamingTool[];
 
   // Sessions
   sessions: ChatSession[];
   currentSessionId: string;
 
-  // Thinking
+  // Thinking toggle
   showThinking: boolean;
 
   // Actions
@@ -63,9 +73,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   sending: false,
   streamingText: '',
+  streamingThinking: '',
+  streamingTools: [],
   sessions: [],
   currentSessionId: '',
-  showThinking: true,
+  showThinking: false,
 
   // Create a new session with workspace (directory path)
   createSessionWithWorkspace: async (workspace: string) => {
@@ -171,6 +183,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentSessionId: sessionId,
       messages: [],
       streamingText: '',
+      streamingThinking: '',
+      streamingTools: [],
       error: null,
       sending: false,
     });
@@ -194,6 +208,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               sessionId: String(m.sessionId || ''),
               role: (String(m.role || 'user') as 'user' | 'assistant'),
               content: String(m.content || ''),
+              contentBlocks: m.contentBlocks as ContentBlock[] | undefined,
               createdAt: String(m.createdAt || ''),
               timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
             }))
@@ -258,6 +273,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [...messages, userMsg],
       sending: true,
       streamingText: '',
+      streamingThinking: '',
+      streamingTools: [],
       error: null,
     });
 
@@ -272,8 +289,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Set up streaming handlers
       const unsubDelta = wrapHandler(client, 'chat.delta', (data) => {
         if (data.sessionId !== currentSessionId) return;
+        const deltaType = String(data.deltaType || 'text');
+        if (deltaType === 'thinking') {
+          set((s) => ({
+            streamingThinking: s.streamingThinking + String(data.content || ''),
+          }));
+        } else {
+          set((s) => ({
+            streamingText: s.streamingText + String(data.content || ''),
+          }));
+        }
+      });
+
+      const unsubToolStart = wrapHandler(client, 'chat.tool_start', (data) => {
+        if (data.sessionId !== currentSessionId) return;
+        const toolId = String(data.toolId || '');
+        const toolName = String(data.toolName || '');
         set((s) => ({
-          streamingText: s.streamingText + String(data.content || ''),
+          streamingTools: [...s.streamingTools, {
+            id: toolId,
+            name: toolName,
+            input: '',
+            status: 'running',
+          }],
+        }));
+      });
+
+      const unsubToolDelta = wrapHandler(client, 'chat.tool_delta', (data) => {
+        if (data.sessionId !== currentSessionId) return;
+        const toolId = String(data.toolId || '');
+        const content = String(data.content || '');
+        set((s) => ({
+          streamingTools: s.streamingTools.map(t =>
+            t.id === toolId ? { ...t, input: t.input + content } : t
+          ),
         }));
       });
 
@@ -282,21 +331,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cleanup();
 
         const st = get();
+        // Build content blocks
+        const contentBlocks: ContentBlock[] = [];
         if (st.streamingText.trim()) {
+          contentBlocks.push({ type: 'text', text: st.streamingText.trim() });
+        }
+        if (st.streamingThinking.trim()) {
+          contentBlocks.push({ type: 'thinking', thinking: st.streamingThinking.trim() });
+        }
+        for (const tool of st.streamingTools) {
+          try {
+            const input = tool.input ? JSON.parse(tool.input) : {};
+            contentBlocks.push({
+              type: 'tool_use',
+              id: tool.id,
+              name: tool.name,
+              input,
+            });
+          } catch {
+            contentBlocks.push({
+              type: 'tool_use',
+              id: tool.id,
+              name: tool.name,
+              input: tool.input,
+            });
+          }
+        }
+
+        if (st.streamingText.trim() || contentBlocks.length > 0) {
           const assistantMsg: Message = {
             id: crypto.randomUUID(),
             sessionId: currentSessionId,
             role: 'assistant',
             content: st.streamingText.trim(),
+            contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
             createdAt: new Date().toISOString(),
           };
           set({
             messages: [...st.messages, assistantMsg],
             streamingText: '',
+            streamingThinking: '',
+            streamingTools: [],
             sending: false,
           });
         } else {
-          set({ streamingText: '', sending: false });
+          set({ streamingText: '', streamingThinking: '', streamingTools: [], sending: false });
         }
       });
 
@@ -305,12 +384,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({
           error: String(_data.error || 'Unknown error'),
           streamingText: '',
+          streamingThinking: '',
+          streamingTools: [],
           sending: false,
         });
       });
 
       const cleanup = () => {
         unsubDelta();
+        unsubToolStart();
+        unsubToolDelta();
         unsubDone();
         unsubErr();
       };
@@ -325,7 +408,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortRun: () => {
     const client = getWsClient();
     const { currentSessionId } = get();
-    set({ sending: false, streamingText: '', error: null });
+    set({ sending: false, streamingText: '', streamingThinking: '', streamingTools: [], error: null });
     if (client && currentSessionId) {
       client.send({ type: 'chat.abort', sessionId: currentSessionId });
     }
@@ -334,7 +417,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearError: () => set({ error: null }),
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
   refresh: () => {
-    set({ messages: [], streamingText: '', error: null, sending: false });
+    set({ messages: [], streamingText: '', streamingThinking: '', streamingTools: [], error: null, sending: false });
     get().loadHistory();
   },
 }));

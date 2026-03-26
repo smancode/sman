@@ -6,7 +6,7 @@
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, RefreshCw, Brain } from 'lucide-react';
+import { SendHorizontal, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -49,8 +49,6 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   // Chat toolbar states
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
-  const showThinking = useChatStore((s) => s.showThinking);
-  const toggleThinking = useChatStore((s) => s.toggleThinking);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
 
   // Auto-resize textarea
@@ -203,26 +201,6 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             </TooltipTrigger>
             <TooltipContent>
               <p>刷新</p>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Thinking Toggle Button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  'h-9 w-9 rounded-lg shrink-0',
-                  showThinking && 'bg-muted text-foreground',
-                )}
-                onClick={toggleThinking}
-              >
-                <Brain className="h-[18px] w-[18px]" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{showThinking ? '隐藏思考与工具' : '显示思考与工具'}</p>
             </TooltipContent>
           </Tooltip>
 

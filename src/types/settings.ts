@@ -34,3 +34,33 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费' },
 ];
 
+// === Cron Task Types ===
+
+export interface CronTask {
+  id: string;
+  workspace: string;
+  skillName: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  latestRun?: CronRun;
+  nextRunAt?: string | null;
+}
+
+export interface CronRun {
+  id: number;
+  taskId: string;
+  sessionId: string;
+  status: 'running' | 'success' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  lastActivityAt: string | null;
+  errorMessage: string | null;
+}
+
+export interface CronSkill {
+  name: string;
+  hasCrontab: boolean;
+}
+

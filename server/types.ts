@@ -39,3 +39,26 @@ export interface SmanConfig {
     maxUsesPerSession: number;
   };
 }
+
+// === Cron Task Types ===
+
+export interface CronTask {
+  id: string;
+  workspace: string;
+  skillName: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CronRun {
+  id: number;
+  taskId: string;
+  sessionId: string;
+  status: 'running' | 'success' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  lastActivityAt: string | null;
+  errorMessage: string | null;
+}

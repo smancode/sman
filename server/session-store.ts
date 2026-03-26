@@ -6,6 +6,7 @@ export interface Session {
   systemId: string;
   workspace: string;
   label?: string;
+  isCron?: boolean;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -15,18 +16,30 @@ export interface Message {
   sessionId: string;
   role: 'user' | 'assistant';
   content: string;
+  contentBlocks?: ContentBlock[];
   createdAt: string;
+}
+
+export interface ContentBlock {
+  type: 'text' | 'thinking' | 'tool_use';
+  text?: string;
+  thinking?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
 }
 
 interface CreateSessionInput {
   id: string;
   systemId: string;
   workspace: string;
+  isCron?: boolean;
 }
 
 interface AddMessageInput {
   role: 'user' | 'assistant';
   content: string;
+  contentBlocks?: ContentBlock[];
 }
 
 export class SessionStore {
@@ -80,62 +93,85 @@ export class SessionStore {
       this.log.info('Migrated: added sdk_session_id column to sessions table');
     }
 
+    // Migration: add content_blocks column if not exists
+    try {
+      this.db.prepare('SELECT content_blocks FROM messages LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE messages ADD COLUMN content_blocks TEXT');
+      this.log.info('Migrated: added content_blocks column to messages table');
+    }
+
+    // Migration: add is_cron column if not exists
+    try {
+      this.db.prepare('SELECT is_cron FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN is_cron INTEGER DEFAULT 0');
+      this.log.info('Migrated: added is_cron column to sessions table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
   }
 
   createSession(input: CreateSessionInput): Session {
-    const { id, systemId, workspace } = input;
+    const { id, systemId, workspace, isCron } = input;
+    const isCronValue = isCron ? 1 : 0;
     this.db.prepare(
-      'INSERT OR IGNORE INTO sessions (id, system_id, workspace) VALUES (?, ?, ?)'
-    ).run(id, systemId, workspace);
+      'INSERT OR IGNORE INTO sessions (id, system_id, workspace, is_cron) VALUES (?, ?, ?, ?)'
+    ).run(id, systemId, workspace, isCronValue);
 
     return this.getSession(id)!;
   }
 
   getSession(id: string): Session | undefined {
     const row = this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
+      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
     ).get(id) as Session | undefined;
     return row;
   }
 
   listSessions(systemId?: string): Session[] {
+    // 默认排除 cron 会话
     if (systemId) {
       return this.db.prepare(
-        'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? ORDER BY last_active_at DESC'
+        'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC'
       ).all(systemId) as Session[];
     }
     return this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, created_at as createdAt, last_active_at as lastActiveAt FROM sessions ORDER BY last_active_at DESC'
+      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE is_cron = 0 OR is_cron IS NULL ORDER BY last_active_at DESC'
     ).all() as Session[];
   }
 
   addMessage(sessionId: string, input: AddMessageInput): Message {
-    const { role, content } = input;
+    const { role, content, contentBlocks } = input;
     this.db.prepare(
       "UPDATE sessions SET last_active_at = datetime('now') WHERE id = ?"
     ).run(sessionId);
 
+    const contentBlocksJson = contentBlocks ? JSON.stringify(contentBlocks) : null;
     const result = this.db.prepare(
-      'INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)'
-    ).run(sessionId, role, content);
+      'INSERT INTO messages (session_id, role, content, content_blocks) VALUES (?, ?, ?, ?)'
+    ).run(sessionId, role, content, contentBlocksJson);
 
     return {
       id: result.lastInsertRowid as number,
       sessionId,
       role,
       content,
+      contentBlocks,
       createdAt: new Date().toISOString(),
     };
   }
 
   getMessages(sessionId: string, limit = 1000): Message[] {
     const rows = this.db.prepare(
-      'SELECT id, session_id as sessionId, role, content, created_at as createdAt FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?'
-    ).all(sessionId, limit) as Message[];
-    return rows;
+      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, created_at as createdAt FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?'
+    ).all(sessionId, limit) as Array<Omit<Message, 'contentBlocks'> & { contentBlocks: string | null }>;
+    return rows.map(row => ({
+      ...row,
+      contentBlocks: row.contentBlocks ? JSON.parse(row.contentBlocks) as ContentBlock[] : undefined,
+    }));
   }
 
   deleteSession(id: string): void {

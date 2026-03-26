@@ -145,9 +145,29 @@ export class ClaudeSessionManager {
       .join('');
   }
 
-  private extractDeltaText(event: any): string | null {
-    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-      return event.delta.text;
+  private extractDeltaText(event: any): { type: 'text' | 'thinking' | 'tool_use'; content: string; name?: string; id?: string } | null {
+    if (event.type === 'content_block_delta') {
+      // Text delta
+      if (event.delta?.type === 'text_delta') {
+        return { type: 'text', content: event.delta.text };
+      }
+      // Thinking delta
+      if (event.delta?.type === 'thinking_delta') {
+        return { type: 'thinking', content: event.delta.thinking };
+      }
+      // Tool use delta (input_json_delta)
+      if (event.delta?.type === 'input_json_delta') {
+        return { type: 'tool_use', content: event.delta.partial_json };
+      }
+    }
+    // Content block start for tool_use
+    if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+      return {
+        type: 'tool_use',
+        content: '',
+        name: event.content_block.name,
+        id: event.content_block.id,
+      };
     }
     return null;
   }
@@ -175,6 +195,40 @@ export class ClaudeSessionManager {
     this.sessions.set(id, session);
     this.log.info(`Session created: ${id} for workspace ${workspace}`);
     return id;
+  }
+
+  /**
+   * 创建会话（使用指定的 ID）- 用于定时任务
+   */
+  createSessionWithId(workspace: string, sessionId: string): string {
+    if (!fs.existsSync(workspace)) {
+      throw new Error(`Workspace does not exist: ${workspace}`);
+    }
+
+    // 检查是否已存在
+    const existing = this.sessions.get(sessionId);
+    if (existing) {
+      return sessionId;
+    }
+
+    // 使用指定的 sessionId 创建，标记为 cron 任务
+    this.store.createSession({
+      id: sessionId,
+      systemId: workspace,
+      workspace,
+      isCron: true,
+    });
+
+    const session: ActiveSession = {
+      id: sessionId,
+      workspace,
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+    };
+
+    this.sessions.set(sessionId, session);
+    this.log.info(`Session created with custom ID: ${sessionId} for workspace ${workspace}`);
+    return sessionId;
   }
 
   async sendMessage(sessionId: string, content: string, wsSend: WsSend): Promise<void> {
@@ -240,6 +294,8 @@ export class ClaudeSessionManager {
       this.activeQueries.set(sessionId, q);
 
       let fullContent = '';
+      let currentThinking = '';
+      let currentToolUse: { id: string; name: string; input: string } | null = null;
       let messageCount = 0;
       let hasResult = false;
       wsSend(JSON.stringify({
@@ -272,12 +328,43 @@ export class ClaudeSessionManager {
           case 'stream_event': {
             const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
             if (delta) {
-              fullContent += delta;
-              wsSend(JSON.stringify({
-                type: 'chat.delta',
-                sessionId,
-                content: delta,
-              }));
+              if (delta.type === 'text') {
+                fullContent += delta.content;
+                wsSend(JSON.stringify({
+                  type: 'chat.delta',
+                  sessionId,
+                  content: delta.content,
+                  deltaType: 'text',
+                }));
+              } else if (delta.type === 'thinking') {
+                currentThinking += delta.content;
+                wsSend(JSON.stringify({
+                  type: 'chat.delta',
+                  sessionId,
+                  content: delta.content,
+                  deltaType: 'thinking',
+                }));
+              } else if (delta.type === 'tool_use') {
+                if (delta.name && delta.id) {
+                  // New tool use started
+                  currentToolUse = { id: delta.id, name: delta.name, input: '' };
+                  wsSend(JSON.stringify({
+                    type: 'chat.tool_start',
+                    sessionId,
+                    toolId: delta.id,
+                    toolName: delta.name,
+                  }));
+                } else if (currentToolUse && delta.content) {
+                  // Accumulate tool input
+                  currentToolUse.input += delta.content;
+                  wsSend(JSON.stringify({
+                    type: 'chat.tool_delta',
+                    sessionId,
+                    toolId: currentToolUse.id,
+                    content: delta.content,
+                  }));
+                }
+              }
             }
             break;
           }
@@ -299,8 +386,41 @@ export class ClaudeSessionManager {
               this.log.info(`[DEBUG] Saved session_id: ${result.session_id} for ${sessionId}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
             }
 
+            // Build content blocks array
+            const contentBlocks: Array<{ type: 'text' | 'thinking' | 'tool_use'; text?: string; thinking?: string; id?: string; name?: string; input?: unknown }> = [];
             if (fullContent) {
-              this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
+              contentBlocks.push({ type: 'text', text: fullContent });
+            }
+            if (currentThinking) {
+              contentBlocks.push({ type: 'thinking', thinking: currentThinking });
+            }
+            if (currentToolUse) {
+              try {
+                const input = currentToolUse.input ? JSON.parse(currentToolUse.input) : {};
+                contentBlocks.push({
+                  type: 'tool_use',
+                  id: currentToolUse.id,
+                  name: currentToolUse.name,
+                  input,
+                });
+              } catch {
+                contentBlocks.push({
+                  type: 'tool_use',
+                  id: currentToolUse.id,
+                  name: currentToolUse.name,
+                  input: currentToolUse.input,
+                });
+              }
+            }
+
+            // Store message with content blocks
+            const finalContent = fullContent || '';
+            if (finalContent || contentBlocks.length > 0) {
+              this.store.addMessage(sessionId, {
+                role: 'assistant',
+                content: finalContent,
+                contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
+              });
             }
 
             wsSend(JSON.stringify({
@@ -358,6 +478,106 @@ export class ClaudeSessionManager {
     }
   }
 
+  /**
+   * 发送消息（定时任务专用，支持外部 AbortController 和活动回调）
+   */
+  async sendMessageForCron(
+    sessionId: string,
+    content: string,
+    abortController: AbortController,
+    onActivity: () => void,
+  ): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+
+    if (this.activeQueries.has(sessionId)) {
+      throw new Error(`Session ${sessionId} already has an active query`);
+    }
+
+    // 校验 LLM 配置
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
+    }
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    this.store.addMessage(sessionId, { role: 'user', content });
+
+    const sessionConfig = this.getSessionConfig(session.workspace);
+    this.abortControllers.set(sessionId, abortController);
+
+    try {
+      const options = this.buildOptions(sessionConfig, abortController);
+      options.cwd = session.workspace;
+
+      this.log.info(`Starting cron query for session ${sessionId}`);
+
+      const q = query({
+        prompt: content,
+        options,
+      });
+
+      this.activeQueries.set(sessionId, q);
+
+      this.log.info(`Cron query() created, waiting for SDK messages...`);
+
+      let fullContent = '';
+      let msgCount = 0;
+
+      for await (const sdkMsg of q) {
+        msgCount++;
+        if (msgCount <= 3 || msgCount % 10 === 0) {
+          this.log.info(`Cron SDK message #${msgCount}: type=${sdkMsg.type}`);
+        }
+        // 调用活动回调
+        onActivity();
+
+        if (abortController.signal.aborted) {
+          this.log.info(`Cron query aborted for session ${sessionId}`);
+          break;
+        }
+
+        switch (sdkMsg.type) {
+          case 'assistant': {
+            const text = this.extractTextContent(sdkMsg);
+            if (text) fullContent = text;
+            break;
+          }
+          case 'stream_event': {
+            const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
+            if (delta) {
+              fullContent += delta;
+            }
+            break;
+          }
+          case 'result': {
+            const result = sdkMsg as SDKResultMessage;
+
+            if (result.session_id) {
+              this.sdkSessionIds.set(sessionId, result.session_id);
+              this.store.updateSdkSessionId(sessionId, result.session_id);
+            }
+
+            if (fullContent) {
+              this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
+            }
+
+            this.log.info(`Cron query completed for session ${sessionId}`);
+            break;
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
+        throw err;
+      }
+    } finally {
+      this.activeQueries.delete(sessionId);
+      this.abortControllers.delete(sessionId);
+    }
+  }
+
   abort(sessionId: string): void {
     const controller = this.abortControllers.get(sessionId);
     if (controller) {
@@ -386,7 +606,7 @@ export class ClaudeSessionManager {
     });
   }
 
-  getHistory(sessionId: string): Array<Message & { timestamp: number }> {
+  getHistory(sessionId: string): Array<Message & { timestamp: number; contentBlocks?: Array<{ type: 'text' | 'thinking' | 'tool_use'; text?: string; thinking?: string; id?: string; name?: string; input?: unknown }> }> {
     const messages = this.store.getMessages(sessionId);
     return messages.map(msg => ({
       ...msg,

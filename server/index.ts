@@ -12,6 +12,8 @@ import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
 import { SettingsManager } from './settings-manager.js';
+import { CronTaskStore } from './cron-task-store.js';
+import { CronScheduler } from './cron-scheduler.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -62,8 +64,19 @@ const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
 const settingsManager = new SettingsManager(homeDir);
 
+// Cron task scheduler
+const cronTaskStore = new CronTaskStore(dbPath);
+const cronScheduler = new CronScheduler(cronTaskStore);
+
+// Start cron scheduler (loads enabled tasks and schedules them)
+cronScheduler.start();
+
 // Feed config to session manager
 sessionManager.updateConfig(settingsManager.getConfig());
+
+// Set up cron scheduler with session manager
+cronScheduler.setSessionManager(sessionManager);
+cronScheduler.start();
 
 // HTTP server with static file serving for production (Electron mode)
 const distDir = path.resolve(path.join(__dirname, 'dist'));
@@ -82,7 +95,7 @@ const MIME: Record<string, string> = {
 const server = http.createServer((req, res) => {
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toLocaleString('zh-CN', { hour12: false }) }));
     return;
   }
 
@@ -282,6 +295,108 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        // ── Cron Tasks ──
+        case 'cron.workspaces': {
+          // 从会话列表中获取所有唯一的 workspace
+          const sessions = store.listSessions();
+          const workspaces = [...new Set(sessions.map(s => s.workspace))];
+          ws.send(JSON.stringify({ type: 'cron.workspaces', workspaces }));
+          break;
+        }
+
+        case 'cron.skills': {
+          if (!msg.workspace) throw new Error('Missing workspace');
+          const skillsDir = path.join(msg.workspace, '.claude', 'skills');
+          const skills: { name: string; hasCrontab: boolean }[] = [];
+
+          if (fs.existsSync(skillsDir)) {
+            const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.isDirectory()) {
+                const crontabPath = path.join(skillsDir, entry.name, 'crontab.md');
+                skills.push({
+                  name: entry.name,
+                  hasCrontab: fs.existsSync(crontabPath),
+                });
+              }
+            }
+          }
+
+          ws.send(JSON.stringify({ type: 'cron.skills', workspace: msg.workspace, skills }));
+          break;
+        }
+
+        case 'cron.list': {
+          const tasks = cronTaskStore.listTasks().map(task => ({
+            ...task,
+            latestRun: cronTaskStore.getLatestRun(task.id),
+            nextRunAt: cronScheduler.getNextRunAt(task.id),
+          }));
+          ws.send(JSON.stringify({ type: 'cron.list', tasks }));
+          break;
+        }
+
+        case 'cron.create': {
+          if (!msg.workspace || !msg.skillName || !msg.intervalMinutes) {
+            throw new Error('Missing required fields');
+          }
+          const task = cronTaskStore.createTask({
+            workspace: msg.workspace as string,
+            skillName: msg.skillName as string,
+            intervalMinutes: msg.intervalMinutes as number,
+          });
+          cronScheduler.schedule(task);
+          ws.send(JSON.stringify({ type: 'cron.created', task }));
+          break;
+        }
+
+        case 'cron.update': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          const task = cronTaskStore.updateTask(msg.taskId as string, {
+            workspace: msg.workspace as string | undefined,
+            skillName: msg.skillName as string | undefined,
+            intervalMinutes: msg.intervalMinutes as number | undefined,
+            enabled: msg.enabled as boolean | undefined,
+          });
+          if (task) {
+            if (task.enabled) {
+              cronScheduler.schedule(task);
+            } else {
+              cronScheduler.unschedule(task.id);
+            }
+          }
+          ws.send(JSON.stringify({ type: 'cron.updated', task }));
+          break;
+        }
+
+        case 'cron.delete': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          cronScheduler.unschedule(msg.taskId as string);
+          cronTaskStore.deleteTask(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'cron.deleted', taskId: msg.taskId }));
+          break;
+        }
+
+        case 'cron.runs': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          const limit = (msg.limit as number) || 20;
+          const runs = cronTaskStore.listRuns(msg.taskId as string, limit);
+          ws.send(JSON.stringify({ type: 'cron.runs', taskId: msg.taskId, runs }));
+          break;
+        }
+
+        case 'cron.execute': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            await cronScheduler.executeNow(msg.taskId as string);
+            ws.send(JSON.stringify({ type: 'cron.executed', taskId: msg.taskId }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
       }
@@ -301,6 +416,7 @@ wss.on('connection', (ws: WebSocket) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down...');
+  cronScheduler.stop();
   sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
@@ -308,6 +424,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down...');
+  cronScheduler.stop();
   sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
