@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useCronStore } from '@/stores/cron';
+import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
 import type { CronTask, CronRun } from '@/types/settings';
 
@@ -145,10 +146,14 @@ export function CronTaskSettings() {
     clearError,
   } = useCronStore();
 
+  const { status: wsStatus } = useWsConnection();
+
   useEffect(() => {
-    fetchWorkspaces();
-    fetchTasks();
-  }, [fetchWorkspaces, fetchTasks]);
+    if (wsStatus === 'connected') {
+      fetchWorkspaces();
+      fetchTasks();
+    }
+  }, [wsStatus, fetchWorkspaces, fetchTasks]);
 
   useEffect(() => {
     if (selectedWorkspace) {

@@ -84,6 +84,30 @@ export class ClaudeSessionManager {
     const projectName = path.basename(workspace);
     systemPromptAppend += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
 
+    // Append skill usage guidance (not displayed in UI)
+    systemPromptAppend += `
+## Available Plugins
+
+The following plugins are loaded and available for use:
+
+1. **superpowers** - Core skills library including:
+   - TDD (test-driven-development)
+   - Systematic debugging (systematic-debugging)
+   - Brainstorming & planning (brainstorming, writing-plans, executing-plans)
+   - Code review (requesting-code-review, receiving-code-review)
+   - Parallel agents (dispatching-parallel-agents, subagent-driven-development)
+   - Git worktrees, verification, and more
+
+2. **gstack** - Headless browser & engineering workflow:
+   - QA testing & site verification (gstack, qa, qa-only)
+   - Design review & consultation (design-review, design-consultation)
+   - Planning reviews (plan-eng-review, plan-design-review, plan-ceo-review)
+   - Debugging (investigate), shipping (ship), retrospectives (retro)
+   - And more sub-skills for the full engineering lifecycle
+
+**Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
+`;
+
     const model = this.config?.llm?.model || '';
 
     return {
@@ -106,6 +130,17 @@ export class ClaudeSessionManager {
     // Find bundled claude-code executable
     const claudeCodePath = this.getClaudeCodePath();
 
+    // Load bundled plugins (superpowers + gstack)
+    const pluginsDir = path.join(__dirname, '..', 'plugins');
+    const plugins: Array<{ type: 'local'; path: string }> = [];
+    for (const name of ['superpowers', 'gstack']) {
+      const pluginPath = path.join(pluginsDir, name);
+      if (fs.existsSync(pluginPath)) {
+        plugins.push({ type: 'local', path: pluginPath });
+        this.log.info(`Loaded plugin: ${name} from ${pluginPath}`);
+      }
+    }
+
     const opts: Options = {
       cwd: undefined as unknown as string, // Will be set per-session
       abortController,
@@ -122,6 +157,7 @@ export class ClaudeSessionManager {
       pathToClaudeCodeExecutable: claudeCodePath,
       // Load project settings to enable .claude/skills/ directory
       settingSources: ['project'],
+      plugins: plugins.length > 0 ? plugins : undefined,
     };
 
     if (this.config) {
