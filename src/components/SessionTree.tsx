@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Plus,
   Trash2,
+  Copy,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -45,11 +46,13 @@ function SessionItem({
   isActive,
   onSelect,
   onDelete,
+  onDuplicate,
 }: {
   session: ChatSession;
   isActive: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -63,6 +66,15 @@ function SessionItem({
     } catch (err) {
       console.error('[SessionItem] Failed to delete session:', err);
       setDeleting(false);
+    }
+  };
+
+  const handleDuplicate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await onDuplicate();
+    } catch (err) {
+      console.error('[SessionItem] Failed to duplicate session:', err);
     }
   };
 
@@ -81,6 +93,17 @@ function SessionItem({
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
+      <button
+        className={cn(
+          'shrink-0 p-0.5 rounded transition-all',
+          hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          'text-muted-foreground hover:text-primary',
+        )}
+        onClick={handleDuplicate}
+        title="复制会话"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
       <button
         className={cn(
           'shrink-0 p-0.5 rounded transition-all',
@@ -106,6 +129,7 @@ function SystemGroup({
   onToggle,
   onSessionSelect,
   onSessionDelete,
+  onSessionDuplicate,
 }: {
   system: { systemId: string; name: string; workspace: string };
   sessions: ChatSession[];
@@ -114,6 +138,7 @@ function SystemGroup({
   onToggle: () => void;
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete: (sessionId: string) => void;
+  onSessionDuplicate: (sessionId: string) => void;
 }) {
   const sessionCount = sessions.length;
   const hasActiveSession = sessions.some((s) => s.key === currentSessionId);
@@ -159,6 +184,7 @@ function SystemGroup({
               isActive={session.key === currentSessionId}
               onSelect={() => onSessionSelect(session.key)}
               onDelete={() => onSessionDelete(session.key)}
+              onDuplicate={() => onSessionDuplicate(session.key)}
             />
           ))}
         </div>
@@ -204,6 +230,17 @@ export function SessionTree() {
     return acc;
   }, {});
 
+  // Auto-expand all systems when sessions load (on app start or refresh)
+  useEffect(() => {
+    if (systems.length > 0) {
+      systems.forEach((system) => {
+        if (!expandedSystems.has(system.systemId)) {
+          toggleSystemExpanded(system.systemId, true);
+        }
+      });
+    }
+  }, [systems.map((s) => s.systemId).join(',')]);
+
   // Auto-expand & auto-scroll to current session
   useEffect(() => {
     if (!currentSessionId) return;
@@ -247,6 +284,24 @@ export function SessionTree() {
       await loadSessions();
     } catch (err) {
       console.error('[SessionTree] Failed to delete session:', err);
+    }
+  };
+
+  const handleSessionDuplicate = async (sessionId: string) => {
+    const session = sessions.find((s) => s.key === sessionId);
+    if (!session || !session.workspace) {
+      console.error('[SessionTree] Cannot duplicate: session or workspace not found');
+      return;
+    }
+    try {
+      // Create new session with the same workspace
+      const newSessionId = await createSessionWithWorkspace(session.workspace);
+      await loadSessions();
+      switchSession(newSessionId);
+      navigate('/chat');
+    } catch (err) {
+      console.error('[SessionTree] Failed to duplicate session:', err);
+      alert(`复制会话失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -309,6 +364,7 @@ export function SessionTree() {
                   onToggle={() => toggleSystem(system.systemId)}
                   onSessionSelect={handleSessionSelect}
                   onSessionDelete={handleSessionDelete}
+                  onSessionDuplicate={handleSessionDuplicate}
                 />
               ))
             )}

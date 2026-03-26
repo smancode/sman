@@ -12,7 +12,6 @@ import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
 import { SettingsManager } from './settings-manager.js';
-import { TaskMonitor } from './task-monitor.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -180,32 +179,6 @@ interface WsMessage {
   [key: string]: unknown;
 }
 
-// TaskMonitor setup - one per workspace
-const taskMonitors = new Map<string, TaskMonitor>();
-
-function startTaskMonitor(workspace: string): void {
-  if (taskMonitors.has(workspace)) return;
-  if (!fs.existsSync(workspace)) return;
-
-  const monitor = new TaskMonitor(
-    workspace,
-    60000,
-    (notification) => {
-      const { type: notifyType, task, content } = notification;
-      broadcast(JSON.stringify({
-        type: 'task.notification',
-        workspace,
-        taskType: notifyType,
-        task,
-        content,
-      }));
-    },
-  );
-  monitor.start();
-  monitor.updateConfig(settingsManager.getConfig());
-  taskMonitors.set(workspace, monitor);
-  log.info(`TaskMonitor started for ${workspace}`);
-}
 
 wss.on('connection', (ws: WebSocket) => {
   log.info('WebSocket client connected');
@@ -226,8 +199,6 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace) throw new Error('Missing workspace');
           const sessionId = sessionManager.createSession(msg.workspace);
           ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
-          // Start task monitor for this workspace
-          startTaskMonitor(msg.workspace);
           break;
         }
 
@@ -307,10 +278,6 @@ wss.on('connection', (ws: WebSocket) => {
           const { type: _t, ...updates } = msg;
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
-          // Push updated config to all task monitors
-          for (const monitor of taskMonitors.values()) {
-            monitor.updateConfig(config);
-          }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
@@ -331,19 +298,9 @@ wss.on('connection', (ws: WebSocket) => {
   });
 });
 
-// Start task monitors for existing sessions' workspaces
-function initTaskMonitors(): void {
-  const sessions = store.listSessions();
-  const workspaces = new Set(sessions.map(s => s.workspace).filter(Boolean));
-  for (const workspace of workspaces) {
-    startTaskMonitor(workspace);
-  }
-}
-
 // Graceful shutdown
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down...');
-  for (const monitor of taskMonitors.values()) monitor.stop();
   sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
@@ -351,7 +308,6 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down...');
-  for (const monitor of taskMonitors.values()) monitor.stop();
   sessionManager.close();
   wss.close();
   server.close(() => process.exit(0));
@@ -362,5 +318,4 @@ server.listen(PORT, () => {
   log.info(`Home directory: ${homeDir}`);
   log.info(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
   log.info(`Health check: http://localhost:${PORT}/api/health`);
-  initTaskMonitors();
 });

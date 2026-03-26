@@ -23,6 +23,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  timestamp?: number;
 }
 
 interface ChatState {
@@ -194,6 +195,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               role: (String(m.role || 'user') as 'user' | 'assistant'),
               content: String(m.content || ''),
               createdAt: String(m.createdAt || ''),
+              timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
             }))
           : [];
 
