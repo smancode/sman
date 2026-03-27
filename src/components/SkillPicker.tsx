@@ -101,16 +101,16 @@ export function SkillPicker({ open, onClose, onSelect, sessionId }: SkillPickerP
   return (
     <div className="bg-card rounded-lg shadow-lg border border-border overflow-hidden z-50">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
-        <Wrench className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">选择 Skill</span>
-        <span className="text-xs text-muted-foreground ml-auto">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30 overflow-hidden">
+        <Wrench className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium truncate">选择 Skill</span>
+        <span className="text-xs text-muted-foreground ml-auto shrink-0">
           ↑↓ 选择 · Enter 确认 · Esc 取消
         </span>
       </div>
 
       {/* Skills list */}
-      <div ref={containerRef} className="max-h-[240px] overflow-y-auto py-1">
+      <div ref={containerRef} className="max-h-[240px] overflow-y-auto py-1 overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -130,15 +130,15 @@ export function SkillPicker({ open, onClose, onSelect, sessionId }: SkillPickerP
               key={skill.id}
               onClick={() => onSelect(skill)}
               className={cn(
-                'w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors',
+                'w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors overflow-hidden min-w-0',
                 index === selectedIndex
                   ? 'bg-primary/10 text-primary'
                   : 'hover:bg-muted/50 text-foreground'
               )}
             >
-              <span className="text-sm font-medium">{skill.name}</span>
+              <span className="text-sm font-medium truncate w-full">{skill.name}</span>
               {skill.description && (
-                <span className="text-xs text-muted-foreground truncate">
+                <span className="text-xs text-muted-foreground truncate w-full">
                   {skill.description}
                 </span>
               )}
