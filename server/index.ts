@@ -14,6 +14,8 @@ import { ClaudeSessionManager } from './claude-session.js';
 import { SettingsManager } from './settings-manager.js';
 import { CronTaskStore } from './cron-task-store.js';
 import { CronScheduler } from './cron-scheduler.js';
+import { BatchStore } from './batch-store.js';
+import { BatchEngine } from './batch-engine.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -68,8 +70,39 @@ const settingsManager = new SettingsManager(homeDir);
 const cronTaskStore = new CronTaskStore(dbPath);
 const cronScheduler = new CronScheduler(cronTaskStore);
 
+// Batch execution engine
+const batchStore = new BatchStore(dbPath);
+const batchEngine = new BatchEngine(batchStore);
+batchEngine.setSessionManager(sessionManager);
+batchEngine.setConfig(settingsManager.getConfig().llm);
+batchEngine.setOnProgress((taskId, data) => {
+  broadcast(JSON.stringify({ type: 'batch.progress', taskId, ...data }));
+});
+batchEngine.start();
+
 // Start cron scheduler (loads enabled tasks and schedules them)
-cronScheduler.start();
+cronScheduler.start()
+
+// Skills cache: 1-minute TTL to avoid frequent disk reads
+// Key: `${workspace}:${skillType}`, Value: { data: any, expiresAt: number }
+const skillsCache = new Map<string, { data: unknown; expiresAt: number }>();
+const SKILLS_CACHE_TTL = 60_000; // 1 minute
+
+function getCachedSkills(workspace: string, skillType: string): unknown | null {
+  const key = `${workspace}:${skillType}`;
+  const entry = skillsCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    skillsCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedSkills(workspace: string, skillType: string, data: unknown): void {
+  const key = `${workspace}:${skillType}`;
+  skillsCache.set(key, { data, expiresAt: Date.now() + SKILLS_CACHE_TTL });
+};
 
 // Feed config to session manager
 sessionManager.updateConfig(settingsManager.getConfig());
@@ -291,6 +324,7 @@ wss.on('connection', (ws: WebSocket) => {
           const { type: _t, ...updates } = msg;
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
+          batchEngine.setConfig(config.llm);
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
@@ -306,6 +340,14 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'cron.skills': {
           if (!msg.workspace) throw new Error('Missing workspace');
+
+          // Try cache first (1-minute TTL)
+          const cached = getCachedSkills(msg.workspace, 'cron');
+          if (cached !== null) {
+            ws.send(JSON.stringify({ type: 'cron.skills', workspace: msg.workspace, skills: cached }));
+            break;
+          }
+
           const skillsDir = path.join(msg.workspace, '.claude', 'skills');
           const skills: { name: string; hasCrontab: boolean }[] = [];
 
@@ -322,6 +364,7 @@ wss.on('connection', (ws: WebSocket) => {
             }
           }
 
+          setCachedSkills(msg.workspace, 'cron', skills);
           ws.send(JSON.stringify({ type: 'cron.skills', workspace: msg.workspace, skills }));
           break;
         }
@@ -397,6 +440,158 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        // ── Batch Tasks ──
+        case 'batch.list': {
+          const tasks = batchStore.listTasks();
+          ws.send(JSON.stringify({ type: 'batch.list', tasks }));
+          break;
+        }
+
+        case 'batch.get': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          const task = batchStore.getTask(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'batch.get', task }));
+          break;
+        }
+
+        case 'batch.create': {
+          if (!msg.workspace || !msg.skillName || !msg.mdContent || !msg.execTemplate) {
+            throw new Error('Missing required fields');
+          }
+          const task = batchStore.createTask({
+            workspace: msg.workspace as string,
+            skillName: msg.skillName as string,
+            mdContent: msg.mdContent as string,
+            execTemplate: msg.execTemplate as string,
+            envVars: msg.envVars as Record<string, string> | undefined,
+            concurrency: msg.concurrency as number | undefined,
+            retryOnFailure: msg.retryOnFailure as number | undefined,
+          });
+          ws.send(JSON.stringify({ type: 'batch.created', task }));
+          break;
+        }
+
+        case 'batch.update': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          const { taskId, ...updates } = msg;
+          const task = batchStore.updateTask(taskId as string, updates as any);
+          ws.send(JSON.stringify({ type: 'batch.updated', task }));
+          break;
+        }
+
+        case 'batch.delete': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          batchStore.deleteTask(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'batch.deleted', taskId: msg.taskId }));
+          break;
+        }
+
+        case 'batch.generate': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            const code = await batchEngine.generateCode(msg.taskId as string);
+            ws.send(JSON.stringify({ type: 'batch.generated', taskId: msg.taskId, code }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'batch.test': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            const result = await batchEngine.testCode(msg.taskId as string);
+            ws.send(JSON.stringify({ type: 'batch.tested', taskId: msg.taskId, ...result }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'batch.save': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            await batchEngine.save(msg.taskId as string);
+            const task = batchStore.getTask(msg.taskId as string);
+            ws.send(JSON.stringify({ type: 'batch.saved', task }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'batch.execute': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            // Execute in background, progress sent via batch.progress
+            batchEngine.execute(msg.taskId as string).then(() => {
+              const task = batchStore.getTask(msg.taskId as string);
+              broadcast(JSON.stringify({ type: 'batch.completed', taskId: msg.taskId, task }));
+            }).catch((err) => {
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              broadcast(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+            });
+            ws.send(JSON.stringify({ type: 'batch.started', taskId: msg.taskId }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'batch.pause': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          batchEngine.pause(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'batch.paused', taskId: msg.taskId }));
+          break;
+        }
+
+        case 'batch.resume': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          await batchEngine.resume(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'batch.resumed', taskId: msg.taskId }));
+          break;
+        }
+
+        case 'batch.cancel': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          batchEngine.cancel(msg.taskId as string);
+          ws.send(JSON.stringify({ type: 'batch.cancelled', taskId: msg.taskId }));
+          break;
+        }
+
+        case 'batch.items': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          const items = batchStore.listItems(msg.taskId as string, {
+            status: msg.status as any,
+            offset: msg.offset as number | undefined,
+            limit: msg.limit as number | undefined,
+          });
+          ws.send(JSON.stringify({ type: 'batch.items', taskId: msg.taskId, items }));
+          break;
+        }
+
+        case 'batch.retry': {
+          if (!msg.taskId) throw new Error('Missing taskId');
+          try {
+            batchEngine.retryFailed(msg.taskId as string).then(() => {
+              const task = batchStore.getTask(msg.taskId as string);
+              broadcast(JSON.stringify({ type: 'batch.retried', taskId: msg.taskId, task }));
+            }).catch((err) => {
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+            });
+            ws.send(JSON.stringify({ type: 'batch.retrying', taskId: msg.taskId }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
       }
@@ -416,6 +611,7 @@ wss.on('connection', (ws: WebSocket) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down...');
+  batchEngine.stop();
   cronScheduler.stop();
   sessionManager.close();
   wss.close();
@@ -424,6 +620,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down...');
+  batchEngine.stop();
   cronScheduler.stop();
   sessionManager.close();
   wss.close();

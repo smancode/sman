@@ -90,7 +90,7 @@ export class SkillsRegistry {
 
   /**
    * Get project-specific skills from {workspace}/.claude/skills/
-   * Only returns directory names as skill IDs (no content reading)
+   * Reads skill.md frontmatter for description (first ~10 lines max).
    */
   getProjectSkills(workspace: string): ProjectSkill[] {
     const projectSkillsDir = path.join(workspace, '.claude', 'skills');
@@ -99,17 +99,30 @@ export class SkillsRegistry {
     }
 
     const skills: ProjectSkill[] = [];
-
-    // Read only top-level directories
     const entries = fs.readdirSync(projectSkillsDir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const skillId = entry.name;
+        const skillMdPath = path.join(projectSkillsDir, skillId, 'skill.md');
+        let description = '';
+
+        if (fs.existsSync(skillMdPath)) {
+          // Read only the first 10 lines to parse frontmatter
+          const lines = fs.readFileSync(skillMdPath, 'utf-8').split('\n').slice(0, 10);
+          for (const line of lines) {
+            const match = line.match(/^description:\s*(.+)/);
+            if (match) {
+              description = match[1].trim();
+              break;
+            }
+          }
+        }
+
         skills.push({
           id: skillId,
           name: skillId,
-          description: '',
+          description,
           content: '',
         });
       }

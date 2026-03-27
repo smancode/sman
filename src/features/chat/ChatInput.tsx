@@ -153,7 +153,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     >
       {/* Skill Picker - positioned above the input */}
       {currentSessionId && (
-        <div className="absolute bottom-full left-2 right-2 mb-2">
+        <div className="absolute bottom-full left-2 right-2 mb-2 w-full overflow-hidden">
           <SkillPicker
             open={showSkillPicker}
             onClose={handleSkillPickerClose}

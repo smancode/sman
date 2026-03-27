@@ -62,3 +62,48 @@ export interface CronRun {
   lastActivityAt: string | null;
   errorMessage: string | null;
 }
+
+// === Batch Task Types ===
+
+export type BatchTaskStatus =
+  | 'draft' | 'generating' | 'generated' | 'testing' | 'tested'
+  | 'saved' | 'queued' | 'running' | 'paused' | 'completed' | 'failed';
+
+export type BatchItemStatus = 'pending' | 'queued' | 'running' | 'success' | 'failed' | 'skipped';
+
+export interface BatchTask {
+  id: string;
+  workspace: string;
+  skillName: string;
+  mdContent: string;
+  execTemplate: string;
+  generatedCode?: string;
+  envVars: string;
+  concurrency: number;
+  retryOnFailure: number;
+  status: BatchTaskStatus;
+  totalItems: number;
+  successCount: number;
+  failedCount: number;
+  totalCost: number;
+  startedAt?: string;
+  finishedAt?: string;
+  cronEnabled: boolean;
+  cronIntervalMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BatchItem {
+  id: number;
+  taskId: string;
+  itemData: string;
+  itemIndex: number;
+  status: BatchItemStatus;
+  sessionId?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  errorMessage?: string;
+  cost: number;
+  retries: number;
+}

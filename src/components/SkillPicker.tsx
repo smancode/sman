@@ -138,7 +138,7 @@ export function SkillPicker({ open, onClose, onSelect, sessionId }: SkillPickerP
             >
               <span className="text-sm font-medium">{skill.name}</span>
               {skill.description && (
-                <span className="text-xs text-muted-foreground line-clamp-1">
+                <span className="text-xs text-muted-foreground truncate">
                   {skill.description}
                 </span>
               )}

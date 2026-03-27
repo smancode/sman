@@ -7,8 +7,11 @@ import { buildMcpServers } from './mcp-config.js';
 import path from 'path';
 import fs from 'fs';
 import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
 
 const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface ActiveSession {
   id: string;
