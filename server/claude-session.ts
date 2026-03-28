@@ -615,7 +615,6 @@ The following plugins are loaded and available for use:
       await v2Session.send(content);
 
       let fullContent = '';
-      let streamedContent = '';
       let msgCount = 0;
 
       for await (const sdkMsg of v2Session.stream()) {
@@ -629,16 +628,23 @@ The following plugins are loaded and available for use:
         switch (sdkMsg.type) {
           case 'assistant': {
             const text = this.extractTextContent(sdkMsg);
-            if (text && !streamedContent) {
-              fullContent = text;
+            if (text) {
+              const newPart = text.length > fullContent.length && text.startsWith(fullContent)
+                ? text.slice(fullContent.length)
+                : (fullContent === '' ? text : '');
+              if (newPart) {
+                fullContent = text;
+                onResponse(newPart);
+              } else {
+                fullContent = text;
+              }
             }
             break;
           }
           case 'stream_event': {
             const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta && delta.type === 'text') {
-              streamedContent += delta.content;
-              fullContent = streamedContent;
+              fullContent += delta.content;
               onResponse(delta.content);
             }
             break;

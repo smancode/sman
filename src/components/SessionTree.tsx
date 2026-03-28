@@ -5,7 +5,7 @@ import {
   FolderOpen,
   MessageSquare,
   Plus,
-  Trash2,
+  Trash,
   Copy,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -82,7 +82,7 @@ function SessionItem({
     <div
       data-session-id={session.key}
       className={cn(
-        'flex items-center gap-2 pl-3 pr-1 py-2 rounded-lg cursor-pointer text-[13px] transition-all duration-200',
+        'flex items-center gap-2 pl-3 pr-2 py-2 rounded-lg cursor-pointer text-[13px] transition-all duration-200 w-full overflow-hidden',
         isActive
           ? 'bg-[hsl(var(--muted))] text-foreground font-semibold'
           : 'hover:bg-[hsl(var(--muted))] text-foreground/60 hover:text-foreground',
@@ -93,30 +93,32 @@ function SessionItem({
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
-      <button
-        className={cn(
-          'shrink-0 p-0.5 rounded transition-all',
-          hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
-          'text-muted-foreground hover:text-primary',
-        )}
-        onClick={handleDuplicate}
-        title="复制会话"
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
-      <button
-        className={cn(
-          'shrink-0 p-0.5 rounded transition-all',
-          hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
-          deleting
-            ? 'opacity-40 cursor-not-allowed text-muted-foreground'
-            : 'text-muted-foreground hover:text-destructive',
-        )}
-        onClick={handleDelete}
-        disabled={deleting}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'invisible')}>
+        <button
+          className={cn(
+            'shrink-0 p-0.5 rounded transition-all',
+            hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            'text-muted-foreground hover:text-primary',
+          )}
+          onClick={handleDuplicate}
+          title="复制会话"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+        <button
+          className={cn(
+            'shrink-0 p-0.5 rounded transition-all',
+            hovered || deleting ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            deleting && 'opacity-40 cursor-not-allowed',
+            'text-muted-foreground hover:text-destructive',
+          )}
+          onClick={handleDelete}
+          disabled={deleting}
+          title="删除会话"
+        >
+          <Trash className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

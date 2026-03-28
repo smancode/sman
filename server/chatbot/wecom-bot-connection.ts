@@ -174,16 +174,18 @@ export class WeComBotConnection {
     let started = false;
     const self = this;
 
+    let accumulated = '';
     return {
       start() { started = true; },
       sendChunk(content: string) {
         if (!started) return;
+        accumulated += content;
         self.send({
           cmd: 'aibot_respond_msg',
           headers: { req_id: reqId },
           body: {
             msgtype: 'stream',
-            stream: { id: streamId, finish: false, content },
+            stream: { id: streamId, finish: false, content: accumulated },
           },
         });
       },

@@ -301,7 +301,8 @@ wss.on('connection', (ws: WebSocket) => {
         case 'session.updateLabel': {
           if (!msg.sessionId || typeof msg.label !== 'string') throw new Error('Missing sessionId or label');
           store.updateLabel(msg.sessionId, msg.label);
-          ws.send(JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
+          // Broadcast to all clients so SessionTree updates immediately
+          broadcast(JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
           break;
         }
 

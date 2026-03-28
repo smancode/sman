@@ -83,11 +83,11 @@ export class ChatbotSessionManager {
     const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
     this.sessionManager.createSessionWithId(workspacePath, sessionId, false);
 
-    const platformLabel = platform === 'wecom' ? '企业微信' : '飞书';
+    const platformPrefix = platform === 'wecom' ? 'WeCom' : 'Feishu';
     const userId = userKey.split(':').slice(1).join(':');
     this.sessionManager.updateSessionLabel(
       sessionId,
-      `[${platformLabel}] ${userId} - ${path.basename(workspacePath)}`,
+      `${platformPrefix}: ${userId} - ${path.basename(workspacePath)}`,
     );
 
     this.store.setSession(userKey, workspacePath, sessionId);
