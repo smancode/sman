@@ -35,7 +35,7 @@ export function ChatbotSettings() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5" />
-          聊天机器人配置
+          Bot机器人配置
         </CardTitle>
         <CardDescription>配置企业微信和飞书机器人接入</CardDescription>
       </CardHeader>
@@ -50,7 +50,7 @@ export function ChatbotSettings() {
 
         {/* Global toggle */}
         <div className="flex items-center justify-between">
-          <Label>启用聊天机器人</Label>
+          <Label>启用Bot机器人</Label>
           <Switch
             checked={enabled}
             onCheckedChange={(checked) => updateChatbot({ enabled: checked }).catch(() => {})}

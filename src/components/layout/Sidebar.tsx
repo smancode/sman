@@ -3,6 +3,8 @@ import {
   Settings as SettingsIcon,
   Sun,
   Moon,
+  Clock,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -32,7 +34,57 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-2 mt-auto border-t border-[hsl(var(--sidebar-border))]">
+      <div className="p-2 mt-auto border-t border-[hsl(var(--sidebar-border))] space-y-0.5">
+        <NavLink
+          to="/cron-tasks"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div
+                className={cn(
+                  'flex shrink-0 items-center justify-center',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              <span>定时任务</span>
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/batch-tasks"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div
+                className={cn(
+                  'flex shrink-0 items-center justify-center',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <Layers className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              <span>自定义任务</span>
+            </>
+          )}
+        </NavLink>
+
         <div className="flex items-center gap-1">
           <NavLink
             to="/settings"
