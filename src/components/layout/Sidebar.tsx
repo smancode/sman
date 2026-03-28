@@ -80,7 +80,7 @@ export function Sidebar() {
               >
                 <Layers className="h-[18px] w-[18px]" strokeWidth={2} />
               </div>
-              <span>自定义任务</span>
+              <span>智能任务</span>
             </>
           )}
         </NavLink>

@@ -43,6 +43,8 @@ interface BatchState {
     envVars?: Record<string, string>;
     concurrency?: number;
     retryOnFailure?: number;
+    cronEnabled?: boolean;
+    cronIntervalMinutes?: number;
   }) => Promise<BatchTask>;
   updateTask: (taskId: string, updates: Partial<BatchTask>) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;

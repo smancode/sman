@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Play, Pause, Square, RotateCcw,
   Loader2, CheckCircle, XCircle, FileCode, FlaskConical,
-  Save, ChevronDown, ChevronUp, Wand2, Timer,
+  Save, ChevronDown, ChevronUp, Wand2, Timer, Pencil, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +65,11 @@ function ProgressBar({ task }: { task: BatchTask }) {
 
 function BatchTaskCard({ task }: { task: BatchTask }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editMdContent, setEditMdContent] = useState(task.mdContent);
+  const [editExecTemplate, setEditExecTemplate] = useState(task.execTemplate);
+  const [editEnvVars, setEditEnvVars] = useState(task.envVars);
+  const [editConcurrency, setEditConcurrency] = useState(String(task.concurrency));
   const [editInterval, setEditInterval] = useState(String(task.cronIntervalMinutes ?? 60));
   const [editUnit, setEditUnit] = useState<'minutes' | 'hours'>(
     (task.cronIntervalMinutes ?? 60) >= 60 ? 'hours' : 'minutes',
@@ -87,6 +92,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
   const hasFailed = task.failedCount > 0;
   const isBusy = generating || testing || executing;
   const canCron = isSaved || isDone;
+  const canEdit = !isBusy && !isRunning && !isPaused;
 
   const handleDelete = async () => {
     if (!confirm('确定要删除这个任务吗？')) return;
@@ -106,13 +112,27 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
     }
   };
 
-  const handleSaveInterval = async () => {
+  const handleSaveEdit = async () => {
     const intervalMin = editUnit === 'hours' ? parseInt(editInterval) * 60 : parseInt(editInterval);
-    if (isNaN(intervalMin) || intervalMin < 1) {
-      alert('请输入有效的间隔时间');
-      return;
-    }
-    await updateTask(task.id, { cronIntervalMinutes: intervalMin });
+    await updateTask(task.id, {
+      mdContent: editMdContent,
+      execTemplate: editExecTemplate,
+      envVars: editEnvVars,
+      concurrency: parseInt(editConcurrency) || 10,
+      cronIntervalMinutes: isNaN(intervalMin) ? 60 : intervalMin,
+    });
+    setEditing(false);
+  };
+
+  const handleStartEdit = () => {
+    setEditMdContent(task.mdContent);
+    setEditExecTemplate(task.execTemplate);
+    setEditEnvVars(task.envVars);
+    setEditConcurrency(String(task.concurrency));
+    setEditInterval(String(task.cronIntervalMinutes ?? 60));
+    setEditUnit((task.cronIntervalMinutes ?? 60) >= 60 ? 'hours' : 'minutes');
+    setExpanded(true);
+    setEditing(true);
   };
 
   return (
@@ -221,6 +241,12 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
           </div>
         )}
 
+        {canEdit && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleStartEdit}>
+            <Pencil className="h-3.5 w-3.5" /> 编辑
+          </Button>
+        )}
+
         <Button
           variant="ghost"
           size="sm"
@@ -233,50 +259,137 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
       </div>
 
       {/* Expanded details */}
-      {expanded && (
-        <div className="border-t px-3 py-2 text-xs text-muted-foreground space-y-2">
-          <div>创建时间：{new Date(task.createdAt).toLocaleString('zh-CN')}</div>
-          {task.startedAt && <div>开始执行：{new Date(task.startedAt).toLocaleString('zh-CN')}</div>}
-          {task.finishedAt && <div>结束执行：{new Date(task.finishedAt).toLocaleString('zh-CN')}</div>}
+      {expanded && !editing && (
+        <div className="border-t px-3 py-3 text-xs text-muted-foreground space-y-3">
+          {/* Basic info */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+            <div><span className="text-foreground font-medium">业务系统：</span>{workspaceName}</div>
+            <div><span className="text-foreground font-medium">Skill：</span>{task.skillName}</div>
+            <div><span className="text-foreground font-medium">并发数：</span>{task.concurrency}</div>
+            <div><span className="text-foreground font-medium">创建时间：</span>{new Date(task.createdAt).toLocaleString('zh-CN')}</div>
+            {task.startedAt && <div><span className="text-foreground font-medium">开始执行：</span>{new Date(task.startedAt).toLocaleString('zh-CN')}</div>}
+            {task.finishedAt && <div><span className="text-foreground font-medium">结束执行：</span>{new Date(task.finishedAt).toLocaleString('zh-CN')}</div>}
+          </div>
 
-          {canCron && (
-            <div className="flex items-center gap-2 pt-1">
-              <Label className="text-foreground">定时间隔</Label>
-              <Input
-                type="number"
-                min={1}
-                max={60}
-                value={editInterval}
-                onChange={(e) => setEditInterval(e.target.value)}
-                className="w-16 h-6 text-xs"
-                disabled={task.cronEnabled}
-              />
-              <Select value={editUnit} onValueChange={(v) => setEditUnit(v as 'minutes' | 'hours')} disabled={task.cronEnabled}>
-                <SelectTrigger className="w-16 h-6 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="minutes">分钟</SelectItem>
-                  <SelectItem value="hours">小时</SelectItem>
-                </SelectContent>
-              </Select>
-              {!task.cronEnabled && (
-                <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleSaveInterval}>
-                  保存间隔
-                </Button>
-              )}
-              {task.cronEnabled && <span className="text-green-600">（定时中，关闭后可修改）</span>}
+          {/* Cron info */}
+          <div>
+            <span className="text-foreground font-medium">定时执行：</span>
+            {task.cronEnabled
+              ? <span className="text-green-600">已启用，每 {task.cronIntervalMinutes} 分钟执行一次</span>
+              : task.cronIntervalMinutes
+                ? <span>未启用（预设间隔 {task.cronIntervalMinutes} 分钟）</span>
+                : <span>未启用</span>
+            }
+          </div>
+
+          {/* Config content */}
+          {task.mdContent && (
+            <div>
+              <div className="text-foreground font-medium mb-1">任务描述</div>
+              <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-40 whitespace-pre-wrap">{task.mdContent}</pre>
+            </div>
+          )}
+
+          {task.execTemplate && (
+            <div>
+              <span className="text-foreground font-medium">执行模板：</span>
+              <code className="bg-muted px-1.5 py-0.5 rounded">{task.execTemplate}</code>
+            </div>
+          )}
+
+          {task.envVars && (
+            <div>
+              <div className="text-foreground font-medium mb-1">环境变量</div>
+              <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-24 whitespace-pre-wrap">{task.envVars}</pre>
             </div>
           )}
 
           {task.generatedCode && (
-            <div className="mt-1">
-              <div className="font-medium text-foreground mb-1">生成代码（前200字符）</div>
-              <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-32">
-                {task.generatedCode.slice(0, 200)}{task.generatedCode.length > 200 ? '...' : ''}
+            <div>
+              <div className="text-foreground font-medium mb-1">生成代码</div>
+              <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-40">
+                {task.generatedCode.slice(0, 500)}{task.generatedCode.length > 500 ? '...' : ''}
               </pre>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Edit mode */}
+      {expanded && editing && (
+        <div className="border-t px-3 py-3 space-y-3">
+          <div className="space-y-2">
+            <Label className="text-xs">任务描述</Label>
+            <Textarea
+              value={editMdContent}
+              onChange={(e) => setEditMdContent(e.target.value)}
+              rows={6}
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">执行模板</Label>
+            <Input
+              value={editExecTemplate}
+              onChange={(e) => setEditExecTemplate(e.target.value)}
+              className="font-mono text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">环境变量</Label>
+            <Textarea
+              value={editEnvVars}
+              onChange={(e) => setEditEnvVars(e.target.value)}
+              rows={3}
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">并发数</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={editConcurrency}
+                onChange={(e) => setEditConcurrency(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label className="text-xs">定时间隔</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={editInterval}
+                  onChange={(e) => setEditInterval(e.target.value)}
+                  className="w-20"
+                />
+                <Select value={editUnit} onValueChange={(v) => setEditUnit(v as 'minutes' | 'hours')}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">分钟</SelectItem>
+                    <SelectItem value="hours">小时</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
+              <X className="h-3.5 w-3.5 mr-1" /> 取消
+            </Button>
+            <Button size="sm" onClick={handleSaveEdit}>
+              <Save className="h-3.5 w-3.5 mr-1" /> 保存
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -384,7 +497,7 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
 
       <div className="grid grid-cols-[1fr_auto] gap-4">
         <div className="space-y-2">
-          <Label>配置 (batch.md)</Label>
+          <Label>任务描述</Label>
           <Textarea
             value={mdContent}
             onChange={(e) => setMdContent(e.target.value)}
@@ -493,9 +606,9 @@ export function BatchTaskSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">自定义任务</h3>
+          <h3 className="text-lg font-medium">智能任务</h3>
           <p className="text-sm text-muted-foreground">
-            MD 驱动的批量执行引擎
+            根据任务描述实时生成任务代码
           </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
@@ -518,7 +631,7 @@ export function BatchTaskSettings() {
           <div className="text-center py-8 text-muted-foreground">加载中...</div>
         ) : tasks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            暂无自定义任务，点击"新建任务"开始配置
+            暂无智能任务，点击"新建任务"开始配置
           </div>
         ) : (
           tasks.map((task) => (
