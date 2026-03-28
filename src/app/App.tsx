@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/useTheme';
 export default function App() {
   const connect = useWsConnection((s) => s.connect);
   const status = useWsConnection((s) => s.status);
+  const client = useWsConnection((s) => s.client);
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const loadSessions = useChatStore((s) => s.loadSessions);
 
@@ -24,6 +25,16 @@ export default function App() {
     fetchSettings();
     loadSessions();
   }, [status, fetchSettings, loadSessions]);
+
+  // Listen for chatbot session creation — silently refresh sidebar
+  useEffect(() => {
+    if (!client || status !== 'connected') return;
+    const handler = () => {
+      loadSessions();
+    };
+    client.on('session.chatbotCreated', handler);
+    return () => client.off('session.chatbotCreated', handler);
+  }, [client, status, loadSessions]);
 
   return (
     <TooltipProvider>

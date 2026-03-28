@@ -86,7 +86,9 @@ batchEngine.start();
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
-const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbotStore);
+const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbotStore, (sessionId: string, label: string) => {
+  broadcast(JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
+});
 
 let wecomConnection: WeComBotConnection | null = null;
 let feishuConnection: FeishuBotConnection | null = null;

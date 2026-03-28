@@ -736,6 +736,9 @@ The following plugins are loaded and available for use:
           lastActiveAt: s.lastActiveAt,
         };
         this.sessions.set(s.id, active);
+      } else {
+        // Sync label from database (may have been updated by chatbot or other process)
+        active.label = s.label;
       }
       return active;
     });

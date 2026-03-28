@@ -15,15 +15,18 @@ export class ChatbotSessionManager {
   private store: ChatbotStore;
   private sessionManager: ClaudeSessionManager;
   private activeQueries = new Map<string, AbortController>();
+  private onSessionCreated?: (sessionId: string, label: string) => void;
 
   constructor(
     private homeDir: string,
     sessionManager: ClaudeSessionManager,
     store: ChatbotStore,
+    onSessionCreated?: (sessionId: string, label: string) => void,
   ) {
     this.log = createLogger('ChatbotSessionManager');
     this.sessionManager = sessionManager;
     this.store = store;
+    this.onSessionCreated = onSessionCreated;
   }
 
   // ── Workspace helpers (unified with desktop sessions) ──
@@ -98,6 +101,10 @@ export class ChatbotSessionManager {
     );
 
     this.store.setSession(userKey, workspacePath, sessionId);
+
+    // Notify frontend to refresh sidebar
+    const label = `${platformPrefix}: ${userId} - ${path.basename(workspacePath)}`;
+    this.onSessionCreated?.(sessionId, label);
   }
 
   // ── Message handling ──

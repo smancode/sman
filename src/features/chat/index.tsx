@@ -68,7 +68,7 @@ export function Chat() {
                     role: msg.role,
                     content: msg.content,
                     contentBlocks: msg.contentBlocks,
-                    timestamp: new Date(msg.createdAt).getTime() / 1000,
+                    timestamp: msg.timestamp ?? new Date(msg.createdAt + 'Z').getTime() / 1000,
                   } as RawMessage}
                   showThinking={showThinking}
                 />
