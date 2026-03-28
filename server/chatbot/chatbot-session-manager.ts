@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { createLogger, type Logger } from '../utils/logger.js';
 import type { ClaudeSessionManager } from '../claude-session.js';
@@ -25,6 +26,75 @@ export class ChatbotSessionManager {
     this.store = store;
   }
 
+  // ── Workspace helpers (unified with desktop sessions) ──
+
+  /** Expand ~ to home directory */
+  private expandPath(p: string): string {
+    if (p.startsWith('~/')) {
+      return path.join(os.homedir(), p.slice(2));
+    }
+    return p;
+  }
+
+  /** Get all unique workspaces from desktop sessions */
+  private getDesktopWorkspaces(): Array<{ path: string; name: string }> {
+    const sessions = this.sessionManager.listSessions();
+    const seen = new Set<string>();
+    const workspaces: Array<{ path: string; name: string }> = [];
+    for (const s of sessions) {
+      if (s.workspace && !seen.has(s.workspace)) {
+        seen.add(s.workspace);
+        workspaces.push({ path: s.workspace, name: path.basename(s.workspace) });
+      }
+    }
+    return workspaces;
+  }
+
+  /** Find workspace by name substring or path */
+  private resolveWorkspace(query: string): string | null {
+    const expanded = this.expandPath(query.trim());
+
+    // Exact path match from desktop sessions
+    if (expanded.startsWith('/')) {
+      const ws = this.getDesktopWorkspaces().find(w => w.path === expanded);
+      if (ws) return ws.path;
+    }
+
+    // Name match from desktop sessions
+    const workspaces = this.getDesktopWorkspaces();
+    const exact = workspaces.find(w => w.name === query.trim());
+    if (exact) return exact.path;
+    const partial = workspaces.find(w => w.name.toLowerCase().includes(query.trim().toLowerCase()));
+    if (partial) return partial.path;
+
+    // Last resort: expanded path exists on disk
+    if (expanded.startsWith('/') && fs.existsSync(expanded)) {
+      return expanded;
+    }
+
+    return null;
+  }
+
+  /** Ensure a chatbot session exists for this userKey+workspace */
+  private ensureSession(userKey: string, workspacePath: string, platform: string): void {
+    let session = this.store.getSession(userKey, workspacePath);
+    if (session) return;
+
+    const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
+    this.sessionManager.createSessionWithId(workspacePath, sessionId, false);
+
+    const platformLabel = platform === 'wecom' ? '企业微信' : '飞书';
+    const userId = userKey.split(':').slice(1).join(':');
+    this.sessionManager.updateSessionLabel(
+      sessionId,
+      `[${platformLabel}] ${userId} - ${path.basename(workspacePath)}`,
+    );
+
+    this.store.setSession(userKey, workspacePath, sessionId);
+  }
+
+  // ── Message handling ──
+
   async handleMessage(msg: IncomingMessage, sender: ChatResponseSender): Promise<void> {
     const userKey = `${msg.platform}:${msg.userId}`;
     const parseResult = parseChatCommand(msg.content);
@@ -34,9 +104,20 @@ export class ChatbotSessionManager {
       return;
     }
 
-    const userState = this.store.getUserState(userKey);
+    // Auto-select first available workspace if user has none set
+    let userState = this.store.getUserState(userKey);
     if (!userState?.currentWorkspace) {
-      sender.finish('尚未设置工作目录。请使用 /cd <项目名或路径> 切换工作目录。\n使用 /help 查看所有命令。');
+      const workspaces = this.getDesktopWorkspaces();
+      if (workspaces.length > 0) {
+        const defaultWorkspace = workspaces[0].path;
+        this.store.setUserState(userKey, defaultWorkspace);
+        this.ensureSession(userKey, defaultWorkspace, msg.platform);
+        userState = this.store.getUserState(userKey);
+      }
+    }
+
+    if (!userState?.currentWorkspace) {
+      sender.finish('暂无可用的项目目录。请先在桌面端打开一个项目。');
       return;
     }
 
@@ -47,6 +128,8 @@ export class ChatbotSessionManager {
 
     await this.executeChatQuery(userKey, userState.currentWorkspace, msg.content, sender);
   }
+
+  // ── Commands ──
 
   private async handleCommand(
     userKey: string,
@@ -63,9 +146,6 @@ export class ChatbotSessionManager {
       case 'workspaces':
         this.handleWorkspaces(sender);
         break;
-      case 'add':
-        this.handleAdd(command.args, sender);
-        break;
       case 'help':
         this.handleHelp(sender);
         break;
@@ -79,23 +159,20 @@ export class ChatbotSessionManager {
 
   private async handleCd(userKey: string, args: string, sender: ChatResponseSender): Promise<void> {
     if (!args) {
-      sender.finish('用法: /cd <项目名或路径>');
+      sender.finish('用法: /cd <项目名或路径>\n例如: /cd my-project 或 /cd ~/projects/my-project');
       return;
     }
 
-    let workspacePath: string | null = null;
-
-    if (args.startsWith('/')) {
-      if (this.store.isWorkspaceRegistered(args)) {
-        workspacePath = args;
-      }
-    } else {
-      workspacePath = this.store.findWorkspace(args);
-    }
+    const workspacePath = this.resolveWorkspace(args);
 
     if (!workspacePath) {
-      const registered = this.store.listWorkspaces().map(w => w.name).join(', ');
-      sender.finish(`目录 "${args}" 未注册。\n已注册的项目: ${registered || '无'}\n使用 /add <路径> 注册新目录。`);
+      const workspaces = this.getDesktopWorkspaces();
+      const names = workspaces.map(w => w.name).join(', ');
+      sender.finish(
+        `项目 "${args}" 未找到。\n` +
+        `桌面端已打开的项目: ${names || '无'}\n` +
+        `提示: 支持使用 ~ 代表用户主目录，例如 /cd ~/projects/my-project`,
+      );
       return;
     }
 
@@ -105,19 +182,7 @@ export class ChatbotSessionManager {
     }
 
     this.store.setUserState(userKey, workspacePath);
-
-    let session = this.store.getSession(userKey, workspacePath);
-    if (!session) {
-      const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
-      try {
-        this.sessionManager.createSessionWithId(workspacePath, sessionId);
-        this.store.setSession(userKey, workspacePath, sessionId);
-        session = this.store.getSession(userKey, workspacePath);
-      } catch (err) {
-        sender.finish(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
-        return;
-      }
-    }
+    this.ensureSession(userKey, workspacePath, userKey.split(':')[0]);
 
     const projectName = path.basename(workspacePath);
     sender.finish(`已切换到: ${projectName} (${workspacePath})`);
@@ -133,40 +198,24 @@ export class ChatbotSessionManager {
   }
 
   private handleWorkspaces(sender: ChatResponseSender): void {
-    const workspaces = this.store.listWorkspaces();
+    const workspaces = this.getDesktopWorkspaces();
     if (workspaces.length === 0) {
-      sender.finish('暂无注册的工作目录。\n使用 /add <路径> 注册新目录。');
+      sender.finish('暂无可用的项目目录。请先在桌面端打开一个项目。');
       return;
     }
     const list = workspaces.map((w, i) => `${i + 1}. ${w.name} (${w.path})`).join('\n');
-    sender.finish(`已知工作目录:\n${list}`);
-  }
-
-  private handleAdd(args: string, sender: ChatResponseSender): void {
-    if (!args) {
-      sender.finish('用法: /add <目录路径>');
-      return;
-    }
-    const wsPath = args.trim();
-    if (!fs.existsSync(wsPath)) {
-      sender.finish(`目录不存在: ${wsPath}`);
-      return;
-    }
-    const name = path.basename(wsPath);
-    this.store.addWorkspace(wsPath, name);
-    sender.finish(`已注册: ${name} (${wsPath})`);
+    sender.finish(`可用项目:\n${list}\n\n使用 /cd <项目名> 切换。`);
   }
 
   private handleHelp(sender: ChatResponseSender): void {
     sender.finish(
       `可用命令:\n` +
-      `/cd <项目名或路径> - 切换工作目录\n` +
+      `/cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
       `/pwd - 显示当前工作目录\n` +
-      `/workspaces - 列出已知工作目录\n` +
-      `/add <路径> - 注册新的工作目录\n` +
+      `/workspaces - 列出桌面端已打开的项目\n` +
       `/status - 显示连接状态\n` +
       `/help - 显示此帮助信息\n\n` +
-      `直接发送消息即可与 Claude 对话。`
+      `直接发送消息即可与 Claude 对话。`,
     );
   }
 
@@ -177,6 +226,8 @@ export class ChatbotSessionManager {
     sender.finish(`状态: ${active}\n工作目录: ${workspace}`);
   }
 
+  // ── Query execution ──
+
   private async executeChatQuery(
     userKey: string,
     workspace: string,
@@ -185,10 +236,16 @@ export class ChatbotSessionManager {
   ): Promise<void> {
     const session = this.store.getSession(userKey, workspace);
     if (!session) {
-      sender.error('会话不存在，请重新 /cd 到目标目录。');
-      return;
+      // Session missing — recreate it
+      try {
+        this.ensureSession(userKey, workspace, userKey.split(':')[0]);
+      } catch (err) {
+        sender.error(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
     }
 
+    const sessionId = this.store.getSession(userKey, workspace)!.sessionId;
     const abortController = new AbortController();
     this.activeQueries.set(userKey, abortController);
 
@@ -201,7 +258,7 @@ export class ChatbotSessionManager {
       sender.start();
 
       const fullContent = await this.sessionManager.sendMessageForChatbot(
-        session.sessionId,
+        sessionId,
         content,
         abortController,
         () => {},

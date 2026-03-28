@@ -19,6 +19,7 @@ interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
   isStreaming?: boolean;
+  streamingThinking?: string;
   streamingTools?: Array<{
     id?: string;
     toolCallId?: string;
@@ -42,6 +43,7 @@ export const ChatMessage = memo(function ChatMessage({
   message,
   showThinking,
   isStreaming = false,
+  streamingThinking,
   streamingTools = [],
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
@@ -62,7 +64,8 @@ export const ChatMessage = memo(function ChatMessage({
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && !hasStreamingToolStatus) return null;
+  const hasStreamingThinking = isStreaming && !!streamingThinking?.trim();
+  if (!hasText && !visibleThinking && !hasStreamingThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && !hasStreamingToolStatus) return null;
 
   return (
     <div
@@ -90,8 +93,8 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* Thinking section */}
-        {visibleThinking && (
-          <ThinkingBlock content={visibleThinking} />
+        {(visibleThinking || (isStreaming && streamingThinking)) && showThinking && (
+          <ThinkingBlock content={isStreaming ? (streamingThinking || visibleThinking || '') : (visibleThinking || '')} />
         )}
 
         {/* Tool use cards */}

@@ -1,5 +1,16 @@
-import { v4 as uuidv4 } from 'uuid';
-import { query, type Query, type Options, type SDKMessage, type SDKResultMessage, type SDKAssistantMessage, type SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
+/**
+ * V2 Session Manager for Claude Agent SDK
+ *
+ * Manages persistent V2 SDK sessions with lifecycle control:
+ * - Session reuse: keeps process alive between messages
+ * - Idle timeout: 30min inactivity → close process
+ * - Crash recovery: detects dead processes and recreates
+ * - Resume support: persists SDK session_id for post-restart recovery
+ *
+ * Based on hello-halo's session-manager.ts pattern.
+ */
+
+import { unstable_v2_createSession, type SDKSession, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SessionStore, Message } from './session-store.js';
 import type { SmanConfig } from './types.js';
@@ -23,36 +34,45 @@ export interface ActiveSession {
 
 type WsSend = (data: string) => void;
 
-interface SessionConfig {
-  model: string;
-  systemPromptAppend: string;
-  permissionMode: 'bypassPermissions' | 'default';
+interface V2SessionInfo {
+  session: SDKSession;
+  sessionId: string;       // our session ID
+  workspace: string;
+  createdAt: number;
+  lastUsedAt: number;
+  configGeneration: number;
 }
 
 export class ClaudeSessionManager {
   private sessions = new Map<string, ActiveSession>();
-  private activeQueries = new Map<string, Query>();
-  private abortControllers = new Map<string, AbortController>();
-  private sdkSessionIds = new Map<string, string>(); // sessionId -> SDK session_id
+  private v2Sessions = new Map<string, V2SessionInfo>();
+  private activeStreams = new Map<string, AbortController>();
+  private sdkSessionIds = new Map<string, string>();
   private log: Logger;
   private config: SmanConfig | null = null;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private configGeneration = 0;
+
+  private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
 
   constructor(private store: SessionStore) {
     this.log = createLogger('ClaudeSessionManager');
+    this.startCleanup();
   }
 
   updateConfig(config: SmanConfig): void {
     this.config = config;
+    this.configGeneration++;
   }
 
   /**
    * Get the path to bundled claude-code executable
    */
   private getClaudeCodePath(): string {
-    // Try to find claude-code cli.js in node_modules
     const possiblePaths: string[] = [];
 
-    // Production: bundled in Electron app (resourcesPath is set by Electron)
+    // Production: bundled in Electron app
     const resourcesPath = (process as any).resourcesPath;
     if (typeof resourcesPath === 'string') {
       possiblePaths.push(
@@ -63,7 +83,7 @@ export class ClaudeSessionManager {
     // Development: in project node_modules
     possiblePaths.push(path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
 
-    // Try require.resolve as well
+    // Try require.resolve
     try {
       const packagePath = require.resolve('@anthropic-ai/claude-code/package.json');
       possiblePaths.push(path.join(path.dirname(packagePath), 'cli.js'));
@@ -82,13 +102,12 @@ export class ClaudeSessionManager {
     return '';
   }
 
-  private getSessionConfig(workspace: string): SessionConfig {
-    let systemPromptAppend = '';
+  private buildSystemPromptAppend(workspace: string): string {
+    let append = '';
     const projectName = path.basename(workspace);
-    systemPromptAppend += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
+    append += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
 
-    // Append skill usage guidance (not displayed in UI)
-    systemPromptAppend += `
+    append += `
 ## Available Plugins
 
 The following plugins are loaded and available for use:
@@ -110,114 +129,164 @@ The following plugins are loaded and available for use:
 
 **Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
 `;
-
-    const model = this.config?.llm?.model || '';
-
-    return {
-      model,
-      systemPromptAppend,
-      permissionMode: 'bypassPermissions',
-    };
+    return append;
   }
 
-  private buildOptions(sessionConfig: SessionConfig, abortController: AbortController): Options {
-    // Build env from config: pass API key and base URL to Claude Code subprocess
-    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
-    if (this.config?.llm?.apiKey) {
-      env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
+  private buildSessionOptions(workspace: string): Record<string, any> {
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
     }
-    if (this.config?.llm?.baseUrl) {
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
+    if (this.config.llm.baseUrl) {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
     }
 
-    // Find bundled claude-code executable
     const claudeCodePath = this.getClaudeCodePath();
 
-    // Load bundled plugins (superpowers + gstack)
+    // Load bundled plugins
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
     for (const name of ['superpowers', 'gstack']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
-        this.log.info(`Loaded plugin: ${name} from ${pluginPath}`);
       }
     }
 
-    const opts: Options = {
-      cwd: undefined as unknown as string, // Will be set per-session
-      abortController,
-      permissionMode: sessionConfig.permissionMode,
-      allowDangerouslySkipPermissions: true,
-      model: sessionConfig.model,
-      includePartialMessages: true,
+    const opts: Record<string, any> = {
+      model: this.config.llm.model,
       env,
-      systemPrompt: {
-        type: 'preset',
-        preset: 'claude_code',
-        append: sessionConfig.systemPromptAppend || undefined,
-      },
       pathToClaudeCodeExecutable: claudeCodePath,
-      // Load project settings to enable .claude/skills/ directory
+      cwd: workspace,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      includePartialMessages: true,
+      systemPrompt: {
+        type: 'preset' as const,
+        preset: 'claude_code',
+        append: this.buildSystemPromptAppend(workspace),
+      },
       settingSources: ['project'],
       plugins: plugins.length > 0 ? plugins : undefined,
+      extraArgs: {
+        'dangerously-skip-permissions': null,
+      },
     };
 
-    if (this.config) {
-      const mcpServers = buildMcpServers(this.config);
-      if (Object.keys(mcpServers).length > 0) {
-        opts.mcpServers = mcpServers;
-      }
+    // Build MCP servers if configured
+    const mcpServers = buildMcpServers(this.config);
+    if (Object.keys(mcpServers).length > 0) {
+      opts.mcpServers = mcpServers;
     }
-
-    this.log.info(`[DEBUG] buildOptions: model=${sessionConfig.model}`);
 
     return opts;
   }
 
-  private extractTextContent(message: SDKAssistantMessage): string {
-    const msg = message.message;
-    if (!msg?.content) return '';
-    return msg.content
-      .filter((block: any) => block.type === 'text')
-      .map((block: any) => block.text)
-      .join('');
+  /**
+   * Get or create a V2 session for the given session ID
+   */
+  private async getOrCreateV2Session(sessionId: string): Promise<SDKSession> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+
+    // Check if we have an existing V2 session
+    const existing = this.v2Sessions.get(sessionId);
+    if (existing) {
+      // Check if process is still alive
+      const pid = (existing.session as any).pid;
+      if (pid !== undefined) {
+        try {
+          process.kill(pid, 0); // Signal 0 = check if alive
+          existing.lastUsedAt = Date.now();
+          return existing.session;
+        } catch {
+          this.log.info(`V2 session process dead (PID: ${pid}), recreating...`);
+          this.closeV2Session(sessionId);
+        }
+      } else {
+        // No pid info, try to use anyway
+        existing.lastUsedAt = Date.now();
+        return existing.session;
+      }
+    }
+
+    // Create new V2 session
+    const options = this.buildSessionOptions(session.workspace);
+
+    // Resume from persisted SDK session ID if available
+    let sdkSessionId = this.sdkSessionIds.get(sessionId);
+    if (!sdkSessionId) {
+      sdkSessionId = this.store.getSdkSessionId(sessionId);
+      if (sdkSessionId) {
+        this.sdkSessionIds.set(sessionId, sdkSessionId);
+      }
+    }
+    if (sdkSessionId) {
+      options.resume = sdkSessionId;
+      this.log.info(`Resuming V2 session with SDK session_id: ${sdkSessionId}`);
+    }
+
+    this.log.info(`Creating V2 session for ${sessionId}...`);
+    const v2Session = await unstable_v2_createSession(options as any);
+
+    const v2Info: V2SessionInfo = {
+      session: v2Session,
+      sessionId,
+      workspace: session.workspace,
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+      configGeneration: this.configGeneration,
+    };
+    this.v2Sessions.set(sessionId, v2Info);
+
+    const pid = (v2Session as any).pid;
+    this.log.info(`V2 session created for ${sessionId}, PID: ${pid ?? 'unknown'}`);
+
+    return v2Session;
   }
 
-  private extractDeltaText(event: any): { type: 'text' | 'thinking' | 'tool_use'; content: string; name?: string; id?: string } | null {
-    if (event.type === 'content_block_delta') {
-      // Text delta
-      if (event.delta?.type === 'text_delta') {
-        return { type: 'text', content: event.delta.text };
-      }
-      // Thinking delta
-      if (event.delta?.type === 'thinking_delta') {
-        return { type: 'thinking', content: event.delta.thinking };
-      }
-      // Tool use delta (input_json_delta)
-      if (event.delta?.type === 'input_json_delta') {
-        return { type: 'tool_use', content: event.delta.partial_json };
-      }
+  private closeV2Session(sessionId: string): void {
+    const info = this.v2Sessions.get(sessionId);
+    if (info) {
+      try {
+        info.session.close();
+      } catch {}
+      this.v2Sessions.delete(sessionId);
+      this.log.info(`V2 session closed for ${sessionId}`);
     }
-    // Content block start for tool_use
-    if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
-      return {
-        type: 'tool_use',
-        content: '',
-        name: event.content_block.name,
-        id: event.content_block.id,
-      };
-    }
-    return null;
   }
+
+  private startCleanup(): void {
+    if (this.cleanupTimer) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      for (const [sessionId, info] of this.v2Sessions) {
+        // Don't close if there's an active stream
+        if (this.activeStreams.has(sessionId)) continue;
+
+        if (now - info.lastUsedAt > ClaudeSessionManager.SESSION_IDLE_TIMEOUT_MS) {
+          this.log.info(`Closing idle V2 session ${sessionId} (idle ${Math.round((now - info.lastUsedAt) / 60000)}min)`);
+          this.closeV2Session(sessionId);
+        }
+      }
+    }, ClaudeSessionManager.CLEANUP_INTERVAL_MS);
+    timer.unref(); // Don't prevent process exit
+    this.cleanupTimer = timer;
+  }
+
+  // ── Public API ──
 
   createSession(workspace: string): string {
     if (!fs.existsSync(workspace)) {
       throw new Error(`Workspace does not exist: ${workspace}`);
     }
 
-    const id = uuidv4();
-    // Use workspace path as systemId for backwards compatibility with DB schema
+    const id = crypto.randomUUID();
     this.store.createSession({
       id,
       systemId: workspace,
@@ -236,26 +305,21 @@ The following plugins are loaded and available for use:
     return id;
   }
 
-  /**
-   * 创建会话（使用指定的 ID）- 用于定时任务
-   */
-  createSessionWithId(workspace: string, sessionId: string): string {
+  createSessionWithId(workspace: string, sessionId: string, isCron = true): string {
     if (!fs.existsSync(workspace)) {
       throw new Error(`Workspace does not exist: ${workspace}`);
     }
 
-    // 检查是否已存在
     const existing = this.sessions.get(sessionId);
     if (existing) {
       return sessionId;
     }
 
-    // 使用指定的 sessionId 创建，标记为 cron 任务
     this.store.createSession({
       id: sessionId,
       systemId: workspace,
       workspace,
-      isCron: true,
+      isCron,
     });
 
     const session: ActiveSession = {
@@ -270,15 +334,17 @@ The following plugins are loaded and available for use:
     return sessionId;
   }
 
+  /**
+   * Send a message via WebSocket (real-time streaming)
+   */
   async sendMessage(sessionId: string, content: string, wsSend: WsSend): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    if (this.activeQueries.has(sessionId)) {
+    if (this.activeStreams.has(sessionId)) {
       throw new Error(`Session ${sessionId} already has an active query`);
     }
 
-    // 校验 LLM 配置
     if (!this.config?.llm?.apiKey) {
       throw new Error('缺少 API Key，请在设置中配置');
     }
@@ -286,86 +352,55 @@ The following plugins are loaded and available for use:
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    // Convert /skillId args -> [触发skill:skillId] args
-    let actualContent = content;
-    if (content.startsWith('/')) {
-      const parts = content.substring(1).split(' ');
-      const skillId = parts[0];
-      const args = parts.slice(1).join(' ');
-      actualContent = args.trim()
-        ? `[触发skill:${skillId}] ${args}`
-        : `[触发skill:${skillId}]`;
-      this.log.info(`Converted skill command: ${content} -> ${actualContent}`);
-    }
+    // V2 sessions handle /slash commands natively — no conversion needed
+    this.store.addMessage(sessionId, { role: 'user', content });
 
-    this.store.addMessage(sessionId, { role: 'user', content: actualContent });
-
-    const sessionConfig = this.getSessionConfig(session.workspace);
     const abortController = new AbortController();
-    this.abortControllers.set(sessionId, abortController);
+    this.activeStreams.set(sessionId, abortController);
 
     try {
-      const options = this.buildOptions(sessionConfig, abortController);
-      options.cwd = session.workspace;
+      const v2Session = await this.getOrCreateV2Session(sessionId);
 
-      // Resume existing SDK session if available
-      let sdkSessionId = this.sdkSessionIds.get(sessionId);
-      // If not in memory (e.g., after app restart), try to load from database
-      if (!sdkSessionId) {
-        sdkSessionId = this.store.getSdkSessionId(sessionId);
-        if (sdkSessionId) {
-          this.sdkSessionIds.set(sessionId, sdkSessionId);
-          this.log.info(`[DEBUG] Loaded sdkSessionId from database: ${sdkSessionId}`);
-        }
-      }
-      this.log.info(`[DEBUG] sendMessage called: sessionId=${sessionId}, sdkSessionId=${sdkSessionId || 'none'}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
-      if (sdkSessionId) {
-        options.resume = sdkSessionId;
-      }
-
-      this.log.info(`Starting query for session ${sessionId}, resume=${sdkSessionId || 'none'}, content: ${content.substring(0, 50)}...`);
-
-      const q = query({
-        prompt: actualContent,
-        options,
-      });
-
-      this.activeQueries.set(sessionId, q);
-
-      let fullContent = '';
-      let currentThinking = '';
-      let currentToolUse: { id: string; name: string; input: string } | null = null;
-      let messageCount = 0;
-      let hasResult = false;
       wsSend(JSON.stringify({
         type: 'chat.start',
         sessionId,
       }));
 
-      for await (const sdkMsg of q) {
-        messageCount++;
-        this.log.info(`Received SDK message ${messageCount}: type=${sdkMsg.type}`);
+      await v2Session.send(content);
 
-        if (abortController.signal.aborted) {
-          this.log.info(`Query aborted for session ${sessionId}`);
-          break;
-        }
+      let fullContent = '';
+      let currentThinking = '';
+      let currentToolUse: { id: string; name: string; input: string } | null = null;
+
+      for await (const sdkMsg of v2Session.stream()) {
+        if (abortController.signal.aborted) break;
 
         switch (sdkMsg.type) {
           case 'assistant': {
-            // Assistant message contains the complete content, but we use stream_event for incremental updates
-            // to avoid duplicate output. Only log here, don't send to client.
             const text = this.extractTextContent(sdkMsg);
-            this.log.info(`Assistant message (complete, length=${text.length})`);
-            // Update fullContent for storage, but don't send - stream_event handles the UI updates
             if (text) {
-              fullContent = text;
+              // Send new content as delta so UI starts rendering immediately
+              // instead of showing only the typing indicator.
+              const newPart = text.length > fullContent.length && text.startsWith(fullContent)
+                ? text.slice(fullContent.length)
+                : (fullContent === '' ? text : '');
+              if (newPart) {
+                fullContent = text;
+                wsSend(JSON.stringify({
+                  type: 'chat.delta',
+                  sessionId,
+                  content: newPart,
+                  deltaType: 'text',
+                }));
+              } else {
+                fullContent = text;
+              }
             }
             break;
           }
 
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
+            const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta) {
               if (delta.type === 'text') {
                 fullContent += delta.content;
@@ -385,7 +420,6 @@ The following plugins are loaded and available for use:
                 }));
               } else if (delta.type === 'tool_use') {
                 if (delta.name && delta.id) {
-                  // New tool use started
                   currentToolUse = { id: delta.id, name: delta.name, input: '' };
                   wsSend(JSON.stringify({
                     type: 'chat.tool_start',
@@ -394,7 +428,6 @@ The following plugins are loaded and available for use:
                     toolName: delta.name,
                   }));
                 } else if (currentToolUse && delta.content) {
-                  // Accumulate tool input
                   currentToolUse.input += delta.content;
                   wsSend(JSON.stringify({
                     type: 'chat.tool_delta',
@@ -409,56 +442,22 @@ The following plugins are loaded and available for use:
           }
 
           case 'result': {
-            hasResult = true;
-            const result = sdkMsg as SDKResultMessage;
+            const result = sdkMsg as any;
             const cost = result.total_cost_usd || 0;
             const isError = result.is_error;
 
-            this.log.info(`Result message: isError=${isError}, session_id=${result.session_id}`);
-
-            this.log.info(`[DEBUG] Result received: sessionId=${sessionId}, result.session_id=${result.session_id}, isError=${isError}`);
-
-            // Save SDK session ID for resuming conversation
+            // Save SDK session ID
             if (result.session_id) {
               this.sdkSessionIds.set(sessionId, result.session_id);
               this.store.updateSdkSessionId(sessionId, result.session_id);
-              this.log.info(`[DEBUG] Saved session_id: ${result.session_id} for ${sessionId}, sdkSessionIds.size=${this.sdkSessionIds.size}`);
             }
 
-            // Build content blocks array
-            const contentBlocks: Array<{ type: 'text' | 'thinking' | 'tool_use'; text?: string; thinking?: string; id?: string; name?: string; input?: unknown }> = [];
-            if (fullContent) {
-              contentBlocks.push({ type: 'text', text: fullContent });
-            }
-            if (currentThinking) {
-              contentBlocks.push({ type: 'thinking', thinking: currentThinking });
-            }
-            if (currentToolUse) {
-              try {
-                const input = currentToolUse.input ? JSON.parse(currentToolUse.input) : {};
-                contentBlocks.push({
-                  type: 'tool_use',
-                  id: currentToolUse.id,
-                  name: currentToolUse.name,
-                  input,
-                });
-              } catch {
-                contentBlocks.push({
-                  type: 'tool_use',
-                  id: currentToolUse.id,
-                  name: currentToolUse.name,
-                  input: currentToolUse.input,
-                });
-              }
-            }
-
-            // Store message with content blocks
+            // Store assistant message
             const finalContent = fullContent || '';
-            if (finalContent || contentBlocks.length > 0) {
+            if (finalContent) {
               this.store.addMessage(sessionId, {
                 role: 'assistant',
                 content: finalContent,
-                contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
               });
             }
 
@@ -477,48 +476,33 @@ The following plugins are loaded and available for use:
             break;
           }
 
-          default:
-            this.log.info(`Ignoring message type: ${sdkMsg.type}, details: ${JSON.stringify(sdkMsg).substring(0, 200)}`);
-            // Ignore system messages, user replays, etc.
+          case 'system': {
+            // Capture session_id from init message
+            if ((sdkMsg as any).subtype === 'init' && (sdkMsg as any).session_id) {
+              const sid = (sdkMsg as any).session_id;
+              this.sdkSessionIds.set(sessionId, sid);
+              this.store.updateSdkSessionId(sessionId, sid);
+              this.log.info(`Captured SDK session_id: ${sid}`);
+            }
             break;
+          }
         }
-      }
-
-      this.log.info(`Query loop ended for session ${sessionId}, received ${messageCount} messages, fullContent length: ${fullContent.length}`);
-
-      // If we got no result message, send an error
-      if (messageCount === 0) {
-        this.log.error(`No messages received from SDK for session ${sessionId}`);
-        wsSend(JSON.stringify({
-          type: 'chat.error',
-          sessionId,
-          error: 'No response from Claude SDK',
-        }));
       }
     } catch (err: any) {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
-        wsSend(JSON.stringify({
-          type: 'chat.aborted',
-          sessionId,
-        }));
-        this.log.info(`Query aborted for session ${sessionId}`);
+        wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
       } else {
         const errorMessage = err instanceof Error ? err.message : String(err);
         this.log.error(`Query error for session ${sessionId}`, { error: errorMessage });
-        wsSend(JSON.stringify({
-          type: 'chat.error',
-          sessionId,
-          error: errorMessage,
-        }));
+        wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: errorMessage }));
       }
     } finally {
-      this.activeQueries.delete(sessionId);
-      this.abortControllers.delete(sessionId);
+      this.activeStreams.delete(sessionId);
     }
   }
 
   /**
-   * 发送消息（定时任务专用，支持外部 AbortController 和活动回调）
+   * Send message for cron tasks (headless execution)
    */
   async sendMessageForCron(
     sessionId: string,
@@ -529,11 +513,10 @@ The following plugins are loaded and available for use:
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    if (this.activeQueries.has(sessionId)) {
+    if (this.activeStreams.has(sessionId)) {
       throw new Error(`Session ${sessionId} already has an active query`);
     }
 
-    // 校验 LLM 配置
     if (!this.config?.llm?.apiKey) {
       throw new Error('缺少 API Key，请在设置中配置');
     }
@@ -543,39 +526,24 @@ The following plugins are loaded and available for use:
 
     this.store.addMessage(sessionId, { role: 'user', content });
 
-    const sessionConfig = this.getSessionConfig(session.workspace);
-    this.abortControllers.set(sessionId, abortController);
+    this.activeStreams.set(sessionId, abortController);
 
     try {
-      const options = this.buildOptions(sessionConfig, abortController);
-      options.cwd = session.workspace;
+      const v2Session = await this.getOrCreateV2Session(sessionId);
 
-      this.log.info(`Starting cron query for session ${sessionId}`);
-
-      const q = query({
-        prompt: content,
-        options,
-      });
-
-      this.activeQueries.set(sessionId, q);
-
-      this.log.info(`Cron query() created, waiting for SDK messages...`);
+      await v2Session.send(content);
 
       let fullContent = '';
       let msgCount = 0;
 
-      for await (const sdkMsg of q) {
+      for await (const sdkMsg of v2Session.stream()) {
         msgCount++;
         if (msgCount <= 3 || msgCount % 10 === 0) {
           this.log.info(`Cron SDK message #${msgCount}: type=${sdkMsg.type}`);
         }
-        // 调用活动回调
         onActivity();
 
-        if (abortController.signal.aborted) {
-          this.log.info(`Cron query aborted for session ${sessionId}`);
-          break;
-        }
+        if (abortController.signal.aborted) break;
 
         switch (sdkMsg.type) {
           case 'assistant': {
@@ -584,24 +552,21 @@ The following plugins are loaded and available for use:
             break;
           }
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
-            if (delta) {
-              fullContent += delta;
+            const delta = this.extractDeltaText((sdkMsg as any).event);
+            if (delta && delta.type === 'text') {
+              fullContent += delta.content;
             }
             break;
           }
           case 'result': {
-            const result = sdkMsg as SDKResultMessage;
-
+            const result = sdkMsg as any;
             if (result.session_id) {
               this.sdkSessionIds.set(sessionId, result.session_id);
               this.store.updateSdkSessionId(sessionId, result.session_id);
             }
-
             if (fullContent) {
               this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
             }
-
             this.log.info(`Cron query completed for session ${sessionId}`);
             break;
           }
@@ -612,13 +577,12 @@ The following plugins are loaded and available for use:
         throw err;
       }
     } finally {
-      this.activeQueries.delete(sessionId);
-      this.abortControllers.delete(sessionId);
+      this.activeStreams.delete(sessionId);
     }
   }
 
   /**
-   * 发送消息（Chatbot 专用，支持流式回调 + SDK session 恢复 + 返回完整内容）
+   * Send message for chatbot (WeCom/Feishu) with streaming callback
    */
   async sendMessageForChatbot(
     sessionId: string,
@@ -630,7 +594,7 @@ The following plugins are loaded and available for use:
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    if (this.activeQueries.has(sessionId)) {
+    if (this.activeStreams.has(sessionId)) {
       throw new Error(`Session ${sessionId} already has an active query`);
     }
 
@@ -643,35 +607,18 @@ The following plugins are loaded and available for use:
 
     this.store.addMessage(sessionId, { role: 'user', content });
 
-    const sessionConfig = this.getSessionConfig(session.workspace);
-    this.abortControllers.set(sessionId, abortController);
+    this.activeStreams.set(sessionId, abortController);
 
     try {
-      const options = this.buildOptions(sessionConfig, abortController);
-      options.cwd = session.workspace;
+      const v2Session = await this.getOrCreateV2Session(sessionId);
 
-      // Resume SDK session if available
-      let sdkSessionId = this.sdkSessionIds.get(sessionId);
-      if (!sdkSessionId) {
-        sdkSessionId = this.store.getSdkSessionId(sessionId);
-        if (sdkSessionId) {
-          this.sdkSessionIds.set(sessionId, sdkSessionId);
-        }
-      }
-      if (sdkSessionId) {
-        options.resume = sdkSessionId;
-      }
-
-      this.log.info(`Starting chatbot query for session ${sessionId}, resume=${sdkSessionId || 'none'}`);
-
-      const q = query({ prompt: content, options });
-      this.activeQueries.set(sessionId, q);
+      await v2Session.send(content);
 
       let fullContent = '';
-      let streamedContent = '';  // Track streamed content separately
+      let streamedContent = '';
       let msgCount = 0;
 
-      for await (const sdkMsg of q) {
+      for await (const sdkMsg of v2Session.stream()) {
         msgCount++;
         if (msgCount <= 3 || msgCount % 10 === 0) {
           this.log.info(`Chatbot SDK message #${msgCount}: type=${sdkMsg.type}`);
@@ -681,7 +628,6 @@ The following plugins are loaded and available for use:
 
         switch (sdkMsg.type) {
           case 'assistant': {
-            // Use assistant message as canonical source; ignore if we already have streamed content
             const text = this.extractTextContent(sdkMsg);
             if (text && !streamedContent) {
               fullContent = text;
@@ -689,7 +635,7 @@ The following plugins are loaded and available for use:
             break;
           }
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
+            const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta && delta.type === 'text') {
               streamedContent += delta.content;
               fullContent = streamedContent;
@@ -698,7 +644,7 @@ The following plugins are loaded and available for use:
             break;
           }
           case 'result': {
-            const result = sdkMsg as SDKResultMessage;
+            const result = sdkMsg as any;
             if (result.session_id) {
               this.sdkSessionIds.set(sessionId, result.session_id);
               this.store.updateSdkSessionId(sessionId, result.session_id);
@@ -717,18 +663,57 @@ The following plugins are loaded and available for use:
       }
       return '';
     } finally {
-      this.activeQueries.delete(sessionId);
-      this.abortControllers.delete(sessionId);
+      this.activeStreams.delete(sessionId);
     }
   }
 
+  // ── Utility methods ──
+
+  private extractTextContent(message: any): string {
+    const msg = message.message;
+    if (!msg?.content) return '';
+    return msg.content
+      .filter((block: any) => block.type === 'text')
+      .map((block: any) => block.text)
+      .join('');
+  }
+
+  private extractDeltaText(event: any): { type: 'text' | 'thinking' | 'tool_use'; content: string; name?: string; id?: string } | null {
+    if (event.type === 'content_block_delta') {
+      if (event.delta?.type === 'text_delta') {
+        return { type: 'text', content: event.delta.text };
+      }
+      if (event.delta?.type === 'thinking_delta') {
+        return { type: 'thinking', content: event.delta.thinking };
+      }
+      if (event.delta?.type === 'input_json_delta') {
+        return { type: 'tool_use', content: event.delta.partial_json };
+      }
+    }
+    if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+      return {
+        type: 'tool_use',
+        content: '',
+        name: event.content_block.name,
+        id: event.content_block.id,
+      };
+    }
+    return null;
+  }
+
+  // ── Session management ──
+
   abort(sessionId: string): void {
-    const controller = this.abortControllers.get(sessionId);
+    const controller = this.activeStreams.get(sessionId);
     if (controller) {
       controller.abort();
-      this.abortControllers.delete(sessionId);
-      this.activeQueries.delete(sessionId);
+      this.activeStreams.delete(sessionId);
       this.log.info(`Session aborted: ${sessionId}`);
+    }
+    // Also try to interrupt V2 session
+    const info = this.v2Sessions.get(sessionId);
+    if (info) {
+      (info.session as any).interrupt?.()?.catch(() => {});
     }
   }
 
@@ -758,12 +743,23 @@ The following plugins are loaded and available for use:
     }));
   }
 
+  updateSessionLabel(sessionId: string, label: string): void {
+    this.store.updateLabel(sessionId, label);
+  }
+
   close(): void {
-    for (const controller of this.abortControllers.values()) {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+    for (const controller of this.activeStreams.values()) {
       controller.abort();
     }
-    this.abortControllers.clear();
-    this.activeQueries.clear();
+    this.activeStreams.clear();
+    for (const [sessionId] of this.v2Sessions) {
+      this.closeV2Session(sessionId);
+    }
+    this.v2Sessions.clear();
     this.sessions.clear();
     this.sdkSessionIds.clear();
   }

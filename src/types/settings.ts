@@ -1,6 +1,5 @@
 /**
  * Settings 类型定义 (Sman)
- * 简化版：只有 LLM 配置 + Web Search 配置
  */
 
 export interface LlmConfig {
@@ -18,10 +17,25 @@ export interface WebSearchConfig {
   maxUsesPerSession: number;
 }
 
+export interface ChatbotConfig {
+  enabled: boolean;
+  wecom: {
+    enabled: boolean;
+    botId: string;
+    secret: string;
+  };
+  feishu: {
+    enabled: boolean;
+    appId: string;
+    appSecret: string;
+  };
+}
+
 export interface SmanSettings {
   port: number;
   llm: LlmConfig;
   webSearch: WebSearchConfig;
+  chatbot: ChatbotConfig;
 }
 
 export const WEB_SEARCH_PROVIDER_OPTIONS: {

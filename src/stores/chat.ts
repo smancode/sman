@@ -77,7 +77,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingTools: [],
   sessions: [],
   currentSessionId: '',
-  showThinking: false,
+  showThinking: true,
 
   // Create a new session with workspace (directory path)
   createSessionWithWorkspace: async (workspace: string) => {

@@ -3,6 +3,7 @@ import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
 import { CronTaskSettings } from './CronTaskSettings';
 import { BatchTaskSettings } from './BatchTaskSettings';
+import { ChatbotSettings } from './ChatbotSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 export function Settings() {
@@ -24,6 +25,7 @@ export function Settings() {
         <BatchTaskSettings />
         <LLMSettings />
         <WebSearchSettings />
+        <ChatbotSettings />
       </div>
     </div>
   );

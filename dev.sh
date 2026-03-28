@@ -33,23 +33,35 @@ fi
 HOME_DIR="${SMANBASE_HOME:-$HOME/.sman}"
 mkdir -p "$HOME_DIR"
 
-# ── 2. 端口冲突检测 ──────────────────────────────────────
+# ── 2. 端口冲突检测与清理 ──────────────────────────────────
 
-check_port() {
+kill_port() {
   local port=$1
-  if lsof -i :"$port" -sTCP:LISTEN > /dev/null 2>&1; then
-    echo -e "${RED}Port $port is already in use!${NC}"
-    echo -e "${RED}  Please stop the process or change the port.${NC}"
-    echo -e "${RED}  Current process: $(lsof -i :"$port" -sTCP:LISTEN -t | head -1 | xargs ps -p | tail -1 | awk '{print $4}')${NC}"
-    return 1
+  local pids=$(lsof -i :"$port" -sTCP:LISTEN -t 2>/dev/null | tr '\n' ' ')
+  if [ -n "$pids" ]; then
+    echo -e "${YELLOW}Port $port in use, sending SIGTERM to $pids...${NC}"
+    echo "$pids" | xargs kill -15 2>/dev/null
+    # Wait up to 5s for graceful shutdown
+    for i in $(seq 1 10); do
+      if ! lsof -i :"$port" -sTCP:LISTEN > /dev/null 2>&1; then
+        break
+      fi
+      sleep 0.5
+    done
+    # Force kill if still alive
+    local remaining=$(lsof -i :"$port" -sTCP:LISTEN -t 2>/dev/null | tr '\n' ' ')
+    if [ -n "$remaining" ]; then
+      echo -e "${RED}Force killing remaining $remaining...${NC}"
+      echo "$remaining" | xargs kill -9 2>/dev/null
+      sleep 0.3
+    fi
   fi
-  return 0
 }
 
 echo -e "${CYAN}Checking ports...${NC}"
-check_port 5880 || exit 1
-check_port 5881 || exit 1
-echo -e "${GREEN}Ports 5880 and 5881 are available.${NC}"
+kill_port 5880
+kill_port 5881
+echo -e "${GREEN}Ports 5880 and 5881 are ready.${NC}"
 
 # ── 3. 构建 Electron main/preload ─────────────────────────
 

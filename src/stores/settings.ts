@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmanSettings, LlmConfig, WebSearchConfig } from '@/types/settings';
+import type { SmanSettings, LlmConfig, WebSearchConfig, ChatbotConfig } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -30,6 +30,7 @@ interface SettingsState {
   fetchSettings: () => Promise<void>;
   updateLlm: (updates: Partial<LlmConfig>) => Promise<void>;
   updateWebSearch: (updates: Partial<WebSearchConfig>) => Promise<void>;
+  updateChatbot: (updates: Partial<ChatbotConfig>) => Promise<void>;
   clearError: () => void;
 }
 
@@ -41,6 +42,11 @@ const DEFAULT_SETTINGS: SmanSettings = {
     braveApiKey: '',
     tavilyApiKey: '',
     maxUsesPerSession: 50,
+  },
+  chatbot: {
+    enabled: false,
+    wecom: { enabled: false, botId: '', secret: '' },
+    feishu: { enabled: false, appId: '', appSecret: '' },
   },
 };
 
@@ -105,6 +111,27 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', webSearch: updates });
+    });
+  },
+
+  updateChatbot: async (updates) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'settings.updated', (data) => {
+        unsub();
+        unsubErr();
+        set({ settings: data.config as SmanSettings });
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'settings.update', chatbot: updates });
     });
   },
 
