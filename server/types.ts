@@ -38,6 +38,7 @@ export interface SmanConfig {
     tavilyApiKey: string;
     maxUsesPerSession: number;
   };
+  chatbot: import('./chatbot/types.js').ChatbotConfig;
 }
 
 // === Cron Task Types ===

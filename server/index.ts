@@ -16,6 +16,10 @@ import { CronTaskStore } from './cron-task-store.js';
 import { CronScheduler } from './cron-scheduler.js';
 import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
+import { ChatbotStore } from './chatbot/chatbot-store.js';
+import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
+import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
+import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -79,6 +83,40 @@ batchEngine.setOnProgress((taskId, data) => {
   broadcast(JSON.stringify({ type: 'batch.progress', taskId, ...data }));
 });
 batchEngine.start();
+
+// Chatbot integration (WeCom + Feishu)
+const chatbotStore = new ChatbotStore(dbPath);
+const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbotStore);
+
+let wecomConnection: WeComBotConnection | null = null;
+let feishuConnection: FeishuBotConnection | null = null;
+
+function startChatbotConnections(): void {
+  const chatbotConfig = settingsManager.getConfig().chatbot;
+  if (!chatbotConfig?.enabled) return;
+
+  if (chatbotConfig.wecom.enabled && chatbotConfig.wecom.botId && chatbotConfig.wecom.secret) {
+    wecomConnection = new WeComBotConnection({
+      botId: chatbotConfig.wecom.botId,
+      secret: chatbotConfig.wecom.secret,
+      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+    });
+    wecomConnection.start();
+    log.info('WeCom bot connection started');
+  }
+
+  if (chatbotConfig.feishu.enabled && chatbotConfig.feishu.appId && chatbotConfig.feishu.appSecret) {
+    feishuConnection = new FeishuBotConnection({
+      appId: chatbotConfig.feishu.appId,
+      appSecret: chatbotConfig.feishu.appSecret,
+      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+    });
+    feishuConnection.start();
+    log.info('Feishu bot connection started');
+  }
+}
+
+startChatbotConnections();
 
 // Start cron scheduler (loads enabled tasks and schedules them)
 cronScheduler.start()
@@ -325,6 +363,11 @@ wss.on('connection', (ws: WebSocket) => {
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
           batchEngine.setConfig(config.llm);
+          if (updates.chatbot) {
+            wecomConnection?.stop();
+            feishuConnection?.stop();
+            startChatbotConnections();
+          }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
@@ -611,6 +654,9 @@ wss.on('connection', (ws: WebSocket) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   log.info('SIGTERM received, shutting down...');
+  wecomConnection?.stop();
+  feishuConnection?.stop();
+  chatbotManager.stop();
   batchEngine.stop();
   cronScheduler.stop();
   sessionManager.close();
@@ -620,6 +666,9 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   log.info('SIGINT received, shutting down...');
+  wecomConnection?.stop();
+  feishuConnection?.stop();
+  chatbotManager.stop();
   batchEngine.stop();
   cronScheduler.stop();
   sessionManager.close();

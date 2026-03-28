@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Play, Pause, Square, RotateCcw,
   Loader2, CheckCircle, XCircle, FileCode, FlaskConical,
-  Save, ChevronDown, ChevronUp,
+  Save, ChevronDown, ChevronUp, Wand2, Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useBatchStore } from '@/stores/batch';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
@@ -64,21 +65,54 @@ function ProgressBar({ task }: { task: BatchTask }) {
 
 function BatchTaskCard({ task }: { task: BatchTask }) {
   const [expanded, setExpanded] = useState(false);
+  const [editInterval, setEditInterval] = useState(String(task.cronIntervalMinutes ?? 60));
+  const [editUnit, setEditUnit] = useState<'minutes' | 'hours'>(
+    (task.cronIntervalMinutes ?? 60) >= 60 ? 'hours' : 'minutes',
+  );
   const {
-    deleteTask, executeTask, pauseTask, resumeTask, cancelTask, retryFailed,
+    deleteTask, generateCode, testCode, saveTask,
+    executeTask, pauseTask, resumeTask, cancelTask, retryFailed,
+    updateTask,
     generating, testing, executing,
   } = useBatchStore();
 
   const workspaceName = task.workspace.split(/[/\\]/).pop() || task.workspace;
-  const isExecutable = task.status === 'saved';
+  const isDraft = task.status === 'draft';
+  const isGenerated = task.status === 'generated';
+  const isTested = task.status === 'tested';
+  const isSaved = task.status === 'saved';
   const isRunning = task.status === 'running';
   const isPaused = task.status === 'paused';
-  const isCompleted = task.status === 'completed' || task.status === 'failed';
+  const isDone = task.status === 'completed' || task.status === 'failed';
   const hasFailed = task.failedCount > 0;
+  const isBusy = generating || testing || executing;
+  const canCron = isSaved || isDone;
 
   const handleDelete = async () => {
-    if (!confirm('确定要删除这个批量任务吗？')) return;
+    if (!confirm('确定要删除这个任务吗？')) return;
     await deleteTask(task.id);
+  };
+
+  const handleToggleCron = async () => {
+    if (!task.cronEnabled) {
+      const intervalMin = editUnit === 'hours' ? parseInt(editInterval) * 60 : parseInt(editInterval);
+      if (isNaN(intervalMin) || intervalMin < 1) {
+        alert('请输入有效的间隔时间');
+        return;
+      }
+      await updateTask(task.id, { cronEnabled: true, cronIntervalMinutes: intervalMin });
+    } else {
+      await updateTask(task.id, { cronEnabled: false });
+    }
+  };
+
+  const handleSaveInterval = async () => {
+    const intervalMin = editUnit === 'hours' ? parseInt(editInterval) * 60 : parseInt(editInterval);
+    if (isNaN(intervalMin) || intervalMin < 1) {
+      alert('请输入有效的间隔时间');
+      return;
+    }
+    await updateTask(task.id, { cronIntervalMinutes: intervalMin });
   };
 
   return (
@@ -99,78 +133,17 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
               <span>{task.successCount} 成功 / {task.failedCount} 失败</span>
             )}
             {task.totalCost > 0 && <span>¥{task.totalCost.toFixed(4)}</span>}
+            {task.cronEnabled && (
+              <span className="flex items-center gap-1 text-blue-500">
+                <Timer className="h-3 w-3" />
+                每 {task.cronIntervalMinutes} 分钟
+              </span>
+            )}
           </div>
           <ProgressBar task={task} />
         </div>
 
         <div className="flex items-center gap-1 ml-2" onClick={(e) => e.stopPropagation()}>
-          {(isExecutable || isPaused) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={async () => {
-                if (isPaused) {
-                  await resumeTask(task.id);
-                  await executeTask(task.id);
-                } else {
-                  await executeTask(task.id);
-                }
-              }}
-              disabled={executing}
-              title="执行"
-              className="h-8 w-8"
-            >
-              <Play className="h-4 w-4" />
-            </Button>
-          )}
-
-          {isRunning && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => pauseTask(task.id)}
-              title="暂停"
-              className="h-8 w-8"
-            >
-              <Pause className="h-4 w-4" />
-            </Button>
-          )}
-
-          {isRunning && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => cancelTask(task.id)}
-              title="取消"
-              className="h-8 w-8 text-destructive hover:text-destructive"
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-          )}
-
-          {isCompleted && hasFailed && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => retryFailed(task.id)}
-              disabled={executing}
-              title="重试失败项"
-              className="h-8 w-8"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleDelete}
-            disabled={isRunning}
-            className="h-8 w-8 text-destructive hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground" />
           ) : (
@@ -179,13 +152,125 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
         </div>
       </div>
 
+      {/* Action bar */}
+      <div className="border-t px-3 py-2 flex items-center gap-1.5 flex-wrap">
+        {isDraft && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => generateCode(task.id)} disabled={isBusy}>
+            <Wand2 className="h-3.5 w-3.5" /> 生成代码
+          </Button>
+        )}
+
+        {isGenerated && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => testCode(task.id)} disabled={isBusy}>
+            <FlaskConical className="h-3.5 w-3.5" /> 测试
+          </Button>
+        )}
+        {testing && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled>
+            <FlaskConical className="h-3.5 w-3.5 animate-spin" /> 测试中...
+          </Button>
+        )}
+
+        {isTested && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => saveTask(task.id)} disabled={isBusy}>
+            <Save className="h-3.5 w-3.5" /> 保存
+          </Button>
+        )}
+
+        {isSaved && (
+          <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
+            <Play className="h-3.5 w-3.5" /> 执行
+          </Button>
+        )}
+        {isPaused && (
+          <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
+            <Play className="h-3.5 w-3.5" /> 继续
+          </Button>
+        )}
+
+        {isRunning && (
+          <>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => pauseTask(task.id)}>
+              <Pause className="h-3.5 w-3.5" /> 暂停
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive" onClick={() => cancelTask(task.id)}>
+              <Square className="h-3.5 w-3.5" /> 取消
+            </Button>
+          </>
+        )}
+
+        {isDone && (
+          <>
+            <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
+              <Play className="h-3.5 w-3.5" /> 重新执行
+            </Button>
+            {hasFailed && (
+              <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => retryFailed(task.id)} disabled={isBusy}>
+                <RotateCcw className="h-3.5 w-3.5" /> 重试失败
+              </Button>
+            )}
+          </>
+        )}
+
+        {canCron && (
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-1">
+              <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+              <Switch checked={task.cronEnabled} onCheckedChange={handleToggleCron} disabled={isBusy} />
+            </div>
+          </div>
+        )}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+          onClick={handleDelete}
+          disabled={isRunning}
+        >
+          <Trash2 className="h-3.5 w-3.5" /> 删除
+        </Button>
+      </div>
+
+      {/* Expanded details */}
       {expanded && (
-        <div className="border-t px-3 py-2 text-xs text-muted-foreground space-y-1">
+        <div className="border-t px-3 py-2 text-xs text-muted-foreground space-y-2">
           <div>创建时间：{new Date(task.createdAt).toLocaleString('zh-CN')}</div>
           {task.startedAt && <div>开始执行：{new Date(task.startedAt).toLocaleString('zh-CN')}</div>}
           {task.finishedAt && <div>结束执行：{new Date(task.finishedAt).toLocaleString('zh-CN')}</div>}
+
+          {canCron && (
+            <div className="flex items-center gap-2 pt-1">
+              <Label className="text-foreground">定时间隔</Label>
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={editInterval}
+                onChange={(e) => setEditInterval(e.target.value)}
+                className="w-16 h-6 text-xs"
+                disabled={task.cronEnabled}
+              />
+              <Select value={editUnit} onValueChange={(v) => setEditUnit(v as 'minutes' | 'hours')} disabled={task.cronEnabled}>
+                <SelectTrigger className="w-16 h-6 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="minutes">分钟</SelectItem>
+                  <SelectItem value="hours">小时</SelectItem>
+                </SelectContent>
+              </Select>
+              {!task.cronEnabled && (
+                <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleSaveInterval}>
+                  保存间隔
+                </Button>
+              )}
+              {task.cronEnabled && <span className="text-green-600">（定时中，关闭后可修改）</span>}
+            </div>
+          )}
+
           {task.generatedCode && (
-            <div className="mt-2">
+            <div className="mt-1">
               <div className="font-medium text-foreground mb-1">生成代码（前200字符）</div>
               <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-32">
                 {task.generatedCode.slice(0, 200)}{task.generatedCode.length > 200 ? '...' : ''}
@@ -200,13 +285,15 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
 
 // === New Task Form ===
 
-function NewTaskForm() {
+function NewTaskForm({ onCancel }: { onCancel: () => void }) {
   const [workspace, setWorkspace] = useState('');
   const [skillName, setSkillName] = useState('');
   const [mdContent, setMdContent] = useState('');
   const [execTemplate, setExecTemplate] = useState('');
   const [envVars, setEnvVars] = useState('');
   const [concurrency, setConcurrency] = useState('10');
+  const [cronInterval, setCronInterval] = useState('60');
+  const [cronUnit, setCronUnit] = useState<'minutes' | 'hours'>('hours');
 
   const { createTask } = useBatchStore();
   const { workspaces, skills, fetchWorkspaces, fetchSkills } = useCronStore();
@@ -225,7 +312,7 @@ function NewTaskForm() {
 
   const handleCreate = async () => {
     if (!workspace || !skillName || !mdContent.trim()) {
-      alert('请填写业务系统、Skill 名称和 Batch 配置');
+      alert('请填写业务系统、Skill 名称和配置');
       return;
     }
 
@@ -239,6 +326,8 @@ function NewTaskForm() {
       }
     }
 
+    const intervalMin = cronUnit === 'hours' ? parseInt(cronInterval) * 60 : parseInt(cronInterval);
+
     await createTask({
       workspace,
       skillName,
@@ -246,11 +335,13 @@ function NewTaskForm() {
       execTemplate,
       envVars: Object.keys(envObj).length > 0 ? envObj : undefined,
       concurrency: parseInt(concurrency) || 10,
+      cronEnabled: false,
+      cronIntervalMinutes: isNaN(intervalMin) ? 60 : intervalMin,
     });
   };
 
-  const handleLoadBatchMd = () => {
-    setMdContent(`# Batch 数据获取配置
+  const handleLoadTemplate = () => {
+    setMdContent(`# 数据获取配置
 
 ## 数据源
 描述数据来源和连接方式
@@ -293,7 +384,7 @@ function NewTaskForm() {
 
       <div className="grid grid-cols-[1fr_auto] gap-4">
         <div className="space-y-2">
-          <Label>Batch 配置 (batch.md)</Label>
+          <Label>配置 (batch.md)</Label>
           <Textarea
             value={mdContent}
             onChange={(e) => setMdContent(e.target.value)}
@@ -303,7 +394,7 @@ function NewTaskForm() {
           />
         </div>
         <div className="flex flex-col gap-2 pt-6">
-          <Button variant="outline" size="sm" onClick={handleLoadBatchMd}>
+          <Button variant="outline" size="sm" onClick={handleLoadTemplate}>
             加载模板
           </Button>
         </div>
@@ -333,19 +424,46 @@ function NewTaskForm() {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>并发数</Label>
-        <Input
-          type="number"
-          min={1}
-          max={50}
-          value={concurrency}
-          onChange={(e) => setConcurrency(e.target.value)}
-          className="w-24"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>并发数</Label>
+          <Input
+            type="number"
+            min={1}
+            max={50}
+            value={concurrency}
+            onChange={(e) => setConcurrency(e.target.value)}
+            className="w-24"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>定时间隔</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={60}
+              value={cronInterval}
+              onChange={(e) => setCronInterval(e.target.value)}
+              className="w-20"
+            />
+            <Select value={cronUnit} onValueChange={(v) => setCronUnit(v as 'minutes' | 'hours')}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="minutes">分钟</SelectItem>
+                <SelectItem value="hours">小时</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel}>
+          取消
+        </Button>
         <Button
           onClick={handleCreate}
           disabled={!workspace || !skillName || !mdContent.trim()}
@@ -375,7 +493,7 @@ export function BatchTaskSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">批量任务</h3>
+          <h3 className="text-lg font-medium">自定义任务</h3>
           <p className="text-sm text-muted-foreground">
             MD 驱动的批量执行引擎
           </p>
@@ -393,14 +511,14 @@ export function BatchTaskSettings() {
         </div>
       )}
 
-      {showForm && <NewTaskForm />}
+      {showForm && <NewTaskForm onCancel={() => setShowForm(false)} />}
 
       <div className="space-y-2">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">加载中...</div>
         ) : tasks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            暂无批量任务，点击"新建任务"开始配置
+            暂无自定义任务，点击"新建任务"开始配置
           </div>
         ) : (
           tasks.map((task) => (

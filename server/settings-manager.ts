@@ -12,6 +12,11 @@ const DEFAULT_CONFIG: SmanConfig = {
     tavilyApiKey: '',
     maxUsesPerSession: 50,
   },
+  chatbot: {
+    enabled: false,
+    wecom: { enabled: false, botId: '', secret: '' },
+    feishu: { enabled: false, appId: '', appSecret: '' },
+  },
 };
 
 export class SettingsManager {
@@ -60,6 +65,7 @@ export class SettingsManager {
     const updated = { ...config, ...updates };
     if (updates.llm) updated.llm = { ...config.llm, ...updates.llm };
     if (updates.webSearch) updated.webSearch = { ...config.webSearch, ...updates.webSearch };
+    if (updates.chatbot) updated.chatbot = { ...config.chatbot, ...updates.chatbot };
     this.write(updated);
     return updated;
   }

@@ -617,6 +617,111 @@ The following plugins are loaded and available for use:
     }
   }
 
+  /**
+   * 发送消息（Chatbot 专用，支持流式回调 + SDK session 恢复 + 返回完整内容）
+   */
+  async sendMessageForChatbot(
+    sessionId: string,
+    content: string,
+    abortController: AbortController,
+    onActivity: () => void,
+    onResponse: (chunk: string) => void,
+  ): Promise<string> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+
+    if (this.activeQueries.has(sessionId)) {
+      throw new Error(`Session ${sessionId} already has an active query`);
+    }
+
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
+    }
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    this.store.addMessage(sessionId, { role: 'user', content });
+
+    const sessionConfig = this.getSessionConfig(session.workspace);
+    this.abortControllers.set(sessionId, abortController);
+
+    try {
+      const options = this.buildOptions(sessionConfig, abortController);
+      options.cwd = session.workspace;
+
+      // Resume SDK session if available
+      let sdkSessionId = this.sdkSessionIds.get(sessionId);
+      if (!sdkSessionId) {
+        sdkSessionId = this.store.getSdkSessionId(sessionId);
+        if (sdkSessionId) {
+          this.sdkSessionIds.set(sessionId, sdkSessionId);
+        }
+      }
+      if (sdkSessionId) {
+        options.resume = sdkSessionId;
+      }
+
+      this.log.info(`Starting chatbot query for session ${sessionId}, resume=${sdkSessionId || 'none'}`);
+
+      const q = query({ prompt: content, options });
+      this.activeQueries.set(sessionId, q);
+
+      let fullContent = '';
+      let streamedContent = '';  // Track streamed content separately
+      let msgCount = 0;
+
+      for await (const sdkMsg of q) {
+        msgCount++;
+        if (msgCount <= 3 || msgCount % 10 === 0) {
+          this.log.info(`Chatbot SDK message #${msgCount}: type=${sdkMsg.type}`);
+        }
+
+        if (abortController.signal.aborted) break;
+
+        switch (sdkMsg.type) {
+          case 'assistant': {
+            // Use assistant message as canonical source; ignore if we already have streamed content
+            const text = this.extractTextContent(sdkMsg);
+            if (text && !streamedContent) {
+              fullContent = text;
+            }
+            break;
+          }
+          case 'stream_event': {
+            const delta = this.extractDeltaText((sdkMsg as SDKPartialAssistantMessage).event);
+            if (delta && delta.type === 'text') {
+              streamedContent += delta.content;
+              fullContent = streamedContent;
+              onResponse(delta.content);
+            }
+            break;
+          }
+          case 'result': {
+            const result = sdkMsg as SDKResultMessage;
+            if (result.session_id) {
+              this.sdkSessionIds.set(sessionId, result.session_id);
+              this.store.updateSdkSessionId(sessionId, result.session_id);
+            }
+            if (fullContent) {
+              this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
+            }
+            break;
+          }
+        }
+      }
+      return fullContent;
+    } catch (err: any) {
+      if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
+        throw err;
+      }
+      return '';
+    } finally {
+      this.activeQueries.delete(sessionId);
+      this.abortControllers.delete(sessionId);
+    }
+  }
+
   abort(sessionId: string): void {
     const controller = this.abortControllers.get(sessionId);
     if (controller) {
