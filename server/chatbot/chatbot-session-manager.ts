@@ -78,7 +78,14 @@ export class ChatbotSessionManager {
   /** Ensure a chatbot session exists for this userKey+workspace */
   private ensureSession(userKey: string, workspacePath: string, platform: string): void {
     let session = this.store.getSession(userKey, workspacePath);
-    if (session) return;
+    if (session) {
+      // Verify the session still exists in the main session manager (may have been deleted via UI)
+      const active = this.sessionManager.listSessions().find(s => s.id === session!.sessionId);
+      if (active) return;
+      // Session was deleted — clean up stale chatbot_sessions record and recreate
+      this.log.info(`Session ${session.sessionId} was deleted, recreating...`);
+      this.store.deleteSession(userKey, workspacePath);
+    }
 
     const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
     this.sessionManager.createSessionWithId(workspacePath, sessionId, false);

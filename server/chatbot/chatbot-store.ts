@@ -70,6 +70,12 @@ export class ChatbotStore {
     ).run(userKey, workspace, sessionId);
   }
 
+  deleteSession(userKey: string, workspace: string): void {
+    this.db.prepare(
+      'DELETE FROM chatbot_sessions WHERE user_key = ? AND workspace = ?'
+    ).run(userKey, workspace);
+  }
+
   updateSdkSessionId(userKey: string, workspace: string, sdkSessionId: string): void {
     this.db.prepare(
       "UPDATE chatbot_sessions SET sdk_session_id = ?, last_active_at = datetime('now') WHERE user_key = ? AND workspace = ?"

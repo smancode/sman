@@ -745,7 +745,7 @@ The following plugins are loaded and available for use:
     const messages = this.store.getMessages(sessionId);
     return messages.map(msg => ({
       ...msg,
-      timestamp: new Date(msg.createdAt).getTime(),
+      timestamp: new Date(msg.createdAt + 'Z').getTime(),
     }));
   }
 
