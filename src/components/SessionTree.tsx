@@ -82,7 +82,7 @@ function SessionItem({
     <div
       data-session-id={session.key}
       className={cn(
-        'flex items-center gap-2 pl-3 pr-2 py-2 rounded-lg cursor-pointer text-[13px] transition-all duration-200 w-full overflow-hidden',
+        'flex items-center gap-2 pl-3 pr-1 py-2 rounded-lg cursor-pointer text-[13px] transition-all duration-200',
         isActive
           ? 'bg-[hsl(var(--muted))] text-foreground font-semibold'
           : 'hover:bg-[hsl(var(--muted))] text-foreground/60 hover:text-foreground',
@@ -93,7 +93,7 @@ function SessionItem({
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
-      <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'invisible')}>
+      <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'hidden')}>
         <button
           className={cn(
             'shrink-0 p-0.5 rounded transition-all',
