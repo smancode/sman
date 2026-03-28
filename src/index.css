@@ -75,6 +75,12 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Radix ScrollArea 内部使用 display:table，会被内容撑宽，需要 table-layout:fixed 限制宽度 */
+  [data-radix-scroll-area-viewport] > div {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
 }
 
 /* Custom scrollbar */
