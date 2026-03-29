@@ -7,12 +7,16 @@ type EventHandler = (...args: unknown[]) => void;
 interface WsClientOptions {
   /** Server port (default: 5880) */
   port?: number;
+  /** Full WebSocket URL (overrides port-based URL construction) */
+  url?: string;
   /** Auto-reconnect on disconnect (default: true) */
   autoReconnect?: boolean;
   /** Base reconnect delay in ms (default: 1000) */
   reconnectDelay?: number;
   /** Max reconnect delay in ms (default: 30000) */
   maxReconnectDelay?: number;
+  /** Auth token for server authentication */
+  token?: string;
 }
 
 export class WsClient {
@@ -21,18 +25,27 @@ export class WsClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private currentDelay: number;
   private _closed = false;
+  private _token: string;
 
   private readonly port: number;
+  private readonly urlOverride: string;
   private readonly autoReconnect: boolean;
   private readonly reconnectDelay: number;
   private readonly maxReconnectDelay: number;
 
   constructor(options: WsClientOptions = {}) {
     this.port = options.port ?? 5880;
+    this.urlOverride = options.url ?? '';
     this.autoReconnect = options.autoReconnect ?? true;
     this.reconnectDelay = options.reconnectDelay ?? 1000;
     this.maxReconnectDelay = options.maxReconnectDelay ?? 30000;
     this.currentDelay = this.reconnectDelay;
+    this._token = options.token ?? '';
+  }
+
+  /** Set or update the auth token (used before connect or reconnect) */
+  set token(value: string) {
+    this._token = value;
   }
 
   get connected(): boolean {
@@ -40,7 +53,7 @@ export class WsClient {
   }
 
   connect(): void {
-    // 已连接或正在连接中，跳过
+    // Already connected or connecting
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -49,18 +62,37 @@ export class WsClient {
       this.ws.close();
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    this.ws = new WebSocket(`${protocol}//${host}:${this.port}/ws`);
+    let wsUrl: string;
+    if (this.urlOverride) {
+      wsUrl = this.urlOverride;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      wsUrl = `${protocol}//${host}:${this.port}/ws`;
+    }
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       this.currentDelay = this.reconnectDelay;
-      this.emit('connected');
+      // Send auth message immediately after connection
+      if (this._token) {
+        this.ws!.send(JSON.stringify({ type: 'auth.verify', token: this._token }));
+      }
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
       try {
         const msg = JSON.parse(String(event.data));
+        if (msg.type === 'auth.verified') {
+          this.emit('connected');
+          return;
+        }
+        if (msg.type === 'auth.failed') {
+          this.emit('authFailed', msg);
+          this._closed = true;
+          this.ws?.close();
+          return;
+        }
         if (msg.type) {
           this.emit(msg.type, msg);
         }

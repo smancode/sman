@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { FolderOpen, ChevronRight, ChevronDown, Loader2, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { authFetch } from '@/lib/auth';
 
 interface DirectoryEntry {
   name: string;
@@ -32,7 +33,7 @@ export function DirectorySelectorDialog({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/directory/read?path=${encodeURIComponent(dirPath)}`);
+      const response = await authFetch(`/api/directory/read?path=${encodeURIComponent(dirPath)}`);
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to read directory');
@@ -52,7 +53,7 @@ export function DirectorySelectorDialog({
   useEffect(() => {
     if (open) {
       // Try to get home directory first
-      fetch('/api/directory/home')
+      authFetch('/api/directory/home')
         .then(res => res.json())
         .then(data => {
           const home = data.home || initialPath;

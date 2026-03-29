@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
 import { ChatbotSettings } from './ChatbotSettings';
+import { BackendSettings } from './BackendSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 export function Settings() {
@@ -19,6 +20,7 @@ export function Settings() {
       </div>
 
       <div className="max-w-2xl space-y-6">
+        <BackendSettings />
         <ChatbotSettings />
         <LLMSettings />
         <WebSearchSettings />

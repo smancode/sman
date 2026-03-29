@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 
 export default function App() {
   const connect = useWsConnection((s) => s.connect);
+  const initToken = useWsConnection((s) => s.initToken);
   const status = useWsConnection((s) => s.status);
   const client = useWsConnection((s) => s.client);
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
@@ -17,8 +18,9 @@ export default function App() {
   useTheme();
 
   useEffect(() => {
-    connect();
-  }, [connect]);
+    // Fetch token first (local mode), then connect
+    initToken().finally(() => connect());
+  }, [connect, initToken]);
 
   useEffect(() => {
     if (status !== 'connected') return;
