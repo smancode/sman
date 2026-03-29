@@ -71,6 +71,9 @@ const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
 const settingsManager = new SettingsManager(homeDir);
 
+// Initialize auth token (generate on first run, reuse thereafter)
+let authToken = settingsManager.ensureAuthToken();
+
 // Cron task scheduler
 const cronTaskStore = new CronTaskStore(dbPath);
 const cronScheduler = new CronScheduler(cronTaskStore);
@@ -166,10 +169,71 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
+// ── CORS & Auth Helpers ──
+
+const ALLOWED_ORIGINS = [
+  'http://localhost:5880',
+  'http://localhost:5881',
+  'http://127.0.0.1:5880',
+  'http://127.0.0.1:5881',
+];
+
+function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  }
+}
+
+function isLoopback(req: http.IncomingMessage): boolean {
+  const addr = req.socket.remoteAddress || '';
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+function verifyHttpAuth(req: http.IncomingMessage): boolean {
+  const header = req.headers.authorization || '';
+  const match = header.match(/^Bearer\s+(.+)$/);
+  if (!match) return false;
+  return match[1] === authToken;
+}
+
 const server = http.createServer((req, res) => {
+  // CORS preflight
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res);
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // Set CORS headers on all responses
+  setCorsHeaders(req, res);
+
+  // Public: health check (no auth)
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toLocaleString('zh-CN', { hour12: false }) }));
+    return;
+  }
+
+  // Public: token retrieval — loopback only
+  if (req.url === '/api/auth/token') {
+    if (!isLoopback(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ token: authToken }));
+    return;
+  }
+
+  // All other endpoints require auth
+  if (!verifyHttpAuth(req)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
   }
 
@@ -247,8 +311,21 @@ const server = http.createServer((req, res) => {
 });
 
 // WebSocket server with broadcast support
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  verifyClient: (info, callback) => {
+    const origin = info.origin || '';
+    // Allow connections with no origin (non-browser clients) or from allowed origins
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+      callback(false, 403, 'Forbidden: invalid origin');
+      return;
+    }
+    callback(true);
+  },
+});
 const clients = new Set<WebSocket>();
+const authenticatedClients = new Set<WebSocket>();
 
 function broadcast(data: string): void {
   for (const client of clients) {
@@ -268,8 +345,15 @@ interface WsMessage {
 
 
 wss.on('connection', (ws: WebSocket) => {
-  log.info('WebSocket client connected');
-  clients.add(ws);
+  log.info('WebSocket client connected, awaiting authentication');
+
+  // Authentication timeout: disconnect after 5 seconds if not authenticated
+  const authTimeout = setTimeout(() => {
+    if (!authenticatedClients.has(ws)) {
+      log.warn('WebSocket client disconnected: auth timeout');
+      ws.close(4001, 'Authentication timeout');
+    }
+  }, 5000);
 
   ws.on('message', async (data) => {
     let msg: WsMessage;
@@ -277,6 +361,27 @@ wss.on('connection', (ws: WebSocket) => {
       msg = JSON.parse(data.toString());
     } catch {
       ws.send(JSON.stringify({ type: 'error', error: 'Invalid JSON' }));
+      return;
+    }
+
+    // Handle auth.verify — the only allowed message before authentication
+    if (msg.type === 'auth.verify') {
+      if (msg.token === authToken) {
+        clearTimeout(authTimeout);
+        clients.add(ws);
+        authenticatedClients.add(ws);
+        ws.send(JSON.stringify({ type: 'auth.verified' }));
+        log.info('WebSocket client authenticated');
+      } else {
+        ws.send(JSON.stringify({ type: 'auth.failed', error: 'Invalid token' }));
+        ws.close(4002, 'Invalid token');
+      }
+      return;
+    }
+
+    // Reject all other messages before authentication
+    if (!authenticatedClients.has(ws)) {
+      ws.send(JSON.stringify({ type: 'error', error: 'Authentication required' }));
       return;
     }
 
@@ -367,7 +472,14 @@ wss.on('connection', (ws: WebSocket) => {
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
           batchEngine.setConfig(config.llm);
-          if (updates.chatbot) {
+          // Sync in-memory auth token if changed
+          if ((updates as Record<string, unknown>).auth && typeof (updates as Record<string, unknown>).auth === 'object') {
+            const authUpdate = (updates as Record<string, unknown>).auth as Record<string, unknown>;
+            if (authUpdate.token) {
+              authToken = String(authUpdate.token);
+            }
+          }
+          if ((updates as Record<string, unknown>).chatbot) {
             wecomConnection?.stop();
             feishuConnection?.stop();
             startChatbotConnections();
@@ -650,7 +762,9 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   ws.on('close', () => {
+    clearTimeout(authTimeout);
     clients.delete(ws);
+    authenticatedClients.delete(ws);
     log.info('WebSocket client disconnected');
   });
 });
@@ -680,9 +794,10 @@ process.on('SIGINT', () => {
   server.close(() => process.exit(0));
 });
 
-server.listen(PORT, () => {
-  log.info(`Sman server running on port ${PORT}`);
+const HOST = process.env.HOST || '127.0.0.1';
+server.listen(PORT, HOST, () => {
+  log.info(`Sman server running on ${HOST}:${PORT}`);
   log.info(`Home directory: ${homeDir}`);
-  log.info(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
-  log.info(`Health check: http://localhost:${PORT}/api/health`);
+  log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
+  log.info(`Health check: http://${HOST}:${PORT}/api/health`);
 });
