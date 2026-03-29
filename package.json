@@ -85,7 +85,9 @@
     "files": [
       "dist/**/*",
       "electron/dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "plugins/**/*",
+      "scripts/patch-sdk.mjs"
     ],
     "mac": {
       "target": [
@@ -95,9 +97,20 @@
     },
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
+    "asar": true,
+    "asarUnpack": [
+      "dist/server/**/*",
+      "node_modules/@anthropic-ai/claude-code/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
     "directories": {
       "output": "release"
     }

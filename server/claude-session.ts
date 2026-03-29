@@ -17,12 +17,6 @@ import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
 import path from 'path';
 import fs from 'fs';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-
-const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export interface ActiveSession {
   id: string;
@@ -72,13 +66,23 @@ export class ClaudeSessionManager {
   private getClaudeCodePath(): string {
     const possiblePaths: string[] = [];
 
-    // Production: bundled in Electron app
+    // Production (Electron): try unpacked path first (asarUnpack in package.json)
     const resourcesPath = (process as any).resourcesPath;
     if (typeof resourcesPath === 'string') {
+      // asarUnpack puts files in app.asar.unpacked/
+      possiblePaths.push(
+        path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+      );
       possiblePaths.push(
         path.join(resourcesPath, 'app.asar', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
       );
     }
+
+    // Production: spawned child process — cwd = app root (set in electron/main.ts)
+    possiblePaths.push(path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
+
+    // Also try app.asar.unpacked relative to cwd
+    possiblePaths.push(path.join(process.cwd(), '..', 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
 
     // Development: in project node_modules
     possiblePaths.push(path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));

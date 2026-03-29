@@ -3,11 +3,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { fileURLToPath } from 'url';
 import { createLogger, type Logger } from './utils/logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
@@ -156,7 +153,9 @@ cronScheduler.setSessionManager(sessionManager);
 cronScheduler.start();
 
 // HTTP server with static file serving for production (Electron mode)
-const distDir = path.resolve(path.join(__dirname, 'dist'));
+// __dirname after tsc compilation = dist/server/
+// Frontend build output = dist/ (index.html, assets/)
+const distDir = path.resolve(path.join(__dirname, '..'));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -770,8 +769,7 @@ wss.on('connection', (ws: WebSocket) => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  log.info('SIGTERM received, shutting down...');
+function shutdown(): void {
   wecomConnection?.stop();
   feishuConnection?.stop();
   chatbotManager.stop();
@@ -779,25 +777,37 @@ process.on('SIGTERM', () => {
   cronScheduler.stop();
   sessionManager.close();
   wss.close();
-  server.close(() => process.exit(0));
-});
+  server.close();
+}
 
-process.on('SIGINT', () => {
-  log.info('SIGINT received, shutting down...');
-  wecomConnection?.stop();
-  feishuConnection?.stop();
-  chatbotManager.stop();
-  batchEngine.stop();
-  cronScheduler.stop();
-  sessionManager.close();
-  wss.close();
-  server.close(() => process.exit(0));
-});
+// Export for Electron in-process usage
+export { shutdown as stopServer };
+export { server, homeDir };
 
-const HOST = process.env.HOST || '127.0.0.1';
-server.listen(PORT, HOST, () => {
-  log.info(`Sman server running on ${HOST}:${PORT}`);
-  log.info(`Home directory: ${homeDir}`);
-  log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
-  log.info(`Health check: http://${HOST}:${PORT}/api/health`);
-});
+// When run directly (dev mode: tsx server/index.ts), auto-start
+// When imported by Electron, electron/main.ts calls startServer()
+const isMainModule = process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
+                     process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
+                     process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js');
+
+if (isMainModule) {
+  process.on('SIGTERM', () => {
+    log.info('SIGTERM received, shutting down...');
+    shutdown();
+    process.exit(0);
+  });
+
+  process.on('SIGINT', () => {
+    log.info('SIGINT received, shutting down...');
+    shutdown();
+    process.exit(0);
+  });
+
+  const HOST = process.env.HOST || '127.0.0.1';
+  server.listen(PORT, HOST, () => {
+    log.info(`Sman server running on ${HOST}:${PORT}`);
+    log.info(`Home directory: ${homeDir}`);
+    log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
+    log.info(`Health check: http://${HOST}:${PORT}/api/health`);
+  });
+}
