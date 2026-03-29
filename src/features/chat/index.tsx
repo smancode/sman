@@ -14,6 +14,15 @@ function safeTimestamp(createdAt: string): number | undefined {
   return Number.isFinite(ts) ? ts : undefined;
 }
 
+function buildContent(text: string, blocks?: unknown[]): unknown {
+  if (!blocks || blocks.length === 0) return text;
+  // contentBlocks only has thinking/tool_use — prepend text block
+  const hasTextBlock = (blocks as Array<{ type: string }>).some(b => b.type === 'text');
+  if (hasTextBlock) return blocks;
+  if (!text) return blocks;
+  return [{ type: 'text', text }, ...blocks];
+}
+
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
   const isConnected = connectionStatus === 'connected';
@@ -73,7 +82,7 @@ export function Chat() {
                   message={{
                     id: msg.id,
                     role: msg.role,
-                    content: msg.contentBlocks ?? msg.content,
+                    content: buildContent(msg.content, msg.contentBlocks),
                     timestamp: msg.timestamp ?? safeTimestamp(msg.createdAt),
                   } as RawMessage}
                   showThinking={showThinking}
