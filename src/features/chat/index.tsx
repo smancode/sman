@@ -7,6 +7,13 @@ import { ChatInput } from './ChatInput';
 import { cn } from '@/lib/utils';
 import type { RawMessage } from '@/types/chat';
 
+function safeTimestamp(createdAt: string): number | undefined {
+  if (!createdAt) return undefined;
+  const d = new Date(createdAt.includes('T') ? createdAt : createdAt.replace(' ', 'T') + 'Z');
+  const ts = d.getTime() / 1000;
+  return Number.isFinite(ts) ? ts : undefined;
+}
+
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
   const isConnected = connectionStatus === 'connected';
@@ -66,9 +73,8 @@ export function Chat() {
                   message={{
                     id: msg.id,
                     role: msg.role,
-                    content: msg.content,
-                    contentBlocks: msg.contentBlocks,
-                    timestamp: msg.timestamp ?? new Date(msg.createdAt + 'Z').getTime() / 1000,
+                    content: msg.contentBlocks ?? msg.content,
+                    timestamp: msg.timestamp ?? safeTimestamp(msg.createdAt),
                   } as RawMessage}
                   showThinking={showThinking}
                 />

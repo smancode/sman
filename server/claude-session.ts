@@ -370,6 +370,8 @@ The following plugins are loaded and available for use:
 
       let fullContent = '';
       let currentThinking = '';
+      let allThinking = '';
+      let allToolUses: Array<{ id: string; name: string; input: string }> = [];
       let currentToolUse: { id: string; name: string; input: string } | null = null;
 
       for await (const sdkMsg of v2Session.stream()) {
@@ -420,6 +422,13 @@ The following plugins are loaded and available for use:
                 }));
               } else if (delta.type === 'tool_use') {
                 if (delta.name && delta.id) {
+                  // Flush previous thinking/toolUse before starting new one
+                  if (currentThinking.trim()) {
+                    allThinking += currentThinking;
+                  }
+                  if (currentToolUse) {
+                    allToolUses.push(currentToolUse);
+                  }
                   currentToolUse = { id: delta.id, name: delta.name, input: '' };
                   wsSend(JSON.stringify({
                     type: 'chat.tool_start',
@@ -452,12 +461,42 @@ The following plugins are loaded and available for use:
               this.store.updateSdkSessionId(sessionId, result.session_id);
             }
 
-            // Store assistant message
+            // Flush remaining thinking and tool_use
+            if (currentThinking.trim()) {
+              allThinking += currentThinking;
+            }
+            if (currentToolUse) {
+              allToolUses.push(currentToolUse);
+            }
+
+            // Build contentBlocks for thinking + tool_use
+            const contentBlocks: Array<{
+              type: 'text' | 'thinking' | 'tool_use';
+              text?: string;
+              thinking?: string;
+              id?: string;
+              name?: string;
+              input?: unknown;
+            }> = [];
+            if (allThinking.trim()) {
+              contentBlocks.push({ type: 'thinking', thinking: allThinking.trim() });
+            }
+            for (const tu of allToolUses) {
+              try {
+                const input = JSON.parse(tu.input);
+                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input });
+              } catch {
+                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+              }
+            }
+
+            // Store assistant message with contentBlocks
             const finalContent = fullContent || '';
-            if (finalContent) {
+            if (finalContent || contentBlocks.length > 0) {
               this.store.addMessage(sessionId, {
                 role: 'assistant',
                 content: finalContent,
+                contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
               });
             }
 
