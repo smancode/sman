@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmanConfig } from './types.js';
 
@@ -16,6 +17,9 @@ const DEFAULT_CONFIG: SmanConfig = {
     enabled: false,
     wecom: { enabled: false, botId: '', secret: '' },
     feishu: { enabled: false, appId: '', appSecret: '' },
+  },
+  auth: {
+    token: '',
   },
 };
 
@@ -68,5 +72,17 @@ export class SettingsManager {
     if (updates.chatbot) updated.chatbot = { ...config.chatbot, ...updates.chatbot };
     this.write(updated);
     return updated;
+  }
+
+  ensureAuthToken(): string {
+    const config = this.read();
+    if (config.auth?.token) {
+      return config.auth.token;
+    }
+    const token = crypto.randomBytes(32).toString('hex');
+    config.auth = { token };
+    this.write(config);
+    this.log.info('Generated new auth token');
+    return token;
   }
 }

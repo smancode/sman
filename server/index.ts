@@ -47,6 +47,7 @@ function ensureHomeDir(homeDir: string): void {
         tavilyApiKey: '',
         maxUsesPerSession: 50,
       },
+      auth: { token: '' },
     };
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
     log.info(`Created default config at ${configPath}`);

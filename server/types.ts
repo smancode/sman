@@ -39,6 +39,9 @@ export interface SmanConfig {
     maxUsesPerSession: number;
   };
   chatbot: import('./chatbot/types.js').ChatbotConfig;
+  auth: {
+    token: string;
+  };
 }
 
 // === Cron Task Types ===
