@@ -17,6 +17,9 @@ import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface ActiveSession {
   id: string;

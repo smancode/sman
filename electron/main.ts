@@ -6,6 +6,12 @@ let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
 let serverStopping = false;
 
+// Windows VDI / GPU compatibility: disable hardware acceleration to prevent white screen
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+}
+
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 5880;
 const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
@@ -22,6 +28,7 @@ function createWindow(): void {
     title: 'Sman',
     titleBarStyle: 'hidden',
     show: false,
+    icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -139,20 +146,19 @@ function buildMenu(): void {
  *
  * Dev mode: server is started externally by dev.sh (pnpm dev:server).
  */
-function startServerInProcess(): void {
+async function startServerInProcess(): Promise<void> {
   if (isDev) return;
 
-  // __dirname = app.asar.unpacked/electron/dist/main/ or app.asar/electron/dist/main/
-  // Server is at: app.asar.unpacked/dist/server/index.js
-  const serverPath = path.join(__dirname, '..', '..', 'dist', 'server', 'index.js');
+  // Server is at: resources/app/dist/server/index.js (no asar)
+  const serverPath = path.join(process.resourcesPath, 'app', 'dist', 'server', 'index.js');
   console.log('[Electron] Loading server from:', serverPath);
 
   try {
-    serverModule = require(serverPath);
-    console.log('[Electron] Server module loaded');
-    console.log('[Electron] Server exports:', Object.keys(serverModule));
+    // Use file:// URL for dynamic import() — required on Windows
+    const serverUrl = 'file:///' + serverPath.replace(/\\/g, '/');
+    serverModule = await import(serverUrl);
 
-    // Server creates http server at require() time but only listens when run directly.
+    // Server creates http server at import time but only listens when run directly.
     // We call listen() ourselves.
     const HOST = process.env.HOST || '127.0.0.1';
     serverModule.server.listen(BACKEND_PORT, HOST, () => {
@@ -203,8 +209,8 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   buildMenu();
 
-  // Production: start server in-process via require()
-  startServerInProcess();
+  // Production: start server in-process via dynamic import()
+  await startServerInProcess();
 
   await waitForFrontend();
   createWindow();

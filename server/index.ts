@@ -3,7 +3,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { createLogger, type Logger } from './utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
@@ -229,8 +233,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // All other endpoints require auth
-  if (!verifyHttpAuth(req)) {
+  // API endpoints (except health/token) require auth
+  if (req.url?.startsWith('/api/') && !verifyHttpAuth(req)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;

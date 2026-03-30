@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
-    "build": "vite build && tsc -p server/tsconfig.json",
+    "build": "vite build && tsc -p server/tsconfig.json && node -e \"require('fs').writeFileSync('dist/server/package.json',JSON.stringify({type:'module'},null,2))\"",
     "build:electron": "electron-vite build",
     "electron:dev": "electron-vite dev",
     "electron:build": "pnpm build && pnpm build:electron && electron-builder",
@@ -82,11 +82,13 @@
   "build": {
     "appId": "com.smanbase.app",
     "productName": "Sman",
+    "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
       "electron/dist/**/*",
       "node_modules/**/*",
       "plugins/**/*",
+      "public/**/*",
       "scripts/patch-sdk.mjs"
     ],
     "mac": {
@@ -98,19 +100,26 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Sman-Setup-${version}.${ext}",
+      "sign": false,
+      "signingHashAlgorithms": []
     },
-    "asar": true,
-    "asarUnpack": [
-      "dist/server/**/*",
-      "node_modules/@anthropic-ai/claude-code/**/*",
-      "node_modules/better-sqlite3/**/*"
-    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "allowElevation": true
+    },
+    "forceCodeSigning": false,
+    "asar": false,
     "directories": {
       "output": "release"
     }
