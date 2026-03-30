@@ -3,11 +3,11 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { createLogger, type Logger } from './utils/logger';
-import type { BatchStore } from './batch-store';
-import type { ClaudeSessionManager } from './claude-session';
-import { Semaphore, SemaphoreStoppedError } from './semaphore';
-import { renderTemplate, detectInterpreter } from './batch-utils';
+import { createLogger, type Logger } from './utils/logger.js';
+import type { BatchStore } from './batch-store.js';
+import type { ClaudeSessionManager } from './claude-session.js';
+import { Semaphore, SemaphoreStoppedError } from './semaphore.js';
+import { renderTemplate, detectInterpreter } from './batch-utils.js';
 
 const execFileAsync = promisify(execFile);
 

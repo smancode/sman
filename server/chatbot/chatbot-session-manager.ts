@@ -2,11 +2,11 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createLogger, type Logger } from '../utils/logger';
-import type { ClaudeSessionManager } from '../claude-session';
-import { ChatbotStore } from './chatbot-store';
-import { parseChatCommand } from './chat-command-parser';
-import type { IncomingMessage, ChatResponseSender } from './types';
+import { createLogger, type Logger } from '../utils/logger.js';
+import type { ClaudeSessionManager } from '../claude-session.js';
+import { ChatbotStore } from './chatbot-store.js';
+import { parseChatCommand } from './chat-command-parser.js';
+import type { IncomingMessage, ChatResponseSender } from './types.js';
 
 const QUERY_TIMEOUT_MS = 5 * 60 * 1000;
 

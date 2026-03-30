@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { createLogger, type Logger } from './utils/logger';
-import type { SmanConfig } from './types';
+import { createLogger, type Logger } from './utils/logger.js';
+import type { SmanConfig } from './types.js';
 
 const DEFAULT_CONFIG: SmanConfig = {
   port: 5880,

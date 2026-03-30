@@ -5,7 +5,7 @@
  * that can be passed to Claude Agent SDK options.
  */
 
-import type { SmanConfig } from './types';
+import type { SmanConfig } from './types.js';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 
 export function buildMcpServers(config: SmanConfig): Record<string, McpServerConfig> {

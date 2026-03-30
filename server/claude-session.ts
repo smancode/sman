@@ -11,10 +11,10 @@
  */
 
 import { unstable_v2_createSession, type SDKSession, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { createLogger, type Logger } from './utils/logger';
-import type { SessionStore, Message } from './session-store';
-import type { SmanConfig } from './types';
-import { buildMcpServers } from './mcp-config';
+import { createLogger, type Logger } from './utils/logger.js';
+import type { SessionStore, Message } from './session-store.js';
+import type { SmanConfig } from './types.js';
+import { buildMcpServers } from './mcp-config.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';

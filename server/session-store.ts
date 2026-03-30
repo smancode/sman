@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { createLogger, type Logger } from './utils/logger';
+import { createLogger, type Logger } from './utils/logger.js';
 
 export interface Session {
   id: string;

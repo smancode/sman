@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { createLogger, type Logger } from '../utils/logger';
-import type { IncomingMessage, ChatResponseSender } from './types';
+import { createLogger, type Logger } from '../utils/logger.js';
+import type { IncomingMessage, ChatResponseSender } from './types.js';
 
 interface WeComBotConfig {
   botId: string;

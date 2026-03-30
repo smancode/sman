@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { createLogger, type Logger } from './utils/logger';
-import type { SkillEntry, Registry } from './types';
+import { createLogger, type Logger } from './utils/logger.js';
+import type { SkillEntry, Registry } from './types.js';
 
 export interface ProjectSkill {
   id: string;
