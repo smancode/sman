@@ -113,8 +113,12 @@ export class ChatbotSessionManager {
     const userKey = `${msg.platform}:${msg.userId}`;
     const parseResult = parseChatCommand(msg.content);
 
-    if (parseResult.isCommand && parseResult.command) {
-      await this.handleCommand(userKey, parseResult.command, sender);
+    if (parseResult.isCommand) {
+      if (parseResult.command) {
+        await this.handleCommand(userKey, parseResult.command, sender);
+      } else {
+        this.handleHelp(sender, true);
+      }
       return;
     }
 
@@ -147,7 +151,7 @@ export class ChatbotSessionManager {
 
   private async handleCommand(
     userKey: string,
-    command: { command: string; args: string },
+    command: { command: string; args: string; rawCommand: string },
     sender: ChatResponseSender,
   ): Promise<void> {
     switch (command.command) {
@@ -167,17 +171,30 @@ export class ChatbotSessionManager {
         this.handleStatus(userKey, sender);
         break;
       default:
-        sender.finish(`未知命令: /${command.command}\n使用 /help 查看所有命令。`);
+        sender.finish(`未知命令: //${command.rawCommand}\n使用 //help 查看所有命令。`);
     }
   }
 
   private async handleCd(userKey: string, args: string, sender: ChatResponseSender): Promise<void> {
     if (!args) {
-      sender.finish('用法: /cd <项目名或路径>\n例如: /cd my-project 或 /cd ~/projects/my-project');
+      sender.finish('用法: //cd <项目名或路径>\n例如: //cd my-project 或 //cd ~/projects/my-project');
       return;
     }
 
-    const workspacePath = this.resolveWorkspace(args);
+    // Support numeric index: //cd 1
+    const numericIndex = parseInt(args, 10);
+    let workspacePath: string | null;
+    if (!isNaN(numericIndex) && numericIndex > 0) {
+      const workspaces = this.getDesktopWorkspaces();
+      if (numericIndex > workspaces.length) {
+        const list = workspaces.map((w, i) => `${i + 1}. ${w.name} (${w.path})`).join('\n');
+        sender.finish(`序号 ${numericIndex} 超出范围。\n可用项目:\n${list}\n\n使用 //cd <项目名> or <数字> 切换。`);
+        return;
+      }
+      workspacePath = workspaces[numericIndex - 1].path;
+    } else {
+      workspacePath = this.resolveWorkspace(args);
+    }
 
     if (!workspacePath) {
       const workspaces = this.getDesktopWorkspaces();
@@ -185,7 +202,7 @@ export class ChatbotSessionManager {
       sender.finish(
         `项目 "${args}" 未找到。\n` +
         `桌面端已打开的项目: ${names || '无'}\n` +
-        `提示: 支持使用 ~ 代表用户主目录，例如 /cd ~/projects/my-project`,
+        `提示: 支持使用 ~ 代表用户主目录，例如 //cd ~/projects/my-project`,
       );
       return;
     }
@@ -205,7 +222,7 @@ export class ChatbotSessionManager {
   private handlePwd(userKey: string, sender: ChatResponseSender): void {
     const state = this.store.getUserState(userKey);
     if (!state?.currentWorkspace) {
-      sender.finish('当前未设置工作目录。\n使用 /cd <项目名或路径> 切换工作目录。');
+      sender.finish('当前未设置工作目录。\n使用 //cd <项目名或路径> 切换工作目录。');
       return;
     }
     sender.finish(`当前工作目录: ${state.currentWorkspace}`);
@@ -218,17 +235,18 @@ export class ChatbotSessionManager {
       return;
     }
     const list = workspaces.map((w, i) => `${i + 1}. ${w.name} (${w.path})`).join('\n');
-    sender.finish(`可用项目:\n${list}\n\n使用 /cd <项目名> 切换。`);
+    sender.finish(`可用项目:\n${list}\n\n使用 //cd <项目名>  or <数字> 切换。`);
   }
 
-  private handleHelp(sender: ChatResponseSender): void {
+  private handleHelp(sender: ChatResponseSender, showUnknownHint = false): void {
+    const prefix = showUnknownHint ? '未知命令，' : '';
     sender.finish(
-      `可用命令:\n` +
-      `/cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
-      `/pwd - 显示当前工作目录\n` +
-      `/workspaces - 列出桌面端已打开的项目\n` +
-      `/status - 显示连接状态\n` +
-      `/help - 显示此帮助信息\n\n` +
+      `${prefix}可用命令:\n` +
+      `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
+      `//pwd - 显示当前工作目录\n` +
+      `//workspaces  or  //wss - 列出桌面端已打开的项目\n` +
+      `//status  or  //sts - 显示连接状态\n` +
+      `//help - 显示此帮助信息\n\n` +
       `直接发送消息即可与 Claude 对话。`,
     );
   }

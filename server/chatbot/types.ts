@@ -22,6 +22,7 @@ export interface ChatResponseSender {
 export interface CommandResult {
   command: 'cd' | 'pwd' | 'workspaces' | 'add' | 'help' | 'status';
   args: string;
+  rawCommand: string;
 }
 
 export interface ParseResult {
