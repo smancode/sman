@@ -135,8 +135,40 @@ pnpm dev:server    # 后端 (5880)
 
 ```bash
 pnpm build         # 构建前端 + 后端
-pnpm electron:build # 打包 Electron 应用
+pnpm build:electron # 编译 Electron 主进程
+pnpm electron:build # 一键构建+打包 (build + build:electron + electron-builder)
 ```
+
+## Windows 打包
+
+详细指南见 `docs/windows-packaging.md`
+
+### 环境要求
+
+- **Node.js 22 LTS** (better-sqlite3 预编译二进制，无需本地编译)
+- **pnpm** 包管理器
+
+### 构建命令
+
+```bash
+# 安装依赖
+pnpm install
+
+# 构建 + 打包
+pnpm build
+pnpm build:electron
+npx electron-builder --win nsis --x64     # NSIS 安装包 (推荐)
+npx electron-builder --win portable --x64  # 便携版 exe
+```
+
+### 关键技术点
+
+1. **CJS/ESM 兼容**: 服务端编译为 ESM (`module: "ES2022"`)，`dist/server/package.json` 声明 `"type": "module"`，Electron 用 `import()` + `file://` URL 加载
+2. **ASAR 已禁用**: `better-sqlite3` 原生模块在 ASAR 内路径解析失败，设置 `"asar": false`
+3. **ESM __dirname**: 服务端用 `path.dirname(fileURLToPath(import.meta.url))` 替代 `__dirname`
+4. **Windows GPU**: VDI 环境需 `app.disableHardwareAcceleration()` 防白屏
+5. **Auth 边界**: 只有 `/api/` 路径需要 Bearer auth，静态文件直接放行
+6. **安装包选择**: NSIS 安装包启动快（推荐）；Portable 每次启动要解压，VDI 环境较慢
 
 ## 端口使用
 
@@ -166,3 +198,4 @@ pnpm electron:build # 打包 Electron 应用
 2. **Skills 加载**: 同时加载全局和项目特定 Skills
 3. **会话分组**: 按目录名分组显示，目录名即为显示名称
 4. **无预配置**: 用户无需预先配置业务系统，直接选择目录即可
+5. **离线部署**: 设置页配置内网模型 URL + API Key + Model 即可使用，支持 `ANTHROPIC_BASE_URL` 指向任意 Anthropic 兼容 API

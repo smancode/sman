@@ -224,6 +224,7 @@ app.whenReady().then(async () => {
   await startServerInProcess();
 
   await waitForFrontend();
+  createWindow();
 });
 
 app.on('window-all-closed', () => {
