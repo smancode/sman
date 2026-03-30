@@ -1,6 +1,6 @@
 import * as Lark from '@larksuiteoapi/node-sdk';
-import { createLogger, type Logger } from '../utils/logger.js';
-import type { IncomingMessage, ChatResponseSender } from './types.js';
+import { createLogger, type Logger } from '../utils/logger';
+import type { IncomingMessage, ChatResponseSender } from './types';
 
 interface FeishuBotConfig {
   appId: string;

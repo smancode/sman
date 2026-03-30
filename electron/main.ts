@@ -142,7 +142,8 @@ function buildMenu(): void {
 
 /**
  * Production: load server as CJS module via require().
- * The server is compiled to CJS format and unpacked from asar.
+ * Server is compiled to CJS and lives inside app.asar.
+ * Electron's built-in asar support handles require() from asar correctly.
  *
  * Dev mode: server is started externally by dev.sh (pnpm dev:server).
  */
@@ -152,6 +153,8 @@ async function startServerInProcess(): Promise<void> {
   // Server is at: resources/app/dist/server/index.js (no asar)
   const serverPath = path.join(process.resourcesPath, 'app', 'dist', 'server', 'index.js');
   console.log('[Electron] Loading server from:', serverPath);
+  console.log('[Electron] __dirname:', __dirname);
+  console.log('[Electron] process.resourcesPath:', process.resourcesPath);
 
   try {
     // Use file:// URL for dynamic import() — required on Windows
@@ -167,7 +170,15 @@ async function startServerInProcess(): Promise<void> {
     });
   } catch (err) {
     console.error('[Electron] Failed to start server:', err);
-    throw err;
+    // Show error dialog so we can see what went wrong
+    const errDetail = err instanceof Error
+      ? `${err.message}\n\n${err.stack || ''}`
+      : String(err);
+    dialog.showErrorBox(
+      'Server Startup Error',
+      `Failed to start backend server:\n${errDetail}\n\nPath: ${serverPath}\n__dirname: ${__dirname}`
+    );
+    // Don't throw — let the app continue so user can see the error
   }
 }
 
@@ -213,7 +224,6 @@ app.whenReady().then(async () => {
   await startServerInProcess();
 
   await waitForFrontend();
-  createWindow();
 });
 
 app.on('window-all-closed', () => {

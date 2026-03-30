@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { createLogger, type Logger } from './utils/logger.js';
-import type { CronTaskStore } from './cron-task-store.js';
-import type { CronTask } from './types.js';
-import type { ClaudeSessionManager } from './claude-session.js';
+import { createLogger, type Logger } from './utils/logger';
+import type { CronTaskStore } from './cron-task-store';
+import type { CronTask } from './types';
+import type { ClaudeSessionManager } from './claude-session';
 
 interface LockFile {
   triggers: Array<{

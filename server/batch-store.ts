@@ -2,9 +2,9 @@ import betterSqlite3 from 'better-sqlite3';
 import type { Database } from 'better-sqlite3';
 // @ts-expect-error - better-sqlite3 ESM interop
 const DatabaseConstructor = betterSqlite3 as unknown as typeof betterSqlite3.default;
-import { createLogger, type Logger } from './utils/logger.js';
+import { createLogger, type Logger } from './utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-import type { BatchTask, BatchItem, BatchTaskStatus, BatchItemStatus } from './types.js';
+import type { BatchTask, BatchItem, BatchTaskStatus, BatchItemStatus } from './types';
 
 interface ItemFilter {
   status?: BatchItemStatus;

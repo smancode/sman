@@ -1,8 +1,8 @@
-import { createLogger, type Logger } from './utils/logger.js';
-import type { CronTaskStore } from './cron-task-store.js';
-import { CronExecutor } from './cron-executor.js';
-import type { CronTask } from './types.js';
-import type { ClaudeSessionManager } from './claude-session.js';
+import { createLogger, type Logger } from './utils/logger';
+import type { CronTaskStore } from './cron-task-store';
+import { CronExecutor } from './cron-executor';
+import type { CronTask } from './types';
+import type { ClaudeSessionManager } from './claude-session';
 
 export class CronScheduler {
   private log: Logger;

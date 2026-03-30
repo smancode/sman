@@ -1,4 +1,4 @@
-import type { ParseResult, CommandResult } from './types.js';
+import type { ParseResult, CommandResult } from './types';
 
 const VALID_COMMANDS = new Set<string>(['cd', 'pwd', 'workspaces', 'add', 'help', 'status']);
 
