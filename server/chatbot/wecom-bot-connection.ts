@@ -13,6 +13,9 @@ const WECOM_WS_URL = 'wss://openws.work.weixin.qq.com';
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const RECONNECT_MAX_ATTEMPTS = 100;
 const RECONNECT_BASE_DELAY_MS = 1000;
+// WeCom rate limit: 30 messages/min per conversation.
+// Throttle stream updates to avoid hitting the limit.
+const STREAM_THROTTLE_MS = 2000;
 
 export class WeComBotConnection {
   private log: Logger;
@@ -175,21 +178,38 @@ export class WeComBotConnection {
     const self = this;
 
     let accumulated = '';
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingContent = '';
+
+    const flushStream = () => {
+      if (!pendingContent) return;
+      self.send({
+        cmd: 'aibot_respond_msg',
+        headers: { req_id: reqId },
+        body: {
+          msgtype: 'stream',
+          stream: { id: streamId, finish: false, content: pendingContent },
+        },
+      });
+      throttleTimer = null;
+    };
+
     return {
       start() { started = true; },
       sendChunk(content: string) {
         if (!started) return;
         accumulated += content;
-        self.send({
-          cmd: 'aibot_respond_msg',
-          headers: { req_id: reqId },
-          body: {
-            msgtype: 'stream',
-            stream: { id: streamId, finish: false, content: accumulated },
-          },
-        });
+        pendingContent = accumulated;
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(flushStream, STREAM_THROTTLE_MS);
+        }
       },
       finish(fullContent: string) {
+        // Cancel pending throttle and flush immediately
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
         if (started) {
           self.send({
             cmd: 'aibot_respond_msg',
@@ -211,6 +231,10 @@ export class WeComBotConnection {
         }
       },
       error(message: string) {
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
         self.send({
           cmd: 'aibot_respond_msg',
           headers: { req_id: reqId },
