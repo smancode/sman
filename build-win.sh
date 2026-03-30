@@ -6,7 +6,7 @@
 #
 # 前提:
 #   - Windows 10/11 开发机
-#   - Node.js 22 LTS (fnm use 22)
+#   - Node.js >= 22
 #   - pnpm 已安装
 #
 # 用法:
@@ -43,11 +43,10 @@ if [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* && "$(uname -s)" != 
   exit 1
 fi
 
-# ── 检查 Node 版本 (需要 22 LTS) ──
+# ── 检查 Node 版本 (>= 22) ──
 NODE_MAJOR=$(node -e "console.log(process.version.split('.')[0].replace('v',''))")
-if [[ "$NODE_MAJOR" != "22" ]]; then
-  err "需要 Node.js 22 LTS，当前: $(node -v)"
-  err "请执行: fnm install 22 && fnm use 22"
+if [[ "$NODE_MAJOR" -lt 22 ]]; then
+  err "需要 Node.js >= 22，当前: $(node -v)"
   exit 1
 fi
 
@@ -56,6 +55,31 @@ install_deps() {
   info "安装依赖..."
   pnpm install
   ok "依赖安装完成"
+
+  # 清理 pnpm store 中无效的 rollup 平台包符号链接
+  # (electron-builder 的 @electron/rebuild 会遍历这些目录，无效链接会导致打包失败)
+  clean_rollup_links
+}
+
+# ── 清理无效的 rollup 平台包 ──
+clean_rollup_links() {
+  local rollup_dir="node_modules/.pnpm/node_modules/@rollup"
+  if [[ ! -d "$rollup_dir" ]]; then
+    return
+  fi
+
+  local cleaned=0
+  for link in "$rollup_dir"/*; do
+    if [[ -L "$link" && ! -e "$link" ]]; then
+      warn "移除无效符号链接: $(basename "$link")"
+      rm "$link"
+      cleaned=$((cleaned + 1))
+    fi
+  done
+
+  if [[ "$cleaned" -gt 0 ]]; then
+    ok "清理了 ${cleaned} 个无效的 rollup 符号链接"
+  fi
 }
 
 # ── Step 2: 构建前端 + 后端 ──

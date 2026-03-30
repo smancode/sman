@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -48,6 +48,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.60.1",
     "@types/better-sqlite3": "^7.6.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
