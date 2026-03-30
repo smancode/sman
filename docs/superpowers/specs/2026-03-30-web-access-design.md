@@ -232,7 +232,99 @@ smanbase/
 | **P1** | EmbeddedEngine | VDI 桌面端 |
 | **P2** | 站点经验机制 | 效率优化（从 web-access 的 site-patterns 借鉴） |
 
-## 8. 参考项目
+## 8. 错误处理与弹性
+
+### 8.1 超时
+
+所有 BrowserEngine 操作默认 **30 秒超时**。可由 MCP Tool 参数覆盖（最大 120 秒）。
+
+```typescript
+interface BrowserEngine {
+  // ...
+  setDefaultTimeout(ms: number): void
+}
+```
+
+超时后返回错误，Agent 决定重试或告知用户。
+
+### 8.2 CDP 连接断开
+
+- 操作期间 WebSocket 断开 → 返回 `CONNECTION_LOST` 错误
+- 自动重连：指数退避，最多 3 次（1s → 2s → 4s）
+- 重连成功后 tab 仍存在 → 继续操作
+- Chrome 重启后 tab 丢失 → 返回 `SESSION_LOST`，Agent 重新开始
+
+### 8.3 并发模型
+
+- `WebAccessService` 是全局单例
+- tab 按 **会话 ID 隔离**：每个 Claude 会话有自己的 tab 集合
+- 同一会话内操作**串行执行**（队列化），不同会话可并行
+- 最大并发 tab 数：每会话 5 个，全局 20 个
+- 超出限制时关闭最早的空闲 tab
+
+### 8.4 资源清理
+
+- 空闲 tab 10 分钟自动关闭
+- 会话结束时关闭该会话所有 tab
+- Sman 关闭时（shutdown）清理所有资源
+
+## 9. SDK 集成契约
+
+**已验证**：`@anthropic-ai/claude-agent-sdk` 原生支持进程内 MCP Server。
+
+```typescript
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
+
+// 定义工具
+const navigateTool = tool(
+  'web_access_navigate',
+  'Navigate to a URL',
+  { url: z.string() },
+  async (args) => { /* 进程内调用 WebAccessService */ }
+)
+
+// 创建 MCP Server
+const webAccessMcpServer = createSdkMcpServer({
+  name: 'web-access',
+  version: '1.0.0',
+  tools: [navigateTool, ...]
+})
+
+// 注入到 Claude Session（通过 mcpServers 选项）
+```
+
+`McpSdkServerConfigWithInstance` 类型包含非序列化的 McpServer 实例，
+直接通过 SDK 选项传递，不走 stdio/HTTP 传输。
+
+## 10. EmbeddedEngine IPC 桥接（P1 设计）
+
+**推迟到 P1 阶段详细设计。** 关键约束：
+
+- Server 代码运行在 Node.js 上下文，无法直接调用 Electron API
+- 需要在 Electron 主进程创建 BrowserView/BrowserWindow
+- Server 通过 IPC 桥接层（EventEmitter 或 Electron IPC）向主进程发指令
+- 主进程执行实际的浏览器操作并返回结果
+
+P0 阶段仅实现 CdpEngine（纯 Node.js，无需 Electron API），不存在此问题。
+
+## 11. 截图传输协议
+
+当前 `chat.delta` 事件支持 `text`、`thinking`、`tool_use` 类型。
+新增 `image` 类型用于传输截图：
+
+```typescript
+// chat.delta 新增
+{
+  type: 'image',
+  data: string,      // base64 encoded image
+  mimeType: string,  // 'image/png'
+  altText?: string   // 描述文本
+}
+```
+
+前端 `ChatMessage` 组件新增对 `image` 类型内容块的渲染。
+
+## 12. 参考项目
 
 | 项目 | 借鉴点 |
 |------|--------|
