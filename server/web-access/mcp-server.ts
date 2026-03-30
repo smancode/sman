@@ -23,14 +23,14 @@ function errorResult(message: string): ToolResult {
 /** Wrap a handler to catch engine-unavailable errors */
 function withEngineCheck(
   service: WebAccessService,
-  handler: () => Promise<ToolResult>,
-): () => Promise<ToolResult> {
-  return async () => {
+  handler: (args: any, extra: any) => Promise<any>,
+): (args: any, extra: any) => Promise<any> {
+  return async (args: any, extra: any) => {
     if (!service.getActiveEngineType()) {
       return errorResult('浏览器不可用。请确保 Chrome 已开启远程调试端口 (--remote-debugging-port=9222)');
     }
     try {
-      return await handler();
+      return await handler(args, extra);
     } catch (e: any) {
       if (e instanceof BrowserConnectionError) {
         return errorResult(`浏览器连接错误: ${e.message}`);

@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
+import { WebAccessService } from './web-access/index.js';
 import { SettingsManager } from './settings-manager.js';
 import { CronTaskStore } from './cron-task-store.js';
 import { CronScheduler } from './cron-scheduler.js';
@@ -151,6 +152,15 @@ function setCachedSkills(workspace: string, skillType: string, data: unknown): v
 
 // Feed config to session manager
 sessionManager.updateConfig(settingsManager.getConfig());
+
+// Initialize WebAccessService
+const webAccessService = new WebAccessService();
+webAccessService.detectEngine().then(() => {
+  log.info(`WebAccess engine: ${webAccessService.getActiveEngineType() ?? 'unavailable'}`);
+}).catch((err: any) => {
+  log.warn(`WebAccess detection failed: ${err.message}`);
+});
+sessionManager.setWebAccessService(webAccessService);
 
 // Set up cron scheduler with session manager
 cronScheduler.setSessionManager(sessionManager);

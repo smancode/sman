@@ -15,6 +15,8 @@ import { createLogger, type Logger } from './utils/logger.js';
 import type { SessionStore, Message } from './session-store.js';
 import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
+import { createWebAccessMcpServer } from './web-access/index.js';
+import type { WebAccessService } from './web-access/index.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -49,6 +51,7 @@ export class ClaudeSessionManager {
   private config: SmanConfig | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private configGeneration = 0;
+  private webAccessService: WebAccessService | null = null;
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
@@ -61,6 +64,11 @@ export class ClaudeSessionManager {
   updateConfig(config: SmanConfig): void {
     this.config = config;
     this.configGeneration++;
+  }
+
+  setWebAccessService(service: WebAccessService): void {
+    this.webAccessService = service;
+    this.log.info('WebAccessService injected');
   }
 
   /**
@@ -187,8 +195,12 @@ The following plugins are loaded and available for use:
 
     // Build MCP servers if configured
     const mcpServers = buildMcpServers(this.config);
-    if (Object.keys(mcpServers).length > 0) {
-      opts.mcpServers = mcpServers;
+    opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
+
+    // Inject web-access MCP Server (in-process)
+    if (this.webAccessService) {
+      const webAccessServer = createWebAccessMcpServer(this.webAccessService);
+      (opts.mcpServers as any)['web-access'] = webAccessServer;
     }
 
     return opts;
