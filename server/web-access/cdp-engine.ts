@@ -28,12 +28,19 @@ interface CdpEngineOptions {
   defaultTimeoutMs?: number;
 }
 
+export interface DomStableOptions {
+  timeoutMs?: number;
+  networkIdleMs?: number;
+  domStableMs?: number;
+}
+
 export class CdpEngine implements BrowserEngine {
   private ws: WebSocketLike | null = null;
   private cmdId = 0;
   private pending = new Map<number, { resolve: (value: any) => void; timer: NodeJS.Timeout }>();
   private tabs = new Map<string, TabContext>();
   private sessions = new Map<string, string>(); // targetId -> sessionId
+  private cdpEventHandlers = new Map<string, Array<(params: any) => void>>();
   private chromePort: number | null = null;
   private chromeWsPath: string | null = null;
   private connectingPromise: Promise<void> | null = null;
@@ -150,21 +157,10 @@ export class CdpEngine implements BrowserEngine {
         this.chromePort = null;
         this.chromeWsPath = null;
         this.sessions.clear();
+        this.cdpEventHandlers.clear();
       };
       const onMessage = (evt: any) => {
-        const data = typeof evt === 'string' ? evt : (evt.data || evt);
-        const msg = JSON.parse(typeof data === 'string' ? data : data.toString());
-
-        if (msg.method === 'Target.attachedToTarget') {
-          const { sessionId, targetInfo } = msg.params;
-          this.sessions.set(targetInfo.targetId, sessionId);
-        }
-        if (msg.id && this.pending.has(msg.id)) {
-          const { resolve, timer } = this.pending.get(msg.id)!;
-          clearTimeout(timer);
-          this.pending.delete(msg.id);
-          resolve(msg);
-        }
+        this.onMessage(evt);
       };
 
       const cleanup = () => {
@@ -241,9 +237,140 @@ export class CdpEngine implements BrowserEngine {
     throw new BrowserConnectionError('Target.attachToTarget failed: ' + JSON.stringify(resp.error));
   }
 
+  // --- CDP event dispatch ---
+
+  onCdpEvent(method: string, handler: (params: any) => void): void {
+    if (!this.cdpEventHandlers.has(method)) {
+      this.cdpEventHandlers.set(method, []);
+    }
+    this.cdpEventHandlers.get(method)!.push(handler);
+  }
+
+  removeCdpEventListener(method: string, handler: (params: any) => void): void {
+    const handlers = this.cdpEventHandlers.get(method);
+    if (handlers) {
+      const idx = handlers.indexOf(handler);
+      if (idx >= 0) handlers.splice(idx, 1);
+    }
+  }
+
+  /** Extracted onMessage handler — callable from connectToChrome and tests */
+  onMessage(evt: any): void {
+    const data = typeof evt === 'string' ? evt : (evt.data || evt);
+    const msg = JSON.parse(typeof data === 'string' ? data : data.toString());
+
+    // Built-in: Target.attachedToTarget
+    if (msg.method === 'Target.attachedToTarget') {
+      const { sessionId, targetInfo } = msg.params;
+      this.sessions.set(targetInfo.targetId, sessionId);
+    }
+    // Command response correlation
+    if (msg.id && this.pending.has(msg.id)) {
+      const { resolve, timer } = this.pending.get(msg.id)!;
+      clearTimeout(timer);
+      this.pending.delete(msg.id);
+      resolve(msg);
+    }
+    // Generic event dispatch
+    if (msg.method && this.cdpEventHandlers.has(msg.method)) {
+      for (const handler of this.cdpEventHandlers.get(msg.method)!) {
+        handler(msg.params);
+      }
+    }
+  }
+
+  // --- DOM stability detection ---
+
+  /** Default options for post-action DOM stability checks (short wait) */
+  private static readonly ACTION_STABLE_OPTS: DomStableOptions = {
+    timeoutMs: 5_000,
+    networkIdleMs: 200,
+    domStableMs: 300,
+  };
+
+  async waitForDomStable(tabId: string, opts: DomStableOptions = {}): Promise<void> {
+    const {
+      timeoutMs = 10_000,
+      networkIdleMs = 500,
+      domStableMs = 800,
+    } = opts;
+    const sessionId = await this.ensureSession(tabId);
+
+    // Inject MutationObserver
+    const installExpr = `(() => {
+      if (window.__domStableObserver) return 'already-installed';
+      window.__domMutations = 0;
+      window.__domLastMutation = Date.now();
+      window.__domStableObserver = new MutationObserver(() => {
+        window.__domMutations++;
+        window.__domLastMutation = Date.now();
+      });
+      if (document.body) {
+        window.__domStableObserver.observe(document.body, {
+          childList: true, subtree: true, attributes: true
+        });
+      }
+      return 'installed';
+    })()`;
+    await this.sendCDP('Runtime.evaluate', { expression: installExpr, returnByValue: true }, sessionId);
+
+    // Enable Network domain for request tracking
+    await this.sendCDP('Network.enable', {}, sessionId);
+
+    // Track network requests via events — use a Set of active requestId for clarity
+    const activeRequests = new Set<string>();
+    let lastNetworkActivity = Date.now();
+
+    const onRequestStart = (params: any) => {
+      if (params.requestId) {
+        activeRequests.add(params.requestId);
+        lastNetworkActivity = Date.now();
+      }
+    };
+    const onRequestDone = (params: any) => {
+      if (activeRequests.delete(params.requestId)) {
+        lastNetworkActivity = Date.now();
+      }
+    };
+
+    this.onCdpEvent('Network.requestWillBeSent', onRequestStart);
+    this.onCdpEvent('Network.loadingFinished', onRequestDone);
+    this.onCdpEvent('Network.loadingFailed', onRequestDone);
+
+    try {
+      const start = Date.now();
+      const checkExpr = `(() => {
+        const elapsed = Date.now() - (window.__domLastMutation || 0);
+        const mutations = window.__domMutations || 0;
+        return JSON.stringify({ elapsed, mutations });
+      })()`;
+
+      while (Date.now() - start < timeoutMs) {
+        const domResp = await this.sendCDP('Runtime.evaluate', {
+          expression: checkExpr,
+          returnByValue: true,
+        }, sessionId);
+        const domState = JSON.parse(domResp.result?.result?.value || '{"elapsed":0,"mutations":0}');
+
+        const networkIdle = activeRequests.size === 0 && (Date.now() - lastNetworkActivity) >= networkIdleMs;
+        const domStable = domState.elapsed >= domStableMs;
+
+        if (networkIdle && domStable) return;
+
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      throw new BrowserTimeoutError('waitForDomStable', timeoutMs);
+    } finally {
+      this.removeCdpEventListener('Network.requestWillBeSent', onRequestStart);
+      this.removeCdpEventListener('Network.loadingFinished', onRequestDone);
+      this.removeCdpEventListener('Network.loadingFailed', onRequestDone);
+    }
+  }
+
   // --- Wait for page load ---
 
-  private async waitForLoad(sessionId: string, timeoutMs = 15_000): Promise<void> {
+  private async waitForLoad(sessionId: string, tabId: string, timeoutMs = 15_000): Promise<void> {
     await this.sendCDP('Page.enable', {}, sessionId);
 
     const start = Date.now();
@@ -253,11 +380,17 @@ export class CdpEngine implements BrowserEngine {
           expression: 'document.readyState',
           returnByValue: true,
         }, sessionId);
-        if (resp.result?.result?.value === 'complete') return;
+        if (resp.result?.result?.value === 'complete') break;
       } catch { /* ignore */ }
       await new Promise(r => setTimeout(r, 500));
     }
-    // Timeout is not fatal — page may still be loading
+
+    // Wait for DOM stability after readyState is complete
+    await this.waitForDomStable(tabId, {
+      timeoutMs: Math.max(1_000, timeoutMs - (Date.now() - start)),
+      networkIdleMs: 500,
+      domStableMs: 800,
+    }).catch(() => { /* non-fatal */ });
   }
 
   // --- Snapshot helpers ---
@@ -354,7 +487,7 @@ export class CdpEngine implements BrowserEngine {
     if (url !== 'about:blank') {
       try {
         const sid = await this.ensureSession(targetId);
-        await this.waitForLoad(sid);
+        await this.waitForLoad(sid, targetId);
       } catch { /* non-fatal */ }
     }
 
@@ -364,7 +497,7 @@ export class CdpEngine implements BrowserEngine {
   async navigate(tabId: string, url: string): Promise<PageSnapshot> {
     const sessionId = await this.ensureSession(tabId);
     await this.sendCDP('Page.navigate', { url }, sessionId);
-    await this.waitForLoad(sessionId);
+    await this.waitForLoad(sessionId, tabId);
     return this.takeSnapshot(tabId);
   }
 
@@ -381,9 +514,23 @@ export class CdpEngine implements BrowserEngine {
     return Buffer.from(resp.result.data, 'base64');
   }
 
+  /** Execute JS in the tab session, then wait for DOM stability and take a snapshot. */
+  private async execAndSnapshot(tabId: string, expression: string, awaitPromise = true): Promise<PageSnapshot> {
+    const sessionId = await this.ensureSession(tabId);
+    const resp = await this.sendCDP('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise,
+    }, sessionId);
+    if (resp.result?.result?.value?.error) {
+      throw new Error(resp.result.result.value.error);
+    }
+    await this.waitForDomStable(tabId, CdpEngine.ACTION_STABLE_OPTS).catch(() => { /* non-fatal */ });
+    return this.takeSnapshot(tabId);
+  }
+
   async click(tabId: string, selector: string): Promise<PageSnapshot> {
     await this.ensureConnected();
-    const sessionId = await this.ensureSession(tabId);
     const selectorJson = JSON.stringify(selector);
     const js = `(() => {
       const el = document.querySelector(${selectorJson});
@@ -392,21 +539,11 @@ export class CdpEngine implements BrowserEngine {
       el.click();
       return { clicked: true, tag: el.tagName };
     })()`;
-    const resp = await this.sendCDP('Runtime.evaluate', {
-      expression: js,
-      returnByValue: true,
-      awaitPromise: true,
-    }, sessionId);
-    if (resp.result?.result?.value?.error) {
-      throw new Error(resp.result.result.value.error);
-    }
-    await new Promise(r => setTimeout(r, 300));
-    return this.takeSnapshot(tabId);
+    return this.execAndSnapshot(tabId, js);
   }
 
   async fill(tabId: string, selector: string, value: string): Promise<PageSnapshot> {
     await this.ensureConnected();
-    const sessionId = await this.ensureSession(tabId);
     const selectorJson = JSON.stringify(selector);
     const valueJson = JSON.stringify(value);
     const js = `(() => {
@@ -418,21 +555,11 @@ export class CdpEngine implements BrowserEngine {
       el.dispatchEvent(new Event('change', { bubbles: true }));
       return { filled: true };
     })()`;
-    const resp = await this.sendCDP('Runtime.evaluate', {
-      expression: js,
-      returnByValue: true,
-      awaitPromise: true,
-    }, sessionId);
-    if (resp.result?.result?.value?.error) {
-      throw new Error(resp.result.result.value.error);
-    }
-    await new Promise(r => setTimeout(r, 200));
-    return this.takeSnapshot(tabId);
+    return this.execAndSnapshot(tabId, js);
   }
 
   async pressKey(tabId: string, key: string): Promise<PageSnapshot> {
     await this.ensureConnected();
-    const sessionId = await this.ensureSession(tabId);
     const keyJson = JSON.stringify(key);
     const js = `(() => {
       document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${keyJson}, bubbles: true }));
@@ -440,12 +567,7 @@ export class CdpEngine implements BrowserEngine {
       document.activeElement.dispatchEvent(new KeyboardEvent('keyup', { key: ${keyJson}, bubbles: true }));
       return true;
     })()`;
-    await this.sendCDP('Runtime.evaluate', {
-      expression: js,
-      returnByValue: true,
-    }, sessionId);
-    await new Promise(r => setTimeout(r, 200));
-    return this.takeSnapshot(tabId);
+    return this.execAndSnapshot(tabId, js);
   }
 
   async evaluate(tabId: string, expression: string): Promise<{ success: boolean; result?: unknown; error?: string }> {
@@ -498,25 +620,12 @@ export class CdpEngine implements BrowserEngine {
 
     if (condition.type === 'idle') {
       const idleMs = condition.idleMs ?? 1000;
-      let lastChange = Date.now();
-      let lastUrl = '';
-      while (Date.now() - start < timeout) {
-        try {
-          const sessionId = await this.ensureSession(tabId);
-          const resp = await this.sendCDP('Runtime.evaluate', {
-            expression: 'document.url || location.href',
-            returnByValue: true,
-          }, sessionId);
-          const currentUrl = resp.result?.result?.value || '';
-          if (currentUrl !== lastUrl) {
-            lastUrl = currentUrl;
-            lastChange = Date.now();
-          }
-          if (Date.now() - lastChange >= idleMs) return;
-        } catch { /* ignore */ }
-        await new Promise(r => setTimeout(r, 200));
-      }
-      throw new BrowserTimeoutError('waitFor(idle)', timeout);
+      await this.waitForDomStable(tabId, {
+        timeoutMs: Math.max(1_000, timeout - (Date.now() - start)),
+        networkIdleMs: idleMs,
+        domStableMs: idleMs,
+      });
+      return;
     }
   }
 
@@ -541,6 +650,7 @@ export class CdpEngine implements BrowserEngine {
     }
     this.tabs.clear();
     this.sessions.clear();
+    this.cdpEventHandlers.clear();
     // Clear pending
     for (const { timer } of this.pending.values()) {
       clearTimeout(timer);

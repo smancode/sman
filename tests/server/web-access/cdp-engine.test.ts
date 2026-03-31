@@ -2,12 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BrowserTimeoutError, BrowserConnectionError } from '../../../server/web-access/browser-engine.js';
 import { CdpEngine } from '../../../server/web-access/cdp-engine.js';
 
-/** Helper to set up engine with mocked sendCDP */
+const TAB_ID = 'tab-123';
+const SESSION_ID = 'session-1';
+
+function makeTabContext(id = TAB_ID) {
+  return { tabId: id, url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() };
+}
+
+/** Helper to set up engine with mocked WebSocket and ensureConnected */
 function setupEngine(opts?: { defaultTimeoutMs?: number }) {
   const engine = new CdpEngine(opts);
   const mockWs = { readyState: 1, send: vi.fn(), close: vi.fn() };
   (engine as any).ws = mockWs;
   vi.spyOn(engine as any, 'ensureConnected').mockResolvedValue(mockWs);
+  return engine;
+}
+
+/** Setup engine + register a tab + mock ensureSession + mock waitForDomStable */
+function setupEngineWithTab(opts?: { defaultTimeoutMs?: number }) {
+  const engine = setupEngine(opts);
+  (engine as any).tabs.set(TAB_ID, makeTabContext());
+  vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
+  vi.spyOn(engine as any, 'waitForDomStable').mockResolvedValue(undefined);
   return engine;
 }
 
@@ -44,7 +60,6 @@ describe('CdpEngine', () => {
       const engine = new CdpEngine({ defaultTimeoutMs: 50 });
       const mockWs = { readyState: 1, send: vi.fn(), close: vi.fn() };
       (engine as any).ws = mockWs;
-      // sendCDP is NOT mocked — it will time out since no one responds
       vi.spyOn(engine as any, 'ensureConnected').mockResolvedValue(mockWs);
 
       await expect(engine.newTab('https://example.com')).rejects.toThrow(BrowserTimeoutError);
@@ -53,9 +68,7 @@ describe('CdpEngine', () => {
 
   describe('navigate', () => {
     it('should navigate and return page snapshot', async () => {
-      const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
+      const engine = setupEngineWithTab();
       vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
         if (method === 'Page.navigate') return { result: { frameId: 'frame-1' } };
         if (method === 'Page.enable') return { result: {} };
@@ -68,7 +81,7 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      const snapshot = await engine.navigate('tab-123', 'https://jira.example.com/browse/PROJ-123');
+      const snapshot = await engine.navigate(TAB_ID, 'https://jira.example.com/browse/PROJ-123');
       expect(snapshot.url).toContain('jira.example.com');
       expect(snapshot.title).toBe('PROJ-123 - Jira');
     });
@@ -76,10 +89,8 @@ describe('CdpEngine', () => {
 
   describe('click', () => {
     it('should click element using JS click first', async () => {
-      const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+      const engine = setupEngineWithTab();
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
         if (params?.expression?.includes('click')) {
           return { result: { result: { value: { clicked: true, tag: 'BUTTON' } } } };
         }
@@ -89,17 +100,15 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      const snapshot = await engine.click('tab-123', '#create-issue');
+      const snapshot = await engine.click(TAB_ID, '#create-issue');
       expect(snapshot.title).toBe('Create Issue');
     });
   });
 
   describe('fill', () => {
     it('should set input value and dispatch events', async () => {
-      const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+      const engine = setupEngineWithTab();
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
         if (params?.expression?.includes('#summary')) {
           return { result: { result: { value: { filled: true } } } };
         }
@@ -109,7 +118,7 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      const snapshot = await engine.fill('tab-123', '#summary', 'Fix login bug');
+      const snapshot = await engine.fill(TAB_ID, '#summary', 'Fix login bug');
       expect(snapshot).toBeDefined();
       expect(snapshot.title).toBe('Create Issue');
     });
@@ -118,13 +127,13 @@ describe('CdpEngine', () => {
   describe('screenshot', () => {
     it('should return a Buffer from Page.captureScreenshot', async () => {
       const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
+      (engine as any).tabs.set(TAB_ID, makeTabContext());
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
       vi.spyOn(engine as any, 'sendCDP').mockResolvedValue({
         result: { data: Buffer.from('test-image').toString('base64') },
       });
 
-      const result = await engine.screenshot('tab-123');
+      const result = await engine.screenshot(TAB_ID);
       expect(Buffer.isBuffer(result)).toBe(true);
     });
   });
@@ -132,37 +141,37 @@ describe('CdpEngine', () => {
   describe('closeTab', () => {
     it('should close tab and remove from tabs map', async () => {
       const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
+      (engine as any).tabs.set(TAB_ID, makeTabContext());
       vi.spyOn(engine as any, 'sendCDP').mockResolvedValue({ result: {} });
 
-      await engine.closeTab('tab-123');
-      expect((engine as any).tabs.has('tab-123')).toBe(false);
+      await engine.closeTab(TAB_ID);
+      expect((engine as any).tabs.has(TAB_ID)).toBe(false);
     });
   });
 
   describe('evaluate', () => {
     it('should return structured result', async () => {
       const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
+      (engine as any).tabs.set(TAB_ID, makeTabContext());
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
       vi.spyOn(engine as any, 'sendCDP').mockResolvedValue({
         result: { result: { value: 5 } },
       });
 
-      const result = await engine.evaluate('tab-123', 'document.querySelectorAll(".issue").length');
+      const result = await engine.evaluate(TAB_ID, 'document.querySelectorAll(".issue").length');
       expect(result.success).toBe(true);
       expect(result.result).toBe(5);
     });
 
     it('should return error on exception', async () => {
       const engine = setupEngine();
-      (engine as any).tabs.set('tab-123', { tabId: 'tab-123', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue('session-1');
+      (engine as any).tabs.set(TAB_ID, makeTabContext());
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
       vi.spyOn(engine as any, 'sendCDP').mockResolvedValue({
         result: { exceptionDetails: { text: 'SyntaxError' } },
       });
 
-      const result = await engine.evaluate('tab-123', 'invalid{{');
+      const result = await engine.evaluate(TAB_ID, 'invalid{{');
       expect(result.success).toBe(false);
       expect(result.error).toBe('SyntaxError');
     });
@@ -213,13 +222,167 @@ describe('CdpEngine', () => {
   describe('dispose', () => {
     it('should clean up all resources', async () => {
       const engine = setupEngine();
-      (engine as any).tabs.set('tab-1', { tabId: 'tab-1', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
-      (engine as any).tabs.set('tab-2', { tabId: 'tab-2', url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() });
+      (engine as any).tabs.set('tab-1', makeTabContext('tab-1'));
+      (engine as any).tabs.set('tab-2', makeTabContext('tab-2'));
       vi.spyOn(engine as any, 'sendCDP').mockResolvedValue({ result: {} });
 
       await engine.dispose();
       expect((engine as any).tabs.size).toBe(0);
       expect((engine as any).disposed).toBe(true);
+    });
+  });
+
+  describe('CDP event dispatch', () => {
+    it('should dispatch CDP events to registered handlers', () => {
+      const engine = new CdpEngine();
+      const handler = vi.fn();
+      engine.onCdpEvent('Network.requestWillBeSent', handler);
+
+      engine.onMessage({ data: JSON.stringify({
+        method: 'Network.requestWillBeSent',
+        params: { requestId: 'req-1', request: { url: 'https://example.com/api' } },
+      }) });
+
+      expect(handler).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        request: { url: 'https://example.com/api' },
+      });
+    });
+
+    it('should remove specific handler', () => {
+      const engine = new CdpEngine();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      engine.onCdpEvent('Page.loadEventFired', handler1);
+      engine.onCdpEvent('Page.loadEventFired', handler2);
+      engine.removeCdpEventListener('Page.loadEventFired', handler1);
+
+      engine.onMessage({ data: JSON.stringify({
+        method: 'Page.loadEventFired',
+        params: { timestamp: 12345 },
+      }) });
+
+      expect(handler1).not.toHaveBeenCalled();
+      expect(handler2).toHaveBeenCalledWith({ timestamp: 12345 });
+    });
+  });
+
+  describe('waitForDomStable', () => {
+    it('should resolve when network idle and DOM stable', async () => {
+      const engine = setupEngine();
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
+
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Network.enable') return { result: {} };
+        if (params?.expression?.includes('new MutationObserver')) {
+          return { result: { result: { value: 'installed' } } };
+        }
+        if (params?.expression?.includes('__domLastMutation')) {
+          return { result: { result: { value: JSON.stringify({ elapsed: 1000, mutations: 3 }) } } };
+        }
+        return { result: {} };
+      });
+
+      const result = engine.waitForDomStable(TAB_ID, {
+        timeoutMs: 5000,
+        networkIdleMs: 200,
+        domStableMs: 300,
+      });
+
+      // Simulate network events becoming idle
+      engine.onMessage({ data: JSON.stringify({
+        method: 'Network.requestWillBeSent',
+        params: { requestId: 'req-1' },
+      }) });
+      engine.onMessage({ data: JSON.stringify({
+        method: 'Network.loadingFinished',
+        params: { requestId: 'req-1' },
+      }) });
+
+      await expect(result).resolves.toBeUndefined();
+    });
+
+    it('should timeout when DOM keeps changing', async () => {
+      const engine = setupEngine({ defaultTimeoutMs: 200 });
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
+
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Network.enable') return { result: {} };
+        if (params?.expression?.includes('new MutationObserver')) {
+          return { result: { result: { value: 'installed' } } };
+        }
+        if (params?.expression?.includes('__domLastMutation')) {
+          return { result: { result: { value: JSON.stringify({ elapsed: 0, mutations: 999 }) } } };
+        }
+        return { result: {} };
+      });
+
+      await expect(engine.waitForDomStable(TAB_ID, {
+        timeoutMs: 300,
+        networkIdleMs: 100,
+        domStableMs: 200,
+      })).rejects.toThrow(BrowserTimeoutError);
+    });
+
+    it('should use default options when none provided', async () => {
+      const engine = setupEngine();
+      vi.spyOn(engine as any, 'ensureSession').mockResolvedValue(SESSION_ID);
+
+      const sendCDPSpy = vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Network.enable') return { result: {} };
+        if (params?.expression?.includes('new MutationObserver')) {
+          return { result: { result: { value: 'installed' } } };
+        }
+        if (params?.expression?.includes('__domLastMutation')) {
+          return { result: { result: { value: JSON.stringify({ elapsed: 10000, mutations: 0 }) } } };
+        }
+        return { result: {} };
+      });
+
+      await engine.waitForDomStable(TAB_ID);
+      expect(sendCDPSpy).toHaveBeenCalledWith('Network.enable', {}, SESSION_ID);
+    });
+  });
+
+  describe('smart wait in actions', () => {
+    it('click should use waitForDomStable instead of fixed delay', async () => {
+      const engine = setupEngineWithTab();
+
+      const domStableSpy = vi.spyOn(engine as any, 'waitForDomStable').mockResolvedValue(undefined);
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+        if (params?.expression?.includes('click')) {
+          return { result: { result: { value: { clicked: true, tag: 'BUTTON' } } } };
+        }
+        if (params?.expression?.includes('document.title')) {
+          return { result: { result: { value: '{"title":"After Click","url":"https://example.com/after","body":"result"}' } } };
+        }
+        return { result: {} };
+      });
+
+      await engine.click(TAB_ID, '#btn');
+      expect(domStableSpy).toHaveBeenCalledWith(TAB_ID, expect.objectContaining({
+        timeoutMs: 5000,
+      }));
+    });
+
+    it('fill should use waitForDomStable instead of fixed delay', async () => {
+      const engine = setupEngineWithTab();
+
+      const domStableSpy = vi.spyOn(engine as any, 'waitForDomStable').mockResolvedValue(undefined);
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+        if (params?.expression?.includes('#input')) {
+          return { result: { result: { value: { filled: true } } } };
+        }
+        if (params?.expression?.includes('document.title')) {
+          return { result: { result: { value: '{"title":"Filled","url":"https://example.com","body":""}' } } };
+        }
+        return { result: {} };
+      });
+
+      await engine.fill(TAB_ID, '#input', 'hello');
+      expect(domStableSpy).toHaveBeenCalledWith(TAB_ID, expect.objectContaining({
+        timeoutMs: 5000,
+      }));
     });
   });
 });
