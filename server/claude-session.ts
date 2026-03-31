@@ -17,6 +17,7 @@ import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
 import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
+import { discoverChromeSites, formatSitesForPrompt } from './web-access/chrome-sites.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -135,6 +136,8 @@ Workspace: ${workspace}
 You have browser tools (web_access_*) available. When the user asks you to browse websites, operate internal systems (ITSM, Jira, Confluence, GitLab, Jenkins, etc.), check todos, fill forms, or any task involving a real browser — use the web-access skill via the Skill tool, then call web_access_* tools to complete the task.
 
 Trigger phrases: 查看待办, 操作网站, 打开网页, 看下xxx, 帮我查xxx, 浏览器操作.
+
+${formatSitesForPrompt(discoverChromeSites())}
 
 ## Available Plugins
 
