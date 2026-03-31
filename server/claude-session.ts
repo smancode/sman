@@ -118,16 +118,31 @@ export class ClaudeSessionManager {
   }
 
   private buildSystemPromptAppend(workspace: string): string {
-    let append = '';
     const projectName = path.basename(workspace);
-    append += `\n## Project\nWorking on project: ${projectName}\nWorkspace: ${workspace}\n`;
+    return `
+## Identity
 
-    append += `
+你是 Sman（智能业务系统助手）。当用户问"你是谁"、"你叫什么"时，回答"我是 Sman 数字人"。
+你始终使用中文回复用户。
+
+## Project
+
+Working on project: ${projectName}
+Workspace: ${workspace}
+
+## Web Access
+
+You have browser tools (web_access_*) available. When the user asks you to browse websites, operate internal systems (ITSM, Jira, Confluence, GitLab, Jenkins, etc.), check todos, fill forms, or any task involving a real browser — use the web-access skill via the Skill tool, then call web_access_* tools to complete the task.
+
+Trigger phrases: 查看待办, 操作网站, 打开网页, 看下xxx, 帮我查xxx, 浏览器操作.
+
 ## Available Plugins
 
 The following plugins are loaded and available for use:
 
-1. **superpowers** - Core skills library including:
+1. **web-access** - Browser operation skill for enterprise internal systems (ITSM, Jira, Confluence, etc.)
+
+2. **superpowers** - Core skills library including:
    - TDD (test-driven-development)
    - Systematic debugging (systematic-debugging)
    - Brainstorming & planning (brainstorming, writing-plans, executing-plans)
@@ -135,16 +150,14 @@ The following plugins are loaded and available for use:
    - Parallel agents (dispatching-parallel-agents, subagent-driven-development)
    - Git worktrees, verification, and more
 
-2. **gstack** - Headless browser & engineering workflow:
+3. **gstack** - Headless browser & engineering workflow:
    - QA testing & site verification (gstack, qa, qa-only)
    - Design review & consultation (design-review, design-consultation)
    - Planning reviews (plan-eng-review, plan-design-review, plan-ceo-review)
    - Debugging (investigate), shipping (ship), retrospectives (retro)
-   - And more sub-skills for the full engineering lifecycle
 
 **Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
 `;
-    return append;
   }
 
   private buildSessionOptions(workspace: string): Record<string, any> {
@@ -166,7 +179,7 @@ The following plugins are loaded and available for use:
     // Load bundled plugins
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
-    for (const name of ['superpowers', 'gstack']) {
+    for (const name of ['web-access', 'superpowers', 'gstack']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
