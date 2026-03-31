@@ -8,12 +8,13 @@ export interface LlmConfig {
   baseUrl?: string;
 }
 
-export type WebSearchProvider = 'builtin' | 'brave' | 'tavily';
+export type WebSearchProvider = 'builtin' | 'brave' | 'tavily' | 'bing';
 
 export interface WebSearchConfig {
   provider: WebSearchProvider;
   braveApiKey: string;
   tavilyApiKey: string;
+  bingApiKey: string;
   maxUsesPerSession: number;
 }
 
@@ -46,6 +47,7 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   { value: 'builtin', label: 'Claude 内置', description: '零配置，$10/千次 + token 费用' },
   { value: 'brave', label: 'Brave Search', description: '$5/千次，有免费额度' },
   { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费' },
+  { value: 'bing', label: 'Bing Search', description: 'Azure 认知服务，$7/千次' },
 ];
 
 // === Cron Task Types ===

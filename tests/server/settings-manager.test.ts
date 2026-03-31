@@ -55,7 +55,7 @@ describe('SettingsManager', () => {
         JSON.stringify({
           port: 5880,
           llm: { apiKey: 'test-key', model: 'test-model' },
-          webSearch: { provider: 'builtin', braveApiKey: '', tavilyApiKey: '', maxUsesPerSession: 50 },
+          webSearch: { provider: 'builtin', braveApiKey: '', tavilyApiKey: '', bingApiKey: '', maxUsesPerSession: 50 },
         }, null, 2),
         'utf-8'
       );

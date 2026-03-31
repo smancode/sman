@@ -33,9 +33,10 @@ export interface SmanConfig {
     baseUrl?: string;
   };
   webSearch: {
-    provider: 'builtin' | 'brave' | 'tavily';
+    provider: 'builtin' | 'brave' | 'tavily' | 'bing';
     braveApiKey: string;
     tavilyApiKey: string;
+    bingApiKey: string;
     maxUsesPerSession: number;
   };
   chatbot: import('./chatbot/types.js').ChatbotConfig;

@@ -10,6 +10,7 @@ describe('MCP Config', () => {
       provider: 'builtin',
       braveApiKey: '',
       tavilyApiKey: '',
+      bingApiKey: '',
       maxUsesPerSession: 50,
     },
   };
@@ -63,6 +64,36 @@ describe('MCP Config', () => {
     expect(servers['tavily-search']).toBeDefined();
     expect(servers['tavily-search'].type).toBe('stdio');
     expect(servers['tavily-search'].env?.TAVILY_API_KEY).toBe('tavily-key-456');
+  });
+
+  it('should configure Bing Search MCP server', () => {
+    const config: SmanConfig = {
+      ...baseConfig,
+      webSearch: {
+        ...baseConfig.webSearch,
+        provider: 'bing',
+        bingApiKey: 'bing-key-789',
+      },
+    };
+
+    const servers = buildMcpServers(config);
+    expect(servers['bing-search']).toBeDefined();
+    expect(servers['bing-search'].type).toBe('stdio');
+    expect(servers['bing-search'].env?.BING_SEARCH_V7_SUBSCRIPTION_KEY).toBe('bing-key-789');
+  });
+
+  it('should not configure Bing without API key', () => {
+    const config: SmanConfig = {
+      ...baseConfig,
+      webSearch: {
+        ...baseConfig.webSearch,
+        provider: 'bing',
+        bingApiKey: '',
+      },
+    };
+
+    const servers = buildMcpServers(config);
+    expect(Object.keys(servers)).toHaveLength(0);
   });
 });
 

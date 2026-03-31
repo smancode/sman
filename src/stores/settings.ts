@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: SmanSettings = {
     provider: 'builtin',
     braveApiKey: '',
     tavilyApiKey: '',
+    bingApiKey: '',
     maxUsesPerSession: 50,
   },
   chatbot: {

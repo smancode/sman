@@ -44,6 +44,7 @@ describe('ClaudeSessionManager', () => {
         provider: 'builtin',
         braveApiKey: '',
         tavilyApiKey: '',
+        bingApiKey: '',
         maxUsesPerSession: 50,
       },
     });
@@ -98,6 +99,7 @@ describe('ClaudeSessionManager', () => {
         provider: 'brave',
         braveApiKey: 'brave-key',
         tavilyApiKey: '',
+        bingApiKey: '',
         maxUsesPerSession: 50,
       },
     });
