@@ -166,6 +166,14 @@ The following plugins are loaded and available for use:
    - PDF: Form filling, merging, PPTX→PDF, PDF→images, data extraction
    Trigger phrases: 创建PPT, 做个演示文稿, 编辑Word, 生成Excel, 导出PDF, 填报表.
 
+5. **frontend-slides** - HTML presentation creation (zero dependencies):
+   - Create stunning, animation-rich HTML slideshows from scratch
+   - Convert PowerPoint (.pptx) to web presentations
+   - Visual style discovery with curated presets (no generic AI aesthetics)
+   - Single HTML file output, no build tools needed
+   - Includes deploy-to-PDF and export scripts
+   Trigger phrases: 做个演示, 创建幻灯片, 转换PPT到网页, 生成HTML演示.
+
 **Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
 `;
   }
@@ -189,7 +197,7 @@ The following plugins are loaded and available for use:
     // Load bundled plugins
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
-    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills']) {
+    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills', 'frontend-slides']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
