@@ -27,6 +27,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Sman',
     titleBarStyle: 'hidden',
+    ...(process.platform === 'win32' ? { frame: false } : {}),
     show: false,
     icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {
@@ -41,6 +42,14 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => {
     mainWindow!.show();
     mainWindow!.focus();
+  });
+
+  // Notify renderer of maximize state changes
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window:maximizeChanged', true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window:maximizeChanged', false);
   });
 
   const registerShortcuts = () => {
@@ -85,6 +94,28 @@ function registerIpcHandlers(): void {
       return null;
     }
     return result.filePaths[0];
+  });
+
+  // Window controls
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize();
+  });
+
+  ipcMain.handle('window:maximize', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+
+  ipcMain.handle('window:close', () => {
+    mainWindow?.close();
+  });
+
+  ipcMain.handle('window:isMaximized', () => {
+    return mainWindow?.isMaximized() ?? false;
   });
 }
 

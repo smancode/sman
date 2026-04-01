@@ -8,4 +8,15 @@ contextBridge.exposeInMainWorld('sman', {
     electron: process.versions.electron,
   },
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
+
+  // Window controls
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowMaximize: () => ipcRenderer.invoke('window:maximize'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onMaximizeChanged: (callback: (maximized: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
+    ipcRenderer.on('window:maximizeChanged', handler);
+    return () => ipcRenderer.removeListener('window:maximizeChanged', handler);
+  },
 });

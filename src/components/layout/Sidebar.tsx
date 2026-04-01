@@ -19,22 +19,16 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r bg-[hsl(var(--sidebar-bg))] transition-all duration-300 w-64',
+        'flex shrink-0 flex-col bg-[hsl(var(--sidebar-bg))] transition-all duration-300 w-64',
       )}
     >
-      {/* Header - Draggable Area for Electron */}
-      <div
-        className="flex items-center h-12 app-drag-region pt-6 justify-end px-3"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      />
-
       {/* Session Tree */}
-      <div className="flex-1 overflow-hidden border-t border-[hsl(var(--sidebar-border))]">
+      <div className="flex-1 overflow-hidden">
         <SessionTree />
       </div>
 
       {/* Footer */}
-      <div className="p-2 mt-auto border-t border-[hsl(var(--sidebar-border))] space-y-0.5">
+      <div className="p-2 mt-auto space-y-0.5">
         <NavLink
           to="/cron-tasks"
           className={({ isActive }) =>

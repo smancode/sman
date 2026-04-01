@@ -334,7 +334,7 @@ export function SessionTree() {
       />
 
       {/* New session button */}
-      <div className="p-3 border-b border-[hsl(var(--sidebar-border))]">
+      <div className="p-3 pb-2">
         <Button
           variant="outline"
           size="sm"

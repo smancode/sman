@@ -30,7 +30,7 @@
     --user-bubble-fg: 220 15% 15%;
 
     /* 侧边栏专用 */
-    --sidebar-bg: 40 15% 91%;
+    --sidebar-bg: 40 20% 94%;
     --sidebar-border: 40 10% 82%;
   }
 
@@ -61,7 +61,7 @@
     --user-bubble-fg: 40 10% 95%;
 
     /* 侧边栏专用 */
-    --sidebar-bg: 30 5% 12%;
+    --sidebar-bg: 30 6% 10%;
     --sidebar-border: 30 5% 20%;
   }
 }

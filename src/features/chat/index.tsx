@@ -68,10 +68,10 @@ export function Chat() {
   const isEmpty = messages.length === 0 && !sending;
 
   return (
-    <div className="relative flex flex-col h-screen transition-colors duration-500 dark:bg-background">
+    <div className="relative flex flex-col h-full transition-colors duration-500 dark:bg-background">
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className={isEmpty ? 'h-full' : 'max-w-4xl mx-auto space-y-4 px-4 py-4'}>
+        <div className={isEmpty ? 'h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
