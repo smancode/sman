@@ -44,7 +44,7 @@ export class WebAccessService {
 
   private requireEngine(): BrowserEngine {
     if (!this.engine) {
-      throw new BrowserConnectionError('No browser engine available. Start Chrome with --remote-debugging-port=9222');
+      throw new BrowserConnectionError('No browser engine available. Chrome could not be auto-launched.');
     }
     return this.engine;
   }

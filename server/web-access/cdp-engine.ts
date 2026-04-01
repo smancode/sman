@@ -9,8 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
+import http from 'node:http';
+import { type ChildProcess, spawn } from 'node:child_process';
 import type { BrowserEngine, TabContext, PageSnapshot, WaitCondition } from './browser-engine.js';
 import { BrowserTimeoutError, BrowserConnectionError, LoginRequiredError } from './browser-engine.js';
+import { createLogger } from '../utils/logger.js';
 
 /** WebSocket constructor type */
 type WebSocketLike = {
@@ -23,6 +26,8 @@ type WebSocketLike = {
 };
 
 const OPEN_STATE = 1;
+const log = createLogger('CdpEngine');
+const SMAN_CHROME_PROFILE_DIR = path.join(os.homedir(), '.sman', 'chrome-profile');
 
 interface CdpEngineOptions {
   defaultTimeoutMs?: number;
@@ -46,6 +51,10 @@ export class CdpEngine implements BrowserEngine {
   private connectingPromise: Promise<void> | null = null;
   private defaultTimeoutMs: number;
   private disposed = false;
+  private chromeProcess: ChildProcess | null = null;
+  private chromePid: number | null = null;
+  private launchedByUs = false;
+  private launchingPromise: Promise<void> | null = null;
 
   constructor(opts?: CdpEngineOptions) {
     this.defaultTimeoutMs = opts?.defaultTimeoutMs ?? 30_000;
@@ -112,9 +121,266 @@ export class CdpEngine implements BrowserEngine {
     });
   }
 
+  // --- Chrome executable and profile discovery ---
+
+  /** Get user's Chrome user-data-dir (parent of Default profile) */
+  private static getChromeUserDataDir(): string | null {
+    const home = os.homedir();
+    const platform = os.platform();
+
+    if (platform === 'darwin') {
+      return path.join(home, 'Library/Application Support/Google/Chrome');
+    }
+    if (platform === 'linux') {
+      return path.join(home, '.config/google-chrome');
+    }
+    if (platform === 'win32') {
+      const localAppData = process.env.LOCALAPPDATA || '';
+      if (!localAppData) return null;
+      return path.join(localAppData, 'Google/Chrome/User Data');
+    }
+    return null;
+  }
+
+  /** Find Chrome executable on the current platform */
+  private static findChromeExecutable(): string | null {
+    const platform = os.platform();
+
+    if (platform === 'darwin') {
+      const p = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      if (fs.existsSync(p)) return p;
+      // Chromium fallback
+      const cp = '/Applications/Chromium.app/Contents/MacOS/Chromium';
+      if (fs.existsSync(cp)) return cp;
+    }
+    if (platform === 'linux') {
+      for (const p of ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser', '/usr/bin/chromium']) {
+        if (fs.existsSync(p)) return p;
+      }
+    }
+    if (platform === 'win32') {
+      const paths = [
+        `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
+        `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
+        `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+      ];
+      for (const p of paths) {
+        if (p && fs.existsSync(p)) return p;
+      }
+    }
+    return null;
+  }
+
+  // --- Chrome auto-launch ---
+
+  /** Copy essential Chrome profile data (cookies, bookmarks, etc.) to ~/.sman/chrome-profile/ */
+  private async copyChromeProfile(): Promise<void> {
+    const srcUserDataDir = CdpEngine.getChromeUserDataDir();
+    if (!srcUserDataDir || !fs.existsSync(srcUserDataDir)) {
+      log.warn('No Chrome user data dir found, launching with empty profile');
+      return;
+    }
+
+    const destDir = SMAN_CHROME_PROFILE_DIR;
+
+    // Remove old profile copy
+    if (fs.existsSync(destDir)) {
+      try {
+        fs.rmSync(destDir, { recursive: true, force: true });
+      } catch {
+        log.warn('Failed to remove old chrome profile, continuing');
+      }
+    }
+
+    fs.mkdirSync(destDir, { recursive: true });
+
+    log.info(`Copying Chrome profile data from ${srcUserDataDir}`);
+
+    try {
+      const platform = os.platform();
+
+      // Essential files/dirs that carry cookies, bookmarks, login sessions
+      // These are relative to the Chrome user-data-dir
+      const essentials = [
+        // Default profile
+        'Default/Cookies',
+        'Default/Cookies-journal',
+        'Default/Login Data',
+        'Default/Login Data-journal',
+        'Default/Web Data',
+        'Default/Web Data-journal',
+        'Default/Bookmarks',
+        'Default/Favicons',
+        'Default/Favicons-journal',
+        'Default/Preferences',
+        'Default/Secure Preferences',
+        'Default/History',
+        'Default/History-journal',
+        'Default/Network',
+        // Additional profiles
+        'Profile 1/Cookies',
+        'Profile 1/Cookies-journal',
+        'Profile 1/Login Data',
+        'Profile 1/Login Data-journal',
+        'Profile 1/Web Data',
+        'Profile 1/Web Data-journal',
+        'Profile 1/Bookmarks',
+        'Profile 1/Favicons',
+        'Profile 1/Favicons-journal',
+        'Profile 1/Preferences',
+        'Profile 1/Secure Preferences',
+        'Profile 1/History',
+        'Profile 1/History-journal',
+        'Profile 1/Network',
+        // Global files
+        'Local State',
+      ];
+
+      for (const relPath of essentials) {
+        const srcPath = path.join(srcUserDataDir, relPath);
+        const destPath = path.join(destDir, relPath);
+        try {
+          if (!fs.existsSync(srcPath)) continue;
+          // Ensure parent directory exists
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.copyFileSync(srcPath, destPath);
+        } catch (e: any) {
+          // File may be locked by Chrome, best effort
+          log.warn(`Failed to copy ${relPath}: ${e.message}`);
+        }
+      }
+
+      log.info('Chrome profile data copy complete');
+    } catch (e: any) {
+      log.warn(`Chrome profile copy failed: ${e.message}, launching with partial/empty profile`);
+    }
+  }
+
+  /** Launch Chrome with copied profile and return debug port */
+  private async launchChrome(): Promise<{ port: number; wsUrl: string | null }> {
+    const chromePath = CdpEngine.findChromeExecutable();
+    if (!chromePath) {
+      throw new BrowserConnectionError(
+        'Chrome executable not found. Install Google Chrome to use web access.',
+      );
+    }
+
+    // Copy user profile fresh each time
+    await this.copyChromeProfile();
+
+    // Ensure profile directory exists (even if copy failed)
+    if (!fs.existsSync(SMAN_CHROME_PROFILE_DIR)) {
+      fs.mkdirSync(SMAN_CHROME_PROFILE_DIR, { recursive: true });
+    }
+
+    const args = [
+      `--user-data-dir=${SMAN_CHROME_PROFILE_DIR}`,
+      '--remote-debugging-port=9333',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-sync',
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-features=Translate,MediaRouter',
+      '--hide-crash-restore-bubble',
+      '--password-store=basic',
+      '--disable-popup-blocking',
+      'about:blank',
+    ];
+
+    log.info(`Launching Chrome: ${chromePath}`);
+
+    const child = spawn(chromePath, args, {
+      detached: false,
+      stdio: 'ignore',
+    });
+
+    this.chromeProcess = child;
+    this.chromePid = child.pid ?? null;
+    this.launchedByUs = true;
+
+    child.on('exit', (code) => {
+      log.info(`Chrome process exited with code ${code}`);
+      this.chromeProcess = null;
+      this.chromePid = null;
+    });
+
+    return this.waitForCdpReady(9333);
+  }
+
+  /** Full WebSocket URL for CDP browser connection */
+  private cdpWsUrl: string | null = null;
+
+  /** Wait for CDP HTTP endpoint to respond (reliable cross-platform) */
+  private async waitForCdpReady(port: number, timeoutMs = 15_000): Promise<{ port: number; wsUrl: string | null }> {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      if (this.chromeProcess === null && this.chromePid === null) {
+        throw new BrowserConnectionError('Chrome process exited unexpectedly during startup');
+      }
+
+      try {
+        const info = await this.fetchCdpVersion(port);
+        if (info) {
+          log.info(`Chrome CDP ready on port ${port}`);
+          return { port, wsUrl: info.webSocketDebuggerUrl || null };
+        }
+      } catch { /* not ready yet */ }
+
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    throw new BrowserConnectionError(
+      `Chrome did not start within ${timeoutMs}ms`,
+    );
+  }
+
+  /** Fetch CDP version info via HTTP, returns parsed JSON or null */
+  private fetchCdpVersion(port: number): Promise<any | null> {
+    return new Promise((resolve) => {
+      const req = http.get(`http://127.0.0.1:${port}/json/version`, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => data += chunk);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        });
+      });
+      req.setTimeout(2000, () => { req.destroy(); resolve(null); });
+      req.on('error', () => resolve(null));
+    });
+  }
+
+  /** Kill Chrome process we spawned */
+  private async killLaunchedChrome(): Promise<void> {
+    if (!this.chromeProcess && !this.chromePid) return;
+
+    const pid = this.chromePid;
+    this.chromeProcess = null;
+    this.chromePid = null;
+    this.cdpWsUrl = null;
+
+    if (pid) {
+      log.info(`Killing Chrome process ${pid}`);
+      try {
+        if (os.platform() === 'win32') {
+          process.kill(pid);
+        } else {
+          process.kill(pid, 'SIGTERM');
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch { /* already dead */ }
+        }
+      } catch { /* already dead */ }
+    }
+  }
+
   // --- Connection management ---
 
   private getWebSocketUrl(): string {
+    // Prefer full URL from CDP /json/version response
+    if (this.cdpWsUrl) return this.cdpWsUrl;
     const port = this.chromePort!;
     if (this.chromeWsPath) return `ws://127.0.0.1:${port}${this.chromeWsPath}`;
     return `ws://127.0.0.1:${port}/devtools/browser`;
@@ -156,6 +422,7 @@ export class CdpEngine implements BrowserEngine {
         this.ws = null;
         this.chromePort = null;
         this.chromeWsPath = null;
+        this.cdpWsUrl = null;
         this.sessions.clear();
         this.cdpEventHandlers.clear();
       };
@@ -201,6 +468,27 @@ export class CdpEngine implements BrowserEngine {
   private async ensureConnected(): Promise<WebSocketLike> {
     if (this.disposed) throw new BrowserConnectionError('Engine disposed');
     if (this.ws && this.ws.readyState === OPEN_STATE) return this.ws;
+
+    // Always launch our own Chrome with copied profile
+    // (don't connect to user's running Chrome — we want isolated, fresh profile)
+    if (!this.chromePort) {
+      if (!this.launchingPromise) {
+        this.launchingPromise = (async () => {
+          await this.killLaunchedChrome();
+          const launched = await this.launchChrome();
+          this.chromePort = launched.port;
+          this.cdpWsUrl = launched.wsUrl;
+        })();
+        try {
+          await this.launchingPromise;
+        } finally {
+          this.launchingPromise = null;
+        }
+      } else {
+        await this.launchingPromise;
+      }
+    }
+
     await this.connectToChrome();
     if (!this.ws || this.ws.readyState !== OPEN_STATE) {
       throw new BrowserConnectionError('WebSocket not connected');
@@ -457,16 +745,8 @@ export class CdpEngine implements BrowserEngine {
   // --- BrowserEngine interface ---
 
   async isAvailable(): Promise<boolean> {
-    try {
-      const discovered = await this.discoverChromePort();
-      if (!discovered) return false;
-      this.chromePort = discovered.port;
-      this.chromeWsPath = discovered.wsPath;
-      await this.connectToChrome();
-      return true;
-    } catch {
-      return false;
-    }
+    // We can always launch Chrome ourselves
+    return true;
   }
 
   async newTab(url: string, _sessionId?: string): Promise<TabContext> {
@@ -661,5 +941,7 @@ export class CdpEngine implements BrowserEngine {
       this.ws.close();
       this.ws = null;
     }
+    // Kill Chrome if we launched it
+    await this.killLaunchedChrome();
   }
 }

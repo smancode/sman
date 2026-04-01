@@ -27,7 +27,7 @@ function withEngineCheck(
 ): (args: any, extra: any) => Promise<any> {
   return async (args: any, extra: any) => {
     if (!service.getActiveEngineType()) {
-      return errorResult('浏览器不可用。请确保 Chrome 已开启远程调试端口 (--remote-debugging-port=9222)');
+      return errorResult('浏览器不可用。Chrome 自动启动失败，请确认已安装 Google Chrome');
     }
     try {
       return await handler(args, extra);

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import { BrowserTimeoutError, BrowserConnectionError } from '../../../server/web-access/browser-engine.js';
 import { CdpEngine } from '../../../server/web-access/cdp-engine.js';
 
@@ -29,16 +31,8 @@ function setupEngineWithTab(opts?: { defaultTimeoutMs?: number }) {
 
 describe('CdpEngine', () => {
   describe('isAvailable', () => {
-    it('should return false when no Chrome debug port found', async () => {
+    it('should always return true since Chrome can be auto-launched', async () => {
       const engine = new CdpEngine();
-      vi.spyOn(engine as any, 'discoverChromePort').mockResolvedValue(null);
-      expect(await engine.isAvailable()).toBe(false);
-    });
-
-    it('should return true when Chrome debug port found', async () => {
-      const engine = new CdpEngine();
-      vi.spyOn(engine as any, 'discoverChromePort').mockResolvedValue({ port: 9222, wsPath: null });
-      vi.spyOn(engine as any, 'connectToChrome').mockResolvedValue(undefined);
       expect(await engine.isAvailable()).toBe(true);
     });
   });
@@ -229,6 +223,50 @@ describe('CdpEngine', () => {
       await engine.dispose();
       expect((engine as any).tabs.size).toBe(0);
       expect((engine as any).disposed).toBe(true);
+    });
+
+    it('should kill launched Chrome on dispose', async () => {
+      const engine = setupEngine();
+      const killSpy = vi.spyOn(engine as any, 'killLaunchedChrome').mockResolvedValue(undefined);
+      (engine as any).launchedByUs = true;
+
+      await engine.dispose();
+      expect(killSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('auto-launch', () => {
+    it('should find Chrome executable on macOS', () => {
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation((p: string) => {
+        return p === '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      });
+      vi.spyOn(os, 'platform').mockReturnValue('darwin');
+
+      const result = (CdpEngine as any).findChromeExecutable();
+      expect(result).toBe('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+
+      existsSpy.mockRestore();
+    });
+
+    it('should return null when Chrome not found', () => {
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+      vi.spyOn(os, 'platform').mockReturnValue('darwin');
+
+      const result = (CdpEngine as any).findChromeExecutable();
+      expect(result).toBeNull();
+
+      existsSpy.mockRestore();
+    });
+
+    it('should throw BrowserConnectionError in ensureConnected when Chrome executable not found', async () => {
+      const engine = new CdpEngine();
+      vi.spyOn(CdpEngine as any, 'findChromeExecutable').mockReturnValue(null);
+      vi.spyOn(engine as any, 'discoverChromePort').mockResolvedValue(null);
+      vi.spyOn(engine as any, 'killLaunchedChrome').mockResolvedValue(undefined);
+
+      await expect(
+        (engine as any).ensureConnected(),
+      ).rejects.toThrow(BrowserConnectionError);
     });
   });
 
