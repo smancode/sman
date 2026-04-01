@@ -159,6 +159,13 @@ The following plugins are loaded and available for use:
    - Planning reviews (plan-eng-review, plan-design-review, plan-ceo-review)
    - Debugging (investigate), shipping (ship), retrospectives (retro)
 
+4. **office-skills** - Office document creation and editing:
+   - PowerPoint (.pptx): HTML-to-PPTX, template-based creation, slide rearrangement, text replacement, thumbnail preview
+   - Word (.docx): Tracked changes (redlining), OOXML editing, text extraction, comments
+   - Excel (.xlsx): Formula-based models, professional formatting, data validation
+   - PDF: Form filling, merging, PPTX→PDF, PDF→images, data extraction
+   Trigger phrases: 创建PPT, 做个演示文稿, 编辑Word, 生成Excel, 导出PDF, 填报表.
+
 **Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
 `;
   }
@@ -182,7 +189,7 @@ The following plugins are loaded and available for use:
     // Load bundled plugins
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
-    for (const name of ['web-access', 'superpowers', 'gstack']) {
+    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });

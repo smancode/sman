@@ -14,3 +14,7 @@ Thumbs.db
 tmp/
 build/.tmp-*
 release/
+
+# Office skills - large generated dirs (installed by setup script)
+plugins/office-skills/venv/
+plugins/office-skills/node_modules/

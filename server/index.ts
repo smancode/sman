@@ -829,6 +829,76 @@ function shutdown(): void {
   server.close();
 }
 
+/**
+ * Auto-setup office-skills plugin dependencies.
+ * Runs once at startup if venv/node_modules don't exist yet.
+ * Non-blocking: errors are logged but don't prevent server startup.
+ */
+async function setupOfficeSkills(): Promise<void> {
+  const officeDir = path.join(__dirname, '..', 'plugins', 'office-skills');
+  const venvDir = path.join(officeDir, 'venv');
+  const nodeModulesDir = path.join(officeDir, 'node_modules');
+
+  const needsPython = !fs.existsSync(venvDir);
+  const needsNode = !fs.existsSync(nodeModulesDir);
+
+  if (!needsPython && !needsNode) return;
+
+  log.info('Office skills: setting up dependencies (first run)...');
+  const { execFile } = await import('child_process');
+
+  const pythonSetup = needsPython ? new Promise<void>((resolve) => {
+    const reqFile = path.join(officeDir, 'requirements.txt');
+    if (!fs.existsSync(reqFile)) {
+      log.warn('Office skills: requirements.txt not found, skipping Python setup');
+      return resolve();
+    }
+
+    log.info('Office skills: creating Python venv...');
+    execFile('python3', ['-m', 'venv', venvDir], (err) => {
+      if (err) {
+        log.warn(`Office skills: failed to create venv: ${err.message}`);
+        return resolve();
+      }
+      const pip = path.join(venvDir, 'bin', 'pip');
+      const pipCmd = process.platform === 'win32'
+        ? path.join(venvDir, 'Scripts', 'pip.exe')
+        : pip;
+
+      log.info('Office skills: installing Python packages...');
+      execFile(pipCmd, ['install', '-q', '-r', reqFile], { timeout: 120_000 }, (err) => {
+        if (err) {
+          log.warn(`Office skills: pip install failed: ${err.message}`);
+        } else {
+          log.info('Office skills: Python packages installed');
+        }
+        resolve();
+      });
+    });
+  }) : Promise.resolve();
+
+  const nodeSetup = needsNode ? new Promise<void>((resolve) => {
+    const pkgFile = path.join(officeDir, 'package.json');
+    if (!fs.existsSync(pkgFile)) {
+      log.warn('Office skills: package.json not found, skipping Node setup');
+      return resolve();
+    }
+
+    log.info('Office skills: installing Node packages...');
+    execFile('npm', ['install', '--production'], { cwd: officeDir, timeout: 180_000 }, (err) => {
+      if (err) {
+        log.warn(`Office skills: npm install failed: ${err.message}`);
+      } else {
+        log.info('Office skills: Node packages installed');
+      }
+      resolve();
+    });
+  }) : Promise.resolve();
+
+  await Promise.all([pythonSetup, nodeSetup]);
+  log.info('Office skills: setup complete');
+}
+
 // Export for Electron in-process usage
 export { shutdown as stopServer };
 export { server, homeDir };
@@ -859,4 +929,7 @@ if (isMainModule) {
     log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
     log.info(`Health check: http://${HOST}:${PORT}/api/health`);
   });
+
+  // Auto-setup office-skills dependencies (non-blocking)
+  setupOfficeSkills();
 }

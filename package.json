@@ -93,6 +93,10 @@
       "electron/dist/**/*",
       "node_modules/**/*",
       "plugins/**/*",
+      "!plugins/office-skills/venv/**/*",
+      "!plugins/office-skills/node_modules/**/*",
+      "!plugins/office-skills/.git/**/*",
+      "!plugins/office-skills/outputs/**/*",
       "public/**/*",
       "scripts/patch-sdk.mjs"
     ],
