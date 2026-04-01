@@ -71,6 +71,8 @@ export function Chat() {
     <div className="relative flex flex-col h-full transition-colors duration-500 dark:bg-background">
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        {/* Top fade mask - soft edge at scroll boundary */}
+        <div className="sticky top-0 h-4 bg-gradient-to-b from-background from-30% to-transparent pointer-events-none z-10" />
         <div className={isEmpty ? 'h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />
