@@ -96,6 +96,27 @@ build_electron() {
   ok "Electron 构建完成"
 }
 
+# ── Step 3.5: 确保原生模块兼容 Electron ABI ──
+rebuild_native() {
+  info "检查 better-sqlite3 原生模块..."
+
+  local SQLITE_DIR
+  SQLITE_DIR=$(find node_modules/.pnpm -path "*/better-sqlite3@*/better-sqlite3" -maxdepth 6 -type d 2>/dev/null | head -1)
+
+  if [[ -z "$SQLITE_DIR" ]]; then
+    warn "未找到 better-sqlite3 模块目录，跳过"
+    return
+  fi
+
+  local NODE_FILE="$SQLITE_DIR/build/Release/better_sqlite3.node"
+  if [[ ! -f "$NODE_FILE" ]]; then
+    err "better_sqlite3.node 不存在！请运行 pnpm install"
+    exit 1
+  fi
+
+  ok "better-sqlite3 原生模块就绪 ($(du -sh "$NODE_FILE" | cut -f1))"
+}
+
 # ── Step 4: electron-builder 打包 ──
 package_win() {
   info "开始 electron-builder 打包 (Windows x64 NSIS)..."
@@ -174,6 +195,7 @@ main() {
 
   build_app
   build_electron
+  rebuild_native
   package_win
   verify_output
 }
