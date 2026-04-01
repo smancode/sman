@@ -6,6 +6,16 @@ import { createLogger, type Logger } from './utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { CronTask, CronRun } from './types.js';
 
+const TASK_COLUMNS = `
+  id, workspace, skill_name as skillName, cron_expression as cronExpression,
+  CASE WHEN enabled = 1 THEN 1 ELSE 0 END as enabled,
+  created_at as createdAt, updated_at as updatedAt
+`;
+
+function mapTaskRow(row: Record<string, unknown>): CronTask {
+  return { ...row, enabled: Boolean(row.enabled) } as CronTask;
+}
+
 export class CronTaskStore {
   private db: Database;
   private log: Logger;
@@ -23,7 +33,7 @@ export class CronTaskStore {
         id TEXT PRIMARY KEY,
         workspace TEXT NOT NULL,
         skill_name TEXT NOT NULL,
-        interval_minutes INTEGER NOT NULL,
+        cron_expression TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -51,6 +61,24 @@ export class CronTaskStore {
       CREATE INDEX IF NOT EXISTS idx_cron_runs_started ON cron_runs(started_at DESC);
     `);
 
+    // Migration: 旧表有 interval_minutes 列，直接删表重建（旧数据不重要，扫描可重新拉取）
+    const tableInfo = this.db.pragma('table_info(cron_tasks)') as { name: string }[];
+    if (tableInfo.some(c => c.name === 'interval_minutes')) {
+      this.db.exec('DROP TABLE IF EXISTS cron_tasks');
+      this.db.exec(`
+        CREATE TABLE cron_tasks (
+          id TEXT PRIMARY KEY,
+          workspace TEXT NOT NULL,
+          skill_name TEXT NOT NULL,
+          cron_expression TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      this.log.info('Migrated cron_tasks: dropped old table with interval_minutes');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('CronTaskStore initialized');
@@ -58,43 +86,48 @@ export class CronTaskStore {
 
   // === Task CRUD ===
 
-  createTask(input: { workspace: string; skillName: string; intervalMinutes: number }): CronTask {
+  createTask(input: { workspace: string; skillName: string; cronExpression: string }): CronTask {
     const id = uuidv4();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO cron_tasks (id, workspace, skill_name, interval_minutes, enabled, created_at, updated_at)
+      INSERT INTO cron_tasks (id, workspace, skill_name, cron_expression, enabled, created_at, updated_at)
       VALUES (?, ?, ?, ?, 1, ?, ?)
-    `).run(id, input.workspace, input.skillName, input.intervalMinutes, now, now);
+    `).run(id, input.workspace, input.skillName, input.cronExpression, now, now);
 
     return this.getTask(id)!;
   }
 
   getTask(id: string): CronTask | undefined {
     const row = this.db.prepare(`
-      SELECT id, workspace, skill_name as skillName, interval_minutes as intervalMinutes,
-             enabled, created_at as createdAt, updated_at as updatedAt
-      FROM cron_tasks WHERE id = ?
-    `).get(id);
-    return row as CronTask | undefined;
+      SELECT ${TASK_COLUMNS} FROM cron_tasks WHERE id = ?
+    `).get(id) as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return mapTaskRow(row);
+  }
+
+  getTaskByWorkspaceAndSkill(workspace: string, skillName: string): CronTask | undefined {
+    const row = this.db.prepare(`
+      SELECT ${TASK_COLUMNS} FROM cron_tasks WHERE workspace = ? AND skill_name = ?
+    `).get(workspace, skillName) as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return mapTaskRow(row);
   }
 
   listTasks(): CronTask[] {
-    return this.db.prepare(`
-      SELECT id, workspace, skill_name as skillName, interval_minutes as intervalMinutes,
-             enabled, created_at as createdAt, updated_at as updatedAt
-      FROM cron_tasks ORDER BY created_at DESC
-    `).all() as CronTask[];
+    const rows = this.db.prepare(`
+      SELECT ${TASK_COLUMNS} FROM cron_tasks ORDER BY created_at DESC
+    `).all() as Record<string, unknown>[];
+    return rows.map(mapTaskRow);
   }
 
   listEnabledTasks(): CronTask[] {
-    return this.db.prepare(`
-      SELECT id, workspace, skill_name as skillName, interval_minutes as intervalMinutes,
-             enabled, created_at as createdAt, updated_at as updatedAt
-      FROM cron_tasks WHERE enabled = 1 ORDER BY created_at DESC
-    `).all() as CronTask[];
+    const rows = this.db.prepare(`
+      SELECT ${TASK_COLUMNS} FROM cron_tasks WHERE enabled = 1 ORDER BY created_at DESC
+    `).all() as Record<string, unknown>[];
+    return rows.map(mapTaskRow);
   }
 
-  updateTask(id: string, updates: Partial<Pick<CronTask, 'workspace' | 'skillName' | 'intervalMinutes' | 'enabled'>>): CronTask | undefined {
+  updateTask(id: string, updates: Partial<Pick<CronTask, 'workspace' | 'skillName' | 'cronExpression' | 'enabled'>>): CronTask | undefined {
     const fields: string[] = [];
     const values: (string | number | boolean)[] = [];
 
@@ -106,9 +139,9 @@ export class CronTaskStore {
       fields.push('skill_name = ?');
       values.push(updates.skillName);
     }
-    if (updates.intervalMinutes !== undefined) {
-      fields.push('interval_minutes = ?');
-      values.push(updates.intervalMinutes);
+    if (updates.cronExpression !== undefined) {
+      fields.push('cron_expression = ?');
+      values.push(updates.cronExpression);
     }
     if (updates.enabled !== undefined) {
       fields.push('enabled = ?');

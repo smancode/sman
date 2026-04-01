@@ -16,6 +16,7 @@ import { WebAccessService } from './web-access/index.js';
 import { SettingsManager } from './settings-manager.js';
 import { CronTaskStore } from './cron-task-store.js';
 import { CronScheduler } from './cron-scheduler.js';
+import { CronExpressionParser } from 'cron-parser';
 import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
 import { ChatbotStore } from './chatbot/chatbot-store.js';
@@ -79,6 +80,7 @@ let authToken = settingsManager.ensureAuthToken();
 // Cron task scheduler
 const cronTaskStore = new CronTaskStore(dbPath);
 const cronScheduler = new CronScheduler(cronTaskStore);
+cronScheduler.setSessionStore(store);
 
 // Batch execution engine
 const batchStore = new BatchStore(dbPath);
@@ -125,9 +127,6 @@ function startChatbotConnections(): void {
 }
 
 startChatbotConnections();
-
-// Start cron scheduler (loads enabled tasks and schedules them)
-cronScheduler.start()
 
 // Skills cache: 1-minute TTL to avoid frequent disk reads
 // Key: `${workspace}:${skillType}`, Value: { data: any, expiresAt: number }
@@ -521,17 +520,24 @@ wss.on('connection', (ws: WebSocket) => {
           }
 
           const skillsDir = path.join(msg.workspace, '.claude', 'skills');
-          const skills: { name: string; hasCrontab: boolean }[] = [];
+          const skills: { name: string; hasCrontab: boolean; cronExpression?: string }[] = [];
 
           if (fs.existsSync(skillsDir)) {
             const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
             for (const entry of entries) {
               if (entry.isDirectory()) {
                 const crontabPath = path.join(skillsDir, entry.name, 'crontab.md');
-                skills.push({
-                  name: entry.name,
-                  hasCrontab: fs.existsSync(crontabPath),
-                });
+                const hasCrontab = fs.existsSync(crontabPath);
+                let cronExpression: string | undefined;
+                if (hasCrontab) {
+                  try {
+                    const content = fs.readFileSync(crontabPath, 'utf-8');
+                    const { parseCrontabMd } = await import('./cron-scheduler.js');
+                    const parsed = parseCrontabMd(content);
+                    if (parsed) cronExpression = parsed.expression;
+                  } catch { /* ignore */ }
+                }
+                skills.push({ name: entry.name, hasCrontab, cronExpression });
               }
             }
           }
@@ -552,13 +558,18 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'cron.create': {
-          if (!msg.workspace || !msg.skillName || !msg.intervalMinutes) {
+          if (!msg.workspace || !msg.skillName || !msg.cronExpression) {
             throw new Error('Missing required fields');
+          }
+          try {
+            CronExpressionParser.parse(msg.cronExpression as string);
+          } catch {
+            throw new Error('Invalid cron expression: ' + msg.cronExpression);
           }
           const task = cronTaskStore.createTask({
             workspace: msg.workspace as string,
             skillName: msg.skillName as string,
-            intervalMinutes: msg.intervalMinutes as number,
+            cronExpression: msg.cronExpression as string,
           });
           cronScheduler.schedule(task);
           ws.send(JSON.stringify({ type: 'cron.created', task }));
@@ -567,10 +578,17 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'cron.update': {
           if (!msg.taskId) throw new Error('Missing taskId');
+          if (msg.cronExpression) {
+            try {
+              CronExpressionParser.parse(msg.cronExpression as string);
+            } catch {
+              throw new Error('Invalid cron expression: ' + msg.cronExpression);
+            }
+          }
           const task = cronTaskStore.updateTask(msg.taskId as string, {
             workspace: msg.workspace as string | undefined,
             skillName: msg.skillName as string | undefined,
-            intervalMinutes: msg.intervalMinutes as number | undefined,
+            cronExpression: msg.cronExpression as string | undefined,
             enabled: msg.enabled as boolean | undefined,
           });
           if (task) {
@@ -605,6 +623,22 @@ wss.on('connection', (ws: WebSocket) => {
           try {
             await cronScheduler.executeNow(msg.taskId as string);
             ws.send(JSON.stringify({ type: 'cron.executed', taskId: msg.taskId }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'cron.scan': {
+          try {
+            const result = await cronScheduler.scanAndSync();
+            const tasks = cronTaskStore.listTasks().map(task => ({
+              ...task,
+              latestRun: cronTaskStore.getLatestRun(task.id),
+              nextRunAt: cronScheduler.getNextRunAt(task.id),
+            }));
+            ws.send(JSON.stringify({ type: 'cron.scanned', ...result, tasks }));
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));

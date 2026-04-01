@@ -51,7 +51,7 @@ export interface CronTask {
   id: string;
   workspace: string;
   skillName: string;
-  intervalMinutes: number;
+  cronExpression: string;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;

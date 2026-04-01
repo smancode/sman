@@ -47,7 +47,8 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   { value: 'builtin', label: 'Claude 内置', description: '零配置，$10/千次 + token 费用' },
   { value: 'brave', label: 'Brave Search', description: '$5/千次，有免费额度' },
   { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费' },
-  { value: 'bing', label: 'Bing Search', description: 'Azure 认知服务，$7/千次' },
+  // Bing Search API 已于 2025-08-11 停用，隐藏选项但保留后端支持以防复活
+  // { value: 'bing', label: 'Bing Search', description: 'Azure 认知服务，$7/千次' },
 ];
 
 // === Cron Task Types ===
@@ -56,7 +57,7 @@ export interface CronTask {
   id: string;
   workspace: string;
   skillName: string;
-  intervalMinutes: number;
+  cronExpression: string;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +79,7 @@ export interface CronRun {
 export interface CronSkill {
   name: string;
   hasCrontab: boolean;
+  cronExpression?: string;
 }
 
 // === Batch Task Types ===

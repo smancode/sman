@@ -4,6 +4,7 @@ import { createLogger, type Logger } from './utils/logger.js';
 import type { CronTaskStore } from './cron-task-store.js';
 import type { CronTask } from './types.js';
 import type { ClaudeSessionManager } from './claude-session.js';
+import { parseCrontabMd } from './cron-scheduler.js';
 
 interface LockFile {
   triggers: Array<{
@@ -228,9 +229,16 @@ export class CronExecutor {
       return;
     }
 
-    const crontabContent = fs.readFileSync(crontabPath, 'utf-8').trim();
-    if (!crontabContent) {
+    const crontabContent = fs.readFileSync(crontabPath, 'utf-8');
+    if (!crontabContent.trim()) {
       this.log.warn(`crontab.md is empty for task ${task.id}`);
+      return;
+    }
+
+    // 解析 crontab.md：第一行可能是 cron 表达式，需要跳过
+    const promptContent = extractPromptContent(crontabContent);
+    if (!promptContent) {
+      this.log.warn(`crontab.md has no prompt content for task ${task.id}`);
       return;
     }
 
@@ -257,7 +265,7 @@ export class CronExecutor {
     this.activeRuns.set(sessionId, activeRun);
 
     // 构造提示词
-    const prompt = `/${task.skillName} ${crontabContent}`;
+    const prompt = `/${task.skillName} ${promptContent}`;
     this.log.info(`Executing task ${task.id}: ${prompt}`);
 
     try {
@@ -319,4 +327,15 @@ export class CronExecutor {
     }
     this.activeRuns.clear();
   }
+}
+
+/**
+ * 从 crontab.md 内容中提取提示词
+ * 如果第一行是合法 cron 表达式，跳过它，返回后续内容
+ * 否则返回全部内容
+ */
+function extractPromptContent(content: string): string {
+  const parsed = parseCrontabMd(content);
+  if (parsed) return parsed.promptContent;
+  return content.replace(/^\uFEFF/, '').trim();
 }

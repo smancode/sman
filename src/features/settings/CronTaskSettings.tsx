@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Play, Pencil, CheckCircle, XCircle, Clock, Loader2, Timer } from 'lucide-react';
+import { Plus, Trash2, Play, Pencil, CheckCircle, XCircle, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -72,7 +72,7 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
         </div>
         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
-          <span>每 {task.intervalMinutes} 分钟</span>
+          <code className="text-xs bg-muted px-1 rounded">{task.cronExpression}</code>
           {task.enabled && task.nextRunAt && (
             <span className="ml-1">
               · 下次执行：<span className="text-foreground">{formatTime(task.nextRunAt)}</span>
@@ -125,8 +125,8 @@ export function CronTaskSettings() {
   const [editingTask, setEditingTask] = useState<CronTask | null>(null);
   const [selectedWorkspace, setSelectedWorkspace] = useState('');
   const [selectedSkill, setSelectedSkill] = useState('');
-  const [intervalValue, setIntervalValue] = useState('30');
-  const [intervalUnit, setIntervalUnit] = useState<'minutes' | 'hours'>('minutes');
+  const [cronExpression, setCronExpression] = useState('*/30 * * * *');
+  const [scanResult, setScanResult] = useState<string | null>(null);
 
   const isEditing = editingTask !== null;
 
@@ -135,6 +135,7 @@ export function CronTaskSettings() {
     skills,
     tasks,
     loading,
+    scanning,
     error,
     fetchWorkspaces,
     fetchSkills,
@@ -143,6 +144,7 @@ export function CronTaskSettings() {
     updateTask,
     deleteTask,
     executeNow,
+    scanCronTasks,
     clearError,
   } = useCronStore();
 
@@ -163,28 +165,19 @@ export function CronTaskSettings() {
   }, [selectedWorkspace, fetchSkills]);
 
   const handleSave = async () => {
-    if (!selectedWorkspace || !selectedSkill) return;
-
-    const intervalMinutes =
-      intervalUnit === 'hours' ? parseInt(intervalValue) * 60 : parseInt(intervalValue);
-
-    if (isNaN(intervalMinutes) || intervalMinutes < 1) {
-      alert('请输入有效的间隔时间');
-      return;
-    }
+    if (!selectedWorkspace || !selectedSkill || !cronExpression) return;
 
     try {
       if (isEditing) {
-        await updateTask(editingTask.id, { workspace: selectedWorkspace, skillName: selectedSkill, intervalMinutes });
+        await updateTask(editingTask.id, { workspace: selectedWorkspace, skillName: selectedSkill, cronExpression });
         setEditingTask(null);
       } else {
-        await createTask(selectedWorkspace, selectedSkill, intervalMinutes);
+        await createTask(selectedWorkspace, selectedSkill, cronExpression);
         setShowForm(false);
       }
       setSelectedWorkspace('');
       setSelectedSkill('');
-      setIntervalValue('30');
-      setIntervalUnit('minutes');
+      setCronExpression('*/30 * * * *');
     } catch (err) {
       console.error('Failed to save task:', err);
     }
@@ -194,14 +187,7 @@ export function CronTaskSettings() {
     setEditingTask(task);
     setSelectedWorkspace(task.workspace);
     setSelectedSkill(task.skillName);
-    // 根据 intervalMinutes 推算值和单位
-    if (task.intervalMinutes >= 60 && task.intervalMinutes % 60 === 0) {
-      setIntervalValue(String(task.intervalMinutes / 60));
-      setIntervalUnit('hours');
-    } else {
-      setIntervalValue(String(task.intervalMinutes));
-      setIntervalUnit('minutes');
-    }
+    setCronExpression(task.cronExpression);
   };
 
   const handleCancel = () => {
@@ -209,8 +195,7 @@ export function CronTaskSettings() {
     setEditingTask(null);
     setSelectedWorkspace('');
     setSelectedSkill('');
-    setIntervalValue('30');
-    setIntervalUnit('minutes');
+    setCronExpression('*/30 * * * *');
   };
 
   const handleToggle = async (task: CronTask) => {
@@ -235,7 +220,6 @@ export function CronTaskSettings() {
     try {
       await executeNow(taskId);
       await fetchTasks();
-      // 轮询刷新直到任务不再是 running 状态
       const poll = setInterval(async () => {
         await fetchTasks();
         const task = useCronStore.getState().tasks.find(t => t.id === taskId);
@@ -248,20 +232,59 @@ export function CronTaskSettings() {
     }
   };
 
+  const handleScan = async () => {
+    try {
+      const result = await scanCronTasks();
+      const parts: string[] = [];
+      if (result.created > 0) parts.push(`新建 ${result.created}`);
+      if (result.updated > 0) parts.push(`更新 ${result.updated}`);
+      if (result.disabled > 0) parts.push(`禁用 ${result.disabled}`);
+      setScanResult(parts.length > 0 ? parts.join('，') : '无变更');
+      setTimeout(() => setScanResult(null), 5000);
+    } catch (err) {
+      console.error('Failed to scan:', err);
+    }
+  };
+
+  // 选中 skill 后自动填充 cronExpression（如果 skill 有自带表达式）
+  const handleSkillSelect = (skillName: string) => {
+    setSelectedSkill(skillName);
+    const skill = skills.find(s => s.name === skillName);
+    if (skill?.cronExpression) {
+      setCronExpression(skill.cronExpression);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">定时任务</h3>
           <p className="text-sm text-muted-foreground">
-            配置定时执行 Skill 的任务
+            配置定时执行 Skill 的任务（标准 cron 表达式）
           </p>
         </div>
-        <Button onClick={() => { setEditingTask(null); setShowForm(!showForm); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          新建任务
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleScan}
+            disabled={scanning}
+          >
+            <RefreshCw className={cn('h-4 w-4 mr-2', scanning && 'animate-spin')} />
+            {scanning ? '扫描中...' : '自动拉取'}
+          </Button>
+          <Button onClick={() => { setEditingTask(null); setShowForm(!showForm); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            新建任务
+          </Button>
+        </div>
       </div>
+
+      {scanResult && (
+        <div className="p-3 rounded-lg bg-green-500/10 text-green-600 text-sm">
+          扫描完成：{scanResult}
+        </div>
+      )}
 
       {error && (
         <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center justify-between">
@@ -295,7 +318,7 @@ export function CronTaskSettings() {
               <Label>Skill</Label>
               <Select
                 value={selectedSkill}
-                onValueChange={setSelectedSkill}
+                onValueChange={handleSkillSelect}
                 disabled={!selectedWorkspace}
               >
                 <SelectTrigger>
@@ -316,29 +339,17 @@ export function CronTaskSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label>执行间隔</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                max={60}
-                value={intervalValue}
-                onChange={(e) => setIntervalValue(e.target.value)}
-                className="w-20"
-              />
-              <Select
-                value={intervalUnit}
-                onValueChange={(v) => setIntervalUnit(v as 'minutes' | 'hours')}
-              >
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="minutes">分钟</SelectItem>
-                  <SelectItem value="hours">小时</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Label>Cron 表达式</Label>
+            <Input
+              type="text"
+              placeholder="*/30 * * * *（分 时 日 月 周）"
+              value={cronExpression}
+              onChange={(e) => setCronExpression(e.target.value)}
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              格式：分 时 日 月 周（例：0 9 * * 1-5 = 工作日每天 9 点）
+            </p>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -347,7 +358,7 @@ export function CronTaskSettings() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!selectedWorkspace || !selectedSkill}
+              disabled={!selectedWorkspace || !selectedSkill || !cronExpression}
             >
               {isEditing ? '保存' : '创建'}
             </Button>
@@ -356,24 +367,24 @@ export function CronTaskSettings() {
       )}
 
       <div className="space-y-2">
-        {loading ? (
+        {loading && (
           <div className="text-center py-8 text-muted-foreground">加载中...</div>
-        ) : tasks.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            暂无定时任务，点击"新建任务"开始配置
-          </div>
-        ) : (
-          tasks.map((task) => (
-            <TaskItem
-              key={task.id}
-              task={task}
-              onDelete={() => handleDelete(task.id)}
-              onToggle={() => handleToggle(task)}
-              onExecute={() => handleExecute(task.id)}
-              onEdit={() => handleEdit(task)}
-            />
-          ))
         )}
+        {!loading && tasks.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            暂无定时任务，点击「自动拉取」扫描或「新建任务」手动创建
+          </div>
+        )}
+        {!loading && tasks.map((task) => (
+          <TaskItem
+            key={task.id}
+            task={task}
+            onDelete={() => handleDelete(task.id)}
+            onToggle={() => handleToggle(task)}
+            onExecute={() => handleExecute(task.id)}
+            onEdit={() => handleEdit(task)}
+          />
+        ))}
       </div>
     </div>
   );
