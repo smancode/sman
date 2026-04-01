@@ -197,6 +197,7 @@ export class CronScheduler {
               workspace,
               skillName: entry.name,
               cronExpression: parsed.expression,
+              source: 'scan',
             });
             this.schedule(task);
             result.created++;

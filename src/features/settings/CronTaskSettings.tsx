@@ -69,6 +69,9 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
           <span className="font-medium truncate">{workspaceName}</span>
           <span className="text-muted-foreground">/</span>
           <span className="text-muted-foreground truncate">{task.skillName}</span>
+          {task.source === 'scan' && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">自动配置</span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
@@ -375,7 +378,13 @@ export function CronTaskSettings() {
             暂无定时任务，点击「自动拉取」扫描或「新建任务」手动创建
           </div>
         )}
-        {!loading && tasks.map((task) => (
+        {!loading && [...tasks].sort((a, b) => {
+          // 按 workspace 分组，同一 workspace 内 scan 排前
+          const wsComp = a.workspace.localeCompare(b.workspace);
+          if (wsComp !== 0) return wsComp;
+          if (a.source !== b.source) return a.source === 'scan' ? -1 : 1;
+          return 0;
+        }).map((task) => (
           <TaskItem
             key={task.id}
             task={task}

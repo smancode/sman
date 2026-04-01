@@ -52,6 +52,7 @@ export interface CronTask {
   workspace: string;
   skillName: string;
   cronExpression: string;
+  source: 'scan' | 'manual';
   enabled: boolean;
   createdAt: string;
   updatedAt: string;

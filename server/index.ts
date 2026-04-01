@@ -570,6 +570,7 @@ wss.on('connection', (ws: WebSocket) => {
             workspace: msg.workspace as string,
             skillName: msg.skillName as string,
             cronExpression: msg.cronExpression as string,
+            source: 'manual',
           });
           cronScheduler.schedule(task);
           ws.send(JSON.stringify({ type: 'cron.created', task }));

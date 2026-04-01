@@ -8,6 +8,7 @@ import type { CronTask, CronRun } from './types.js';
 
 const TASK_COLUMNS = `
   id, workspace, skill_name as skillName, cron_expression as cronExpression,
+  source,
   CASE WHEN enabled = 1 THEN 1 ELSE 0 END as enabled,
   created_at as createdAt, updated_at as updatedAt
 `;
@@ -34,6 +35,7 @@ export class CronTaskStore {
         workspace TEXT NOT NULL,
         skill_name TEXT NOT NULL,
         cron_expression TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -71,12 +73,21 @@ export class CronTaskStore {
           workspace TEXT NOT NULL,
           skill_name TEXT NOT NULL,
           cron_expression TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'manual',
           enabled INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )
       `);
       this.log.info('Migrated cron_tasks: dropped old table with interval_minutes');
+    }
+
+    // Migration: 旧表没有 source 列
+    if (!tableInfo.some(c => c.name === 'source') && tableInfo.length > 0) {
+      try {
+        this.db.exec("ALTER TABLE cron_tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+        this.log.info('Migrated cron_tasks: added source column');
+      } catch { /* column already exists */ }
     }
 
     this.db.pragma('journal_mode = WAL');
@@ -86,13 +97,14 @@ export class CronTaskStore {
 
   // === Task CRUD ===
 
-  createTask(input: { workspace: string; skillName: string; cronExpression: string }): CronTask {
+  createTask(input: { workspace: string; skillName: string; cronExpression: string; source?: 'scan' | 'manual' }): CronTask {
     const id = uuidv4();
     const now = new Date().toISOString();
+    const source = input.source ?? 'manual';
     this.db.prepare(`
-      INSERT INTO cron_tasks (id, workspace, skill_name, cron_expression, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, ?, ?)
-    `).run(id, input.workspace, input.skillName, input.cronExpression, now, now);
+      INSERT INTO cron_tasks (id, workspace, skill_name, cron_expression, source, enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(id, input.workspace, input.skillName, input.cronExpression, source, now, now);
 
     return this.getTask(id)!;
   }
