@@ -14,6 +14,7 @@ import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
 import { WebAccessService } from './web-access/index.js';
 import { SettingsManager } from './settings-manager.js';
+import { UserProfileManager } from './user-profile.js';
 import { CronTaskStore } from './cron-task-store.js';
 import { CronScheduler } from './cron-scheduler.js';
 import { CronExpressionParser } from 'cron-parser';
@@ -73,6 +74,10 @@ const store = new SessionStore(dbPath);
 const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
 const settingsManager = new SettingsManager(homeDir);
+
+// User profile manager
+const userProfileManager = new UserProfileManager(homeDir, settingsManager.getConfig());
+sessionManager.setUserProfile(userProfileManager);
 
 // Initialize auth token (generate on first run, reuse thereafter)
 let authToken = settingsManager.ensureAuthToken();
@@ -483,6 +488,7 @@ wss.on('connection', (ws: WebSocket) => {
           const { type: _t, ...updates } = msg;
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
+          userProfileManager.updateConfig(config);
           batchEngine.setConfig(config.llm);
           // Sync in-memory auth token if changed
           if ((updates as Record<string, unknown>).auth && typeof (updates as Record<string, unknown>).auth === 'object') {
