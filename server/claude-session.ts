@@ -174,6 +174,15 @@ The following plugins are loaded and available for use:
    - Includes deploy-to-PDF and export scripts
    Trigger phrases: 做个演示, 创建幻灯片, 转换PPT到网页, 生成HTML演示.
 
+6. **dev-workflow** - 实战开发流程 (复杂任务使用):
+   - brainstorm → plan → subagent implement → spec review → quality review → verify → 总结
+   - Every step dispatched as independent Agent to prevent context explosion
+   - TDD分级: 严格TDD / 逻辑验证 / 纯实现 (根据项目环境自动判断)
+   Use for: complex features, architecture changes, multi-module tasks.
+   NOT for: bug fixes, small changes (<30 lines), simple features.
+
+**Default mode**: For most tasks (bug fixes, small features, <30 line changes), write code directly with normal TDD. Only use dev-workflow for complex tasks or when user explicitly requests it ("完整流程" or /dev-workflow).
+
 **Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
 `;
   }
@@ -197,7 +206,7 @@ The following plugins are loaded and available for use:
     // Load bundled plugins
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
-    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills', 'frontend-slides']) {
+    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills', 'frontend-slides', 'dev-workflow']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
