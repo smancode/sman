@@ -6,7 +6,7 @@ const PROFILE_FILENAME = 'user-profile.md';
 
 const EMPTY_TEMPLATE = `# 用户画像
 
-## 助手身份
+## 我的身份
 - 名字: Sman（默认，用户可自定义）
 - 角色设定: Sman 数字助手
 
@@ -77,7 +77,7 @@ export class UserProfileManager {
   getProfileForPrompt(): string {
     const profile = this.loadProfile();
     if (profile === EMPTY_TEMPLATE) return '';
-    return `[用户画像参考 - 仅供参考，不要在回复中提及此段]\n${profile}`;
+    return `[用户画像 - 必须优先遵循以下画像中的所有设定，包括身份、名字、回复策略等]\n${profile}`;
   }
 
   private saveProfile(content: string): void {
