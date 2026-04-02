@@ -376,8 +376,9 @@ export class WeixinBotConnection {
     const self = this;
     let accumulated = '';
 
-    const doSend = async (text: string) => {
+    const doSend = async (text: string, label: string) => {
       if (!text || !self.token) return;
+      self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length}`);
       const contextToken = self.contextTokens.get(userId);
       try {
         await WeixinApi.sendMessage({
@@ -404,11 +405,11 @@ export class WeixinBotConnection {
         // Split only if exceeding max length
         const chunks = self.splitMessage(text, MESSAGE_SPLIT_MAX_LEN);
         for (const chunk of chunks) {
-          await doSend(chunk);
+          await doSend(chunk, 'finish');
         }
       },
       async error(message: string) {
-        await doSend(message);
+        await doSend(message, 'error');
       },
     };
   }
