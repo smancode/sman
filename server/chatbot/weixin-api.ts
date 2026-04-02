@@ -170,9 +170,12 @@ export async function sendMessage(opts: {
   text: string;
   contextToken?: string;
 }): Promise<void> {
+  const clientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const body: SendMessageReq = {
     msg: {
+      from_user_id: '',
       to_user_id: opts.toUserId,
+      client_id: clientId,
       message_type: 2, // BOT
       message_state: 2, // FINISH
       item_list: [

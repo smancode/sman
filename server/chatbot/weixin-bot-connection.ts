@@ -265,11 +265,26 @@ export class WeixinBotConnection {
           getUpdatesBuf,
         });
 
+        this.log.info(`getUpdates response: ret=${resp.ret} errcode=${resp.errcode} msgs=${resp.msgs?.length ?? 0}`);
+
         // Session expired
         if (resp.errcode === SESSION_EXPIRED_ERRCODE) {
           this.log.warn('WeChat session expired (errcode -14)');
           this.setStatus('disconnected');
           return;
+        }
+
+        // API error
+        if ((resp.ret !== undefined && resp.ret !== 0) || (resp.errcode !== undefined && resp.errcode !== 0)) {
+          this.log.warn(`getUpdates API error: ret=${resp.ret} errcode=${resp.errcode} errmsg=${resp.errmsg}`);
+          consecutiveFailures++;
+          if (consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD) {
+            await new Promise((resolve) => setTimeout(resolve, MONITOR_BACKOFF_MS));
+            consecutiveFailures = 0;
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+          continue;
         }
 
         // Reset failure counter
@@ -281,9 +296,19 @@ export class WeixinBotConnection {
           WeixinStore.saveCursor(this.config.homeDir, this.accountId!, getUpdatesBuf);
         }
 
-        // Process messages
+        // Process messages sequentially to avoid duplicate responses and query conflicts
         if (resp.msgs && resp.msgs.length > 0) {
           for (const msg of resp.msgs) {
+            const userId = msg.from_user_id;
+            const textParts: string[] = [];
+            if (msg.item_list) {
+              for (const item of msg.item_list) {
+                if (item.type === MessageItemType.TEXT && item.text_item?.text) {
+                  textParts.push(item.text_item.text);
+                }
+              }
+            }
+            this.log.info(`Inbound msg: from=${userId} type=${msg.message_type} text="${textParts.join(' ').substring(0, 100)}"`);
             await this.handleInboundMessage(msg);
           }
         }

@@ -140,10 +140,12 @@ export class ChatbotSessionManager {
     }
 
     if (this.activeQueries.has(userKey)) {
+      this.log.info(`Rejecting message from ${userKey}: active query in progress`);
       sender.finish('当前还有未完成的请求，请稍后再试。');
       return;
     }
 
+    this.log.info(`Executing chat query for ${userKey}, workspace=${userState.currentWorkspace}, content="${msg.content.substring(0, 50)}"`);
     await this.executeChatQuery(userKey, userState.currentWorkspace, msg.content, sender);
   }
 
