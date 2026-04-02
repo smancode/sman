@@ -18,6 +18,7 @@ import { buildMcpServers } from './mcp-config.js';
 import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { discoverChromeSites, formatSitesForPrompt } from './web-access/chrome-sites.js';
+import { UserProfileManager } from './user-profile.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -53,6 +54,12 @@ export class ClaudeSessionManager {
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private configGeneration = 0;
   private webAccessService: WebAccessService | null = null;
+  private userProfile: UserProfileManager | null = null;
+
+  setUserProfile(manager: UserProfileManager): void {
+    this.userProfile = manager;
+    this.log.info('UserProfileManager injected');
+  }
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
@@ -425,7 +432,13 @@ The following plugins are loaded and available for use:
         sessionId,
       }));
 
-      await v2Session.send(content);
+      // Inject user profile into content for Claude, but don't store it
+      const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
+      const contentWithProfile = profilePrefix
+        ? `${profilePrefix}\n\n${content}`
+        : content;
+
+      await v2Session.send(contentWithProfile);
 
       let fullContent = '';
       let currentThinking = '';
@@ -571,6 +584,11 @@ The following plugins are loaded and available for use:
             }));
 
             this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}`);
+
+            // Fire-and-forget: update user profile after conversation turn
+            if (this.userProfile && this.config?.llm?.userProfile !== false && !isError) {
+              this.userProfile.updateProfile(content, finalContent);
+            }
             break;
           }
 
@@ -710,7 +728,13 @@ The following plugins are loaded and available for use:
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
 
-      await v2Session.send(content);
+      // Inject user profile into content for Claude
+      const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
+      const contentWithProfile = profilePrefix
+        ? `${profilePrefix}\n\n${content}`
+        : content;
+
+      await v2Session.send(contentWithProfile);
 
       let fullContent = '';
       let msgCount = 0;
@@ -755,6 +779,11 @@ The following plugins are loaded and available for use:
             }
             if (fullContent) {
               this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
+            }
+
+            // Fire-and-forget: update user profile after chatbot conversation turn
+            if (this.userProfile && this.config?.llm?.userProfile !== false) {
+              this.userProfile.updateProfile(content, fullContent);
             }
             break;
           }
