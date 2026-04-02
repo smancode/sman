@@ -165,7 +165,7 @@ export class WeComBotConnection {
         headers: { req_id: requestId },
         body: {
           msgtype: 'text',
-          text: { content: '你好！我是 Claude Code 助手。输入 //help 查看可用命令。' },
+          text: { content: '欢迎使用 Sman，输入 //help 查看可用命令。' },
         },
       });
     }
