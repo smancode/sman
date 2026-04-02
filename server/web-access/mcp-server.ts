@@ -9,6 +9,8 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { WebAccessService } from './web-access-service.js';
 import { BrowserConnectionError } from './browser-engine.js';
+import { loadExperiences, addExperience } from './url-experience-store.js';
+import { readAllHistory } from './chrome-sites.js';
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
@@ -41,6 +43,47 @@ function withEngineCheck(
 }
 
 export function createWebAccessMcpServer(service: WebAccessService): McpSdkServerConfigWithInstance {
+  const findUrlTool = tool(
+    'web_access_find_url',
+    'Find the best matching URL from user\'s Chrome browsing history and learned experiences. '
+    + 'Use this when you need to navigate to a website but are unsure of the exact URL. '
+    + 'You will receive a list of candidate URLs from both saved experiences and Chrome history — '
+    + 'pick the one that best matches the user\'s intent. '
+    + 'If none matches, ask the user for the URL and save it with web_access_remember_url.',
+    {
+      query: z.string().describe('User\'s original question or intent, e.g., "智谱MCP用量" or "ITSM待办"'),
+    },
+    async (args: any) => {
+      const experiences = loadExperiences();
+      const history = readAllHistory(200);
+
+      return textResult(JSON.stringify({
+        query: args.query,
+        experiences: experiences.entries,
+        chromeHistory: history,
+      }, null, 2));
+    },
+  );
+
+  const rememberUrlTool = tool(
+    'web_access_remember_url',
+    'Save a URL mapping for future smart matching. '
+    + 'Call this after the user provides a URL that was not found by web_access_find_url, '
+    + 'so next time it will be matched automatically.',
+    {
+      description: z.string().describe('What this URL is for, in the user\'s own words, e.g., "智谱MCP用量页面"'),
+      url: z.string().describe('The exact URL to remember'),
+    },
+    async (args: any) => {
+      addExperience({
+        description: args.description,
+        url: args.url,
+        createdAt: new Date().toISOString(),
+      });
+      return textResult(`已记录: ${args.description} -> ${args.url}`);
+    },
+  );
+
   const navigateTool = tool(
     'web_access_navigate',
     'Navigate to a URL in the browser. Creates a new tab for the session if needed.',
@@ -188,6 +231,8 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
     name: 'web-access',
     version: '1.0.0',
     tools: [
+      findUrlTool,
+      rememberUrlTool,
       navigateTool,
       snapshotTool,
       screenshotTool,

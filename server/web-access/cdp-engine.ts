@@ -276,6 +276,7 @@ export class CdpEngine implements BrowserEngine {
     const args = [
       `--user-data-dir=${SMAN_CHROME_PROFILE_DIR}`,
       '--remote-debugging-port=9333',
+      '--headless=new',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-sync',
@@ -285,6 +286,7 @@ export class CdpEngine implements BrowserEngine {
       '--hide-crash-restore-bubble',
       '--password-store=basic',
       '--disable-popup-blocking',
+      '--disable-gpu',
       'about:blank',
     ];
 

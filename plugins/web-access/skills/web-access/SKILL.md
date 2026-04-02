@@ -20,6 +20,8 @@ Use web_access tools when the user asks you to:
 
 | Tool | Purpose |
 |------|---------|
+| `web_access_find_url` | Find best matching URL from Chrome history + learned experiences |
+| `web_access_remember_url` | Save a URL mapping for future smart matching |
 | `web_access_navigate` | Open a URL in the browser (creates a tab if needed) |
 | `web_access_snapshot` | Get page text content (accessibility tree) |
 | `web_access_screenshot` | Take a screenshot of the current page |
@@ -29,6 +31,18 @@ Use web_access tools when the user asks you to:
 | `web_access_evaluate` | Execute JavaScript and get the result |
 | `web_access_list_tabs` | List all open browser tabs |
 | `web_access_close_tab` | Close a browser tab |
+
+## Smart URL Matching
+
+When you need to navigate but are unsure of the exact URL:
+
+1. Call `web_access_find_url(query="智谱MCP用量")` with the user's original question
+2. Review the returned **experiences** (previously saved) and **chromeHistory** entries
+3. Pick the best matching URL — you are the matching engine, use your semantic understanding
+4. If a good match found → use it with `web_access_navigate`
+5. If nothing matches → ask the user for the URL
+6. After user provides URL → `web_access_remember_url(description="智谱MCP用量页面", url="https://...")`
+7. Next time `find_url` will match it automatically from experiences
 
 ## Workflow
 

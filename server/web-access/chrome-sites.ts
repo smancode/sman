@@ -79,33 +79,29 @@ function readBookmarks(profileDir: string, results: Map<string, string>, max: nu
 
 // --- History ---
 
-function readHistory(profileDir: string, results: Map<string, string>, max: number): void {
+/**
+ * Query Chrome History SQLite for a single profile.
+ * Copies to a temp file because Chrome locks the original.
+ */
+function queryHistoryDb(profileDir: string, max: number): Array<{ title: string; url: string }> {
   const historyPath = path.join(profileDir, 'History');
-  if (!fs.existsSync(historyPath)) return;
+  if (!fs.existsSync(historyPath)) return [];
 
-  // Copy to temp file — Chrome locks the original
   const tmpPath = path.join(os.tmpdir(), `sman-chrome-history-${Date.now()}.db`);
   try {
     fs.copyFileSync(historyPath, tmpPath);
-  } catch { return; }
+  } catch { return []; }
 
   try {
-    // Use better-sqlite3 if available, otherwise skip
     const Database = require('better-sqlite3');
     const db = new Database(tmpPath, { readonly: true });
     const rows = db.prepare(
-      'SELECT title, url FROM urls ORDER BY last_visit_time DESC LIMIT ?'
+      'SELECT title, url FROM urls WHERE url IS NOT NULL ORDER BY last_visit_time DESC LIMIT ?'
     ).all(max);
-
-    for (const row of rows) {
-      const url = normalizeUrl(row.url);
-      if (url && !results.has(url)) {
-        results.set(url, row.title || '');
-      }
-    }
     db.close();
+    return rows;
   } catch {
-    // better-sqlite3 not available or read error — skip history
+    return [];
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* cleanup */ }
   }
@@ -130,18 +126,39 @@ function normalizeUrl(raw: string): string | null {
 
 // --- Public API ---
 
+/** Read Chrome History with titles, returning ALL entries (not deduped).
+ *  Used by web_access_find_url to give Claude full context for semantic matching. */
+export function readAllHistory(maxEntries = 500): SiteEntry[] {
+  const results: SiteEntry[] = [];
+
+  for (const profileDir of getChromeProfileDirs()) {
+    if (!fs.existsSync(profileDir)) continue;
+    for (const row of queryHistoryDb(profileDir, maxEntries - results.length)) {
+      const url = normalizeUrl(row.url);
+      if (url) results.push({ name: row.title || '', url });
+    }
+    if (results.length >= maxEntries) break;
+  }
+
+  log.info(`Read ${results.length} history entries for URL matching`);
+  return results;
+}
+
 /** Read all known sites from Chrome bookmarks + history */
 export function discoverChromeSites(maxEntries = 300): SiteEntry[] {
-  const seen = new Map<string, string>(); // url → name
-  const profiles = getChromeProfileDirs();
+  const seen = new Map<string, string>(); // url -> name
 
-  for (const profileDir of profiles) {
+  for (const profileDir of getChromeProfileDirs()) {
     if (!fs.existsSync(profileDir)) continue;
 
     // Bookmarks first (higher quality names)
     readBookmarks(profileDir, seen, maxEntries);
+
     // History for broader coverage
-    readHistory(profileDir, seen, maxEntries);
+    for (const row of queryHistoryDb(profileDir, maxEntries - seen.size)) {
+      const url = normalizeUrl(row.url);
+      if (url && !seen.has(url)) seen.set(url, row.title || '');
+    }
 
     if (seen.size >= maxEntries) break;
   }
