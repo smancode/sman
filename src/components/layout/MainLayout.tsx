@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Titlebar } from './Titlebar';
+import { useChatStore } from '@/stores/chat';
 
 // 浅色主题流动色块配色
 const CANDY_COLORS = [
@@ -17,6 +18,10 @@ const NEBULA_COLORS = [
 
 export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const location = useLocation();
+  const messages = useChatStore((s) => s.messages);
+  const hasMessages = messages.length > 0;
+  const inChat = location.pathname === '/chat';
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -29,7 +34,10 @@ export function MainLayout() {
   return (
     <div className="flex flex-col h-screen overflow-hidden relative bg-background">
       {/* 全局流动背景 - 覆盖整个 UI */}
-      <div className="absolute inset-0 pointer-events-none z-0">
+      <div
+        className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
+        style={{ opacity: (inChat && hasMessages) ? 0.33 : 1 }}
+      >
         {isDark ? <NebulaFlow /> : <CandyBlobs />}
       </div>
 
