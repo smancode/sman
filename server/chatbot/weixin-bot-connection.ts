@@ -23,7 +23,6 @@ const MAX_QR_REFRESH_COUNT = 3;
 const MONITOR_BACKOFF_MS = 30_000;
 const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 const MESSAGE_SPLIT_MAX_LEN = 3900;
-const STREAM_FLUSH_INTERVAL_MS = 5000;
 
 interface WeixinBotConfig {
   homeDir: string;
@@ -376,18 +375,9 @@ export class WeixinBotConnection {
   private createSender(userId: string): ChatResponseSender {
     const self = this;
     let accumulated = '';
-    let flushedLen = 0;
-    let flushTimer: ReturnType<typeof setInterval> | null = null;
-    let lastSendTime = 0;
-    const MIN_SEND_INTERVAL_MS = 3000; // Min 3s between messages to avoid rate limiting
 
-    const sendWithRateLimit = async (text: string): Promise<void> => {
-      if (!self.token || !text) return;
-      const now = Date.now();
-      const elapsed = now - lastSendTime;
-      if (elapsed < MIN_SEND_INTERVAL_MS) {
-        await new Promise((r) => setTimeout(r, MIN_SEND_INTERVAL_MS - elapsed));
-      }
+    const doSend = async (text: string) => {
+      if (!text || !self.token) return;
       const contextToken = self.contextTokens.get(userId);
       try {
         await WeixinApi.sendMessage({
@@ -397,57 +387,28 @@ export class WeixinBotConnection {
           text,
           contextToken,
         });
-        lastSendTime = Date.now();
       } catch (err) {
-        self.log.error(`Failed to send to ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+        self.log.error(`Failed to send message to ${userId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
 
-    const flushAccumulated = () => {
-      const newContent = accumulated.slice(flushedLen);
-      if (!newContent || newContent.length < 20) return; // Don't flush tiny chunks
-      // Truncate at a natural boundary (newline or space) for readability
-      let truncateAt = newContent.length;
-      const lastNewline = newContent.lastIndexOf('\n');
-      if (lastNewline > newContent.length * 0.5) truncateAt = lastNewline + 1;
-      const toSend = newContent.slice(0, truncateAt);
-      flushedLen += truncateAt;
-      sendWithRateLimit(toSend).catch(() => {});
-    };
-
     return {
-      start() {
-        // Start periodic flush for streaming partial results
-        flushTimer = setInterval(flushAccumulated, STREAM_FLUSH_INTERVAL_MS);
-      },
+      start() {},
       sendChunk(content: string) {
         accumulated += content;
       },
       async finish(fullContent: string) {
-        // Stop periodic flush
-        if (flushTimer) {
-          clearInterval(flushTimer);
-          flushTimer = null;
-        }
-
         const text = fullContent || accumulated;
         if (!text || !self.token) return;
 
-        // Send only the part that hasn't been flushed yet
-        const remaining = text.slice(flushedLen);
-        if (remaining.trim()) {
-          const chunks = self.splitMessage(remaining, MESSAGE_SPLIT_MAX_LEN);
-          for (const chunk of chunks) {
-            await sendWithRateLimit(chunk);
-          }
+        // Split only if exceeding max length
+        const chunks = self.splitMessage(text, MESSAGE_SPLIT_MAX_LEN);
+        for (const chunk of chunks) {
+          await doSend(chunk);
         }
       },
       async error(message: string) {
-        if (flushTimer) {
-          clearInterval(flushTimer);
-          flushTimer = null;
-        }
-        await sendWithRateLimit(message);
+        await doSend(message);
       },
     };
   }
