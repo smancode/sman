@@ -1,13 +1,13 @@
-import { User, ToggleLeft, ToggleRight } from 'lucide-react';
+import { User } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSettingsStore } from '@/stores/settings';
 
 export function UserProfileSettings() {
   const { settings, updateLlm } = useSettingsStore();
 
-  const llm = settings?.llm;
-  const enabled = llm?.userProfile !== false;
+  const enabled = settings?.llm?.userProfile !== false;
 
   return (
     <Card>
@@ -19,7 +19,6 @@ export function UserProfileSettings() {
         <CardDescription>自动学习你的偏好和习惯，让助手越用越懂你</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Enable Toggle */}
         <div className="flex items-center justify-between py-2">
           <div className="space-y-0.5">
             <Label>启用用户画像</Label>
@@ -27,19 +26,12 @@ export function UserProfileSettings() {
               每次对话后自动分析，积累你的偏好画像
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => updateLlm({ userProfile: !enabled }).catch(() => {})}
-            className="cursor-pointer"
-          >
-            {enabled
-              ? <ToggleRight className="h-8 w-8 text-primary" />
-              : <ToggleLeft className="h-8 w-8 text-muted-foreground" />
-            }
-          </button>
+          <Switch
+            checked={enabled}
+            onCheckedChange={(checked) => updateLlm({ userProfile: checked }).catch(() => {})}
+          />
         </div>
 
-        {/* Status description */}
         <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
           {enabled ? (
             <>
