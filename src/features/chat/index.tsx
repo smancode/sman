@@ -68,11 +68,9 @@ export function Chat() {
   const isEmpty = messages.length === 0 && !sending;
 
   return (
-    <div className="relative flex flex-col h-full transition-colors duration-500 bg-background">
+    <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
       {/* Messages */}
       <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
-        {/* Top fade mask - soft edge at scroll boundary */}
-        {!isEmpty && <div className="sticky top-0 h-2 bg-gradient-to-b from-background from-30% to-transparent pointer-events-none z-10" />}
         <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />
@@ -154,7 +152,7 @@ export function Chat() {
 
 function WelcomeScreen() {
   return (
-    <div className="flex flex-col items-center justify-center text-center h-full">
+    <div className="relative flex flex-col items-center justify-center text-center h-full overflow-hidden">
       <div className="relative z-10 text-center px-8">
         <h1 className="text-4xl md:text-5xl tracking-wide">
           <span className="font-light italic text-foreground/80">欢迎使用</span>{' '}
@@ -165,6 +163,7 @@ function WelcomeScreen() {
           <span className="hint-chip">开始对话</span>
         </div>
       </div>
+
       <style>{`
         .hint-chip {
           font-size: 0.65rem; padding: 4px 12px; border-radius: 100px;

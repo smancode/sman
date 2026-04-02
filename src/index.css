@@ -30,8 +30,12 @@
     --user-bubble-fg: 220 15% 15%;
 
     /* 侧边栏专用 */
-    --sidebar-bg: 40 20% 94%;
+    --sidebar-bg: 40 20% 94% / 0.65;
     --sidebar-border: 40 10% 82%;
+
+    /* 玻璃效果背景 */
+    --glass-bg: 40 20% 94% / 0.7;
+    --glass-border: 40 10% 82% / 0.5;
   }
 
   /* Neutral warm dark palette */
@@ -61,8 +65,12 @@
     --user-bubble-fg: 40 10% 95%;
 
     /* 侧边栏专用 */
-    --sidebar-bg: 30 6% 10%;
+    --sidebar-bg: 30 6% 10% / 0.65;
     --sidebar-border: 30 5% 20%;
+
+    /* 玻璃效果背景 */
+    --glass-bg: 30 6% 10% / 0.7;
+    --glass-border: 30 5% 20% / 0.5;
   }
 }
 
@@ -72,7 +80,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 

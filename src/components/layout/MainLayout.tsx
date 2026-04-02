@@ -19,28 +19,26 @@ export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
   useEffect(() => {
-    console.log('[MainLayout] isDark:', isDark);
     const observer = new MutationObserver(() => {
-      const dark = document.documentElement.classList.contains('dark');
-      console.log('[MainLayout] Theme changed, isDark:', dark);
-      setIsDark(dark);
+      setIsDark(document.documentElement.classList.contains('dark'));
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden relative">
-      {/* 全局流动背景 - 覆盖整个UI */}
-      <div className="absolute inset-0 pointer-events-none z-0" style={{ border: '2px solid blue', minWidth: '100px', minHeight: '100px' }}>
+    <div className="flex flex-col h-screen overflow-hidden relative bg-background">
+      {/* 全局流动背景 - 覆盖整个 UI */}
+      <div className="absolute inset-0 pointer-events-none z-0">
         {isDark ? <NebulaFlow /> : <CandyBlobs />}
       </div>
 
+      {/* 内容层 - 半透明以透出背景 */}
       <div className="relative z-10 flex flex-col h-full">
         <Titlebar />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto bg-transparent">
             <Outlet />
           </main>
         </div>
@@ -49,29 +47,19 @@ export function MainLayout() {
   );
 }
 
-// 浅色主题 - 糖果色流动色块
+// ── 浅色主题 - 糖果色流动色块 ──────────────────────────────────
+
 function CandyBlobs() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    console.log('[CandyBlobs] Effect running');
     const canvas = canvasRef.current;
-    if (!canvas) {
-      console.error('[CandyBlobs] Canvas ref is null!');
-      return;
-    }
-    console.log('[CandyBlobs] Canvas found:', canvas);
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.error('[CandyBlobs] Could not get 2d context!');
-      return;
-    }
+    if (!ctx) return;
 
     const resize = () => {
-      const parent = canvas.parentElement;
-      console.log('[CandyBlobs] Parent:', parent?.clientWidth, 'x', parent?.clientHeight);
-      canvas.width = parent ? parent.clientWidth : window.innerWidth;
-      canvas.height = parent ? parent.clientHeight : window.innerHeight;
-      console.log('[CandyBlobs] Canvas sized to:', canvas.width, 'x', canvas.height);
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     };
     resize();
 
@@ -96,9 +84,9 @@ function CandyBlobs() {
     function step(ts: number) {
       if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
-      // 浅色背景 - 使用 CSS 变量背景色
-      ctx.fillStyle = 'hsl(var(--background))';
-      ctx.fillRect(0, 0, W, H);
+
+      // 清空画布，只保留色块（不画不透明底色）
+      ctx.clearRect(0, 0, W, H);
 
       for (const b of blobs) {
         b.x += b.vx;
@@ -144,14 +132,14 @@ function CandyBlobs() {
 
     rafId = requestAnimationFrame(step);
     window.addEventListener('resize', resize);
-    console.log('[CandyBlobs] Animation started, rafId:', rafId);
     return () => { cancelAnimationFrame(rafId); window.removeEventListener('resize', resize); };
   }, []);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={{ border: '2px solid red' }} />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
-// 深色主题 - 星云流动效果
+// ── 深色主题 - 星云流动效果 ────────────────────────────────────
+
 function NebulaFlow() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -192,13 +180,8 @@ function NebulaFlow() {
       if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
-      // 深色背景渐变
-      const bgGrd = ctx.createLinearGradient(0, 0, W, H);
-      bgGrd.addColorStop(0, 'hsla(30, 6%, 8%, 1)');
-      bgGrd.addColorStop(0.5, 'hsla(260, 20%, 8%, 1)');
-      bgGrd.addColorStop(1, 'hsla(30, 6%, 10%, 1)');
-      ctx.fillStyle = bgGrd;
-      ctx.fillRect(0, 0, W, H);
+      // 清空画布，只保留星云色块
+      ctx.clearRect(0, 0, W, H);
 
       for (const n of nebulas) {
         n.x += n.vx;

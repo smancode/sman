@@ -19,8 +19,9 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col bg-[hsl(var(--sidebar-bg))] transition-all duration-300 w-64',
+        'flex shrink-0 flex-col backdrop-blur-sm transition-all duration-300 w-64',
       )}
+      style={{ background: 'hsl(var(--sidebar-bg))' }}
     >
       {/* Session Tree */}
       <div className="flex-1 overflow-hidden">

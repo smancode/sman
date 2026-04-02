@@ -31,7 +31,7 @@ export function Titlebar() {
 
   return (
     <div
-      className="flex items-center h-6 select-none shrink-0 bg-background"
+      className="flex items-center h-6 select-none shrink-0 bg-transparent"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       {/* Spacer - drag area */}
