@@ -32,6 +32,9 @@ export interface ChatbotConfig {
     appId: string;
     appSecret: string;
   };
+  weixin: {
+    enabled: boolean;
+  };
 }
 
 export interface SmanSettings {

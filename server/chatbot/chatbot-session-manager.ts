@@ -93,7 +93,7 @@ export class ChatbotSessionManager {
     const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
     this.sessionManager.createSessionWithId(workspacePath, sessionId, false);
 
-    const platformPrefix = platform === 'wecom' ? 'WeCom' : 'Feishu';
+    const platformPrefix = platform === 'wecom' ? 'WeCom' : platform === 'feishu' ? 'Feishu' : 'Weixin';
     const userId = userKey.split(':').slice(1).join(':');
     this.sessionManager.updateSessionLabel(
       sessionId,

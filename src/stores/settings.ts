@@ -48,6 +48,7 @@ const DEFAULT_SETTINGS: SmanSettings = {
     enabled: false,
     wecom: { enabled: false, botId: '', secret: '' },
     feishu: { enabled: false, appId: '', appSecret: '' },
+    weixin: { enabled: false },
   },
 };
 

@@ -24,6 +24,7 @@ import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
 import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
+import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -87,6 +88,18 @@ const cronTaskStore = new CronTaskStore(dbPath);
 const cronScheduler = new CronScheduler(cronTaskStore);
 cronScheduler.setSessionStore(store);
 
+// WebSocket client tracking (declared early for use by broadcast)
+const clients = new Set<WebSocket>();
+const authenticatedClients = new Set<WebSocket>();
+
+function broadcast(data: string): void {
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(data);
+    }
+  }
+}
+
 // Batch execution engine
 const batchStore = new BatchStore(dbPath);
 const batchEngine = new BatchEngine(batchStore);
@@ -105,6 +118,7 @@ const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbo
 
 let wecomConnection: WeComBotConnection | null = null;
 let feishuConnection: FeishuBotConnection | null = null;
+let weixinConnection: WeixinBotConnection | null = null;
 
 function startChatbotConnections(): void {
   const chatbotConfig = settingsManager.getConfig().chatbot;
@@ -128,6 +142,18 @@ function startChatbotConnections(): void {
     });
     feishuConnection.start();
     log.info('Feishu bot connection started');
+  }
+
+  if (chatbotConfig.weixin?.enabled) {
+    weixinConnection = new WeixinBotConnection({
+      homeDir,
+      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+      onStatusChange: (status) => {
+        broadcast(JSON.stringify({ type: 'chatbot.weixin.status', status }));
+      },
+    });
+    weixinConnection.start();
+    log.info('WeChat bot connection initialized');
   }
 }
 
@@ -341,17 +367,6 @@ const wss = new WebSocketServer({
     callback(true);
   },
 });
-const clients = new Set<WebSocket>();
-const authenticatedClients = new Set<WebSocket>();
-
-function broadcast(data: string): void {
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  }
-}
-
 interface WsMessage {
   type: string;
   sessionId?: string;
@@ -500,6 +515,7 @@ wss.on('connection', (ws: WebSocket) => {
           if ((updates as Record<string, unknown>).chatbot) {
             wecomConnection?.stop();
             feishuConnection?.stop();
+            weixinConnection?.stop();
             startChatbotConnections();
           }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
@@ -805,6 +821,59 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        // ── WeChat Personal Bot ──
+        case 'chatbot.weixin.qr.request': {
+          log.info('Received chatbot.weixin.qr.request');
+          if (!weixinConnection) {
+            ws.send(JSON.stringify({ type: 'chatbot.weixin.qr.error', error: 'WeChat bot not enabled' }));
+            break;
+          }
+          try {
+            const result = await weixinConnection.startQRLogin();
+            ws.send(JSON.stringify({
+              type: 'chatbot.weixin.qr.response',
+              qrcodeUrl: result.qrcodeUrl,
+              sessionKey: result.sessionKey,
+            }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chatbot.weixin.qr.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'chatbot.weixin.qr.poll': {
+          if (!weixinConnection || !msg.sessionKey) {
+            ws.send(JSON.stringify({ type: 'chatbot.weixin.qr.status', status: 'error', message: 'Invalid state' }));
+            break;
+          }
+          try {
+            const result = await weixinConnection.waitForLogin(msg.sessionKey as string);
+            ws.send(JSON.stringify({
+              type: 'chatbot.weixin.qr.status',
+              status: result.qrStatus || (result.connected ? 'confirmed' : 'wait'),
+              connected: result.connected,
+              message: result.message,
+            }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chatbot.weixin.qr.status', status: 'error', message: errorMessage }));
+          }
+          break;
+        }
+
+        case 'chatbot.weixin.disconnect': {
+          weixinConnection?.disconnect();
+          ws.send(JSON.stringify({ type: 'chatbot.weixin.status', status: 'idle' }));
+          break;
+        }
+
+        case 'chatbot.weixin.getStatus': {
+          const status = weixinConnection?.getConnectionStatus() ?? 'idle';
+          ws.send(JSON.stringify({ type: 'chatbot.weixin.status', status }));
+          break;
+        }
+
         default:
           ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
       }
@@ -827,6 +896,7 @@ wss.on('connection', (ws: WebSocket) => {
 function shutdown(): void {
   wecomConnection?.stop();
   feishuConnection?.stop();
+  weixinConnection?.stop();
   chatbotManager.stop();
   batchEngine.stop();
   cronScheduler.stop();

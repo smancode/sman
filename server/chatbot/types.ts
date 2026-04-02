@@ -10,6 +10,9 @@ export interface ChatbotConfig {
     appId: string;
     appSecret: string;
   };
+  weixin: {
+    enabled: boolean;
+  };
 }
 
 export interface ChatResponseSender {
@@ -49,7 +52,7 @@ export interface ChatbotWorkspace {
 }
 
 export interface IncomingMessage {
-  platform: 'wecom' | 'feishu';
+  platform: 'wecom' | 'feishu' | 'weixin';
   userId: string;
   content: string;
   requestId: string;

@@ -18,6 +18,7 @@ const DEFAULT_CONFIG: SmanConfig = {
     enabled: false,
     wecom: { enabled: false, botId: '', secret: '' },
     feishu: { enabled: false, appId: '', appSecret: '' },
+    weixin: { enabled: false },
   },
   auth: {
     token: '',
