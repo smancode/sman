@@ -6,6 +6,8 @@ export interface LlmConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  profileModel?: string;
+  userProfile?: boolean;
 }
 
 export type WebSearchProvider = 'builtin' | 'brave' | 'tavily' | 'bing';

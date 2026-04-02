@@ -6,7 +6,7 @@ import type { SmanConfig } from './types.js';
 
 const DEFAULT_CONFIG: SmanConfig = {
   port: 5880,
-  llm: { apiKey: '', model: '' },
+  llm: { apiKey: '', model: '', userProfile: true },
   webSearch: {
     provider: 'builtin',
     braveApiKey: '',

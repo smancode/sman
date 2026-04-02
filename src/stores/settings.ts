@@ -36,7 +36,7 @@ interface SettingsState {
 
 const DEFAULT_SETTINGS: SmanSettings = {
   port: 5880,
-  llm: { apiKey: '', model: '' },
+  llm: { apiKey: '', model: '', userProfile: true },
   webSearch: {
     provider: 'builtin',
     braveApiKey: '',

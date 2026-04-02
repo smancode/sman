@@ -31,6 +31,8 @@ export interface SmanConfig {
     apiKey: string;
     model: string;
     baseUrl?: string;
+    profileModel?: string;   // 画像分析用模型，不填则使用主模型
+    userProfile?: boolean;   // 是否启用用户画像，默认 true
   };
   webSearch: {
     provider: 'builtin' | 'brave' | 'tavily' | 'bing';

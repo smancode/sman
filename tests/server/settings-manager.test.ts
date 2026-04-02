@@ -70,3 +70,35 @@ describe('SettingsManager', () => {
     });
   });
 });
+
+describe('UserProfile config', () => {
+  let homeDir: string;
+  let manager: SettingsManager;
+
+  beforeEach(() => {
+    homeDir = path.join(os.tmpdir(), `sman-test-up-${Date.now()}`);
+    fs.mkdirSync(homeDir, { recursive: true });
+    manager = new SettingsManager(homeDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  });
+
+  it('should default userProfile to enabled', () => {
+    const config = manager.getConfig();
+    expect(config.llm.userProfile).toBe(true);
+  });
+
+  it('should persist userProfile config', () => {
+    manager.updateLlm({ userProfile: false });
+    const config = manager.getConfig();
+    expect(config.llm.userProfile).toBe(false);
+  });
+
+  it('should persist profileModel config', () => {
+    manager.updateLlm({ profileModel: 'claude-haiku-4-5-20251001' });
+    const config = manager.getConfig();
+    expect(config.llm.profileModel).toBe('claude-haiku-4-5-20251001');
+  });
+});
