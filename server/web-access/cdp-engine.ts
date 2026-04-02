@@ -404,8 +404,8 @@ export class CdpEngine implements BrowserEngine {
     }
 
     const wsUrl = this.getWebSocketUrl();
+    const WS = await this.getWebSocketConstructor();
     this.connectingPromise = new Promise((resolve, reject) => {
-      const WS = this.getWebSocketConstructor();
       const ws = new WS(wsUrl) as WebSocketLike;
       this.ws = ws;
 
@@ -456,12 +456,12 @@ export class CdpEngine implements BrowserEngine {
     return this.connectingPromise;
   }
 
-  private getWebSocketConstructor(): any {
+  private async getWebSocketConstructor(): Promise<any> {
     if (typeof globalThis.WebSocket !== 'undefined') return globalThis.WebSocket;
-    // Lazy-load ws module as fallback
+    // Fallback: dynamic import ws (works in ESM context where require() fails)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require('ws');
+      const wsModule = await import('ws');
+      return wsModule.WebSocket || wsModule.default || wsModule;
     } catch {
       throw new BrowserConnectionError('No WebSocket available. Need Node.js 22+ or ws package.');
     }
