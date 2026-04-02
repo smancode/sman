@@ -86,6 +86,29 @@ export function LLMSettings() {
           />
         </div>
 
+        {/* User Profile Toggle */}
+        <div className="flex items-center justify-between py-2">
+          <div className="space-y-0.5">
+            <Label>用户画像</Label>
+            <p className="text-xs text-muted-foreground">
+              自动学习你的偏好，让助手更懂你
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateLlm({ userProfile: !llm?.userProfile }).catch(() => {})}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              llm?.userProfile !== false ? 'bg-primary' : 'bg-muted'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                llm?.userProfile !== false ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
         <div className="flex items-center gap-2 pt-4 border-t">
           <Button variant="outline" size="sm" onClick={handleSave} disabled={loading || saving}>
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
