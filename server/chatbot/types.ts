@@ -51,6 +51,14 @@ export interface ChatbotWorkspace {
   addedAt: string;
 }
 
+export interface MediaAttachment {
+  type: 'image' | 'audio' | 'video' | 'document';
+  fileName?: string;
+  mimeType: string;
+  base64Data: string;
+  transcription?: string;
+}
+
 export interface IncomingMessage {
   platform: 'wecom' | 'feishu' | 'weixin';
   userId: string;
@@ -58,4 +66,5 @@ export interface IncomingMessage {
   requestId: string;
   chatType: 'single' | 'group' | 'p2p';
   chatId: string;
+  media?: MediaAttachment[];
 }
