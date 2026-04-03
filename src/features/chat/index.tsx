@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
-import { ChatInput } from './ChatInput';
+import { ChatInput, type StagedMedia } from './ChatInput';
 import { cn } from '@/lib/utils';
 import type { RawMessage } from '@/types/chat';
 
@@ -42,6 +42,12 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMsgCount = useRef(0);
   const hasActiveSession = !!currentSessionId;
+
+  // Adapter: ChatInput onSend → chat store sendMessage with media
+  const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
+    const mediaForWs = media?.map(m => ({ type: 'image' as const, mimeType: m.mimeType, base64Data: m.base64Data, fileName: m.fileName }));
+    sendMessage(_text, mediaForWs);
+  }, [sendMessage]);
 
   // Load history when session changes
   useEffect(() => {
@@ -134,7 +140,7 @@ export function Chat() {
       {/* Input */}
       {hasActiveSession && (
         <div className="mt-auto">
-          <ChatInput onSend={sendMessage} disabled={!isConnected} isEmpty={isEmpty} />
+          <ChatInput onSend={handleSend} disabled={!isConnected} isEmpty={isEmpty} />
         </div>
       )}
 

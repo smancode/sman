@@ -2,11 +2,11 @@
  * Chat Input Component
  * Textarea with send button for web (no Electron file picker).
  * Enter to send, Shift+Enter for new line.
- * In web version, file attachments are not supported via native picker.
+ * Supports image/PDF upload via file picker.
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, RefreshCw, Brain } from 'lucide-react';
+import { SendHorizontal, RefreshCw, Brain, ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -25,6 +25,13 @@ export interface FileAttachment {
   error?: string;
 }
 
+export interface StagedMedia {
+  fileName: string;
+  mimeType: string;
+  base64Data: string;
+  preview?: string;
+}
+
 interface Skill {
   id: string;
   name: string;
@@ -33,16 +40,40 @@ interface Skill {
 }
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, media?: StagedMedia[]) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
+const ACCEPTED_TYPES = 'image/*,.pdf';
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix (e.g., "data:image/png;base64,")
+      const base64 = result.split(',')[1];
+      if (base64) {
+        resolve(base64);
+      } else {
+        reject(new Error('Failed to read file as base64'));
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [stagedMedia, setStagedMedia] = useState<StagedMedia[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const slashTriggeredRef = useRef(false);
 
@@ -68,17 +99,63 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     }
   }, [disabled]);
 
-  const canSend = input.trim().length > 0 && !disabled;
+  const canSend = (input.trim().length > 0 || stagedMedia.length > 0) && !disabled;
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newMedia: StagedMedia[] = [];
+    let totalSize = stagedMedia.reduce((sum, m) => sum + m.base64Data.length, 0);
+
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_SIZE) {
+        console.warn(`File ${file.name} exceeds 10MB limit, skipping`);
+        continue;
+      }
+      totalSize += file.size;
+      if (totalSize > MAX_TOTAL_SIZE) {
+        console.warn('Total upload size exceeds 20MB limit');
+        break;
+      }
+
+      const base64Data = await readFileAsBase64(file);
+      const media: StagedMedia = {
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        base64Data,
+      };
+
+      // Generate preview for images
+      if (file.type.startsWith('image/')) {
+        media.preview = `data:${file.type};base64,${base64Data}`;
+      }
+
+      newMedia.push(media);
+    }
+
+    setStagedMedia((prev) => [...prev, ...newMedia]);
+
+    // Reset file input so the same file can be re-selected
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [stagedMedia]);
+
+  const removeStagedMedia = useCallback((index: number) => {
+    setStagedMedia((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const textToSend = input.trim();
     setInput('');
+    setStagedMedia([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(textToSend, undefined, null);
-  }, [input, canSend, onSend]);
+    onSend(textToSend || ' ', undefined, null, stagedMedia.length > 0 ? stagedMedia : undefined);
+  }, [input, canSend, onSend, stagedMedia]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -167,7 +244,45 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
       {/* Input Row */}
       <div className="relative bg-card rounded-xl shadow-sm border p-1.5 border-border">
+        {/* Media preview row */}
+        {stagedMedia.length > 0 && (
+          <div className="flex gap-2 p-2 pb-0 flex-wrap">
+            {stagedMedia.map((media, idx) => (
+              <div key={idx} className="relative group">
+                {media.preview ? (
+                  <img
+                    src={media.preview}
+                    alt={media.fileName}
+                    className="h-16 w-16 object-cover rounded-lg border"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-lg border bg-muted flex items-center justify-center text-xs text-muted-foreground p-1 text-center truncate">
+                    {media.fileName}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeStagedMedia(idx)}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-1.5">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_TYPES}
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
           {/* Textarea */}
           <div className="flex-1 relative">
             <Textarea
@@ -187,6 +302,24 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
               rows={1}
             />
           </div>
+
+          {/* Image Upload Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-lg shrink-0"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled}
+              >
+                <ImagePlus className="h-[18px] w-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>上传图片或 PDF</p>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Brain Toggle */}
           <Tooltip>

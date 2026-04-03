@@ -59,7 +59,7 @@ interface ChatState {
   loadSessions: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string }>) => Promise<void>;
   abortRun: () => void;
   clearError: () => void;
   toggleThinking: () => void;
@@ -250,12 +250,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     client.send({ type: 'session.updateLabel', sessionId, label });
   },
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content, media) => {
     const client = getWsClient();
     if (!client) return;
 
     const trimmed = content.trim();
-    if (!trimmed) return;
+    if (!trimmed && (!media || media.length === 0)) return;
 
     const { currentSessionId, messages, sessions } = get();
     if (!currentSessionId) return;
@@ -399,7 +399,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       // Send message
-      client.send({ type: 'chat.send', sessionId: currentSessionId, content: trimmed });
+      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: currentSessionId, content: trimmed };
+      if (media && media.length > 0) {
+        msg.media = media;
+      }
+      client.send(msg);
     } catch (err) {
       set({ error: String(err), sending: false });
     }
