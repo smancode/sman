@@ -14,6 +14,7 @@ Thumbs.db
 tmp/
 build/.tmp-*
 release/
+.VSCodeCounter/
 
 # Office skills - large generated dirs (installed by setup script)
 plugins/office-skills/venv/
