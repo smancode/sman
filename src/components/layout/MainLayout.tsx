@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Titlebar } from './Titlebar';
 import { useChatStore } from '@/stores/chat';
+import { cn } from '@/lib/utils';
 
 // 浅色主题流动色块配色
 const CANDY_COLORS = [
@@ -18,10 +19,12 @@ const NEBULA_COLORS = [
 
 export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const [isMaximized, setIsMaximized] = useState(false);
   const location = useLocation();
   const messages = useChatStore((s) => s.messages);
   const hasMessages = messages.length > 0;
   const inChat = location.pathname === '/chat';
+  const isWindows = window.sman?.platform === 'win32';
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -31,8 +34,19 @@ export function MainLayout() {
     return () => observer.disconnect();
   }, []);
 
+  // Listen for maximize state on Windows (to toggle rounded corners)
+  useEffect(() => {
+    if (!window.sman?.onMaximizeChanged) return;
+    const unsubscribe = window.sman.onMaximizeChanged(setIsMaximized);
+    window.sman.windowIsMaximized?.().then(setIsMaximized);
+    return unsubscribe;
+  }, []);
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden relative bg-background">
+    <div className={cn(
+      'flex flex-col h-screen overflow-hidden relative bg-background',
+      isWindows && !isMaximized && 'rounded-lg',
+    )}>
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
