@@ -552,7 +552,7 @@ wss.on('connection', (ws: WebSocket) => {
 
           // Persist capabilities alongside config
           if (finalCaps) {
-            settingsManager.updateConfig({ llm: { capabilities: finalCaps } } as any);
+            settingsManager.updateConfig({ llm: { capabilities: finalCaps } });
           }
 
           ws.send(JSON.stringify({

@@ -2,12 +2,24 @@
  * Settings 类型定义 (Sman)
  */
 
+export interface DetectedCapabilities {
+  text: boolean;
+  image: boolean;
+  pdf: boolean;
+  audio: boolean;
+  video: boolean;
+  maxInputTokens?: number;
+  displayName?: string;
+  source: 'api' | 'mapping' | 'probe';
+}
+
 export interface LlmConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
   profileModel?: string;
   userProfile?: boolean;
+  capabilities?: DetectedCapabilities;
 }
 
 export type WebSearchProvider = 'builtin' | 'brave' | 'tavily' | 'bing';

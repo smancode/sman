@@ -25,6 +25,17 @@ export interface Profile {
   claudeMdTemplate?: string;
 }
 
+export interface DetectedCapabilities {
+  text: boolean;
+  image: boolean;
+  pdf: boolean;
+  audio: boolean;
+  video: boolean;
+  maxInputTokens?: number;
+  displayName?: string;
+  source: 'api' | 'mapping' | 'probe';
+}
+
 export interface SmanConfig {
   port: number;
   llm: {
@@ -33,6 +44,7 @@ export interface SmanConfig {
     baseUrl?: string;
     profileModel?: string;   // 画像分析用模型，不填则使用主模型
     userProfile?: boolean;   // 是否启用用户画像，默认 true
+    capabilities?: DetectedCapabilities;
   };
   webSearch: {
     provider: 'builtin' | 'brave' | 'tavily' | 'bing';
