@@ -25,6 +25,7 @@ import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
 import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
+import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -520,6 +521,45 @@ wss.on('connection', (ws: WebSocket) => {
             startChatbotConnections();
           }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
+          break;
+        }
+
+        case 'settings.testAndSave': {
+          const { apiKey, model, baseUrl } = msg as { apiKey: string; model: string; baseUrl?: string };
+          if (!apiKey || !model) {
+            ws.send(JSON.stringify({ type: 'settings.testResult', success: false, error: '缺少 API Key 或模型名称' }));
+            break;
+          }
+
+          // Step 1: Test Anthropic compatibility
+          const testResult = await testAnthropicCompat(apiKey, model, baseUrl);
+          if (!testResult.success) {
+            ws.send(JSON.stringify({ type: 'settings.testResult', success: false, error: testResult.error }));
+            break;
+          }
+
+          // Step 2: Save config
+          const llmUpdate: Record<string, unknown> = { apiKey, model };
+          if (baseUrl !== undefined) llmUpdate.baseUrl = baseUrl;
+          const config = settingsManager.updateConfig({ llm: llmUpdate });
+          sessionManager.updateConfig(config);
+          userProfileManager.updateConfig(config);
+          batchEngine.setConfig(config.llm);
+
+          // Step 3: Detect capabilities (3-layer)
+          const capsResult = await detectCapabilities(apiKey, model, baseUrl);
+          const finalCaps = capsResult.capabilities ?? testResult.capabilities;
+
+          // Persist capabilities alongside config
+          if (finalCaps) {
+            settingsManager.updateConfig({ llm: { capabilities: finalCaps } } as any);
+          }
+
+          ws.send(JSON.stringify({
+            type: 'settings.testResult',
+            success: true,
+            capabilities: finalCaps ?? { text: true, image: false, pdf: false, audio: false, video: false, source: 'test' },
+          }));
           break;
         }
 
