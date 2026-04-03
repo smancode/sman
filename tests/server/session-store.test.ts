@@ -59,14 +59,28 @@ describe('SessionStore', () => {
     expect(messages[1].content).toBe('hi there');
   });
 
-  it('should delete a session and its messages', () => {
+  it('should soft-delete a session (hide from list but keep data)', () => {
     store.createSession({ id: 'sess-4', systemId: 'sysA', workspace: '/a' });
     store.addMessage('sess-4', { role: 'user', content: 'hello' });
 
     store.deleteSession('sess-4');
 
-    expect(store.getSession('sess-4')).toBeUndefined();
-    expect(store.getMessages('sess-4')).toHaveLength(0);
+    // Session should still exist in DB (getSession doesn't filter deleted)
+    expect(store.getSession('sess-4')).toBeDefined();
+    // But hidden from listSessions
+    expect(store.listSessions('sysA')).toHaveLength(0);
+    // Messages are preserved
+    expect(store.getMessages('sess-4')).toHaveLength(1);
+  });
+
+  it('should restore a soft-deleted session', () => {
+    store.createSession({ id: 'sess-4b', systemId: 'sysA', workspace: '/a' });
+    store.deleteSession('sess-4b');
+    expect(store.listSessions('sysA')).toHaveLength(0);
+
+    store.restoreSession('sess-4b');
+
+    expect(store.listSessions('sysA')).toHaveLength(1);
   });
 
   it('should update lastActiveAt on message add', async () => {

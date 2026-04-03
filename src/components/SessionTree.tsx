@@ -54,6 +54,7 @@ function SessionItem({
   onDelete: () => void;
   onDuplicate: () => void;
 }) {
+  const isChatbot = session.key.startsWith('chatbot-');
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -94,17 +95,19 @@ function SessionItem({
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
       <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'hidden')}>
-        <button
-          className={cn(
-            'shrink-0 p-0.5 rounded transition-all',
-            hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
-            'text-muted-foreground hover:text-primary',
-          )}
-          onClick={handleDuplicate}
-          title="复制会话"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </button>
+        {!isChatbot && (
+          <button
+            className={cn(
+              'shrink-0 p-0.5 rounded transition-all',
+              hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
+              'text-muted-foreground hover:text-primary',
+            )}
+            onClick={handleDuplicate}
+            title="复制会话"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           className={cn(
             'shrink-0 p-0.5 rounded transition-all',

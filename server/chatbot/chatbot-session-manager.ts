@@ -82,10 +82,18 @@ export class ChatbotSessionManager {
   private ensureSession(userKey: string, workspacePath: string, platform: string): void {
     let session = this.store.getSession(userKey, workspacePath);
     if (session) {
-      // Verify the session still exists in the main session manager (may have been deleted via UI)
+      // Try to restore soft-deleted session
+      const restored = this.sessionManager.restoreSession(session.sessionId);
+      // Verify the session still exists
       const active = this.sessionManager.listSessions().find(s => s.id === session!.sessionId);
-      if (active) return;
-      // Session was deleted — clean up stale chatbot_sessions record and recreate
+      if (active) {
+        // Notify frontend to refresh sidebar (session may have been restored from soft-delete)
+        if (restored) {
+          this.onSessionCreated?.(session.sessionId, active.label || '');
+        }
+        return;
+      }
+      // Session was hard-deleted — clean up stale chatbot_sessions record and recreate
       this.log.info(`Session ${session.sessionId} was deleted, recreating...`);
       this.store.deleteSession(userKey, workspacePath);
     }

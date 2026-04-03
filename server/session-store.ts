@@ -109,6 +109,15 @@ export class SessionStore {
       this.log.info('Migrated: added is_cron column to sessions table');
     }
 
+    // Migration: add deleted_at column if not exists
+    try {
+      this.db.prepare('SELECT deleted_at FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN deleted_at TEXT DEFAULT NULL");
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_deleted_at ON sessions(deleted_at)');
+      this.log.info('Migrated: added deleted_at column to sessions table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
@@ -132,14 +141,14 @@ export class SessionStore {
   }
 
   listSessions(systemId?: string): Session[] {
-    // 默认排除 cron 会话
+    // 默认排除 cron 会话和已软删除的会话
     if (systemId) {
       return this.db.prepare(
-        'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC'
+        'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? AND (is_cron = 0 OR is_cron IS NULL) AND deleted_at IS NULL ORDER BY last_active_at DESC'
       ).all(systemId) as Session[];
     }
     return this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE is_cron = 0 OR is_cron IS NULL ORDER BY last_active_at DESC'
+      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE (is_cron = 0 OR is_cron IS NULL) AND deleted_at IS NULL ORDER BY last_active_at DESC'
     ).all() as Session[];
   }
 
@@ -175,7 +184,11 @@ export class SessionStore {
   }
 
   deleteSession(id: string): void {
-    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+    this.db.prepare("UPDATE sessions SET deleted_at = datetime('now') WHERE id = ?").run(id);
+  }
+
+  restoreSession(id: string): void {
+    this.db.prepare('UPDATE sessions SET deleted_at = NULL WHERE id = ?').run(id);
   }
 
   updateLabel(id: string, label: string): void {

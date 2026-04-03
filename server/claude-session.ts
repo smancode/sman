@@ -885,6 +885,24 @@ The following plugins are loaded and available for use:
     this.store.updateLabel(sessionId, label);
   }
 
+  restoreSession(sessionId: string): boolean {
+    const session = this.store.getSession(sessionId);
+    if (!session) return false;
+    // If the session exists in DB (possibly soft-deleted), restore it
+    this.store.restoreSession(sessionId);
+    // Also ensure it's in memory
+    if (!this.sessions.has(sessionId)) {
+      this.sessions.set(sessionId, {
+        id: session.id,
+        workspace: session.workspace,
+        label: session.label,
+        createdAt: session.createdAt,
+        lastActiveAt: session.lastActiveAt,
+      });
+    }
+    return true;
+  }
+
   close(): void {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
