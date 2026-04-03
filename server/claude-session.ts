@@ -63,6 +63,8 @@ export class ClaudeSessionManager {
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
+  private static readonly STREAM_STALL_MS = 3 * 60 * 1000; // 3 minutes no data = stalled
+  private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
 
   constructor(private store: SessionStore) {
     this.log = createLogger('ClaudeSessionManager');
@@ -409,8 +411,12 @@ The following plugins are loaded and available for use:
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
+    // If there's an active query, abort it to make room for the new one
     if (this.activeStreams.has(sessionId)) {
-      throw new Error(`Session ${sessionId} already has an active query`);
+      this.log.info(`Aborting active query for session ${sessionId} to process new message`);
+      this.abort(sessionId);
+      // Give the abort a moment to clean up
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     if (!this.config?.llm?.apiKey) {
@@ -425,6 +431,8 @@ The following plugins are loaded and available for use:
 
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
+
+    let stallChecker: ReturnType<typeof setInterval> | null = null;
 
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
@@ -447,8 +455,56 @@ The following plugins are loaded and available for use:
       let allThinking = '';
       let allToolUses: Array<{ id: string; name: string; input: string }> = [];
       let currentToolUse: { id: string; name: string; input: string } | null = null;
+      let lastActivityAt = Date.now();
+      let toolInProgress = false;
+
+      // Stall detector: abort if no data received for STREAM_STALL_MS
+      // When tool/sub-agent is in progress, check if the V2 session process is still alive instead
+      stallChecker = setInterval(() => {
+        if (abortController.signal.aborted) {
+          clearInterval(stallChecker!);
+          return;
+        }
+        const elapsed = Date.now() - lastActivityAt;
+        if (toolInProgress) {
+          // Tool running — check if V2 session process is still alive
+          const v2Info = this.v2Sessions.get(sessionId);
+          if (!v2Info) {
+            this.log.warn(`V2 session lost while tool in progress for ${sessionId}, aborting...`);
+            abortController.abort();
+            clearInterval(stallChecker!);
+            return;
+          }
+          const pid = (v2Info.session as any).pid;
+          if (pid !== undefined) {
+            try {
+              process.kill(pid, 0); // check if alive
+              return; // process alive, keep waiting
+            } catch {
+              this.log.warn(`V2 session process dead (PID: ${pid}) while tool in progress for ${sessionId}, aborting...`);
+              abortController.abort();
+              clearInterval(stallChecker!);
+              return;
+            }
+          }
+          // Process alive but exceeded hard limit — likely rate-limited/stuck
+          if (elapsed > ClaudeSessionManager.TOOL_STALL_MS) {
+            this.log.warn(`Tool/sub-agent hard limit reached for ${sessionId} (${Math.round(elapsed / 1000)}s), aborting...`);
+            abortController.abort();
+            clearInterval(stallChecker!);
+          }
+          return;
+        }
+        if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
+          this.log.warn(`Stream stalled for session ${sessionId} (no data for ${Math.round(ClaudeSessionManager.STREAM_STALL_MS / 1000)}s), aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker!);
+        }
+      }, 30_000); // check every 30s
+      stallChecker.unref();
 
       for await (const sdkMsg of v2Session.stream()) {
+        lastActivityAt = Date.now();
         if (abortController.signal.aborted) break;
 
         switch (sdkMsg.type) {
@@ -479,6 +535,7 @@ The following plugins are loaded and available for use:
             const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta) {
               if (delta.type === 'text') {
+                toolInProgress = false;
                 fullContent += delta.content;
                 wsSend(JSON.stringify({
                   type: 'chat.delta',
@@ -487,6 +544,7 @@ The following plugins are loaded and available for use:
                   deltaType: 'text',
                 }));
               } else if (delta.type === 'thinking') {
+                toolInProgress = false;
                 currentThinking += delta.content;
                 wsSend(JSON.stringify({
                   type: 'chat.delta',
@@ -495,6 +553,7 @@ The following plugins are loaded and available for use:
                   deltaType: 'thinking',
                 }));
               } else if (delta.type === 'tool_use') {
+                toolInProgress = true;
                 if (delta.name && delta.id) {
                   // Flush previous thinking/toolUse before starting new one
                   if (currentThinking.trim()) {
@@ -606,7 +665,9 @@ The following plugins are loaded and available for use:
           }
         }
       }
+      if (stallChecker) clearInterval(stallChecker);
     } catch (err: any) {
+      if (stallChecker) clearInterval(stallChecker);
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
       } else {
@@ -646,6 +707,47 @@ The following plugins are loaded and available for use:
 
     this.activeStreams.set(sessionId, abortController);
 
+    // Stall detector for cron queries
+    let lastActivityAt = Date.now();
+    let toolInProgress = false;
+    let stallChecker = setInterval(() => {
+      if (abortController.signal.aborted) {
+        clearInterval(stallChecker);
+        return;
+      }
+      const elapsed = Date.now() - lastActivityAt;
+      if (toolInProgress) {
+        const v2Info = this.v2Sessions.get(sessionId);
+        if (!v2Info) {
+          this.log.warn(`Cron: V2 session lost while tool in progress for ${sessionId}, aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+          return;
+        }
+        const pid = (v2Info.session as any).pid;
+        if (pid !== undefined) {
+          try { process.kill(pid, 0); } catch {
+            this.log.warn(`Cron: V2 session process dead (PID: ${pid}) for ${sessionId}, aborting...`);
+            abortController.abort();
+            clearInterval(stallChecker);
+            return;
+          }
+        }
+        if (elapsed > ClaudeSessionManager.TOOL_STALL_MS) {
+          this.log.warn(`Cron: tool/sub-agent no-progress timeout for ${sessionId} (${Math.round(elapsed / 1000)}s), aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+        }
+        return;
+      }
+      if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
+        this.log.warn(`Cron stream stalled for session ${sessionId}, aborting...`);
+        abortController.abort();
+        clearInterval(stallChecker);
+      }
+    }, 30_000);
+    stallChecker.unref();
+
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
 
@@ -655,6 +757,7 @@ The following plugins are loaded and available for use:
       let msgCount = 0;
 
       for await (const sdkMsg of v2Session.stream()) {
+        lastActivityAt = Date.now();
         msgCount++;
         if (msgCount <= 3 || msgCount % 10 === 0) {
           this.log.info(`Cron SDK message #${msgCount}: type=${sdkMsg.type}`);
@@ -671,8 +774,13 @@ The following plugins are loaded and available for use:
           }
           case 'stream_event': {
             const delta = this.extractDeltaText((sdkMsg as any).event);
-            if (delta && delta.type === 'text') {
-              fullContent += delta.content;
+            if (delta) {
+              if (delta.type === 'text') {
+                toolInProgress = false;
+                fullContent += delta.content;
+              } else if (delta.type === 'tool_use') {
+                toolInProgress = true;
+              }
             }
             break;
           }
@@ -690,7 +798,9 @@ The following plugins are loaded and available for use:
           }
         }
       }
+      clearInterval(stallChecker);
     } catch (err: any) {
+      clearInterval(stallChecker);
       if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
         throw err;
       }
@@ -727,6 +837,47 @@ The following plugins are loaded and available for use:
 
     this.activeStreams.set(sessionId, abortController);
 
+    // Stall detector for chatbot queries (total timeout handled by caller)
+    let lastActivityAt = Date.now();
+    let toolInProgress = false;
+    let stallChecker = setInterval(() => {
+      if (abortController.signal.aborted) {
+        clearInterval(stallChecker);
+        return;
+      }
+      const elapsed = Date.now() - lastActivityAt;
+      if (toolInProgress) {
+        const v2Info = this.v2Sessions.get(sessionId);
+        if (!v2Info) {
+          this.log.warn(`Chatbot: V2 session lost while tool in progress for ${sessionId}, aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+          return;
+        }
+        const pid = (v2Info.session as any).pid;
+        if (pid !== undefined) {
+          try { process.kill(pid, 0); /* alive */ } catch {
+            this.log.warn(`Chatbot: V2 session process dead (PID: ${pid}) for ${sessionId}, aborting...`);
+            abortController.abort();
+            clearInterval(stallChecker);
+            return;
+          }
+        }
+        if (elapsed > ClaudeSessionManager.TOOL_STALL_MS) {
+          this.log.warn(`Chatbot: tool/sub-agent no-progress timeout for ${sessionId} (${Math.round(elapsed / 1000)}s), aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+        }
+        return;
+      }
+      if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
+        this.log.warn(`Chatbot stream stalled for session ${sessionId}, aborting...`);
+        abortController.abort();
+        clearInterval(stallChecker);
+      }
+    }, 30_000);
+    stallChecker.unref();
+
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
 
@@ -742,6 +893,7 @@ The following plugins are loaded and available for use:
       let msgCount = 0;
 
       for await (const sdkMsg of v2Session.stream()) {
+        lastActivityAt = Date.now();
         msgCount++;
         if (msgCount <= 3 || msgCount % 10 === 0) {
           this.log.info(`Chatbot SDK message #${msgCount}: type=${sdkMsg.type}`);
@@ -767,9 +919,14 @@ The following plugins are loaded and available for use:
           }
           case 'stream_event': {
             const delta = this.extractDeltaText((sdkMsg as any).event);
-            if (delta && delta.type === 'text') {
-              fullContent += delta.content;
-              onResponse(delta.content);
+            if (delta) {
+              if (delta.type === 'text' && delta.content !== '(no content)') {
+                toolInProgress = false;
+                fullContent += delta.content;
+                onResponse(delta.content);
+              } else if (delta.type === 'tool_use') {
+                toolInProgress = true;
+              }
             }
             break;
           }
@@ -791,8 +948,10 @@ The following plugins are loaded and available for use:
           }
         }
       }
+      clearInterval(stallChecker);
       return fullContent;
     } catch (err: any) {
+      clearInterval(stallChecker);
       if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
         throw err;
       }
@@ -808,7 +967,7 @@ The following plugins are loaded and available for use:
     const msg = message.message;
     if (!msg?.content) return '';
     return msg.content
-      .filter((block: any) => block.type === 'text')
+      .filter((block: any) => block.type === 'text' && block.text !== '(no content)')
       .map((block: any) => block.text)
       .join('');
   }

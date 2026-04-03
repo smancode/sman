@@ -448,6 +448,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'session.delete': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
+          sessionManager.abort(msg.sessionId);
           store.deleteSession(msg.sessionId);
           ws.send(JSON.stringify({ type: 'session.deleted', sessionId: msg.sessionId }));
           break;

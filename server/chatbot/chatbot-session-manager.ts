@@ -307,7 +307,9 @@ export class ChatbotSessionManager {
         (chunk) => sender.sendChunk(chunk),
       );
 
-      sender.finish(fullContent || '(空响应)');
+      // Strip all "(no content)" placeholders from the final content
+      const cleaned = fullContent.replace(/\(no content\)/g, '').trim();
+      sender.finish(cleaned || '(空响应)');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (abortController.signal.aborted) {
