@@ -283,7 +283,7 @@ export async function testAnthropicCompat(
           pdf: false,
           audio: false,
           video: false,
-          source: 'test' as const,
+          source: 'probe',
         },
       };
     }

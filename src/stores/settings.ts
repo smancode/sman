@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmanSettings, LlmConfig, WebSearchConfig, ChatbotConfig } from '@/types/settings';
+import type { SmanSettings, LlmConfig, WebSearchConfig, ChatbotConfig, DetectedCapabilities } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -22,6 +22,12 @@ function wrapHandler(
   return () => client.off(event, wrapped);
 }
 
+export interface TestAndSaveResult {
+  success: boolean;
+  error?: string;
+  capabilities?: DetectedCapabilities;
+}
+
 interface SettingsState {
   settings: SmanSettings | null;
   loading: boolean;
@@ -31,6 +37,7 @@ interface SettingsState {
   updateLlm: (updates: Partial<LlmConfig>) => Promise<void>;
   updateWebSearch: (updates: Partial<WebSearchConfig>) => Promise<void>;
   updateChatbot: (updates: Partial<ChatbotConfig>) => Promise<void>;
+  testAndSaveLlm: (apiKey: string, model: string, baseUrl?: string) => Promise<TestAndSaveResult>;
   clearError: () => void;
 }
 
@@ -52,7 +59,7 @@ const DEFAULT_SETTINGS: SmanSettings = {
   },
 };
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: null,
   loading: false,
   error: null,
@@ -134,6 +141,46 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', chatbot: updates });
+    });
+  },
+
+  testAndSaveLlm: async (apiKey, model, baseUrl) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<TestAndSaveResult>((resolve) => {
+      const unsub = wrapHandler(client, 'settings.testResult', (data) => {
+        unsub();
+        const result = data as unknown as TestAndSaveResult;
+
+        // Update settings in store on success (config already saved server-side)
+        if (result.success) {
+          const current = get().settings;
+          if (current) {
+            set({
+              settings: {
+                ...current,
+                llm: {
+                  ...current.llm,
+                  apiKey,
+                  model,
+                  baseUrl,
+                  capabilities: result.capabilities,
+                },
+              },
+            });
+          }
+        }
+
+        resolve(result);
+      });
+
+      client.send({
+        type: 'settings.testAndSave',
+        apiKey,
+        model,
+        baseUrl: baseUrl || undefined,
+      });
     });
   },
 

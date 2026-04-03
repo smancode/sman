@@ -525,7 +525,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'settings.testAndSave': {
-          const { apiKey, model, baseUrl } = msg as { apiKey: string; model: string; baseUrl?: string };
+          const { apiKey, model, baseUrl } = msg as unknown as { apiKey: string; model: string; baseUrl?: string };
           if (!apiKey || !model) {
             ws.send(JSON.stringify({ type: 'settings.testResult', success: false, error: '缺少 API Key 或模型名称' }));
             break;
@@ -541,7 +541,7 @@ wss.on('connection', (ws: WebSocket) => {
           // Step 2: Save config
           const llmUpdate: Record<string, unknown> = { apiKey, model };
           if (baseUrl !== undefined) llmUpdate.baseUrl = baseUrl;
-          const config = settingsManager.updateConfig({ llm: llmUpdate });
+          const config = settingsManager.updateConfig({ llm: llmUpdate } as any);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
           batchEngine.setConfig(config.llm);
@@ -552,7 +552,7 @@ wss.on('connection', (ws: WebSocket) => {
 
           // Persist capabilities alongside config
           if (finalCaps) {
-            settingsManager.updateConfig({ llm: { capabilities: finalCaps } });
+            settingsManager.updateConfig({ llm: { capabilities: finalCaps } } as any);
           }
 
           ws.send(JSON.stringify({
