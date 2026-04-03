@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createLogger } from '../utils/logger.js';
+import { CdpEngine } from './cdp-engine.js';
 
 const log = createLogger('ChromeSites');
 
@@ -89,7 +90,7 @@ function queryHistoryDb(profileDir: string, max: number): Array<{ title: string;
 
   const tmpPath = path.join(os.tmpdir(), `sman-chrome-history-${Date.now()}.db`);
   try {
-    fs.copyFileSync(historyPath, tmpPath);
+    CdpEngine.copyFileLocked(historyPath, tmpPath);
   } catch { return []; }
 
   try {

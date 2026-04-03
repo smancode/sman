@@ -29,7 +29,12 @@ function withEngineCheck(
 ): (args: any, extra: any) => Promise<any> {
   return async (args: any, extra: any) => {
     if (!service.getActiveEngineType()) {
-      return errorResult('浏览器不可用。Chrome 自动启动失败，请确认已安装 Google Chrome');
+      return errorResult(
+        '浏览器不可用。Chrome 自动启动失败，请确认已安装 Google Chrome。\n'
+        + '提示：如果需要访问内网系统（ITSM/OA等），请用以下命令启动 Chrome 后重试：\n'
+        + '  Windows: chrome.exe --remote-debugging-port=9222\n'
+        + '  macOS: /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222',
+      );
     }
     try {
       return await handler(args, extra);
@@ -101,7 +106,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
       };
       if (snapshot.isLoginPage && snapshot.loginUrl) {
         result.loginUrl = snapshot.loginUrl;
-        result.message = '检测到登录页面，请先登录后再操作';
+        result.message = '检测到登录页面。如果 Chrome 是用 --remote-debugging-port=9222 启动的，请在那个 Chrome 窗口中手动登录，登录完成后告诉我，我会继续操作。';
       }
       return textResult(JSON.stringify(result, null, 2));
     }),

@@ -3,3 +3,6 @@ export type { BrowserEngine, TabContext, PageSnapshot, WaitCondition } from './b
 export { BrowserTimeoutError, BrowserConnectionError, LoginRequiredError } from './browser-engine.js';
 export { CdpEngine } from './cdp-engine.js';
 export { createWebAccessMcpServer } from './mcp-server.js';
+
+// Utility: copy files that may be locked by Chrome (Windows EBUSY bypass)
+export const copyFileLocked = CdpEngine.copyFileLocked;

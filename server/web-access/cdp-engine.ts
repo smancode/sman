@@ -10,7 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
 import http from 'node:http';
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, spawn, execFileSync } from 'node:child_process';
 import type { BrowserEngine, TabContext, PageSnapshot, WaitCondition } from './browser-engine.js';
 import { BrowserTimeoutError, BrowserConnectionError, LoginRequiredError } from './browser-engine.js';
 import { createLogger } from '../utils/logger.js';
@@ -102,8 +102,8 @@ export class CdpEngine implements BrowserEngine {
       } catch { /* file not found, continue */ }
     }
 
-    // Scan common ports
-    for (const port of [9222, 9229, 9333]) {
+    // Scan common debugging ports
+    for (const port of [9222, 9229, 9333, 9515]) {
       const ok = await this.checkPort(port);
       if (ok) return { port, wsPath: null };
     }
@@ -172,6 +172,21 @@ export class CdpEngine implements BrowserEngine {
   }
 
   // --- Chrome auto-launch ---
+
+  /**
+   * Copy a file that may be locked by another process (Chrome).
+   * On Windows, uses PowerShell Copy-Item which can read locked files.
+   * On macOS/Linux, uses fs.copyFileSync (Unix doesn't lock open files).
+   */
+  static copyFileLocked(srcPath: string, destPath: string): void {
+    if (os.platform() === 'win32') {
+      // PowerShell Copy-Item can read files locked by Chrome (Win32 CopyFile API)
+      const psCmd = `Copy-Item -LiteralPath '${srcPath.replace(/'/g, "''")}' -Destination '${destPath.replace(/'/g, "''")}' -Force`;
+      execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { timeout: 5000 });
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
 
   /** Copy essential Chrome profile data (cookies, bookmarks, etc.) to ~/.sman/chrome-profile/ */
   private async copyChromeProfile(): Promise<void> {
@@ -243,7 +258,7 @@ export class CdpEngine implements BrowserEngine {
           if (!fs.existsSync(srcPath)) continue;
           // Ensure parent directory exists
           fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          fs.copyFileSync(srcPath, destPath);
+          CdpEngine.copyFileLocked(srcPath, destPath);
         } catch (e: any) {
           // File may be locked by Chrome, best effort
           log.warn(`Failed to copy ${relPath}: ${e.message}`);
@@ -276,7 +291,6 @@ export class CdpEngine implements BrowserEngine {
     const args = [
       `--user-data-dir=${SMAN_CHROME_PROFILE_DIR}`,
       '--remote-debugging-port=9333',
-      '--headless=new',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-sync',
@@ -287,6 +301,7 @@ export class CdpEngine implements BrowserEngine {
       '--password-store=basic',
       '--disable-popup-blocking',
       '--disable-gpu',
+      '--window-size=1024,768',
       'about:blank',
     ];
 
@@ -471,23 +486,43 @@ export class CdpEngine implements BrowserEngine {
     if (this.disposed) throw new BrowserConnectionError('Engine disposed');
     if (this.ws && this.ws.readyState === OPEN_STATE) return this.ws;
 
-    // Always launch our own Chrome with copied profile
-    // (don't connect to user's running Chrome — we want isolated, fresh profile)
     if (!this.chromePort) {
-      if (!this.launchingPromise) {
-        this.launchingPromise = (async () => {
-          await this.killLaunchedChrome();
-          const launched = await this.launchChrome();
-          this.chromePort = launched.port;
-          this.cdpWsUrl = launched.wsUrl;
-        })();
+      // 1. Try to discover already-running Chrome (user logged in with SSO cookies)
+      const discovered = await this.discoverChromePort();
+      if (discovered) {
+        log.info(`Discovered running Chrome on port ${discovered.port}, connecting...`);
+        this.chromePort = discovered.port;
+        this.chromeWsPath = discovered.wsPath;
         try {
-          await this.launchingPromise;
-        } finally {
-          this.launchingPromise = null;
+          await this.connectToChrome();
+          if (this.ws && this.ws.readyState === OPEN_STATE) {
+            log.info('Connected to running Chrome (reusing login session)');
+            return this.ws;
+          }
+        } catch (e: any) {
+          log.warn(`Failed to connect to discovered Chrome: ${e.message}, falling back to headless`);
+          this.chromePort = null;
+          this.chromeWsPath = null;
         }
-      } else {
-        await this.launchingPromise;
+      }
+
+      // 2. Fallback: launch headless Chrome with copied profile
+      if (!this.chromePort) {
+        if (!this.launchingPromise) {
+          this.launchingPromise = (async () => {
+            await this.killLaunchedChrome();
+            const launched = await this.launchChrome();
+            this.chromePort = launched.port;
+            this.cdpWsUrl = launched.wsUrl;
+          })();
+          try {
+            await this.launchingPromise;
+          } finally {
+            this.launchingPromise = null;
+          }
+        } else {
+          await this.launchingPromise;
+        }
       }
     }
 
