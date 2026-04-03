@@ -467,7 +467,8 @@ wss.on('connection', (ws: WebSocket) => {
           const wsSend = (d: string) => {
             if (ws.readyState === WebSocket.OPEN) ws.send(d);
           };
-          await sessionManager.sendMessage(msg.sessionId, msg.content, wsSend);
+          const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
+          await sessionManager.sendMessage(msg.sessionId, msg.content, wsSend, media);
           break;
         }
 

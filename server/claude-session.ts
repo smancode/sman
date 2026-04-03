@@ -18,6 +18,8 @@ import { buildMcpServers } from './mcp-config.js';
 import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { discoverChromeSites, formatSitesForPrompt } from './web-access/chrome-sites.js';
+import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
+import type { MediaAttachment } from './chatbot/types.js';
 import { UserProfileManager } from './user-profile.js';
 import path from 'path';
 import fs from 'fs';
@@ -407,7 +409,7 @@ The following plugins are loaded and available for use:
   /**
    * Send a message via WebSocket (real-time streaming)
    */
-  async sendMessage(sessionId: string, content: string, wsSend: WsSend): Promise<void> {
+  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[]): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -444,11 +446,28 @@ The following plugins are loaded and available for use:
 
       // Inject user profile into content for Claude, but don't store it
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
-      const contentWithProfile = profilePrefix
-        ? `${profilePrefix}\n\n${content}`
-        : content;
+      const capabilities = this.config?.llm?.capabilities;
 
-      await v2Session.send(contentWithProfile);
+      // Build content for send(): string or SDKUserMessage
+      const builtContent = buildContentBlocks(content, media, capabilities);
+
+      if (typeof builtContent === 'string') {
+        const contentWithProfile = profilePrefix
+          ? `${profilePrefix}\n\n${builtContent}`
+          : builtContent;
+        await v2Session.send(contentWithProfile);
+      } else {
+        // Content blocks array → construct SDKUserMessage
+        const blocks = profilePrefix
+          ? [{ type: 'text', text: profilePrefix }, ...builtContent]
+          : builtContent;
+        await v2Session.send({
+          type: 'user',
+          message: { role: 'user', content: blocks },
+          parent_tool_use_id: null,
+          session_id: sessionId,
+        } as any);
+      }
 
       let fullContent = '';
       let currentThinking = '';
@@ -818,6 +837,7 @@ The following plugins are loaded and available for use:
     abortController: AbortController,
     onActivity: () => void,
     onResponse: (chunk: string) => void,
+    media?: MediaAttachment[],
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -883,11 +903,26 @@ The following plugins are loaded and available for use:
 
       // Inject user profile into content for Claude
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
-      const contentWithProfile = profilePrefix
-        ? `${profilePrefix}\n\n${content}`
-        : content;
+      const capabilities = this.config?.llm?.capabilities;
 
-      await v2Session.send(contentWithProfile);
+      const builtContent = buildContentBlocks(content, media, capabilities);
+
+      if (typeof builtContent === 'string') {
+        const contentWithProfile = profilePrefix
+          ? `${profilePrefix}\n\n${builtContent}`
+          : builtContent;
+        await v2Session.send(contentWithProfile);
+      } else {
+        const blocks = profilePrefix
+          ? [{ type: 'text', text: profilePrefix }, ...builtContent]
+          : builtContent;
+        await v2Session.send({
+          type: 'user',
+          message: { role: 'user', content: blocks },
+          parent_tool_use_id: null,
+          session_id: sessionId,
+        } as any);
+      }
 
       let fullContent = '';
       let msgCount = 0;

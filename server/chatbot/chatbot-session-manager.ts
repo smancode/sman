@@ -154,7 +154,7 @@ export class ChatbotSessionManager {
     }
 
     this.log.info(`Executing chat query for ${userKey}, workspace=${userState.currentWorkspace}, content="${msg.content.substring(0, 50)}"`);
-    await this.executeChatQuery(userKey, userState.currentWorkspace, msg.content, sender);
+    await this.executeChatQuery(userKey, userState.currentWorkspace, msg.content, sender, msg.media);
   }
 
   // ── Commands ──
@@ -275,6 +275,7 @@ export class ChatbotSessionManager {
     workspace: string,
     content: string,
     sender: ChatResponseSender,
+    media?: import('./types.js').MediaAttachment[],
   ): Promise<void> {
     const session = this.store.getSession(userKey, workspace);
     if (!session) {
@@ -305,6 +306,7 @@ export class ChatbotSessionManager {
         abortController,
         () => {},
         (chunk) => sender.sendChunk(chunk),
+        media,
       );
 
       // Strip all "(no content)" placeholders from the final content
