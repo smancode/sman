@@ -51,9 +51,9 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
   const findUrlTool = tool(
     'web_access_find_url',
     'Find the best matching URL from user\'s Chrome browsing history and learned experiences. '
-    + 'Use this when you need to navigate to a website but are unsure of the exact URL. '
-    + 'You will receive a list of candidate URLs from both saved experiences and Chrome history — '
-    + 'pick the one that best matches the user\'s intent. '
+    + '**Always call this before web_access_navigate when the user mentions a site by name or keyword** '
+    + '(e.g., "ITSM", "Jira", "OA", "Confluence", "GitLab") instead of guessing the URL. '
+    + 'Returns candidate URLs from saved experiences and Chrome history — pick the best match. '
     + 'If none matches, ask the user for the URL and save it with web_access_remember_url.',
     {
       query: z.string().describe('User\'s original question or intent, e.g., "智谱MCP用量" or "ITSM待办"'),

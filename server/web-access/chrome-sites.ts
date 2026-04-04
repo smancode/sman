@@ -167,17 +167,3 @@ export function discoverChromeSites(maxEntries = 300): SiteEntry[] {
   log.info(`Discovered ${seen.size} sites from Chrome`);
   return Array.from(seen.entries()).map(([url, name]) => ({ name, url }));
 }
-
-/** Format sites as compact text for system prompt injection */
-export function formatSitesForPrompt(entries: SiteEntry[]): string {
-  if (entries.length === 0) return '';
-
-  const lines = entries.map(e => `- ${e.name}: ${e.url}`);
-  return `## Known Sites (from Chrome)
-
-The following sites are known to the user from their Chrome bookmarks and browsing history.
-When the user mentions a site by name or keyword (e.g., "ITSM", "Jira", "Confluence", "OA"), match it against this list and use the corresponding URL.
-
-${lines.join('\n')}
-`;
-}
