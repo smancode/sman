@@ -178,8 +178,10 @@ function lookupMappingTable(model: string): DetectedCapabilities | null {
 }
 
 /**
- * Layer 3: Probe — send minimal image request to test vision support.
- * Conservative: don't assume PDF from probe.
+ * Layer 3: Probe — send an image with a question that requires processing it.
+ * We ask the model to describe the image content. If it correctly identifies
+ * something in the image, we know it processed it. If it gives a generic
+ * response unrelated to the image, it likely ignored the image content.
  */
 async function probeVisionCapability(
   apiKey: string,
@@ -190,8 +192,18 @@ async function probeVisionCapability(
     ? `${baseUrl.replace(/\/+$/, '')}/v1/messages`
     : `https://api.anthropic.com/v1/messages`;
 
-  // Minimal valid 1x1 PNG
-  const MINIMAL_PNG_BASE64 = 'iVBORw0KGgoAAAANS';
+  // 2x2 red PNG — distinct color that a vision model should describe
+  // Created from: a 2x2 pixel image with all pixels set to red (255,0,0)
+  const RED_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAAByss0lAAAAFUlEQVQI12P8z8BQz0BFwMgwww0oAHYPCspjiWkoAAAAAElFTkSuQmCC';
+
+  const TEXT_ONLY_CAPS: DetectedCapabilities = {
+    text: true,
+    image: false,
+    pdf: false,
+    audio: false,
+    video: false,
+    source: 'probe',
+  };
 
   try {
     const resp = await fetch(url, {
@@ -203,45 +215,58 @@ async function probeVisionCapability(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1,
+        max_tokens: 50,
         messages: [{
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: MINIMAL_PNG_BASE64 } },
-            { type: 'text', text: 'ok' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: RED_PNG_BASE64 } },
+            { type: 'text', text: 'What color is this image? Reply with just the color name in English.' },
           ],
         }],
       }),
     });
 
-    if (resp.ok) {
+    if (!resp.ok) {
+      // If the API rejects image content entirely (e.g. 400 error), it doesn't support images
+      log.info(`Probe: API returned ${resp.status}, model does not support images`);
+      return TEXT_ONLY_CAPS;
+    }
+
+    const data = await resp.json() as any;
+
+    // Extract text from response
+    let responseText = '';
+    if (data.content) {
+      for (const block of data.content) {
+        if (block.type === 'text' && block.text) {
+          responseText += block.text;
+        }
+      }
+    }
+
+    const lowerResponse = responseText.toLowerCase().trim();
+
+    // The image is solid red. A model that processed the image should mention "red" (or "红色").
+    // Models that ignore the image will give generic responses like "I can help with..."
+    // or claim they cannot see images.
+    const mentionsRed = lowerResponse.includes('red') || lowerResponse.includes('红色') || lowerResponse.includes('紅色');
+    if (mentionsRed) {
+      log.info(`Probe: model described image color correctly → image supported`);
       return {
         text: true,
         image: true,
-        pdf: false, // conservative
+        pdf: false,
         audio: false,
         video: false,
         source: 'probe',
       };
     }
 
-    return {
-      text: true,
-      image: false,
-      pdf: false,
-      audio: false,
-      video: false,
-      source: 'probe',
-    };
-  } catch {
-    return {
-      text: true,
-      image: false,
-      pdf: false,
-      audio: false,
-      video: false,
-      source: 'probe',
-    };
+    log.info(`Probe: model response "${lowerResponse.substring(0, 100)}" does not mention red → image NOT supported`);
+    return TEXT_ONLY_CAPS;
+  } catch (err) {
+    log.info(`Probe: failed with error ${err instanceof Error ? err.message : String(err)}`);
+    return TEXT_ONLY_CAPS;
   }
 }
 

@@ -261,11 +261,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!currentSessionId) return;
 
     // Optimistic user message
+    // Build contentBlocks from media so images render in chat
+    const mediaContentBlocks: ContentBlock[] = [];
+    if (media && media.length > 0) {
+      for (const m of media) {
+        if (m.mimeType.startsWith('image/')) {
+          mediaContentBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
+          });
+        }
+      }
+    }
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       sessionId: currentSessionId,
       role: 'user',
       content: trimmed,
+      contentBlocks: mediaContentBlocks.length > 0 ? mediaContentBlocks : undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -280,9 +294,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Update label from first message if not set
     const session = sessions.find(s => s.key === currentSessionId);
-    if (!session?.label && trimmed) {
-      const truncated = trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed;
-      get().updateSessionLabel(currentSessionId, truncated);
+    if (!session?.label) {
+      const labelText = trimmed || (media && media.length > 0 ? '[图片]' : '');
+      if (labelText) {
+        const truncated = labelText.length > 20 ? `${labelText.slice(0, 20)}...` : labelText;
+        get().updateSessionLabel(currentSessionId, truncated);
+      }
     }
 
     try {

@@ -463,12 +463,13 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'chat.send': {
-          if (!msg.sessionId || !msg.content) throw new Error('Missing sessionId or content');
+          if (!msg.sessionId) throw new Error('Missing sessionId');
+          if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');
           const wsSend = (d: string) => {
             if (ws.readyState === WebSocket.OPEN) ws.send(d);
           };
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
-          await sessionManager.sendMessage(msg.sessionId, msg.content, wsSend, media);
+          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media);
           break;
         }
 
