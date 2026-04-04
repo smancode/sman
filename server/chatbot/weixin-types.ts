@@ -34,6 +34,44 @@ export interface TextItem {
   text?: string;
 }
 
+export interface ImageItem {
+  url?: string;
+  width?: number;
+  height?: number;
+  thumb_url?: string;
+  thumb_width?: number;
+  thumb_height?: number;
+  md5?: string;
+  data_size?: number;
+}
+
+export interface VoiceItem {
+  url?: string;
+  duration_ms?: number;
+  md5?: string;
+  data_size?: number;
+  recognition?: string; // voice-to-text transcription
+}
+
+export interface FileItem {
+  url?: string;
+  file_name?: string;
+  md5?: string;
+  data_size?: number;
+}
+
+export interface VideoItem {
+  url?: string;
+  width?: number;
+  height?: number;
+  duration_ms?: number;
+  md5?: string;
+  data_size?: number;
+  thumb_url?: string;
+  thumb_width?: number;
+  thumb_height?: number;
+}
+
 export interface MessageItem {
   type?: number;
   create_time_ms?: number;
@@ -41,6 +79,10 @@ export interface MessageItem {
   is_completed?: boolean;
   msg_id?: string;
   text_item?: TextItem;
+  image_item?: ImageItem;
+  voice_item?: VoiceItem;
+  file_item?: FileItem;
+  video_item?: VideoItem;
 }
 
 export interface WeixinMessage {

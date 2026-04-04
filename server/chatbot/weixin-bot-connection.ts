@@ -341,11 +341,29 @@ export class WeixinBotConnection {
     const userId = msg.from_user_id;
     if (!userId || !msg.item_list) return;
 
-    // Extract text from message items
+    // Extract text and log non-text items
     const textParts: string[] = [];
     for (const item of msg.item_list) {
-      if (item.type === MessageItemType.TEXT && item.text_item?.text) {
-        textParts.push(item.text_item.text);
+      switch (item.type) {
+        case MessageItemType.TEXT:
+          if (item.text_item?.text) {
+            textParts.push(item.text_item.text);
+          }
+          break;
+        case MessageItemType.IMAGE:
+          this.log.info(`WeChat IMAGE item: url=${item.image_item?.url ?? 'N/A'} size=${item.image_item?.data_size ?? 0}`);
+          break;
+        case MessageItemType.VOICE:
+          this.log.info(`WeChat VOICE item: url=${item.voice_item?.url ?? 'N/A'} duration=${item.voice_item?.duration_ms ?? 0}ms recognition="${item.voice_item?.recognition ?? ''}"`);
+          break;
+        case MessageItemType.FILE:
+          this.log.info(`WeChat FILE item: url=${item.file_item?.url ?? 'N/A'} name=${item.file_item?.file_name ?? 'unknown'} size=${item.file_item?.data_size ?? 0}`);
+          break;
+        case MessageItemType.VIDEO:
+          this.log.info(`WeChat VIDEO item: url=${item.video_item?.url ?? 'N/A'} duration=${item.video_item?.duration_ms ?? 0}ms size=${item.video_item?.data_size ?? 0}`);
+          break;
+        default:
+          this.log.info(`WeChat unknown item type=${item.type}`);
       }
     }
 

@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger, type Logger } from '../utils/logger.js';
-import type { IncomingMessage, ChatResponseSender } from './types.js';
+import type { IncomingMessage, ChatResponseSender, MediaAttachment } from './types.js';
+import { downloadAndDecrypt, wecomMsgtypeToMediaType } from './wecom-media.js';
 
 interface WeComBotConfig {
   botId: string;
@@ -133,22 +134,145 @@ export class WeComBotConnection {
 
   private async handleMsgCallback(msg: any): Promise<void> {
     const userId = msg.body?.from?.userid;
-    const rawContent = msg.body?.text?.content || '';
-    // Strip @mentions
-    const content = rawContent.replace(/@[^\s]+\s?/g, '').trim();
+    const msgtype: string = msg.body?.msgtype || 'text';
     const chatType = msg.body?.chattype === 'group' ? 'group' : 'single';
     const chatId = msg.body?.chatid || userId;
     const requestId = msg.headers?.req_id;
 
-    if (!userId || !content) return;
+    if (!userId) return;
+
+    let content = '';
+    let media: MediaAttachment[] | undefined;
+
+    try {
+      switch (msgtype) {
+        case 'text': {
+          const rawContent = msg.body?.text?.content || '';
+          content = rawContent.replace(/@[^\s]+\s?/g, '').trim();
+          break;
+        }
+
+        case 'image': {
+          const imageUrl = msg.body?.image?.url;
+          const aesKey = msg.body?.image?.aeskey;
+          if (imageUrl && aesKey) {
+            const { buffer, mimeType } = await downloadAndDecrypt(imageUrl, aesKey);
+            media = [{
+              type: 'image',
+              mimeType,
+              base64Data: buffer.toString('base64'),
+            }];
+            content = '[图片]';
+          }
+          break;
+        }
+
+        case 'voice': {
+          // WeCom voice messages include pre-transcribed text in voice.content
+          const voiceContent = msg.body?.voice?.content;
+          if (voiceContent) {
+            content = String(voiceContent).replace(/@[^\s]+\s?/g, '').trim();
+          }
+          // Also download the audio file for transcription fallback
+          const voiceUrl = msg.body?.voice?.url;
+          const voiceAesKey = msg.body?.voice?.aeskey;
+          if (voiceUrl && voiceAesKey) {
+            const { buffer, mimeType } = await downloadAndDecrypt(voiceUrl, voiceAesKey);
+            media = [{
+              type: 'audio',
+              mimeType,
+              base64Data: buffer.toString('base64'),
+              transcription: content || undefined,
+            }];
+          }
+          if (!content) content = '[语音消息]';
+          break;
+        }
+
+        case 'file': {
+          const fileUrl = msg.body?.file?.url;
+          const fileAesKey = msg.body?.file?.aeskey;
+          const fileName = msg.body?.file?.filename || 'unknown';
+          if (fileUrl && fileAesKey) {
+            const { buffer, mimeType } = await downloadAndDecrypt(fileUrl, fileAesKey);
+            media = [{
+              type: 'document',
+              fileName,
+              mimeType,
+              base64Data: buffer.toString('base64'),
+            }];
+            content = `[文件: ${fileName}]`;
+          }
+          break;
+        }
+
+        case 'video': {
+          const videoUrl = msg.body?.video?.url;
+          const videoAesKey = msg.body?.video?.aeskey;
+          if (videoUrl && videoAesKey) {
+            const { buffer, mimeType } = await downloadAndDecrypt(videoUrl, videoAesKey);
+            media = [{
+              type: 'video',
+              mimeType,
+              base64Data: buffer.toString('base64'),
+            }];
+            content = '[视频]';
+          }
+          break;
+        }
+
+        case 'mixed': {
+          // Mixed messages contain multiple items (text + image etc.)
+          const items: Array<any> = msg.body?.mixed?.items || [];
+          const textParts: string[] = [];
+          const mediaList: MediaAttachment[] = [];
+
+          for (const item of items) {
+            const itemType: string = item.msgtype;
+            if (itemType === 'text' && item.text?.content) {
+              textParts.push(String(item.text.content).replace(/@[^\s]+\s?/g, '').trim());
+            } else if (itemType === 'image' && item.image?.url && item.image?.aeskey) {
+              try {
+                const { buffer, mimeType } = await downloadAndDecrypt(item.image.url, item.image.aeskey);
+                mediaList.push({
+                  type: 'image',
+                  mimeType,
+                  base64Data: buffer.toString('base64'),
+                });
+              } catch (err) {
+                this.log.warn('Failed to download mixed image item', { error: String(err) });
+              }
+            }
+          }
+
+          content = textParts.join('\n').trim();
+          if (mediaList.length > 0) {
+            media = mediaList;
+            if (!content) content = '[图文消息]';
+          }
+          if (!content && mediaList.length === 0) return;
+          break;
+        }
+
+        default:
+          this.log.info(`Unsupported WeCom msgtype: ${msgtype}`);
+          content = `[不支持的消息类型: ${msgtype}]`;
+      }
+    } catch (err) {
+      this.log.error(`Failed to process WeCom ${msgtype} message`, { error: String(err) });
+      content = content || `[消息处理失败: ${msgtype}]`;
+    }
+
+    if (!content && (!media || media.length === 0)) return;
 
     const incoming: IncomingMessage = {
       platform: 'wecom',
       userId,
-      content,
+      content: content || ' ',
       requestId: requestId || uuidv4(),
       chatType: chatType as 'single' | 'group',
       chatId: chatId || userId,
+      media,
     };
 
     const sender = this.createSender(requestId);
