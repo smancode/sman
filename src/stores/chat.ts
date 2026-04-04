@@ -257,10 +257,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed && (!media || media.length === 0)) return;
 
-    const { currentSessionId, messages, sessions } = get();
+    const { currentSessionId, sessions, streamingText, streamingThinking, streamingTools, messages } = get();
     if (!currentSessionId) return;
 
-    // Optimistic user message
+    // Before clearing streaming state, save any in-progress assistant content to messages
+    // so the user doesn't lose what was already streamed when aborting to send a new message
+    let allMessages = messages;
+    if (streamingText.trim() || streamingThinking.trim() || streamingTools.length > 0) {
+      const contentBlocks: ContentBlock[] = [];
+      if (streamingThinking.trim()) {
+        contentBlocks.push({ type: 'thinking', thinking: streamingThinking.trim() });
+      }
+      if (streamingText.trim()) {
+        contentBlocks.push({ type: 'text', text: streamingText.trim() });
+      }
+      for (const tool of streamingTools) {
+        try {
+          const input = tool.input ? JSON.parse(tool.input) : {};
+          contentBlocks.push({ type: 'tool_use', id: tool.id, name: tool.name, input });
+        } catch {
+          contentBlocks.push({ type: 'tool_use', id: tool.id, name: tool.name, input: tool.input });
+        }
+      }
+      const partialAssistantMsg: Message = {
+        id: crypto.randomUUID(),
+        sessionId: currentSessionId,
+        role: 'assistant',
+        content: streamingText.trim(),
+        contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
+        createdAt: new Date().toISOString(),
+      };
+      allMessages = [...messages, partialAssistantMsg];
+    }
+
     // Build contentBlocks from media so images render in chat
     const mediaContentBlocks: ContentBlock[] = [];
     if (media && media.length > 0) {
@@ -284,7 +313,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
 
     set({
-      messages: [...messages, userMsg],
+      messages: [...allMessages, userMsg],
       sending: true,
       streamingText: '',
       streamingThinking: '',
@@ -339,6 +368,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((s) => ({
           streamingTools: s.streamingTools.map(t =>
             t.id === toolId ? { ...t, input: t.input + content } : t
+          ),
+        }));
+      });
+
+      const unsubToolEnd = wrapHandler(client, 'chat.tool_end', (_data) => {
+        if (_data.sessionId !== currentSessionId) return;
+        // Mark all running tools as completed
+        set((s) => ({
+          streamingTools: s.streamingTools.map(t =>
+            t.status === 'running' ? { ...t, status: 'completed' as const } : t
           ),
         }));
       });
@@ -411,6 +450,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubDelta();
         unsubToolStart();
         unsubToolDelta();
+        unsubToolEnd();
         unsubDone();
         unsubErr();
       };

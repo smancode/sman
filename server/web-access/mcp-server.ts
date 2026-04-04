@@ -91,13 +91,13 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
 
   const navigateTool = tool(
     'web_access_navigate',
-    'Navigate to a URL in the browser. Creates a new tab for the session if needed.',
+    'Navigate to a URL in the browser. Reuses existing tab for the session if one exists.',
     {
       session_id: z.string().describe('Session ID for tab isolation'),
       url: z.string().describe('URL to navigate to'),
     },
     withEngineCheck(service, async (args: any) => {
-      const { tabId, snapshot } = await service.createTab(args.session_id, args.url);
+      const { tabId, snapshot } = await service.navigateOrCreateTab(args.session_id, args.url);
       const result: Record<string, any> = {
         tabId,
         title: snapshot.title,

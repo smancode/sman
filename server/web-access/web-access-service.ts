@@ -51,6 +51,32 @@ export class WebAccessService {
 
   // --- Tab management ---
 
+  /**
+   * Get the primary tab for a session, or undefined if none exists.
+   */
+  getPrimaryTab(sessionId: string): string | undefined {
+    const tabs = this.sessionTabs.get(sessionId);
+    return tabs?.[0];
+  }
+
+  /**
+   * Navigate in an existing session tab, or create one if none exists.
+   * Reuses the same tab across all navigate calls within a session.
+   */
+  async navigateOrCreateTab(sessionId: string, url: string): Promise<{ tabId: string; snapshot: PageSnapshot }> {
+    const engine = this.requireEngine();
+    const existingTabId = this.getPrimaryTab(sessionId);
+
+    if (existingTabId) {
+      // Reuse existing tab — navigate in-place
+      const snapshot = await engine.navigate(existingTabId, url);
+      return { tabId: existingTabId, snapshot };
+    }
+
+    // No tab yet — create one
+    return this.createTab(sessionId, url);
+  }
+
   async createTab(sessionId: string, url: string): Promise<{ tabId: string; snapshot: PageSnapshot }> {
     const engine = this.requireEngine();
     const tabs = this.sessionTabs.get(sessionId) || [];

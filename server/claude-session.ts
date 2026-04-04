@@ -50,6 +50,8 @@ export class ClaudeSessionManager {
   private sessions = new Map<string, ActiveSession>();
   private v2Sessions = new Map<string, V2SessionInfo>();
   private activeStreams = new Map<string, AbortController>();
+  /** Resolves when the current stream loop for a session fully exits (finally block ran) */
+  private streamDone = new Map<string, Promise<void>>();
   private sdkSessionIds = new Map<string, string>();
   private log: Logger;
   private config: SmanConfig | null = null;
@@ -411,12 +413,13 @@ The following plugins are loaded and available for use:
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    // If there's an active query, abort it to make room for the new one
+    // If there's an active query, abort it and wait for the stream to fully exit
     if (this.activeStreams.has(sessionId)) {
       this.log.info(`Aborting active query for session ${sessionId} to process new message`);
       this.abort(sessionId);
-      // Give the abort a moment to clean up
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for the previous stream to fully exit (finally block ran, activeStreams deleted)
+      const done = this.streamDone.get(sessionId);
+      if (done) await done;
     }
 
     if (!this.config?.llm?.apiKey) {
@@ -432,7 +435,19 @@ The following plugins are loaded and available for use:
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
 
+    // Track when this stream fully exits so the next sendMessage can await it
+    let streamResolve!: () => void;
+    const streamPromise = new Promise<void>(r => { streamResolve = r; });
+    this.streamDone.set(sessionId, streamPromise);
+
     let stallChecker: ReturnType<typeof setInterval> | null = null;
+
+    // Track streamed content — declared outside try so catch can save partial state on abort
+    let fullContent = '';
+    let currentThinking = '';
+    let allThinking = '';
+    let allToolUses: Array<{ id: string; name: string; input: string }> = [];
+    let currentToolUse: { id: string; name: string; input: string } | null = null;
 
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
@@ -467,11 +482,6 @@ The following plugins are loaded and available for use:
         } as any);
       }
 
-      let fullContent = '';
-      let currentThinking = '';
-      let allThinking = '';
-      let allToolUses: Array<{ id: string; name: string; input: string }> = [];
-      let currentToolUse: { id: string; name: string; input: string } | null = null;
       let lastActivityAt = Date.now();
       let toolInProgress = false;
 
@@ -526,6 +536,12 @@ The following plugins are loaded and available for use:
 
         switch (sdkMsg.type) {
           case 'assistant': {
+            // New assistant turn means previous tools have completed
+            if (currentToolUse) {
+              allToolUses.push(currentToolUse);
+              currentToolUse = null;
+              wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId }));
+            }
             const text = this.extractTextContent(sdkMsg);
             if (text) {
               // Send new content as delta so UI starts rendering immediately
@@ -553,6 +569,12 @@ The following plugins are loaded and available for use:
             if (delta) {
               if (delta.type === 'text') {
                 toolInProgress = false;
+                // Text output means previous tool has completed
+                if (currentToolUse) {
+                  allToolUses.push(currentToolUse);
+                  currentToolUse = null;
+                  wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId }));
+                }
                 fullContent += delta.content;
                 wsSend(JSON.stringify({
                   type: 'chat.delta',
@@ -686,6 +708,8 @@ The following plugins are loaded and available for use:
     } catch (err: any) {
       if (stallChecker) clearInterval(stallChecker);
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
+        // Save partial assistant content so the user doesn't lose what was already streamed
+        this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
         wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
       } else {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -694,6 +718,8 @@ The following plugins are loaded and available for use:
       }
     } finally {
       this.activeStreams.delete(sessionId);
+      this.streamDone.delete(sessionId);
+      streamResolve();
     }
   }
 
@@ -1029,6 +1055,54 @@ The following plugins are loaded and available for use:
   }
 
   // ── Session management ──
+
+  /**
+   * Save partial assistant content when a stream is aborted mid-response.
+   * Preserves whatever text/thinking/tool_use was already streamed so the user doesn't lose it.
+   */
+  private savePartialAssistantMessage(
+    sessionId: string,
+    fullContent: string,
+    allThinking: string,
+    allToolUses: Array<{ id: string; name: string; input: string }>,
+    currentToolUse: { id: string; name: string; input: string } | null,
+  ): void {
+    // Flush any in-progress tool use
+    if (currentToolUse) {
+      allToolUses = [...allToolUses, currentToolUse];
+    }
+
+    const contentBlocks: Array<{
+      type: 'text' | 'thinking' | 'tool_use';
+      text?: string;
+      thinking?: string;
+      id?: string;
+      name?: string;
+      input?: unknown;
+    }> = [];
+
+    if (allThinking.trim()) {
+      contentBlocks.push({ type: 'thinking', thinking: allThinking.trim() });
+    }
+    for (const tu of allToolUses) {
+      try {
+        const input = JSON.parse(tu.input);
+        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input });
+      } catch {
+        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+      }
+    }
+
+    const finalContent = fullContent.trim();
+    if (finalContent || contentBlocks.length > 0) {
+      this.store.addMessage(sessionId, {
+        role: 'assistant',
+        content: finalContent,
+        contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
+      });
+      this.log.info(`Saved partial assistant message for session ${sessionId} (${finalContent.length} chars)`);
+    }
+  }
 
   abort(sessionId: string): void {
     const controller = this.activeStreams.get(sessionId);
