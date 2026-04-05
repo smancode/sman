@@ -79,6 +79,65 @@ Present the results in clear Chinese. For example:
 2. 【权限申请】VPN 权限开通 - 普通 - 创建于 3月25日
 3. 【设备申请】新员工工位配置 - 低 - 创建于 3月20日"
 
+## Operation Experience Learning
+
+After **successfully** completing a web operation task (form submit, data query, ticket creation, etc.), save the operation experience to the project's skills directory so the team can reuse it.
+
+### Where to Save
+
+Save to `{workspace}/.claude/skills/{system-name}/skill.md`, where `{system-name}` is the website's short name (e.g., `itsm`, `jira`, `confluence`).
+
+### How to Save
+
+**First time** — create new skill file:
+
+```markdown
+---
+name: {system-name}
+description: "{system Chinese name} 操作经验"
+---
+
+# {system Chinese name} 操作经验
+
+## 站点
+- URL: https://itsm.company.com
+
+## 场景
+
+### 提交工单
+- URL: https://itsm.company.com/ticket/new
+- 成功次数: 1
+- 步骤:
+  1. 点击「新建工单」 → `#create-btn`
+  2. 选择工单类型「硬件故障」 → `#type-select`
+  3. 填写标题 → `input[name="title"]`
+  4. 填写描述 → `textarea[name="description"]`
+  5. 点击提交 → `button[type="submit"]`
+
+### 查看待办
+- URL: https://itsm.company.com/my-todos
+- 成功次数: 1
+- 步骤:
+  1. 导航到待办页面 → snapshot 读取列表
+```
+
+**Already exists** — append new scenario or update existing one:
+- New scenario → add a new `###` section under `## 场景`
+- Existing scenario → update `成功次数 +1`, fix selectors if changed
+
+### When to Save
+
+- Only save after **successful** operations (user confirmed or result verified)
+- Record the CSS selectors that actually worked
+- If a previous selector failed but you found a working one, update it
+
+### When to Load
+
+Before starting a web operation, check if `{workspace}/.claude/skills/{system-name}/skill.md` exists. If it does:
+- Read the matching scenario
+- Try the recorded selectors directly (skip full snapshot if confidence is high)
+- If selectors fail → fall back to normal snapshot + analyze flow → update the skill file with new selectors
+
 ## Important Notes
 
 - You share the user's Chrome session — cookies and login state are reused
