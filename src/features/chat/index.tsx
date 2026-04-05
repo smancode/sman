@@ -111,6 +111,7 @@ export function Chat() {
                     name: t.name,
                     status: t.status,
                     input: t.input as unknown,
+                    durationMs: t.elapsedSeconds != null ? t.elapsedSeconds * 1000 : undefined,
                   }))}
                 />
               )}

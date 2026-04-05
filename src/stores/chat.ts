@@ -32,6 +32,7 @@ interface StreamingTool {
   name: string;
   input: string;
   status: 'running' | 'completed';
+  elapsedSeconds?: number;
 }
 
 interface ChatState {
@@ -372,6 +373,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
       });
 
+      const unsubToolProgress = wrapHandler(client, 'chat.tool_progress', (data) => {
+        if (data.sessionId !== currentSessionId) return;
+        const toolUseId = String(data.toolUseId || '');
+        const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds : undefined;
+        set((s) => ({
+          streamingTools: s.streamingTools.map(t =>
+            t.id === toolUseId ? { ...t, elapsedSeconds } : t
+          ),
+        }));
+      });
+
       const unsubToolEnd = wrapHandler(client, 'chat.tool_end', (_data) => {
         if (_data.sessionId !== currentSessionId) return;
         // Mark all running tools as completed
@@ -450,6 +462,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubDelta();
         unsubToolStart();
         unsubToolDelta();
+        unsubToolProgress();
         unsubToolEnd();
         unsubDone();
         unsubErr();

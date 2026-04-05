@@ -537,6 +537,7 @@ The following plugins are loaded and available for use:
         switch (sdkMsg.type) {
           case 'assistant': {
             // New assistant turn means previous tools have completed
+            toolInProgress = false;
             if (currentToolUse) {
               allToolUses.push(currentToolUse);
               currentToolUse = null;
@@ -568,13 +569,6 @@ The following plugins are loaded and available for use:
             const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta) {
               if (delta.type === 'text') {
-                toolInProgress = false;
-                // Text output means previous tool has completed
-                if (currentToolUse) {
-                  allToolUses.push(currentToolUse);
-                  currentToolUse = null;
-                  wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId }));
-                }
                 fullContent += delta.content;
                 wsSend(JSON.stringify({
                   type: 'chat.delta',
@@ -583,7 +577,6 @@ The following plugins are loaded and available for use:
                   deltaType: 'text',
                 }));
               } else if (delta.type === 'thinking') {
-                toolInProgress = false;
                 currentThinking += delta.content;
                 wsSend(JSON.stringify({
                   type: 'chat.delta',
@@ -619,6 +612,19 @@ The following plugins are loaded and available for use:
                 }
               }
             }
+            break;
+          }
+
+          case 'tool_progress': {
+            const progress = sdkMsg as any;
+            toolInProgress = true;
+            wsSend(JSON.stringify({
+              type: 'chat.tool_progress',
+              sessionId,
+              toolUseId: progress.tool_use_id,
+              toolName: progress.tool_name,
+              elapsedSeconds: progress.elapsed_time_seconds,
+            }));
             break;
           }
 
@@ -811,6 +817,7 @@ The following plugins are loaded and available for use:
 
         switch (sdkMsg.type) {
           case 'assistant': {
+            toolInProgress = false;
             const text = this.extractTextContent(sdkMsg);
             if (text) fullContent = text;
             break;
@@ -819,7 +826,6 @@ The following plugins are loaded and available for use:
             const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta) {
               if (delta.type === 'text') {
-                toolInProgress = false;
                 fullContent += delta.content;
               } else if (delta.type === 'tool_use') {
                 toolInProgress = true;
@@ -962,6 +968,7 @@ The following plugins are loaded and available for use:
 
         switch (sdkMsg.type) {
           case 'assistant': {
+            toolInProgress = false;
             const text = this.extractTextContent(sdkMsg);
             if (text) {
               const newPart = text.length > fullContent.length && text.startsWith(fullContent)
@@ -980,7 +987,6 @@ The following plugins are loaded and available for use:
             const delta = this.extractDeltaText((sdkMsg as any).event);
             if (delta) {
               if (delta.type === 'text' && delta.content !== '(no content)') {
-                toolInProgress = false;
                 fullContent += delta.content;
                 onResponse(delta.content);
               } else if (delta.type === 'tool_use') {
