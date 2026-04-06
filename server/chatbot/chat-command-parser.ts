@@ -10,6 +10,7 @@ const COMMAND_ALIASES: Record<string, CommandResult['command']> = {
   sts: 'status',
   help: 'help',
   add: 'add',
+  new: 'new',
 };
 
 export function parseChatCommand(input: string): ParseResult {

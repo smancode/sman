@@ -180,6 +180,9 @@ export class ChatbotSessionManager {
       case 'status':
         this.handleStatus(userKey, sender);
         break;
+      case 'new':
+        this.handleNew(userKey, sender);
+        break;
       default:
         sender.finish(`未知命令: //${command.rawCommand}\n使用 //help 查看所有命令。`);
     }
@@ -253,6 +256,7 @@ export class ChatbotSessionManager {
     sender.finish(
       `${prefix}可用命令:\n` +
       `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
+      `//new - 新建会话，清空上下文重新开始\n` +
       `//pwd - 显示当前工作目录\n` +
       `//workspaces  or  //wss - 列出桌面端已打开的项目\n` +
       `//status  or  //sts - 显示连接状态\n` +
@@ -266,6 +270,29 @@ export class ChatbotSessionManager {
     const workspace = state?.currentWorkspace || '未设置';
     const active = this.activeQueries.has(userKey) ? '处理中' : '空闲';
     sender.finish(`状态: ${active}\n工作目录: ${workspace}`);
+  }
+
+  private handleNew(userKey: string, sender: ChatResponseSender): void {
+    const state = this.store.getUserState(userKey);
+    if (!state?.currentWorkspace) {
+      sender.finish('当前未设置工作目录，无需新建会话。\n使用 //cd <项目名或路径> 切换工作目录。');
+      return;
+    }
+
+    const workspace = state.currentWorkspace;
+    const oldSession = this.store.getSession(userKey, workspace);
+
+    // Close old V2 session process to release SDK context
+    if (oldSession?.sessionId) {
+      this.sessionManager.abort(oldSession.sessionId);
+    }
+
+    // Create a new session (ensureSession will overwrite the old mapping)
+    this.store.deleteSession(userKey, workspace);
+    this.ensureSession(userKey, workspace, userKey.split(':')[0]);
+
+    const projectName = path.basename(workspace);
+    sender.finish(`已新建会话: ${projectName}\n旧会话的聊天记录仍可在桌面端查看。`);
   }
 
   // ── Query execution ──
