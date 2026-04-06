@@ -254,14 +254,13 @@ export class ChatbotSessionManager {
   private handleHelp(sender: ChatResponseSender, showUnknownHint = false): void {
     const prefix = showUnknownHint ? '未知命令，' : '';
     sender.finish(
-      `${prefix}可用命令:\n` +
-      `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
-      `//new - 新建会话，清空上下文重新开始\n` +
-      `//pwd - 显示当前工作目录\n` +
+      `${prefix}可用系统命令:\n` +
       `//workspaces  or  //wss - 列出桌面端已打开的项目\n` +
-      `//status  or  //sts - 显示连接状态\n` +
+      `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
+      `//pwd - 显示当前工作目录\n` +
+      `//new - 新建会话，清空上下文重新开始\n` +
       `//help - 显示此帮助信息\n\n` +
-      `直接发送消息即可与 Claude 对话。`,
+      `直接发送消息开启对话。`,
     );
   }
 
