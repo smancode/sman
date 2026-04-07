@@ -36,6 +36,7 @@ export interface ActiveSession {
   label?: string;
   createdAt: string;
   lastActiveAt: string;
+  isScanner?: boolean;
 }
 
 type WsSend = (data: string) => void;
@@ -272,6 +273,45 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
   }
 
   /**
+   * Build minimal session options for scanner sessions.
+   * Skips plugins, MCP servers, and web-access to keep scanner lightweight.
+   */
+  private buildScannerSessionOptions(workspace: string): Record<string, any> {
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
+    }
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
+    if (this.config.llm.baseUrl) {
+      env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
+    }
+
+    const claudeCodePath = this.getClaudeCodePath();
+
+    return {
+      model: this.config.llm.model,
+      env,
+      pathToClaudeCodeExecutable: claudeCodePath,
+      cwd: workspace,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      includePartialMessages: true,
+      systemPrompt: {
+        type: 'preset' as const,
+        preset: 'claude_code',
+      },
+      settingSources: ['project'],
+      extraArgs: {
+        'dangerously-skip-permissions': null,
+      },
+    };
+  }
+
+  /**
    * Get or create a V2 session for the given session ID
    */
   private async getOrCreateV2Session(sessionId: string): Promise<SDKSession> {
@@ -300,7 +340,12 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
     }
 
     // Create new V2 session
-    const options = this.buildSessionOptions(session.workspace);
+    const sessionInfo = this.sessions.get(sessionId);
+    const isScanner = sessionInfo?.isScanner === true;
+
+    const options = isScanner
+      ? this.buildScannerSessionOptions(session.workspace)
+      : this.buildSessionOptions(session.workspace);
 
     // Resume from persisted SDK session ID if available
     let sdkSessionId = this.sdkSessionIds.get(sessionId);
@@ -390,7 +435,7 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
     return id;
   }
 
-  createSessionWithId(workspace: string, sessionId: string, isCron = true): string {
+  createSessionWithId(workspace: string, sessionId: string, isCron = true, isScanner = false): string {
     if (!fs.existsSync(workspace)) {
       throw new Error(`Workspace does not exist: ${workspace}`);
     }
@@ -412,6 +457,7 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
       workspace,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
+      ...(isScanner ? { isScanner: true } : {}),
     };
 
     this.sessions.set(sessionId, session);
