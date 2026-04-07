@@ -20,11 +20,40 @@ interface WsConnectionState {
 let singletonClient: WsClient | null = null;
 let listenersRegistered = false;
 
-function getClient(): WsClient {
-  if (!singletonClient) {
-    singletonClient = new WsClient({ port: 5880 });
+function getStoredUrl(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('sman-backend-url') || '';
+}
+
+function getClient(recreate = false): WsClient {
+  const storedUrl = getStoredUrl();
+
+  if (!singletonClient || recreate) {
+    // Disconnect old client if exists
+    if (singletonClient) {
+      singletonClient.disconnect();
+      listenersRegistered = false;
+    }
+    singletonClient = new WsClient({
+      port: 5880,
+      url: storedUrl || undefined,
+      token: typeof window !== 'undefined' ? localStorage.getItem('sman-backend-token') || '' : '',
+    });
   }
   return singletonClient;
+}
+
+export function recreateClient(): WsClient {
+  const client = getClient(true);
+  // Re-register connection status listeners
+  if (!listenersRegistered) {
+    client.on('connected', () => useWsConnection.setState({ status: 'connected' }));
+    client.on('disconnected', () => useWsConnection.setState({ status: 'disconnected' }));
+    client.on('authFailed', () => useWsConnection.setState({ status: 'auth_failed' }));
+    listenersRegistered = true;
+  }
+  useWsConnection.setState({ client });
+  return client;
 }
 
 export const useWsConnection = create<WsConnectionState>((set) => {

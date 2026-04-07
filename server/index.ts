@@ -236,6 +236,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5881',
   'http://127.0.0.1:5880',
   'http://127.0.0.1:5881',
+  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()) : []),
 ];
 
 function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -1044,7 +1045,8 @@ export { server, homeDir };
 // When imported by Electron, electron/main.ts calls startServer()
 const isMainModule = process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
                      process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
-                     process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js');
+                     process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js') ||
+                     process.argv[1]?.replace(/\\/g, '/').endsWith('app/index.js');
 
 if (isMainModule) {
   process.on('SIGTERM', () => {
