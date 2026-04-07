@@ -19,7 +19,7 @@ import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
 import type { CapabilityRegistry } from './capabilities/registry.js';
-import { loadKnowledgeOverviews } from './capabilities/knowledge-loader.js';
+
 // Chrome site discovery removed from system prompt — now served on-demand via web_access_find_url MCP tool
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
 import type { MediaAttachment } from './chatbot/types.js';
@@ -191,11 +191,6 @@ When a task matches a trigger below, call \`capability_load\` with the capabilit
 
 To activate: call \`capability_list\` first, then \`capability_load\` with the capability ID and current session ID.
 `;
-
-    const knowledgeContent = loadKnowledgeOverviews(workspace);
-    if (knowledgeContent) {
-      prompt += `\n\n## Project Knowledge\n\n${knowledgeContent}`;
-    }
 
     return prompt;
   }
