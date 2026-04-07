@@ -9,6 +9,7 @@ import { CronExecutor } from './cron-executor.js';
 import type { CronTask } from './types.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SessionStore } from './session-store.js';
+import type { ProjectScanner } from './capabilities/project-scanner.js';
 
 const SCAN_INTERVAL_MS = 30 * 60 * 1000; // 30 分钟
 
@@ -18,6 +19,7 @@ export class CronScheduler {
   private executor: CronExecutor;
   private _sessionManager: ClaudeSessionManager | null = null;
   private _sessionStore: SessionStore | null = null;
+  private projectScanner: ProjectScanner | null = null;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private isStarted = false;
   private isScanning = false;
@@ -38,11 +40,18 @@ export class CronScheduler {
     this._sessionStore = store;
   }
 
+  setProjectScanner(scanner: ProjectScanner): void {
+    this.projectScanner = scanner;
+  }
+
   start(): void {
     if (this.isStarted) return;
     this.isStarted = true;
 
     this.log.info('Starting CronScheduler...');
+
+    // 清理孤儿记录：进程重启后 activeRuns 为空，数据库中 status=running 的都是未正常结束的
+    this.recoverOrphanRuns();
 
     const tasks = this.taskStore.listEnabledTasks();
     for (const task of tasks) {
@@ -53,6 +62,35 @@ export class CronScheduler {
     this.startAutoScan();
 
     this.log.info(`CronScheduler started with ${tasks.length} tasks`);
+
+    // Built-in nightly knowledge refresh (3 AM daily)
+    if (this.projectScanner) {
+      const nightlyJob = cron.schedule('0 3 * * *', () => {
+        this.projectScanner!.nightlyRefresh().catch((e: any) => {
+          this.log.error(`Nightly knowledge refresh failed: ${e.message}`);
+        });
+      });
+      this.jobs.set('__nightly_knowledge_refresh__', nightlyJob);
+    }
+  }
+
+  /**
+   * 清理孤儿执行记录
+   * 进程重启后，activeRuns（内存 Map）丢失，数据库中残留的 running 记录永远不会被更新
+   * 将这些记录标记为 failed，避免任务永远卡在"执行中"
+   */
+  private recoverOrphanRuns(): void {
+    const orphans = this.taskStore.getRunningRuns();
+    if (orphans.length === 0) return;
+
+    this.log.warn(`Found ${orphans.length} orphan running run(s), marking as failed`);
+
+    for (const run of orphans) {
+      this.taskStore.updateRun(run.id, {
+        status: 'failed',
+        errorMessage: '进程重启，任务异常终止',
+      });
+    }
   }
 
   stop(): void {

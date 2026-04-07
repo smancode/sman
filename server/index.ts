@@ -210,6 +210,7 @@ const projectScanner = new ProjectScanner({
 
 // Set up cron scheduler with session manager
 cronScheduler.setSessionManager(sessionManager);
+cronScheduler.setProjectScanner(projectScanner);
 cronScheduler.start();
 
 // HTTP server with static file serving for production (Electron mode)
