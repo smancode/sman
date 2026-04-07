@@ -22,6 +22,8 @@ import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
+import { CapabilityRegistry } from './capabilities/registry.js';
+import { initCapabilities } from './capabilities/init-registry.js';
 import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
@@ -192,6 +194,12 @@ webAccessService.detectEngine().then(() => {
   log.warn(`WebAccess detection failed: ${err.message}`);
 });
 sessionManager.setWebAccessService(webAccessService);
+
+// Initialize capability registry (on-demand capability loading)
+const pluginsDir = path.join(__dirname, '..', 'plugins');
+initCapabilities(homeDir, pluginsDir);
+const capabilityRegistry = new CapabilityRegistry(homeDir);
+sessionManager.setCapabilityRegistry(capabilityRegistry);
 
 // Set up cron scheduler with session manager
 cronScheduler.setSessionManager(sessionManager);

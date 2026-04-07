@@ -17,6 +17,8 @@ import type { SmanConfig } from './types.js';
 import { buildMcpServers } from './mcp-config.js';
 import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
+import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
+import type { CapabilityRegistry } from './capabilities/registry.js';
 // Chrome site discovery removed from system prompt — now served on-demand via web_access_find_url MCP tool
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
 import type { MediaAttachment } from './chatbot/types.js';
@@ -59,6 +61,7 @@ export class ClaudeSessionManager {
   private configGeneration = 0;
   private webAccessService: WebAccessService | null = null;
   private userProfile: UserProfileManager | null = null;
+  private capabilityRegistry: CapabilityRegistry | null = null;
 
   setUserProfile(manager: UserProfileManager): void {
     this.userProfile = manager;
@@ -83,6 +86,11 @@ export class ClaudeSessionManager {
   setWebAccessService(service: WebAccessService): void {
     this.webAccessService = service;
     this.log.info('WebAccessService injected');
+  }
+
+  setCapabilityRegistry(registry: CapabilityRegistry): void {
+    this.capabilityRegistry = registry;
+    this.log.info('CapabilityRegistry injected');
   }
 
   /**
@@ -156,9 +164,7 @@ Trigger phrases: 查看待办, 操作网站, 打开网页, 看下xxx, 帮我查x
 
 The following plugins are loaded and available for use:
 
-1. **web-access** - Browser operation skill for enterprise internal systems (ITSM, Jira, Confluence, etc.)
-
-2. **superpowers** - Core skills library including:
+1. **superpowers** - Core skills library including:
    - TDD (test-driven-development)
    - Systematic debugging (systematic-debugging)
    - Brainstorming & planning (brainstorming, writing-plans, executing-plans)
@@ -166,37 +172,22 @@ The following plugins are loaded and available for use:
    - Parallel agents (dispatching-parallel-agents, subagent-driven-development)
    - Git worktrees, verification, and more
 
-3. **gstack** - Headless browser & engineering workflow:
-   - QA testing & site verification (gstack, qa, qa-only)
-   - Design review & consultation (design-review, design-consultation)
-   - Planning reviews (plan-eng-review, plan-design-review, plan-ceo-review)
-   - Debugging (investigate), shipping (ship), retrospectives (retro)
-
-4. **office-skills** - Office document creation and editing:
-   - PowerPoint (.pptx): HTML-to-PPTX, template-based creation, slide rearrangement, text replacement, thumbnail preview
-   - Word (.docx): Tracked changes (redlining), OOXML editing, text extraction, comments
-   - Excel (.xlsx): Formula-based models, professional formatting, data validation
-   - PDF: Form filling, merging, PPTX→PDF, PDF→images, data extraction
-   Trigger phrases: 创建PPT, 做个演示文稿, 编辑Word, 生成Excel, 导出PDF, 填报表.
-
-5. **frontend-slides** - HTML presentation creation (zero dependencies):
-   - Create stunning, animation-rich HTML slideshows from scratch
-   - Convert PowerPoint (.pptx) to web presentations
-   - Visual style discovery with curated presets (no generic AI aesthetics)
-   - Single HTML file output, no build tools needed
-   - Includes deploy-to-PDF and export scripts
-   Trigger phrases: 做个演示, 创建幻灯片, 转换PPT到网页, 生成HTML演示.
-
-6. **dev-workflow** - 实战开发流程 (复杂任务使用):
+2. **dev-workflow** - 实战开发流程 (复杂任务使用):
    - brainstorm → plan → subagent implement → spec review → quality review → verify → 总结
-   - Every step dispatched as independent Agent to prevent context explosion
-   - TDD分级: 严格TDD / 逻辑验证 / 纯实现 (根据项目环境自动判断)
    Use for: complex features, architecture changes, multi-module tasks.
    NOT for: bug fixes, small changes (<30 lines), simple features.
 
 **Default mode**: For most tasks (bug fixes, small features, <30 line changes), write code directly with normal TDD. Only use dev-workflow for complex tasks or when user explicitly requests it ("完整流程" or /dev-workflow).
 
-**Important**: For complex tasks, prefer using these plugin skills via the Skill tool. They provide proven, structured workflows that lead to better outcomes.
+## Extended Capabilities
+
+Additional capabilities are available on-demand. Use the \`capability_list\` MCP tool to discover them.
+When a task matches a trigger below, call \`capability_load\` with the capability ID.
+
+- **office-skills** (PPT/Word/Excel/PDF): 创建PPT, 做个演示文稿, 编辑Word, 生成Excel, 导出PDF, 填报表
+- **frontend-slides** (HTML演示文稿): 做个演示, 创建幻灯片, HTML slides, 转换PPT到网页
+
+To activate: call \`capability_list\` first, then \`capability_load\` with the capability ID and current session ID.
 `;
   }
 
@@ -216,10 +207,10 @@ The following plugins are loaded and available for use:
 
     const claudeCodePath = this.getClaudeCodePath();
 
-    // Load bundled plugins
+    // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
-    for (const name of ['web-access', 'superpowers', 'gstack', 'office-skills', 'frontend-slides', 'dev-workflow']) {
+    for (const name of ['superpowers', 'dev-workflow']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
@@ -254,6 +245,19 @@ The following plugins are loaded and available for use:
     if (this.webAccessService) {
       const webAccessServer = createWebAccessMcpServer(this.webAccessService);
       (opts.mcpServers as any)['web-access'] = webAccessServer;
+    }
+
+    // Inject capability gateway MCP Server (in-process, always present)
+    if (this.capabilityRegistry) {
+      const gatewayServer = createCapabilityGatewayMcpServer({
+        registry: this.capabilityRegistry,
+        getActiveSession: (sid: string) => {
+          const entry = this.v2Sessions.get(sid);
+          return entry?.session ?? null;
+        },
+        pluginsDir,
+      });
+      (opts.mcpServers as any)['capability-gateway'] = gatewayServer;
     }
 
     return opts;
@@ -329,6 +333,7 @@ The following plugins are loaded and available for use:
         info.session.close();
       } catch {}
       this.v2Sessions.delete(sessionId);
+      cleanupLoadedCapabilities(sessionId);
       this.log.info(`V2 session closed for ${sessionId}`);
     }
   }
