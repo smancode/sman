@@ -2,7 +2,7 @@
  * Scanner Prompts — system prompts for the 3 parallel scanner agents.
  *
  * Each prompt instructs Claude to explore a specific aspect of the codebase
- * and write structured markdown files directly to .claude/knowledge/.
+ * and write structured markdown files directly to .claude/skills/.
  */
 
 export const SCANNER_TYPES = ['structure', 'apis', 'external-calls'] as const;
@@ -16,26 +16,26 @@ const SHARED_RULES = `
 3. **Don't guess**: If uncertain, mark with ⚠️
 4. **Write files directly**: Use the Write tool. Do NOT return file contents in your response.
 5. **Your output is a preprocessing aid**: Claude will verify against actual code when working. Prioritize accuracy of file paths and signatures over completeness of descriptions.
-6. **overview.md must be < 50 lines**: Table format, scannable at a glance.
-7. **Detail files must be < 100 lines**: Key facts only.
+6. **SKILL.md must be < 50 lines**: Table format, scannable at a glance.
+7. **Reference files must be < 100 lines**: Key facts only.
 8. **Output language: English**: Save tokens. File paths and code references stay in original form.
 `;
 
 const STRUCTURE_PROMPT = `
-You are a project structure scanner. Analyze the codebase and write knowledge files.
+You are a project structure scanner. Analyze the codebase and write skill files.
 
 ## Output Directory
-Write all files to: {KNOWLEDGE_DIR}/structure/
+Write all files to: {SKILLS_DIR}/project-structure/
 
 ## Files to Write
 
-1. **overview.md** (< 50 lines) — Must include:
+1. **SKILL.md** (< 50 lines) — Overview, must include:
    - Tech stack (languages, frameworks, build tools — from package.json/pom.xml/build.gradle/go.mod)
    - Directory tree (top 2-3 levels, exclude node_modules/.git/target)
    - Module list (table: name | path | purpose)
    - How to build and run (from Makefile/Dockerfile/README/scripts)
 
-2. **modules/{name}.md** (< 100 lines each) — Per module/package:
+2. **references/{name}.md** (< 100 lines each) — Per module/package:
    - Purpose (1-2 sentences)
    - Key files (list with paths)
    - Dependencies (imports from other modules)
@@ -58,23 +58,23 @@ cat Makefile Dockerfile README.md 2>/dev/null | head -50
 `;
 
 const APIS_PROMPT = `
-You are an API endpoint scanner. Analyze the codebase and write knowledge files.
+You are an API endpoint scanner. Analyze the codebase and write skill files.
 
 ## Output Directory
-Write all files to: {KNOWLEDGE_DIR}/apis/
+Write all files to: {SKILLS_DIR}/project-apis/
 
 ## File Naming
-API path /api/payment/create with method POST → file: endpoints/POST-api-payment-create.md
+API path /api/payment/create with method POST → file: references/POST-api-payment-create.md
 Rule: Replace / with -, remove leading -, max 80 chars.
 
 ## Files to Write
 
-1. **overview.md** (< 50 lines) — Must include:
-   - Endpoint table: | Method | Path | Description | Detail File |
+1. **SKILL.md** (< 50 lines) — Overview, must include:
+   - Endpoint table: | Method | Path | Description | Reference File |
    - One row per endpoint
    - Group by controller/module if possible
 
-2. **endpoints/{METHOD}-{slug}.md** (< 100 lines each) — Per endpoint:
+2. **references/{METHOD}-{slug}.md** (< 100 lines each) — Per endpoint:
    - Signature (method + path + parameters)
    - Request parameters (from annotations/types)
    - Business flow summary (1-3 sentences: what it does)
@@ -96,18 +96,18 @@ find . -name "*.proto" | head -20
 `;
 
 const EXTERNAL_CALLS_PROMPT = `
-You are an external call scanner. Analyze the codebase and write knowledge files.
+You are an external call scanner. Analyze the codebase and write skill files.
 
 ## Output Directory
-Write all files to: {KNOWLEDGE_DIR}/external-calls/
+Write all files to: {SKILLS_DIR}/project-external-calls/
 
 ## Files to Write
 
-1. **overview.md** (< 50 lines) — Must include:
-   - External service table: | Service | Type (HTTP/DB/MQ) | Purpose | Detail File |
+1. **SKILL.md** (< 50 lines) — Overview, must include:
+   - External service table: | Service | Type (HTTP/DB/MQ) | Purpose | Reference File |
    - One row per external dependency
 
-2. **services/{name}.md** (< 100 lines each) — Per external service:
+2. **references/{name}.md** (< 100 lines each) — Per external service:
    - Call method (HTTP client, ORM, SDK, message queue client)
    - Config source (env var name, config file path — NOT actual values)
    - Call locations in code (file paths that call this service)
@@ -137,10 +137,10 @@ export function getScannerPrompt(type: ScannerType, workspace: string): string {
   const template = PROMPTS[type];
   if (!template) throw new Error(`Unknown scanner type: ${type}`);
 
-  const knowledgeDir = `${workspace}/.claude/knowledge`;
+  const skillsDir = `${workspace}/.claude/skills`;
 
   return template
-    .replace(/\{KNOWLEDGE_DIR\}/g, knowledgeDir)
+    .replace(/\{SKILLS_DIR\}/g, skillsDir)
     + '\n\n'
     + SHARED_RULES
     + `\n\nWorkspace: ${workspace}`;

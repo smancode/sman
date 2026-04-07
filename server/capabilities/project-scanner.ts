@@ -62,11 +62,14 @@ export function getGitInfo(workspace: string): {
 }
 
 export function isScanNeeded(workspace: string): boolean {
-  const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-  const manifestPath = path.join(knowledgeDir, 'manifest.json');
-  const lockPath = path.join(knowledgeDir, '.scanning');
+  const lockPath = path.join(workspace, '.claude', '.scanning');
 
-  if (fs.existsSync(manifestPath)) return false;
+  // Check if skill files already exist — if all 3 SKILL.md exist, skip
+  const skillsDir = path.join(workspace, '.claude', 'skills');
+  const allExist = SCANNER_TYPES.every(type =>
+    fs.existsSync(path.join(skillsDir, `project-${type}`, 'SKILL.md')),
+  );
+  if (allExist) return false;
 
   if (fs.existsSync(lockPath)) {
     if (isLockStale(workspace)) {
@@ -82,7 +85,7 @@ export function isScanNeeded(workspace: string): boolean {
 const LOCK_STALE_MS = 30 * 60 * 1000;
 
 export function isLockStale(workspace: string): boolean {
-  const lockPath = path.join(workspace, '.claude', 'knowledge', '.scanning');
+  const lockPath = path.join(workspace, '.claude', '.scanning');
   if (!fs.existsSync(lockPath)) return false;
   try {
     const lock = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
@@ -94,9 +97,9 @@ export function isLockStale(workspace: string): boolean {
 }
 
 export function acquireLock(workspace: string): void {
-  const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-  fs.mkdirSync(knowledgeDir, { recursive: true });
-  fs.writeFileSync(path.join(knowledgeDir, '.scanning'), JSON.stringify({
+  const claudeDir = path.join(workspace, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, '.scanning'), JSON.stringify({
     pid: process.pid,
     startedAt: new Date().toISOString(),
     scanners: [...SCANNER_TYPES],
@@ -104,14 +107,14 @@ export function acquireLock(workspace: string): void {
 }
 
 export function releaseLock(workspace: string): void {
-  const lockPath = path.join(workspace, '.claude', 'knowledge', '.scanning');
+  const lockPath = path.join(workspace, '.claude', '.scanning');
   if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
 }
 
 export function writeManifest(workspace: string, manifest: ScanManifest): void {
-  const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-  fs.mkdirSync(knowledgeDir, { recursive: true });
-  fs.writeFileSync(path.join(knowledgeDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  const claudeDir = path.join(workspace, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'knowledge-manifest.json'), JSON.stringify(manifest, null, 2));
 }
 
 // ── Registry ──
@@ -195,7 +198,7 @@ export class ProjectScanner {
     let filesWritten = 0;
     try {
       await this.options.sessionManager.sendMessageForCron(sessionId, prompt, abortController, () => {});
-      const outputDir = path.join(workspace, '.claude', 'knowledge', type);
+      const outputDir = path.join(workspace, '.claude', 'skills', `project-${type}`);
       if (fs.existsSync(outputDir)) {
         filesWritten = fs.readdirSync(outputDir).filter(f => f.endsWith('.md')).length;
       }
@@ -210,7 +213,7 @@ export class ProjectScanner {
     this.log.info(`Nightly refresh: checking ${registry.workspaces.length} workspaces`);
     for (const entry of registry.workspaces) {
       if (!fs.existsSync(entry.path)) continue;
-      const manifestPath = path.join(entry.path, '.claude', 'knowledge', 'manifest.json');
+      const manifestPath = path.join(entry.path, '.claude', 'knowledge-manifest.json');
       if (!fs.existsSync(manifestPath)) continue;
       let needsRescan = false;
       try {
@@ -223,8 +226,12 @@ export class ProjectScanner {
         }
       } catch { needsRescan = true; }
       if (needsRescan) {
-        const knowledgeDir = path.join(entry.path, '.claude', 'knowledge');
-        if (fs.existsSync(knowledgeDir)) fs.rmSync(knowledgeDir, { recursive: true, force: true });
+        // Delete old skill files to force full rescan
+        const skillsDir = path.join(entry.path, '.claude', 'skills');
+        for (const type of SCANNER_TYPES) {
+          const skillDir = path.join(skillsDir, `project-${type}`);
+          if (fs.existsSync(skillDir)) fs.rmSync(skillDir, { recursive: true, force: true });
+        }
         await this.scan(entry.path);
       }
     }
