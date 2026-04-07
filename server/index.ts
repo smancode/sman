@@ -28,6 +28,7 @@ import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
+import { ProjectScanner } from './capabilities/project-scanner.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -200,6 +201,12 @@ const pluginsDir = path.join(__dirname, '..', 'plugins');
 initCapabilities(homeDir, pluginsDir);
 const capabilityRegistry = new CapabilityRegistry(homeDir);
 sessionManager.setCapabilityRegistry(capabilityRegistry);
+
+// Initialize project scanner (on-demand knowledge scanning)
+const projectScanner = new ProjectScanner({
+  homeDir,
+  sessionManager,
+});
 
 // Set up cron scheduler with session manager
 cronScheduler.setSessionManager(sessionManager);
@@ -432,6 +439,8 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace) throw new Error('Missing workspace');
           const sessionId = sessionManager.createSession(msg.workspace);
           ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
+          // Trigger knowledge scan if needed (fire-and-forget)
+          projectScanner.scheduleScanIfNeeded(msg.workspace).catch(() => {});
           break;
         }
 
