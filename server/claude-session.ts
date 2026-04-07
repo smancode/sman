@@ -356,7 +356,25 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
     }
 
     this.log.info(`Creating V2 session for ${sessionId}...`);
-    const v2Session = await unstable_v2_createSession(options as any);
+
+    // SDK's unstable_v2_createSession doesn't pass cwd to ProcessTransport,
+    // so claude CLI inherits the parent process's cwd.
+    // Fix: temporarily chdir to workspace before creating the session.
+    const prevCwd = process.cwd();
+    if (prevCwd !== session.workspace) {
+      try { process.chdir(session.workspace); } catch {
+        this.log.warn(`Failed to chdir to ${session.workspace}, using ${prevCwd}`);
+      }
+    }
+
+    let v2Session: SDKSession;
+    try {
+      v2Session = await unstable_v2_createSession(options as any);
+    } finally {
+      if (prevCwd !== session.workspace) {
+        try { process.chdir(prevCwd); } catch { /* ignore */ }
+      }
+    }
 
     const v2Info: V2SessionInfo = {
       session: v2Session,

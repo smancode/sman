@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { WsClient } from '@/lib/ws-client';
-import { setAuthToken } from '@/lib/auth';
+import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
 
@@ -18,79 +18,82 @@ interface WsConnectionState {
 }
 
 let singletonClient: WsClient | null = null;
-let listenersRegistered = false;
 
 function getStoredUrl(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('sman-backend-url') || '';
 }
 
-function getClient(recreate = false): WsClient {
-  const storedUrl = getStoredUrl();
+function getStoredToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('sman-backend-token') || '';
+}
 
-  if (!singletonClient || recreate) {
-    // Disconnect old client if exists
-    if (singletonClient) {
-      singletonClient.disconnect();
-      listenersRegistered = false;
-    }
-    singletonClient = new WsClient({
-      port: 5880,
-      url: storedUrl || undefined,
-      token: typeof window !== 'undefined' ? localStorage.getItem('sman-backend-token') || '' : '',
-    });
+function registerListeners(client: WsClient) {
+  client.on('connected', () => useWsConnection.setState({ status: 'connected' }));
+  client.on('disconnected', () => useWsConnection.setState({ status: 'disconnected' }));
+  client.on('authFailed', () => useWsConnection.setState({ status: 'auth_failed' }));
+}
+
+/** Create or recreate WsClient — reads URL + token from localStorage */
+export function recreateClient(): WsClient {
+  // Disconnect old client
+  if (singletonClient) {
+    singletonClient.disconnect();
   }
+
+  const url = getStoredUrl() || undefined;
+  const token = getStoredToken();
+
+  singletonClient = new WsClient({
+    port: 5880,
+    url,
+    token,
+  });
+
+  // Sync HTTP base URL so authFetch hits the right backend
+  setHttpBaseUrl(url || '');
+
+  registerListeners(singletonClient);
+  useWsConnection.setState({ client: singletonClient });
   return singletonClient;
 }
 
-export function recreateClient(): WsClient {
-  const client = getClient(true);
-  // Re-register connection status listeners
-  if (!listenersRegistered) {
-    client.on('connected', () => useWsConnection.setState({ status: 'connected' }));
-    client.on('disconnected', () => useWsConnection.setState({ status: 'disconnected' }));
-    client.on('authFailed', () => useWsConnection.setState({ status: 'auth_failed' }));
-    listenersRegistered = true;
-  }
-  useWsConnection.setState({ client });
-  return client;
-}
+export const useWsConnection = create<WsConnectionState>((set, get) => ({
+  status: 'disconnected',
+  client: null,
 
-export const useWsConnection = create<WsConnectionState>((set) => {
-  const client = getClient();
+  init: () => {
+    // Lazy init: create client on first use, avoiding TDZ
+    if (!singletonClient) {
+      recreateClient();
+    }
+  },
 
-  if (!listenersRegistered) {
-    client.on('connected', () => set({ status: 'connected' }));
-    client.on('disconnected', () => set({ status: 'disconnected' }));
-    client.on('authFailed', () => set({ status: 'auth_failed' }));
-    listenersRegistered = true;
-  }
-
-  return {
-    status: 'disconnected',
-    client,
-
-    async initToken() {
-      try {
-        const res = await fetch('/api/auth/token');
-        if (res.ok) {
-          const data = await res.json();
-          client.token = data.token;
-          setAuthToken(data.token);
-        }
-      } catch {
-        // Not running locally or backend not ready — token must be configured manually
+  async initToken() {
+    try {
+      const res = await fetch('/api/auth/token');
+      if (res.ok) {
+        const data = await res.json();
+        const c = get().client;
+        if (c) c.token = data.token;
+        setAuthToken(data.token);
       }
-    },
+    } catch {
+      // Not running locally or backend not ready
+    }
+  },
 
-    connect() {
-      set({ status: 'connecting' });
-      client.connect();
-    },
+  connect() {
+    if (!singletonClient) recreateClient();
+    set({ status: 'connecting' });
+    const c = get().client;
+    if (c) c.connect();
+  },
 
-    disconnect() {
-      set({ status: 'disconnected' });
-      client.disconnect();
-    },
-  };
-});
+  disconnect() {
+    set({ status: 'disconnected' });
+    const c = get().client;
+    if (c) c.disconnect();
+  },
+}));

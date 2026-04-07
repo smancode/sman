@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useWsConnection, recreateClient } from '@/stores/ws-connection';
-import { setAuthToken } from '@/lib/auth';
+import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
+import { useChatStore } from '@/stores/chat';
 
 const STORAGE_KEY_URL = 'sman-backend-url';
 const STORAGE_KEY_SERVERS = 'sman-servers';
@@ -66,10 +67,21 @@ export function BackendSettings() {
     setSelectedName(name);
     const server = servers.find(s => s.name === name);
     if (!server) return;
-    localStorage.setItem(STORAGE_KEY_URL, server.url);
-    // 切换到对应服务器的 token
     const t = server.url ? (server.token || '') : (localStorage.getItem('sman-backend-token') || '');
     setToken(t);
+
+    // 保存到 localStorage + 立即重连
+    localStorage.setItem(STORAGE_KEY_URL, server.url);
+    localStorage.setItem('sman-backend-token', t);
+    setAuthToken(t);
+    setHttpBaseUrl(server.url || '');
+    recreateClient();
+
+    disconnect();
+    setTimeout(() => {
+      connect();
+      useChatStore.getState().loadSessions();
+    }, 300);
   };
 
   const handleTestAndAdd = async () => {
@@ -91,9 +103,20 @@ export function BackendSettings() {
         setSelectedName(name);
         setToken(newToken);
         localStorage.setItem(STORAGE_KEY_URL, wsUrl);
+        localStorage.setItem('sman-backend-token', newToken);
+        setAuthToken(newToken);
+        setHttpBaseUrl(wsUrl);
         setTestResult('ok');
         setNewAddr('');
         setNewToken('');
+
+        // 自动连接新添加的服务器
+        recreateClient();
+        disconnect();
+        setTimeout(() => {
+          connect();
+          useChatStore.getState().loadSessions();
+        }, 300);
       } else {
         setTestResult('fail');
       }
@@ -115,15 +138,13 @@ export function BackendSettings() {
     setServers(updated);
     saveServers(updated);
 
+    // 写入 localStorage 供 WsClient 读取
     localStorage.setItem(STORAGE_KEY_URL, server.url);
-    if (!server.url) {
-      localStorage.setItem('sman-backend-token', token);
-    }
+    localStorage.setItem('sman-backend-token', token);
     setAuthToken(token);
 
-    // Recreate WsClient with new URL and token
-    const newClient = recreateClient();
-    newClient.token = token;
+    // Recreate WsClient (reads URL + token from localStorage)
+    recreateClient();
 
     disconnect();
     setTimeout(() => connect(), 300);
