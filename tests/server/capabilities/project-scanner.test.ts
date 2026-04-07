@@ -63,32 +63,32 @@ describe('isScanNeeded', () => {
     expect(isScanNeeded(workspace)).toBe(true);
   });
 
-  it('returns false when manifest exists', () => {
-    const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-    fs.mkdirSync(knowledgeDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(knowledgeDir, 'manifest.json'),
-      JSON.stringify({ version: '1.0', scannedAt: new Date().toISOString(), scanners: {} }),
-    );
+  it('returns false when all 3 SKILL.md files exist', () => {
+    const skillsDir = path.join(workspace, '.claude', 'skills');
+    for (const type of ['structure', 'apis', 'external-calls']) {
+      const skillDir = path.join(skillsDir, `project-${type}`);
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Overview');
+    }
     expect(isScanNeeded(workspace)).toBe(false);
   });
 
   it('returns false when lock file exists and is fresh', () => {
-    const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-    fs.mkdirSync(knowledgeDir, { recursive: true });
+    const claudeDir = path.join(workspace, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
     fs.writeFileSync(
-      path.join(knowledgeDir, '.scanning'),
+      path.join(claudeDir, '.scanning'),
       JSON.stringify({ pid: 99999, startedAt: new Date().toISOString() }),
     );
     expect(isScanNeeded(workspace)).toBe(false);
   });
 
   it('returns true when lock file is stale', () => {
-    const knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-    fs.mkdirSync(knowledgeDir, { recursive: true });
+    const claudeDir = path.join(workspace, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
     const oldDate = new Date(Date.now() - 31 * 60 * 1000).toISOString();
     fs.writeFileSync(
-      path.join(knowledgeDir, '.scanning'),
+      path.join(claudeDir, '.scanning'),
       JSON.stringify({ pid: 99999, startedAt: oldDate }),
     );
     expect(isScanNeeded(workspace)).toBe(true);
@@ -97,12 +97,12 @@ describe('isScanNeeded', () => {
 
 describe('lock file operations', () => {
   let workspace: string;
-  let knowledgeDir: string;
+  let claudeDir: string;
 
   beforeEach(() => {
     workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sman-lock-'));
-    knowledgeDir = path.join(workspace, '.claude', 'knowledge');
-    fs.mkdirSync(knowledgeDir, { recursive: true });
+    claudeDir = path.join(workspace, '.claude');
+    fs.mkdirSync(claudeDir, { recursive: true });
   });
 
   afterEach(() => {
@@ -111,7 +111,7 @@ describe('lock file operations', () => {
 
   it('acquireLock writes .scanning file with PID', () => {
     acquireLock(workspace);
-    const lockPath = path.join(knowledgeDir, '.scanning');
+    const lockPath = path.join(claudeDir, '.scanning');
     expect(fs.existsSync(lockPath)).toBe(true);
     const lock = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
     expect(lock.pid).toBe(process.pid);
@@ -121,7 +121,7 @@ describe('lock file operations', () => {
   it('releaseLock deletes .scanning file', () => {
     acquireLock(workspace);
     releaseLock(workspace);
-    expect(fs.existsSync(path.join(knowledgeDir, '.scanning'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, '.scanning'))).toBe(false);
   });
 
   it('isLockStale returns false for recent lock', () => {
@@ -130,7 +130,7 @@ describe('lock file operations', () => {
   });
 
   it('isLockStale returns true for lock older than 30 min', () => {
-    const lockPath = path.join(knowledgeDir, '.scanning');
+    const lockPath = path.join(claudeDir, '.scanning');
     const oldDate = new Date(Date.now() - 31 * 60 * 1000).toISOString();
     fs.writeFileSync(lockPath, JSON.stringify({ pid: 99999, startedAt: oldDate }));
     expect(isLockStale(workspace)).toBe(true);

@@ -17,7 +17,7 @@ describe('scanner-prompts', () => {
   it('each prompt contains output directory instruction', () => {
     for (const type of SCANNER_TYPES) {
       const prompt = getScannerPrompt(type as ScannerType, '/tmp/test-workspace');
-      expect(prompt).toContain('.claude/knowledge/');
+      expect(prompt).toContain('.claude/skills/project-');
       expect(prompt).toContain(type);
     }
   });
