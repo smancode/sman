@@ -15,21 +15,29 @@ import { useTheme } from '@/hooks/useTheme';
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const connectionStatus = useWsConnection((s) => s.status);
+  const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
 
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col backdrop-blur-sm transition-all duration-300 w-64',
+        'flex flex-col backdrop-blur-sm transition-all duration-300 w-64 h-full',
       )}
       style={{ background: 'hsl(var(--sidebar-bg))' }}
     >
+      {/* macOS traffic lights 占位 / Windows 标题栏对齐 */}
+      {isMac ? (
+        <div className="shrink-0 h-10" />
+      ) : window.sman ? (
+        <div className="shrink-0 h-6" />
+      ) : null}
+
       {/* Session Tree */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         <SessionTree />
       </div>
 
-      {/* Footer */}
-      <div className="p-2 mt-auto space-y-0.5">
+      {/* Footer - 固定在底部 */}
+      <div className="p-2 shrink-0 space-y-0.5">
         <NavLink
           to="/cron-tasks"
           className={({ isActive }) =>

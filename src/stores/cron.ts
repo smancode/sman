@@ -212,3 +212,64 @@ export const useCronStore = create<CronState>((storeSet) => {
     clearError: () => set({ error: null }),
   };
 });
+
+// ── WebSocket push listener: sync cron state across clients ──
+// Registered once on first store access, auto-cleans on disconnect.
+
+let pushListenerRegistered = false;
+
+function registerPushListeners() {
+  if (pushListenerRegistered) return;
+  pushListenerRegistered = true;
+
+  const handle = (msg: Record<string, unknown>) => {
+    if (msg.type === 'cron.changed') {
+      const action = msg.action as string;
+      if (action === 'created') {
+        const task = msg.task as CronTask;
+        set((state) => {
+          if (state.tasks.some(t => t.id === task.id)) return state;
+          return { tasks: [task, ...state.tasks] };
+        });
+      } else if (action === 'updated') {
+        const task = msg.task as CronTask;
+        set((state) => ({
+          tasks: state.tasks.map(t => (t.id === task.id ? { ...t, ...task } : t)),
+        }));
+      } else if (action === 'deleted') {
+        const taskId = msg.taskId as string;
+        set((state) => ({
+          tasks: state.tasks.filter(t => t.id !== taskId),
+        }));
+      } else if (action === 'scanned') {
+        const tasks = msg.tasks as CronTask[];
+        if (tasks) set({ tasks });
+      }
+    } else if (msg.type === 'cron.runStatusChanged') {
+      const taskId = msg.taskId as string;
+      const latestRun = msg.latestRun as CronRun | undefined;
+      if (latestRun) {
+        set((state) => ({
+          tasks: state.tasks.map(t =>
+            t.id === taskId ? { ...t, latestRun } : t
+          ),
+        }));
+      }
+    }
+  };
+
+  // Subscribe to all WS messages via the connection store
+  const unsub = useWsConnection.subscribe((state, prev) => {
+    if (state.client && state.client !== prev.client) {
+      state.client.on('message', handle as (...a: unknown[]) => void);
+    }
+  });
+
+  // Also attach to current client if already connected
+  const currentClient = useWsConnection.getState().client;
+  if (currentClient) {
+    currentClient.on('message', handle as (...a: unknown[]) => void);
+  }
+}
+
+registerPushListeners();

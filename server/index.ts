@@ -213,6 +213,13 @@ cronScheduler.setSessionManager(sessionManager);
 cronScheduler.setProjectScanner(projectScanner);
 cronScheduler.start();
 
+// Broadcast cron run status changes to all clients
+cronScheduler.getExecutor().onRunStatusChange((taskId: string, status: string) => {
+  const task = cronTaskStore.getTask(taskId);
+  const latestRun = cronTaskStore.getLatestRun(taskId);
+  broadcast(JSON.stringify({ type: 'cron.runStatusChanged', taskId, status, task, latestRun }));
+});
+
 // HTTP server with static file serving for production (Electron mode)
 // __dirname after tsc compilation = dist/server/
 // Frontend build output = dist/ (index.html, assets/)
@@ -663,6 +670,7 @@ wss.on('connection', (ws: WebSocket) => {
           });
           cronScheduler.schedule(task);
           ws.send(JSON.stringify({ type: 'cron.created', task }));
+          broadcast(JSON.stringify({ type: 'cron.changed', action: 'created', task }));
           break;
         }
 
@@ -689,6 +697,7 @@ wss.on('connection', (ws: WebSocket) => {
             }
           }
           ws.send(JSON.stringify({ type: 'cron.updated', task }));
+          broadcast(JSON.stringify({ type: 'cron.changed', action: 'updated', task }));
           break;
         }
 
@@ -697,6 +706,7 @@ wss.on('connection', (ws: WebSocket) => {
           cronScheduler.unschedule(msg.taskId as string);
           cronTaskStore.deleteTask(msg.taskId as string);
           ws.send(JSON.stringify({ type: 'cron.deleted', taskId: msg.taskId }));
+          broadcast(JSON.stringify({ type: 'cron.changed', action: 'deleted', taskId: msg.taskId }));
           break;
         }
 
@@ -729,6 +739,7 @@ wss.on('connection', (ws: WebSocket) => {
               nextRunAt: cronScheduler.getNextRunAt(task.id),
             }));
             ws.send(JSON.stringify({ type: 'cron.scanned', ...result, tasks }));
+            broadcast(JSON.stringify({ type: 'cron.changed', action: 'scanned', tasks }));
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));

@@ -57,10 +57,14 @@ export function MainLayout() {
 
       {/* 内容层 - 半透明以透出背景 */}
       <div className="relative z-10 flex flex-col h-full">
-        <Titlebar />
-        <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar 全通：从顶部到底部，绝对定位 */}
+        <div className="absolute inset-y-0 left-0 z-20 w-64">
           <Sidebar />
-          <main className="flex-1 overflow-y-auto bg-transparent">
+        </div>
+        {/* 右侧区域：Titlebar + 主内容 */}
+        <div className="flex flex-col flex-1 ml-64 overflow-hidden">
+          <Titlebar />
+          <main className="flex-1 overflow-hidden bg-transparent">
             <Outlet />
           </main>
         </div>

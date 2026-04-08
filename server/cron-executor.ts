@@ -30,11 +30,16 @@ export class CronExecutor {
   private activeRuns = new Map<string, ActiveRun>(); // sessionId -> ActiveRun
   private zombieCheckInterval: ReturnType<typeof setInterval> | null = null;
   private _sessionManager: ClaudeSessionManager | null = null;
+  private _onRunStatusChange: ((taskId: string, status: string) => void) | null = null;
 
   constructor(
     private taskStore: CronTaskStore,
   ) {
     this.log = createLogger('CronExecutor');
+  }
+
+  onRunStatusChange(callback: (taskId: string, status: string) => void): void {
+    this._onRunStatusChange = callback;
   }
 
   /**
@@ -263,6 +268,7 @@ export class CronExecutor {
       lastActivityAt: new Date(),
     };
     this.activeRuns.set(sessionId, activeRun);
+    this._onRunStatusChange?.(task.id, 'running');
 
     // 构造提示词
     const prompt = `/${task.skillName} ${promptContent}`;
@@ -292,6 +298,7 @@ export class CronExecutor {
       // 成功
       this.taskStore.updateRun(run.id, { status: 'success' });
       this.log.info(`Task ${task.id} completed successfully`);
+      this._onRunStatusChange?.(task.id, 'success');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (abortController.signal.aborted) {
@@ -300,6 +307,7 @@ export class CronExecutor {
       } else {
         this.taskStore.updateRun(run.id, { status: 'failed', errorMessage });
         this.log.error(`Task ${task.id} failed`, { error: errorMessage });
+        this._onRunStatusChange?.(task.id, 'failed');
       }
     } finally {
       this.activeRuns.delete(sessionId);
