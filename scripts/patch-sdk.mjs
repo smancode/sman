@@ -20,8 +20,12 @@ const __dirname = dirname(__filename);
 
 // Resolve SDK file path
 const sdkPaths = [
+  // Local dev: scripts/patch-sdk.mjs → node_modules/ is at project root
   join(__dirname, '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
+  // pnpm monorepo
   join(__dirname, '..', 'node_modules', '.pnpm', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
+  // Remote deploy: patch-sdk.mjs is in /root/sman/app/ alongside node_modules/
+  join(__dirname, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
 ];
 
 let sdkPath = null;

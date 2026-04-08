@@ -78,9 +78,15 @@ export const useWsConnection = create<WsConnectionState>((set, get) => ({
         const c = get().client;
         if (c) c.token = data.token;
         setAuthToken(data.token);
+        return;
       }
     } catch {
       // Not running locally or backend not ready
+    }
+    // Fallback: use stored token (for remote mode where /api/auth/token is 403)
+    const stored = getStoredToken();
+    if (stored) {
+      setAuthToken(stored);
     }
   },
 

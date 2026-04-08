@@ -116,6 +116,9 @@ export class ClaudeSessionManager {
     // Production: spawned child process — cwd = app root (set in electron/main.ts)
     possiblePaths.push(path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
 
+    // Remote deploy: __dirname = /root/sman/app, node_modules is alongside compiled code
+    possiblePaths.push(path.join(__dirname, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
+
     // Also try app.asar.unpacked relative to cwd
     possiblePaths.push(path.join(process.cwd(), '..', 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
 
@@ -211,6 +214,13 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
 
     const claudeCodePath = this.getClaudeCodePath();
 
+    // root/sudo cannot use --dangerously-skip-permissions (claude CLI rejects it).
+    // Use environment variable bypass instead.
+    const isRoot = process.getuid?.() === 0;
+    if (isRoot) {
+      env['CLAUDE_BYPASS_PERMISSIONS'] = '1';
+    }
+
     // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
     const pluginsDir = path.join(__dirname, '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
@@ -226,8 +236,12 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
       cwd: workspace,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      // root/sudo: claude CLI rejects --permission-mode bypassPermissions.
+      // Use CLAUDE_BYPASS_PERMISSIONS env var instead (set above).
+      ...(isRoot ? {} : {
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+      }),
       includePartialMessages: true,
       systemPrompt: {
         type: 'preset' as const,
@@ -236,7 +250,7 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
       },
       settingSources: ['project'],
       plugins: plugins.length > 0 ? plugins : undefined,
-      extraArgs: {
+      extraArgs: isRoot ? {} : {
         'dangerously-skip-permissions': null,
       },
     };
@@ -287,20 +301,27 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
 
     const claudeCodePath = this.getClaudeCodePath();
 
+    const isRoot = process.getuid?.() === 0;
+    if (isRoot) {
+      env['CLAUDE_BYPASS_PERMISSIONS'] = '1';
+    }
+
     return {
       model: this.config.llm.model,
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
       cwd: workspace,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
+      ...(isRoot ? {} : {
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+      }),
       includePartialMessages: true,
       systemPrompt: {
         type: 'preset' as const,
         preset: 'claude_code',
       },
       settingSources: ['project'],
-      extraArgs: {
+      extraArgs: isRoot ? {} : {
         'dangerously-skip-permissions': null,
       },
     };
