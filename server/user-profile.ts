@@ -17,23 +17,25 @@ const EMPTY_TEMPLATE = `# 用户画像
 - 业务领域:
 
 ## 技术偏好
-- 主力语言/工具:
+- 主力语言:
 - 使用偏好:
-
 ## 常用任务
 - 高频操作:
 - 最近任务:
 
 ## 失败任务
-
 ## 沟通风格
 - 偏好语言: 中文
 - 回复详细度:
 - 关注点:
 
+## 维护原则
+- 画像只记录通用信息（身份、偏好、风格）
+- 不记录业务数据（skills、插件、项目背景、常用任务、账户信息等）
+- 业务数据属于运行时状态，应实时查询而非硬编码到画像
+
 ## 回复策略
 - 根据用户习惯调整回复风格和技术深度
-- 注意事项:
 `;
 
 export class UserProfileManager {
@@ -85,6 +87,40 @@ export class UserProfileManager {
   }
 
   /**
+   * Validate LLM-generated profile before saving.
+   * Rejects profiles with duplicate sections or duplicate body paragraphs (LLM hallucination).
+   */
+  private isValidProfile(content: string): boolean {
+    if (!content.includes('# 用户画像')) return false;
+    // Check duplicate ## section headers
+    const sections = content.match(/^## .+$/gm);
+    if (!sections) return false;
+    const seenSections = new Set<string>();
+    for (const s of sections) {
+      if (seenSections.has(s)) {
+        this.log.warn(`Duplicate section detected: ${s}, rejecting profile update`);
+        return false;
+      }
+      seenSections.add(s);
+    }
+    // Check duplicate body lines (strip whitespace, ignore empty/headers)
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    const seenLines = new Set<string>();
+    let duplicateCount = 0;
+    for (const line of lines) {
+      if (seenLines.has(line)) {
+        duplicateCount++;
+        if (duplicateCount >= 2) {
+          this.log.warn(`Duplicate body content detected (>=2 repeated lines), rejecting profile update`);
+          return false;
+        }
+      }
+      seenLines.add(line);
+    }
+    return true;
+  }
+
+  /**
    * Update user profile by analyzing conversation with LLM.
    * Serialized via queue to prevent concurrent writes.
    * Fire-and-forget: errors are logged but not thrown.
@@ -96,7 +132,7 @@ export class UserProfileManager {
         const truncatedUser = this.truncateInput(userMsg, UserProfileManager.MAX_USER_MSG_LENGTH);
         const truncatedAssistant = this.truncateInput(assistantMsg, UserProfileManager.MAX_ASSISTANT_MSG_LENGTH);
         const updated = await this.callLLMForUpdate(existing, truncatedUser, truncatedAssistant);
-        if (updated && updated.includes('# 用户画像')) {
+        if (updated && this.isValidProfile(updated)) {
           this.saveProfile(updated);
           this.log.info('User profile updated');
         } else {
@@ -132,11 +168,17 @@ export class UserProfileManager {
 ## 规则
 1. 保持精简，总字数 < 800字，宁可少写不要多写
 2. 确认的信息直接写，推测的加 [推测] 前缀
-3. 失败任务只保留最近5条，相同原因不重复记录
-4. 常用任务归纳为一句话，不罗列具体操作
-5. 回复策略要具体可执行，不要空话
-6. 不要编造信息，只在有明确证据时更新
-7. 助手身份如果用户要求了就更新，否则保持默认`;
+3. 回复策略要具体可执行，不要空话
+4. 不要编造信息，只在有明确证据时更新
+5. 助手身份如果用户要求了就更新，否则保持默认
+
+## 严格禁止（不要记录以下内容）
+- 已安装的 skills / 插件列表（这是运行时状态，实时查询）
+- 项目背景、常用任务、业务领域（这些是业务数据）
+- 账户信息、额度、密钥（这些是敏感数据）
+- 任何会随时间失效的环境信息
+
+只记录通用信息：身份、语言偏好、沟通风格、回复策略原则。`;
 
     const userPrompt = `## 输入
 已有画像：

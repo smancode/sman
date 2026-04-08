@@ -189,8 +189,10 @@ function StreamingBlocksRenderer({
                   tool={{
                     id: block.id,
                     name: block.name,
+                    input: block.input,
                     status: block.status,
                     durationMs: block.elapsedSeconds != null ? block.elapsedSeconds * 1000 : undefined,
+                    result: block.result,
                   }}
                 />
               );
@@ -269,31 +271,99 @@ function StreamingToolStatus({ tool }: {
   tool: {
     id?: string;
     name: string;
+    input?: string;
     status: 'running' | 'completed' | 'error';
     durationMs?: number;
+    result?: string;
   };
 }) {
   const duration = formatDuration(tool.durationMs);
   const isRunning = tool.status === 'running';
   const isError = tool.status === 'error';
+  const [expanded, setExpanded] = useState(false);
+
+  // Format input for display
+  const displayInput = formatToolInput(tool.name, tool.input);
+  const displayResult = tool.result?.trim();
 
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors w-full',
+        'rounded-lg border text-xs transition-colors w-full',
         isRunning && 'border-primary/30 bg-primary/5 text-foreground',
         !isRunning && !isError && 'border-border/50 bg-muted/20 text-muted-foreground',
         isError && 'border-destructive/30 bg-destructive/5 text-destructive',
       )}
     >
-      {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
-      {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-      {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-      <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-      <span className="font-mono text-[12px] font-medium">{tool.name}</span>
-      {duration && <span className="text-[11px] opacity-60">{duration}</span>}
+      {/* Header row: icon + name + duration + expand toggle */}
+      <button
+        className="flex items-center gap-2 w-full px-3 py-2 text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+        {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+        {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+        <Wrench className="h-3 w-3 shrink-0 opacity-60" />
+        <span className="font-mono text-[12px] font-medium">{tool.name}</span>
+        {duration && <span className="text-[11px] opacity-60">{duration}</span>}
+        {(displayInput || displayResult) && (
+          expanded
+            ? <ChevronDown className="h-3 w-3 ml-auto shrink-0 opacity-50" />
+            : <ChevronRight className="h-3 w-3 ml-auto shrink-0 opacity-50" />
+        )}
+      </button>
+
+      {/* Expanded content: input + result */}
+      {expanded && (displayInput || displayResult) && (
+        <div className="border-t border-border/30 px-3 py-2 space-y-1.5">
+          {displayInput && (
+            <div>
+              <span className="text-[10px] uppercase tracking-wider opacity-50 font-semibold">Input</span>
+              <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap break-all mt-0.5 font-mono leading-relaxed max-h-48 overflow-y-auto">
+                {displayInput}
+              </pre>
+            </div>
+          )}
+          {displayResult && (
+            <div>
+              <span className="text-[10px] uppercase tracking-wider opacity-50 font-semibold">Output</span>
+              <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap break-all mt-0.5 font-mono leading-relaxed max-h-48 overflow-y-auto">
+                {displayResult.length > 2000 ? displayResult.slice(0, 2000) + '...' : displayResult}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** Format tool input JSON into a readable summary */
+function formatToolInput(name: string, input?: string): string | null {
+  if (!input?.trim()) return null;
+
+  // Try to parse as JSON and format key fields
+  try {
+    const obj = JSON.parse(input);
+
+    // Common tool-specific formatting
+    if (name === 'Bash' && obj.command) return `$ ${obj.command}`;
+    if (name === 'Read' && obj.file_path) return obj.file_path;
+    if (name === 'Write' && obj.file_path) return `${obj.file_path}`;
+    if (name === 'Edit' && obj.file_path) return `${obj.file_path}`;
+    if (name === 'Grep' && obj.pattern) return `pattern: ${obj.pattern}${obj.path ? ` in ${obj.path}` : ''}`;
+    if (name === 'Glob' && obj.pattern) return obj.pattern;
+    if (name === 'WebSearch' && obj.query) return obj.query;
+    if (name === 'WebFetch' && obj.url) return obj.url;
+
+    // Generic: pretty print compact JSON
+    const compact = Object.entries(obj)
+      .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .join('\n');
+    return compact;
+  } catch {
+    return input.trim();
+  }
 }
 
 function formatDuration(durationMs?: number): string | null {

@@ -600,6 +600,9 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
 
       let lastActivityAt = Date.now();
       let toolInProgress = false;
+      let currentBlockType: 'text' | 'thinking' | 'tool_use' | 'tool_result' | null = null;
+      let currentToolResultId: string | null = null;
+      let currentToolResultContent = '';
 
       // Stall detector: abort if no data received for STREAM_STALL_MS
       // When tool/sub-agent is in progress, check if the V2 session process is still alive instead
@@ -684,16 +687,54 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
           }
 
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as any).event);
+            const rawEvent = (sdkMsg as any).event;
+            // Track content block transitions
+            if (rawEvent.type === 'content_block_start') {
+              const blockType = rawEvent.content_block?.type;
+              if (blockType === 'tool_result') {
+                currentBlockType = 'tool_result';
+                currentToolResultId = rawEvent.content_block.tool_use_id || null;
+                const initialContent = typeof rawEvent.content_block.content === 'string'
+                  ? rawEvent.content_block.content : '';
+                currentToolResultContent = initialContent;
+                if (initialContent) {
+                  wsSend(JSON.stringify({
+                    type: 'chat.tool_result',
+                    sessionId,
+                    toolUseId: currentToolResultId,
+                    content: initialContent,
+                  }));
+                }
+              } else if (blockType) {
+                currentBlockType = blockType;
+                currentToolResultId = null;
+              }
+            } else if (rawEvent.type === 'content_block_stop') {
+              currentBlockType = null;
+              currentToolResultId = null;
+            }
+
+            const delta = this.extractDeltaText(rawEvent);
             if (delta) {
               if (delta.type === 'text') {
-                fullContent += delta.content;
-                wsSend(JSON.stringify({
-                  type: 'chat.delta',
-                  sessionId,
-                  content: delta.content,
-                  deltaType: 'text',
-                }));
+                // Check if this text is inside a tool_result block
+                if (currentBlockType === 'tool_result') {
+                  currentToolResultContent += delta.content;
+                  wsSend(JSON.stringify({
+                    type: 'chat.tool_result',
+                    sessionId,
+                    toolUseId: currentToolResultId,
+                    content: delta.content,
+                  }));
+                } else {
+                  fullContent += delta.content;
+                  wsSend(JSON.stringify({
+                    type: 'chat.delta',
+                    sessionId,
+                    content: delta.content,
+                    deltaType: 'text',
+                  }));
+                }
               } else if (delta.type === 'thinking') {
                 currentThinking += delta.content;
                 wsSend(JSON.stringify({
@@ -737,6 +778,16 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
                     content: delta.content,
                   }));
                 }
+              } else if (delta.type === 'tool_result') {
+                // Initial content from content_block_start
+                toolInProgress = true;
+                currentToolResultContent += delta.content;
+                wsSend(JSON.stringify({
+                  type: 'chat.tool_result',
+                  sessionId,
+                  toolUseId: delta.id,
+                  content: delta.content,
+                }));
               }
             }
             break;
@@ -1164,7 +1215,7 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
       .join('');
   }
 
-  private extractDeltaText(event: any): { type: 'text' | 'thinking' | 'tool_use'; content: string; name?: string; id?: string } | null {
+  private extractDeltaText(event: any): { type: 'text' | 'thinking' | 'tool_use' | 'tool_result'; content: string; name?: string; id?: string } | null {
     if (event.type === 'content_block_delta') {
       if (event.delta?.type === 'text_delta') {
         return { type: 'text', content: event.delta.text };
@@ -1183,6 +1234,25 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
         name: event.content_block.name,
         id: event.content_block.id,
       };
+    }
+    // Tool result start
+    if (event.type === 'content_block_start' && event.content_block?.type === 'tool_result') {
+      const toolUseId = event.content_block.tool_use_id;
+      const initialContent = typeof event.content_block.content === 'string'
+        ? event.content_block.content
+        : '';
+      return {
+        type: 'tool_result',
+        content: initialContent,
+        id: toolUseId,
+      };
+    }
+    // Tool result text delta (when content is streamed)
+    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      // This is already handled by text_delta above, but tool_result deltas
+      // also use text_delta type. We need context to distinguish.
+      // Since tool_result is always preceded by a tool_result start,
+      // we track the current block type in the caller instead.
     }
     return null;
   }

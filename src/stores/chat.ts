@@ -47,6 +47,7 @@ interface StreamingToolBlock {
   id: string;
   name: string;
   input: string;
+  result: string;
   status: 'running' | 'completed';
   elapsedSeconds?: number;
 }
@@ -465,6 +466,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             id: toolId,
             name: toolName,
             input: '',
+            result: '',
             status: 'running' as const,
           }],
         }));
@@ -477,6 +479,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((s) => ({
           streamingBlocks: s.streamingBlocks.map(b =>
             b.type === 'tool_use' && b.id === toolId ? { ...b, input: b.input + content } : b
+          ),
+        }));
+      });
+
+      const unsubToolResult = wrapHandler(client, 'chat.tool_result', (data) => {
+        if (data.sessionId !== currentSessionId) return;
+        const toolUseId = String(data.toolUseId || '');
+        const content = String(data.content || '');
+        set((s) => ({
+          streamingBlocks: s.streamingBlocks.map(b =>
+            b.type === 'tool_use' && b.id === toolUseId ? { ...b, result: b.result + content } : b
           ),
         }));
       });
@@ -554,6 +567,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubDelta();
         unsubToolStart();
         unsubToolDelta();
+        unsubToolResult();
         unsubToolProgress();
         unsubToolEnd();
         unsubDone();
