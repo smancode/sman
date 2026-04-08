@@ -64,7 +64,7 @@ export function MainLayout() {
         {/* 右侧区域：Titlebar + 主内容 */}
         <div className="flex flex-col flex-1 ml-64 overflow-hidden">
           <Titlebar />
-          <main className="flex-1 overflow-hidden bg-transparent">
+          <main className="flex-1 overflow-y-auto bg-transparent">
             <Outlet />
           </main>
         </div>
