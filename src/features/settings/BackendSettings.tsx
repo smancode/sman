@@ -2,28 +2,36 @@ import { useState, useEffect } from 'react';
 import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from '@/stores/chat';
+import { useCronStore } from '@/stores/cron';
 
-const STORAGE_KEY_URL = 'sman-backend-url';
 const STORAGE_KEY_SERVERS = 'sman-servers';
+const STORAGE_KEY_SELECTED = 'sman-selected-server';
 
 interface ServerEntry {
   name: string;
   url: string;
-  token?: string;
+  token: string;
 }
 
-const LOCALHOST_SERVER: ServerEntry = { name: 'localhost', url: '' };
+const LOCALHOST_NAME = 'localhost';
 
 function loadServers(): ServerEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SERVERS);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const list: ServerEntry[] = JSON.parse(raw);
+      if (list.some(s => s.name === LOCALHOST_NAME)) return list;
+    }
   } catch { /* ignore */ }
-  return [LOCALHOST_SERVER];
+  return [{ name: LOCALHOST_NAME, url: '', token: '' }];
 }
 
 function saveServers(servers: ServerEntry[]) {
   localStorage.setItem(STORAGE_KEY_SERVERS, JSON.stringify(servers));
+}
+
+function loadSelectedName(): string {
+  return localStorage.getItem(STORAGE_KEY_SELECTED) || LOCALHOST_NAME;
 }
 
 function toWsUrl(input: string): string {
@@ -33,55 +41,91 @@ function toWsUrl(input: string): string {
   return `ws://${trimmed}/ws`;
 }
 
+/** 连接后端并刷新所有数据 */
+function connectAndRefresh() {
+  const ws = useWsConnection.getState();
+  ws.disconnect();
+  setTimeout(() => {
+    ws.connect();
+    useChatStore.getState().loadSessions();
+    useCronStore.getState().fetchTasks();
+  }, 300);
+}
+
 export function BackendSettings() {
-  const { status, connect, disconnect, client } = useWsConnection();
+  const { status, connect, disconnect } = useWsConnection();
   const [servers, setServers] = useState<ServerEntry[]>(loadServers);
-  const [selectedName, setSelectedName] = useState(() => {
-    const url = localStorage.getItem(STORAGE_KEY_URL) || '';
-    if (!url) return LOCALHOST_SERVER.name;
-    const s = loadServers().find(s => s.url === url);
-    return s ? s.name : LOCALHOST_SERVER.name;
-  });
+  const [selectedName, setSelectedName] = useState(loadSelectedName);
 
-  // Token: 本机从 localStorage 读（initToken 写入的），远程从 server entry 读
   const currentServer = servers.find(s => s.name === selectedName);
-  const [token, setToken] = useState(() => {
-    if (currentServer?.token) return currentServer.token;
-    return localStorage.getItem('sman-backend-token') || '';
-  });
 
-  // 添加新服务器
+  // Token editor (remote servers only; localhost auto-fetches)
+  const [token, setToken] = useState(() => currentServer?.token || '');
   const [newAddr, setNewAddr] = useState('');
   const [newToken, setNewToken] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
 
+  const isLocal = !currentServer?.url;
+
+  // On mount: sync localhost token into server entry (App.tsx already handles init + connect)
   useEffect(() => {
-    // 本机模式自动获取 token
-    if (!currentServer?.url) {
-      useWsConnection.getState().initToken();
+    if (isLocal) {
+      const localToken = localStorage.getItem('sman-backend-token') || '';
+      if (localToken) {
+        updateServerToken(LOCALHOST_NAME, localToken);
+        setToken(localToken);
+      }
     }
   }, []);
+
+  /** Update token for a server entry in both state and localStorage */
+  function updateServerToken(name: string, t: string) {
+    setServers(prev => {
+      const updated = prev.map(s => s.name === name ? { ...s, token: t } : s);
+      saveServers(updated);
+      return updated;
+    });
+  }
+
+  /** Apply server selection: write to localStorage + recreate client */
+  async function applyServer(server: ServerEntry) {
+    let effectiveToken = server.token;
+
+    // localhost: always fetch fresh token from local backend
+    if (!server.url) {
+      await useWsConnection.getState().initToken();
+      effectiveToken = localStorage.getItem('sman-backend-token') || '';
+      updateServerToken(LOCALHOST_NAME, effectiveToken);
+      setToken(effectiveToken);
+    } else {
+      setToken(effectiveToken);
+    }
+
+    // Sync all auth state
+    localStorage.setItem('sman-backend-url', server.url);
+    localStorage.setItem('sman-backend-token', effectiveToken);
+    localStorage.setItem(STORAGE_KEY_SELECTED, server.name);
+    setAuthToken(effectiveToken);
+    setHttpBaseUrl(server.url || '');
+    recreateClient();
+
+    connectAndRefresh();
+  }
 
   const handleSelect = (name: string) => {
     setSelectedName(name);
     const server = servers.find(s => s.name === name);
     if (!server) return;
-    const t = server.url ? (server.token || '') : (localStorage.getItem('sman-backend-token') || '');
-    setToken(t);
+    applyServer(server);
+  };
 
-    // 保存到 localStorage + 立即重连
-    localStorage.setItem(STORAGE_KEY_URL, server.url);
-    localStorage.setItem('sman-backend-token', t);
-    setAuthToken(t);
-    setHttpBaseUrl(server.url || '');
-    recreateClient();
+  const handleSaveAndConnect = () => {
+    if (!currentServer) return;
 
-    disconnect();
-    setTimeout(() => {
-      connect();
-      useChatStore.getState().loadSessions();
-    }, 300);
+    // Save edited token back to server entry
+    updateServerToken(currentServer.name, token);
+    applyServer({ ...currentServer, token });
   };
 
   const handleTestAndAdd = async () => {
@@ -96,27 +140,16 @@ export function BackendSettings() {
       if (ok) {
         const name = newAddr.trim().replace(/\/$/, '');
         const entry: ServerEntry = { name, url: wsUrl, token: newToken };
-        const updated = servers.filter(s => s.name !== name);
-        updated.push(entry);
+        const updated = [...servers.filter(s => s.name !== name), entry];
         setServers(updated);
         saveServers(updated);
         setSelectedName(name);
         setToken(newToken);
-        localStorage.setItem(STORAGE_KEY_URL, wsUrl);
-        localStorage.setItem('sman-backend-token', newToken);
-        setAuthToken(newToken);
-        setHttpBaseUrl(wsUrl);
         setTestResult('ok');
         setNewAddr('');
         setNewToken('');
 
-        // 自动连接新添加的服务器
-        recreateClient();
-        disconnect();
-        setTimeout(() => {
-          connect();
-          useChatStore.getState().loadSessions();
-        }, 300);
+        applyServer(entry);
       } else {
         setTestResult('fail');
       }
@@ -127,39 +160,13 @@ export function BackendSettings() {
     }
   };
 
-  const handleSaveAndConnect = () => {
-    const server = servers.find(s => s.name === selectedName);
-    if (!server) return;
-
-    // 保存 token 到 server entry
-    const updated = servers.map(s =>
-      s.name === selectedName ? { ...s, token } : s
-    );
-    setServers(updated);
-    saveServers(updated);
-
-    // 写入 localStorage 供 WsClient 读取
-    localStorage.setItem(STORAGE_KEY_URL, server.url);
-    localStorage.setItem('sman-backend-token', token);
-    setAuthToken(token);
-
-    // Recreate WsClient (reads URL + token from localStorage)
-    recreateClient();
-
-    disconnect();
-    setTimeout(() => connect(), 300);
-  };
-
   const handleRemoveServer = (name: string) => {
-    if (name === LOCALHOST_SERVER.name) return;
+    if (name === LOCALHOST_NAME) return;
     const updated = servers.filter(s => s.name !== name);
     setServers(updated);
     saveServers(updated);
     if (selectedName === name) {
-      setSelectedName(LOCALHOST_SERVER.name);
-      localStorage.setItem(STORAGE_KEY_URL, '');
-      const localToken = localStorage.getItem('sman-backend-token') || '';
-      setToken(localToken);
+      handleSelect(LOCALHOST_NAME);
     }
   };
 
@@ -170,8 +177,6 @@ export function BackendSettings() {
     auth_failed: '认证失败',
   };
 
-  const isLocal = !currentServer?.url;
-
   return (
     <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
       <div className="flex flex-col space-y-1.5 p-6">
@@ -181,7 +186,7 @@ export function BackendSettings() {
         </p>
       </div>
       <div className="p-6 pt-0 space-y-4">
-        {/* 服务器选择 */}
+        {/* Server selector */}
         <div className="space-y-2">
           <label className="text-sm font-medium leading-none">后端服务器</label>
           <select
@@ -197,7 +202,7 @@ export function BackendSettings() {
           </select>
         </div>
 
-        {/* 当前服务器信息 */}
+        {/* Remote server info + delete */}
         {currentServer && currentServer.url && (
           <div className="text-xs text-muted-foreground">
             {currentServer.url}
@@ -210,19 +215,20 @@ export function BackendSettings() {
           </div>
         )}
 
-        {/* Token */}
+        {/* Token (read-only for localhost) */}
         <div className="space-y-2">
           <label className="text-sm font-medium leading-none">认证 Token</label>
           <input
             type="password"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder={isLocal ? '本机自动获取' : '输入远程服务器 Token'}
+            readOnly={isLocal}
           />
         </div>
 
-        {/* 操作按钮 */}
+        {/* Connect button */}
         <div className="flex items-center gap-2">
           <button
             className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground shadow hover:bg-primary/90 h-8 px-3"
@@ -235,21 +241,21 @@ export function BackendSettings() {
           </span>
         </div>
 
-        {/* 添加新服务器 */}
+        {/* Add remote server */}
         <div className="border-t pt-4 space-y-2">
           <label className="text-sm font-medium leading-none">添加远程服务器</label>
           <input
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newAddr}
             onChange={(e) => { setNewAddr(e.target.value); setTestResult(null); }}
-            placeholder=""
+            placeholder="例: 192.168.1.100:5880"
           />
           <input
             type="password"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newToken}
             onChange={(e) => { setNewToken(e.target.value); setTestResult(null); }}
-            placeholder=""
+            placeholder="Token"
           />
           <button
             className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent h-8 px-3 disabled:opacity-50"
@@ -270,7 +276,7 @@ export function BackendSettings() {
   );
 }
 
-/** 测试 WebSocket 连接是否可达 */
+/** Test if a WebSocket endpoint is reachable */
 function testConnection(wsUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {

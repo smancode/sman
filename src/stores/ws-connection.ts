@@ -78,6 +78,7 @@ export const useWsConnection = create<WsConnectionState>((set, get) => ({
         const c = get().client;
         if (c) c.token = data.token;
         setAuthToken(data.token);
+        localStorage.setItem('sman-backend-token', data.token);
         return;
       }
     } catch {

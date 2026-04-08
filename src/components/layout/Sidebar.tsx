@@ -26,9 +26,9 @@ export function Sidebar() {
     >
       {/* macOS traffic lights 占位 / Windows 标题栏对齐 */}
       {isMac ? (
-        <div className="shrink-0 h-10" />
+        <div className="shrink-0 h-8" />
       ) : window.sman ? (
-        <div className="shrink-0 h-6" />
+        <div className="shrink-0 h-3" />
       ) : null}
 
       {/* Session Tree */}
