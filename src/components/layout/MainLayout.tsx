@@ -24,6 +24,7 @@ export function MainLayout() {
   const messages = useChatStore((s) => s.messages);
   const hasMessages = messages.length > 0;
   const inChat = location.pathname === '/chat';
+  const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
 
   useEffect(() => {
@@ -50,7 +51,7 @@ export function MainLayout() {
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
-        style={{ opacity: (inChat && hasMessages) ? 0.33 : 1 }}
+        style={{ opacity: isWelcome ? 1 : 0.15 }}
       >
         {isDark ? <NebulaFlow /> : <CandyBlobs />}
       </div>
