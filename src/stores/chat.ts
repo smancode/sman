@@ -333,19 +333,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     try {
+      // ── Delta batching: accumulate tokens and flush every 50ms ──
+      // This avoids per-token React re-renders, the #1 cause of "feels slow".
+      let pendingText = '';
+      let pendingThinking = '';
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const flushDeltas = () => {
+        flushTimer = null;
+        if (!pendingText && !pendingThinking) return;
+        const textBatch = pendingText;
+        const thinkBatch = pendingThinking;
+        pendingText = '';
+        pendingThinking = '';
+        set((s) => ({
+          streamingText: s.streamingText + textBatch,
+          streamingThinking: s.streamingThinking + thinkBatch,
+        }));
+      };
+
+      const scheduleFlush = () => {
+        if (!flushTimer) {
+          flushTimer = setTimeout(flushDeltas, 50);
+        }
+      };
+
       // Set up streaming handlers
       const unsubDelta = wrapHandler(client, 'chat.delta', (data) => {
         if (data.sessionId !== currentSessionId) return;
         const deltaType = String(data.deltaType || 'text');
         if (deltaType === 'thinking') {
-          set((s) => ({
-            streamingThinking: s.streamingThinking + String(data.content || ''),
-          }));
+          pendingThinking += String(data.content || '');
         } else {
-          set((s) => ({
-            streamingText: s.streamingText + String(data.content || ''),
-          }));
+          pendingText += String(data.content || '');
         }
+        scheduleFlush();
       });
 
       const unsubToolStart = wrapHandler(client, 'chat.tool_start', (data) => {
@@ -396,6 +418,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
         if (data.sessionId !== currentSessionId) return;
+        // Flush any remaining batched deltas before finalizing
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        flushDeltas();
         cleanup();
 
         const st = get();
@@ -448,6 +473,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       const unsubErr = wrapHandler(client, 'chat.error', (_data) => {
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        pendingText = '';
+        pendingThinking = '';
         cleanup();
         set({
           error: String(_data.error || 'Unknown error'),
@@ -459,6 +487,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       const cleanup = () => {
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         unsubDelta();
         unsubToolStart();
         unsubToolDelta();

@@ -6,14 +6,14 @@
  */
 import { useState, useCallback, useEffect, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Streamdown } from 'streamdown';
+import 'streamdown/styles.css';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { RawMessage, AttachedFileMeta } from '@/types/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
-import { highlightCode, getLangDisplayName, type HighlightResult } from './highlighter';
+import { useCodePlugin } from '@/lib/streamdown-plugins';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -336,139 +336,48 @@ function MessageBubble({
   isUser: boolean;
   isStreaming: boolean;
 }) {
+  const codePlugin = useCodePlugin();
+
+  if (isUser) {
+    return (
+      <div
+        className={cn(
+          'relative rounded-xl px-4 py-3',
+          'bg-[hsl(var(--user-bubble-bg))] text-[hsl(var(--user-bubble-fg))]',
+        )}
+      >
+        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
+      </div>
+    );
+  }
+
+  // Assistant message: use Streamdown for both streaming and static rendering
   return (
     <div
       className={cn(
-        'relative rounded-xl px-4 py-3',
-        !isUser && 'w-full',
-        isUser
-          ? 'bg-[hsl(var(--user-bubble-bg))] text-[hsl(var(--user-bubble-fg))]'
-          : 'bg-muted text-foreground',
+        'relative rounded-xl px-4 py-3 w-full',
+        'bg-muted text-foreground',
       )}
     >
-      {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
-      ) : (
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words break-all">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                // 检测是否为行内代码：没有 className 且内容不包含换行符
-                const codeContent = String(children).replace(/\n$/, '');
-                const hasNewline = codeContent.includes('\n');
-                const isInline = !className && !hasNewline;
-
-                if (isInline) {
-                  return (
-                    <code className="bg-background/60 px-1.5 py-0.5 rounded text-sm font-mono break-words break-all" {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-
-                // Use CodeBlockWithHighlight for syntax highlighting
-                return (
-                  <CodeBlockWithHighlight
-                    code={codeContent}
-                    lang={match?.[1] || 'text'}
-                  />
-                );
-              },
-              a({ href, children }) {
-                return (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
-                    {children}
-                  </a>
-                );
-              },
-            }}
-          >
-            {text}
-          </ReactMarkdown>
-          {isStreaming && (
-            <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-0.5" />
-          )}
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-/**
- * Code block component with async syntax highlighting, language label, and line numbers
- */
-function CodeBlockWithHighlight({
-  code,
-  lang,
-}: {
-  code: string;
-  lang: string;
-}) {
-  const [highlighted, setHighlighted] = useState<HighlightResult | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    highlightCode(code, lang).then(setHighlighted).catch(() => setHighlighted(null));
-  }, [code, lang]);
-
-  const copyCode = useCallback(() => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [code]);
-
-  const displayLang = getLangDisplayName(lang);
-  const lineCount = highlighted?.lineCount || code.split('\n').length;
-
-  return (
-    <div className="code-block-wrapper">
-      {/* Header with language label and copy button */}
-      <div className="code-block-header">
-        <span className="code-block-lang">{displayLang}</span>
-        <button
-          className="code-block-copy-btn"
-          onClick={copyCode}
-          title={copied ? '已复制' : '复制代码'}
+      <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all">
+        <Streamdown
+          mode={isStreaming ? 'streaming' : 'static'}
+          components={{
+            a: ({ href, children }: Record<string, unknown>) => (
+              <a href={href as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
+                {children as React.ReactNode}
+              </a>
+            ),
+          } as any}
+          controls={{ code: true }}
+          plugins={codePlugin ? { code: codePlugin } : undefined}
         >
-          {copied ? (
-            <>
-              <Check className="h-3 w-3 text-green-500" />
-              <span>已复制</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3 w-3" />
-              <span>复制</span>
-            </>
-          )}
-        </button>
+          {text}
+        </Streamdown>
       </div>
-
-      {/* Code content with line numbers */}
-      <div className="code-block-content">
-        <div className="code-block-with-line-numbers">
-          {/* Line numbers */}
-          <div className="line-numbers">
-            {Array.from({ length: lineCount }, (_, i) => (
-              <span key={i} className="line-number">
-                {i + 1}
-              </span>
-            ))}
-          </div>
-
-          {/* Code */}
-          <div className="code-content">
-            {highlighted ? (
-              <code dangerouslySetInnerHTML={{ __html: highlighted.html }} />
-            ) : (
-              <code className="shiki-fallback">{code}</code>
-            )}
-          </div>
-        </div>
-      </div>
+      {isStreaming && (
+        <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-0.5" />
+      )}
     </div>
   );
 }
@@ -477,6 +386,7 @@ function CodeBlockWithHighlight({
 
 function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
+  const codePlugin = useCodePlugin();
 
   return (
     <div className="w-full rounded-xl border border-border bg-muted/50 text-[14px]">
@@ -489,8 +399,14 @@ function ThinkingBlock({ content }: { content: string }) {
       </button>
       {expanded && (
         <div className="px-3 pb-3 text-muted-foreground">
-          <div className="prose prose-sm dark:prose-invert max-w-none opacity-75">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none opacity-75">
+            <Streamdown
+              mode="static"
+              controls={{ code: true }}
+              plugins={codePlugin ? { code: codePlugin } : undefined}
+            >
+              {content}
+            </Streamdown>
           </div>
         </div>
       )}
