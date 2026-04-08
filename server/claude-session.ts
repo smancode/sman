@@ -445,6 +445,29 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
 
   // ── Public API ──
 
+  /**
+   * Preheat a session by creating the V2 process ahead of time.
+   * Called when user starts typing (before actually sending a message).
+   * Fire-and-forget: errors are logged but not thrown.
+   */
+  async preheatSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    // Already has an active V2 session — nothing to do
+    if (this.v2Sessions.has(sessionId)) {
+      return;
+    }
+
+    this.log.info(`Preheating V2 session for ${sessionId}...`);
+    try {
+      await this.getOrCreateV2Session(sessionId);
+      this.log.info(`V2 session preheated for ${sessionId}`);
+    } catch (err) {
+      this.log.warn(`Failed to preheat session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   createSession(workspace: string): string {
     if (!fs.existsSync(workspace)) {
       throw new Error(`Workspace does not exist: ${workspace}`);

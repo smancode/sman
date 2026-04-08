@@ -22,7 +22,7 @@ describe('UserProfileManager', () => {
     it('should create empty template when profile file does not exist', () => {
       const profile = manager.loadProfile();
       expect(profile).toContain('# 用户画像');
-      expect(profile).toContain('## 助手身份');
+      expect(profile).toContain('## 我的身份');
       expect(profile).toContain('## 用户身份');
       expect(profile).toContain('## 技术偏好');
       expect(profile).toContain('## 常用任务');

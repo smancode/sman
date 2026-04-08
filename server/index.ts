@@ -488,6 +488,12 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'session.preheat': {
+          if (!msg.sessionId) throw new Error('Missing sessionId');
+          sessionManager.preheatSession(msg.sessionId).catch(() => {});
+          break;
+        }
+
         case 'chat.send': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');

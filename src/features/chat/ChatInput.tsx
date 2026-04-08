@@ -176,7 +176,15 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
+    const wasEmpty = input.length === 0;
     setInput(value);
+
+    // Preheat V2 session when input goes from empty to non-empty.
+    // Covers all cases: new session, switch session, send then continue, next day return.
+    // Backend deduplicates: if V2 process already exists, it's a no-op.
+    if (wasEmpty && value.length > 0 && currentSessionId) {
+      useChatStore.getState().preheatSession();
+    }
 
     // Check if user just typed "/" at the beginning or after a space
     const cursorPosition = e.target.selectionStart;

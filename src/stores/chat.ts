@@ -61,6 +61,7 @@ interface ChatState {
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
   sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string }>) => Promise<void>;
+  preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
   toggleThinking: () => void;
@@ -249,6 +250,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Send to backend
     client.send({ type: 'session.updateLabel', sessionId, label });
+  },
+
+  preheatSession: () => {
+    const client = getWsClient();
+    const { currentSessionId, sending } = get();
+    if (!client || !currentSessionId || sending) return;
+    client.send({ type: 'session.preheat', sessionId: currentSessionId });
   },
 
   sendMessage: async (content, media) => {
