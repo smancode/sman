@@ -31,6 +31,25 @@ export class ChatbotSessionManager {
 
   // ── Workspace helpers (unified with desktop sessions) ──
 
+  /** Build session label for chatbot platforms */
+  private buildLabel(platform: string, userKey: string, workspacePath: string): string {
+    const projectName = path.basename(workspacePath);
+    switch (platform) {
+      case 'wecom': {
+        const userId = userKey.split(':').slice(1).join(':');
+        return `WeCom: ${userId} - ${projectName}`;
+      }
+      case 'feishu': {
+        const userId = userKey.split(':').slice(1).join(':');
+        return `Feishu: ${userId} - ${projectName}`;
+      }
+      // Weixin: no bot name from API, show generic label
+      case 'weixin':
+      default:
+        return `Weixin:bot - ${projectName}`;
+    }
+  }
+
   /** Expand ~ to home directory */
   private expandPath(p: string): string {
     if (p.startsWith('~/')) {
@@ -101,17 +120,12 @@ export class ChatbotSessionManager {
     const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
     this.sessionManager.createSessionWithId(workspacePath, sessionId, false);
 
-    const platformPrefix = platform === 'wecom' ? 'WeCom' : platform === 'feishu' ? 'Feishu' : 'Weixin';
-    const userId = userKey.split(':').slice(1).join(':');
-    this.sessionManager.updateSessionLabel(
-      sessionId,
-      `${platformPrefix}: ${userId} - ${path.basename(workspacePath)}`,
-    );
+    const label = this.buildLabel(platform, userKey, workspacePath);
+    this.sessionManager.updateSessionLabel(sessionId, label);
 
     this.store.setSession(userKey, workspacePath, sessionId);
 
     // Notify frontend to refresh sidebar
-    const label = `${platformPrefix}: ${userId} - ${path.basename(workspacePath)}`;
     this.onSessionCreated?.(sessionId, label);
   }
 
