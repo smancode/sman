@@ -168,16 +168,18 @@ export async function sendMessage(opts: {
   token: string;
   toUserId: string;
   text: string;
+  clientId?: string;
+  messageState?: number;
   contextToken?: string;
 }): Promise<void> {
-  const clientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const clientId = opts.clientId || `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const body: SendMessageReq = {
     msg: {
       from_user_id: '',
       to_user_id: opts.toUserId,
       client_id: clientId,
       message_type: 2, // BOT
-      message_state: 2, // FINISH
+      message_state: opts.messageState ?? 2, // FINISH
       item_list: [
         {
           type: 1, // TEXT

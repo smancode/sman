@@ -7,9 +7,16 @@ import os from 'os';
 
 const mockCreateSessionWithId = vi.fn();
 const mockSendMessageForChatbot = vi.fn();
+const mockRestoreSession = vi.fn();
+const mockAbort = vi.fn();
+const mockUpdateSessionLabel = vi.fn();
 const mockSessionManager = {
   createSessionWithId: mockCreateSessionWithId,
   sendMessageForChatbot: mockSendMessageForChatbot,
+  restoreSession: mockRestoreSession,
+  abort: mockAbort,
+  updateSessionLabel: mockUpdateSessionLabel,
+  listSessions: vi.fn().mockReturnValue([]),
 } as any;
 
 describe('ChatbotSessionManager', () => {
@@ -25,6 +32,7 @@ describe('ChatbotSessionManager', () => {
     store = new ChatbotStore(dbPath);
     manager = new ChatbotSessionManager(homeDir, mockSessionManager, store);
     vi.clearAllMocks();
+    mockSessionManager.listSessions.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -47,28 +55,28 @@ describe('ChatbotSessionManager', () => {
   }
 
   describe('command routing', () => {
-    it('should handle /help command', async () => {
+    it('should handle //help command', async () => {
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/help',
+        content: '//help',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
       }, sender);
 
-      expect(responses[0]).toContain('/cd');
-      expect(responses[0]).toContain('/pwd');
-      expect(responses[0]).toContain('/workspaces');
+      expect(responses[0]).toContain('//cd');
+      expect(responses[0]).toContain('//pwd');
+      expect(responses[0]).toContain('//workspaces');
     });
 
-    it('should handle /pwd without workspace', async () => {
+    it('should handle //pwd without workspace', async () => {
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/pwd',
+        content: '//pwd',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -77,14 +85,14 @@ describe('ChatbotSessionManager', () => {
       expect(responses[0]).toContain('未设置');
     });
 
-    it('should handle /pwd with workspace', async () => {
+    it('should handle //pwd with workspace', async () => {
       store.addWorkspace('/data/projectA', 'projectA');
       store.setUserState('wecom:user1', '/data/projectA');
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/pwd',
+        content: '//pwd',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -93,12 +101,12 @@ describe('ChatbotSessionManager', () => {
       expect(responses[0]).toContain('/data/projectA');
     });
 
-    it('should handle /workspaces when empty', async () => {
+    it('should handle //workspaces when empty', async () => {
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/workspaces',
+        content: '//workspaces',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -107,14 +115,19 @@ describe('ChatbotSessionManager', () => {
       expect(responses[0]).toContain('暂无');
     });
 
-    it('should handle /workspaces with registered workspaces', async () => {
+    it('should handle //workspaces with registered workspaces', async () => {
       store.addWorkspace('/data/projectA', 'projectA');
       store.addWorkspace('/data/projectB', 'projectB');
+      // Manager gets workspaces from desktop sessions, not store
+      mockSessionManager.listSessions.mockReturnValue([
+        { id: 's1', workspace: '/data/projectA' },
+        { id: 's2', workspace: '/data/projectB' },
+      ]);
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/workspaces',
+        content: '//workspaces',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -124,43 +137,12 @@ describe('ChatbotSessionManager', () => {
       expect(responses[0]).toContain('projectB');
     });
 
-    it('should handle /add with valid path', async () => {
-      const testDir = path.join(homeDir, 'new-project');
-      fs.mkdirSync(testDir, { recursive: true });
+    it('should handle //status', async () => {
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: `/add ${testDir}`,
-        requestId: 'req-1',
-        chatType: 'single',
-        chatId: 'chat-1',
-      }, sender);
-
-      expect(responses[0]).toContain('已注册');
-      expect(store.isWorkspaceRegistered(testDir)).toBe(true);
-    });
-
-    it('should handle /add with non-existent path', async () => {
-      const { sender, responses } = createSender();
-      await manager.handleMessage({
-        platform: 'wecom',
-        userId: 'user1',
-        content: '/add /non/existent/path',
-        requestId: 'req-1',
-        chatType: 'single',
-        chatId: 'chat-1',
-      }, sender);
-
-      expect(responses[0]).toContain('不存在');
-    });
-
-    it('should handle /status', async () => {
-      const { sender, responses } = createSender();
-      await manager.handleMessage({
-        platform: 'wecom',
-        userId: 'user1',
-        content: '/status',
+        content: '//status',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -170,17 +152,21 @@ describe('ChatbotSessionManager', () => {
     });
   });
 
-  describe('/cd command', () => {
+  describe('//cd command', () => {
     it('should switch to registered workspace', async () => {
       const testDir = path.join(homeDir, 'projectA');
       fs.mkdirSync(testDir, { recursive: true });
       store.addWorkspace(testDir, 'projectA');
+      // Manager resolves workspace from desktop sessions
+      mockSessionManager.listSessions.mockReturnValue([
+        { id: 's1', workspace: testDir },
+      ]);
 
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: `/cd projectA`,
+        content: '//cd projectA',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -188,7 +174,7 @@ describe('ChatbotSessionManager', () => {
 
       expect(responses[0]).toContain('projectA');
       expect(responses[0]).toContain(testDir);
-      expect(mockCreateSessionWithId).toHaveBeenCalledWith(testDir, expect.any(String));
+      expect(mockCreateSessionWithId).toHaveBeenCalledWith(testDir, expect.any(String), false);
     });
 
     it('should reject unregistered workspace', async () => {
@@ -196,22 +182,26 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/cd unknown-project',
+        content: '//cd unknown-project',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
       }, sender);
 
-      expect(responses[0]).toContain('未注册');
+      expect(responses[0]).toContain('未找到');
     });
 
     it('should reject non-existent path', async () => {
       store.addWorkspace('/non/existent/path', 'path');
+      // resolveWorkspace needs desktop session to find the workspace
+      mockSessionManager.listSessions.mockReturnValue([
+        { id: 's1', workspace: '/non/existent/path' },
+      ]);
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/cd path',
+        content: '//cd path',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -220,12 +210,12 @@ describe('ChatbotSessionManager', () => {
       expect(responses[0]).toContain('不存在');
     });
 
-    it('should require argument for /cd', async () => {
+    it('should require argument for //cd', async () => {
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
-        content: '/cd',
+        content: '//cd',
         requestId: 'req-1',
         chatType: 'single',
         chatId: 'chat-1',
@@ -247,7 +237,8 @@ describe('ChatbotSessionManager', () => {
         chatId: 'chat-1',
       }, sender);
 
-      expect(responses[0]).toContain('/cd');
+      // No desktop workspaces → tells user to open one in desktop
+      expect(responses[0]).toContain('桌面端');
     });
 
     it('should forward chat to session manager', async () => {
@@ -275,6 +266,7 @@ describe('ChatbotSessionManager', () => {
         expect.any(AbortController),
         expect.any(Function),
         expect.any(Function),
+        undefined,
       );
       expect(responses[0]).toBe('Hello! How can I help?');
     });

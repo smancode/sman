@@ -23,6 +23,7 @@ const MAX_QR_REFRESH_COUNT = 3;
 const MONITOR_BACKOFF_MS = 30_000;
 const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 const MESSAGE_SPLIT_MAX_LEN = 3900;
+const STREAM_THROTTLE_MS = 3000;
 
 interface WeixinBotConfig {
   homeDir: string;
@@ -393,10 +394,15 @@ export class WeixinBotConnection {
   private createSender(userId: string): ChatResponseSender {
     const self = this;
     let accumulated = '';
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingContent = '';
+    // Shared clientId for streaming updates — same clientId lets iLink update the same message
+    const streamClientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    let streamStarted = false;
 
-    const doSend = async (text: string, label: string) => {
+    const doSend = async (text: string, label: string, messageState: number) => {
       if (!text || !self.token) return;
-      self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length}`);
+      self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length} state=${messageState}`);
       const contextToken = self.contextTokens.get(userId);
       try {
         await WeixinApi.sendMessage({
@@ -404,30 +410,51 @@ export class WeixinBotConnection {
           token: self.token,
           toUserId: userId,
           text,
+          clientId: streamClientId,
+          messageState,
           contextToken,
         });
+        streamStarted = true;
       } catch (err) {
         self.log.error(`Failed to send message to ${userId}: ${err instanceof Error ? err.message : String(err)}`);
       }
+    };
+
+    const flushStream = () => {
+      throttleTimer = null;
+      if (!pendingContent || !self.token) return;
+      doSend(pendingContent, 'stream', 1 /* GENERATING */);
     };
 
     return {
       start() {},
       sendChunk(content: string) {
         accumulated += content;
+        pendingContent = accumulated;
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(flushStream, STREAM_THROTTLE_MS);
+        }
       },
       async finish(fullContent: string) {
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
         const text = fullContent || accumulated;
         if (!text || !self.token) return;
 
-        // Split only if exceeding max length
+        // Final message with FINISH state
         const chunks = self.splitMessage(text, MESSAGE_SPLIT_MAX_LEN);
         for (const chunk of chunks) {
-          await doSend(chunk, 'finish');
+          await doSend(chunk, 'finish', 2 /* FINISH */);
         }
       },
       async error(message: string) {
-        await doSend(message, 'error');
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
+        await doSend(message, 'error', 2 /* FINISH */);
       },
     };
   }

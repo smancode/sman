@@ -8,6 +8,8 @@ interface FeishuBotConfig {
   onMessage: (msg: IncomingMessage, sender: ChatResponseSender) => Promise<void>;
 }
 
+const FEISHU_STREAM_THROTTLE_MS = 3000;
+
 export class FeishuBotConnection {
   private log: Logger;
   private client: Lark.Client;
@@ -224,46 +226,65 @@ export class FeishuBotConnection {
 
   private createSender(chatId: string): ChatResponseSender {
     let accumulated = '';
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastSentLength = 0;
     const self = this;
+
+    const sendText = async (text: string) => {
+      try {
+        await self.client.im.message.create({
+          params: { receive_id_type: 'chat_id' },
+          data: {
+            receive_id: chatId,
+            msg_type: 'text',
+            content: JSON.stringify({ text }),
+          },
+        });
+      } catch (err) {
+        self.log.error('Failed to send Feishu message', { error: err });
+      }
+    };
+
+    const flushStream = () => {
+      throttleTimer = null;
+      if (accumulated.length <= lastSentLength) return;
+      // Only send the new content since last flush
+      const newContent = accumulated.slice(lastSentLength);
+      lastSentLength = accumulated.length;
+      sendText(newContent);
+    };
 
     return {
       start() {},
       sendChunk(content: string) {
         accumulated += content;
+        if (!throttleTimer) {
+          throttleTimer = setTimeout(flushStream, FEISHU_STREAM_THROTTLE_MS);
+        }
       },
       async finish(fullContent: string) {
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
+        }
         const text = fullContent || accumulated;
         if (!text) return;
 
-        const chunks = self.splitMessage(text, 3900);
-        for (const chunk of chunks) {
-          try {
-            await self.client.im.message.create({
-              params: { receive_id_type: 'chat_id' },
-              data: {
-                receive_id: chatId,
-                msg_type: 'text',
-                content: JSON.stringify({ text: chunk }),
-              },
-            });
-          } catch (err) {
-            self.log.error('Failed to send Feishu message', { error: err });
+        // Send only the remaining unsent content
+        const remaining = text.slice(lastSentLength);
+        if (remaining) {
+          const chunks = self.splitMessage(remaining, 3900);
+          for (const chunk of chunks) {
+            await sendText(chunk);
           }
         }
       },
       async error(message: string) {
-        try {
-          await self.client.im.message.create({
-            params: { receive_id_type: 'chat_id' },
-            data: {
-              receive_id: chatId,
-              msg_type: 'text',
-              content: JSON.stringify({ text: message }),
-            },
-          });
-        } catch (err) {
-          self.log.error('Failed to send Feishu error message', { error: err });
+        if (throttleTimer) {
+          clearTimeout(throttleTimer);
+          throttleTimer = null;
         }
+        await sendText(message);
       },
     };
   }

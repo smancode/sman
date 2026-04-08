@@ -16,7 +16,7 @@ const RECONNECT_MAX_ATTEMPTS = 100;
 const RECONNECT_BASE_DELAY_MS = 1000;
 // WeCom rate limit: 30 messages/min per conversation.
 // Throttle stream updates to avoid hitting the limit.
-const STREAM_THROTTLE_MS = 2000;
+const STREAM_THROTTLE_MS = 1000;
 
 export class WeComBotConnection {
   private log: Logger;
