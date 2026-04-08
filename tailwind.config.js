@@ -4,6 +4,7 @@ module.exports = {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
+    './node_modules/streamdown/dist/*.js',
   ],
   theme: {
     container: {

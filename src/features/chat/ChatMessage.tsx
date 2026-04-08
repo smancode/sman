@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { RawMessage, AttachedFileMeta } from '@/types/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
+import { streamdownComponents } from './streamdown-components';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -362,14 +363,8 @@ function MessageBubble({
       <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all">
         <Streamdown
           mode={isStreaming ? 'streaming' : 'static'}
-          components={{
-            a: ({ href, children }: Record<string, unknown>) => (
-              <a href={href as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
-                {children as React.ReactNode}
-              </a>
-            ),
-          } as any}
-          controls={{ code: true }}
+          components={streamdownComponents}
+          controls={{ code: true, table: true }}
           plugins={codePlugin ? { code: codePlugin } : undefined}
         >
           {text}
@@ -402,7 +397,7 @@ function ThinkingBlock({ content }: { content: string }) {
           <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none opacity-75">
             <Streamdown
               mode="static"
-              controls={{ code: true }}
+              controls={{ code: true, table: true }}
               plugins={codePlugin ? { code: codePlugin } : undefined}
             >
               {content}

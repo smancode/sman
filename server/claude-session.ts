@@ -652,31 +652,33 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
 
         switch (sdkMsg.type) {
           case 'assistant': {
-            // New assistant turn means previous tools have completed
+            // New assistant turn: previous text segment is done, flush it
             toolInProgress = false;
+            // Flush previous tool use
             if (currentToolUse) {
               allToolUses.push(currentToolUse);
               currentToolUse = null;
               wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId }));
             }
+            // Flush previous text segment so UI can freeze it
+            if (fullContent.trim()) {
+              wsSend(JSON.stringify({
+                type: 'chat.segment',
+                sessionId,
+                segmentType: 'text',
+              }));
+              // Reset fullContent for the new turn
+              fullContent = '';
+            }
+            // NOTE: We do NOT send text from the 'assistant' event as delta.
+            // The SDK sends accumulated text here (includePartialMessages: true),
+            // but we already streamed it token-by-token via 'stream_event' events.
+            // Sending it again would cause duplicate content in the UI.
+            // The text in this event becomes the authoritative fullContent for
+            // error recovery / partial save, but UI rendering comes from stream_events.
             const text = this.extractTextContent(sdkMsg);
             if (text) {
-              // Send new content as delta so UI starts rendering immediately
-              // instead of showing only the typing indicator.
-              const newPart = text.length > fullContent.length && text.startsWith(fullContent)
-                ? text.slice(fullContent.length)
-                : (fullContent === '' ? text : '');
-              if (newPart) {
-                fullContent = text;
-                wsSend(JSON.stringify({
-                  type: 'chat.delta',
-                  sessionId,
-                  content: newPart,
-                  deltaType: 'text',
-                }));
-              } else {
-                fullContent = text;
-              }
+              fullContent = text;
             }
             break;
           }
@@ -709,6 +711,15 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
                   }
                   if (currentToolUse) {
                     allToolUses.push(currentToolUse);
+                  }
+                  // Freeze current text segment before tool starts
+                  if (fullContent.trim()) {
+                    wsSend(JSON.stringify({
+                      type: 'chat.segment',
+                      sessionId,
+                      segmentType: 'text',
+                    }));
+                    fullContent = '';
                   }
                   currentToolUse = { id: delta.id, name: delta.name, input: '' };
                   wsSend(JSON.stringify({

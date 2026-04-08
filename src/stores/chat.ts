@@ -27,13 +27,37 @@ interface Message {
   timestamp?: number;
 }
 
-interface StreamingTool {
+// ── Streaming Block types ──
+
+/** A frozen (completed) text segment */
+interface StreamingTextBlock {
+  type: 'text';
+  content: string;
+}
+
+/** A streaming (in-progress) text segment — always the last text block */
+interface StreamingTextLiveBlock {
+  type: 'text_live';
+  content: string;
+}
+
+/** A completed tool use */
+interface StreamingToolBlock {
+  type: 'tool_use';
   id: string;
   name: string;
   input: string;
   status: 'running' | 'completed';
   elapsedSeconds?: number;
 }
+
+/** A thinking block */
+interface StreamingThinkingBlock {
+  type: 'thinking';
+  content: string;
+}
+
+export type StreamingBlock = StreamingTextBlock | StreamingTextLiveBlock | StreamingToolBlock | StreamingThinkingBlock;
 
 interface ChatState {
   // Messages
@@ -43,9 +67,8 @@ interface ChatState {
 
   // Streaming
   sending: boolean;
-  streamingText: string;
-  streamingThinking: string;
-  streamingTools: StreamingTool[];
+  /** Ordered array of streaming blocks — rendered sequentially in UI */
+  streamingBlocks: StreamingBlock[];
 
   // Sessions
   sessions: ChatSession[];
@@ -69,14 +92,65 @@ interface ChatState {
   updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
 }
 
+// ── Helpers for streaming block management ──
+
+/** Find the index of the last text_live block (should be at most one, at the end) */
+function findLiveTextIndex(blocks: StreamingBlock[]): number {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].type === 'text_live') return i;
+  }
+  return -1;
+}
+
+/** Append text to the current live text block, or create one */
+function appendLiveText(blocks: StreamingBlock[], text: string): StreamingBlock[] {
+  const idx = findLiveTextIndex(blocks);
+  if (idx >= 0) {
+    const block = blocks[idx] as StreamingTextLiveBlock;
+    return [
+      ...blocks.slice(0, idx),
+      { ...block, content: block.content + text },
+      ...blocks.slice(idx + 1),
+    ];
+  }
+  return [...blocks, { type: 'text_live' as const, content: text }];
+}
+
+/** Append thinking content */
+function appendThinking(blocks: StreamingBlock[], text: string): StreamingBlock[] {
+  // Find or create thinking block
+  const last = blocks[blocks.length - 1];
+  if (last && last.type === 'thinking') {
+    return [
+      ...blocks.slice(0, -1),
+      { ...last, content: last.content + text },
+    ];
+  }
+  return [...blocks, { type: 'thinking' as const, content: text }];
+}
+
+/** Freeze the current live text block into a completed text block */
+function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
+  const idx = findLiveTextIndex(blocks);
+  if (idx < 0) return blocks;
+  const live = blocks[idx] as StreamingTextLiveBlock;
+  if (!live.content.trim()) {
+    // Empty live block — just remove it
+    return [...blocks.slice(0, idx), ...blocks.slice(idx + 1)];
+  }
+  return [
+    ...blocks.slice(0, idx),
+    { type: 'text' as const, content: live.content },
+    ...blocks.slice(idx + 1),
+  ];
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
   error: null,
   sending: false,
-  streamingText: '',
-  streamingThinking: '',
-  streamingTools: [],
+  streamingBlocks: [],
   sessions: [],
   currentSessionId: '',
   showThinking: true,
@@ -184,9 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       currentSessionId: sessionId,
       messages: [],
-      streamingText: '',
-      streamingThinking: '',
-      streamingTools: [],
+      streamingBlocks: [],
       error: null,
       sending: false,
     });
@@ -266,33 +338,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed && (!media || media.length === 0)) return;
 
-    const { currentSessionId, sessions, streamingText, streamingThinking, streamingTools, messages } = get();
+    const { currentSessionId, sessions, streamingBlocks, messages } = get();
     if (!currentSessionId) return;
 
     // Before clearing streaming state, save any in-progress assistant content to messages
-    // so the user doesn't lose what was already streamed when aborting to send a new message
     let allMessages = messages;
-    if (streamingText.trim() || streamingThinking.trim() || streamingTools.length > 0) {
-      const contentBlocks: ContentBlock[] = [];
-      if (streamingThinking.trim()) {
-        contentBlocks.push({ type: 'thinking', thinking: streamingThinking.trim() });
-      }
-      if (streamingText.trim()) {
-        contentBlocks.push({ type: 'text', text: streamingText.trim() });
-      }
-      for (const tool of streamingTools) {
-        try {
-          const input = tool.input ? JSON.parse(tool.input) : {};
-          contentBlocks.push({ type: 'tool_use', id: tool.id, name: tool.name, input });
-        } catch {
-          contentBlocks.push({ type: 'tool_use', id: tool.id, name: tool.name, input: tool.input });
-        }
-      }
+    if (streamingBlocks.length > 0) {
+      const contentBlocks = streamingBlocksToContentBlocks(streamingBlocks);
+      const textContent = streamingBlocks
+        .filter(b => b.type === 'text' || b.type === 'text_live')
+        .map(b => (b as StreamingTextBlock | StreamingTextLiveBlock).content)
+        .join('');
       const partialAssistantMsg: Message = {
         id: crypto.randomUUID(),
         sessionId: currentSessionId,
         role: 'assistant',
-        content: streamingText.trim(),
+        content: textContent.trim(),
         contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
         createdAt: new Date().toISOString(),
       };
@@ -324,9 +385,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       messages: [...allMessages, userMsg],
       sending: true,
-      streamingText: '',
-      streamingThinking: '',
-      streamingTools: [],
+      streamingBlocks: [],
       error: null,
     });
 
@@ -342,7 +401,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       // ── Delta batching: accumulate tokens and flush every 50ms ──
-      // This avoids per-token React re-renders, the #1 cause of "feels slow".
       let pendingText = '';
       let pendingThinking = '';
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -354,10 +412,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const thinkBatch = pendingThinking;
         pendingText = '';
         pendingThinking = '';
-        set((s) => ({
-          streamingText: s.streamingText + textBatch,
-          streamingThinking: s.streamingThinking + thinkBatch,
-        }));
+        set((s) => {
+          let blocks = s.streamingBlocks;
+          if (textBatch) blocks = appendLiveText(blocks, textBatch);
+          if (thinkBatch) blocks = appendThinking(blocks, thinkBatch);
+          return { streamingBlocks: blocks };
+        });
       };
 
       const scheduleFlush = () => {
@@ -365,6 +425,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           flushTimer = setTimeout(flushDeltas, 50);
         }
       };
+
+      // Handle chat.segment: freeze the live text block, new text segment starting
+      const unsubSegment = wrapHandler(client, 'chat.segment', (data) => {
+        if (data.sessionId !== currentSessionId) return;
+        const segType = String(data.segmentType || 'text');
+        if (segType === 'text') {
+          // Flush pending text first
+          if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+          flushDeltas();
+          // Freeze the live text into a completed text block
+          set((s) => ({ streamingBlocks: freezeLiveText(s.streamingBlocks) }));
+        }
+      });
 
       // Set up streaming handlers
       const unsubDelta = wrapHandler(client, 'chat.delta', (data) => {
@@ -380,14 +453,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolStart = wrapHandler(client, 'chat.tool_start', (data) => {
         if (data.sessionId !== currentSessionId) return;
+        // Flush pending deltas before adding tool block
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        flushDeltas();
+
         const toolId = String(data.toolId || '');
         const toolName = String(data.toolName || '');
         set((s) => ({
-          streamingTools: [...s.streamingTools, {
+          streamingBlocks: [...s.streamingBlocks, {
+            type: 'tool_use' as const,
             id: toolId,
             name: toolName,
             input: '',
-            status: 'running',
+            status: 'running' as const,
           }],
         }));
       });
@@ -397,8 +475,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const toolId = String(data.toolId || '');
         const content = String(data.content || '');
         set((s) => ({
-          streamingTools: s.streamingTools.map(t =>
-            t.id === toolId ? { ...t, input: t.input + content } : t
+          streamingBlocks: s.streamingBlocks.map(b =>
+            b.type === 'tool_use' && b.id === toolId ? { ...b, input: b.input + content } : b
           ),
         }));
       });
@@ -408,8 +486,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const toolUseId = String(data.toolUseId || '');
         const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds : undefined;
         set((s) => ({
-          streamingTools: s.streamingTools.map(t =>
-            t.id === toolUseId ? { ...t, elapsedSeconds } : t
+          streamingBlocks: s.streamingBlocks.map(b =>
+            b.type === 'tool_use' && b.id === toolUseId ? { ...b, elapsedSeconds } : b
           ),
         }));
       });
@@ -418,8 +496,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (_data.sessionId !== currentSessionId) return;
         // Mark all running tools as completed
         set((s) => ({
-          streamingTools: s.streamingTools.map(t =>
-            t.status === 'running' ? { ...t, status: 'completed' as const } : t
+          streamingBlocks: s.streamingBlocks.map(b =>
+            b.type === 'tool_use' && b.status === 'running' ? { ...b, status: 'completed' as const } : b
           ),
         }));
       });
@@ -431,52 +509,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
         flushDeltas();
         cleanup();
 
-        const st = get();
-        // Build content blocks
-        const contentBlocks: ContentBlock[] = [];
-        if (st.streamingText.trim()) {
-          contentBlocks.push({ type: 'text', text: st.streamingText.trim() });
-        }
-        if (st.streamingThinking.trim()) {
-          contentBlocks.push({ type: 'thinking', thinking: st.streamingThinking.trim() });
-        }
-        for (const tool of st.streamingTools) {
-          try {
-            const input = tool.input ? JSON.parse(tool.input) : {};
-            contentBlocks.push({
-              type: 'tool_use',
-              id: tool.id,
-              name: tool.name,
-              input,
-            });
-          } catch {
-            contentBlocks.push({
-              type: 'tool_use',
-              id: tool.id,
-              name: tool.name,
-              input: tool.input,
-            });
-          }
-        }
+        const frozen = freezeLiveText(get().streamingBlocks);
+        const contentBlocks = streamingBlocksToContentBlocks(frozen);
+        const textContent = frozen
+          .filter(b => b.type === 'text')
+          .map(b => (b as StreamingTextBlock).content)
+          .join('');
 
-        if (st.streamingText.trim() || contentBlocks.length > 0) {
+        if (textContent.trim() || contentBlocks.length > 0) {
           const assistantMsg: Message = {
             id: crypto.randomUUID(),
             sessionId: currentSessionId,
             role: 'assistant',
-            content: st.streamingText.trim(),
+            content: textContent.trim(),
             contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
             createdAt: new Date().toISOString(),
           };
+          const st = get();
           set({
             messages: [...st.messages, assistantMsg],
-            streamingText: '',
-            streamingThinking: '',
-            streamingTools: [],
+            streamingBlocks: [],
             sending: false,
           });
         } else {
-          set({ streamingText: '', streamingThinking: '', streamingTools: [], sending: false });
+          set({ streamingBlocks: [], sending: false });
         }
       });
 
@@ -487,15 +543,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cleanup();
         set({
           error: String(_data.error || 'Unknown error'),
-          streamingText: '',
-          streamingThinking: '',
-          streamingTools: [],
+          streamingBlocks: [],
           sending: false,
         });
       });
 
       const cleanup = () => {
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        unsubSegment();
         unsubDelta();
         unsubToolStart();
         unsubToolDelta();
@@ -519,7 +574,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortRun: () => {
     const client = getWsClient();
     const { currentSessionId } = get();
-    set({ sending: false, streamingText: '', streamingThinking: '', streamingTools: [], error: null });
+    set({ sending: false, streamingBlocks: [], error: null });
     if (client && currentSessionId) {
       client.send({ type: 'chat.abort', sessionId: currentSessionId });
     }
@@ -528,7 +583,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearError: () => set({ error: null }),
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
   refresh: () => {
-    set({ messages: [], streamingText: '', streamingThinking: '', streamingTools: [], error: null, sending: false });
+    set({ messages: [], streamingBlocks: [], error: null, sending: false });
     get().loadHistory();
   },
 }));
+
+/** Convert streaming blocks to ContentBlock[] for message storage */
+function streamingBlocksToContentBlocks(blocks: StreamingBlock[]): ContentBlock[] {
+  const result: ContentBlock[] = [];
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'thinking':
+        if (block.content.trim()) {
+          result.push({ type: 'thinking', thinking: block.content.trim() });
+        }
+        break;
+      case 'text':
+      case 'text_live':
+        if (block.content.trim()) {
+          result.push({ type: 'text', text: block.content.trim() });
+        }
+        break;
+      case 'tool_use':
+        try {
+          const input = block.input ? JSON.parse(block.input) : {};
+          result.push({ type: 'tool_use', id: block.id, name: block.name, input });
+        } catch {
+          result.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
+        }
+        break;
+    }
+  }
+  return result;
+}

@@ -16,7 +16,7 @@ function loadCodePlugin(): Promise<CodeHighlighterPlugin> {
   if (!loadPromise) {
     loadPromise = import('@streamdown/code').then(m => {
       const plugin = m.createCodePlugin({
-        themes: ['github-dark', 'github-light'],
+        themes: ['tokyo-night', 'vitesse-light'],
       })
       cachedPlugin = plugin
       return plugin
