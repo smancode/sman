@@ -48,6 +48,8 @@ export class UserProfileManager {
   private updateQueue: Promise<void> = Promise.resolve();
   private lastUpdateTime: number = 0;
   private pendingConversations: Array<{ user: string; assistant: string }> = [];
+  /** Callback to check if it's safe to call LLM (no active sessions streaming) */
+  private isIdle: () => boolean = () => true;
 
   constructor(private homeDir: string, config?: import('./types.js').SmanConfig) {
     this.profilePath = path.join(homeDir, PROFILE_FILENAME);
@@ -57,6 +59,11 @@ export class UserProfileManager {
 
   updateConfig(config: import('./types.js').SmanConfig): void {
     this.config = config;
+  }
+
+  /** Set a callback that returns true when no sessions are actively streaming */
+  setIdleCheck(check: () => boolean): void {
+    this.isIdle = check;
   }
 
   loadProfile(): string {
@@ -124,10 +131,13 @@ export class UserProfileManager {
   }
 
   /**
-   * Accumulate conversation and batch-update profile every 10 minutes.
+   * Accumulate conversation data. Profile update runs when idle and 10min has elapsed.
    * Fire-and-forget: errors are logged but not thrown.
    */
   updateProfile(userMsg: string, assistantMsg: string): void {
+    // Skip empty conversations
+    if (!assistantMsg.trim()) return;
+
     this.pendingConversations.push({
       user: this.truncateInput(userMsg, UserProfileManager.MAX_USER_MSG_LENGTH),
       assistant: this.truncateInput(assistantMsg, UserProfileManager.MAX_ASSISTANT_MSG_LENGTH),
@@ -138,12 +148,25 @@ export class UserProfileManager {
       return; // Not yet time
     }
 
+    this.tryFlush();
+  }
+
+  /**
+   * Wait for all sessions to be idle, then flush pending conversations to LLM.
+   * Safe to call anytime — won't run if already queued.
+   */
+  private tryFlush(): void {
     // Drain pending conversations
     const conversations = this.pendingConversations;
+    if (conversations.length === 0) return;
     this.pendingConversations = [];
-    this.lastUpdateTime = now;
+    this.lastUpdateTime = Date.now();
 
     this.updateQueue = this.updateQueue.then(async () => {
+      // Poll until all sessions are idle (no active streaming)
+      while (!this.isIdle()) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
       try {
         const existing = this.loadProfile();
         const updated = await this.callLLMForUpdate(existing, conversations);
@@ -154,7 +177,7 @@ export class UserProfileManager {
           this.log.warn('LLM returned invalid profile, keeping existing');
         }
       } catch (err) {
-        this.log.error('Failed to update user profile', { error: String(err) });
+        this.log.warn('Profile update skipped', { error: String(err) });
       }
     });
   }

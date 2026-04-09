@@ -69,6 +69,8 @@ export class ClaudeSessionManager {
 
   setUserProfile(manager: UserProfileManager): void {
     this.userProfile = manager;
+    // Profile updates only run LLM when no sessions are actively streaming
+    manager.setIdleCheck(() => this.activeStreams.size === 0);
     this.log.info('UserProfileManager injected');
   }
 

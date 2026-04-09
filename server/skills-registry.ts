@@ -104,7 +104,7 @@ export class SkillsRegistry {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const skillId = entry.name;
-        const skillMdPath = path.join(projectSkillsDir, skillId, 'skill.md');
+        const skillMdPath = path.join(projectSkillsDir, skillId, 'SKILL.md');
         let description = '';
 
         if (fs.existsSync(skillMdPath)) {
