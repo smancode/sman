@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmanSettings, LlmConfig, WebSearchConfig, ChatbotConfig, DetectedCapabilities } from '@/types/settings';
+import type { SmanSettings, LlmConfig, LlmProfile, WebSearchConfig, ChatbotConfig, DetectedCapabilities } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -37,13 +37,17 @@ interface SettingsState {
   updateLlm: (updates: Partial<LlmConfig>) => Promise<void>;
   updateWebSearch: (updates: Partial<WebSearchConfig>) => Promise<void>;
   updateChatbot: (updates: Partial<ChatbotConfig>) => Promise<void>;
-  testAndSaveLlm: (apiKey: string, model: string, baseUrl?: string) => Promise<TestAndSaveResult>;
+  testAndSaveLlm: (apiKey: string, model: string, baseUrl?: string, profileName?: string) => Promise<TestAndSaveResult>;
+  selectLlmProfile: (name: string) => Promise<void>;
+  deleteLlmProfile: (name: string) => Promise<void>;
   clearError: () => void;
 }
 
 const DEFAULT_SETTINGS: SmanSettings = {
   port: 5880,
   llm: { apiKey: '', model: '', userProfile: true },
+  savedLlms: [],
+  currentLlmProfile: '',
   webSearch: {
     provider: 'builtin',
     braveApiKey: '',
@@ -144,14 +148,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     });
   },
 
-  testAndSaveLlm: async (apiKey, model, baseUrl) => {
+  testAndSaveLlm: async (apiKey, model, baseUrl, profileName) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
 
     return new Promise<TestAndSaveResult>((resolve) => {
       const unsub = wrapHandler(client, 'settings.testResult', (data) => {
         unsub();
-        const result = data as unknown as TestAndSaveResult;
+        const result = data as unknown as TestAndSaveResult & { savedLlms?: LlmProfile[] };
 
         // Update settings in store on success (config already saved server-side)
         if (result.success) {
@@ -167,6 +171,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                   baseUrl,
                   capabilities: result.capabilities,
                 },
+                savedLlms: result.savedLlms ?? current.savedLlms,
+                currentLlmProfile: profileName || current.currentLlmProfile,
               },
             });
           }
@@ -180,7 +186,52 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         apiKey,
         model,
         baseUrl: baseUrl || undefined,
+        profileName: profileName || undefined,
       });
+    });
+  },
+
+  selectLlmProfile: async (name) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'settings.updated', (data) => {
+        unsub();
+        unsubErr();
+        const config = data.config as SmanSettings;
+        set({ settings: config });
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'settings.selectLlmProfile', profileName: name });
+    });
+  },
+
+  deleteLlmProfile: async (name) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'settings.updated', (data) => {
+        unsub();
+        unsubErr();
+        const config = data.config as SmanSettings;
+        set({ settings: config });
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'settings.deleteLlmProfile', profileName: name });
     });
   },
 

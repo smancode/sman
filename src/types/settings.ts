@@ -22,6 +22,16 @@ export interface LlmConfig {
   capabilities?: DetectedCapabilities;
 }
 
+export interface LlmProfile {
+  name: string;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  profileModel?: string;
+  userProfile?: boolean;
+  capabilities?: DetectedCapabilities;
+}
+
 export type WebSearchProvider = 'builtin' | 'brave' | 'tavily' | 'bing';
 
 export interface WebSearchConfig {
@@ -52,6 +62,8 @@ export interface ChatbotConfig {
 export interface SmanSettings {
   port: number;
   llm: LlmConfig;
+  savedLlms: LlmProfile[];
+  currentLlmProfile: string;
   webSearch: WebSearchConfig;
   chatbot: ChatbotConfig;
 }

@@ -564,7 +564,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'settings.testAndSave': {
-          const { apiKey, model, baseUrl } = msg as unknown as { apiKey: string; model: string; baseUrl?: string };
+          const { apiKey, model, baseUrl, profileName } = msg as unknown as { apiKey: string; model: string; baseUrl?: string; profileName?: string };
           if (!apiKey || !model) {
             ws.send(JSON.stringify({ type: 'settings.testResult', success: false, error: '缺少 API Key 或模型名称' }));
             break;
@@ -577,28 +577,48 @@ wss.on('connection', (ws: WebSocket) => {
             break;
           }
 
-          // Step 2: Save config
-          const llmUpdate: Record<string, unknown> = { apiKey, model };
-          if (baseUrl !== undefined) llmUpdate.baseUrl = baseUrl;
-          const config = settingsManager.updateConfig({ llm: llmUpdate } as any);
+          // Step 2: Detect capabilities (3-layer)
+          const capsResult = await detectCapabilities(apiKey, model, baseUrl);
+          const finalCaps = capsResult.capabilities ?? testResult.capabilities;
+
+          // Step 3: Build LLM profile
+          const llmProfile: import('./types.js').LlmProfile = {
+            name: profileName || '默认',
+            apiKey,
+            model,
+            baseUrl,
+            capabilities: finalCaps ?? { text: true, image: false, pdf: false, audio: false, video: false, source: 'api' as const },
+          };
+
+          // Step 4: Save to savedLlms list (upsert by name)
+          const config = settingsManager.saveLlmProfile(llmProfile);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
           batchEngine.setConfig(config.llm);
 
-          // Step 3: Detect capabilities (3-layer)
-          const capsResult = await detectCapabilities(apiKey, model, baseUrl);
-          const finalCaps = capsResult.capabilities ?? testResult.capabilities;
-
-          // Persist capabilities alongside config
-          if (finalCaps) {
-            settingsManager.updateConfig({ llm: { capabilities: finalCaps } } as any);
-          }
-
           ws.send(JSON.stringify({
             type: 'settings.testResult',
             success: true,
-            capabilities: finalCaps ?? { text: true, image: false, pdf: false, audio: false, video: false, source: 'test' },
+            capabilities: finalCaps ?? { text: true, image: false, pdf: false, audio: false, video: false, source: 'api' as const },
+            savedLlms: config.savedLlms,
           }));
+          break;
+        }
+
+        case 'settings.selectLlmProfile': {
+          const { profileName } = msg as unknown as { profileName: string };
+          const config = settingsManager.selectLlmProfile(profileName);
+          sessionManager.updateConfig(config);
+          userProfileManager.updateConfig(config);
+          batchEngine.setConfig(config.llm);
+          ws.send(JSON.stringify({ type: 'settings.updated', config }));
+          break;
+        }
+
+        case 'settings.deleteLlmProfile': {
+          const { profileName } = msg as unknown as { profileName: string };
+          const config = settingsManager.deleteLlmProfile(profileName);
+          ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
         }
 

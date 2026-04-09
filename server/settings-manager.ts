@@ -7,6 +7,8 @@ import type { SmanConfig } from './types.js';
 const DEFAULT_CONFIG: SmanConfig = {
   port: 5880,
   llm: { apiKey: '', model: '', userProfile: true },
+  savedLlms: [],
+  currentLlmProfile: '',
   webSearch: {
     provider: 'builtin',
     braveApiKey: '',
@@ -74,6 +76,60 @@ export class SettingsManager {
     if (updates.chatbot) updated.chatbot = { ...config.chatbot, ...updates.chatbot };
     this.write(updated);
     return updated;
+  }
+
+  saveLlmProfile(profile: import('./types.js').LlmProfile): SmanConfig {
+    const config = this.read();
+    const existing = config.savedLlms.findIndex(p => p.name === profile.name);
+    if (existing >= 0) {
+      config.savedLlms[existing] = profile;
+    } else {
+      config.savedLlms.push(profile);
+    }
+    config.currentLlmProfile = profile.name;
+    config.llm = {
+      apiKey: profile.apiKey,
+      model: profile.model,
+      baseUrl: profile.baseUrl,
+      profileModel: profile.profileModel,
+      userProfile: profile.userProfile,
+      capabilities: profile.capabilities,
+    };
+    this.write(config);
+    return config;
+  }
+
+  selectLlmProfile(name: string): SmanConfig {
+    const config = this.read();
+    const profile = config.savedLlms.find(p => p.name === name);
+    if (!profile) return config;
+    config.currentLlmProfile = name;
+    config.llm = {
+      apiKey: profile.apiKey,
+      model: profile.model,
+      baseUrl: profile.baseUrl,
+      profileModel: profile.profileModel,
+      userProfile: profile.userProfile,
+      capabilities: profile.capabilities,
+    };
+    this.write(config);
+    return config;
+  }
+
+  deleteLlmProfile(name: string): SmanConfig {
+    const config = this.read();
+    config.savedLlms = config.savedLlms.filter(p => p.name !== name);
+    if (config.currentLlmProfile === name) {
+      config.currentLlmProfile = config.savedLlms[0]?.name ?? '';
+      if (config.savedLlms[0]) {
+        const p = config.savedLlms[0];
+        config.llm = { apiKey: p.apiKey, model: p.model, baseUrl: p.baseUrl, profileModel: p.profileModel, userProfile: p.userProfile, capabilities: p.capabilities };
+      } else {
+        config.llm = { apiKey: '', model: '', userProfile: true };
+      }
+    }
+    this.write(config);
+    return config;
   }
 
   ensureAuthToken(): string {

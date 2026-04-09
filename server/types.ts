@@ -36,6 +36,16 @@ export interface DetectedCapabilities {
   source: 'api' | 'mapping' | 'probe';
 }
 
+export interface LlmProfile {
+  name: string;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  profileModel?: string;
+  userProfile?: boolean;
+  capabilities?: DetectedCapabilities;
+}
+
 export interface SmanConfig {
   port: number;
   llm: {
@@ -46,6 +56,8 @@ export interface SmanConfig {
     userProfile?: boolean;   // 是否启用用户画像，默认 true
     capabilities?: DetectedCapabilities;
   };
+  savedLlms: LlmProfile[];   // 保存的 LLM 配置列表
+  currentLlmProfile: string; // 当前激活的 LLM 配置名称
   webSearch: {
     provider: 'builtin' | 'brave' | 'tavily' | 'bing';
     braveApiKey: string;

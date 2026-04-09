@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useSettingsStore } from '@/stores/settings';
-import type { DetectedCapabilities } from '@/types/settings';
+import type { DetectedCapabilities, LlmProfile } from '@/types/settings';
 
 function CapabilitiesDisplay({ capabilities }: { capabilities?: DetectedCapabilities }) {
   if (!capabilities) return null;
@@ -33,37 +40,90 @@ function CapabilitiesDisplay({ capabilities }: { capabilities?: DetectedCapabili
 }
 
 export function LLMSettings() {
-  const { settings, testAndSaveLlm } = useSettingsStore();
+  const { settings, testAndSaveLlm, selectLlmProfile, deleteLlmProfile } = useSettingsStore();
 
-  // Local draft state — synced from settings on load, edited locally
+  // Local draft state
   const [draftApiKey, setDraftApiKey] = useState('');
   const [draftModel, setDraftModel] = useState('');
   const [draftBaseUrl, setDraftBaseUrl] = useState('');
+  const [draftProfileName, setDraftProfileName] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // Selected profile name (empty = not from saved list)
+  const [selectedProfile, setSelectedProfile] = useState('');
 
   // Test-and-save state
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string; capabilities?: DetectedCapabilities } | null>(null);
 
-  // Sync from store settings → local draft
+  const savedLlms: LlmProfile[] = settings?.savedLlms ?? [];
+
+  // Sync from store settings → local draft when profile changes
   useEffect(() => {
-    if (settings?.llm) {
-      setDraftApiKey(settings.llm.apiKey ?? '');
-      setDraftModel(settings.llm.model ?? '');
-      setDraftBaseUrl(settings.llm.baseUrl ?? '');
+    if (selectedProfile) {
+      const profile = savedLlms.find(p => p.name === selectedProfile);
+      if (profile) {
+        setDraftApiKey(profile.apiKey ?? '');
+        setDraftModel(profile.model ?? '');
+        setDraftBaseUrl(profile.baseUrl ?? '');
+        setDraftProfileName(profile.name);
+      }
+    } else {
+      // Show current active LLM in form
+      if (settings?.llm) {
+        setDraftApiKey(settings.llm.apiKey ?? '');
+        setDraftModel(settings.llm.model ?? '');
+        setDraftBaseUrl(settings.llm.baseUrl ?? '');
+        setDraftProfileName(settings.currentLlmProfile ?? '');
+      }
     }
-  }, [settings?.llm?.apiKey, settings?.llm?.model, settings?.llm?.baseUrl]);
+  }, [selectedProfile, settings?.llm, settings?.currentLlmProfile, savedLlms]);
+
+  const handleProfileChange = (name: string) => {
+    if (name === '__new__') {
+      setSelectedProfile('');
+      setDraftApiKey('');
+      setDraftModel('');
+      setDraftBaseUrl('');
+      setDraftProfileName('');
+    } else {
+      setSelectedProfile(name);
+    }
+    setTestResult(null);
+  };
 
   const handleTestAndSave = async () => {
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testAndSaveLlm(draftApiKey, draftModel, draftBaseUrl || undefined);
+      // If no profile name entered, use existing profile name or default
+      const profileName = draftProfileName || selectedProfile || '默认';
+      const result = await testAndSaveLlm(draftApiKey, draftModel, draftBaseUrl || undefined, profileName);
       setTestResult(result);
+      if (result.success) {
+        setDraftProfileName(profileName);
+        setSelectedProfile(profileName);
+      }
     } catch {
       setTestResult({ success: false, error: '连接失败' });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!selectedProfile) return;
+    if (!confirm(`确定删除配置「${selectedProfile}」？`)) return;
+    try {
+      await deleteLlmProfile(selectedProfile);
+      setSelectedProfile('');
+      setDraftApiKey('');
+      setDraftModel('');
+      setDraftBaseUrl('');
+      setDraftProfileName('');
+      setTestResult(null);
+    } catch {
+      // ignore
     }
   };
 
@@ -82,6 +142,50 @@ export function LLMSettings() {
         <CardDescription>配置使用的模型和 API Key，保存时自动检测兼容性和模态能力</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Saved LLM profiles dropdown */}
+        <div className="space-y-2">
+          <Label>已保存的配置</Label>
+          <div className="flex items-center gap-2">
+            <Select value={selectedProfile} onValueChange={handleProfileChange}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="选择已保存的配置，或新建..." />
+              </SelectTrigger>
+              <SelectContent>
+                {savedLlms.map(p => (
+                  <SelectItem key={p.name} value={p.name}>
+                    {p.name} ({p.model})
+                  </SelectItem>
+                ))}
+                <SelectItem value="__new__">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Plus className="h-3.5 w-3.5" /> 新建配置...
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {selectedProfile && (
+              <Button variant="outline" size="sm" onClick={handleDeleteProfile} title="删除当前配置">
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
+          </div>
+          {selectedProfile && (
+            <p className="text-xs text-muted-foreground">
+              当前使用: <span className="font-medium text-foreground">{selectedProfile}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Profile name (only when creating new or editing) */}
+        <div className="space-y-2">
+          <Label>配置名称</Label>
+          <Input
+            value={draftProfileName}
+            onChange={(e) => setDraftProfileName(e.target.value)}
+            placeholder="给这个配置起个名字，如 Anthropic、DeepSeek..."
+          />
+        </div>
+
         {/* Base URL */}
         <div className="space-y-2">
           <Label>Base URL</Label>

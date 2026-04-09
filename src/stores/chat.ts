@@ -402,11 +402,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       // ── Delta batching: accumulate tokens and flush every 50ms ──
-      // First delta flushes immediately (no 50ms delay) for instant user feedback.
       let pendingText = '';
       let pendingThinking = '';
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
-      let isFirstDelta = true;
 
       const flushDeltas = () => {
         flushTimer = null;
@@ -424,11 +422,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       const scheduleFlush = () => {
-        if (isFirstDelta) {
-          isFirstDelta = false;
-          flushDeltas();
-          return;
-        }
         if (!flushTimer) {
           flushTimer = setTimeout(flushDeltas, 50);
         }
