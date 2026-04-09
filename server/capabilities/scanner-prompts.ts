@@ -20,6 +20,7 @@ const SHARED_RULES = `
 7. **Reference files must be < 100 lines**: Key facts only.
 8. **Output language: English**: Save tokens. File paths and code references stay in original form.
 9. **MANDATORY**: You MUST write SKILL.md. If you finish without writing it, the scan is considered failed.
+10. **Set _scanned fields in SKILL.md frontmatter**: Set \`_scanned.commitHash\` to the workspace git commit hash, \`_scanned.scannedAt\` to the current ISO timestamp, and \`_scanned.branch\` to the current git branch. These MUST be set in the frontmatter — they enable team members to skip re-scanning when their local commit matches.
 
 ## SKILL.md Format (MANDATORY)
 
@@ -30,6 +31,10 @@ Format:
 ---
 name: {skill-name}
 description: "{1-2 sentence description of what this skill provides and when to use it}"
+_scanned:
+  commitHash: "{COMMIT_HASH}"
+  scannedAt: "{SCANNED_AT}"
+  branch: "{BRANCH}"
 ---
 
 # {Title}
@@ -53,6 +58,10 @@ Write all files to: {SKILLS_DIR}/project-structure/
    ---
    name: project-structure
    description: "{Project} directory layout, tech stack, module organization, and build instructions. Consult this when you need to understand project structure, find where code lives, or determine how to build/run."
+   _scanned:
+     commitHash: "{COMMIT_HASH}"
+     scannedAt: "{SCANNED_AT}"
+     branch: "{BRANCH}"
    ---
    \`\`\`
    Body must include:
@@ -100,6 +109,10 @@ Rule: Replace / with -, remove leading -, max 80 chars.
    ---
    name: project-apis
    description: "{Project} API endpoints catalog with signatures, parameters, and business flows. Consult this when you need to understand, modify, or add API endpoints."
+   _scanned:
+     commitHash: "{COMMIT_HASH}"
+     scannedAt: "{SCANNED_AT}"
+     branch: "{BRANCH}"
    ---
    \`\`\`
    Body must include:
@@ -141,6 +154,10 @@ Write all files to: {SKILLS_DIR}/project-external-calls/
    ---
    name: project-external-calls
    description: "{Project} external dependencies: HTTP services, databases, message queues. Consult this when modifying integrations, debugging connectivity, or adding new external calls."
+   _scanned:
+     commitHash: "{COMMIT_HASH}"
+     scannedAt: "{SCANNED_AT}"
+     branch: "{BRANCH}"
    ---
    \`\`\`
    Body must include:
@@ -173,16 +190,22 @@ const PROMPTS: Record<ScannerType, string> = {
   'external-calls': EXTERNAL_CALLS_PROMPT,
 };
 
-export function getScannerPrompt(type: ScannerType, workspace: string): string {
+export function getScannerPrompt(type: ScannerType, workspace: string, gitInfo?: { commitHash: string; branch: string }): string {
   const template = PROMPTS[type];
   if (!template) throw new Error(`Unknown scanner type: ${type}`);
 
   const skillsDir = `${workspace}/.claude/skills`;
   const projectName = workspace.split('/').pop() || 'project';
+  const commitHash = gitInfo?.commitHash ?? 'unknown';
+  const branch = gitInfo?.branch ?? 'unknown';
+  const scannedAt = new Date().toISOString();
 
   return template
     .replace(/\{SKILLS_DIR\}/g, skillsDir)
     .replace(/\{Project\}/g, projectName)
+    .replace(/\{COMMIT_HASH\}/g, commitHash)
+    .replace(/\{BRANCH\}/g, branch)
+    .replace(/\{SCANNED_AT\}/g, scannedAt)
     + '\n\n'
     + SHARED_RULES
     + `\n\nWorkspace: ${workspace}`;

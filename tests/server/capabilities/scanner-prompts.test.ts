@@ -40,4 +40,57 @@ describe('scanner-prompts', () => {
   it('throws for unknown scanner type', () => {
     expect(() => getScannerPrompt('unknown' as ScannerType, '/tmp')).toThrow();
   });
+
+  it('prompt contains _scanned fields for structure scanner', () => {
+    const prompt = getScannerPrompt('structure', '/tmp/test');
+    expect(prompt).toContain('_scanned:');
+    expect(prompt).toContain('commitHash');
+    expect(prompt).toContain('scannedAt');
+    expect(prompt).toContain('branch');
+  });
+
+  it('prompt contains _scanned fields for apis scanner', () => {
+    const prompt = getScannerPrompt('apis', '/tmp/test');
+    expect(prompt).toContain('_scanned:');
+    expect(prompt).toContain('commitHash');
+    expect(prompt).toContain('scannedAt');
+    expect(prompt).toContain('branch');
+  });
+
+  it('prompt contains _scanned fields for external-calls scanner', () => {
+    const prompt = getScannerPrompt('external-calls', '/tmp/test');
+    expect(prompt).toContain('_scanned:');
+    expect(prompt).toContain('commitHash');
+    expect(prompt).toContain('scannedAt');
+    expect(prompt).toContain('branch');
+  });
+
+  it('prompt accepts and injects git info', () => {
+    const prompt = getScannerPrompt('structure', '/tmp/test', {
+      commitHash: 'abc123',
+      branch: 'main'
+    });
+    expect(prompt).toContain('abc123');
+    expect(prompt).toContain('main');
+  });
+
+  it('prompt uses unknown when git info not provided', () => {
+    const prompt = getScannerPrompt('structure', '/tmp/test');
+    expect(prompt).toContain('unknown');
+  });
+
+  it('prompt contains ISO timestamp for scannedAt', () => {
+    const before = new Date().toISOString();
+    const prompt = getScannerPrompt('structure', '/tmp/test');
+    const after = new Date().toISOString();
+    // scannedAt should be a valid ISO date string (contains T and Z)
+    expect(prompt).toMatch(/scannedAt.*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('prompt contains _scanned rule in shared rules', () => {
+    const prompt = getScannerPrompt('structure', '/tmp/test');
+    expect(prompt).toContain('_scanned.commitHash');
+    expect(prompt).toContain('_scanned.scannedAt');
+    expect(prompt).toContain('_scanned.branch');
+  });
 });
