@@ -63,14 +63,14 @@ export class CronScheduler {
 
     this.log.info(`CronScheduler started with ${tasks.length} tasks`);
 
-    // Built-in nightly knowledge refresh (3 AM daily)
+    // Built-in 6-hour knowledge refresh
     if (this.projectScanner) {
-      const nightlyJob = cron.schedule('0 3 * * *', () => {
+      const sixHourRefreshJob = cron.schedule('0 */6 * * *', () => {
         this.projectScanner!.nightlyRefresh().catch((e: any) => {
-          this.log.error(`Nightly knowledge refresh failed: ${e.message}`);
+          this.log.error(`6-hour knowledge refresh failed: ${e.message}`);
         });
       });
-      this.jobs.set('__nightly_knowledge_refresh__', nightlyJob);
+      this.jobs.set('__sixhour_knowledge_refresh__', sixHourRefreshJob);
     }
   }
 
