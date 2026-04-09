@@ -117,14 +117,16 @@ function appendLiveText(blocks: StreamingBlock[], text: string): StreamingBlock[
   return [...blocks, { type: 'text_live' as const, content: text }];
 }
 
-/** Append thinking content */
+/** Append thinking content — always appends to the single thinking block */
 function appendThinking(blocks: StreamingBlock[], text: string): StreamingBlock[] {
-  // Find or create thinking block
-  const last = blocks[blocks.length - 1];
-  if (last && last.type === 'thinking') {
+  // Find existing thinking block anywhere in the array
+  const idx = blocks.findIndex(b => b.type === 'thinking');
+  if (idx >= 0) {
+    const block = blocks[idx] as StreamingThinkingBlock;
     return [
-      ...blocks.slice(0, -1),
-      { ...last, content: last.content + text },
+      ...blocks.slice(0, idx),
+      { ...block, content: block.content + text },
+      ...blocks.slice(idx + 1),
     ];
   }
   return [...blocks, { type: 'thinking' as const, content: text }];

@@ -51,8 +51,6 @@ export function LLMSettings() {
 
   // Selected profile name (empty = not from saved list)
   const [selectedProfile, setSelectedProfile] = useState('');
-
-  // Test-and-save state
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string; capabilities?: DetectedCapabilities } | null>(null);
 
@@ -78,6 +76,13 @@ export function LLMSettings() {
       }
     }
   }, [selectedProfile, settings?.llm, settings?.currentLlmProfile, savedLlms]);
+
+  // Initialize selectedProfile from settings on mount/refresh
+  useEffect(() => {
+    if (settings?.currentLlmProfile && !selectedProfile) {
+      setSelectedProfile(settings.currentLlmProfile);
+    }
+  }, [settings]);
 
   const handleProfileChange = (name: string) => {
     if (name === '__new__') {

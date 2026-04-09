@@ -541,7 +541,7 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]`;
+      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。\n重要：收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行。]`;
       const messagePrefix = profilePrefix
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;

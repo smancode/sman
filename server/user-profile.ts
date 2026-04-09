@@ -41,10 +41,13 @@ const EMPTY_TEMPLATE = `# 用户画像
 export class UserProfileManager {
   private static readonly MAX_USER_MSG_LENGTH = 2000;
   private static readonly MAX_ASSISTANT_MSG_LENGTH = 3000;
+  private static readonly UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
   private config: import('./types.js').SmanConfig | null = null;
   private profilePath: string;
   private log: Logger;
   private updateQueue: Promise<void> = Promise.resolve();
+  private lastUpdateTime: number = 0;
+  private pendingConversations: Array<{ user: string; assistant: string }> = [];
 
   constructor(private homeDir: string, config?: import('./types.js').SmanConfig) {
     this.profilePath = path.join(homeDir, PROFILE_FILENAME);
@@ -121,20 +124,32 @@ export class UserProfileManager {
   }
 
   /**
-   * Update user profile by analyzing conversation with LLM.
-   * Serialized via queue to prevent concurrent writes.
+   * Accumulate conversation and batch-update profile every 10 minutes.
    * Fire-and-forget: errors are logged but not thrown.
    */
   updateProfile(userMsg: string, assistantMsg: string): void {
+    this.pendingConversations.push({
+      user: this.truncateInput(userMsg, UserProfileManager.MAX_USER_MSG_LENGTH),
+      assistant: this.truncateInput(assistantMsg, UserProfileManager.MAX_ASSISTANT_MSG_LENGTH),
+    });
+
+    const now = Date.now();
+    if (now - this.lastUpdateTime < UserProfileManager.UPDATE_INTERVAL_MS) {
+      return; // Not yet time
+    }
+
+    // Drain pending conversations
+    const conversations = this.pendingConversations;
+    this.pendingConversations = [];
+    this.lastUpdateTime = now;
+
     this.updateQueue = this.updateQueue.then(async () => {
       try {
         const existing = this.loadProfile();
-        const truncatedUser = this.truncateInput(userMsg, UserProfileManager.MAX_USER_MSG_LENGTH);
-        const truncatedAssistant = this.truncateInput(assistantMsg, UserProfileManager.MAX_ASSISTANT_MSG_LENGTH);
-        const updated = await this.callLLMForUpdate(existing, truncatedUser, truncatedAssistant);
+        const updated = await this.callLLMForUpdate(existing, conversations);
         if (updated && this.isValidProfile(updated)) {
           this.saveProfile(updated);
-          this.log.info('User profile updated');
+          this.log.info(`User profile updated (${conversations.length} conversations batched)`);
         } else {
           this.log.warn('LLM returned invalid profile, keeping existing');
         }
@@ -150,10 +165,10 @@ export class UserProfileManager {
   }
 
   /**
-   * Call LLM to analyze conversation and generate updated profile.
+   * Call LLM to analyze batched conversations and generate updated profile.
    * Uses direct HTTP call to Anthropic API.
    */
-  private async callLLMForUpdate(existing: string, userMsg: string, assistantMsg: string): Promise<string> {
+  private async callLLMForUpdate(existing: string, conversations: Array<{ user: string; assistant: string }>): Promise<string> {
     const config = this.config;
     if (!config?.llm?.apiKey) {
       this.log.warn('No API key configured, skipping profile update');
@@ -180,13 +195,16 @@ export class UserProfileManager {
 
 只记录通用信息：身份、语言偏好、沟通风格、回复策略原则。`;
 
+    const conversationText = conversations.map((c, i) =>
+      `### 对话 ${i + 1}\n用户: ${c.user}\n助手: ${c.assistant}`
+    ).join('\n\n');
+
     const userPrompt = `## 输入
 已有画像：
 ${existing}
 
-本轮对话：
-用户: ${userMsg}
-助手: ${assistantMsg}
+本轮对话（共 ${conversations.length} 条）：
+${conversationText}
 
 ## 输出
 直接输出更新后的完整画像 Markdown，不要输出其他内容。`;
