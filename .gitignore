@@ -19,3 +19,4 @@ release/
 # Office skills - large generated dirs (installed by setup script)
 plugins/office-skills/venv/
 plugins/office-skills/node_modules/
+.claude/.scanning
