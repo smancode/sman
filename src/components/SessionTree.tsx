@@ -7,11 +7,13 @@ import {
   Plus,
   Trash,
   Copy,
+  Server,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatStore } from '@/stores/chat';
+import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
 import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
 import type { ChatSession } from '@/types/chat';
@@ -39,6 +41,43 @@ function useExpandedSystems() {
   };
 
   return { expanded, toggle };
+}
+
+function BackendStatusBar() {
+  const { status } = useWsConnection();
+  const selectedName = localStorage.getItem('sman-servers') || '';
+  let alias = '';
+  let address = '';
+  let url = '';
+
+  try {
+    const servers: Array<{ name: string; url: string; alias?: string }> = JSON.parse(
+      localStorage.getItem('sman-servers') || '[]',
+    );
+    const selected = localStorage.getItem('sman-selected-server') || 'localhost';
+    const current = servers.find((s) => s.name === selected);
+    if (current) {
+      alias = current.alias || '';
+      url = current.url;
+      address = current.name;
+    }
+  } catch { /* ignore */ }
+
+  const isLocal = !url;
+  const statusColor = status === 'connected' ? 'bg-green-500' : 'bg-yellow-500';
+  const label = isLocal
+    ? '本机'
+    : alias
+      ? `${alias} (${address})`
+      : address;
+
+  return (
+    <div className="px-3 pb-2 flex items-center gap-1.5">
+      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusColor)} />
+      <Server className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <span className="text-[11px] text-muted-foreground truncate">{label}</span>
+    </div>
+  );
 }
 
 function SessionItem({
@@ -348,6 +387,9 @@ export function SessionTree() {
           新建会话
         </Button>
       </div>
+
+      {/* Backend status bar */}
+      <BackendStatusBar />
 
       {/* Tree */}
       <div ref={scrollAreaRef} className="flex-1 min-h-0">

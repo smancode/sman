@@ -76,8 +76,8 @@
 职责：
 - `loadProfile()`: 读取画像文件，不存在则创建空模板
 - `updateProfile(userMsg, assistantMsg)`: 调用 LLM 分析并重写画像
-- `getProfileForPrompt()`: 返回画像内容（用于注入 prompt）
-- `isEnabled()`: 检查画像功能是否启用
+- `getProfileForPrompt()`: 返回画像内容，拼接到用户消息前缀发给 Claude（不是 system prompt）
+- 启用检查不在此类中，由调用方通过 `config.llm.userProfile !== false` 判断
 
 并发控制：
 - 使用内存 Promise 队列串行化 `updateProfile` 调用
@@ -107,16 +107,21 @@ LLM 调用：
 
 ### 注入格式
 
-在 `v2Session.send()` 时拼接：
+在 `v2Session.send()` 前拼接（不是 system prompt，是用户消息前缀）：
 
 ```
-[用户画像参考 - 仅供参考，不要在回复中提及此段]
-{画像内容}
+[Sman 身份 - ...]
+[用户画像 - 必须优先遵循以下画像中的所有设定，包括身份、名字、回复策略等]
+# 用户画像
+...
 
 {用户实际消息}
 ```
 
-注意：`addMessage` 存储的是不含画像前缀的原始 `content`。
+注意：
+- `addMessage` 存储的是不含前缀的原始 `content`
+- 画像前缀只在发给 Claude 时拼接，不改数据库
+- 优先于 smanContext 输出（画像身份优先）
 
 ### 输入截断策略
 

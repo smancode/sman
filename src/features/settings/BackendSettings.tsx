@@ -8,9 +8,10 @@ const STORAGE_KEY_SERVERS = 'sman-servers';
 const STORAGE_KEY_SELECTED = 'sman-selected-server';
 
 interface ServerEntry {
-  name: string;
+  name: string;      // display name (alias or address)
   url: string;
   token: string;
+  alias?: string;    // user-friendly alias
 }
 
 const LOCALHOST_NAME = 'localhost';
@@ -23,7 +24,7 @@ function loadServers(): ServerEntry[] {
       if (list.some(s => s.name === LOCALHOST_NAME)) return list;
     }
   } catch { /* ignore */ }
-  return [{ name: LOCALHOST_NAME, url: '', token: '' }];
+  return [{ name: LOCALHOST_NAME, url: '', token: '', alias: '本机' }];
 }
 
 function saveServers(servers: ServerEntry[]) {
@@ -62,6 +63,7 @@ export function BackendSettings() {
   // Token editor (remote servers only; localhost auto-fetches)
   const [token, setToken] = useState(() => currentServer?.token || '');
   const [newAddr, setNewAddr] = useState('');
+  const [newAlias, setNewAlias] = useState('');
   const [newToken, setNewToken] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
@@ -139,7 +141,12 @@ export function BackendSettings() {
       const ok = await testConnection(wsUrl);
       if (ok) {
         const name = newAddr.trim().replace(/\/$/, '');
-        const entry: ServerEntry = { name, url: wsUrl, token: newToken };
+        const entry: ServerEntry = {
+          name,
+          url: wsUrl,
+          token: newToken,
+          alias: newAlias.trim() || undefined,
+        };
         const updated = [...servers.filter(s => s.name !== name), entry];
         setServers(updated);
         saveServers(updated);
@@ -147,6 +154,7 @@ export function BackendSettings() {
         setToken(newToken);
         setTestResult('ok');
         setNewAddr('');
+        setNewAlias('');
         setNewToken('');
 
         applyServer(entry);
@@ -194,18 +202,23 @@ export function BackendSettings() {
             value={selectedName}
             onChange={(e) => handleSelect(e.target.value)}
           >
-            {servers.map(s => (
-              <option key={s.name} value={s.name}>
-                {s.name}{s.url ? '' : ' (本机)'}
-              </option>
-            ))}
+            {servers.map(s => {
+              const label = s.alias
+                ? `${s.alias} (${s.name})`
+                : s.name + (s.url ? ` (${s.url})` : ' (本机)');
+              return (
+                <option key={s.name} value={s.name}>
+                  {label}
+                </option>
+              );
+            })}
           </select>
         </div>
 
         {/* Remote server info + delete */}
         {currentServer && currentServer.url && (
           <div className="text-xs text-muted-foreground">
-            {currentServer.url}
+            {currentServer.alias ? `${currentServer.alias} (${currentServer.url})` : currentServer.url}
             <button
               className="ml-2 text-red-500 hover:text-red-700 text-xs underline"
               onClick={() => handleRemoveServer(currentServer.name)}
@@ -246,9 +259,15 @@ export function BackendSettings() {
           <label className="text-sm font-medium leading-none">添加远程服务器</label>
           <input
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={newAlias}
+            onChange={(e) => { setNewAlias(e.target.value); setTestResult(null); }}
+            placeholder="别名（可选，例如：测试服务器）"
+          />
+          <input
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newAddr}
             onChange={(e) => { setNewAddr(e.target.value); setTestResult(null); }}
-            placeholder="例: 192.168.1.100:5880"
+            placeholder="地址: 192.168.1.100:5880"
           />
           <input
             type="password"

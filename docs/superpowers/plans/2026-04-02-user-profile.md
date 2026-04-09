@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 实现对话后自动分析用户行为、持续积累用户画像、注入 prompt 让 Claude 懂用户。
+**Goal:** 实现对话后自动分析用户行为、持续积累用户画像、在用户消息前拼接画像前缀让 Claude 懂用户（不是注入 system prompt）。
 
 **Architecture:** 新建 `server/user-profile.ts` 画像管理器，Markdown 文件存储画像。三个 sendMessage* 方法中注入画像前缀 + result case 后 fire-and-forget 调用 LLM 更新画像。串行队列保证并发安全。
 

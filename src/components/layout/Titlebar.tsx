@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Minus, Square, X, Copy } from 'lucide-react';
+import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 
 declare global {
@@ -19,6 +20,10 @@ export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
   const isWindows = window.sman?.platform === 'win32';
+  const sessions = useChatStore((s) => s.sessions);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
+  const currentSession = sessions.find((s) => s.key === currentSessionId);
+  const workspace = currentSession?.workspace;
 
   useEffect(() => {
     if (!window.sman?.onMaximizeChanged) return;
@@ -34,6 +39,16 @@ export function Titlebar() {
       className="flex items-center h-6 select-none shrink-0 bg-transparent"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
+      {/* Spacer - drag area */}
+      <div className="flex-1" />
+
+      {/* Workspace path - centered */}
+      {workspace && (
+        <span className="text-[12px] font-mono text-muted-foreground/50 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          {workspace}
+        </span>
+      )}
+
       {/* Spacer - drag area */}
       <div className="flex-1" />
 

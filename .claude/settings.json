@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(.claude/skills/project-apis)",
+      "Edit(.claude/skills/project-apis)",
+      "Write(.claude/skills/project-external-calls)",
+      "Edit(.claude/skills/project-external-calls)",
+      "Bash"
+    ]
+  }
+}
