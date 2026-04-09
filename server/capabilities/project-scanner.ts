@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { createLogger, type Logger } from '../utils/logger.js';
 import { getScannerPrompt, SCANNER_TYPES, type ScannerType } from './scanner-prompts.js';
 
 // ── Types ──
@@ -157,55 +158,81 @@ export interface ProjectScannerOptions {
 }
 
 export class ProjectScanner {
-  private log = { info: (...args: any[]) => console.log('[ProjectScanner]', ...args) };
+  private log: Logger;
 
-  constructor(private options: ProjectScannerOptions) {}
+  constructor(private options: ProjectScannerOptions) {
+    this.log = createLogger('ProjectScanner');
+  }
 
   async scheduleScanIfNeeded(workspace: string): Promise<void> {
     if (!isScanNeeded(workspace)) return;
     this.log.info(`Scheduling scan for ${workspace}`);
-    try { await this.scan(workspace); } catch (e: any) { this.log.info(`Scan failed: ${e.message}`); }
+    try { await this.scan(workspace); } catch (e: any) { this.log.error(`Scan failed: ${e.message}`); }
   }
 
   async scan(workspace: string): Promise<void> {
     acquireLock(workspace);
-    const gitInfo = getGitInfo(workspace);
-    const scannerStatuses: Record<string, ScannerStatus> = {};
-    const scannerPromises: Promise<void>[] = [];
+    try {
+      const gitInfo = getGitInfo(workspace);
+      const scannerStatuses: Record<string, ScannerStatus> = {};
+      const scannerPromises: Promise<void>[] = [];
 
-    for (const type of SCANNER_TYPES) {
-      scannerStatuses[type] = { status: 'pending' };
-      scannerPromises.push(
-        this.runScanner(type, workspace)
-          .then((count) => { scannerStatuses[type] = { status: 'done', filesWritten: count }; })
-          .catch((e: any) => { scannerStatuses[type] = { status: 'error', error: e.message }; }),
-      );
+      for (const type of SCANNER_TYPES) {
+        scannerStatuses[type] = { status: 'pending' };
+        scannerPromises.push(
+          this.runScanner(type, workspace)
+            .then((result) => {
+              scannerStatuses[type] = {
+                status: result.success ? 'done' : 'error',
+                filesWritten: result.filesWritten,
+                ...(result.success ? {} : { error: result.error }),
+              };
+            })
+            .catch((e: any) => { scannerStatuses[type] = { status: 'error', error: e.message }; }),
+        );
+      }
+
+      await Promise.all(scannerPromises);
+      writeManifest(workspace, { version: '1.0', ...gitInfo, scannedAt: new Date().toISOString(), scanners: scannerStatuses });
+      registerScannedWorkspace(this.options.homeDir, workspace);
+      const doneCount = Object.values(scannerStatuses).filter(s => s.status === 'done').length;
+      this.log.info(`Scan complete: ${doneCount}/3 scanners succeeded`);
+    } finally {
+      releaseLock(workspace);
     }
-
-    await Promise.all(scannerPromises);
-    writeManifest(workspace, { version: '1.0', ...gitInfo, scannedAt: new Date().toISOString(), scanners: scannerStatuses });
-    releaseLock(workspace);
-    registerScannedWorkspace(this.options.homeDir, workspace);
-    const doneCount = Object.values(scannerStatuses).filter(s => s.status === 'done').length;
-    this.log.info(`Scan complete: ${doneCount}/3 scanners succeeded`);
   }
 
-  private async runScanner(type: ScannerType, workspace: string): Promise<number> {
+  private async runScanner(type: ScannerType, workspace: string): Promise<{ filesWritten: number; success: boolean; error?: string }> {
     const sessionId = `scanner-${type}-${Date.now()}`;
     const prompt = getScannerPrompt(type, workspace);
     this.options.sessionManager.createSessionWithId(workspace, sessionId, true, true);
     const abortController = new AbortController();
-    let filesWritten = 0;
     try {
+      this.log.info(`Scanner [${type}] starting for session ${sessionId}`);
       await this.options.sessionManager.sendMessageForCron(sessionId, prompt, abortController, () => {});
       const outputDir = path.join(workspace, '.claude', 'skills', `project-${type}`);
-      if (fs.existsSync(outputDir)) {
-        filesWritten = fs.readdirSync(outputDir).filter(f => f.endsWith('.md')).length;
+      const skillFile = path.join(outputDir, 'SKILL.md');
+
+      // Validate SKILL.md exists and is non-empty
+      if (!fs.existsSync(skillFile)) {
+        this.log.error(`Scanner [${type}] failed: SKILL.md not written`);
+        return { filesWritten: 0, success: false, error: 'SKILL.md not written by agent' };
       }
+      const content = fs.readFileSync(skillFile, 'utf-8').trim();
+      if (content.length < 50) {
+        this.log.error(`Scanner [${type}] failed: SKILL.md too short (${content.length} chars)`);
+        return { filesWritten: 0, success: false, error: `SKILL.md too short: ${content.length} chars` };
+      }
+
+      const mdFiles = fs.readdirSync(outputDir).filter(f => f.endsWith('.md'));
+      this.log.info(`Scanner [${type}] succeeded: ${mdFiles.length} files written`);
+      return { filesWritten: mdFiles.length, success: true };
+    } catch (e: any) {
+      this.log.error(`Scanner [${type}] error: ${e.message}`);
+      return { filesWritten: 0, success: false, error: e.message };
     } finally {
       try { this.options.sessionManager.closeV2Session(sessionId); } catch { /* ignore */ }
     }
-    return filesWritten;
   }
 
   async nightlyRefresh(): Promise<void> {

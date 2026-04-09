@@ -14,11 +14,30 @@ const SHARED_RULES = `
 1. **Never read sensitive files**: .env, .env.*, credentials.*, *.key, *.pem, *.p12, *.jks. Note their EXISTENCE only.
 2. **File paths must be exact**: Always use backtick format: \`src/services/PaymentService.java\`
 3. **Don't guess**: If uncertain, mark with ⚠️
-4. **Write files directly**: Use the Write tool. Do NOT return file contents in your response.
-5. **Your output is a preprocessing aid**: Claude will verify against actual code when working. Prioritize accuracy of file paths and signatures over completeness of descriptions.
-6. **SKILL.md must be < 50 lines**: Table format, scannable at a glance.
+4. **Write files directly**: Use the Write tool to create each file. Do NOT return file contents in your response text. Do NOT use Bash/cat to write files — use the Write tool exclusively.
+5. **Create directories first**: Before writing, use Bash to run \`mkdir -p\` on the target directory.
+6. **Your output is a preprocessing aid**: Claude will verify against actual code when working. Prioritize accuracy of file paths and signatures over completeness of descriptions.
 7. **Reference files must be < 100 lines**: Key facts only.
 8. **Output language: English**: Save tokens. File paths and code references stay in original form.
+9. **MANDATORY**: You MUST write SKILL.md. If you finish without writing it, the scan is considered failed.
+
+## SKILL.md Format (MANDATORY)
+
+SKILL.md MUST start with YAML frontmatter followed by markdown body. Total file must be < 80 lines.
+
+Format:
+\`\`\`markdown
+---
+name: {skill-name}
+description: "{1-2 sentence description of what this skill provides and when to use it}"
+---
+
+# {Title}
+
+{Content — tables, lists, structured data}
+\`\`\`
+
+The \`name\` field must be lowercase, hyphen-separated. The \`description\` is used for skill discovery and triggering — write it so Claude knows when to consult this skill.
 `;
 
 const STRUCTURE_PROMPT = `
@@ -29,7 +48,14 @@ Write all files to: {SKILLS_DIR}/project-structure/
 
 ## Files to Write
 
-1. **SKILL.md** (< 50 lines) — Overview, must include:
+1. **SKILL.md** (< 80 lines total including frontmatter) — MUST start with frontmatter:
+   \`\`\`yaml
+   ---
+   name: project-structure
+   description: "{Project} directory layout, tech stack, module organization, and build instructions. Consult this when you need to understand project structure, find where code lives, or determine how to build/run."
+   ---
+   \`\`\`
+   Body must include:
    - Tech stack (languages, frameworks, build tools — from package.json/pom.xml/build.gradle/go.mod)
    - Directory tree (top 2-3 levels, exclude node_modules/.git/target)
    - Module list (table: name | path | purpose)
@@ -69,7 +95,14 @@ Rule: Replace / with -, remove leading -, max 80 chars.
 
 ## Files to Write
 
-1. **SKILL.md** (< 50 lines) — Overview, must include:
+1. **SKILL.md** (< 80 lines total including frontmatter) — MUST start with frontmatter:
+   \`\`\`yaml
+   ---
+   name: project-apis
+   description: "{Project} API endpoints catalog with signatures, parameters, and business flows. Consult this when you need to understand, modify, or add API endpoints."
+   ---
+   \`\`\`
+   Body must include:
    - Endpoint table: | Method | Path | Description | Reference File |
    - One row per endpoint
    - Group by controller/module if possible
@@ -103,7 +136,14 @@ Write all files to: {SKILLS_DIR}/project-external-calls/
 
 ## Files to Write
 
-1. **SKILL.md** (< 50 lines) — Overview, must include:
+1. **SKILL.md** (< 80 lines total including frontmatter) — MUST start with frontmatter:
+   \`\`\`yaml
+   ---
+   name: project-external-calls
+   description: "{Project} external dependencies: HTTP services, databases, message queues. Consult this when modifying integrations, debugging connectivity, or adding new external calls."
+   ---
+   \`\`\`
+   Body must include:
    - External service table: | Service | Type (HTTP/DB/MQ) | Purpose | Reference File |
    - One row per external dependency
 
@@ -138,9 +178,11 @@ export function getScannerPrompt(type: ScannerType, workspace: string): string {
   if (!template) throw new Error(`Unknown scanner type: ${type}`);
 
   const skillsDir = `${workspace}/.claude/skills`;
+  const projectName = workspace.split('/').pop() || 'project';
 
   return template
     .replace(/\{SKILLS_DIR\}/g, skillsDir)
+    .replace(/\{Project\}/g, projectName)
     + '\n\n'
     + SHARED_RULES
     + `\n\nWorkspace: ${workspace}`;

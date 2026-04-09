@@ -351,3 +351,91 @@
   white-space: pre-wrap !important;
   word-break: break-all !important;
 }
+
+/* ── Streamdown code block overrides ── */
+
+/* No-language code blocks: flat style, no card wrapper */
+[data-streamdown="code-block"][data-language=""] {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
+}
+
+/* Hide the empty header for no-language blocks */
+[data-streamdown="code-block"][data-language=""] [data-streamdown="code-block-header"] {
+  display: none !important;
+}
+
+/* Remove border from code body for no-language blocks */
+[data-streamdown="code-block"][data-language=""] [data-streamdown="code-block-body"] {
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0.5rem 0 !important;
+  background: transparent !important;
+}
+
+/* ── Language-tagged code blocks: compact header, no extra gap ── */
+
+/* Compact language header */
+[data-streamdown="code-block-header"] {
+  height: 1.5rem !important;
+  min-height: 1.5rem !important;
+  padding: 0 0.25rem !important;
+}
+
+[data-streamdown="code-block-header"] span {
+  font-size: 0.625rem !important;
+}
+
+/* Reduce gap between header and code body */
+[data-streamdown="code-block"]:not([data-language=""]) {
+  gap: 0 !important;
+}
+
+/* ── Code block action buttons: bottom-right, small, no border box ── */
+
+/* Make code-block container the positioning context */
+[data-streamdown="code-block"] {
+  position: relative !important;
+}
+
+/* Reposition the sticky actions wrapper to bottom-right */
+[data-streamdown="code-block"] > :has([data-streamdown="code-block-actions"]) {
+  position: absolute !important;
+  bottom: calc(0.375rem + 5px) !important;
+  right: calc(0.375rem + 5px) !important;
+  top: auto !important;
+  margin-top: 0 !important;
+  height: auto !important;
+  z-index: 10 !important;
+  pointer-events: auto !important;
+}
+
+/* Remove the border box around buttons */
+[data-streamdown="code-block-actions"] {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  backdrop-filter: none !important;
+  gap: 0.25rem !important;
+}
+
+/* Buttons: subtle until hover */
+[data-streamdown="code-block-actions"] button {
+  padding: 0.25rem !important;
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+}
+
+[data-streamdown="code-block-actions"] button:hover {
+  opacity: 1;
+}
+
+/* Button icon size */
+[data-streamdown="code-block-copy-button"] svg,
+[data-streamdown="code-block-download-button"] svg {
+  width: 14px !important;
+  height: 14px !important;
+}

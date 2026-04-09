@@ -56,6 +56,8 @@ export class ClaudeSessionManager {
   private activeStreams = new Map<string, AbortController>();
   /** Resolves when the current stream loop for a session fully exits (finally block ran) */
   private streamDone = new Map<string, Promise<void>>();
+  /** Tracks in-flight preheat promises so sendMessage can await them */
+  private preheatPromises = new Map<string, Promise<void>>();
   private sdkSessionIds = new Map<string, string>();
   private log: Logger;
   private config: SmanConfig | null = null;
@@ -359,6 +361,7 @@ export class ClaudeSessionManager {
   }
 
   closeV2Session(sessionId: string): void {
+    this.preheatPromises.delete(sessionId);
     const info = this.v2Sessions.get(sessionId);
     if (info) {
       try {
@@ -404,13 +407,23 @@ export class ClaudeSessionManager {
       return;
     }
 
-    this.log.info(`Preheating V2 session for ${sessionId}...`);
-    try {
-      await this.getOrCreateV2Session(sessionId);
-      this.log.info(`V2 session preheated for ${sessionId}`);
-    } catch (err) {
-      this.log.warn(`Failed to preheat session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    // Already preheating — let the existing promise do the work
+    if (this.preheatPromises.has(sessionId)) {
+      return;
     }
+
+    this.log.info(`Preheating V2 session for ${sessionId}...`);
+    const promise = this.getOrCreateV2Session(sessionId)
+      .then(() => {
+        this.log.info(`V2 session preheated for ${sessionId}`);
+      })
+      .catch((err) => {
+        this.log.warn(`Failed to preheat session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+      })
+      .finally(() => {
+        this.preheatPromises.delete(sessionId);
+      });
+    this.preheatPromises.set(sessionId, promise);
   }
 
   createSession(workspace: string): string {
@@ -502,6 +515,12 @@ export class ClaudeSessionManager {
     this.streamDone.set(sessionId, streamPromise);
 
     let stallChecker: ReturnType<typeof setInterval> | null = null;
+
+    // If preheat is in progress, wait for it to finish so we don't create a duplicate V2 session
+    const preheatPromise = this.preheatPromises.get(sessionId);
+    if (preheatPromise) {
+      await preheatPromise;
+    }
 
     // Track streamed content — declared outside try so catch can save partial state on abort
     let fullContent = '';
@@ -948,12 +967,18 @@ export class ClaudeSessionManager {
             break;
           }
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as any).event);
+            const rawEvent = (sdkMsg as any).event;
+            const delta = this.extractDeltaText(rawEvent);
             if (delta) {
               if (delta.type === 'text') {
                 fullContent += delta.content;
               } else if (delta.type === 'tool_use') {
                 toolInProgress = true;
+                if (delta.name && delta.id) {
+                  this.log.info(`Cron tool_start: ${delta.name} (id=${delta.id})`);
+                }
+              } else if (delta.type === 'tool_result') {
+                this.log.info(`Cron tool_result for ${delta.id}: ${delta.content.slice(0, 100)}...`);
               }
             }
             break;
@@ -1332,6 +1357,7 @@ export class ClaudeSessionManager {
       this.closeV2Session(sessionId);
     }
     this.v2Sessions.clear();
+    this.preheatPromises.clear();
     this.sessions.clear();
     this.sdkSessionIds.clear();
   }

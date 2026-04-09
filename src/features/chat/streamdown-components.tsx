@@ -1,12 +1,8 @@
 /**
  * Custom Streamdown components to override default rendering.
  *
- * Problem 1: Streamdown wraps tables in a "code-block-like" container
- *            (rounded-lg border bg-sidebar) — looks ugly.
- * Solution:  Override table/theader/tbody/tr/th/td to render clean HTML tables.
- *
- * Problem 2: Shiki github-dark/github-light themes have poor contrast for some tokens.
- * Solution:  Override pre/code to ensure proper contrast.
+ * 1. Tables: render clean HTML without the "card-like" wrapper
+ * 2. Code blocks: no border for untyped blocks; compact header for typed blocks
  */
 
 import type { ComponentType } from 'react';
