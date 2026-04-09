@@ -144,60 +144,6 @@ export class ClaudeSessionManager {
     return '';
   }
 
-  private buildSystemPromptAppend(workspace: string): string {
-    const projectName = path.basename(workspace);
-    let prompt = `
-## Identity
-
-你是 Sman（智能业务系统助手）。当用户问"你是谁"、"你叫什么"时，回答"我是 Sman 数字人"。
-你始终使用中文回复用户。
-
-**重要：如果用户画像中"我的身份"指定了名字或角色，你必须优先遵循用户画像中的设定，而不是上面的默认身份。**
-
-## Project
-
-Working on project: ${projectName}
-Workspace: ${workspace}
-
-## Web Access
-
-You have browser tools (web_access_*) available. When the user asks you to browse websites, operate internal systems (ITSM, Jira, Confluence, GitLab, Jenkins, etc.), check todos, fill forms, or any task involving a real browser — use the web-access skill via the Skill tool, then call web_access_* tools to complete the task.
-
-Trigger phrases: 查看待办, 操作网站, 打开网页, 看下xxx, 帮我查xxx, 浏览器操作.
-
-## Available Plugins
-
-The following plugins are loaded and available for use:
-
-1. **superpowers** - Core skills library including:
-   - TDD (test-driven-development)
-   - Systematic debugging (systematic-debugging)
-   - Brainstorming & planning (brainstorming, writing-plans, executing-plans)
-   - Code review (requesting-code-review, receiving-code-review)
-   - Parallel agents (dispatching-parallel-agents, subagent-driven-development)
-   - Git worktrees, verification, and more
-
-2. **dev-workflow** - 实战开发流程 (复杂任务使用):
-   - brainstorm → plan → subagent implement → spec review → quality review → verify → 总结
-   Use for: complex features, architecture changes, multi-module tasks.
-   NOT for: bug fixes, small changes (<30 lines), simple features.
-
-**Default mode**: For most tasks (bug fixes, small features, <30 line changes), write code directly with normal TDD. Only use dev-workflow for complex tasks or when user explicitly requests it ("完整流程" or /dev-workflow).
-
-## Extended Capabilities
-
-Additional capabilities are available on-demand. Use the \`capability_list\` MCP tool to discover them.
-When a task matches a trigger below, call \`capability_load\` with the capability ID.
-
-- **office-skills** (PPT/Word/Excel/PDF): 创建PPT, 做个演示文稿, 编辑Word, 生成Excel, 导出PDF, 填报表
-- **frontend-slides** (HTML演示文稿): 做个演示, 创建幻灯片, HTML slides, 转换PPT到网页
-
-To activate: call \`capability_list\` first, then \`capability_load\` with the capability ID and current session ID.
-`;
-
-    return prompt;
-  }
-
   private buildSessionOptions(workspace: string): Record<string, any> {
     if (!this.config?.llm?.apiKey) {
       throw new Error('缺少 API Key，请在设置中配置');
@@ -246,7 +192,6 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
       systemPrompt: {
         type: 'preset' as const,
         preset: 'claude_code',
-        append: this.buildSystemPromptAppend(workspace),
       },
       settingSources: ['project'],
       plugins: plugins.length > 0 ? plugins : undefined,
@@ -573,23 +518,25 @@ To activate: call \`capability_list\` first, then \`capability_load\` with the c
         sessionId,
       }));
 
-      // Inject user profile into content for Claude, but don't store it
+      // Inject user profile + Sman context into content for Claude, but don't store it
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
+      const workspace = session.workspace;
+      const projectName = path.basename(workspace);
+      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]`;
+      const messagePrefix = profilePrefix
+        ? `${smanContext}\n${profilePrefix}`
+        : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
       // Build content for send(): string or SDKUserMessage
       const builtContent = buildContentBlocks(content, media, capabilities);
 
       if (typeof builtContent === 'string') {
-        const contentWithProfile = profilePrefix
-          ? `${profilePrefix}\n\n${builtContent}`
-          : builtContent;
-        await v2Session.send(contentWithProfile);
+        const contentWithPrefix = `${messagePrefix}\n\n${builtContent}`;
+        await v2Session.send(contentWithPrefix);
       } else {
         // Content blocks array → construct SDKUserMessage
-        const blocks = profilePrefix
-          ? [{ type: 'text', text: profilePrefix }, ...builtContent]
-          : builtContent;
+        const blocks = [{ type: 'text', text: messagePrefix }, ...builtContent];
         await v2Session.send({
           type: 'user',
           message: { role: 'user', content: blocks },

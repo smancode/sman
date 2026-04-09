@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "commitHash": "24d724b7fbcceab41f0f4052ae67e5be4db7b63d",
+  "commitHash": "f8dfc139bfe5a3c037154aa76ee105c3febe2206",
   "gitUrl": "https://github.com/smancode/sman.git",
   "branch": "base",
-  "scannedAt": "2026-04-08T14:07:29.033Z",
+  "scannedAt": "2026-04-08T16:41:52.719Z",
   "scanners": {
     "structure": {
       "status": "done",
