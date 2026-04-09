@@ -1,12 +1,13 @@
 /**
- * Project Scanner — orchestrates parallel scanner agents to generate
- * lightweight knowledge files in {workspace}/.claude/knowledge/.
+ * Project Scanner — orchestrates serial scanner agents to generate
+ * lightweight knowledge files in {workspace}/.claude/skills/.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createLogger, type Logger } from '../utils/logger.js';
 import { getScannerPrompt, SCANNER_TYPES, type ScannerType } from './scanner-prompts.js';
+import { validateSkillMd, parseFrontmatter } from './frontmatter-utils.js';
 
 // ── Types ──
 
@@ -62,25 +63,34 @@ export function getGitInfo(workspace: string): {
   }
 }
 
-export function isScanNeeded(workspace: string): boolean {
-  const lockPath = path.join(workspace, '.claude', '.scanning');
+export function isScanNeeded(workspace: string, scannerType: ScannerType): { needed: boolean; reason: string } {
+  const skillMdPath = path.join(workspace, '.claude', 'skills', `project-${scannerType}`, 'SKILL.md');
 
-  // Check if skill files already exist — if all 3 SKILL.md exist, skip
-  const skillsDir = path.join(workspace, '.claude', 'skills');
-  const allExist = SCANNER_TYPES.every(type =>
-    fs.existsSync(path.join(skillsDir, `project-${type}`, 'SKILL.md')),
-  );
-  if (allExist) return false;
-
-  if (fs.existsSync(lockPath)) {
-    if (isLockStale(workspace)) {
-      fs.unlinkSync(lockPath);
-      return true;
-    }
-    return false;
+  if (!fs.existsSync(skillMdPath)) {
+    return { needed: true, reason: 'SKILL.md not found' };
   }
 
-  return true;
+  const content = fs.readFileSync(skillMdPath, 'utf-8');
+  const frontmatter = parseFrontmatter(content);
+  const scannedCommit = frontmatter?._scanned?.commitHash;
+
+  let currentCommit: string;
+  try {
+    currentCommit = execSync('git rev-parse HEAD', { cwd: workspace, encoding: 'utf-8' }).trim();
+  } catch {
+    return { needed: true, reason: 'not a git repo' };
+  }
+
+  if (scannedCommit !== currentCommit) {
+    return {
+      needed: true,
+      reason: scannedCommit
+        ? `commit changed: ${scannedCommit} → ${currentCommit}`
+        : `commit hash missing in SKILL.md`
+    };
+  }
+
+  return { needed: false, reason: 'up to date' };
 }
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
@@ -154,7 +164,13 @@ export interface ProjectScannerOptions {
     createSessionWithId(workspace: string, sessionId: string, isCron?: boolean, isScanner?: boolean): string;
     sendMessageForCron(sessionId: string, content: string, abortController: AbortController, onActivity: () => void): Promise<void>;
     closeV2Session(sessionId: string): void;
+    hasActiveStreams(): boolean;
   };
+}
+
+function deleteScannerDir(workspace: string, scannerType: ScannerType): void {
+  const dir = path.join(workspace, '.claude', 'skills', `project-${scannerType}`);
+  if (fs.existsSync(dir)) { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 export class ProjectScanner {
@@ -165,51 +181,86 @@ export class ProjectScanner {
   }
 
   async scheduleScanIfNeeded(workspace: string): Promise<void> {
-    if (!isScanNeeded(workspace)) return;
     this.log.info(`Scheduling scan for ${workspace}`);
-    try { await this.scan(workspace); } catch (e: any) { this.log.error(`Scan failed: ${e.message}`); }
+    try { await this.scanWorkspace(workspace); } catch (e: any) { this.log.error(`Scan failed: ${e.message}`); }
   }
 
-  async scan(workspace: string): Promise<void> {
+  async scanWorkspace(workspace: string): Promise<void> {
     acquireLock(workspace);
     try {
       const gitInfo = getGitInfo(workspace);
-      const scannerStatuses: Record<string, ScannerStatus> = {};
-      const scannerPromises: Promise<void>[] = [];
 
       for (const type of SCANNER_TYPES) {
-        scannerStatuses[type] = { status: 'pending' };
-        scannerPromises.push(
-          this.runScanner(type, workspace)
-            .then((result) => {
-              scannerStatuses[type] = {
-                status: result.success ? 'done' : 'error',
-                filesWritten: result.filesWritten,
-                ...(result.success ? {} : { error: result.error }),
-              };
-            })
-            .catch((e: any) => { scannerStatuses[type] = { status: 'error', error: e.message }; }),
-        );
+        const { needed, reason } = isScanNeeded(workspace, type);
+        if (!needed) {
+          this.log.info(`Scanner [${type}] skipped: ${reason}`);
+          continue;
+        }
+
+        await this.waitUntilIdle();
+
+        let success = false;
+        for (let retry = 0; retry <= 2 && !success; retry++) {
+          const result = await this.runScanner(type, workspace, gitInfo);
+          if (result.success) {
+            const skillMdPath = path.join(workspace, '.claude', 'skills', `project-${type}`, 'SKILL.md');
+            if (validateSkillMd(skillMdPath)) {
+              success = true;
+              this.updateManifestScanner(workspace, type, { status: 'done', filesWritten: result.filesWritten });
+            } else {
+              this.log.warn(`Scanner [${type}] SKILL.md validation failed, retry ${retry + 1}/2`);
+              deleteScannerDir(workspace, type);
+            }
+          } else {
+            this.log.warn(`Scanner [${type}] failed: ${result.error}, retry ${retry + 1}/2`);
+            deleteScannerDir(workspace, type);
+          }
+        }
+        if (!success) {
+          this.updateManifestScanner(workspace, type, { status: 'error', error: 'exhausted retries' });
+        }
       }
 
-      await Promise.all(scannerPromises);
-      writeManifest(workspace, { version: '1.0', ...gitInfo, scannedAt: new Date().toISOString(), scanners: scannerStatuses });
+      writeManifest(workspace, { version: '2.0', ...gitInfo, scannedAt: new Date().toISOString(), scanners: {} });
       registerScannedWorkspace(this.options.homeDir, workspace);
-      const doneCount = Object.values(scannerStatuses).filter(s => s.status === 'done').length;
-      this.log.info(`Scan complete: ${doneCount}/3 scanners succeeded`);
+      this.log.info(`Scan complete for ${workspace}`);
     } finally {
       releaseLock(workspace);
     }
   }
 
-  private async runScanner(type: ScannerType, workspace: string): Promise<{ filesWritten: number; success: boolean; error?: string }> {
+  private async waitUntilIdle(): Promise<void> {
+    while (this.options.sessionManager.hasActiveStreams()) {
+      this.log.info('Waiting for active sessions to finish...');
+      await new Promise(r => setTimeout(r, 30_000));
+    }
+  }
+
+  private updateManifestScanner(workspace: string, type: ScannerType, status: ScannerStatus): void {
+    const manifestPath = path.join(workspace, '.claude', 'knowledge-manifest.json');
+    let manifest: ScanManifest = { version: '2.0', gitUrl: null, commitHash: null, branch: null, scannedAt: '', scanners: {} };
+    if (fs.existsSync(manifestPath)) {
+      try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')); } catch { /* ignore */ }
+    }
+    manifest.scanners[type] = status;
+    manifest.version = '2.0';
+    fs.mkdirSync(path.join(workspace, '.claude'), { recursive: true });
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  }
+
+  private async runScanner(type: ScannerType, workspace: string, gitInfo: { commitHash: string | null; gitUrl: string | null; branch: string | null }): Promise<{ filesWritten: number; success: boolean; error?: string }> {
     const sessionId = `scanner-${type}-${Date.now()}`;
-    const prompt = getScannerPrompt(type, workspace);
+    const prompt = getScannerPrompt(type, workspace, {
+      commitHash: gitInfo.commitHash ?? 'unknown',
+      branch: gitInfo.branch ?? 'unknown',
+    });
     this.options.sessionManager.createSessionWithId(workspace, sessionId, true, true);
     const abortController = new AbortController();
+    const timeoutId = setTimeout(() => { abortController.abort(); }, 10 * 60 * 1000);
     try {
       this.log.info(`Scanner [${type}] starting for session ${sessionId}`);
       await this.options.sessionManager.sendMessageForCron(sessionId, prompt, abortController, () => {});
+      clearTimeout(timeoutId);
       const outputDir = path.join(workspace, '.claude', 'skills', `project-${type}`);
       const skillFile = path.join(outputDir, 'SKILL.md');
 
@@ -228,6 +279,11 @@ export class ProjectScanner {
       this.log.info(`Scanner [${type}] succeeded: ${mdFiles.length} files written`);
       return { filesWritten: mdFiles.length, success: true };
     } catch (e: any) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        this.log.error(`Scanner [${type}] timed out after 10 minutes`);
+        return { filesWritten: 0, success: false, error: 'timeout after 10 minutes' };
+      }
       this.log.error(`Scanner [${type}] error: ${e.message}`);
       return { filesWritten: 0, success: false, error: e.message };
     } finally {
@@ -259,7 +315,7 @@ export class ProjectScanner {
           const skillDir = path.join(skillsDir, `project-${type}`);
           if (fs.existsSync(skillDir)) fs.rmSync(skillDir, { recursive: true, force: true });
         }
-        await this.scan(entry.path);
+        await this.scanWorkspace(entry.path);
       }
     }
   }

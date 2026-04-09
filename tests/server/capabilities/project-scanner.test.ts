@@ -59,39 +59,10 @@ describe('isScanNeeded', () => {
     fs.rmSync(workspace, { recursive: true, force: true });
   });
 
-  it('returns true when no manifest exists', () => {
-    expect(isScanNeeded(workspace)).toBe(true);
-  });
-
-  it('returns false when all 3 SKILL.md files exist', () => {
-    const skillsDir = path.join(workspace, '.claude', 'skills');
-    for (const type of ['structure', 'apis', 'external-calls']) {
-      const skillDir = path.join(skillsDir, `project-${type}`);
-      fs.mkdirSync(skillDir, { recursive: true });
-      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# Overview');
-    }
-    expect(isScanNeeded(workspace)).toBe(false);
-  });
-
-  it('returns false when lock file exists and is fresh', () => {
-    const claudeDir = path.join(workspace, '.claude');
-    fs.mkdirSync(claudeDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(claudeDir, '.scanning'),
-      JSON.stringify({ pid: 99999, startedAt: new Date().toISOString() }),
-    );
-    expect(isScanNeeded(workspace)).toBe(false);
-  });
-
-  it('returns true when lock file is stale', () => {
-    const claudeDir = path.join(workspace, '.claude');
-    fs.mkdirSync(claudeDir, { recursive: true });
-    const oldDate = new Date(Date.now() - 31 * 60 * 1000).toISOString();
-    fs.writeFileSync(
-      path.join(claudeDir, '.scanning'),
-      JSON.stringify({ pid: 99999, startedAt: oldDate }),
-    );
-    expect(isScanNeeded(workspace)).toBe(true);
+  it('returns needed=true when SKILL.md does not exist', () => {
+    const result = isScanNeeded(workspace, 'structure');
+    expect(result.needed).toBe(true);
+    expect(result.reason).toBe('SKILL.md not found');
   });
 });
 

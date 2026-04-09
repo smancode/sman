@@ -375,6 +375,10 @@ export class ClaudeSessionManager {
     }
   }
 
+  hasActiveStreams(): boolean {
+    return this.activeStreams.size > 0;
+  }
+
   private startCleanup(): void {
     if (this.cleanupTimer) return;
     const timer = setInterval(() => {
