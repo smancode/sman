@@ -41,28 +41,14 @@ describe('scanner-prompts', () => {
     expect(() => getScannerPrompt('unknown' as ScannerType, '/tmp')).toThrow();
   });
 
-  it('prompt contains _scanned fields for structure scanner', () => {
-    const prompt = getScannerPrompt('structure', '/tmp/test');
-    expect(prompt).toContain('_scanned:');
-    expect(prompt).toContain('commitHash');
-    expect(prompt).toContain('scannedAt');
-    expect(prompt).toContain('branch');
-  });
-
-  it('prompt contains _scanned fields for apis scanner', () => {
-    const prompt = getScannerPrompt('apis', '/tmp/test');
-    expect(prompt).toContain('_scanned:');
-    expect(prompt).toContain('commitHash');
-    expect(prompt).toContain('scannedAt');
-    expect(prompt).toContain('branch');
-  });
-
-  it('prompt contains _scanned fields for external-calls scanner', () => {
-    const prompt = getScannerPrompt('external-calls', '/tmp/test');
-    expect(prompt).toContain('_scanned:');
-    expect(prompt).toContain('commitHash');
-    expect(prompt).toContain('scannedAt');
-    expect(prompt).toContain('branch');
+  it('prompt contains _scanned fields for all scanners', () => {
+    for (const type of SCANNER_TYPES) {
+      const prompt = getScannerPrompt(type as ScannerType, '/tmp/test');
+      expect(prompt).toContain('_scanned:');
+      expect(prompt).toContain('commitHash');
+      expect(prompt).toContain('scannedAt');
+      expect(prompt).toContain('branch');
+    }
   });
 
   it('prompt accepts and injects git info', () => {
