@@ -29,6 +29,12 @@ describe('parseFrontmatter', () => {
     const content = `---\nname: test\n# missing closing ---`;
     expect(parseFrontmatter(content)).toBeNull();
   });
+
+  it('parses empty frontmatter block', () => {
+    const content = `---\n---\n\n# Content`;
+    const result = parseFrontmatter(content);
+    expect(result).toEqual({});
+  });
 });
 
 describe('validateSkillMd', () => {
