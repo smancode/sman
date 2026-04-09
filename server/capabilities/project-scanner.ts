@@ -208,11 +208,11 @@ export class ProjectScanner {
               success = true;
               this.updateManifestScanner(workspace, type, { status: 'done', filesWritten: result.filesWritten });
             } else {
-              this.log.warn(`Scanner [${type}] SKILL.md validation failed, retry ${retry + 1}/2`);
+              this.log.warn(`Scanner [${type}] SKILL.md validation failed, retry ${retry + 1}/3`);
               deleteScannerDir(workspace, type);
             }
           } else {
-            this.log.warn(`Scanner [${type}] failed: ${result.error}, retry ${retry + 1}/2`);
+            this.log.warn(`Scanner [${type}] failed: ${result.error}, retry ${retry + 1}/3`);
             deleteScannerDir(workspace, type);
           }
         }
