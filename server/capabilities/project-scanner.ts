@@ -164,8 +164,8 @@ export interface ProjectScannerOptions {
     createSessionWithId(workspace: string, sessionId: string, isCron?: boolean, isScanner?: boolean): string;
     sendMessageForCron(sessionId: string, content: string, abortController: AbortController, onActivity: () => void): Promise<void>;
     closeV2Session(sessionId: string): void;
-    hasActiveStreams(): boolean;
   };
+  hasActiveStreams: () => boolean;
 }
 
 function deleteScannerDir(workspace: string, scannerType: ScannerType): void {
@@ -230,7 +230,7 @@ export class ProjectScanner {
   }
 
   private async waitUntilIdle(): Promise<void> {
-    while (this.options.sessionManager.hasActiveStreams()) {
+    while (this.options.hasActiveStreams()) {
       this.log.info('Waiting for active sessions to finish...');
       await new Promise(r => setTimeout(r, 30_000));
     }

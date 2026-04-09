@@ -206,6 +206,7 @@ sessionManager.setCapabilityRegistry(capabilityRegistry);
 const projectScanner = new ProjectScanner({
   homeDir,
   sessionManager,
+  hasActiveStreams: sessionManager.hasActiveStreams.bind(sessionManager),
 });
 
 // Set up cron scheduler with session manager
