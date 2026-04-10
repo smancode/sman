@@ -16,7 +16,7 @@ export function BazaarSettings() {
 
   const [server, setServer] = useState(bazaar?.server ?? '');
   const [agentName, setAgentName] = useState(bazaar?.agentName ?? '');
-  const [mode, setMode] = useState(bazaar?.mode ?? 'notify');
+  const [mode, setMode] = useState<string>(bazaar?.mode ?? 'notify');
   const [maxSlots, setMaxSlots] = useState(bazaar?.maxConcurrentTasks ?? 3);
   const [saving, setSaving] = useState(false);
 
