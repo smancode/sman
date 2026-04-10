@@ -241,11 +241,7 @@ export class CronExecutor {
     }
 
     // 解析 crontab.md：第一行可能是 cron 表达式，需要跳过
-    const promptContent = extractPromptContent(crontabContent);
-    if (!promptContent) {
-      this.log.warn(`crontab.md has no prompt content for task ${task.id}`);
-      return;
-    }
+    const parsed = parseCrontabMd(crontabContent);
 
     // 写入 lock
     const lockPath = this.getLockFilePath(task.workspace, task.skillName);
@@ -270,8 +266,10 @@ export class CronExecutor {
     this.activeRuns.set(sessionId, activeRun);
     this._onRunStatusChange?.(task.id, 'running');
 
-    // 构造提示词
-    const prompt = `/${task.skillName} ${promptContent}`;
+    // 构造提示词：优先用 crontab.md 中的 promptContent，为空则只用 skill name
+    const prompt = parsed && parsed.promptContent
+      ? `/${task.skillName} ${parsed.promptContent}`
+      : `/${task.skillName}`;
     this.log.info(`Executing task ${task.id}: ${prompt}`);
 
     try {
@@ -337,13 +335,4 @@ export class CronExecutor {
   }
 }
 
-/**
- * 从 crontab.md 内容中提取提示词
- * 如果第一行是合法 cron 表达式，跳过它，返回后续内容
- * 否则返回全部内容
- */
-function extractPromptContent(content: string): string {
-  const parsed = parseCrontabMd(content);
-  if (parsed) return parsed.promptContent;
-  return content.replace(/^\uFEFF/, '').trim();
-}
+
