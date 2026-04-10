@@ -78,6 +78,7 @@ export interface BazaarAck {
 
 export type AgentMessageType =
   | 'agent.register'
+  | 'agent.registered'
   | 'agent.heartbeat'
   | 'agent.update'
   | 'agent.offline';
@@ -146,12 +147,32 @@ export type ServerMessageType =
   | 'agent.resume_tasks'
   | 'world.resync';
 
+// ── Task 状态和协作模式枚举 ──
+
+export type TaskStatus = 'created' | 'searching' | 'offered' | 'matched' | 'chatting' | 'completed' | 'rated' | 'failed';
+
+export type CollaborationMode = 'auto' | 'notify' | 'manual';
+
+// ── Task Payload 骨架（后续 Chunk 扩展） ──
+
+export interface TaskCreatePayload {
+  question: string;
+  capabilityQuery: string;
+  provenance?: string[];
+  hopCount?: number;
+}
+
+export interface TaskOfferPayload {
+  taskId: string;
+  candidates: Array<{ agentId: string; reputation: number }>;
+}
+
 // ── Bazaar 配置（嵌入 SmanConfig） ──
 
 export interface BazaarConfig {
   server: string;          // 集市服务器地址，如 "bazaar.company.com:5890"
   agentName?: string;      // Agent 显示名
-  mode: 'auto' | 'notify' | 'manual';  // 协作模式
+  mode: CollaborationMode;  // 协作模式
   maxConcurrentTasks: number;  // 最大并发槽位，默认 3
 }
 ```
@@ -362,7 +383,7 @@ type AllMessageTypes = AgentMessageType | TaskMessageType | WorldMessageType | S
 
 const VALID_TYPES: Set<string> = new Set([
   // Agent
-  'agent.register', 'agent.heartbeat', 'agent.update', 'agent.offline',
+  'agent.register', 'agent.registered', 'agent.heartbeat', 'agent.update', 'agent.offline',
   'agent.kicked', 'agent.resume_tasks',
   // Task
   'task.create', 'task.search_result', 'task.offer', 'task.incoming',
@@ -738,6 +759,8 @@ export class AgentStore {
       CREATE INDEX IF NOT EXISTS idx_audit_agent ON audit_log(agent_id);
       CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
       CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_type);
+      CREATE INDEX IF NOT EXISTS idx_projects_agent ON agent_projects(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_privcap_agent ON agent_private_capabilities(agent_id);
 
       PRAGMA journal_mode=WAL;
     `);
@@ -808,13 +831,15 @@ export class AgentStore {
   }
 
   findAgentsByCapability(keyword: string): { agentId: string; repo: string }[] {
+    // 转义 SQL LIKE 通配符防止非预期匹配
+    const escaped = keyword.replace(/%/g, '\\%').replace(/_/g, '\\_');
     return this.db.prepare(`
       SELECT ap.agent_id as agentId, ap.repo
       FROM agent_projects ap
       JOIN agents a ON a.id = ap.agent_id
       WHERE a.status != 'offline'
-        AND ap.skills LIKE ?
-    `).all(`%${keyword}%`) as { agentId: string; repo: string }[];
+        AND ap.skills LIKE ? ESCAPE '\\'
+    `).all(`%${escaped}%`) as { agentId: string; repo: string }[];
   }
 
   // ── Audit Log ──
@@ -1067,8 +1092,12 @@ export class MessageRouter {
       });
     }
 
-    // 更新项目列表
-    const projects = (payload.projects as Array<{ repo: string; skills: string }>) ?? [];
+    // 更新项目列表（确保 skills 为 JSON string）
+    const rawProjects = (payload.projects as Array<{ repo: string; skills: unknown }>) ?? [];
+    const projects = rawProjects.map(p => ({
+      repo: p.repo,
+      skills: typeof p.skills === 'string' ? p.skills : JSON.stringify(p.skills),
+    }));
     if (projects.length > 0) {
       this.store.updateProjects(agentId, projects);
     }
@@ -1184,6 +1213,9 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+const store = new AgentStore(DB_PATH);
+const router = new MessageRouter(store);
+
 const app = express();
 const server = http.createServer(app);
 
@@ -1194,8 +1226,6 @@ app.get('/api/health', (_req, res) => {
 
 // WebSocket 服务器
 const wss = new WebSocketServer({ server });
-const store = new AgentStore(DB_PATH);
-const router = new MessageRouter(store);
 
 // Agent ID → WebSocket 映射
 const connections = new Map<string, WebSocket>();
@@ -1312,8 +1342,7 @@ git commit -m "feat(bazaar): add server entry point with WS, health check, grace
     "better-sqlite3": "^11.0.0",
     "express": "^4.21.0",
     "uuid": "^11.0.0",
-    "ws": "^8.18.0",
-    "zod": "^3.24.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
@@ -1345,10 +1374,7 @@ git commit -m "feat(bazaar): add server entry point with WS, health check, grace
     "sourceMap": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "include": ["src/**/*.ts", "../shared/**/*.ts"]
 }
 ```
 
@@ -1357,10 +1383,16 @@ git commit -m "feat(bazaar): add server entry point with WS, health check, grace
 ```typescript
 // bazaar/vitest.config.ts
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
   test: {
     globals: true,
+  },
+  resolve: {
+    alias: {
+      '../../shared/bazaar-types.js': path.resolve(__dirname, '../shared/bazaar-types.ts'),
+    },
   },
 });
 ```

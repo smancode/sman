@@ -10,6 +10,11 @@
 
 **Design Doc:** `docs/superpowers/specs/2026-04-10-bazaar-agent-swarm-design.md`
 
+**前置依赖：**
+- Chunk 1 必须先完成（`shared/bazaar-types.ts` 中的 `BazaarConfig` 等共享类型）
+- Chunk 2 必须先完成（`server/types.ts` 中的 `bazaar` 字段、Bridge 的 `bazaar.*` 消息路由、初始连接状态推送）
+- 本 Chunk 不可独立编译，必须按 Chunk 1 → 2 → 3 顺序执行
+
 ---
 
 ## Chunk 1: 基础设施（类型 + Store + Hooks）
@@ -142,6 +147,7 @@ interface BazaarState {
 
   // Actions
   fetchTasks: () => void;
+  fetchOnlineAgents: () => void;
   cancelTask: (taskId: string) => void;
   setActiveChat: (taskId: string) => void;
   clearActiveChat: () => void;
@@ -174,10 +180,16 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
       client.send({ type: 'bazaar.task.list' });
     },
 
+    fetchOnlineAgents: () => {
+      const client = getWsClient();
+      if (!client) return;
+      client.send({ type: 'bazaar.agent.list' });
+    },
+
     cancelTask: (taskId: string) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.task.cancel', taskId });
+      client.send({ type: 'bazaar.task.cancel', payload: { taskId } });
     },
 
     setActiveChat: (taskId: string) => {
@@ -191,7 +203,7 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
     setMode: (mode: BazaarMode) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.config.update', mode });
+      client.send({ type: 'bazaar.config.update', payload: { mode } });
     },
 
     clearError: () => set({ error: null }),
@@ -215,13 +227,23 @@ function registerPushListeners() {
       const event = msg.event as string;
       if (event === 'connected') {
         set((s) => ({
-          connection: { ...s.connection, connected: true, agentId: msg.agentId as string, agentName: msg.agentName as string },
+          connection: {
+            ...s.connection,
+            connected: true,
+            agentId: msg.agentId as string,
+            agentName: msg.agentName as string,
+            reputation: (msg.reputation as number) ?? 0,
+            activeSlots: (msg.activeSlots as number) ?? 0,
+            maxSlots: (msg.maxSlots as number) ?? 3,
+          },
         }));
       } else if (event === 'disconnected') {
         set((s) => ({ connection: { ...s.connection, connected: false } }));
       }
     } else if (type === 'bazaar.task.list.update') {
       set({ tasks: msg.tasks as BazaarTask[], loading: false });
+    } else if (type === 'bazaar.agent.list.update') {
+      set({ onlineAgents: msg.agents as BazaarAgentInfo[] });
     } else if (type === 'bazaar.task.chat.delta') {
       set((s) => {
         if (!s.activeChat || s.activeChat.taskId !== msg.taskId) return s;
@@ -292,11 +314,12 @@ import { Button } from '@/components/ui/button';
 
 export function BazaarPage() {
   const navigate = useNavigate();
-  const { connection, fetchTasks, loading } = useBazaarStore();
+  const { connection, fetchTasks, fetchOnlineAgents, loading } = useBazaarStore();
 
   useEffect(() => {
     fetchTasks();
-  }, [fetchTasks]);
+    fetchOnlineAgents();
+  }, [fetchTasks, fetchOnlineAgents]);
 
   // 未连接集市时显示配置提示
   if (!connection.connected) {
@@ -805,7 +828,7 @@ import { Settings as SettingsIcon, Sun, Moon, Clock, Layers, Sparkles } from 'lu
                   isActive ? 'text-foreground' : 'text-muted-foreground',
                 )}
               >
-                <Sparkles className="h-[18px] w-[18px] strokeWidth={2} />
+                <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
               </div>
               <span>传送门</span>
             </>
@@ -845,9 +868,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSettingsStore } from '@/stores/settings';
+import { useWsConnection } from '@/stores/ws-connection';
 
 export function BazaarSettings() {
-  const { settings, updateSettings } = useSettingsStore();
+  const settings = useSettingsStore((s) => s.settings);
+  const send = useWsConnection((s) => s.client?.send.bind(s.client));
   const bazaar = settings?.bazaar;
 
   const [server, setServer] = useState(bazaar?.server ?? '');
@@ -859,7 +884,9 @@ export function BazaarSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      updateSettings({
+      // 通过 settings.update WS 消息保存配置到后端
+      send?.({
+        type: 'settings.update',
         bazaar: { server, agentName: agentName || undefined, mode, maxConcurrentTasks: maxSlots },
       });
     } finally {
@@ -936,11 +963,11 @@ export function BazaarSettings() {
 }
 ```
 
-- [ ] **Step 2: 在 Settings 页面新增 Tab**
+- [ ] **Step 2: 在 Settings 页面新增集市配置区块**
 
 在 `src/features/settings/index.tsx` 中：
 - 新增 import: `import { BazaarSettings } from '@/features/bazaar/BazaarSettings';`
-- 在 Tab 列表中新增集市 Tab（和其他 Tab 一样的模式）
+- 在 `<WebSearchSettings />` 之后新增 `<BazaarSettings />`（Settings 页面是垂直卡片堆叠，不是 Tab 模式）
 
 - [ ] **Step 3: Commit**
 
@@ -992,11 +1019,18 @@ git commit -m "chore(bazaar): verify frontend compilation and existing tests"
 | `src/features/bazaar/BazaarSettings.tsx` | 集市设置 | 新增 |
 | `src/app/routes.tsx` | 新增 1 行路由 | 最小改动 |
 | `src/components/layout/Sidebar.tsx` | 新增 1 个 NavLink | 最小改动 |
-| `src/features/settings/index.tsx` | 新增 1 个 Tab | 最小改动 |
+| `src/features/settings/index.tsx` | 新增 1 个 Settings 区块 | 最小改动 |
 
 **对现有代码的改动**：
 - `routes.tsx`: 新增 1 行 `{ path: 'bazaar', element: <BazaarPage /> }`
 - `Sidebar.tsx`: 新增 1 个 `<NavLink to="/bazaar">` + 1 个 import
-- `settings/index.tsx`: 新增 1 个 Tab + 1 个 import
+- `settings/index.tsx`: 新增 `<BazaarSettings />` 组件 + 1 个 import
+
+**MVP 范围裁剪（Phase 2 再实现）**：
+- ChatPanel 对话面板（点击任务卡片的对话视图）
+- DailyDigest 每日摘要组件
+- notify 模式 30 秒超时自动接受
+- manual 模式前端接受/拒绝 UI
+- Bridge 层 `bazaar.agent.list` / `bazaar.task.detail` handler（当前 Chunk 2 只处理已定义的消息类型）
 
 **判定标准**：删除 `src/features/bazaar/` 目录，还原 `routes.tsx`、`Sidebar.tsx`、`settings/index.tsx` 的 3 行改动后，项目编译运行零报错。

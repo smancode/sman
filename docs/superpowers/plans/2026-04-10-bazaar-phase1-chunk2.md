@@ -21,15 +21,16 @@
 
 - [ ] **Step 1: 在 SmanConfig 末尾新增 bazaar 字段**
 
-在 `server/types.ts` 的 `SmanConfig` 接口中，`auth` 字段后新增：
+在 `server/types.ts` 文件顶部新增 import：
 
 ```typescript
-  bazaar?: {
-    server: string;              // 集市服务器地址
-    agentName?: string;          // Agent 显示名
-    mode: 'auto' | 'notify' | 'manual';  // 协作模式
-    maxConcurrentTasks: number;  // 最大并发槽位
-  };
+import type { BazaarConfig } from '../shared/bazaar-types.js';
+```
+
+在 `SmanConfig` 接口中，`auth` 字段后新增：
+
+```typescript
+  bazaar?: BazaarConfig;
 ```
 
 - [ ] **Step 2: Commit**
@@ -256,8 +257,12 @@ export class BazaarStore {
   private init(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS identity (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
+        agent_id TEXT PRIMARY KEY,
+        hostname TEXT NOT NULL,
+        username TEXT NOT NULL,
+        name TEXT NOT NULL,
+        server TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS tasks (
@@ -281,20 +286,16 @@ export class BazaarStore {
   // ── Identity ──
 
   saveIdentity(identity: LocalAgentIdentity): void {
-    const upsert = this.db.prepare('INSERT OR REPLACE INTO identity (key, value) VALUES (?, ?)');
-    for (const [key, value] of Object.entries(identity)) {
-      upsert.run(key, JSON.stringify(value));
-    }
+    this.db.prepare(`
+      INSERT OR REPLACE INTO identity (agent_id, hostname, username, name, server, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(identity.agentId, identity.hostname, identity.username, identity.name, identity.server, new Date().toISOString());
   }
 
   getIdentity(): LocalAgentIdentity | undefined {
-    const rows = this.db.prepare('SELECT key, value FROM identity').all() as { key: string; value: string }[];
-    if (rows.length === 0) return undefined;
-    const obj: Record<string, unknown> = {};
-    for (const row of rows) {
-      try { obj[row.key] = JSON.parse(row.value); } catch { obj[row.key] = row.value; }
-    }
-    return obj as unknown as LocalAgentIdentity;
+    return this.db.prepare(
+      'SELECT agent_id as agentId, hostname, username, name, server FROM identity'
+    ).get() as LocalAgentIdentity | undefined;
   }
 
   // ── Tasks ──
@@ -539,8 +540,13 @@ export class BazaarClient {
       this.log.info(`Connecting to bazaar: ${url}`);
 
       this.ws = new WebSocket(url);
+      let settled = false;
+      let timeoutId: ReturnType<typeof setTimeout>;
 
       this.ws.on('open', () => {
+        clearTimeout(timeoutId);
+        if (settled) return;
+        settled = true;
         this.log.info('Connected to bazaar server');
         this.reconnectAttempts = 0;
 
@@ -574,6 +580,31 @@ export class BazaarClient {
           }
         } catch (err) {
           this.log.error('Failed to parse server message', { error: String(err) });
+        }
+      });
+
+      this.ws.on('close', () => {
+        this.log.info('Disconnected from bazaar');
+        this.stopHeartbeat();
+        if (!this.stopped) this.scheduleReconnect(identity);
+      });
+
+      this.ws.on('error', (err) => {
+        clearTimeout(timeoutId);
+        if (settled) return;
+        settled = true;
+        this.log.error('WebSocket error', { error: err.message });
+        reject(err);
+      });
+
+      // 5 秒连接超时
+      timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.ws?.close();
+        reject(new Error('Connection timeout'));
+      }, 5_000);
+    });
         }
       });
 
@@ -722,6 +753,18 @@ export class BazaarBridge {
     try {
       await this.client.connect();
       this.log.info('Bazaar bridge started');
+
+      // 推送初始连接状态给前端
+      const identity = this.store.getIdentity();
+      this.deps.broadcast(JSON.stringify({
+        type: 'bazaar.status',
+        event: 'connected',
+        agentId: identity?.agentId,
+        agentName: identity?.name,
+        reputation: 0,
+        activeSlots: 0,
+        maxSlots: config.bazaar?.maxConcurrentTasks ?? 3,
+      }));
     } catch (err) {
       this.log.error('Failed to connect to bazaar', { error: String(err) });
     }
@@ -753,9 +796,13 @@ export class BazaarBridge {
         break;
       }
 
-      case 'bazaar.config.update':
-        this.log.info('Bazaar config update requested');
+      case 'bazaar.config.update': {
+        const config = this.deps.settingsManager.getConfig();
+        const updated = { ...config.bazaar, ...payload };
+        this.deps.settingsManager.updateConfig({ ...config, bazaar: updated });
+        this.log.info('Bazaar config updated', { mode: payload.mode });
         break;
+      }
 
       default:
         this.log.warn(`Unknown frontend message type: ${type}`);
@@ -827,8 +874,17 @@ export class BazaarBridge {
       createdAt: new Date().toISOString(),
     });
 
-    if (mode === 'notify' || mode === 'manual') {
-      // 推送通知给前端
+    if (mode === 'auto') {
+      // 全自动模式：直接接受
+      this.client.send({
+        id: uuidv4(),
+        type: 'task.accept',
+        payload: { taskId: payload.taskId as string },
+      });
+    } else {
+      // notify/manual 模式：推送通知给前端
+      // TODO(Phase 2): notify 模式需实现 30 秒超时自动接受
+      // TODO(Phase 2): manual 模式需前端实现接受/拒绝 UI
       this.deps.broadcast(JSON.stringify({
         type: 'bazaar.notify',
         taskId: payload.taskId,
@@ -836,25 +892,17 @@ export class BazaarBridge {
         question: payload.question,
         mode,
       }));
-    } else {
-      // 全自动模式：直接接受
-      this.client.send({
-        id: uuidv4(),
-        type: 'task.accept',
-        payload: { taskId: payload.taskId as string },
-      });
     }
   }
 
   private ensureIdentity(bazaarConfig: NonNullable<SmanConfig['bazaar']>): void {
     let identity = this.store.getIdentity();
     if (!identity) {
-      const { v4: uuid } = require('uuid');
       identity = {
-        agentId: `uuid:${uuid()}`,
-        hostname: require('os').hostname(),
-        username: require('os').userInfo().username,
-        name: bazaarConfig.agentName ?? require('os').userInfo().username,
+        agentId: uuidv4(),
+        hostname: os.hostname(),
+        username: os.userInfo().username,
+        name: bazaarConfig.agentName ?? os.userInfo().username,
         server: bazaarConfig.server,
       };
       this.store.saveIdentity(identity);
@@ -890,7 +938,7 @@ git commit -m "feat(bazaar): add BazaarBridge message routing between frontend a
 
 **Files:**
 - Create: `server/bazaar/index.ts`
-- Modify: `server/index.ts`（仅新增 5 行）
+- Modify: `server/index.ts`（2 处改动：末尾 1 个 import + 5 行初始化 + switch default 分支修改）
 
 - [ ] **Step 1: 实现 Bridge 入口**
 
@@ -905,20 +953,25 @@ const log = createLogger('BazaarInit');
 let bridge: BazaarBridge | null = null;
 
 export function initBazaarBridge(deps: BridgeDeps): void {
-  const config = deps.settingsManager.getConfig();
-  if (!config.bazaar?.server) {
-    log.info('Bazaar not configured, skipping bridge initialization');
-    return;
+  try {
+    const config = deps.settingsManager.getConfig();
+    if (!config.bazaar?.server) {
+      log.info('Bazaar not configured, skipping bridge initialization');
+      return;
+    }
+
+    bridge = new BazaarBridge(deps);
+
+    // 启动连接（异步，不阻塞主流程）
+    bridge.start().catch((err) => {
+      log.error('Bazaar bridge failed to start', { error: String(err) });
+    });
+
+    log.info('Bazaar bridge initialized');
+  } catch (err) {
+    // 构造函数异常不传播，保证一期服务正常
+    log.error('Bazaar bridge initialization failed', { error: String(err) });
   }
-
-  bridge = new BazaarBridge(deps);
-
-  // 启动连接（异步，不阻塞主流程）
-  bridge.start().catch((err) => {
-    log.error('Bazaar bridge failed to start', { error: String(err) });
-  });
-
-  log.info('Bazaar bridge initialized');
 }
 
 export function getBazaarBridge(): BazaarBridge | null {
@@ -926,12 +979,12 @@ export function getBazaarBridge(): BazaarBridge | null {
 }
 ```
 
-- [ ] **Step 2: 在 server/index.ts 底部新增 5 行注入代码**
+- [ ] **Step 2: 在 server/index.ts 底部新增注入代码**
 
-在 `server/index.ts` 文件末尾（所有现有代码之后），新增：
+在 `server/index.ts` 文件末尾（所有现有代码之后），新增 1 个 import + 5 行初始化：
 
 ```typescript
-// Bazaar Bridge（二期功能，独立模块）
+// Bazaar Bridge（独立模块，未配置时无副作用）
 import { initBazaarBridge } from './bazaar/index.js';
 
 initBazaarBridge({
@@ -943,7 +996,7 @@ initBazaarBridge({
 });
 ```
 
-**注意**：这 import 在文件末尾，不会影响一期的任何模块初始化顺序。如果 bazaar 未配置，`initBazaarBridge` 什么都不做。
+**注意**：ESM 中 import 会被提升到模块顶部，但 `initBazaarBridge` 的调用在所有变量声明之后，参数在调用时都已初始化。如果 bazaar 未配置，`initBazaarBridge` 什么都不做。
 
 - [ ] **Step 3: 在 WS 消息路由中新增 bazaar.* 前缀处理**
 
@@ -955,8 +1008,12 @@ initBazaarBridge({
         if (msg.type?.startsWith('bazaar.')) {
           const bridge = getBazaarBridge();
           if (bridge) {
-            bridge.handleFrontendMessage(msg.type, msg, ws);
+            bridge.handleFrontendMessage(msg.type, msg.payload ?? msg, ws);
+          } else {
+            ws.send(JSON.stringify({ type: 'error', error: `Bazaar not configured: ${msg.type}` }));
           }
+        } else {
+          ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
         }
         break;
 ```
@@ -1148,7 +1205,7 @@ git commit -m "chore(bazaar): verify zero-invasion — existing tests pass"
 | `server/bazaar/bazaar-client.ts` | WS 连接集市服务器 | 新文件 |
 | `server/bazaar/bazaar-bridge.ts` | 前端↔集市消息路由 | 新文件 |
 | `server/bazaar/index.ts` | Bridge 入口 | 新文件 |
-| `server/index.ts` | 新增 5 行 Bridge 初始化 | 最小改动 |
+| `server/index.ts` | 1 个 import + 5 行初始化 + switch default 修改 | 最小改动 |
 | `tests/server/bazaar/bazaar-store.test.ts` | Store 测试 | 新文件 |
 | `tests/server/bazaar/bazaar-client.test.ts` | Client 测试 | 新文件 |
 | `tests/server/bazaar/bridge-integration.test.ts` | 集成测试 | 新文件 |
@@ -1160,7 +1217,7 @@ git commit -m "chore(bazaar): verify zero-invasion — existing tests pass"
 | `sessionManager.createSessionWithId()` | 创建协作会话 |
 | `sessionManager.sendMessageForCron()` | 协作对话执行 |
 | `sessionManager.abort()` | 强制结束任务 |
-| `broadcast()` | 向前端推送消息 |
+| `broadcast()` | 向前端推送消息（注：全局广播，所有 WS 客户端都会收到 `bazaar.*` 消息。Phase 2 需改为按需推送） |
 | `settingsManager.getConfig()` | 读取配置 |
 | `skillsRegistry.listSkills()` | 获取能力列表 |
 
