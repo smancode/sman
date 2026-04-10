@@ -49,6 +49,13 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), agents: store.listOnlineAgents().length });
 });
 
+// 声望排行榜
+app.get('/api/leaderboard', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+  const board = store.getLeaderboard(limit);
+  res.json(board);
+});
+
 // WebSocket 服务器
 const wss = new WebSocketServer({ server });
 
