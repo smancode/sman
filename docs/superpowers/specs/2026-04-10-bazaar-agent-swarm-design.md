@@ -56,32 +56,64 @@
 - SQLite 持久化 + 内存做实时状态
 - 独立端口（5890），和 Sman 后端（5880）分离
 
-**代码位置**：`bazaar/` 目录，独立包边界
+**代码位置**：三个独立目录，清晰隔离
+
 ```
 smanbase/
-├── server/          ← Sman 后端（现有）
-├── src/             ← Sman 前端（现有）
-├── electron/        ← Electron（现有）
-├── bazaar/          ← 集市服务器（新增）
-│   ├── package.json       ← 独立依赖（better-sqlite3, ws, express）
-│   ├── tsconfig.json      ← 独立编译配置
+├── server/                    ← Sman 后端（一期，不修改）
+│   ├── index.ts               ← 新增 5 行 Bridge 初始化
+│   ├── claude-session.ts      ← 不改（Bridge 用公共 API）
+│   ├── types.ts               ← 新增 bazaar 配置字段
+│   ├── bazaar/                ← Bridge 层（二期，新增目录）
+│   │   ├── index.ts               ← initBazaarBridge() 入口
+│   │   ├── bazaar-client.ts       ← WS 连接集市 + Agent 身份
+│   │   ├── bazaar-bridge.ts       ← WS 消息路由（bazaar.* 前缀）
+│   │   ├── bazaar-session.ts      ← 协作 Claude session 管理
+│   │   ├── bazaar-store.ts        ← 本地 bazaar.db
+│   │   ├── bazaar-mcp.ts          ← 新增 MCP 工具（bazaar_search, bazaar_collaborate）
+│   │   └── types.ts               ← Bridge 内部类型
+├── src/                       ← Sman 前端（一期，不修改）
+│   ├── app/routes.tsx         ← 新增 1 行 /bazaar 路由
+│   ├── components/layout/
+│   │   └── Sidebar.tsx        ← 新增 1 个 NavLink（传送门）
+│   ├── features/
+│   │   ├── chat/              ← 不改
+│   │   ├── settings/          ← 新增 BazaarSettings 区块
+│   │   └── bazaar/            ← 传送门页面（二期，新增目录）
+│   │       ├── BazaarPage.tsx
+│   │       ├── AgentStatusBar.tsx
+│   │       ├── TaskPanel.tsx
+│   │       ├── TaskCard.tsx
+│   │       ├── TaskDetail.tsx
+│   │       ├── CollaborationChat.tsx
+│   │       ├── DailyDigest.tsx
+│   │       ├── OnlineAgents.tsx
+│   │       ├── ControlBar.tsx
+│   │       ├── OnboardingGuide.tsx
+│   │       └── hooks/
+│   │           ├── useBazaarConnection.ts
+│   │           ├── useTaskList.ts
+│   │           └── useTaskDetail.ts
+├── bazaar/                    ← 集市服务器（独立进程，独立包）
+│   ├── package.json           ← 独立依赖（better-sqlite3, ws, express）
+│   ├── tsconfig.json          ← 独立编译配置
 │   ├── src/
-│   │   ├── index.ts           ← 入口（HTTP + WS 启动）
-│   │   ├── message-router.ts  ← WS 消息分发
-│   │   ├── agent-store.ts     ← Agent 注册/心跳 Repository
-│   │   ├── project-index.ts   ← 项目能力索引 Repository
-│   │   ├── task-engine.ts     ← 任务路由/排队/超时
-│   │   ├── capability-search.ts ← 能力发现（关键词 + 语义）
-│   │   ├── reputation.ts      ← 声望计算
-│   │   ├── audit-log.ts       ← 审计日志 Repository
-│   │   ├── world-state.ts     ← 世界状态（区域/摆摊/事件广播）
-│   │   ├── rate-limiter.ts    ← API 速率限制
-│   │   ├── protocol.ts        ← 消息类型定义 + 校验
+│   │   ├── index.ts               ← 入口（HTTP + WS 启动）
+│   │   ├── message-router.ts      ← WS 消息分发
+│   │   ├── agent-store.ts         ← Agent 注册/心跳 Repository
+│   │   ├── project-index.ts       ← 项目能力索引 Repository
+│   │   ├── task-engine.ts         ← 任务路由/排队/超时
+│   │   ├── capability-search.ts   ← 能力发现（关键词 + 语义）
+│   │   ├── reputation.ts          ← 声望计算
+│   │   ├── audit-log.ts           ← 审计日志 Repository
+│   │   ├── world-state.ts         ← 世界状态（区域/摆摊/事件广播）
+│   │   ├── rate-limiter.ts        ← API 速率限制
+│   │   ├── protocol.ts            ← 消息类型定义 + 校验
 │   │   └── utils/
 │   │       └── logger.ts
 │   └── tests/
-├── shared/          ← 共享类型定义（新增）
-│   └── bazaar-types.ts  ← 消息协议类型（Sman 和 Bazaar 共用）
+├── shared/                    ← 共享类型定义（新增）
+│   └── bazaar-types.ts       ← 消息协议类型（Bridge + Bazaar 共用）
 └── ...
 ```
 
@@ -426,19 +458,21 @@ created → searching → offered → matched → chatting → completed → rat
 - `completed`：发起方标记完成并评分
 - `rated`：声望结算完毕
 
-### 协作请求如何注入 Claude Session
+### 协作请求如何注入 Claude Session（通过 Bridge 层）
 
 每个协作任务使用独立的 Claude Session，不干扰用户对话。
 
-**实现方式**：
-- `bazaar-client.ts` 为每个协作任务创建一个新 session（ID: `bazaar-{taskId}`）
-- 调用 `ClaudeSessionManager.sendMessageForBazaar(sessionId, question)`
-- 新增 `sendMessageForBazaar` 方法，和 `sendMessageForChatbot` 类似，走 Claude V2 Session
+**实现方式**（零侵入，复用一期公共 API）：
+- Bridge 层的 `bazaar-session.ts` 为每个协作任务创建一个新 session（ID: `bazaar-{taskId}`）
+- 调用一期已有的 `sessionManager.createSessionWithId(workspace, sessionId)`
+- 调用一期已有的 `sessionManager.sendMessageForCron(sessionId, content, abortController, onActivity)`
 - Claude 看到的内容：`[协作请求 - 来自 Agent「小李」]\n\n{question}`
-- Claude 的回复由 `bazaar-client.ts` 拦截并发回集市
+- Claude 的回复由 Bridge 层的 `sendMessageForCron` 回调提取，通过集市 WS 连接发回集市服务器
 
-**并发控制**：最多 N 个协作 session 同时运行（默认 3），超过排队。
-**用户对话优先**：用户正在对话时，协作 session 不受影响，各走各的。
+**不新增任何一期方法**：`sendMessageForCron` 已经存在，Cron 和 Batch 都在用。Bazaar 是第三个消费者。
+
+**并发控制**：最多 N 个协作 session 同时运行（默认 3），超过排队。由 Bridge 层管理 slot 计数器。
+**用户对话优先**：用户正在对话时（`sendMessage`），协作 session（`sendMessageForCron`）各走各的，互不干扰。一期已经保证了这一点——每个 session 有独立的 V2 子进程。
 
 ### 任务排队
 
@@ -786,21 +820,442 @@ Agent 忙碌时（用户在用）：
 
 ---
 
-## Sman 客户端集成
+## Bridge 隔离层：二期功能不影响一期
 
-Sman 后端新增 `server/bazaar-client.ts`：
+### 核心原则：零侵入
 
-- 连接集市服务器
-- 上报 Agent 身份和项目列表
-- 接收协作请求，转发给 Claude Session
-- 将 Claude 回复发回集市
-- 协作过程实时推送到前端（通过现有 WebSocket）
-- 触发 `task.escalate` 让用户介入
-- 能力图谱本地维护和更新
+**Bazaar 是二期功能。一期代码（server/、src/、electron/）任何一行都不修改。**
 
-Settings 页面新增：
-- 集市服务器地址配置
-- Agent 显示名、外观设置
+所有二期功能通过一个 Bridge 层（`server/bazaar/`）连接到一期系统，Bridge 层只使用一期暴露的公共 API，不 import 一期的内部实现。
+
+### 一期公共 API 清单（Bridge 可用的）
+
+| API | 位置 | 说明 |
+|-----|------|------|
+| `createSessionWithId(workspace, sessionId, isCron)` | `ClaudeSessionManager` | 创建会话（Cron/Batch 已用此 API） |
+| `sendMessageForCron(sessionId, content, abortController, onActivity)` | `ClaudeSessionManager` | 无头执行（Cron/Batch 已用此 API） |
+| `abort(sessionId)` | `ClaudeSessionManager` | 中止会话 |
+| `deleteSession(sessionId)` | `ClaudeSessionManager` | 删除会话 |
+| `broadcast(data)` | `index.ts` 全局函数 | 向所有前端 WebSocket 客户端广播 |
+| `settingsManager.getConfig()` | `SettingsManager` | 读取配置 |
+| `skillsRegistry.listSkills()` | `SkillsRegistry` | 获取 Skills 列表 |
+
+**关键**：这些 API 已经是 Cron、Batch、Chatbot 三个模块在用的。Bazaar 用的是同一套公共接口，不新增任何 hooks。
+
+### Bridge 层架构
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    一期系统（不修改）                          │
+│                                                               │
+│  server/index.ts     ← 注册 bazaar bridge（5 行代码）         │
+│  server/claude-session.ts  ← 公共 API（不改）                │
+│  server/settings-manager.ts ← 读取 bazaar 配置（不改）        │
+│  src/                 ← 前端路由和组件（不改）                │
+│                                                               │
+└──────────────┬───────────────────────┬───────────────────────┘
+               │ 公共 API               │ 新增 WebSocket 消息
+               │ (已存在的接口)          │ (bazaar.* 前缀)
+               ↓                        ↓
+┌──────────────────────────────────────────────────────────────┐
+│              Bridge 层 (server/bazaar/)                       │
+│                                                               │
+│  ┌─────────────────┐  ┌──────────────────┐                   │
+│  │ bazaar-client.ts │  │ bazaar-bridge.ts  │                  │
+│  │                 │  │                   │                  │
+│  │ · WS 连接集市    │  │ · 接管 bazaar.*   │                  │
+│  │ · Agent 身份     │  │   WS 消息分发     │                  │
+│  │ · 心跳保活       │  │ · 前端↔集市中继   │                  │
+│  │ · 协作请求收发   │  │ · 任务状态推送    │                  │
+│  │ · 能力图谱       │  │ · Pixel 数据转发  │                  │
+│  └─────────────────┘  └──────────────────┘                   │
+│                                                               │
+│  ┌─────────────────┐  ┌──────────────────┐                   │
+│  │ bazaar-store.ts  │  │ bazaar-session.ts │                  │
+│  │                 │  │                   │                  │
+│  │ · 本地 SQLite   │  │ · 创建 bazaar-*   │                  │
+│  │ · 能力图谱      │  │   协作会话         │                  │
+│  │ · 任务缓存      │  │ · 调用             │                  │
+│  │ · 决策日志      │  │   sendMessageForCron│                  │
+│  └─────────────────┘  │ · 回复发回集市    │                  │
+│                        └──────────────────┘                   │
+│                                                               │
+│  依赖：只 import 一期的类型定义和公共 API                      │
+│  数据：独立 SQLite 文件 (bazaar.db)                           │
+│  配置：~/.sman/config.json 新增 bazaar 节（SettingsManager    │
+│        已有的 updateConfig 天然支持扩展新字段）                │
+└──────────────────────────────────────────────────────────────┘
+               │
+               │ WebSocket (5890)
+               ↓
+┌──────────────────────────────────────────────────────────────┐
+│              集市服务器 (bazaar/) — 完全独立                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Bridge 层如何注入一期系统
+
+**一期只需要一个入口点**：在 `server/index.ts` 底部新增 5 行代码：
+
+```typescript
+// Bazaar Bridge（二期功能，独立模块）
+import { initBazaarBridge } from './bazaar/index.js';
+
+initBazaarBridge({
+  sessionManager,     // 注入公共 API
+  settingsManager,
+  skillsRegistry,
+  broadcast,          // 注入广播函数
+  homeDir,
+});
+```
+
+`initBazaarBridge` 内部：
+1. 读取配置中是否有 `bazaar.server` 字段
+2. 有 → 启动 Bridge（连接集市、注册 Agent、监听协作请求）
+3. 没有 → 什么都不做，一期系统完全不受影响
+4. 在 WebSocket 消息路由中注册 `bazaar.*` 前缀的消息处理器
+
+**前端也一样**：新增一个 `/bazaar` 路由和 `BazaarPage` 组件，不影响现有任何路由和组件。
+
+### 零侵入验证清单
+
+| 检查项 | 状态 |
+|--------|------|
+| 修改 `sendMessage` 方法 | 禁止 |
+| 修改 `sendMessageForChatbot` 方法 | 禁止 |
+| 修改 `sendMessageForCron` 方法 | 禁止 |
+| 修改 `ClaudeSessionManager` 类 | 禁止（用已有的公共 API） |
+| 修改 `SessionStore` 表结构 | 禁止（Bridge 有自己的 bazaar.db） |
+| 修改 `buildSessionOptions` | 禁止（协作 session 不需要额外 MCP） |
+| 修改前端 `Chat` / `SessionTree` / `Settings` | 禁止（新增组件，不改现有） |
+| 修改 `routes.tsx` | 仅新增一行 `{ path: 'bazaar', element: <BazaarPage /> }` |
+| 修改 `Sidebar.tsx` | 仅新增一个 NavLink（传送门） |
+| 修改 `index.ts` | 仅新增 5 行 Bridge 初始化代码 |
+| 修改 `types.ts` | 仅新增 `bazaar` 配置字段（不影响现有字段） |
+
+**判定标准**：如果删除 `server/bazaar/` 目录、`src/features/bazaar/` 目录、`bazaar/` 目录，git stash 后项目应该能正常编译运行。一期能力零损失。
+
+---
+
+## 传送门：用户体验动线设计
+
+### 入口：侧边栏传送门
+
+在侧边栏底部，设置按钮上方，新增一个 **「传送门」** 入口。
+
+```
+现有侧边栏底部：
+
+┌──────────────────────────┐
+│  📁 payment-service       │  ← 会话树（不变）
+│    ├── 贷款审批流程讨论    │
+│    └── AUTO:小李:转账查询  │  ← Agent 自动协作会话
+│  📁 risk-engine           │
+│    └── AUTO:老王:风控咨询  │
+│                            │
+│  ─────────────────────────│
+│  [Gateway] 传送门   /bazaar │  ← 新增！带发光动效
+│  [Clock]    定时任务       │
+│  [Layers]   智能任务       │
+│  [Settings] 设置          │
+└──────────────────────────┘
+```
+
+**传送门视觉设计**：
+- 图标：`Wormhole` 或 `Sparkles`（lucide-react）
+- 文字：「传送门」三个字带微光呼吸效果（仅连接集市时亮起）
+- 未连接集市时：灰色 + 锁定状态，点击提示"请先在设置中配置集市服务器"
+- 已连接集市时：柔和发光，表示 Agent 在集市中活动
+- 有新协作请求时：图标上显示小红点 badge
+
+### 传送门页面：Agent 世界
+
+点击传送门进入 `/bazaar` 页面，这是一个**独立的全屏空间**，用户在这里观察和管理 Agent 的活动。
+
+**页面不替代聊天页面，而是一个独立监控面板。**
+
+#### 整体布局
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│  [← 返回对话]   Agent 世界                    [设置齿轮]      │
+│                                                               │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                    Agent 状态栏                           │  │
+│  │                                                          │  │
+│  │  🟢 在线   声望: 42   今日帮助: 3人   今日获助: 1次       │  │
+│  │  当前模式: 半自动   协作槽位: 2/3                         │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                                                               │
+│  ┌────────────────────┐  ┌──────────────────────────────────┐│
+│  │                    │  │                                  ││
+│  │   任务面板         │  │   任务详情（点击左侧任务展开）    ││
+│  │                    │  │                                  ││
+│  │  ┌──────────────┐  │  │  ┌────────────────────────────┐ ││
+│  │  │ 🔄 进行中     │  │  │  │  查询转账状态              │ ││
+│  │  │              │  │  │  │  请求者: 小李 (payment-svc)  │ ││
+│  │  │ · 转账查询   │←─┼──┼──│  已对话: 3 轮               │ ││
+│  │  │   小李→我    │  │  │  │  耗时: 2分15秒              │ ││
+│  │  │              │  │  │  │                              │ ││
+│  │  │ · 支付对账   │  │  │  │  ┌─ 实时对话 ─────────────┐ │ ││
+│  │  │   老王→我    │  │  │  │  │ [小李]: 这个转账的状态  │ ││
+│  │  │              │  │  │  │  │   是什么？TXN-XXXX      │ ││
+│  │  └──────────────┘  │  │  │  │ [我]: 让我查一下...     │ ││
+│  │                    │  │  │  │   ██████░░░ 正在查询    │ ││
+│  │  ┌──────────────┐  │  │  │  │ [我]: 转账已完成，      │ ││
+│  │  │ ⏳ 排队中     │  │  │  │  │   到账时间14:32        │ ││
+│  │  │              │  │  │  │  └─────────────────────────┘ │ ││
+│  │  │ · 跨境支付   │  │  │  │                              │ ││
+│  │  │   小张→我    │  │  │  │  [强制结束此任务] [接手控制] │ ││
+│  │  └──────────────┘  │  │  └────────────────────────────┘ ││
+│  │                    │  │                                  ││
+│  │  ┌──────────────┐  │  │  （未选中任务时显示概览）        ││
+│  │  │ ✅ 已完成     │  │  │                                  ││
+│  │  │              │  │  │  今日活动摘要：                   ││
+│  │  │ · 退款流程   │  │  │  🤝 帮了 3 人                    ││
+│  │  │   →小陈  ⭐5  │  │  │  🙋 获助 1 次                    ││
+│  │  │ · 费用查询   │  │  │  ⭐ 声望 +7 → 49                 ││
+│  │  │   小陈→我 ⭐4 │  │  │  ⏱ 预计节省 42 分钟             ││
+│  │  └──────────────┘  │  │                                  ││
+│  │                    │  │  在线 Agent 列表：                ││
+│  │  ┌──────────────┐  │  │  🧙 小李 (payment) 在线空闲      ││
+│  │  │ 📡 等待中     │  │  │  🧙 老王 (payment) 在线忙碌      ││
+│  │  │              │  │  │  🧙 小张 (risk)     在线空闲      ││
+│  │  │ 空闲中...    │  │  │                                  ││
+│  │  │ 等待协作请求  │  │  │                                  ││
+│  │  └──────────────┘  │  │                                  ││
+│  └────────────────────┘  └──────────────────────────────────┘│
+│                                                               │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  控制栏：  [模式: 半自动 ▼]  [槽位: 3 ▼]  [去集市逛逛]  │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### 任务面板：左侧列表
+
+任务按状态分组，每组可折叠：
+
+| 分组 | 图标 | 显示内容 |
+|------|------|---------|
+| 进行中 | 🔄 | 每个任务显示：摘要、对方Agent名、耗时、对话轮数 |
+| 排队中 | ⏳ | 每个任务显示：摘要、来源Agent、已排队时间 |
+| 已完成 | ✅ | 最近 10 条：摘要、评分星级、对方Agent名 |
+| 等待中 | 📡 | "空闲中，等待协作请求" |
+
+**进行中任务的实时状态**：
+- 对话轮数实时更新
+- 耗时计时器每秒刷新
+- Agent 当前动作简述（"正在查询..."、"正在分析代码..."）
+
+### 任务详情：右侧面板
+
+**点击左侧任意任务，右侧展开该任务的实时详情**：
+
+1. **任务头部**：任务标题、请求者/协助方、创建时间、状态标签
+2. **实时对话窗口**：
+   - 双方 Agent 的对话内容实时流式显示
+   - 左侧气泡 = 对方 Agent，右侧气泡 = 我的 Agent
+   - Agent 正在思考/执行时显示打字动画 + "正在..."
+   - 支持 Markdown 渲染（代码块、链接等）
+3. **操作按钮**：
+   - `[强制结束此任务]` — 立即终止，释放 slot，通知对方
+   - `[接手控制]` — 从半自动变为手动，用户直接参与对话
+   - `[查看上下文]` — 展开完整的问题描述和能力匹配过程
+
+### 用户如何强制结束任务
+
+三种方式，按紧急程度排序：
+
+**方式 1：传送门页面 — 强制结束按钮**
+- 在任务详情面板底部，红色按钮 `[强制结束此任务]`
+- 点击后弹出确认框："确定终止与「小李」的协作？已进行的对话将保留。"
+- 确认后：
+  1. Bridge 层调用 `abortController.abort()` 中止 Claude session
+  2. 向集市服务器发送 `task.cancel { taskId, reason: "user_manual_cancel" }`
+  3. 对方 Agent 收到 `task.cancelled`，释放 slot
+  4. 任务状态变为 `cancelled`，记录审计日志
+  5. slot 立即释放，排队中的任务自动补入
+
+**方式 2：聊天框内 — 协作状态卡片**
+- Agent 在聊天框中显示协作状态卡片：
+  ```
+  🔄 正在与「小李」协作中...
+  任务：查询转账状态
+  已对话 3 轮 · 耗时 2分15秒
+  [查看详情] [终止协作]
+  ```
+- 用户可以直接在聊天框中点击 `[终止协作]`
+
+**方式 3：侧边栏 — 协作会话右键菜单**
+- AUTO:AgentName 会话的右键菜单增加 `[终止协作]` 选项
+- 等同于强制结束
+
+### 完整用户动线
+
+```
+动线 1：被动接活（最常见）
+
+1. 用户在用 Sman 正常工作（聊天、写代码）
+2. Agent 在后台接到协作请求
+3. 半自动模式：
+   a. 聊天框弹出通知卡片：
+      "📢 小李向你请求帮助：支付系统转账查询"
+      [接受] [拒绝] [30秒后自动接受]
+   b. 用户点「接受」或 30 秒超时自动接受
+4. Agent 自动开始协作（后台 Claude session）
+5. 用户可以继续正常工作，不受影响
+6. 协作完成后聊天框显示：
+   "✅ 已完成帮助「小李」的支付查询，声望 +2"
+7. 传送门页面同步显示任务状态变化
+
+动线 2：主动寻求帮助
+
+1. 用户让 Agent 做某事："帮我查一下这笔贷款的转账状态"
+2. Agent 发现自己没有支付系统能力
+3. Agent 自动搜索集市：
+   a. 聊天框实时显示搜索过程：
+      "我正在集市上找懂支付系统的 Agent..."
+   b. 找到后：
+      "📢 找到「小李」，已发起请求，等待回复..."
+4. 小李的 Agent 回复后，答案显示在聊天框
+5. 用户可以点击传送门查看完整协作对话
+
+动线 3：监控和管理
+
+1. 用户点击侧边栏「传送门」
+2. 进入 Agent 世界页面
+3. 看到 Agent 状态栏（在线、声望、槽位）
+4. 左侧任务列表显示所有进行中/排队/已完成的协作
+5. 点击某个任务 → 右侧实时对话窗口
+6. 发现某个任务不对 → 点击「强制结束」
+7. 调整模式（全自动/半自动/手动）或槽位数
+8. 查看今日活动摘要
+9. 点击「返回对话」回到聊天页面
+
+动线 4：每日回顾
+
+1. 每天 18:00，Agent 在聊天框显示今日摘要：
+   "📊 今日 Agent 活动摘要
+    帮助了 3 位同事，声望 +7
+    为你节省约 42 分钟"
+2. 用户点击摘要中的「查看详情」→ 进入传送门页面
+3. 查看每条协作的详细记录
+
+动线 5：首次配置
+
+1. 用户安装 Sman（一期功能正常使用）
+2. IT 管理员部署集市服务器
+3. 用户在「设置」页面新增的「集市」配置区填写：
+   - 集市服务器地址
+   - Agent 显示名
+   - 协作模式（默认半自动）
+4. 保存后，侧边栏「传送门」亮起
+5. 首次点击传送门 → 引导弹窗：
+   "欢迎来到集市！你的 Agent 已上线。
+    当前拥有能力：支付查询、退款处理、对账
+    在线 Agent：5 人
+    开始探索吧！"
+```
+
+### 前端组件结构（独立于现有组件）
+
+```
+src/features/bazaar/          ← 新增，不修改现有组件
+├── BazaarPage.tsx            ← 传送门主页面（/bazaar 路由）
+├── AgentStatusBar.tsx        ← Agent 状态栏（在线、声望、槽位）
+├── TaskPanel.tsx             ← 左侧任务列表面板
+├── TaskCard.tsx              ← 任务卡片组件
+├── TaskDetail.tsx            ← 右侧任务详情面板
+├── CollaborationChat.tsx     ← 实时协作对话窗口
+├── DailyDigest.tsx           ← 今日摘要卡片
+├── OnlineAgents.tsx          ← 在线 Agent 列表
+├── ControlBar.tsx            ← 底部控制栏（模式切换、槽位调整）
+├── BazaarSettings.tsx        ← 集市配置组件（嵌入 Settings 页面）
+├── OnboardingGuide.tsx       ← 首次引导弹窗
+└── hooks/
+    ├── useBazaarConnection.ts  ← Bridge WebSocket 连接
+    ├── useTaskList.ts          ← 任务列表状态
+    └── useTaskDetail.ts        ← 任务详情实时流
+```
+
+### 前端路由变更（仅新增 1 行）
+
+```typescript
+// src/app/routes.tsx — 仅新增一行
+{ path: 'bazaar', element: <BazaarPage /> },
+```
+
+### 侧边栏变更（仅新增 1 个 NavLink）
+
+```tsx
+// src/components/layout/Sidebar.tsx — 在定时任务上方新增
+<NavLink to="/bazaar" className={...}>
+  <Sparkles /> <span>传送门</span>
+  {/* 红点 badge：有未处理的协作请求时显示 */}
+</NavLink>
+```
+
+### Settings 页面变更（仅新增一个配置区块）
+
+在 Settings 页面底部新增「集市」配置区，包含：
+- 集市服务器地址
+- Agent 显示名
+- 协作模式（全自动/半自动/手动）
+- 最大并发槽位（1-10）
+
+### Bridge 层 WebSocket 消息（bazaar.* 前缀，不影响现有消息）
+
+| 消息 | 方向 | 说明 |
+|------|------|------|
+| `bazaar.status` | Bridge → 前端 | Agent 状态更新（在线、声望、槽位变化） |
+| `bazaar.task.list` | 前端 → Bridge | 请求任务列表 |
+| `bazaar.task.list.update` | Bridge → 前端 | 任务列表更新推送 |
+| `bazaar.task.detail` | 前端 → Bridge | 请求任务详情 |
+| `bazaar.task.chat.delta` | Bridge → 前端 | 协作对话实时流 |
+| `bazaar.task.cancel` | 前端 → Bridge | 用户强制结束任务 |
+| `bazaar.task.takeover` | 前端 → Bridge | 用户接手控制 |
+| `bazaar.config.update` | 前端 → Bridge | 更新集市配置 |
+| `bazaar.notify` | Bridge → 前端 | 协作请求通知（半自动模式弹出） |
+| `bazaar.digest` | Bridge → 前端 | 每日活动摘要 |
+
+---
+
+## 问题 37：Bridge 层如何连接协作 Session 和 Claude
+
+**问题**：协作 Session 怎么通过 Bridge 层使用一期的 Claude 能力，而不修改一期代码？
+
+**解法**：复用 `sendMessageForCron` 公共 API。
+
+```
+bazaar-session.ts（Bridge 层内部）:
+
+async function handleCollaboration(taskId: string, question: string) {
+  const sessionId = `bazaar-${taskId}`;
+  const workspace = findWorkspaceForTask(taskId);  // 从任务上下文获取
+
+  // 使用一期公共 API — 和 Cron/Batch 完全一样的方式
+  sessionManager.createSessionWithId(workspace, sessionId);
+
+  const abortController = new AbortController();
+
+  // 创建对话转发管道：Claude 的输出 → 发回集市 + 推送到前端
+  await sessionManager.sendMessageForCron(
+    sessionId,
+    `[协作请求 - 来自 Agent「${fromAgentName}」]\n\n${question}`,
+    abortController,
+    () => { /* onActivity: 心跳 */ }
+  );
+}
+```
+
+**和 Cron/Batch 的关系**：完全同级别的消费者。Cron 用 `sendMessageForCron` 做定时任务，Batch 用它做批量任务，Bazaar 用它做协作对话。三个模块互不感知，只共享同一个公共 API。
+
+**abortController 生命周期由 Bridge 层管理**：
+- 用户点「强制结束」→ `abortController.abort()` → Claude session 中止
+- 5 分钟超时 → Bridge 层本地定时器触发 abort
+- 对话完成 → Bridge 层提取最终结果，发回集市
 
 ---
 
@@ -1047,48 +1502,64 @@ CREATE INDEX idx_audit_event ON audit_log(event_type);
 
 ## 模块边界与接口契约（高内聚低耦合）
 
-整个系统分为 **4 个独立模块**，每个模块有明确的职责边界和接口契约。模块内部高内聚，模块之间只通过 WebSocket JSON 消息通信，不共享状态、不共享数据库、不共享代码。
+整个系统分为 **5 个独立模块**，每个模块有明确的职责边界和接口契约。模块内部高内聚，模块之间只通过明确定义的接口通信。
+
+**Bridge 层是核心隔离机制**：一期和二期之间不直接依赖，所有交互通过 Bridge 层中转。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        模块边界                              │
+│                   一期系统（永不修改）                        │
 │                                                              │
-│  ┌──────────────┐    WS 消息     ┌──────────────────────┐  │
-│  │  Sman 客户端  │ ←──────────→ │   集市服务器 (Bazaar)  │  │
-│  │              │               │                      │  │
-│  │ 职责：        │               │ 职责：                │  │
-│  │ · Agent 身份  │               │ · Agent 注册/心跳     │  │
-│  │ · 本地能力    │               │ · 能力索引与搜索      │  │
-│  │ · Claude 会话 │               │ · 任务路由与排队      │  │
-│  │ · 用户交互    │               │ · 声望计算            │  │
-│  │ · 像素渲染    │               │ · 审计日志            │  │
-│  │              │               │ · 世界状态            │  │
-│  │ 数据：        │               │ 数据：                │  │
-│  │ · SQLite(本地)│               │ · SQLite(服务器)      │  │
-│  │ · 能力图谱    │               │ · 内存(世界状态)      │  │
-│  │ · 会话历史    │               │                      │  │
-│  └──────────────┘               └──────────────────────┘  │
-│         │                              │                    │
-│         │ MCP                          │ HTTP               │
-│         ↓                              ↓                    │
-│  ┌──────────────┐               ┌──────────────────────┐  │
-│  │ Claude SDK   │               │   LLM API            │  │
-│  │ (本地子进程)  │               │ (语义搜索/匹配)       │  │
-│  └──────────────┘               └──────────────────────┘  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ ClaudeSession │    │ SettingsMgr  │    │ SkillsReg    │  │
+│  │ Manager       │    │              │    │              │  │
+│  │              │    │              │    │              │  │
+│  │ 公共 API：    │    │ getConfig()  │    │ listSkills() │  │
+│  │ · create      │    │ updateConfig │    │              │  │
+│  │ · sendForCron │    │              │    │              │  │
+│  │ · abort       │    │              │    │              │  │
+│  │ · delete      │    │              │    │              │  │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘  │
+│         │                   │                   │            │
+└─────────┼───────────────────┼───────────────────┼───────────┘
+          │ 公共 API（已存在） │                   │
+          ↓                   ↓                   ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Bridge 层 (server/bazaar/)                      │
+│              二期功能的唯一入口点                              │
+│                                                              │
+│  bazaar-client.ts    bazaar-bridge.ts    bazaar-session.ts  │
+│  bazaar-store.ts     bazaar-mcp.ts       bazaar-store.ts    │
+│                                                              │
+│  依赖方向：Bridge → 一期（单向，只用公共 API）               │
+│  数据：独立 bazaar.db（不碰一期的 sman.db）                  │
+│  配置：config.json 新增 bazaar 字段（扩展不修改）            │
+│  WS 消息：bazaar.* 前缀（不碰一期的消息类型）                │
+│  MCP 工具：bazaar_search / bazaar_collaborate（新增不修改）  │
+│  前端路由：/bazaar（新增路由不碰现有路由）                    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ WebSocket (5890)
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│              集市服务器 (bazaar/) — 完全独立                  │
+│              独立进程、独立端口、独立数据库                    │
 └─────────────────────────────────────────────────────────────┘
 
-接口契约：
-1. Sman ↔ Bazaar：WebSocket JSON 消息（本文档定义的所有消息类型）
-2. Sman ↔ Claude SDK：现有 MCP 工具接口（不修改）
-3. Bazaar ↔ LLM API：HTTP REST（语义搜索用）
-4. 像素渲染 ↔ 世界状态：WebSocket 消息子集（只读订阅）
+接口契约（5 条边界线）：
+1. 一期 → Bridge：公共 API（createSessionWithId, sendMessageForCron, abort, broadcast）
+2. Bridge → 集市：WebSocket JSON 消息（本文档定义的 agent.*/task.*/world.* 消息）
+3. Bridge → 前端：bazaar.* 前缀 WS 消息（新增，不碰现有 chat.*/session.*/settings.*）
+4. Bridge → Claude：新增 MCP 工具（bazaar_search, bazaar_collaborate）
+5. 集市 → LLM：HTTP REST（语义搜索用）
 ```
 
 **模块独立性保证**：
-- Sman 客户端可以独立运行（不连集市时就是现在的 Sman）
+- 一期 Sman 完全不受影响（不修改任何一行一期代码）
+- 删除 `server/bazaar/` 和 `src/features/bazaar/` 后，一期编译运行零报错
 - 集市服务器可以独立运行（没有 Sman 连接时就是一个空集市）
-- 像素渲染可以独立于协作引擎（只渲染世界状态，不参与任务路由）
-- Claude SDK 完全不感知集市的存在（通过 MCP 工具桥接）
+- Bridge 层是一期和二期的唯一接触点
+- Claude SDK 完全不感知集市的存在（通过 Bridge 层 MCP 工具桥接）
+- 用户不配置集市服务器 → Bridge 层不初始化 → 一期功能完全不受影响
 
 ---
 
@@ -1098,30 +1569,32 @@ CREATE INDEX idx_audit_event ON audit_log(event_type);
 
 **问题**：Claude 不知道集市上有什么能力，怎么搜索？
 
-**解法**：扩展现有 `capability_list` MCP 工具，增加 `scope` 参数。
+**解法**：通过 Bridge 层新增独立 MCP 工具（不改现有 capability_list）。
 
 ```
-现有机制（本地）：
-Claude 在执行中卡住了 → 调用 capability_list(scope="local") → 搜索本地能力
+现有机制（一期，不改）：
+Claude 在执行中卡住了 → 调用 capability_list → 搜索本地能力
 
-新增机制（集市）：
-Claude 找不到本地能力 → 调用 capability_list(scope="bazaar", query="支付系统查询")
-  → bazaar-client.ts 拦截 → 转发到集市服务器 → 返回匹配的 Agent 列表
-  → Claude 看到结果，决定是否发起协作
+新增机制（二期，Bridge 层注入）：
+Claude 找不到本地能力 → 调用 bazaar_search(query="支付系统查询")
+  → Bridge 层 MCP Server 拦截 → 转发到集市服务器 → 返回匹配的 Agent 列表
+  → Claude 看到结果 → 调用 bazaar_collaborate(agentId, question) 发起协作
 ```
 
-**关键**：Claude 不需要知道能力叫什么名字，只需要描述问题（"我需要查询支付系统的转账状态"），集市用语义搜索匹配。
+**关键设计**：不修改现有 `capability_list` MCP 工具。Bridge 层新增两个独立 MCP 工具：
+1. `bazaar_search(query)` — 搜索集市能力
+2. `bazaar_collaborate(agentId, question)` — 发起协作
 
-**系统 prompt 注入**（在 `claude-session.ts` 的 context 中追加）：
+Bridge 层在初始化时，通过 `session.setMcpServers()` 注入这两个工具到活跃 session（和 WebAccess 注入 MCP Server 的方式完全一样）。**一期代码不需要知道这两个工具的存在。**
+
+**系统 prompt 注入**（通过 Bridge 层的 MCP Server 注入，不修改一期 system prompt）：
 ```
 当你遇到无法完成的任务时，按以下顺序处理：
-1. 检查本地能力（capability_list scope=local）
-2. 搜索集市能力（capability_list scope=bazaar）
+1. 检查本地能力（capability_list）
+2. 搜索集市能力（bazaar_search）
 3. 找到匹配 → 调用 bazaar_collaborate 发起协作
 4. 找不到 → 告知用户并建议发悬赏
 ```
-
-**高内聚体现**：`capability_list` 工具是唯一入口，Claude 不需要理解集市架构，只调一个工具。
 
 ---
 
