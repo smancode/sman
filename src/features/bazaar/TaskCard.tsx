@@ -10,7 +10,9 @@ interface TaskCardProps {
 }
 
 const statusLabels: Record<string, { label: string; color: string }> = {
+  searching: { label: '搜索中', color: 'bg-yellow-100 text-yellow-700' },
   offered: { label: '待接受', color: 'bg-blue-100 text-blue-700' },
+  matched: { label: '已匹配', color: 'bg-indigo-100 text-indigo-700' },
   chatting: { label: '协作中', color: 'bg-green-100 text-green-700' },
   completed: { label: '已完成', color: 'bg-gray-100 text-gray-500' },
   timeout: { label: '超时', color: 'bg-red-100 text-red-700' },
@@ -19,7 +21,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 
 export function TaskCard({ task, onClick, onCancel }: TaskCardProps) {
   const status = statusLabels[task.status] ?? { label: task.status, color: 'bg-gray-100 text-gray-500' };
-  const isActive = task.status === 'offered' || task.status === 'chatting';
+  const isActive = task.status === 'searching' || task.status === 'offered' || task.status === 'matched' || task.status === 'chatting';
 
   return (
     <div

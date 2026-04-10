@@ -5,6 +5,8 @@ import { AgentStatusBar } from './AgentStatusBar';
 import { TaskPanel } from './TaskPanel';
 import { OnlineAgents } from './OnlineAgents';
 import { ControlBar } from './ControlBar';
+import { CollaborationChat } from './CollaborationChat';
+import { TaskNotify } from './TaskNotify';
 import { OnboardingGuide } from './OnboardingGuide';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +35,7 @@ export function BazaarPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* 顶栏 */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-2">
@@ -45,15 +47,23 @@ export function BazaarPage() {
         </div>
       </div>
 
-      {/* 主内容区 — 看板模式 */}
+      {/* 协作请求通知浮层 */}
+      <TaskNotify />
+
+      {/* 主内容区 — 三栏看板模式 */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧：任务列表 */}
-        <div className="w-1/2 border-r overflow-y-auto p-4">
+        {/* 左栏：任务列表 */}
+        <div className="w-1/3 border-r overflow-y-auto p-4">
           <TaskPanel />
         </div>
 
-        {/* 右侧：在线 Agent + 控制栏 */}
-        <div className="w-1/2 flex flex-col overflow-hidden">
+        {/* 中栏：协作对话面板 */}
+        <div className="w-1/3 border-r overflow-hidden">
+          <CollaborationChat />
+        </div>
+
+        {/* 右栏：在线 Agent + 控制栏 */}
+        <div className="w-1/3 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4">
             <OnlineAgents />
           </div>

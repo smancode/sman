@@ -17,7 +17,7 @@ export interface BazaarTask {
   requesterAgentId?: string;
   requesterName?: string;
   question: string;
-  status: 'offered' | 'chatting' | 'completed' | 'timeout' | 'cancelled';
+  status: 'searching' | 'offered' | 'matched' | 'chatting' | 'completed' | 'timeout' | 'cancelled';
   rating?: number;
   createdAt: string;
   completedAt?: string;
@@ -28,6 +28,21 @@ export interface BazaarChatMessage {
   from: string;
   text: string;
   timestamp: string;
+}
+
+export interface BazaarNotification {
+  notificationId: string;
+  taskId: string;
+  from: string;
+  question: string;
+  mode: 'auto' | 'notify' | 'manual';
+  receivedAt: string;
+  countdownEndsAt: string | null;
+}
+
+export interface BazaarTaskChat {
+  taskId: string;
+  messages: BazaarChatMessage[];
 }
 
 export interface BazaarDigest {

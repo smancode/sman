@@ -6,7 +6,9 @@ import { ListTodo } from 'lucide-react';
 export function TaskPanel() {
   const { tasks, setActiveChat, cancelTask } = useBazaarStore();
 
-  const activeTasks = tasks.filter(t => t.status === 'offered' || t.status === 'chatting');
+  const activeTasks = tasks.filter(t =>
+    t.status === 'searching' || t.status === 'offered' || t.status === 'matched' || t.status === 'chatting'
+  );
   const pastTasks = tasks.filter(t => t.status === 'completed' || t.status === 'timeout' || t.status === 'cancelled');
 
   return (
