@@ -3,6 +3,7 @@ import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
 import { ChatbotSettings } from './ChatbotSettings';
 import { BackendSettings } from './BackendSettings';
+import { BazaarSettings } from '@/features/bazaar/BazaarSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 export function Settings() {
@@ -24,6 +25,7 @@ export function Settings() {
         <ChatbotSettings />
         <LLMSettings />
         <WebSearchSettings />
+        <BazaarSettings />
       </div>
     </div>
   );
