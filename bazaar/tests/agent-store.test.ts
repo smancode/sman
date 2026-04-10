@@ -251,6 +251,28 @@ describe('AgentStore', () => {
       const agent = store.getAgent('a1');
       expect(agent!.reputation).toBe(0);
     });
+
+    it('should not decay twice on the same day', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 10);
+      store.logReputation('a1', 't1', 1.5, 'base', 'req-1');
+
+      const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+      (store as any).db.prepare(
+        'UPDATE reputation_log SET created_at = ? WHERE agent_id = ?'
+      ).run(oldDate, 'a1');
+
+      // 第一次衰减
+      const first = store.decayReputation(30, 0.1);
+      expect(first).toBe(1);
+
+      // 同一天第二次调用，不应再衰减
+      const second = store.decayReputation(30, 0.1);
+      expect(second).toBe(0);
+
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBeCloseTo(9.9);
+    });
   });
 
   describe('leaderboard', () => {

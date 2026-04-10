@@ -259,7 +259,9 @@ export class AgentStore {
 
   decayReputation(olderThanDays: number, decayAmount: number): number {
     const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+    const today = new Date().toISOString().slice(0, 10);
 
+    // 找到所有不活跃的 Agent（排除今天已经衰减过的）
     const inactiveAgents = this.db.prepare(`
       SELECT a.id, a.reputation
       FROM agents a
@@ -269,7 +271,8 @@ export class AgentStore {
           OR (SELECT MAX(rl2.created_at) FROM reputation_log rl2 WHERE rl2.agent_id = a.id AND rl2.reason != 'decay') < ?
         )
         AND a.reputation > 0
-    `).all(cutoff) as Array<{ id: string; reputation: number }>;
+        AND NOT EXISTS (SELECT 1 FROM reputation_log rd WHERE rd.agent_id = a.id AND rd.reason = 'decay' AND rd.created_at >= ?)
+    `).all(cutoff, today) as Array<{ id: string; reputation: number }>;
 
     if (inactiveAgents.length === 0) return 0;
 
