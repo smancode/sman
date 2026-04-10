@@ -59,6 +59,13 @@ export interface ChatbotConfig {
   };
 }
 
+export interface BazaarSettingsConfig {
+  server: string;
+  agentName?: string;
+  mode: 'auto' | 'notify' | 'manual';
+  maxConcurrentTasks: number;
+}
+
 export interface SmanSettings {
   port: number;
   llm: LlmConfig;
@@ -66,6 +73,7 @@ export interface SmanSettings {
   currentLlmProfile: string;
   webSearch: WebSearchConfig;
   chatbot: ChatbotConfig;
+  bazaar?: BazaarSettingsConfig;
 }
 
 export const WEB_SEARCH_PROVIDER_OPTIONS: {
