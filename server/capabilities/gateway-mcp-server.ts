@@ -11,6 +11,7 @@ import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-
 import type { CapabilityGatewayOptions, CapabilityEntry, CapabilityRunner } from './types.js';
 import { createOfficeSkillsMcpTools } from './office-skills-runner.js';
 import { createFrontendSlidesInstructions } from './frontend-slides-runner.js';
+import { createGenericInstructions } from './generic-instruction-runner.js';
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
@@ -291,6 +292,10 @@ function createRunnerInstructions(cap: CapabilityEntry, pluginsDir: string): str
   switch (cap.id) {
     case 'frontend-slides':
       return createFrontendSlidesInstructions(pluginsDir);
+    case 'internal-comms':
+    case 'theme-factory':
+    case 'skill-creator':
+      return createGenericInstructions(pluginsDir, cap.pluginPath);
     default:
       // Generic: try to read SKILL.md from plugin path
       return readPluginSkillMd(cap, pluginsDir);
