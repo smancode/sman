@@ -81,4 +81,47 @@ describe('BazaarStore', () => {
       expect(tasks[0].taskId).toBe('t2'); // 最新的在前
     });
   });
+
+  describe('chat_messages', () => {
+    it('should save and list chat messages', () => {
+      store.saveChatMessage({
+        taskId: 'task-001',
+        from: 'remote',
+        text: '你好，请问支付系统怎么查？',
+      });
+      store.saveChatMessage({
+        taskId: 'task-001',
+        from: 'local',
+        text: '让我查一下支付系统的转账记录...',
+      });
+
+      const messages = store.listChatMessages('task-001');
+      expect(messages).toHaveLength(2);
+      expect(messages[0].from).toBe('remote');
+      expect(messages[1].from).toBe('local');
+    });
+
+    it('should list messages ordered by createdAt ASC', () => {
+      store.saveChatMessage({ taskId: 'task-001', from: 'remote', text: 'first' });
+      store.saveChatMessage({ taskId: 'task-001', from: 'local', text: 'second' });
+      store.saveChatMessage({ taskId: 'task-001', from: 'remote', text: 'third' });
+
+      const messages = store.listChatMessages('task-001');
+      expect(messages[0].text).toBe('first');
+      expect(messages[2].text).toBe('third');
+    });
+
+    it('should return empty array for non-existent task', () => {
+      const messages = store.listChatMessages('non-existent');
+      expect(messages).toHaveLength(0);
+    });
+
+    it('should separate messages by task', () => {
+      store.saveChatMessage({ taskId: 'task-001', from: 'remote', text: 'q1' });
+      store.saveChatMessage({ taskId: 'task-002', from: 'remote', text: 'q2' });
+
+      expect(store.listChatMessages('task-001')).toHaveLength(1);
+      expect(store.listChatMessages('task-002')).toHaveLength(1);
+    });
+  });
 });

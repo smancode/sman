@@ -45,6 +45,16 @@ export class BazaarStore {
         completed_at TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        from_agent TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chat_task ON chat_messages(task_id);
+
       PRAGMA journal_mode=WAL;
     `);
   }
@@ -105,6 +115,24 @@ export class BazaarStore {
         created_at as createdAt, completed_at as completedAt
       FROM tasks WHERE task_id = ?
     `).get(taskId) as BazaarLocalTask | undefined;
+  }
+
+  // ── Chat Messages ──
+
+  saveChatMessage(msg: { taskId: string; from: string; text: string }): void {
+    this.db.prepare(`
+      INSERT INTO chat_messages (task_id, from_agent, text, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(msg.taskId, msg.from, msg.text, new Date().toISOString());
+  }
+
+  listChatMessages(taskId: string): Array<{ id: number; taskId: string; from: string; text: string; createdAt: string }> {
+    return this.db.prepare(`
+      SELECT id, task_id as taskId, from_agent as \`from\`, text, created_at as createdAt
+      FROM chat_messages
+      WHERE task_id = ?
+      ORDER BY created_at ASC
+    `).all(taskId) as Array<{ id: number; taskId: string; from: string; text: string; createdAt: string }>;
   }
 
   close(): void {

@@ -36,6 +36,45 @@ export interface ActiveCollaboration {
   lastActivityAt: string;
 }
 
+// ── 协作 Slot 管理 ──
+
+export interface CollaborationSlot {
+  taskId: string;
+  helperAgentId: string;
+  helperName: string;
+  question: string;
+  startedAt: string;
+}
+
+// ── Notify 超时管理 ──
+
+export interface NotifyTimeout {
+  taskId: string;
+  timer: ReturnType<typeof setTimeout>;
+  accepted: boolean;
+}
+
+// ── 协作对话消息（本地存储） ──
+
+export interface BazaarChatMessage {
+  id: number;
+  taskId: string;
+  from: string;         // 'local' | 'remote' | 'system'
+  text: string;
+  createdAt: string;
+}
+
+// ── BazaarSession 依赖注入 ──
+
+export interface BazaarSessionDeps {
+  sessionManager: import('../claude-session.js').ClaudeSessionManager;
+  client: import('./bazaar-client.js').BazaarClient;
+  store: import('./bazaar-store.js').BazaarStore;
+  broadcast: (data: string) => void;
+  homeDir: string;
+  maxConcurrentTasks: number;
+}
+
 // ── Bridge → 前端消息类型 ──
 
 export type BazaarBridgeMessageType =

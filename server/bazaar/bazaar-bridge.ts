@@ -4,6 +4,7 @@ import os from 'os';
 import { createLogger, type Logger } from '../utils/logger.js';
 import { BazaarClient } from './bazaar-client.js';
 import { BazaarStore } from './bazaar-store.js';
+import { BazaarSession } from './bazaar-session.js';
 import type { BridgeDeps } from './types.js';
 import type { BazaarConfig } from '../../shared/bazaar-types.js';
 
@@ -12,6 +13,8 @@ export class BazaarBridge {
   private client: BazaarClient;
   private store: BazaarStore;
   private deps: BridgeDeps;
+  private bazaarSession: BazaarSession | null = null;
+  private notifyTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(deps: BridgeDeps) {
     this.deps = deps;
@@ -40,6 +43,16 @@ export class BazaarBridge {
       await this.client.connect();
       this.log.info('Bazaar bridge started');
 
+      // 初始化协作 Session 管理器
+      this.bazaarSession = new BazaarSession({
+        sessionManager: this.deps.sessionManager,
+        client: this.client,
+        store: this.store,
+        broadcast: this.deps.broadcast,
+        homeDir: this.deps.homeDir,
+        maxConcurrentTasks: config.bazaar?.maxConcurrentTasks ?? 3,
+      });
+
       // 推送初始连接状态给前端
       const identity = this.store.getIdentity();
       this.deps.broadcast(JSON.stringify({
@@ -57,6 +70,16 @@ export class BazaarBridge {
   }
 
   stop(): void {
+    // 清理所有活跃协作
+    this.bazaarSession?.stopAll();
+    this.bazaarSession = null;
+
+    // 清理所有 notify 超时
+    for (const timer of this.notifyTimeouts.values()) {
+      clearTimeout(timer);
+    }
+    this.notifyTimeouts.clear();
+
     this.client.disconnect();
     this.log.info('Bazaar bridge stopped');
   }
@@ -72,8 +95,33 @@ export class BazaarBridge {
         }));
         break;
 
+      case 'bazaar.task.accept': {
+        const taskId = payload.taskId as string;
+        this.clearNotifyTimeout(taskId);
+        this.client.send({
+          id: uuidv4(),
+          type: 'task.accept',
+          payload: { taskId },
+        });
+        break;
+      }
+
+      case 'bazaar.task.reject': {
+        const taskId = payload.taskId as string;
+        this.clearNotifyTimeout(taskId);
+        this.store.updateTaskStatus(taskId, 'rejected');
+        this.client.send({
+          id: uuidv4(),
+          type: 'task.reject',
+          payload: { taskId, reason: 'user_manual_reject' },
+        });
+        break;
+      }
+
       case 'bazaar.task.cancel': {
         const taskId = payload.taskId as string;
+        // 中止协作 Session
+        this.bazaarSession?.abortCollaboration(taskId);
         this.client.send({
           id: uuidv4(),
           type: 'task.cancel',
@@ -106,12 +154,15 @@ export class BazaarBridge {
         break;
 
       case 'task.chat':
-        this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.task.chat.delta',
-          taskId: msg.payload.taskId,
-          from: msg.payload.from,
-          text: msg.payload.text,
-        }));
+        this.handleIncomingChat(msg.payload);
+        break;
+
+      case 'task.accept':
+        this.handleTaskAccepted(msg.payload);
+        break;
+
+      case 'task.complete':
+        this.handleTaskComplete(msg.payload);
         break;
 
       case 'task.matched':
@@ -150,32 +201,58 @@ export class BazaarBridge {
     const config = this.deps.settingsManager.getConfig().bazaar;
     const mode = config?.mode ?? 'notify';
 
+    const taskId = payload.taskId as string;
+    const helperAgentId = payload.from as string;
+    const helperName = (payload.fromName as string) ?? '一位同事';
+    const question = payload.question as string;
+
     this.store.saveTask({
-      taskId: payload.taskId as string,
+      taskId,
       direction: 'incoming',
-      requesterAgentId: payload.from as string,
-      requesterName: (payload.fromName as string) ?? '一位同事',
-      question: payload.question as string,
+      requesterAgentId: helperAgentId,
+      requesterName: helperName,
+      question,
       status: 'offered',
       createdAt: new Date().toISOString(),
     });
 
     if (mode === 'auto') {
-      // 全自动模式：直接接受
+      // 全自动模式：直接接受并启动协作
       this.client.send({
         id: uuidv4(),
         type: 'task.accept',
-        payload: { taskId: payload.taskId as string },
+        payload: { taskId },
       });
-    } else {
-      // notify/manual 模式：推送通知给前端
-      // TODO(Phase 2): notify 模式需实现 30 秒超时自动接受
-      // TODO(Phase 2): manual 模式需前端实现接受/拒绝 UI
+    } else if (mode === 'notify') {
+      // 半自动模式：通知前端，30 秒超时自动接受
       this.deps.broadcast(JSON.stringify({
         type: 'bazaar.notify',
-        taskId: payload.taskId,
-        from: payload.fromName ?? '一位同事',
-        question: payload.question,
+        taskId,
+        from: helperName,
+        question,
+        mode,
+      }));
+
+      // 30 秒后自动接受
+      const timer = setTimeout(() => {
+        this.notifyTimeouts.delete(taskId);
+        const task = this.store.getTask(taskId);
+        if (task && task.status === 'offered') {
+          this.client.send({
+            id: uuidv4(),
+            type: 'task.accept',
+            payload: { taskId },
+          });
+        }
+      }, 30_000);
+      this.notifyTimeouts.set(taskId, timer);
+    } else {
+      // manual 模式：等待前端操作
+      this.deps.broadcast(JSON.stringify({
+        type: 'bazaar.notify',
+        taskId,
+        from: helperName,
+        question,
         mode,
       }));
     }
@@ -207,5 +284,79 @@ export class BazaarBridge {
     // Phase 1 简化版：从配置中的工作目录推断
     // 后续 Phase 从 SkillsRegistry 动态获取
     return projects;
+  }
+
+  // ── 协作 Session 相关处理 ──
+
+  private handleTaskAccepted(payload: Record<string, unknown>): void {
+    if (!this.bazaarSession) return;
+
+    const taskId = payload.taskId as string;
+    const task = this.store.getTask(taskId);
+    if (!task) {
+      this.log.warn(`Task not found for accept: ${taskId}`);
+      return;
+    }
+
+    // 取消 notify 超时（如果有）
+    this.clearNotifyTimeout(taskId);
+
+    // 更新状态
+    this.store.updateTaskStatus(taskId, 'chatting');
+
+    // 启动协作 Session
+    const workspace = this.deps.homeDir;
+    this.bazaarSession.startCollaboration(
+      taskId,
+      task.question,
+      task.requesterAgentId ?? 'unknown',
+      task.requesterName ?? '一位同事',
+      workspace,
+    ).catch((err) => {
+      this.log.error(`Failed to start collaboration for ${taskId}`, { error: String(err) });
+    });
+  }
+
+  private handleIncomingChat(payload: Record<string, unknown>): void {
+    if (!this.bazaarSession) return;
+
+    const taskId = payload.taskId as string;
+    const from = payload.from as string;
+    const text = payload.text as string;
+
+    // 推送到前端
+    this.deps.broadcast(JSON.stringify({
+      type: 'bazaar.task.chat.delta',
+      taskId,
+      from,
+      text,
+    }));
+
+    // 如果是对方发来的消息，注入协作 Session
+    if (from !== 'local') {
+      this.bazaarSession.sendCollaborationMessage(taskId, text).catch((err) => {
+        this.log.error(`Failed to send collaboration message for ${taskId}`, { error: String(err) });
+      });
+    }
+  }
+
+  private handleTaskComplete(payload: Record<string, unknown>): void {
+    const taskId = payload.taskId as string;
+    const rating = payload.rating as number;
+    const feedback = (payload.feedback as string) ?? '';
+
+    if (this.bazaarSession) {
+      this.bazaarSession.completeCollaboration(taskId, rating, feedback);
+    }
+  }
+
+  // ── notify 超时清理辅助 ──
+
+  private clearNotifyTimeout(taskId: string): void {
+    const timer = this.notifyTimeouts.get(taskId);
+    if (timer) {
+      clearTimeout(timer);
+      this.notifyTimeouts.delete(taskId);
+    }
   }
 }
