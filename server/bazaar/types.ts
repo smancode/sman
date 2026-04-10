@@ -104,3 +104,11 @@ export interface BazaarLocalTask {
   createdAt: string;
   completedAt?: string;
 }
+
+// ── MCP Server 依赖注入 ──
+
+export interface BazaarMcpDeps {
+  store: import('./bazaar-store.js').BazaarStore;
+  client: import('./bazaar-client.js').BazaarClient;
+  broadcast: (data: string) => void;
+}
