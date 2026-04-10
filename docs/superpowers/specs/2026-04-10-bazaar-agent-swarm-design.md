@@ -56,6 +56,42 @@
 - SQLite 持久化 + 内存做实时状态
 - 独立端口（5890），和 Sman 后端（5880）分离
 
+**代码位置**：`bazaar/` 目录，独立包边界
+```
+smanbase/
+├── server/          ← Sman 后端（现有）
+├── src/             ← Sman 前端（现有）
+├── electron/        ← Electron（现有）
+├── bazaar/          ← 集市服务器（新增）
+│   ├── package.json       ← 独立依赖（better-sqlite3, ws, express）
+│   ├── tsconfig.json      ← 独立编译配置
+│   ├── src/
+│   │   ├── index.ts           ← 入口（HTTP + WS 启动）
+│   │   ├── message-router.ts  ← WS 消息分发
+│   │   ├── agent-store.ts     ← Agent 注册/心跳 Repository
+│   │   ├── project-index.ts   ← 项目能力索引 Repository
+│   │   ├── task-engine.ts     ← 任务路由/排队/超时
+│   │   ├── capability-search.ts ← 能力发现（关键词 + 语义）
+│   │   ├── reputation.ts      ← 声望计算
+│   │   ├── audit-log.ts       ← 审计日志 Repository
+│   │   ├── world-state.ts     ← 世界状态（区域/摆摊/事件广播）
+│   │   ├── rate-limiter.ts    ← API 速率限制
+│   │   ├── protocol.ts        ← 消息类型定义 + 校验
+│   │   └── utils/
+│   │       └── logger.ts
+│   └── tests/
+├── shared/          ← 共享类型定义（新增）
+│   └── bazaar-types.ts  ← 消息协议类型（Sman 和 Bazaar 共用）
+└── ...
+```
+
+**包边界原则**：
+- `bazaar/` 有自己的 `package.json`，不依赖 `server/` 的代码
+- 共享类型放 `shared/bazaar-types.ts`，两边 import
+- `bazaar/` 可以独立 `pnpm build` 和 `pnpm start`
+- 部署时 `bazaar/` 单独打包为 Docker 镜像或 Node 服务
+- `server/` 中新增 `server/bazaar-client.ts` 作为连接集市服务器的客户端
+
 **集市服务器需要自己的 LLM 配置**：
 - 能力发现引擎的语义搜索需要调用 LLM
 - 声明在集市服务器的配置文件 `~/.bazaar/config.json` 中

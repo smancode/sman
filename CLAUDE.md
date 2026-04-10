@@ -141,6 +141,22 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   ├── init-skills.ts       # Skills 初始化
 │   ├── init-system.ts       # 系统初始化
 │   └── patch-sdk.mjs        # Claude Agent SDK postinstall 补丁
+├── bazaar/                  # 集市服务器（独立包边界）
+│   ├── package.json         # 独立依赖
+│   ├── tsconfig.json        # 独立编译配置
+│   └── src/
+│       ├── index.ts         # 集市服务器入口
+│       ├── message-router.ts # WS 消息分发
+│       ├── agent-store.ts   # Agent 注册/心跳
+│       ├── project-index.ts # 项目能力索引
+│       ├── task-engine.ts   # 任务路由/排队
+│       ├── capability-search.ts # 能力发现
+│       ├── reputation.ts    # 声望计算
+│       ├── audit-log.ts     # 审计日志
+│       ├── world-state.ts   # 世界状态
+│       └── protocol.ts      # 消息协议定义
+├── shared/                  # 共享类型（Sman + Bazaar 共用）
+│   └── bazaar-types.ts      # 集市消息协议类型
 ├── docs/                    # 文档
 │   ├── windows-packaging.md
 │   └── superpowers/         # 设计文档和规格
