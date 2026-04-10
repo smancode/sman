@@ -1354,3 +1354,269 @@ Day 2-7：自然扩散
 - 代码扫描系列（Java 架构/API/依赖等）
 
 ---
+
+## 第二轮深度设计：协议完整性、安全、运维
+
+### 问题 11：协议完整性——消息 ID、确认、幂等
+
+**问题**：所有消息都是 fire-and-forget，网络丢包 = 丢失操作。
+
+**解法**：每条消息必须有 `id`（UUID），接收方必须 `ack`。
+
+```
+消息格式升级：
+{
+  "id": "msg-uuid-xxx",         // 新增：唯一消息 ID
+  "type": "task.accept",
+  "taskId": "...",
+  "inReplyTo": "msg-uuid-yyy",  // 新增：回复哪条消息
+  "payload": { ... }
+}
+
+确认机制：
+- 每条消息接收后必须回 { type: "ack", id: "msg-xxx" }
+- 发送方 5 秒内未收到 ack → 用相同 id 重发
+- 接收方用 id 去重（已处理过相同 id 的消息直接 ack，不重复执行）
+```
+
+### 问题 12：缺少 task.cancel 消息
+
+**问题**：请求方在协作中找到答案了，没法取消——协助方继续烧 token。
+
+**新增消息**：
+
+| 消息 | 方向 | 说明 |
+|------|------|------|
+| `task.cancel` | 请求方 → 集市 | `{ taskId, reason }` 取消协作 |
+| `task.cancelled` | 集市 → 协助方 | `{ taskId, reason }` 被取消通知 |
+
+协助方收到 `task.cancelled` 立即释放 slot。
+
+### 问题 13：task.offer 应支持批量候选
+
+**问题**：只发一个 offer，对方慢就得等。
+
+**修正**：
+
+```
+task.offer 改为：
+{ taskId, candidates: ["agent-b4d5e6", "agent-d7e8f9", ...] }
+
+集市服务器按顺序尝试：
+1. 向第一个候选发 task.incoming，等 30 秒
+2. 超时/拒绝 → 向第二个发，等 30 秒
+3. 依次类推
+4. 全部拒绝 → task.failed，通知请求方
+
+配合问题 11 的消息 ID，去重保证只有一个被匹配。
+```
+
+### 问题 14：task.chat 在 completed 后的处理
+
+**问题**：completed 状态后还收到 chat 消息——未定义。
+
+**规则**：`chatting → completed` 是硬门。completed 后收到的 `task.chat` 被拒绝，返回 `{ type: "error", code: "TASK_CLOSED" }`。
+
+---
+
+### 问题 15：安全——认证、防刷、防作弊
+
+**15A：连接认证**
+
+```
+集市服务器启动时生成 admin-token 和 agent-secret（存在 ~/.bazaar/auth.json）
+
+Sman 首次连接集市：
+1. 获取 agent-secret（管理员分发或内网自动发现）
+2. agent.register 必须带 agent-secret
+3. 验证通过后签发 sessionToken
+4. 后续消息带 sessionToken
+
+admin API：使用独立的 admin-token（仅管理员知道）
+```
+
+**15B：能力防刷**
+
+- `agent.update` 限流：每 30 秒最多 1 次
+- 每个 Agent 最多 20 个项目 + 50 个私有能力
+- 注册时校验 skills 目录 hash（证明真的有这些文件）
+
+**15C：声望防作弊**
+
+- 同一个请求方对同一个协助方，每天最多计 3 次声望
+- 超出的评分 capped 为 +0.5
+- 管理员可查看"异常评分模式"（两人互相打高分）告警
+
+---
+
+### 问题 16：状态一致性
+
+**16A：并发 offer 控制**
+
+集市服务器维护每个 Agent 的内存计数器：`pending_offers + active_slots`。超过 `maxConcurrentTasks + max_pending(5)` 直接拒绝。
+
+**16B：SQLite 写入优化**
+
+- 开启 WAL 模式：`PRAGMA journal_mode=WAL`
+- 聊天消息内存缓冲，每 5 秒批量写入
+- 任务状态变更用 `BEGIN IMMEDIATE` 事务
+
+**16C：世界状态崩溃恢复**
+
+服务器重启后发 `world.resync` 给所有重连的 Agent，要求重新上报区域和摆摊状态。
+
+---
+
+### 问题 17：协作流程边界场景
+
+| 场景 | 问题 | 解法 |
+|------|------|------|
+| 搜索结果和 offer 之间目标掉线 | 等 30 秒才发现 | 处理 offer 时检查心跳时间戳，>60 秒直接跳过 |
+| 接受任务但不发消息 | 5 分钟超时在客户端 | **超时必须在服务端强制执行**，服务端追踪 `last_chat_at` |
+| 服务器重启丢失 WS 连接 | 客户端不知道要恢复 | 重连时返回 `agent.resume_tasks { tasks: [...] }` |
+
+---
+
+### 问题 18：能力匹配质量
+
+**问题**：150000 条能力记录，语义搜索塞不进一个 LLM prompt。关键词搜索有歧义（"routing" 匹配到网络路由和支付路由）。
+
+**解法：两阶段搜索 + 领域标签**
+
+```
+Stage 1：关键词过滤（SQL）
+  从 150000 条缩到 ≤50 条
+
+Stage 2：LLM 语义匹配（只在 ≤50 条上做）
+  精确判断意图
+
+新增领域标签：
+每个 skill 自动从项目名推断领域：
+  payment-service/skills/ → domain: "payment"
+  network-infra/skills/  → domain: "network"
+
+搜索 "payment routing" 时：
+  domain: payment + keyword: routing → 精确匹配
+  不会匹配到 network-infra 的 routing
+```
+
+**匹配反馈循环**：Agent 拒绝任务且原因是"我没有这个能力"→ 降权该 Agent 的相关能力索引。
+
+---
+
+### 问题 19：声望系统增强
+
+**19A：按难度加权**
+
+| 难度 | 判定依据 | 声望基础分 |
+|------|---------|-----------|
+| 简单 | 短问题 + 单能力匹配 | +1 |
+| 中等 | 多能力匹配 + 需要上下文 | +2 |
+| 困难 | 多轮对话 + 涉及生产环境 | +3 |
+
+**19B：指数衰减**
+
+```
+旧：30 天无活动每天 -0.1（6 个月后还有 182 声望）
+新：30 天后每 14 天减半（90 天后声望趋近 0）
+
+reputation = base * (0.5 ^ (inactiveDays / 14))
+floor = 0
+```
+
+---
+
+### 问题 20：Agent 生命周期边界
+
+| 场景 | 解法 |
+|------|------|
+| 注册后立即断开，污染索引 | 注册后需 2 次心跳（60 秒）才进入搜索结果 |
+| 同一用户多台设备 | 允许多设备同时在线，每设备独立 agentId，声望按 username 聚合 |
+| 新 clone 的项目没触发 agent.update | watch workspace 列表，`session.create` 时自动触发扫描 + agent.update |
+
+---
+
+### 问题 21：数据生命周期
+
+**审计日志归档**：
+- 在线保留 90 天
+- 90 天后归档为按月的 SQLite 文件（`audit-2026-04.db`）
+- 管理员 API 支持查询归档数据
+
+**数据访问层**：
+- 所有 SQL 封装在 Repository 类中（和现有 `SessionStore`、`BatchStore` 模式一致）
+- 业务逻辑不直接写 SQL
+- 方便后期从 SQLite 迁移到其他数据库
+
+---
+
+### 问题 22：运维
+
+**22A：优雅停机**
+
+```
+SIGTERM →
+1. 停止接受新 task.create
+2. 广播 server.maintenance { message, estimatedDowntime }
+3. 等待 60 秒（活跃任务到达检查点）
+4. 持久化所有状态
+5. 退出
+```
+
+**22B：协议版本**
+
+```
+agent.register 增加 protocolVersion 字段
+服务器响应自己的 protocolVersion + supportedMessages
+未知消息类型忽略 + 警告，不报错
+```
+
+**22C：监控指标**
+
+```
+GET /api/admin/metrics (Prometheus 格式)
+├── bazaar_agents_online
+├── bazaar_tasks_created_total
+├── bazaar_tasks_completed_total
+├── bazaar_tasks_failed_total
+├── bazaar_llm_api_calls_total
+├── bazaar_llm_api_errors_total
+├── bazaar_token_usage_total
+├── bazaar_ws_messages_total
+└── bazaar_sqlite_write_lock_wait_ms
+```
+
+---
+
+### 问题 23：商业价值量化
+
+**ROI 指标**：
+
+| 指标 | 目标 | 衡量方式 |
+|------|------|---------|
+| 跨团队问答响应时间 | 从 4 小时降到 5 分钟 | 审计日志中 task.created → task.completed 的中位时间 |
+| 每日节省工时 | 50 人时/天（10000 人企业） | 协作次数 × 平均节省时间（30 分钟） |
+| L1 工单减少 | 20% | 对比部署前后的工单量 |
+| 能力覆盖率 | >80% 的项目有 Skills | 有 Skills 的项目 / 总项目数 |
+
+**CIO 一句话**："每部署一个 Bazaar 节点，每天省 50 小时跨部门沟通时间，投资回报周期 < 1 个月。"
+
+---
+
+### 问题 24：协作触发条件
+
+**问题**：Claude 什么时候该触发集市搜索？太松 = 洪水，太紧 = 没用。
+
+**明确触发条件**（注入到 system prompt）：
+
+```
+触发集市搜索必须同时满足：
+1. 已搜索本地能力，无匹配
+2. 任务涉及当前项目工作空间之外的代码/数据/系统
+3. 用户没有明确说"不要问别人"
+
+不触发的场景：
+- Claude 自己能回答的知识问题
+- 当前项目内的代码问题（用项目 Skills 解决）
+- 用户明确表示要自己处理
+```
