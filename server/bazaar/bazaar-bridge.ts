@@ -139,6 +139,10 @@ export class BazaarBridge {
         break;
       }
 
+      case 'bazaar.leaderboard':
+        this.fetchLeaderboard();
+        break;
+
       case 'bazaar.config.update': {
         const config = this.deps.settingsManager.getConfig();
         const updated = { ...config.bazaar, ...payload } as import('../../shared/bazaar-types.js').BazaarConfig | undefined;
@@ -391,6 +395,24 @@ export class BazaarBridge {
     if (timer) {
       clearTimeout(timer);
       this.notifyTimeouts.delete(taskId);
+    }
+  }
+
+  // ── 排行榜 ──
+
+  private async fetchLeaderboard(): Promise<void> {
+    const identity = this.store.getIdentity();
+    if (!identity) return;
+
+    try {
+      const response = await fetch(`http://${identity.server}/api/leaderboard?limit=50`);
+      const data = await response.json();
+      this.deps.broadcast(JSON.stringify({
+        type: 'bazaar.leaderboard.update',
+        leaderboard: data,
+      }));
+    } catch (e) {
+      this.log.error('Failed to fetch leaderboard', { error: String(e) });
     }
   }
 }
