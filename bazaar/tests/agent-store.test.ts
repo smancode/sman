@@ -198,4 +198,58 @@ describe('AgentStore', () => {
       expect(store.getReputationCountToday('a1', 'req-1')).toBe(4);
     });
   });
+
+  describe('reputation decay', () => {
+    it('should return last collaboration date', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      expect(store.getLastCollaborationAt('a1')).toBeNull();
+
+      store.logReputation('a1', 't1', 1.5, 'base', 'req-1');
+      const lastDate = store.getLastCollaborationAt('a1');
+      expect(lastDate).not.toBeNull();
+    });
+
+    it('should decay reputation for inactive agents', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 10);
+      store.logReputation('a1', 't1', 1.5, 'base', 'req-1');
+
+      // 模拟 31 天前的日志记录
+      const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+      (store as any).db.prepare(
+        'UPDATE reputation_log SET created_at = ? WHERE agent_id = ?'
+      ).run(oldDate, 'a1');
+
+      const decayed = store.decayReputation(30, 0.1);
+      expect(decayed).toBe(1);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBeCloseTo(9.9);
+    });
+
+    it('should not decay reputation for active agents', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 10);
+      store.logReputation('a1', 't1', 1.5, 'base', 'req-1'); // 今天活跃
+
+      const decayed = store.decayReputation(30, 0.1);
+      expect(decayed).toBe(0);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBe(10);
+    });
+
+    it('should not decay reputation below 0', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 0.05);
+      store.logReputation('a1', 't1', 0.05, 'base', 'req-1');
+
+      const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+      (store as any).db.prepare(
+        'UPDATE reputation_log SET created_at = ? WHERE agent_id = ?'
+      ).run(oldDate, 'a1');
+
+      store.decayReputation(30, 0.1);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBe(0);
+    });
+  });
 });

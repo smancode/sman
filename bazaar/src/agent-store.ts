@@ -249,6 +249,51 @@ export class AgentStore {
     return row?.count ?? 0;
   }
 
+  getLastCollaborationAt(agentId: string): string | null {
+    const row = this.db.prepare(`
+      SELECT MAX(created_at) as lastAt FROM reputation_log
+      WHERE agent_id = ? AND reason != 'decay'
+    `).get(agentId) as { lastAt: string | null } | undefined;
+    return row?.lastAt ?? null;
+  }
+
+  decayReputation(olderThanDays: number, decayAmount: number): number {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+
+    const inactiveAgents = this.db.prepare(`
+      SELECT a.id, a.reputation
+      FROM agents a
+      WHERE a.status != 'offline'
+        AND (
+          NOT EXISTS (SELECT 1 FROM reputation_log rl WHERE rl.agent_id = a.id AND rl.reason != 'decay')
+          OR (SELECT MAX(rl2.created_at) FROM reputation_log rl2 WHERE rl2.agent_id = a.id AND rl2.reason != 'decay') < ?
+        )
+        AND a.reputation > 0
+    `).all(cutoff) as Array<{ id: string; reputation: number }>;
+
+    if (inactiveAgents.length === 0) return 0;
+
+    const updateStmt = this.db.prepare(`
+      UPDATE agents SET reputation = MAX(0, reputation - ?) WHERE id = ?
+    `);
+    const logStmt = this.db.prepare(`
+      INSERT INTO reputation_log (agent_id, task_id, delta, reason, created_at)
+      VALUES (?, '__decay__', ?, 'decay', ?)
+    `);
+
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      for (const agent of inactiveAgents) {
+        const actualDecay = Math.min(decayAmount, agent.reputation);
+        updateStmt.run(actualDecay, agent.id);
+        logStmt.run(agent.id, -actualDecay, now);
+      }
+    });
+    tx();
+
+    return inactiveAgents.length;
+  }
+
   close(): void {
     this.db.close();
   }
