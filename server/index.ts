@@ -29,6 +29,7 @@ import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
 import { ProjectScanner } from './capabilities/project-scanner.js';
+import { initBazaarBridge, getBazaarBridge } from './bazaar/index.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -980,7 +981,17 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         default:
-          ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
+          if (msg.type?.startsWith('bazaar.')) {
+            const bridge = getBazaarBridge();
+            if (bridge) {
+              bridge.handleFrontendMessage(msg.type, (msg.payload ?? msg) as Record<string, unknown>, ws);
+            } else {
+              ws.send(JSON.stringify({ type: 'error', error: `Bazaar not configured: ${msg.type}` }));
+            }
+          } else {
+            ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
+          }
+          break;
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1083,6 +1094,15 @@ async function setupOfficeSkills(): Promise<void> {
 // Export for Electron in-process usage
 export { shutdown as stopServer };
 export { server, homeDir };
+
+// Bazaar Bridge（独立模块，未配置时无副作用）
+initBazaarBridge({
+  sessionManager,
+  settingsManager,
+  skillsRegistry,
+  broadcast: (data: string) => broadcast(data),
+  homeDir,
+});
 
 // When run directly (dev mode: tsx server/index.ts), auto-start
 // When imported by Electron, electron/main.ts calls startServer()
