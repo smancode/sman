@@ -222,14 +222,6 @@ export function CronTaskSettings() {
   const handleExecute = async (taskId: string) => {
     try {
       await executeNow(taskId);
-      await fetchTasks();
-      const poll = setInterval(async () => {
-        await fetchTasks();
-        const task = useCronStore.getState().tasks.find(t => t.id === taskId);
-        if (!task?.latestRun || task.latestRun.status !== 'running') {
-          clearInterval(poll);
-        }
-      }, 5000);
     } catch (err) {
       console.error('Failed to execute task:', err);
     }
