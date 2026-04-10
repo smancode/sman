@@ -106,6 +106,12 @@ setInterval(() => {
 
   // 检查超时的任务
   taskEngine.checkTimeouts(5);
+
+  // 声望衰减（30 天不活跃每天 -0.1）
+  const decayed = store.decayReputation(30, 0.1);
+  if (decayed > 0) {
+    log.info(`Reputation decayed: ${decayed} agents`);
+  }
 }, 60_000);
 
 // 优雅停机
