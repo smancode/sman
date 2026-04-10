@@ -343,8 +343,8 @@ function MessageBubble({
     return (
       <div
         className={cn(
-          'relative rounded-xl px-4 py-3',
-          'bg-[hsl(var(--user-bubble-bg))] text-[hsl(var(--user-bubble-fg))]',
+          'relative rounded-xl px-4 py-3 border',
+          'border-[hsl(var(--user-bubble-fg))]/20 text-[hsl(var(--user-bubble-fg))]',
         )}
       >
         <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
