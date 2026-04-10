@@ -1,3 +1,5 @@
+import type { BazaarConfig } from '../shared/bazaar-types.js';
+
 export interface SkillEntry {
   name: string;
   description: string;
@@ -69,6 +71,7 @@ export interface SmanConfig {
   auth: {
     token: string;
   };
+  bazaar?: BazaarConfig;
 }
 
 // === Cron Task Types ===
