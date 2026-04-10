@@ -31,7 +31,7 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'agent.heartbeat': ['agentId', 'status'],
   'agent.update': ['agentId'],
   'task.create': ['question', 'capabilityQuery'],
-  'task.offer': ['taskId', 'candidates'],
+  'task.offer': ['taskId', 'targetAgent'],
   'task.accept': ['taskId'],
   'task.reject': ['taskId'],
   'task.chat': ['taskId', 'text'],

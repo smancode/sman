@@ -2,19 +2,28 @@
 import type WebSocket from 'ws';
 import { validateMessage } from './protocol.js';
 import type { AgentStore } from './agent-store.js';
+import type { TaskEngine } from './task-engine.js';
 import { createLogger, type Logger } from './utils/logger.js';
+import { v4 as uuidv4 } from 'uuid';
 
 interface RouteResult {
   handled: boolean;
   error?: string;
 }
 
+// ws → agentId 反向索引
+const wsToAgent = new WeakMap<WebSocket, string>();
+
 export class MessageRouter {
   private log: Logger;
   private store: AgentStore;
+  private taskEngine: TaskEngine | null;
+  private connections: Map<string, WebSocket>;
 
-  constructor(store: AgentStore) {
+  constructor(store: AgentStore, taskEngine?: TaskEngine, connections?: Map<string, WebSocket>) {
     this.store = store;
+    this.taskEngine = taskEngine ?? null;
+    this.connections = connections ?? new Map();
     this.log = createLogger('MessageRouter');
   }
 
@@ -50,6 +59,8 @@ export class MessageRouter {
         return this.handleUpdate(payload, send);
       } else if (type === 'agent.offline') {
         return this.handleOffline(payload, send);
+      } else if (type.startsWith('task.')) {
+        return this.handleTaskMessage(type, payload, ws, send);
       } else {
         this.log.warn(`Unhandled message type: ${type}`);
         return { handled: true }; // 已知类型但当前 phase 未实现
@@ -107,6 +118,9 @@ export class MessageRouter {
 
     this.log.info(`Agent registered: ${payload.name} (${agentId})`);
 
+    // 记录 ws → agentId 映射，用于 task 消息路由
+    wsToAgent.set(_ws, agentId);
+
     // 回复注册成功
     send({
       type: 'agent.registered',
@@ -163,6 +177,55 @@ export class MessageRouter {
     this.store.setAgentOffline(agentId);
     this.store.logAudit('agent.offline', agentId);
     this.log.info(`Agent offline: ${agentId}`);
+    return { handled: true };
+  }
+
+  private handleTaskMessage(
+    type: string,
+    payload: Record<string, unknown>,
+    ws: WebSocket,
+    send: (data: unknown) => void,
+  ): RouteResult {
+    if (!this.taskEngine) {
+      this.log.warn('TaskEngine not initialized, ignoring task message');
+      return { handled: false, error: 'TaskEngine not available' };
+    }
+
+    // 从 ws 反查 agentId
+    const fromAgentId = wsToAgent.get(ws);
+    if (!fromAgentId) {
+      return { handled: false, error: 'Agent not registered' };
+    }
+
+    const msg = { id: '', type, payload };
+
+    if (type === 'task.create') {
+      const result = this.taskEngine.handleTaskCreate(msg, fromAgentId);
+      send({ type: 'task.search_result', id: uuidv4(), payload: { taskId: result.taskId, matches: result.matches } });
+      return { handled: true };
+    } else if (type === 'task.offer') {
+      const result = this.taskEngine.handleTaskOffer(msg, fromAgentId);
+      if (result.error) {
+        send({ type: 'error', id: uuidv4(), payload: { message: result.error } });
+      }
+      return { handled: true };
+    } else if (type === 'task.accept') {
+      this.taskEngine.handleTaskAccept(msg, fromAgentId);
+      return { handled: true };
+    } else if (type === 'task.reject') {
+      this.taskEngine.handleTaskReject(msg, fromAgentId);
+      return { handled: true };
+    } else if (type === 'task.chat') {
+      this.taskEngine.handleTaskChat(msg, fromAgentId);
+      return { handled: true };
+    } else if (type === 'task.complete') {
+      this.taskEngine.handleTaskComplete(msg, fromAgentId);
+      return { handled: true };
+    } else if (type === 'task.cancel') {
+      this.taskEngine.handleTaskCancel(msg, fromAgentId);
+      return { handled: true };
+    }
+
     return { handled: true };
   }
 }

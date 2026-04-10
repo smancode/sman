@@ -3,6 +3,8 @@ import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AgentStore } from './agent-store.js';
+import { TaskStore } from './task-store.js';
+import { TaskEngine } from './task-engine.js';
 import { MessageRouter } from './message-router.js';
 import { createLogger } from './utils/logger.js';
 import fs from 'fs';
@@ -20,8 +22,22 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
+const TASK_DB_PATH = process.env.BAZAAR_TASK_DB_PATH ?? `${process.env.HOME}/.bazaar/tasks.db`;
+
 const store = new AgentStore(DB_PATH);
-const router = new MessageRouter(store);
+const taskStore = new TaskStore(TASK_DB_PATH);
+const connections = new Map<string, WebSocket>();
+
+// 发送消息给指定 Agent
+const sendToAgent = (agentId: string, data: unknown) => {
+  const ws = connections.get(agentId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+};
+
+const taskEngine = new TaskEngine(taskStore, store, connections, sendToAgent);
+const router = new MessageRouter(store, taskEngine, connections);
 
 const app = express();
 const server = http.createServer(app);
@@ -34,8 +50,7 @@ app.get('/api/health', (_req, res) => {
 // WebSocket 服务器
 const wss = new WebSocketServer({ server });
 
-// Agent ID → WebSocket 映射
-const connections = new Map<string, WebSocket>();
+// Agent ID → WebSocket 映射（已在前方声明）
 
 wss.on('connection', (ws) => {
   let agentId: string | null = null;
@@ -86,6 +101,9 @@ setInterval(() => {
       }
     }
   }
+
+  // 检查超时的任务
+  taskEngine.checkTimeouts(5);
 }, 60_000);
 
 // 优雅停机
@@ -99,6 +117,7 @@ function gracefulShutdown(signal: string) {
     store.setAgentOffline(id);
   }
   store.close();
+  taskStore.close();
   server.close(() => {
     log.info('Server closed');
     process.exit(0);
