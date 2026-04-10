@@ -13,6 +13,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "server"],
+  "include": ["src", "server", "shared"],
   "exclude": ["node_modules", "dist", "electron"]
 }
