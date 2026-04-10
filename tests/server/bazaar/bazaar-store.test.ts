@@ -124,4 +124,48 @@ describe('BazaarStore', () => {
       expect(store.listChatMessages('task-002')).toHaveLength(1);
     });
   });
+
+  describe('learned_routes', () => {
+    it('should save and find learned routes by capability', () => {
+      store.saveLearnedRoute({ capability: '支付查询', agentId: 'agent-002', agentName: '小李', repo: 'payment-service' });
+      store.saveLearnedRoute({ capability: '风控规则', agentId: 'agent-003', agentName: '王五', repo: 'risk-engine' });
+
+      const results = store.findLearnedRoutes('支付');
+      expect(results).toHaveLength(1);
+      expect(results[0].agentId).toBe('agent-002');
+      expect(results[0].repo).toBe('payment-service');
+    });
+
+    it('should accumulate multiple routes for same capability', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A', repo: 'pay1' });
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a2', agentName: 'B', repo: 'pay2' });
+
+      const results = store.findLearnedRoutes('支付');
+      expect(results).toHaveLength(2);
+    });
+
+    it('should update existing route (upsert by capability + agentId)', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A', repo: 'pay-v1' });
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A-Updated', repo: 'pay-v2' });
+
+      const results = store.findLearnedRoutes('支付');
+      expect(results).toHaveLength(1);
+      expect(results[0].agentName).toBe('A-Updated');
+      expect(results[0].repo).toBe('pay-v2');
+    });
+
+    it('should return empty array when no matches', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A', repo: 'pay' });
+      const results = store.findLearnedRoutes('风控');
+      expect(results).toHaveLength(0);
+    });
+
+    it('should list all learned routes', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A', repo: 'pay' });
+      store.saveLearnedRoute({ capability: '风控', agentId: 'a2', agentName: 'B', repo: 'risk' });
+
+      const all = store.listLearnedRoutes();
+      expect(all).toHaveLength(2);
+    });
+  });
 });

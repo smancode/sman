@@ -55,6 +55,17 @@ export class BazaarStore {
 
       CREATE INDEX IF NOT EXISTS idx_chat_task ON chat_messages(task_id);
 
+      CREATE TABLE IF NOT EXISTS learned_routes (
+        capability TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        agent_name TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (capability, agent_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_learned_capability ON learned_routes(capability);
+
       PRAGMA journal_mode=WAL;
     `);
   }
@@ -137,5 +148,31 @@ export class BazaarStore {
 
   close(): void {
     this.db.close();
+  }
+
+  // ── Learned Routes ──
+
+  saveLearnedRoute(input: { capability: string; agentId: string; agentName: string; repo: string }): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO learned_routes (capability, agent_id, agent_name, repo, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(input.capability, input.agentId, input.agentName, input.repo, new Date().toISOString());
+  }
+
+  findLearnedRoutes(keyword: string): Array<{ capability: string; agentId: string; agentName: string; repo: string }> {
+    const escaped = keyword.replace(/%/g, '\\%').replace(/_/g, '\\_');
+    return this.db.prepare(`
+      SELECT capability, agent_id as agentId, agent_name as agentName, repo
+      FROM learned_routes
+      WHERE capability LIKE ? ESCAPE '\\'
+    `).all(`%${escaped}%`) as Array<{ capability: string; agentId: string; agentName: string; repo: string }>;
+  }
+
+  listLearnedRoutes(): Array<{ capability: string; agentId: string; agentName: string; repo: string }> {
+    return this.db.prepare(`
+      SELECT capability, agent_id as agentId, agent_name as agentName, repo
+      FROM learned_routes
+      ORDER BY capability, updated_at DESC
+    `).all() as Array<{ capability: string; agentId: string; agentName: string; repo: string }>;
   }
 }
