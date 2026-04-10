@@ -109,6 +109,19 @@ export class AgentStore {
       CREATE INDEX IF NOT EXISTS idx_projects_agent ON agent_projects(agent_id);
       CREATE INDEX IF NOT EXISTS idx_privcap_agent ON agent_private_capabilities(agent_id);
 
+      CREATE TABLE IF NOT EXISTS reputation_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        delta REAL NOT NULL,
+        reason TEXT NOT NULL,
+        source_agent_id TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_reputation_agent ON reputation_log(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_reputation_created ON reputation_log(created_at);
+
       PRAGMA journal_mode=WAL;
     `);
   }
@@ -202,6 +215,38 @@ export class AgentStore {
     return this.db.prepare(
       'SELECT id, timestamp, event_type as eventType, agent_id as agentId, target_agent_id as targetAgentId, task_id as taskId, detail FROM audit_log WHERE agent_id = ? ORDER BY timestamp DESC LIMIT ?'
     ).all(agentId, limit) as AuditRow[];
+  }
+
+  // ── Reputation ──
+
+  updateReputation(agentId: string, delta: number): void {
+    this.db.prepare(`
+      UPDATE agents SET reputation = MAX(0, reputation + ?) WHERE id = ?
+    `).run(delta, agentId);
+  }
+
+  logReputation(agentId: string, taskId: string, delta: number, reason: string, sourceAgentId?: string): void {
+    this.db.prepare(`
+      INSERT INTO reputation_log (agent_id, task_id, delta, reason, source_agent_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(agentId, taskId, delta, reason, sourceAgentId ?? null, new Date().toISOString());
+  }
+
+  getReputationLogs(agentId: string, limit = 100): Array<{ id: number; taskId: string; delta: number; reason: string; createdAt: string }> {
+    return this.db.prepare(`
+      SELECT id, task_id as taskId, delta, reason, created_at as createdAt
+      FROM reputation_log WHERE agent_id = ?
+      ORDER BY created_at DESC LIMIT ?
+    `).all(agentId, limit) as Array<{ id: number; taskId: string; delta: number; reason: string; createdAt: string }>;
+  }
+
+  getReputationCountToday(agentId: string, sourceAgentId: string): number {
+    const today = new Date().toISOString().slice(0, 10);
+    const row = this.db.prepare(`
+      SELECT COUNT(*) as count FROM reputation_log
+      WHERE agent_id = ? AND source_agent_id = ? AND created_at >= ?
+    `).get(agentId, sourceAgentId, today) as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 
   close(): void {

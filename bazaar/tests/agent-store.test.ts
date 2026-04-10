@@ -151,4 +151,51 @@ describe('AgentStore', () => {
       expect(logs[0].eventType).toBe('agent.online');
     });
   });
+
+  // === Reputation ===
+
+  describe('reputation', () => {
+    it('should update agent reputation', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 2.5);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBe(2.5);
+    });
+
+    it('should accumulate reputation', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', 1.5);
+      store.updateReputation('a1', 2.0);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBeCloseTo(3.5);
+    });
+
+    it('should not go below 0', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.updateReputation('a1', -5);
+      const agent = store.getAgent('a1');
+      expect(agent!.reputation).toBe(0);
+    });
+
+    it('should log reputation changes', () => {
+      store.registerAgent({ id: 'a1', username: 'test', hostname: 'h', name: 'Test' });
+      store.logReputation('a1', 'task-001', 1.5, 'base');
+      store.logReputation('a1', 'task-002', 2.0, 'quality');
+      const logs = store.getReputationLogs('a1');
+      expect(logs).toHaveLength(2);
+      // Check both entries exist regardless of order
+      const deltas = logs.map(l => l.delta);
+      expect(deltas).toContain(1.5);
+      expect(deltas).toContain(2.0);
+    });
+
+    it('should count reputation events between two agents today', () => {
+      store.registerAgent({ id: 'a1', username: 'test1', hostname: 'h', name: 'T1' });
+      store.logReputation('a1', 't1', 1, 'base', 'req-1');
+      store.logReputation('a1', 't2', 1, 'base', 'req-1');
+      store.logReputation('a1', 't3', 1, 'base', 'req-1');
+      store.logReputation('a1', 't4', 1, 'base', 'req-1');
+      expect(store.getReputationCountToday('a1', 'req-1')).toBe(4);
+    });
+  });
 });
