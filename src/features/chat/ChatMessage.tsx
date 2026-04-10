@@ -276,10 +276,10 @@ function ToolStatusBar({
           <div
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
-              'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors',
-              isRunning && 'border-primary/30 bg-primary/5 text-foreground',
-              !isRunning && !isError && 'border-border/50 bg-muted/20 text-muted-foreground',
-              isError && 'border-destructive/30 bg-destructive/5 text-destructive',
+              'flex items-center gap-2 text-xs transition-colors',
+              isRunning && 'text-foreground',
+              !isRunning && !isError && 'text-muted-foreground',
+              isError && 'text-destructive',
             )}
           >
             {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
@@ -352,15 +352,10 @@ function MessageBubble({
     );
   }
 
-  // Assistant message: use Streamdown for both streaming and static rendering
+  // Assistant message: no bubble — plain text rendering
   return (
-    <div
-      className={cn(
-        'relative rounded-xl px-4 py-3 w-full',
-        'bg-muted text-foreground',
-      )}
-    >
-      <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all">
+    <div className="w-full">
+      <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all text-foreground">
         <Streamdown
           mode={isStreaming ? 'streaming' : 'static'}
           components={streamdownComponents}
@@ -384,16 +379,16 @@ function ThinkingBlock({ content }: { content: string }) {
   const codePlugin = useCodePlugin();
 
   return (
-    <div className="w-full rounded-xl border border-border bg-muted/50 text-[14px]">
+    <div className="w-full text-[14px]">
       <button
-        className="flex items-center gap-2 w-full px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <span className="font-medium">思考</span>
       </button>
       {expanded && (
-        <div className="px-3 pb-3 text-muted-foreground">
+        <div className="text-muted-foreground">
           <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none opacity-75">
             <Streamdown
               mode="static"
@@ -577,9 +572,9 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border border-border bg-muted/50 text-[14px]">
+    <div className="text-[14px]">
       <button
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -588,7 +583,7 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
         {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
       </button>
       {expanded && input != null && (
-        <pre className="px-3 pb-2 text-xs text-muted-foreground whitespace-pre-wrap break-all">
+        <pre className="pl-5 text-xs text-muted-foreground whitespace-pre-wrap break-all">
           {typeof input === 'string' ? input : JSON.stringify(input, null, 2) as string}
         </pre>
       )}
