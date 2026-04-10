@@ -193,6 +193,13 @@ export interface TaskResultPayload {
   reputationDelta: number;
 }
 
+export interface ReputationUpdatePayload {
+  agentId: string;
+  delta: number;
+  reason: string;
+  newTotal: number;
+}
+
 export interface TaskEscalatePayload {
   taskId: string;
   reason: string;

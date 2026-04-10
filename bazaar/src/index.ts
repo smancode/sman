@@ -6,6 +6,7 @@ import { AgentStore } from './agent-store.js';
 import { TaskStore } from './task-store.js';
 import { TaskEngine } from './task-engine.js';
 import { MessageRouter } from './message-router.js';
+import { ReputationEngine } from './reputation.js';
 import { createLogger } from './utils/logger.js';
 import fs from 'fs';
 import path from 'path';
@@ -36,7 +37,8 @@ const sendToAgent = (agentId: string, data: unknown) => {
   }
 };
 
-const taskEngine = new TaskEngine(taskStore, store, connections, sendToAgent);
+const reputationEngine = new ReputationEngine(store);
+const taskEngine = new TaskEngine(taskStore, store, connections, sendToAgent, reputationEngine);
 const router = new MessageRouter(store, taskEngine, connections);
 
 const app = express();

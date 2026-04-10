@@ -22,7 +22,7 @@ const VALID_TYPES: Set<string> = new Set([
   'world.zone_snapshot', 'world.agent_enter', 'world.agent_leave', 'world.event',
   'world.resync',
   // Server
-  'ack', 'error', 'server.maintenance',
+  'ack', 'error', 'server.maintenance', 'reputation.update',
 ]);
 
 // 各消息类型的必填 payload 字段

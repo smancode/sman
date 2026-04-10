@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { TaskStore } from './task-store.js';
 import type { AgentStore } from './agent-store.js';
+import type { ReputationEngine } from './reputation.js';
 import type WebSocket from 'ws';
 
 type SendFn = (agentId: string, data: unknown) => void;
@@ -13,17 +14,20 @@ export class TaskEngine {
   private agentStore: AgentStore;
   private connections: Map<string, WebSocket>;
   private sendTo: SendFn;
+  private reputationEngine: ReputationEngine | null;
 
   constructor(
     taskStore: TaskStore,
     agentStore: AgentStore,
     connections: Map<string, WebSocket>,
     sendTo: SendFn,
+    reputationEngine?: ReputationEngine,
   ) {
     this.taskStore = taskStore;
     this.agentStore = agentStore;
     this.connections = connections;
     this.sendTo = sendTo;
+    this.reputationEngine = reputationEngine ?? null;
     this.log = createLogger('TaskEngine');
   }
 
@@ -197,8 +201,16 @@ export class TaskEngine {
 
     this.taskStore.updateTaskStatus(taskId, 'completed', { rating, feedback });
 
+    // 声望计算
+    let reputationDelta = 0;
+    if (this.reputationEngine && task.requesterId && task.helperId) {
+      const repResult = this.reputationEngine.onTaskComplete(
+        taskId, task.requesterId, task.helperId, rating,
+      );
+      reputationDelta = repResult.helperDelta;
+    }
+
     // 通知协助方结算
-    const reputationDelta = rating; // 简化：评分即声望增量
     if (task.helperId) {
       this.sendTo(task.helperId, {
         type: 'task.result',
@@ -208,7 +220,7 @@ export class TaskEngine {
     }
 
     this.agentStore.logAudit('task.completed', fromAgentId, task.helperId ?? undefined, taskId, {
-      rating, feedback,
+      rating, feedback, reputationDelta,
     });
   }
 
