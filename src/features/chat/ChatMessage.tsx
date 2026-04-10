@@ -85,7 +85,7 @@ export const ChatMessage = memo(function ChatMessage({
       {/* Content */}
       <div
         className={cn(
-          'flex flex-col w-full min-w-0 max-w-[80%] space-y-2',
+          'flex flex-col w-full min-w-0 max-w-[85%] space-y-2',
           isUser ? 'items-end' : 'items-start',
         )}
       >
