@@ -5,6 +5,7 @@ import { createLogger, type Logger } from '../utils/logger.js';
 import { BazaarClient } from './bazaar-client.js';
 import { BazaarStore } from './bazaar-store.js';
 import { BazaarSession } from './bazaar-session.js';
+import { createBazaarMcpServer } from './bazaar-mcp.js';
 import type { BridgeDeps } from './types.js';
 import type { BazaarConfig } from '../../shared/bazaar-types.js';
 
@@ -52,6 +53,14 @@ export class BazaarBridge {
         homeDir: this.deps.homeDir,
         maxConcurrentTasks: config.bazaar?.maxConcurrentTasks ?? 3,
       });
+
+      // 创建 MCP Server（bazaar_search + bazaar_collaborate）
+      const mcpServer = createBazaarMcpServer({
+        store: this.store,
+        client: this.client,
+        broadcast: this.deps.broadcast,
+      });
+      this.log.info('Bazaar MCP server created', { serverName: mcpServer.name });
 
       // 推送初始连接状态给前端
       const identity = this.store.getIdentity();
@@ -184,6 +193,17 @@ export class BazaarBridge {
           type: 'bazaar.status',
           event: msg.type,
           taskId: msg.payload.taskId,
+        }));
+        break;
+
+      case 'reputation.update':
+        this.deps.broadcast(JSON.stringify({
+          type: 'bazaar.status',
+          event: 'reputation_updated',
+          agentId: msg.payload.agentId,
+          delta: msg.payload.delta,
+          newTotal: msg.payload.newTotal,
+          reason: msg.payload.reason,
         }));
         break;
 
@@ -344,6 +364,20 @@ export class BazaarBridge {
     const taskId = payload.taskId as string;
     const rating = payload.rating as number;
     const feedback = (payload.feedback as string) ?? '';
+
+    // 保存经验路由（rating >= 3 表示成功）
+    if (rating >= 3) {
+      const task = this.store.getTask(taskId);
+      if (task) {
+        const capability = task.question.slice(0, 50);
+        const agentId = task.requesterAgentId ?? task.helperAgentId;
+        const agentName = task.requesterName ?? task.helperName;
+        const repo = '';
+        if (agentId && agentName) {
+          this.store.saveLearnedRoute({ capability, agentId, agentName, repo });
+        }
+      }
+    }
 
     if (this.bazaarSession) {
       this.bazaarSession.completeCollaboration(taskId, rating, feedback);
