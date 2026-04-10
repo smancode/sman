@@ -10,6 +10,7 @@ import type {
   BazaarDigest,
   BazaarNotification,
   BazaarTaskChat,
+  BazaarLeaderboardEntry,
 } from '@/types/bazaar';
 
 function getWsClient() {
@@ -26,6 +27,7 @@ interface BazaarState {
   connection: BazaarConnectionStatus;
   tasks: BazaarTask[];
   onlineAgents: BazaarAgentInfo[];
+  leaderboard: BazaarLeaderboardEntry[];
   activeChat: BazaarTaskChat | null;
   notifications: BazaarNotification[];
   digest: BazaarDigest | null;
@@ -35,6 +37,7 @@ interface BazaarState {
   // Actions
   fetchTasks: () => void;
   fetchOnlineAgents: () => void;
+  fetchLeaderboard: () => void;
   cancelTask: (taskId: string) => void;
   setActiveChat: (taskId: string) => void;
   clearActiveChat: () => void;
@@ -62,6 +65,7 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
     },
     tasks: [],
     onlineAgents: [],
+    leaderboard: [],
     activeChat: null,
     notifications: [],
     digest: null,
@@ -79,6 +83,12 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
       const client = getWsClient();
       if (!client) return;
       client.send({ type: 'bazaar.agent.list' });
+    },
+
+    fetchLeaderboard: () => {
+      const client = getWsClient();
+      if (!client) return;
+      client.send({ type: 'bazaar.leaderboard' });
     },
 
     cancelTask: (taskId: string) => {
@@ -173,6 +183,8 @@ function registerPushListeners() {
       set({ tasks: msg.tasks as BazaarTask[], loading: false });
     } else if (type === 'bazaar.agent.list.update') {
       set({ onlineAgents: msg.agents as BazaarAgentInfo[] });
+    } else if (type === 'bazaar.leaderboard.update') {
+      set({ leaderboard: msg.leaderboard as BazaarLeaderboardEntry[] });
     } else if (type === 'bazaar.task.chat.delta') {
       const taskId = msg.taskId as string;
       const from = msg.from as string;

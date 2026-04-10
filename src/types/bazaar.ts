@@ -61,6 +61,15 @@ export interface BazaarDigest {
 
 export type BazaarMode = 'auto' | 'notify' | 'manual';
 
+export interface BazaarLeaderboardEntry {
+  agentId: string;
+  name: string;
+  avatar: string;
+  reputation: number;
+  status: string;
+  helpCount: number;
+}
+
 export interface BazaarConnectionStatus {
   connected: boolean;
   agentId?: string;

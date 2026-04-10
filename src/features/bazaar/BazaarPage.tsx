@@ -4,6 +4,7 @@ import { useBazaarStore } from '@/stores/bazaar';
 import { AgentStatusBar } from './AgentStatusBar';
 import { TaskPanel } from './TaskPanel';
 import { OnlineAgents } from './OnlineAgents';
+import { LeaderboardPanel } from './LeaderboardPanel';
 import { ControlBar } from './ControlBar';
 import { CollaborationChat } from './CollaborationChat';
 import { TaskNotify } from './TaskNotify';
@@ -14,12 +15,13 @@ import { Button } from '@/components/ui/button';
 
 export function BazaarPage() {
   const navigate = useNavigate();
-  const { connection, fetchTasks, fetchOnlineAgents, loading } = useBazaarStore();
+  const { connection, fetchTasks, fetchOnlineAgents, fetchLeaderboard, loading } = useBazaarStore();
 
   useEffect(() => {
     fetchTasks();
     fetchOnlineAgents();
-  }, [fetchTasks, fetchOnlineAgents]);
+    fetchLeaderboard();
+  }, [fetchTasks, fetchOnlineAgents, fetchLeaderboard]);
 
   // 未连接集市时显示配置提示
   if (!connection.connected) {
@@ -62,9 +64,10 @@ export function BazaarPage() {
           <CollaborationChat />
         </div>
 
-        {/* 右栏：在线 Agent + 控制栏 */}
+        {/* 右栏：排行榜 + 在线 Agent + 控制栏 */}
         <div className="w-1/3 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <LeaderboardPanel />
             <OnlineAgents />
           </div>
           <ControlBar />
