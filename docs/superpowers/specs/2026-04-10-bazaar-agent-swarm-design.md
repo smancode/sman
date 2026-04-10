@@ -797,26 +797,146 @@ Agent 忙碌时（用户在用）：
 - React + TypeScript，新增 `src/features/world/` 目录
 - 后期可独立部署为网页，API 同一套
 
-### 渲染引擎：不需要图片引擎
+### 渲染引擎：分层 Canvas + PNG Sprite Sheet
 
-像素风**不使用 jpg/png 图片**，全部代码绘制：
+**像素世界是装饰性导航层，不是功能 UI。数据密集型交互交给现代 HTML 面板。**
 
-- **Tile Map**：世界地图由 16x16 像素方格组成，每个格子的颜色/图案用代码定义，Canvas 直接绘制
-- **Sprite**：小人是几个关键帧的像素矩阵（站立、走路左脚、走路右脚），Canvas 按帧切换画出动画
-- 一个完整的像素小人只有几百字节数据，1 万个小人内存占用极小
-- Canvas 2D 绘制像素是 GPU 最擅长的事，不需要图片引擎，不需要 WebGL/Three.js
+```
+渲染架构：
 
-### 素材生成
+Canvas Layer 0 (底): 地面 Tile Map（加载一次，缓存）
+Canvas Layer 1 (中): 建筑、摊位、装饰物（很少更新）
+Canvas Layer 2 (上): Agent 精灵（频繁更新，dirty rect 优化）
+HTML Layer   (顶): 信息面板（React 组件，任务/声望/对话等）
+```
 
-像素素材由 mmx-cli 生成：
+| 元素 | 尺寸 | 说明 |
+|------|------|------|
+| **Tile** | 32×32 px | 4K 下缩放到 48px，锯齿可控 |
+| **Agent Sprite** | 32×48 px | 4帧行走动画，7个状态（idle/walk_4dir/action/celebrate） |
+| **小建筑** | 64×64 px | 摊位、信箱、搜索站 |
+| **大建筑** | 96×96 px | 悬赏板、声望榜、工坊 |
+| **视角** | 3/4 俯视角 | Zelda-like，建筑有立面，角色有朝向 |
+| **色板** | 48色，5组 | 基底/暖色/冷色/强调/UI |
+| **描边** | 选择性 | 建筑底部暗描边，Agent 不描边 |
+| **光影** | 明暗面 | 建筑顶面亮、立面暗，无投影 |
+| **最小显示** | 48px | 缩放后保证 4K 可读 |
 
-| 素材类型 | mmx-cli 能力 | 用途 |
-|---------|-------------|------|
-| Tileset | 图片生成 | 地面、墙壁、摊位、装饰物等像素瓦片 |
-| Sprite Sheet | 图片生成 | 小人各方向行走帧、站立、idle 动画 |
-| 声效 | 音频生成 | 摆摊提示音、接任务音效、走动声、环境音 |
+**HiDPI 处理**：Canvas 尺寸 = CSS 尺寸 × devicePixelRatio，`imageSmoothingEnabled = false` 保持像素锐利。
 
-素材生成后作为 JSON 数据（像素矩阵）内嵌到前端代码中，不依赖外部图片文件。
+### 素材格式：PNG Sprite Sheet + JSON Atlas
+
+```
+skins/classic/
+├── manifest.json         ← 皮肤元数据（名称、版本、配置）
+├── tiles.png             ← 地面/墙壁瓦片 Sprite Sheet
+├── tiles.json            ← Atlas: { "grass": { x:0, y:0, w:32, h:32 }, ... }
+├── agents.png            ← Agent 精灵 Sprite Sheet
+├── agents.json           ← Atlas: { "walk_down_0": { x:0, y:0, w:32, h:48 }, ... }
+├── buildings.png         ← 建筑 Sprite Sheet
+├── buildings.json        ← Atlas
+└── preview.png           ← 预览图
+```
+
+素材由 mmx-cli 生成，输出为 Sprite Sheet + Atlas JSON 格式。
+
+### 皮肤系统：可替换的装饰层
+
+美术风格是独立的"皮肤"，和功能逻辑完全解耦。
+
+```typescript
+// 皮肤接口
+interface BazaarSkin {
+  id: string;           // 'classic' | 'neon' | 'minimal' | 'warm'
+  name: string;         // '经典像素风' | '霓虹赛博' | '极简扁平' | '温暖治愈'
+  version: string;
+  assets: {
+    tiles: string;      // Sprite Sheet URL
+    tilesAtlas: string; // Atlas JSON URL
+    agents: string;
+    agentsAtlas: string;
+    buildings: string;
+    buildingsAtlas: string;
+  };
+  config: {
+    tileSize: number;
+    spriteSize: { w: number; h: number };
+    palette: string[];
+    animations: Record<string, AnimationDef>;
+  };
+  preview: string;
+}
+```
+
+**皮肤热切换**：加载新皮肤 → 预加载所有资源 → 300ms crossfade 过渡。
+
+**预置皮肤**：
+
+| 皮肤 | 风格 | 色调 | 目标用户 |
+|------|------|------|---------|
+| **Classic** | 经典像素风 | 暖棕色 Zelda-like | 默认，所有人 |
+| **Neon** | 赛博朋克 | 深紫黑 + 霓虹色 | 年轻开发者 |
+| **Minimal** | 极简扁平 | 灰白 + 蓝色强调 | 效率优先用户 |
+| **Warm** | 温暖治愈 | 马卡龙色系 | 非技术人员 |
+
+### Classic 皮肤默认调色板（48色）
+
+```
+基底色（6色）— 建筑和地面
+#1a1c2c  #333c57  #566c86  #94b0c2  #c2c3c7  #f4f4f4
+
+暖色组（6色）— 角色、NPC、生活区
+#5a4a3a  #7a6852  #a88c6a  #c2a882  #e8d4b2  #fff3e6
+
+冷色组（6色）— 工坊、搜索站、科技感
+#253c58  #3a5a7c  #4a8aaa  #68b8d8  #a8e4f0  #c0f0ff
+
+强调色（6色）— 任务、声望、高亮
+#b13e53  #ef7d57  #ffcd75  #a7f070  #38b764  #41a6f6
+
+UI色（6色）— 界面元素
+#000000  #3a3a4a  #7a7a8a  #ff4444  #ffcc44  #44cc44
+```
+
+**调色板是皮肤级别的**，不同皮肤可以有完全不同的调色板。渲染代码不硬编码颜色，所有颜色从皮肤的 `config.palette` 读取。
+
+### 双轨 UI：像素世界 + 现代 HTML 面板
+
+**像素世界只负责"氛围"和"空间导航"，不承载文字和数据。**
+
+```
+┌───────────────────────────────────────────────────┐
+│ [🌍 世界模式] [📊 看板模式]    ← 一键切换        │
+├────────────────────────┬──────────────────────────┤
+│                        │                          │
+│  像素世界 (Canvas 60%)  │  信息面板 (React 40%)     │
+│                        │                          │
+│  · 地图导航            │  · 任务列表/详情          │
+│  · 点击建筑/Agent      │  · 声望排行              │
+│  · Agent 来回走动      │  · 实时协作对话          │
+│  · 协作对话线          │  · 搜索结果              │
+│  · 区域氛围            │  · 在线 Agent 列表       │
+│                        │                          │
+├────────────────────────┴──────────────────────────┤
+│ 底部状态栏（HTML）：Agent 状态 · 声望 · 通知      │
+└───────────────────────────────────────────────────┘
+
+看板模式 = 隐藏 Canvas，信息面板占 100%
+世界模式 = Canvas + 信息面板
+```
+
+### 进入集市的视觉过渡
+
+不是硬切，而是"像素化过渡"动画：
+1. 当前 Sman 画面逐渐降低分辨率（mosaic 效果，200ms）
+2. 从像素粒子里重组为集市画面（300ms）
+3. 给用户心理缓冲，不是"突然进入游戏"
+
+### 性能目标
+
+- 1000 活跃 Agent < 5ms/帧（dirty rect 优化，只重绘移动中的 Agent）
+- 地面/建筑层缓存为离屏 Canvas，不每帧重绘
+- 60fps 在主流办公电脑上稳定
 
 ---
 
@@ -2509,50 +2629,49 @@ ALTER TABLE agents ADD COLUMN department TEXT;
 
 ---
 
-### 问题 35：像素世界美术风格统一
+### 问题 35：像素世界美术风格统一（经专业评审修订）
 
 **问题**：像素素材如果东一块西一块，风格不统一，视觉会很丑。
 
-**美术风格统一策略**：
+**经 7 角色评审后的修订方案**：
 
+原始方案（32色 + 16×16 + 纯俯视 + 1px 描边）经像素美术师、UI/UX 设计师、前端工程师和 4 类目标用户评审后评分 3.9/10，主要问题：
+- 32色覆盖不了 7 个区域的差异
+- 16×16 在 4K 显示器上放大后锯齿极重
+- 纯俯视角缺乏立体感
+- 1px 描边高倍缩放后变成粗黑线
+- 像素风承载不了文字和数据信息
+
+**修订后的美术规范**（详见"渲染引擎"章节）：
+- **48色调色板**，5组（基底/暖色/冷色/强调/UI），由皮肤的 `config.palette` 管理
+- **Tile 32×32，Sprite 32×48，建筑 64×64 / 96×96**
+- **3/4 俯视角**（Zelda-like），建筑有立面
+- **选择性描边**：建筑底部暗描边，Agent 不描边
+- **明暗面**：顶面亮、立面暗，无投影
+- **双轨 UI**：Canvas 只渲染像素世界，文字/数据/列表用 HTML React 组件
+- **皮肤可替换**：`BazaarSkin` 接口，4 套预置皮肤（Classic/Neon/Minimal/Warm）
+- **素材格式**：PNG Sprite Sheet + JSON Atlas（mmx-cli 生成）
+
+**素材生成和校验流程（不变）**：
+1. mmx-cli 根据皮肤 Design Token prompt 生成素材
+2. 自动校验：尺寸、调色板范围、无渐变/阴影
+3. 校验通过 → 打包为 Sprite Sheet + Atlas JSON
+4. 校验失败 → 调整 prompt 重新生成
+
+**皮肤管理目录**：
 ```
-设计规范（Design Token）：
-├── 调色板：固定 32 色（像素风经典色板）
-│   ├── 地面色：#2d1b00, #4a7c3f, #c4a35a ...
-│   ├── 建筑色：#8b4513, #d2691e ...
-│   ├── 角色色：肤色、发色、衣服各 4-5 种
-│   └── UI 色：#ffffff, #000000, #ffcc00 ...
-│
-├── 尺寸规范：
-│   ├── Tile: 16×16 像素（地面、墙壁、装饰物）
-│   ├── Sprite: 16×24 像素（小人，3 帧走路动画）
-│   └── 建筑: 32×32 或 48×48 像素（摊位、悬赏板）
-│
-├── 视角：俯视角（RPG 经典 45° 俯视）
-├── 阴影：无（纯像素风不使用渐变和阴影）
-└── 描边：所有角色和建筑使用 1px 黑色描边
-
-素材生成流程（mmx-cli）：
-1. 编写文字描述 prompt（包含 Design Token 引用）
-2. mmx-cli 生成像素图
-3. 自动校验：
-   ├── 尺寸是否匹配（16×16 / 16×24）
-   ├── 调色板是否在 32 色范围内
-   ├── 是否有非预期的渐变或阴影
-4. 校验通过 → 导入项目
-5. 校验失败 → 重新生成（调整 prompt）
-
-素材管理：
-├── src/features/world/assets/
-│   ├── tiles/          ← 地面、墙壁瓦片
-│   ├── sprites/        ← 角色 sprite sheet
-│   ├── buildings/      ← 建筑（摊位、悬赏板等）
-│   └── ui/             ← UI 元素（气泡、按钮）
-├── src/features/world/assets/design-tokens.ts  ← 调色板和尺寸常量
-└── 所有素材在运行时通过 design-tokens.ts 着色，确保一致性
+skins/
+├── classic/         ← 默认皮肤
+│   ├── manifest.json
+│   ├── tiles.png + tiles.json
+│   ├── agents.png + agents.json
+│   └── buildings.png + buildings.json
+├── neon/            ← 赛博朋克风
+├── minimal/         ← 极简扁平风
+└── warm/            ← 温暖治愈风
 ```
 
-**核心原则**：所有素材共享同一份 Design Token，渲染时通过代码着色，而不是每个素材独立配色。
+**核心原则**：美术风格是独立的皮肤层，功能代码不硬编码任何颜色/素材。渲染代码从 `BazaarSkin.config` 读取所有视觉参数。换皮肤 = 换 manifest.json，不改一行代码。
 
 ---
 
