@@ -5,6 +5,7 @@ import {
   Moon,
   Clock,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,31 @@ export function Sidebar() {
 
       {/* Footer - 固定在底部 */}
       <div className="p-2 shrink-0 space-y-0.5">
+        <NavLink
+          to="/bazaar"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div
+                className={cn(
+                  'flex shrink-0 items-center justify-center',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              <span>传送门</span>
+            </>
+          )}
+        </NavLink>
+
         <NavLink
           to="/cron-tasks"
           className={({ isActive }) =>
