@@ -252,4 +252,37 @@ describe('AgentStore', () => {
       expect(agent!.reputation).toBe(0);
     });
   });
+
+  describe('leaderboard', () => {
+    it('should return leaderboard ordered by reputation DESC', () => {
+      store.registerAgent({ id: 'a1', username: 'u1', hostname: 'h1', name: '小李', avatar: '🧙' });
+      store.registerAgent({ id: 'a2', username: 'u2', hostname: 'h2', name: '老王', avatar: '🧑‍💻' });
+      store.registerAgent({ id: 'a3', username: 'u3', hostname: 'h3', name: '张三', avatar: '🧑‍🎓' });
+
+      store.updateReputation('a1', 87);
+      store.updateReputation('a2', 45);
+      store.updateReputation('a3', 23);
+
+      // a2 设为离线，应被排除
+      store.setAgentOffline('a2');
+
+      const board = store.getLeaderboard(10);
+      expect(board).toHaveLength(2);
+      expect(board[0].name).toBe('小李');
+      expect(board[0].reputation).toBe(87);
+      expect(board[0].helpCount).toBe(0);
+      expect(board[1].name).toBe('张三');
+    });
+
+    it('should count helpCount from reputation_log excluding decay', () => {
+      store.registerAgent({ id: 'a1', username: 'u1', hostname: 'h1', name: '小李' });
+      store.updateReputation('a1', 10);
+      store.logReputation('a1', 't1', 1.0, 'base', 'req');
+      store.logReputation('a1', 't2', 0.5, 'quality', 'req');
+      store.logReputation('a1', '__decay__', -0.1, 'decay'); // decay 不算帮助次数
+
+      const board = store.getLeaderboard(10);
+      expect(board[0].helpCount).toBe(2); // base + quality，不算 decay
+    });
+  });
 });

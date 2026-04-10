@@ -294,6 +294,31 @@ export class AgentStore {
     return inactiveAgents.length;
   }
 
+  getLeaderboard(limit: number): Array<{
+    agentId: string;
+    name: string;
+    avatar: string;
+    reputation: number;
+    status: string;
+    helpCount: number;
+  }> {
+    return this.db.prepare(`
+      SELECT a.id as agentId, a.name, a.avatar, a.reputation, a.status,
+        (SELECT COUNT(*) FROM reputation_log rl WHERE rl.agent_id = a.id AND rl.reason != 'decay') as helpCount
+      FROM agents a
+      WHERE a.status != 'offline'
+      ORDER BY a.reputation DESC
+      LIMIT ?
+    `).all(limit) as Array<{
+      agentId: string;
+      name: string;
+      avatar: string;
+      reputation: number;
+      status: string;
+      helpCount: number;
+    }>;
+  }
+
   close(): void {
     this.db.close();
   }
