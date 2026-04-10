@@ -99,7 +99,8 @@ export type TaskMessageType =
   | 'task.result'
   | 'task.timeout'
   | 'task.cancel'
-  | 'task.cancelled';
+  | 'task.cancelled'
+  | 'task.escalate';
 
 // ── World 消息类型 ──
 
@@ -141,6 +142,61 @@ export interface TaskCreatePayload {
 export interface TaskOfferPayload {
   taskId: string;
   candidates: Array<{ agentId: string; reputation: number }>;
+}
+
+export interface TaskSearchResultPayload {
+  taskId: string;
+  matches: Array<{ agentId: string; name: string; status: AgentStatus; reputation: number; repo: string }>;
+}
+
+export interface TaskIncomingPayload {
+  taskId: string;
+  from: string;
+  fromName: string;
+  question: string;
+  deadline: string;
+}
+
+export interface TaskAcceptPayload {
+  taskId: string;
+}
+
+export interface TaskRejectPayload {
+  taskId: string;
+  reason?: string;
+}
+
+export interface TaskMatchedPayload {
+  taskId: string;
+  helper: { agentId: string; name: string };
+}
+
+export interface TaskChatPayload {
+  taskId: string;
+  text: string;
+}
+
+export interface TaskProgressPayload {
+  taskId: string;
+  status: TaskStatus;
+  detail: string;
+}
+
+export interface TaskCompletePayload {
+  taskId: string;
+  rating: number;
+  feedback?: string;
+}
+
+export interface TaskResultPayload {
+  taskId: string;
+  reputationDelta: number;
+}
+
+export interface TaskEscalatePayload {
+  taskId: string;
+  reason: string;
+  options: string[];
 }
 
 // ── Bazaar 配置（嵌入 SmanConfig） ──
