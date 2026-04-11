@@ -59,13 +59,23 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  // Continuously save scroll position on scroll events
+  // Track which message is at the top of the viewport — save on scroll
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onSave = () => {
       const sid = useChatStore.getState().currentSessionId;
-      if (sid) sessionCache.setScrollTop(sid, el.scrollTop);
+      if (!sid) return;
+      // Find the first message element inside the viewport
+      const msgEls = el.querySelectorAll('[data-msg-id]');
+      for (let i = 0; i < msgEls.length; i++) {
+        const rect = msgEls[i].getBoundingClientRect();
+        const containerRect = el.getBoundingClientRect();
+        if (rect.bottom > containerRect.top) {
+          sessionCache.setAnchorMsgId(sid, (msgEls[i] as HTMLElement).dataset.msgId ?? '');
+          return;
+        }
+      }
     };
     el.addEventListener('scroll', onSave, { passive: true });
     return () => el.removeEventListener('scroll', onSave);
@@ -81,14 +91,18 @@ export function Chat() {
     prevSessionIdRef.current = currentSessionId;
 
     if (sessionChanged && currentSessionId) {
-      // Session switch: restore saved position or go to bottom
-      const saved = sessionCache.getScrollTop(currentSessionId);
+      // Wait for messages to render, then restore position
       requestAnimationFrame(() => {
-        if (saved >= 0 && el.scrollHeight > saved) {
-          el.scrollTop = saved;
-        } else {
-          el.scrollTop = el.scrollHeight;
+        const anchorId = sessionCache.getAnchorMsgId(currentSessionId);
+        if (anchorId) {
+          const target = el.querySelector(`[data-msg-id="${CSS.escape(anchorId)}"]`);
+          if (target) {
+            target.scrollIntoView({ block: 'start' });
+            return;
+          }
         }
+        // No anchor or not found — go to bottom
+        el.scrollTop = el.scrollHeight;
       });
       return;
     }

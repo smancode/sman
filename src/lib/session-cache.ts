@@ -1,12 +1,13 @@
 /**
  * Session Message Cache
  *
- * In-memory cache for chat messages and scroll position keyed by session ID.
+ * In-memory cache for chat messages and scroll anchor keyed by session ID.
+ * Scroll position is stored as the message ID visible at the top of the viewport.
  */
 
 interface CacheEntry {
   messages: unknown[];
-  scrollTop: number;
+  anchorMsgId: string;
 }
 
 class SessionCache {
@@ -16,18 +17,18 @@ class SessionCache {
     return this.cache.get(sessionId)?.messages ?? null;
   }
 
-  getScrollTop(sessionId: string): number {
-    return this.cache.get(sessionId)?.scrollTop ?? -1;
-  }
-
   set(sessionId: string, messages: unknown[]): void {
     const prev = this.cache.get(sessionId);
-    this.cache.set(sessionId, { messages: [...messages], scrollTop: prev?.scrollTop ?? -1 });
+    this.cache.set(sessionId, { messages: [...messages], anchorMsgId: prev?.anchorMsgId ?? '' });
   }
 
-  setScrollTop(sessionId: string, scrollTop: number): void {
+  setAnchorMsgId(sessionId: string, msgId: string): void {
     const entry = this.cache.get(sessionId);
-    if (entry) entry.scrollTop = scrollTop;
+    if (entry) entry.anchorMsgId = msgId;
+  }
+
+  getAnchorMsgId(sessionId: string): string {
+    return this.cache.get(sessionId)?.anchorMsgId ?? '';
   }
 
   has(sessionId: string): boolean {
