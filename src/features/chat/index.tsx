@@ -213,7 +213,7 @@ function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming:
   if (!text.trim()) return null;
 
   return (
-    <div className="relative rounded-xl px-4 py-3 w-full bg-muted text-foreground">
+    <div className="w-full text-foreground">
       <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all">
         <Streamdown
           mode={isStreaming ? 'streaming' : 'static'}
@@ -240,16 +240,16 @@ function ThinkingBlock({ content }: { content: string }) {
   if (!content.trim()) return null;
 
   return (
-    <div className="w-full rounded-xl border border-border bg-muted/50 text-[14px]">
+    <div className="w-full text-[14px]">
       <button
-        className="flex items-center gap-2 w-full px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <span className="font-medium">思考</span>
       </button>
       {expanded && (
-        <div className="px-3 pb-3 text-muted-foreground">
+        <div className="text-muted-foreground">
           <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none opacity-75">
             <Streamdown
               mode="static"
@@ -289,15 +289,15 @@ function StreamingToolStatus({ tool }: {
   return (
     <div
       className={cn(
-        'rounded-lg border text-xs transition-colors w-full',
-        isRunning && 'border-primary/30 bg-primary/5 text-foreground',
-        !isRunning && !isError && 'border-border/50 bg-muted/20 text-muted-foreground',
-        isError && 'border-destructive/30 bg-destructive/5 text-destructive',
+        'text-xs transition-colors w-full',
+        isRunning && 'text-foreground',
+        !isRunning && !isError && 'text-muted-foreground',
+        isError && 'text-destructive',
       )}
     >
       {/* Header row: icon + name + duration + expand toggle */}
       <button
-        className="flex items-center gap-2 w-full px-3 py-2 text-left"
+        className="flex items-center gap-2 w-full px-1 py-0.5 text-left"
         onClick={() => setExpanded(!expanded)}
       >
         {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
@@ -315,7 +315,7 @@ function StreamingToolStatus({ tool }: {
 
       {/* Expanded content: input + result */}
       {expanded && (displayInput || displayResult) && (
-        <div className="border-t border-border/30 px-3 py-2 space-y-1.5">
+        <div className="px-3 py-2 space-y-1.5">
           {displayInput && (
             <div>
               <span className="text-[10px] uppercase tracking-wider opacity-50 font-semibold">Input</span>
@@ -405,10 +405,10 @@ function WelcomeScreen() {
 function TypingIndicator() {
   return (
     <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg mt-1 bg-muted text-foreground">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg mt-1 ai-avatar text-foreground overflow-hidden">
         <img src="/favicon.svg" alt="AI" className="h-5 w-5" />
       </div>
-      <div className="bg-muted text-foreground rounded-xl px-4 py-3">
+      <div className="text-foreground flex items-center">
         <div className="flex gap-1">
           <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
           <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
