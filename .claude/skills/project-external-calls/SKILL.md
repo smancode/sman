@@ -2,8 +2,8 @@
 name: project-external-calls
 description: "smanbase external dependencies: HTTP services, databases, message queues. Consult this when modifying integrations, debugging connectivity, or adding new external calls."
 _scanned:
-  commitHash: "74f4bbc6b4bfc811384eabcc73070c20f12be381"
-  scannedAt: "2026-04-09T15:40:40.605Z"
+  commitHash: "244ad7730e49cf49ebc53f3129b49b391c9c3999"
+  scannedAt: "2026-04-11T08:29:50.864Z"
   branch: "base"
 ---
 
@@ -13,23 +13,15 @@ _scanned:
 
 | Service | Type | Purpose | Reference |
 |---------|------|---------|-----------|
-| Anthropic API | HTTP | LLM inference via SDK + direct HTTP for model probing | `references/anthropic-api.md` |
-| SQLite (better-sqlite3) | DB | All local persistence: sessions, cron tasks, batch tasks, chatbot state | `references/sqlite.md` |
-| WeCom Bot | WS | Enterprise WeChat (WeCom) bot via WebSocket long-connection | `references/wecom-bot.md` |
-| WeChat Personal Bot | HTTP | iLink Bot API (personal WeChat account) via HTTP long-polling | `references/wechat-personal-bot.md` |
-| Feishu Bot | WS | 飞书 Bot via `@larksuiteoapi/node-sdk` WebSocket long-connection | `references/feishu-bot.md` |
-| Brave Search | MCP | Web search via `@anthropic-ai/mcp-server-brave` (stdio) | `references/brave-search.md` |
-| Tavily Search | MCP | Web search via `@anthropic-ai/mcp-server-tavily` (stdio) | `references/tavily-search.md` |
-| Bing Search | MCP | Web search via `@anthropic-ai/mcp-server-bing` (stdio) | `references/bing-search.md` |
-| Web Access (CDP) | CDP | Chrome DevTools Protocol — local browser automation | `references/web-access-cdp.md` |
-| Capability Registry | HTTP | Internal capability registry (Anthropic API proxy) | `references/capability-registry.md` |
+| Claude Agent SDK | HTTP (SDK) | AI chat, cron tasks, chatbot responses via Anthropic API | [claude-agent-sdk.md](references/claude-agent-sdk.md) |
+| Web Search MCP (Brave/Tavily/Bing) | HTTP (MCP, npx) | Web search capability for Claude sessions | [web-search-mcp.md](references/web-search-mcp.md) |
+| WeCom Bot | WebSocket (WS) | WeChat Work bot - receive messages, stream Claude replies | [wecom-bot.md](references/wecom-bot.md) |
+| Feishu Bot | HTTP + WS (SDK) | Feishu/Lark bot - receive messages, stream Claude replies | [feishu-bot.md](references/feishu-bot.md) |
+| WeChat Personal (iLink) | HTTP (fetch) | WeChat personal account bot via iLink API, long-polling | [wechat-personal.md](references/wechat-personal.md) |
+| Chrome CDP | WebSocket (WS) | Browser automation - navigate, snapshot, screenshot, click | [chrome-cdp.md](references/chrome-cdp.md) |
+| SQLite (better-sqlite3) | DB | Sessions, messages, cron/batch tasks, chatbot state | [sqlite.md](references/sqlite.md) |
+| Bazaar Server | WebSocket (WS) | Multi-agent collaboration - agent register, task offers | [bazaar-server.md](references/bazaar-server.md) |
 
 ## Config Source
 
-All credentials stored in `~/.sman/config.json` (env: `SMANBASE_HOME`). No `.env` files.
-
-## Notes
-
-- No email, Redis, S3, or other external services found.
-- Claude SDK handles LLM API internally via env vars `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`.
-- Three chatbot platforms are mutually exclusive; only one active at a time.
+All config is in ~/.sman/config.json (env: SMANBASE_HOME). No .env files. No hard-coded credentials.

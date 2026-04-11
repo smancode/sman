@@ -2,11 +2,10 @@
 name: project-structure
 description: "smanbase directory layout, tech stack, module organization, and build/run instructions. Consult this when you need to understand project structure, find where code lives, or determine how to build/run."
 _scanned:
-  commitHash: "74f4bbc6b4bfc811384eabcc73070c20f12be381"
-  scannedAt: "2026-04-09T15:19:52.550Z"
+  commitHash: "244ad7730e49cf49ebc53f3129b49b391c9c3999"
+  scannedAt: "2026-04-11T08:21:49.263Z"
   branch: "base"
 ---
-
 # Smanbase — Project Structure
 
 ## Tech Stack
@@ -20,7 +19,6 @@ _scanned:
 | AI | @anthropic-ai/claude-agent-sdk v0.1 + @anthropic-ai/claude-code v2.1 |
 | Package manager | pnpm |
 
-## Directory Tree
 
 ```
 smanbase/
@@ -51,7 +49,6 @@ smanbase/
 └── dev.sh            # Dev mode launcher
 ```
 
-## Modules
 
 | Name | Path | Purpose |
 |---|---|---|
@@ -62,6 +59,10 @@ smanbase/
 | frontend | `src/` | React SPA: chat UI, settings panels, Zustand stores |
 | electron | `electron/` | Desktop window, IPC, backend process spawn |
 | plugins | `plugins/` | Claude Code plugins (web-access, superpowers, gstack) |
+| bazaar | `bazaar/` | P2P capability marketplace: agent registry, task routing, reputation |
+| tests | `tests/server/` | Vitest unit tests (30+ files) |
+| scripts | `scripts/` | Build/utility scripts (init-skills, init-system, patch-sdk) |
+| shared | `shared/` | Cross-module type definitions (bazaar protocol) |
 
 ## Build & Run
 
