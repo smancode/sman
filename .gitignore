@@ -20,3 +20,7 @@ release/
 plugins/office-skills/venv/
 plugins/office-skills/node_modules/
 .claude/.scanning
+
+# tsc 编译产物（shared/ 下的源码 .ts 保留）
+shared/*.d.ts
+shared/*.js
