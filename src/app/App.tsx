@@ -5,6 +5,7 @@ import { router } from './routes';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
+import { sessionCache } from '@/lib/session-cache';
 import { useTheme } from '@/hooks/useTheme';
 
 export default function App() {
@@ -24,8 +25,11 @@ export default function App() {
 
   useEffect(() => {
     if (status !== 'connected') return;
-    fetchSettings();
-    loadSessions();
+    // Warm memory cache from IndexedDB before loading sessions
+    sessionCache.loadAll().then(() => {
+      fetchSettings();
+      loadSessions();
+    });
   }, [status, fetchSettings, loadSessions]);
 
   // Listen for chatbot session creation — silently refresh sidebar

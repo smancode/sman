@@ -269,7 +269,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  switchSession: (sessionId: string) => {
+  switchSession: async (sessionId: string) => {
     if (sessionId === get().currentSessionId) return;
 
     // Save current messages to cache
@@ -278,8 +278,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionCache.set(currentSessionId, messages);
     }
 
-    // Read target session from cache
-    const cached = sessionCache.get(sessionId) as Message[] | null;
+    // Read target session: memory first, then IndexedDB
+    let cached = sessionCache.get(sessionId) as Message[] | null;
+    if (!cached) {
+      cached = (await sessionCache.getAsync(sessionId)) as Message[] | null;
+    }
+
+    // Guard: user may have triggered another switch while we awaited IndexedDB
+    if (get().currentSessionId !== currentSessionId) return;
 
     set({
       currentSessionId: sessionId,
@@ -582,11 +588,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             createdAt: new Date().toISOString(),
           };
           const st = get();
+          const finalMessages = [...st.messages, assistantMsg];
           set({
-            messages: [...st.messages, assistantMsg],
+            messages: finalMessages,
             streamingBlocks: [],
             sending: false,
           });
+          // Persist to IndexedDB
+          sessionCache.set(currentSessionId, finalMessages);
         } else {
           set({ streamingBlocks: [], sending: false });
         }
