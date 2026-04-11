@@ -303,10 +303,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!sessionCache.has(sessionId)) set({ loading: true, error: null });
 
     const unsub = wrapHandler(client, 'session.history', (data) => {
-      unsub();
-
-      // Check response sessionId matches what we asked for
+      // Ignore responses for other sessions — don't unsub, wait for ours
       if (String(data.sessionId) !== sessionId) return;
+      unsub();
 
       const serverMsgs: Message[] = Array.isArray(data.messages)
         ? data.messages.map((m: Record<string, unknown>) => {
