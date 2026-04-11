@@ -1,34 +1,18 @@
 /**
  * Session Message Cache
  *
- * In-memory cache for chat messages and scroll anchor keyed by session ID.
- * Scroll position is stored as the message ID visible at the top of the viewport.
+ * In-memory cache for chat messages keyed by session ID.
  */
 
-interface CacheEntry {
-  messages: unknown[];
-  anchorMsgId: string;
-}
-
 class SessionCache {
-  private cache = new Map<string, CacheEntry>();
+  private cache = new Map<string, unknown[]>();
 
   get(sessionId: string): unknown[] | null {
-    return this.cache.get(sessionId)?.messages ?? null;
+    return this.cache.get(sessionId) ?? null;
   }
 
   set(sessionId: string, messages: unknown[]): void {
-    const prev = this.cache.get(sessionId);
-    this.cache.set(sessionId, { messages: [...messages], anchorMsgId: prev?.anchorMsgId ?? '' });
-  }
-
-  setAnchorMsgId(sessionId: string, msgId: string): void {
-    const entry = this.cache.get(sessionId);
-    if (entry) entry.anchorMsgId = msgId;
-  }
-
-  getAnchorMsgId(sessionId: string): string {
-    return this.cache.get(sessionId)?.anchorMsgId ?? '';
+    this.cache.set(sessionId, [...messages]);
   }
 
   has(sessionId: string): boolean {

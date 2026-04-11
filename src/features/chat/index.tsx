@@ -4,7 +4,6 @@ import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useChatStore, type StreamingBlock } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
-import { sessionCache } from '@/lib/session-cache';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
@@ -59,61 +58,17 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  // Track which message is at the top of the viewport — save on scroll
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onSave = () => {
-      const sid = useChatStore.getState().currentSessionId;
-      if (!sid) return;
-      // Find the first message element inside the viewport
-      const msgEls = el.querySelectorAll('[data-msg-id]');
-      for (let i = 0; i < msgEls.length; i++) {
-        const rect = msgEls[i].getBoundingClientRect();
-        const containerRect = el.getBoundingClientRect();
-        if (rect.bottom > containerRect.top) {
-          sessionCache.setAnchorMsgId(sid, (msgEls[i] as HTMLElement).dataset.msgId ?? '');
-          return;
-        }
-      }
-    };
-    el.addEventListener('scroll', onSave, { passive: true });
-    return () => el.removeEventListener('scroll', onSave);
-  }, []);
-
-  // Restore scroll position after session switch or scroll to bottom
-  const prevSessionIdRef = useRef(currentSessionId);
+  // Auto-scroll to bottom
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
-    const sessionChanged = currentSessionId !== prevSessionIdRef.current;
-    prevSessionIdRef.current = currentSessionId;
-
-    if (sessionChanged && currentSessionId) {
-      // Wait for messages to render, then restore position
-      requestAnimationFrame(() => {
-        const anchorId = sessionCache.getAnchorMsgId(currentSessionId);
-        if (anchorId) {
-          const target = el.querySelector(`[data-msg-id="${CSS.escape(anchorId)}"]`);
-          if (target) {
-            target.scrollIntoView({ block: 'start' });
-            return;
-          }
-        }
-        // No anchor or not found — go to bottom
-        el.scrollTop = el.scrollHeight;
-      });
-      return;
-    }
-
-    // Same session: auto-scroll
     if (sending || streamingBlocks.length > 0) {
       el.scrollTop = el.scrollHeight;
     } else if (messages.length > 0) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [currentSessionId, messages.length, sending, streamingBlocks.length]);
+  }, [messages.length, sending, streamingBlocks.length]);
 
   const hasStreamingContent = streamingBlocks.length > 0;
   const isEmpty = messages.length === 0 && !sending;
