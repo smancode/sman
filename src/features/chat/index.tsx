@@ -49,11 +49,15 @@ export function Chat() {
     sendMessage(_text, mediaForWs);
   }, [sendMessage]);
 
+  // Load history on initial connect or reconnect.
+  // Session switching is handled by switchSession() internally.
+  const prevConnectedRef = useRef(false);
   useEffect(() => {
-    if (isConnected && currentSessionId) {
+    if (isConnected && !prevConnectedRef.current && currentSessionId) {
       useChatStore.getState().loadHistory();
     }
-  }, [isConnected, currentSessionId]);
+    prevConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Track scroll position to prevent jump when streaming → static transition
   const wasSendingRef = useRef(false);

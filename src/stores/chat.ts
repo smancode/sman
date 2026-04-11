@@ -153,9 +153,6 @@ function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
   ];
 }
 
-// Sequence number to guard against stale loadHistory responses (module scope)
-let historySeq = 0;
-
 /** Pre-resolve content for memo stability — mirrors buildContent from Chat component */
 function resolveContent(text: string, blocks?: unknown[]): unknown {
   if (!blocks || blocks.length === 0) return text;
@@ -333,18 +330,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadHistory: async () => {
     const client = getWsClient();
     if (!client) return;
-    const { currentSessionId, sessions } = get();
+    const { currentSessionId } = get();
     if (!currentSessionId) return;
 
-    const seq = ++historySeq;
     const cached = sessionCache.get(currentSessionId);
     if (!cached) set({ loading: true, error: null });
 
     try {
       const unsub = wrapHandler(client, 'session.history', (data) => {
-        // Stale request — discard
-        if (seq !== historySeq) { unsub(); return; }
         unsub();
+
+        // If user switched away, ignore stale response
+        const { currentSessionId: nowId } = get();
+        if (nowId !== currentSessionId) return;
 
         const serverMsgs: Message[] = Array.isArray(data.messages)
           ? data.messages.map((m: Record<string, unknown>) => {
@@ -363,11 +361,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             })
           : [];
 
-        // Update cache
+        // Update cache with server data
         sessionCache.set(currentSessionId, serverMsgs);
 
-        // Sync strategy: if cached and counts match, skip UI update
-        if (cached && serverMsgs.length === cached.length) {
+        // If cached and server has same count, skip UI update
+        const { messages: currentMsgs } = get();
+        if (cached && serverMsgs.length === currentMsgs.length) {
           set({ syncStatus: 'synced', loading: false });
           return;
         }
@@ -375,6 +374,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ messages: serverMsgs, loading: false, syncStatus: 'synced' });
 
         // Generate session label from first user message if not set
+        const { sessions } = get();
         const session = sessions.find(s => s.key === currentSessionId);
         if (!session?.label) {
           const firstUser = serverMsgs.find(m => m.role === 'user' && m.content.trim());
