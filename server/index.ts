@@ -748,13 +748,13 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'cron.execute': {
           if (!msg.taskId) throw new Error('Missing taskId');
-          try {
-            await cronScheduler.executeNow(msg.taskId as string);
-            ws.send(JSON.stringify({ type: 'cron.executed', taskId: msg.taskId }));
-          } catch (err) {
+          // Fire-and-forget: 不 await，避免阻塞 WS message handler
+          const execTaskId = msg.taskId as string;
+          ws.send(JSON.stringify({ type: 'cron.executed', taskId: execTaskId }));
+          cronScheduler.executeNow(execTaskId).catch((err) => {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
-          }
+            log.error(`Cron execute failed for task ${execTaskId}`, { error: errorMessage });
+          });
           break;
         }
 

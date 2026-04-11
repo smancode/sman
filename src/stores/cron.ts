@@ -183,7 +183,17 @@ export const useCronStore = create<CronState>((storeSet) => {
       const client = getWsClient();
       if (!client) throw new Error('Not connected');
 
-      return sendWithAck<void>(client, 'cron.executed', { type: 'cron.execute', taskId }, () => {});
+      return sendWithAck<void>(client, 'cron.executed', { type: 'cron.execute', taskId }, () => {
+        // ack 表示后端已接受执行请求，立即更新 UI 为"执行中"
+        const now = new Date().toISOString();
+        set((state) => ({
+          tasks: state.tasks.map(t =>
+            t.id === taskId
+              ? { ...t, latestRun: { id: -1, taskId, sessionId: '', status: 'running' as const, startedAt: now, finishedAt: null, lastActivityAt: null, errorMessage: null } }
+              : t
+          ),
+        }));
+      });
     },
 
     scanCronTasks: () => {
