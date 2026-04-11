@@ -307,6 +307,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (String(data.sessionId) !== sessionId) return;
       unsub();
 
+      // User already switched away — just update cache, don't touch UI
+      if (get().currentSessionId !== sessionId) return;
+
       const serverMsgs: Message[] = Array.isArray(data.messages)
         ? data.messages.map((m: Record<string, unknown>) => {
             const content = String(m.content || '');
