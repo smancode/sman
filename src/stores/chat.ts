@@ -80,9 +80,6 @@ interface ChatState {
   // Thinking toggle
   showThinking: boolean;
 
-  // Sync status
-  syncStatus: 'synced' | 'syncing' | 'loading' | 'offline';
-
   // Actions
   createSessionWithWorkspace: (workspace: string) => Promise<string>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -171,7 +168,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   currentSessionId: '',
   showThinking: true,
-  syncStatus: 'synced',
 
   // Create a new session with workspace (directory path)
   createSessionWithWorkspace: async (workspace: string) => {
@@ -276,120 +272,83 @@ export const useChatStore = create<ChatState>((set, get) => ({
   switchSession: (sessionId: string) => {
     if (sessionId === get().currentSessionId) return;
 
-    const { currentSessionId, messages, streamingBlocks, sending } = get();
-
-    // Step 1: Save current session to cache
-    if (currentSessionId) {
-      let msgsToSave = messages;
-      // Freeze streaming blocks into messages before saving
-      if (streamingBlocks.length > 0) {
-        const frozen = freezeLiveText(streamingBlocks);
-        const contentBlocks = streamingBlocksToContentBlocks(frozen);
-        const textContent = frozen
-          .filter(b => b.type === 'text')
-          .map(b => (b as StreamingTextBlock).content)
-          .join('');
-        if (textContent.trim() || contentBlocks.length > 0) {
-          const partialMsg: Message = {
-            id: crypto.randomUUID(),
-            sessionId: currentSessionId,
-            role: 'assistant',
-            content: textContent.trim(),
-            contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
-            createdAt: new Date().toISOString(),
-          };
-          msgsToSave = [...messages, partialMsg];
-        }
-        // Abort the running stream
-        const client = getWsClient();
-        if (client && sending && currentSessionId) {
-          client.send({ type: 'chat.abort', sessionId: currentSessionId });
-        }
-      }
-      sessionCache.set(currentSessionId, msgsToSave);
+    // Save current messages to cache
+    const { currentSessionId, messages } = get();
+    if (currentSessionId && messages.length > 0) {
+      sessionCache.set(currentSessionId, messages);
     }
 
-    // Step 2: Read from cache
-    const cached = sessionCache.get(sessionId);
+    // Read target session from cache
+    const cached = sessionCache.get(sessionId) as Message[] | null;
 
-    // Step 3: Update UI immediately
     set({
       currentSessionId: sessionId,
-      messages: (cached as Message[] | null) ?? [],
+      messages: cached ?? [],
       streamingBlocks: [],
       error: null,
       sending: false,
       loading: !cached,
-      syncStatus: cached ? 'syncing' : 'loading',
     });
 
-    // Step 4: Background sync
+    // Always sync from backend
     get().loadHistory();
   },
 
   loadHistory: async () => {
     const client = getWsClient();
     if (!client) return;
-    const { currentSessionId } = get();
-    if (!currentSessionId) return;
+    const sessionId = get().currentSessionId;
+    if (!sessionId) return;
 
-    const cached = sessionCache.get(currentSessionId);
-    if (!cached) set({ loading: true, error: null });
+    if (!sessionCache.has(sessionId)) set({ loading: true, error: null });
 
-    try {
-      const unsub = wrapHandler(client, 'session.history', (data) => {
-        unsub();
+    const unsub = wrapHandler(client, 'session.history', (data) => {
+      unsub();
 
-        // If user switched away, ignore stale response
-        const { currentSessionId: nowId } = get();
-        if (nowId !== currentSessionId) return;
+      // Stale response — user already switched away
+      if (get().currentSessionId !== sessionId) return;
 
-        const serverMsgs: Message[] = Array.isArray(data.messages)
-          ? data.messages.map((m: Record<string, unknown>) => {
-              const content = String(m.content || '');
-              const blocks = m.contentBlocks as ContentBlock[] | undefined;
-              return {
-                id: String(m.id || ''),
-                sessionId: String(m.sessionId || ''),
-                role: (String(m.role || 'user') as 'user' | 'assistant'),
-                content,
-                contentBlocks: blocks,
-                createdAt: String(m.createdAt || ''),
-                timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
-                resolvedContent: resolveContent(content, blocks),
-              };
-            })
-          : [];
+      const serverMsgs: Message[] = Array.isArray(data.messages)
+        ? data.messages.map((m: Record<string, unknown>) => {
+            const content = String(m.content || '');
+            const blocks = m.contentBlocks as ContentBlock[] | undefined;
+            return {
+              id: String(m.id || ''),
+              sessionId: String(m.sessionId || ''),
+              role: (String(m.role || 'user') as 'user' | 'assistant'),
+              content,
+              contentBlocks: blocks,
+              createdAt: String(m.createdAt || ''),
+              timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
+              resolvedContent: resolveContent(content, blocks),
+            };
+          })
+        : [];
 
-        // Update cache with server data
-        sessionCache.set(currentSessionId, serverMsgs);
+      // Update cache
+      sessionCache.set(sessionId, serverMsgs);
 
-        // If cached and server has same count, skip UI update
-        const { messages: currentMsgs } = get();
-        if (cached && serverMsgs.length === currentMsgs.length) {
-          set({ syncStatus: 'synced', loading: false });
-          return;
+      // Backend has more messages than what's showing → update UI
+      const { messages } = get();
+      if (serverMsgs.length > messages.length) {
+        set({ messages: serverMsgs, loading: false });
+      } else {
+        set({ loading: false });
+      }
+
+      // Auto-label from first user message
+      const { sessions } = get();
+      const session = sessions.find(s => s.key === sessionId);
+      if (!session?.label) {
+        const firstUser = serverMsgs.find(m => m.role === 'user' && m.content.trim());
+        if (firstUser) {
+          const text = firstUser.content.trim();
+          const truncated = text.length > 20 ? `${text.slice(0, 20)}...` : text;
+          get().updateSessionLabel(sessionId, truncated);
         }
-
-        set({ messages: serverMsgs, loading: false, syncStatus: 'synced' });
-
-        // Generate session label from first user message if not set
-        const { sessions } = get();
-        const session = sessions.find(s => s.key === currentSessionId);
-        if (!session?.label) {
-          const firstUser = serverMsgs.find(m => m.role === 'user' && m.content.trim());
-          if (firstUser) {
-            const text = firstUser.content.trim();
-            const truncated = text.length > 20 ? `${text.slice(0, 20)}...` : text;
-            get().updateSessionLabel(currentSessionId, truncated);
-          }
-        }
-      });
-      client.send({ type: 'session.history', sessionId: currentSessionId });
-    } catch (err) {
-      console.warn('Failed to load history:', err);
-      set({ loading: false, syncStatus: 'synced' });
-    }
+      }
+    });
+    client.send({ type: 'session.history', sessionId });
   },
 
   updateSessionLabel: async (sessionId: string, label: string) => {
@@ -681,7 +640,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   refresh: () => {
     const { currentSessionId } = get();
     if (currentSessionId) sessionCache.invalidate(currentSessionId);
-    set({ messages: [], streamingBlocks: [], error: null, sending: false, syncStatus: 'loading' });
+    set({ messages: [], streamingBlocks: [], error: null, sending: false });
     get().loadHistory();
   },
 }));

@@ -37,7 +37,6 @@ export function Chat() {
   const streamingBlocks = useChatStore((s) => s.streamingBlocks);
   const showThinking = useChatStore((s) => s.showThinking);
   const error = useChatStore((s) => s.error);
-  const syncStatus = useChatStore((s) => s.syncStatus);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearError = useChatStore((s) => s.clearError);
 
@@ -156,14 +155,6 @@ export function Chat() {
           <div className="bg-card shadow-lg rounded-xl p-3 border border-border">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        </div>
-      )}
-
-      {/* Sync status indicator — subtle pulse when syncing from cache */}
-      {syncStatus === 'syncing' && !loading && (
-        <div className="absolute top-2 right-3 z-40 flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-pulse" />
-          同步中
         </div>
       )}
     </div>
