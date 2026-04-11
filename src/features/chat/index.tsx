@@ -42,7 +42,6 @@ export function Chat() {
   const clearError = useChatStore((s) => s.clearError);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const prevSessionIdRef = useRef(currentSessionId);
   const hasActiveSession = !!currentSessionId;
 
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
@@ -60,35 +59,41 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  // Save scroll position before switching away, restore after switching in
+  // Continuously save scroll position on scroll events
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onSave = () => {
+      const sid = useChatStore.getState().currentSessionId;
+      if (sid) sessionCache.setScrollTop(sid, el.scrollTop);
+    };
+    el.addEventListener('scroll', onSave, { passive: true });
+    return () => el.removeEventListener('scroll', onSave);
+  }, []);
+
+  // Restore scroll position after session switch or scroll to bottom
+  const prevSessionIdRef = useRef(currentSessionId);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
-    // Session changed — save old position, restore new position
-    if (currentSessionId !== prevSessionIdRef.current) {
-      // Save old session's scroll position
-      if (prevSessionIdRef.current) {
-        sessionCache.setScrollTop(prevSessionIdRef.current, el.scrollTop);
-      }
-      prevSessionIdRef.current = currentSessionId;
+    const sessionChanged = currentSessionId !== prevSessionIdRef.current;
+    prevSessionIdRef.current = currentSessionId;
 
-      // Restore new session's scroll position
-      if (currentSessionId) {
-        const saved = sessionCache.getScrollTop(currentSessionId);
-        // Delay to let React render the cached messages first
-        requestAnimationFrame(() => {
-          if (saved >= 0 && el.scrollHeight > 0) {
-            el.scrollTop = saved;
-          } else if (messages.length > 0) {
-            el.scrollTop = el.scrollHeight;
-          }
-        });
-      }
+    if (sessionChanged && currentSessionId) {
+      // Session switch: restore saved position or go to bottom
+      const saved = sessionCache.getScrollTop(currentSessionId);
+      requestAnimationFrame(() => {
+        if (saved >= 0 && el.scrollHeight > saved) {
+          el.scrollTop = saved;
+        } else {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
       return;
     }
 
-    // Normal scroll behavior (same session)
+    // Same session: auto-scroll
     if (sending || streamingBlocks.length > 0) {
       el.scrollTop = el.scrollHeight;
     } else if (messages.length > 0) {
