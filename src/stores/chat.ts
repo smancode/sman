@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
+import { sessionCache } from '@/lib/session-cache';
 import type { ChatSession, ContentBlock } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
@@ -25,6 +26,7 @@ interface Message {
   contentBlocks?: ContentBlock[];
   createdAt: string;
   timestamp?: number;
+  resolvedContent?: unknown;
 }
 
 // ── Streaming Block types ──
@@ -77,6 +79,9 @@ interface ChatState {
 
   // Thinking toggle
   showThinking: boolean;
+
+  // Sync status
+  syncStatus: 'synced' | 'syncing' | 'loading' | 'offline';
 
   // Actions
   createSessionWithWorkspace: (workspace: string) => Promise<string>;
@@ -148,6 +153,18 @@ function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
   ];
 }
 
+// Sequence number to guard against stale loadHistory responses (module scope)
+let historySeq = 0;
+
+/** Pre-resolve content for memo stability — mirrors buildContent from Chat component */
+function resolveContent(text: string, blocks?: unknown[]): unknown {
+  if (!blocks || blocks.length === 0) return text;
+  const hasTextBlock = (blocks as Array<{ type: string }>).some(b => b.type === 'text');
+  if (hasTextBlock) return blocks;
+  if (!text) return blocks;
+  return [{ type: 'text', text }, ...blocks];
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
@@ -157,6 +174,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   currentSessionId: '',
   showThinking: true,
+  syncStatus: 'synced',
 
   // Create a new session with workspace (directory path)
   createSessionWithWorkspace: async (workspace: string) => {
@@ -198,6 +216,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (String(data.sessionId) === sessionId) {
           unsub();
           unsubErr();
+          // Invalidate cache
+          sessionCache.invalidate(sessionId);
           // Remove from local state and switch session if needed
           const state = get();
           const remaining = state.sessions.filter(s => s.key !== sessionId);
@@ -258,13 +278,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   switchSession: (sessionId: string) => {
     if (sessionId === get().currentSessionId) return;
+
+    const { currentSessionId, messages, streamingBlocks, sending } = get();
+
+    // Step 1: Save current session to cache
+    if (currentSessionId) {
+      let msgsToSave = messages;
+      // Freeze streaming blocks into messages before saving
+      if (streamingBlocks.length > 0) {
+        const frozen = freezeLiveText(streamingBlocks);
+        const contentBlocks = streamingBlocksToContentBlocks(frozen);
+        const textContent = frozen
+          .filter(b => b.type === 'text')
+          .map(b => (b as StreamingTextBlock).content)
+          .join('');
+        if (textContent.trim() || contentBlocks.length > 0) {
+          const partialMsg: Message = {
+            id: crypto.randomUUID(),
+            sessionId: currentSessionId,
+            role: 'assistant',
+            content: textContent.trim(),
+            contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
+            createdAt: new Date().toISOString(),
+          };
+          msgsToSave = [...messages, partialMsg];
+        }
+        // Abort the running stream
+        const client = getWsClient();
+        if (client && sending && currentSessionId) {
+          client.send({ type: 'chat.abort', sessionId: currentSessionId });
+        }
+      }
+      sessionCache.set(currentSessionId, msgsToSave);
+    }
+
+    // Step 2: Read from cache
+    const cached = sessionCache.get(sessionId);
+
+    // Step 3: Update UI immediately
     set({
       currentSessionId: sessionId,
-      messages: [],
+      messages: (cached as Message[] | null) ?? [],
       streamingBlocks: [],
       error: null,
       sending: false,
+      loading: !cached,
+      syncStatus: cached ? 'syncing' : 'loading',
     });
+
+    // Step 4: Background sync
     get().loadHistory();
   },
 
@@ -274,33 +336,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId, sessions } = get();
     if (!currentSessionId) return;
 
-    set({ loading: true, error: null });
+    const seq = ++historySeq;
+    const cached = sessionCache.get(currentSessionId);
+    if (!cached) set({ loading: true, error: null });
+
     try {
       const unsub = wrapHandler(client, 'session.history', (data) => {
+        // Stale request — discard
+        if (seq !== historySeq) { unsub(); return; }
         unsub();
 
-        const msgs: Message[] = Array.isArray(data.messages)
-          ? data.messages.map((m: Record<string, unknown>) => ({
-              id: String(m.id || ''),
-              sessionId: String(m.sessionId || ''),
-              role: (String(m.role || 'user') as 'user' | 'assistant'),
-              content: String(m.content || ''),
-              contentBlocks: m.contentBlocks as ContentBlock[] | undefined,
-              createdAt: String(m.createdAt || ''),
-              timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
-            }))
+        const serverMsgs: Message[] = Array.isArray(data.messages)
+          ? data.messages.map((m: Record<string, unknown>) => {
+              const content = String(m.content || '');
+              const blocks = m.contentBlocks as ContentBlock[] | undefined;
+              return {
+                id: String(m.id || ''),
+                sessionId: String(m.sessionId || ''),
+                role: (String(m.role || 'user') as 'user' | 'assistant'),
+                content,
+                contentBlocks: blocks,
+                createdAt: String(m.createdAt || ''),
+                timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
+                resolvedContent: resolveContent(content, blocks),
+              };
+            })
           : [];
 
-        set({ messages: msgs, loading: false });
+        // Update cache
+        sessionCache.set(currentSessionId, serverMsgs);
+
+        // Sync strategy: if cached and counts match, skip UI update
+        if (cached && serverMsgs.length === cached.length) {
+          set({ syncStatus: 'synced', loading: false });
+          return;
+        }
+
+        set({ messages: serverMsgs, loading: false, syncStatus: 'synced' });
 
         // Generate session label from first user message if not set
         const session = sessions.find(s => s.key === currentSessionId);
         if (!session?.label) {
-          const firstUser = msgs.find(m => m.role === 'user' && m.content.trim());
+          const firstUser = serverMsgs.find(m => m.role === 'user' && m.content.trim());
           if (firstUser) {
             const text = firstUser.content.trim();
             const truncated = text.length > 20 ? `${text.slice(0, 20)}...` : text;
-            // Update in backend
             get().updateSessionLabel(currentSessionId, truncated);
           }
         }
@@ -308,7 +388,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       client.send({ type: 'session.history', sessionId: currentSessionId });
     } catch (err) {
       console.warn('Failed to load history:', err);
-      set({ loading: false });
+      set({ loading: false, syncStatus: 'synced' });
     }
   },
 
@@ -599,7 +679,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   clearError: () => set({ error: null }),
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
   refresh: () => {
-    set({ messages: [], streamingBlocks: [], error: null, sending: false });
+    const { currentSessionId } = get();
+    if (currentSessionId) sessionCache.invalidate(currentSessionId);
+    set({ messages: [], streamingBlocks: [], error: null, sending: false, syncStatus: 'loading' });
     get().loadHistory();
   },
 }));

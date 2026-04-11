@@ -71,9 +71,10 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div
       className={cn(
-        'flex gap-3 group',
+        'flex gap-3 group chat-message',
         isUser ? 'flex-row-reverse' : 'flex-row',
       )}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' }}
     >
       {/* Avatar */}
       {!isUser && (
@@ -464,7 +465,7 @@ function ImageThumbnail({
       className="relative w-36 h-36 rounded-xl border overflow-hidden border-border bg-muted/50 group/img cursor-zoom-in"
       onClick={onPreview}
     >
-      <img src={src} alt={fileName} className="w-full h-full object-cover" />
+      <img src={src} alt={fileName} className="w-full h-full object-cover" loading="lazy" />
       <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/25 transition-colors flex items-center justify-center">
         <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow" />
       </div>
@@ -495,7 +496,7 @@ function ImagePreviewCard({
       className="relative max-w-xs rounded-xl border overflow-hidden border-border bg-muted/50 group/img cursor-zoom-in"
       onClick={onPreview}
     >
-      <img src={src} alt={fileName} className="block w-full" />
+      <img src={src} alt={fileName} className="block w-full" loading="lazy" />
       <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors flex items-center justify-center">
         <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow" />
       </div>
