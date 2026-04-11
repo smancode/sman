@@ -59,11 +59,15 @@ export function Chat() {
   }, [isConnected]);
 
   // Auto-scroll to bottom
-  const scrollEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (sending || streamingBlocks.length > 0 || messages.length > 0) {
-      scrollEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
-    }
+    const el = scrollRef.current;
+    if (!el) return;
+    if (messages.length === 0 && !sending) return;
+
+    // Use setTimeout to let content-visibility elements render their real heights
+    setTimeout(() => {
+      el.scrollTop = el.scrollHeight;
+    }, 0);
   }, [messages.length, sending, streamingBlocks.length]);
 
   const hasStreamingContent = streamingBlocks.length > 0;
@@ -98,9 +102,6 @@ export function Chat() {
 
               {/* Typing indicator */}
               {sending && !hasStreamingContent && <TypingIndicator />}
-
-              {/* Scroll anchor — always at the end */}
-              <div ref={scrollEndRef} />
             </>
           )}
         </div>

@@ -74,7 +74,6 @@ export const ChatMessage = memo(function ChatMessage({
         'flex gap-3 group chat-message',
         isUser ? 'flex-row-reverse' : 'flex-row',
       )}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' }}
     >
       {/* Avatar */}
       {!isUser && (
