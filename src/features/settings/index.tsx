@@ -20,7 +20,7 @@ export function Settings() {
         <p className="text-muted-foreground mt-1">配置 Sman</p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         <BackendSettings />
         <ChatbotSettings />
         <LLMSettings />

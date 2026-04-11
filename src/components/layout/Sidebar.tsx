@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Sun,
@@ -16,7 +17,14 @@ import { useTheme } from '@/hooks/useTheme';
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const connectionStatus = useWsConnection((s) => s.status);
+  const location = useLocation();
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
+  const shouldBlur = !['/chat', '/bazaar'].includes(location.pathname);
+  const [dismissed, setDismissed] = useState(false);
+  const blurSession = shouldBlur && !dismissed;
+
+  // 切换页面时重置 dismissed 状态
+  useEffect(() => { setDismissed(false); }, [location.pathname]);
 
   return (
     <aside
@@ -33,8 +41,14 @@ export function Sidebar() {
       ) : null}
 
       {/* Session Tree */}
-      <div className="flex-1 overflow-hidden min-h-0">
+      <div className="flex-1 overflow-hidden min-h-0 relative">
         <SessionTree />
+        {blurSession && (
+          <div
+            className="absolute inset-0 backdrop-blur-[2px] bg-background/10 z-10 transition-all duration-300 cursor-pointer"
+            onClick={() => setDismissed(true)}
+          />
+        )}
       </div>
 
       {/* Footer - 固定在底部 */}
