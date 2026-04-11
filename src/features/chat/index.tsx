@@ -4,6 +4,7 @@ import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useChatStore, type StreamingBlock } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
+import { sessionCache } from '@/lib/session-cache';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
@@ -41,6 +42,7 @@ export function Chat() {
   const clearError = useChatStore((s) => s.clearError);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevSessionIdRef = useRef(currentSessionId);
   const hasActiveSession = !!currentSessionId;
 
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
@@ -58,37 +60,41 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  // Track scroll position to prevent jump when streaming → static transition
-  const wasSendingRef = useRef(false);
-  const savedScrollTopRef = useRef(0);
-
-  // Save scroll position while streaming
-  useEffect(() => {
-    if (sending) {
-      wasSendingRef.current = true;
-    }
-  }, [sending]);
-
-  // Auto-scroll + restore position after streaming ends
+  // Save scroll position before switching away, restore after switching in
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
+    // Session changed — save old position, restore new position
+    if (currentSessionId !== prevSessionIdRef.current) {
+      // Save old session's scroll position
+      if (prevSessionIdRef.current) {
+        sessionCache.setScrollTop(prevSessionIdRef.current, el.scrollTop);
+      }
+      prevSessionIdRef.current = currentSessionId;
+
+      // Restore new session's scroll position
+      if (currentSessionId) {
+        const saved = sessionCache.getScrollTop(currentSessionId);
+        // Delay to let React render the cached messages first
+        requestAnimationFrame(() => {
+          if (saved >= 0 && el.scrollHeight > 0) {
+            el.scrollTop = saved;
+          } else if (messages.length > 0) {
+            el.scrollTop = el.scrollHeight;
+          }
+        });
+      }
+      return;
+    }
+
+    // Normal scroll behavior (same session)
     if (sending || streamingBlocks.length > 0) {
-      // During streaming: follow content
       el.scrollTop = el.scrollHeight;
-    } else if (wasSendingRef.current) {
-      // Streaming just ended: lock position to prevent jump-back
-      wasSendingRef.current = false;
-      // Use requestAnimationFrame to let React finish rendering the new DOM
-      requestAnimationFrame(() => {
-        if (el) el.scrollTop = el.scrollHeight;
-      });
     } else if (messages.length > 0) {
-      // Normal case (e.g. page load): scroll to bottom
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages.length, sending, streamingBlocks.length]);
+  }, [currentSessionId, messages.length, sending, streamingBlocks.length]);
 
   const hasStreamingContent = streamingBlocks.length > 0;
   const isEmpty = messages.length === 0 && !sending;

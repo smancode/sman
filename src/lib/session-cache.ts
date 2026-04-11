@@ -1,16 +1,12 @@
 /**
  * Session Message Cache
  *
- * In-memory cache for chat messages keyed by session ID.
- * Enables instant session switching by serving cached messages
- * immediately while syncing with the backend in the background.
- *
- * Uses unknown[] to avoid tight coupling with chat store's Message type.
+ * In-memory cache for chat messages and scroll position keyed by session ID.
  */
 
 interface CacheEntry {
   messages: unknown[];
-  syncedAt: number;
+  scrollTop: number;
 }
 
 class SessionCache {
@@ -20,8 +16,18 @@ class SessionCache {
     return this.cache.get(sessionId)?.messages ?? null;
   }
 
+  getScrollTop(sessionId: string): number {
+    return this.cache.get(sessionId)?.scrollTop ?? -1;
+  }
+
   set(sessionId: string, messages: unknown[]): void {
-    this.cache.set(sessionId, { messages: [...messages], syncedAt: Date.now() });
+    const prev = this.cache.get(sessionId);
+    this.cache.set(sessionId, { messages: [...messages], scrollTop: prev?.scrollTop ?? -1 });
+  }
+
+  setScrollTop(sessionId: string, scrollTop: number): void {
+    const entry = this.cache.get(sessionId);
+    if (entry) entry.scrollTop = scrollTop;
   }
 
   has(sessionId: string): boolean {
@@ -30,13 +36,6 @@ class SessionCache {
 
   invalidate(sessionId: string): void {
     this.cache.delete(sessionId);
-  }
-
-  /** Milliseconds since last sync, or null if not cached */
-  getSyncAge(sessionId: string): number | null {
-    const entry = this.cache.get(sessionId);
-    if (!entry) return null;
-    return Date.now() - entry.syncedAt;
   }
 
   clear(): void {
