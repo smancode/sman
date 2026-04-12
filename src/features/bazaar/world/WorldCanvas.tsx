@@ -10,6 +10,8 @@ import { WorldSync } from './WorldSync';
 import { BuildingRegistry } from './BuildingRegistry';
 import { BUILDINGS } from './map-data';
 import { DESIGN } from './palette';
+import { setAssetProvider } from './SpriteSheet';
+import { ImageAssets } from './assets/ImageAssets';
 import { useBazaarStore } from '@/stores/bazaar';
 import type { ActivePanel } from './types';
 
@@ -25,6 +27,12 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick }: WorldC
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Try loading PNG assets (fallback to procedural)
+    const imageAssets = new ImageAssets();
+    imageAssets.load().then((ok) => {
+      if (ok) setAssetProvider(imageAssets);
+    });
 
     const rect = canvas.getBoundingClientRect();
     const renderer = new WorldRenderer();
