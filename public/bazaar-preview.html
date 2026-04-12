@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bazaar 像素世界 — 开罗风美术预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1c2c;
+    color: #f4f4f4;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: #FFD700;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94b0c2;
+    font-size: 13px;
+    margin-bottom: 32px;
+  }
+  h2 {
+    color: #FF7043;
+    font-size: 18px;
+    margin: 32px 0 16px 0;
+    border-bottom: 2px solid #FF704333;
+    padding-bottom: 8px;
+  }
+  h3 {
+    color: #FFD700;
+    font-size: 14px;
+    margin: 16px 0 8px 0;
+  }
+  .section {
+    background: #253040;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .sprite-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+  }
+  .sprite-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .sprite-cell canvas, .sprite-cell img {
+    image-rendering: pixelated;
+    border: 1px solid #566c86;
+    border-radius: 4px;
+    background: #0d1117;
+  }
+  .sprite-label {
+    font-size: 10px;
+    color: #94b0c2;
+    text-align: center;
+  }
+  .big canvas, .big img {
+    width: 128px !important;
+    height: 128px !important;
+  }
+  .building-grid {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .building-card {
+    background: #1a2030;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .building-card canvas {
+    image-rendering: pixelated;
+    background: #0d1117;
+    border: 1px solid #566c86;
+    border-radius: 4px;
+  }
+  .building-card .label {
+    font-size: 11px;
+    color: #94b0c2;
+    margin-top: 6px;
+  }
+  .tile-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tile-cell canvas {
+    image-rendering: pixelated;
+    background: #0d1117;
+    border: 1px solid #566c86;
+    border-radius: 4px;
+  }
+  .anim-section {
+    background: #1a2030;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+  }
+  .anim-row {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+  }
+  .info-box {
+    background: #FFD70015;
+    border: 1px solid #FFD70033;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 16px 0;
+    font-size: 12px;
+    color: #FFD700;
+  }
+  .combo-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .combo-table th {
+    text-align: left;
+    padding: 6px 12px;
+    color: #FFD700;
+    border-bottom: 1px solid #566c86;
+  }
+  .combo-table td {
+    padding: 4px 12px;
+    border-bottom: 1px solid #333;
+  }
+  .swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 6px;
+    border: 1px solid #ffffff33;
+  }
+</style>
+</head>
+<body>
+
+<h1>🏰 Bazaar 像素世界 — 开罗Q版风</h1>
+<p class="subtitle">Kairosoft-style pixel art preview · 大头小身子 · 点眼 · 圆润 · 暖色调 · 1568种组合</p>
+
+<!-- Color Palette -->
+<div class="section">
+<h2>🎨 配色方案</h2>
+<table class="combo-table">
+  <tr><th>维度</th><th>颜色</th></tr>
+  <tr>
+    <td>发色 (7)</td>
+    <td>
+      <span class="swatch" style="background:#5D4037"></span>棕色
+      <span class="swatch" style="background:#212121"></span>黑色
+      <span class="swatch" style="background:#FFB74D"></span>金色
+      <span class="swatch" style="background:#F48FB1"></span>粉色
+      <span class="swatch" style="background:#7B68EE"></span>紫色
+      <span class="swatch" style="background:#4FC3F7"></span>蓝色
+      <span class="swatch" style="background:#E52521"></span>红色
+    </td>
+  </tr>
+  <tr>
+    <td>肤色 (4)</td>
+    <td>
+      <span class="swatch" style="background:#FFE0BD"></span>浅肤
+      <span class="swatch" style="background:#FFDAB9"></span>自然
+      <span class="swatch" style="background:#D2A679"></span>小麦
+      <span class="swatch" style="background:#8D6E63"></span>深肤
+    </td>
+  </tr>
+  <tr>
+    <td>服装 (7)</td>
+    <td>
+      <span class="swatch" style="background:#4CAF50"></span>绿
+      <span class="swatch" style="background:#2196F3"></span>蓝
+      <span class="swatch" style="background:#E52521"></span>红
+      <span class="swatch" style="background:#FF9800"></span>橙
+      <span class="swatch" style="background:#9C27B0"></span>紫
+      <span class="swatch" style="background:#FFEB3B"></span>黄
+      <span class="swatch" style="background:#00BCD4"></span>青
+    </td>
+  </tr>
+  <tr>
+    <td>发型 (8)</td>
+    <td>尖刺 · 长发 · 卷发 · 双马尾 · 鸭舌帽 · 头盔 · 尖帽 · 光头</td>
+  </tr>
+</table>
+<div class="info-box">组合数 = 8发型 × 7发色 × 4肤色 × 7服装色 = <strong>1,568 种独特外观</strong></div>
+</div>
+
+<!-- Agent Sprites -->
+<div class="section">
+<h2>👤 Agent 精灵 (32×32 Q版)</h2>
+
+<div id="agent-showcase"></div>
+
+<div class="anim-section">
+<h3>走路动画 (4帧弹跳)</h3>
+<div class="anim-row" id="walk-anim"></div>
+<p style="font-size:11px;color:#94b0c2;margin-top:8px">
+  帧0:站立 → 帧1:右脚前(↑弹跳1px) → 帧2:站立 → 帧3:左脚前(↑弹跳1px)
+</p>
+</div>
+
+<div class="anim-section">
+<h3>所有方向展示</h3>
+<div id="facing-showcase"></div>
+</div>
+
+<div class="anim-section">
+<h3>不同外观组合</h3>
+<div id="combo-showcase"></div>
+</div>
+</div>
+
+<!-- Buildings -->
+<div class="section">
+<h2>🏠 建筑</h2>
+<div class="building-grid" id="building-showcase"></div>
+</div>
+
+<!-- Tiles -->
+<div class="section">
+<h2>🗺️ 地面瓦片 (32×32)</h2>
+<div class="tile-grid" id="tile-showcase"></div>
+<div class="anim-section" style="margin-top:16px">
+<h3>组合效果预览</h3>
+<canvas id="world-preview" width="640" height="480" style="image-rendering:pixelated;border:2px solid #566c86;border-radius:8px"></canvas>
+<p style="font-size:11px;color:#94b0c2;margin-top:8px">完整的像素世界预览：草地 + 路径 + 建筑 + 多个 Agent 走动</p>
+</div>
+</div>
+
+<script>
+const HAIR_COLORS = ['#5D4037', '#212121', '#FFB74D', '#F48FB1', '#7B68EE', '#4FC3F7', '#E52521'];
+const SKIN_TONES = ['#FFE0BD', '#FFDAB9', '#D2A679', '#8D6E63'];
+const OUTFIT_COLORS = ['#4CAF50', '#2196F3', '#E52521', '#FF9800', '#9C27B0', '#FFEB3B', '#00BCD4'];
+const HAIR_NAMES = ['尖刺', '长发', '卷发', '双马尾', '鸭舌帽', '头盔', '尖帽', '光头'];
+
+const EYE = '#212121';
+const BLUSH = '#FFB6C1';
+const OUTLINE = '#4E342E';
+const SHOES = '#4E342E';
+
+// Drawing helpers
+const S = 4; // Display scale
+function px(ctx, x, y, color) {
+  if (!color) return;
+  ctx.fillStyle = color;
+  ctx.fillRect(x * S, y * S, S, S);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawAgent(canvas, hairIdx, skinIdx, outfitIdx, facing='down', frame=0) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+
+  const hair = HAIR_COLORS[hairIdx % 7];
+  const skin = SKIN_TONES[skinIdx % 4];
+  const outfit = OUTFIT_COLORS[outfitIdx % 7];
+
+  const bounce = (frame === 1 || frame === 3) ? -1 : 0;
+  const y0 = 2 + bounce;
+
+  // Hair top
+  px(ctx, 5, y0, hair); px(ctx, 6, y0, hair); px(ctx, 7, y0, hair); px(ctx, 8, y0, hair);
+  px(ctx, 4, y0+1, hair); px(ctx, 5, y0+1, hair); px(ctx, 6, y0+1, hair); px(ctx, 7, y0+1, hair); px(ctx, 8, y0+1, hair); px(ctx, 9, y0+1, hair);
+
+  // Face outline + skin
+  px(ctx, 4, y0+2, OUTLINE);
+  for (let i = 5; i <= 9; i++) px(ctx, i, y0+2, skin);
+  px(ctx, 10, y0+2, OUTLINE);
+
+  for (let i = 4; i <= 10; i++) px(ctx, i, y0+3, skin);
+
+  // Eyes based on facing
+  if (facing === 'down') {
+    px(ctx, 5, y0+3, skin); px(ctx, 6, y0+4, EYE); px(ctx, 9, y0+4, EYE);
+  } else if (facing === 'left') {
+    px(ctx, 5, y0+4, EYE); px(ctx, 8, y0+4, EYE);
+  } else if (facing === 'right') {
+    px(ctx, 7, y0+4, EYE); px(ctx, 10, y0+4, EYE);
+  } else if (facing === 'up') {
+    // Back of head - show hair
+    for (let i = 4; i <= 10; i++) px(ctx, i, y0+4, hair);
+    px(ctx, 5, y0+4, skin); px(ctx, 9, y0+4, skin);
+  }
+  // Fill remaining face row
+  if (facing !== 'up') {
+    for (let i = 4; i <= 10; i++) {
+      if (ctx.getImageData(i*S, (y0+4)*S, 1, 1).data[3] === 0) px(ctx, i, y0+4, skin);
+    }
+  }
+
+  for (let i = 4; i <= 10; i++) px(ctx, i, y0+5, skin);
+
+  // Blush
+  px(ctx, 5, y0+6, skin); px(ctx, 6, y0+6, BLUSH);
+  for (let i = 7; i <= 8; i++) px(ctx, i, y0+6, skin);
+  px(ctx, 9, y0+6, BLUSH); px(ctx, 10, y0+6, skin);
+
+  // Chin
+  for (let i = 5; i <= 9; i++) px(ctx, i, y0+7, skin);
+
+  // Hair style overlay
+  drawHairStyle(ctx, hairIdx % 8, hair, bounce);
+
+  // Body
+  const bodyY = 10 + bounce;
+  for (let i = 5; i <= 8; i++) px(ctx, i, bodyY, OUTLINE);
+  for (let i = 4; i <= 9; i++) px(ctx, i, bodyY+1, outfit);
+  for (let i = 4; i <= 9; i++) px(ctx, i, bodyY+2, outfit);
+
+  // Legs
+  const legSpread = frame === 1 ? 1 : (frame === 3 ? -1 : 0);
+  px(ctx, 5+legSpread, bodyY+3, SHOES);
+  px(ctx, 6+legSpread, bodyY+4, SHOES);
+  px(ctx, 8-legSpread, bodyY+3, SHOES);
+  px(ctx, 7-legSpread, bodyY+4, SHOES);
+}
+
+function drawHairStyle(ctx, style, color, bounce) {
+  const y0 = 2 + bounce;
+  ctx.fillStyle = color;
+  switch (style) {
+    case 0: // spiky
+      px(ctx, 5, y0-1, color); px(ctx, 8, y0-1, color);
+      px(ctx, 3, y0, color); px(ctx, 10, y0, color);
+      break;
+    case 1: // long
+      for (let dy = 1; dy <= 3; dy++) { px(ctx, 3, y0+dy, color); px(ctx, 11, y0+dy, color); }
+      break;
+    case 2: // curly
+      px(ctx, 3, y0, color); px(ctx, 11, y0, color);
+      px(ctx, 5, y0-1, color); px(ctx, 9, y0-1, color);
+      break;
+    case 3: // twin tails
+      for (let dy = 1; dy <= 4; dy++) { px(ctx, 2, y0+dy, color); px(ctx, 12, y0+dy, color); }
+      break;
+    case 4: // cap
+      for (let i = 3; i <= 11; i++) px(ctx, i, y0+1, color);
+      px(ctx, 3, y0+2, color);
+      break;
+    case 5: // helmet
+      for (let i = 4; i <= 10; i++) { px(ctx, i, y0, color); px(ctx, i, y0+1, color); }
+      break;
+    case 6: // pointed
+      px(ctx, 6, y0-2, color); px(ctx, 7, y0-2, color);
+      for (let i = 5; i <= 9; i++) px(ctx, i, y0-1, color);
+      break;
+    // case 7: bald - nothing
+  }
+}
+
+function drawBuilding(canvas, type) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  const s = S;
+  const bc = {
+    wood: '#A1887F', woodDark: '#6D4C41', roof: '#FF7043', roofDark: '#E64A19',
+    stone: '#BDBDBD', stoneDark: '#757575', gold: '#FFD700', banner: '#FF5252',
+    blue: '#4FC3F7', blueDark: '#0288D1', cloth: '#FFF8E1',
+  };
+
+  if (type === 'stall') {
+    // Roof
+    ctx.fillStyle = bc.roof;
+    ctx.beginPath(); ctx.ellipse(32*s, 8*s, 30*s, 14*s, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = bc.roofDark;
+    ctx.fillRect(2*s, 16*s, 60*s, 4*s);
+    // Stripes
+    ctx.fillStyle = bc.banner;
+    for (let i = 0; i < 8; i++) ctx.fillRect((i*8+4)*s, 4*s, 4*s, 10*s);
+    // Counter
+    ctx.fillStyle = bc.wood;
+    ctx.fillRect(4*s, 20*s, 56*s, 16*s);
+    ctx.fillStyle = bc.gold;
+    ctx.fillRect(4*s, 20*s, 56*s, 2*s);
+    // Items
+    ctx.fillStyle = '#FF7043'; ctx.fillRect(8*s, 16*s, 6*s, 4*s);
+    ctx.fillStyle = '#4CAF50'; ctx.fillRect(20*s, 16*s, 6*s, 4*s);
+    ctx.fillStyle = '#FFD700'; ctx.fillRect(32*s, 16*s, 6*s, 4*s);
+    // Legs
+    ctx.fillStyle = bc.woodDark;
+    ctx.fillRect(6*s, 36*s, 4*s, 8*s);
+    ctx.fillRect(40*s, 36*s, 4*s, 8*s);
+  } else if (type === 'reputation') {
+    // Base
+    ctx.fillStyle = bc.stoneDark; roundRect(ctx, 8*s, 48*s, 56*s, 16*s, 4*s);
+    ctx.fillStyle = bc.stone; roundRect(ctx, 10*s, 42*s, 52*s, 10*s, 3*s);
+    // Board
+    ctx.fillStyle = bc.cloth; roundRect(ctx, 12*s, 6*s, 48*s, 34*s, 4*s);
+    ctx.fillStyle = bc.stoneDark;
+    ctx.fillRect(10*s, 4*s, 52*s, 3*s);
+    ctx.fillRect(10*s, 40*s, 52*s, 3*s);
+    // Crown
+    ctx.fillStyle = bc.gold;
+    ctx.fillRect(28*s, 0, 16*s, 6*s);
+    ctx.fillRect(32*s, 0, 8*s, 3*s);
+    ctx.fillStyle = '#FF5252';
+    ctx.fillRect(34*s, 1*s, 4*s, 3*s);
+    // Stars
+    ctx.fillStyle = bc.gold;
+    [[22,16],[38,14],[30,24],[42,22],[22,30],[38,28]].forEach(([x,y]) => {
+      ctx.fillRect(x*s, y*s, 3*s, 3*s);
+      ctx.fillRect((x+1)*s, (y-1)*s, 1*s, 1*s);
+    });
+    // Pillars
+    ctx.fillStyle = bc.stoneDark;
+    ctx.fillRect(12*s, 40*s, 4*s, 18*s);
+    ctx.fillRect(52*s, 40*s, 4*s, 18*s);
+  } else if (type === 'bounty') {
+    // Frame
+    ctx.fillStyle = bc.woodDark; roundRect(ctx, 4*s, 4*s, 56*s, 44*s, 6*s);
+    ctx.fillStyle = bc.wood; roundRect(ctx, 8*s, 6*s, 48*s, 40*s, 4*s);
+    // Notes
+    ctx.fillStyle = '#FFF8E1';
+    roundRect(ctx, 12*s, 10*s, 16*s, 12*s, 2*s);
+    roundRect(ctx, 34*s, 8*s, 18*s, 14*s, 2*s);
+    roundRect(ctx, 14*s, 28*s, 14*s, 12*s, 2*s);
+    // Nails
+    ctx.fillStyle = bc.gold;
+    ctx.fillRect(18*s, 8*s, 2*s, 2*s);
+    ctx.fillRect(42*s, 6*s, 2*s, 2*s);
+    ctx.fillRect(20*s, 26*s, 2*s, 2*s);
+    // Base
+    ctx.fillStyle = bc.woodDark; roundRect(ctx, 8*s, 48*s, 48*s, 14*s, 4*s);
+    ctx.fillRect(12*s, 46*s, 4*s, 18*s);
+    ctx.fillRect(52*s, 46*s, 4*s, 18*s);
+  } else if (type === 'search') {
+    // Base
+    ctx.fillStyle = bc.stone; roundRect(ctx, 8*s, 32*s, 28*s, 12*s, 3*s);
+    // Ball
+    ctx.fillStyle = bc.blue;
+    ctx.beginPath(); ctx.ellipse(22*s, 20*s, 14*s, 16*s, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = bc.blueDark;
+    ctx.fillRect(8*s, 28*s, 28*s, 6*s);
+    // Highlight
+    ctx.fillStyle = '#B3E5FC';
+    ctx.fillRect(14*s, 12*s, 8*s, 6*s);
+    // Star
+    ctx.fillStyle = bc.gold;
+    ctx.fillRect(18*s, 2*s, 8*s, 6*s);
+    ctx.fillRect(20*s, 0, 4*s, 2*s);
+  } else if (type === 'workshop') {
+    // Base
+    ctx.fillStyle = bc.blueDark; roundRect(ctx, 8*s, 32*s, 28*s, 12*s, 3*s);
+    // Bench
+    ctx.fillStyle = bc.blue; roundRect(ctx, 6*s, 12*s, 32*s, 20*s, 3*s);
+    ctx.fillStyle = bc.stone; roundRect(ctx, 8*s, 14*s, 28*s, 16*s, 2*s);
+    // Tools
+    ctx.fillStyle = bc.gold;
+    ctx.fillRect(12*s, 18*s, 8*s, 3*s);
+    ctx.fillRect(26*s, 20*s, 3*s, 6*s);
+    // Gear
+    ctx.fillStyle = '#757575';
+    ctx.fillRect(18*s, 2*s, 8*s, 8*s);
+    ctx.fillRect(20*s, 0, 4*s, 12*s);
+    ctx.fillRect(16*s, 4*s, 12*s, 4*s);
+  }
+}
+
+function drawTile(ctx, x, y, tileId, variant) {
+  const s = S;
+  const tc = {
+    grass: '#8BC34A', grass2: '#9CCC65', grass3: '#AED581',
+    path: '#D7CCC8', path2: '#BCAAA4', stone: '#BDBDBD', water: '#4FC3F7', dark: '#5D4037',
+  };
+
+  if (tileId === 0) {
+    const colors = [tc.grass, tc.grass2, tc.grass3];
+    ctx.fillStyle = colors[variant % 3];
+    ctx.fillRect(x, y, 8*s, 8*s);
+    ctx.fillStyle = '#7CB342';
+    if (variant === 0) { ctx.fillRect(x+2*s, y+2*s, s, s); ctx.fillRect(x+5*s, y+5*s, s, s); }
+    if (variant === 1) { ctx.fillRect(x+3*s, y+1*s, s, s); ctx.fillRect(x+1*s, y+6*s, s, s); }
+    if (variant === 2) { ctx.fillRect(x+4*s, y+3*s, s, s); ctx.fillRect(x+1*s, y+2*s, s, s); }
+    if (variant === 0) { ctx.fillStyle = '#FFD700'; ctx.fillRect(x+6*s, y+2*s, s, s); }
+    if (variant === 1) { ctx.fillStyle = '#FF8A80'; ctx.fillRect(x+2*s, y+4*s, s, s); }
+  } else if (tileId === 1) {
+    ctx.fillStyle = variant === 0 ? tc.path : tc.path2;
+    ctx.fillRect(x, y, 8*s, 8*s);
+    ctx.fillStyle = variant === 0 ? '#C8B8AE' : '#B0A094';
+    ctx.fillRect(x+1*s, y+1*s, s, s);
+    ctx.fillRect(x+5*s, y+4*s, s, s);
+    ctx.fillRect(x+3*s, y+6*s, s, s);
+  } else if (tileId === 2) {
+    ctx.fillStyle = tc.stone;
+    ctx.fillRect(x, y, 8*s, 8*s);
+    ctx.fillStyle = '#A0A0A0';
+    ctx.fillRect(x, y+4*s, 8*s, s);
+    ctx.fillRect(x+4*s, y, s, 4*s);
+    ctx.fillRect(x+2*s, y+5*s, s, 3*s);
+    ctx.fillRect(x+6*s, y+5*s, s, 3*s);
+  } else if (tileId === 3) {
+    ctx.fillStyle = tc.water;
+    ctx.fillRect(x, y, 8*s, 8*s);
+    ctx.fillStyle = '#81D4FA';
+    ctx.fillRect(x+1*s, y+1*s, 2*s, s);
+    ctx.fillRect(x+5*s, y+3*s, 2*s, s);
+  } else {
+    ctx.fillStyle = tc.dark;
+    ctx.fillRect(x, y, 8*s, 8*s);
+  }
+}
+
+// ── BUILD PAGE ──
+window.addEventListener('DOMContentLoaded', () => {
+  // Agent showcase - different hair styles with default outfit
+  const showcase = document.getElementById('agent-showcase');
+  for (let h = 0; h < 8; h++) {
+    for (let s = 0; s < 4; s++) {
+      const cell = document.createElement('div');
+      cell.className = 'sprite-cell big';
+      const canvas = document.createElement('canvas');
+      canvas.width = 32 * S;
+      canvas.height = 32 * S;
+      drawAgent(canvas, h, s, 0, 'down', 0);
+      const label = document.createElement('div');
+      label.className = 'sprite-label';
+      label.textContent = `${HAIR_NAMES[h]} / 肤${s+1}`;
+      cell.appendChild(canvas);
+      cell.appendChild(label);
+      showcase.appendChild(cell);
+    }
+  }
+
+  // Walk animation
+  const walkRow = document.getElementById('walk-anim');
+  const walkLabels = ['帧0 站立', '帧1 右脚↑', '帧2 站立', '帧3 左脚↑'];
+  for (let f = 0; f < 4; f++) {
+    const cell = document.createElement('div');
+    cell.className = 'sprite-cell big';
+    const canvas = document.createElement('canvas');
+    canvas.width = 32 * S;
+    canvas.height = 32 * S;
+    drawAgent(canvas, 0, 0, 0, 'down', f);
+    const label = document.createElement('div');
+    label.className = 'sprite-label';
+    label.textContent = walkLabels[f];
+    cell.appendChild(canvas);
+    cell.appendChild(label);
+    walkRow.appendChild(cell);
+  }
+
+  // Facing showcase
+  const facingDiv = document.getElementById('facing-showcase');
+  const facingNames = ['下 (down)', '上 (up)', '左 (left)', '右 (right)'];
+  const facings = ['down', 'up', 'left', 'right'];
+  const facingRow = document.createElement('div');
+  facingRow.className = 'sprite-row';
+  for (let d = 0; d < 4; d++) {
+    const cell = document.createElement('div');
+    cell.className = 'sprite-cell big';
+    const canvas = document.createElement('canvas');
+    canvas.width = 32 * S;
+    canvas.height = 32 * S;
+    drawAgent(canvas, 0, 0, 0, facings[d], 0);
+    const label = document.createElement('div');
+    label.className = 'sprite-label';
+    label.textContent = facingNames[d];
+    cell.appendChild(canvas);
+    cell.appendChild(label);
+    facingRow.appendChild(cell);
+  }
+  facingDiv.appendChild(facingRow);
+
+  // Combo showcase - some interesting combos
+  const comboDiv = document.getElementById('combo-showcase');
+  const combos = [
+    [0, 0, 0], [3, 1, 3], [6, 2, 5], [1, 3, 2], [4, 0, 6],
+    [7, 2, 1], [2, 1, 4], [5, 3, 0], [0, 0, 3], [3, 2, 6],
+    [6, 1, 2], [1, 0, 5], [7, 3, 4], [2, 2, 0], [4, 1, 1],
+  ];
+  const comboRow = document.createElement('div');
+  comboRow.className = 'sprite-row';
+  for (const [h, s, o] of combos) {
+    const cell = document.createElement('div');
+    cell.className = 'sprite-cell';
+    const canvas = document.createElement('canvas');
+    canvas.width = 32 * S;
+    canvas.height = 32 * S;
+    drawAgent(canvas, h, s, o, 'down', 0);
+    const label = document.createElement('div');
+    label.className = 'sprite-label';
+    label.textContent = `${HAIR_NAMES[h]}/${['浅','自','麦','深'][s]}/${['绿','蓝','红','橙','紫','黄','青'][o]}`;
+    cell.appendChild(canvas);
+    cell.appendChild(label);
+    comboRow.appendChild(cell);
+  }
+  comboDiv.appendChild(comboRow);
+
+  // Buildings
+  const buildingDiv = document.getElementById('building-showcase');
+  const buildings = [
+    { type: 'stall', label: '摊位 (64×64)', w: 64, h: 44 },
+    { type: 'reputation', label: '声望榜 (96×96)', w: 64, h: 56 },
+    { type: 'bounty', label: '悬赏板 (96×96)', w: 64, h: 56 },
+    { type: 'search', label: '搜索站 (64×64)', w: 48, h: 44 },
+    { type: 'workshop', label: '工坊 (64×64)', w: 48, h: 44 },
+  ];
+  for (const b of buildings) {
+    const card = document.createElement('div');
+    card.className = 'building-card';
+    const canvas = document.createElement('canvas');
+    canvas.width = b.w * S;
+    canvas.height = b.h * S;
+    drawBuilding(canvas, b.type);
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = b.label;
+    card.appendChild(canvas);
+    card.appendChild(label);
+    buildingDiv.appendChild(card);
+  }
+
+  // Tiles
+  const tileDiv = document.getElementById('tile-showcase');
+  const tileNames = ['草地', '路径', '石砖', '水面', '深色'];
+  for (let t = 0; t < 5; t++) {
+    for (let v = 0; v < 3; v++) {
+      const cell = document.createElement('div');
+      cell.className = 'sprite-cell';
+      const canvas = document.createElement('canvas');
+      canvas.width = 8 * S;
+      canvas.height = 8 * S;
+      const ctx = canvas.getContext('2d');
+      drawTile(ctx, 0, 0, t, v);
+      const label = document.createElement('div');
+      label.className = 'sprite-label';
+      label.textContent = `${tileNames[t]} v${v+1}`;
+      cell.appendChild(canvas);
+      cell.appendChild(label);
+      tileDiv.appendChild(cell);
+    }
+  }
+
+  // World preview - mini world scene
+  const worldCanvas = document.getElementById('world-preview');
+  const wCtx = worldCanvas.getContext('2d');
+  wCtx.imageSmoothingEnabled = false;
+  const TS = 8 * S; // tile size in pixels
+
+  // Draw ground
+  const miniMap = [
+    [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],
+  ];
+
+  for (let row = 0; row < miniMap.length; row++) {
+    for (let col = 0; col < miniMap[row].length; col++) {
+      const hash = ((col * 7 + row * 13) & 0xFF) / 255;
+      const variant = hash < 0.3 ? 0 : hash < 0.7 ? 1 : 2;
+      drawTile(wCtx, col * TS, row * TS, miniMap[row][col], variant);
+    }
+  }
+
+  // Draw buildings in scene
+  const sceneBuildings = [
+    { type: 'stall', col: 3, row: 2 },
+    { type: 'reputation', col: 8, row: 1 },
+    { type: 'search', col: 12, row: 5 },
+    { type: 'workshop', col: 1, row: 7 },
+  ];
+  for (const sb of sceneBuildings) {
+    const tempCanvas = document.createElement('canvas');
+    const isLarge = sb.type === 'reputation' || sb.type === 'bounty';
+    tempCanvas.width = (isLarge ? 96 : 64) / 8 * TS;
+    tempCanvas.height = (isLarge ? 96 : 64) / 8 * TS;
+    // Use smaller scale for buildings in scene
+    const bCtx = tempCanvas.getContext('2d');
+    bCtx.scale(TS/32, TS/32);
+    drawBuildingSimple(bCtx, sb.type);
+    wCtx.drawImage(tempCanvas, sb.col * TS, sb.row * TS);
+  }
+
+  // Draw agents in scene
+  const agents = [
+    { h: 0, s: 0, o: 0, col: 5, row: 4, facing: 'down', frame: 0 },
+    { h: 3, s: 1, o: 3, col: 7, row: 3, facing: 'right', frame: 1 },
+    { h: 6, s: 2, o: 5, col: 4, row: 6, facing: 'left', frame: 2 },
+    { h: 1, s: 3, o: 2, col: 10, row: 5, facing: 'up', frame: 3 },
+    { h: 7, s: 0, o: 4, col: 2, row: 4, facing: 'down', frame: 0 },
+    { h: 4, s: 2, o: 6, col: 13, row: 3, facing: 'down', frame: 1 },
+  ];
+  for (const a of agents) {
+    const aCanvas = document.createElement('canvas');
+    aCanvas.width = 32;
+    aCanvas.height = 32;
+    const aCtx = aCanvas.getContext('2d');
+    drawAgentSimple(aCtx, a.h, a.s, a.o, a.facing, a.frame);
+    wCtx.imageSmoothingEnabled = false;
+    wCtx.drawImage(aCanvas, a.col * TS + TS/4, a.row * TS);
+  }
+});
+
+// Simple versions for world preview (1:1 pixel)
+function drawAgentSimple(ctx, hairIdx, skinIdx, outfitIdx, facing, frame) {
+  ctx.imageSmoothingEnabled = false;
+  const hair = HAIR_COLORS[hairIdx % 7];
+  const skin = SKIN_TONES[skinIdx % 4];
+  const outfit = OUTFIT_COLORS[outfitIdx % 7];
+  const bounce = (frame === 1 || frame === 3) ? -1 : 0;
+
+  const px1 = (x, y, c) => { if (c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); } };
+
+  // Head
+  const y0 = 2 + bounce;
+  for (let i = 5; i <= 8; i++) px1(i, y0, hair);
+  for (let i = 4; i <= 9; i++) px1(i, y0+1, hair);
+  px1(4, y0+2, OUTLINE); for (let i = 5; i <= 9; i++) px1(i, y0+2, skin); px1(10, y0+2, OUTLINE);
+  for (let i = 4; i <= 10; i++) px1(i, y0+3, skin);
+  // Eyes
+  if (facing === 'down') { px1(6, y0+4, EYE); px1(9, y0+4, EYE); }
+  else if (facing === 'left') { px1(5, y0+4, EYE); px1(8, y0+4, EYE); }
+  else if (facing === 'right') { px1(7, y0+4, EYE); px1(10, y0+4, EYE); }
+  else { for (let i = 4; i <= 10; i++) px1(i, y0+4, hair); px1(5, y0+4, skin); px1(9, y0+4, skin); }
+  for (let i = 4; i <= 10; i++) px1(i, y0+5, skin);
+  px1(6, y0+6, BLUSH); px1(9, y0+6, BLUSH);
+  for (let i = 5; i <= 9; i++) px1(i, y0+7, skin);
+
+  // Body
+  const bY = 10 + bounce;
+  for (let i = 4; i <= 9; i++) px1(i, bY, outfit);
+  for (let i = 4; i <= 9; i++) px1(i, bY+1, outfit);
+
+  // Legs
+  const ls = frame === 1 ? 1 : (frame === 3 ? -1 : 0);
+  px1(5+ls, bY+2, SHOES); px1(8-ls, bY+2, SHOES);
+}
+
+function drawBuildingSimple(ctx, type) {
+  // Simplified building drawing at 1:1 pixel for scene
+  ctx.imageSmoothingEnabled = false;
+  const bc = {
+    wood: '#A1887F', woodDark: '#6D4C41', roof: '#FF7043', roofDark: '#E64A19',
+    stone: '#BDBDBD', stoneDark: '#757575', gold: '#FFD700', banner: '#FF5252',
+    blue: '#4FC3F7', blueDark: '#0288D1', cloth: '#FFF8E1',
+  };
+  if (type === 'stall') {
+    ctx.fillStyle = bc.roof;
+    ctx.beginPath(); ctx.ellipse(16, 8, 14, 7, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = bc.roofDark; ctx.fillRect(2, 8, 28, 2);
+    ctx.fillStyle = bc.banner;
+    for (let i = 0; i < 4; i++) ctx.fillRect(i*7+3, 3, 2, 5);
+    ctx.fillStyle = bc.wood; ctx.fillRect(2, 10, 28, 8);
+    ctx.fillStyle = bc.gold; ctx.fillRect(2, 10, 28, 1);
+    ctx.fillStyle = bc.woodDark; ctx.fillRect(3, 18, 2, 4); ctx.fillRect(25, 18, 2, 4);
+  } else if (type === 'reputation') {
+    ctx.fillStyle = bc.stoneDark; ctx.fillRect(4, 24, 24, 8);
+    ctx.fillStyle = bc.cloth; ctx.fillRect(6, 3, 20, 17);
+    ctx.fillStyle = bc.gold; ctx.fillRect(14, 0, 6, 3);
+    ctx.fillStyle = '#FF5252'; ctx.fillRect(17, 1, 2, 2);
+    ctx.fillStyle = bc.gold;
+    [[10,10],[20,8],[15,14],[22,12],[10,18],[20,16]].forEach(([x,y]) => ctx.fillRect(x,y,2,2));
+    ctx.fillStyle = bc.stoneDark; ctx.fillRect(6, 20, 2, 10); ctx.fillRect(24, 20, 2, 10);
+  } else if (type === 'search') {
+    ctx.fillStyle = bc.stone; ctx.fillRect(4, 16, 12, 6);
+    ctx.fillStyle = bc.blue; ctx.beginPath(); ctx.ellipse(11, 10, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#B3E5FC'; ctx.fillRect(7, 6, 4, 3);
+    ctx.fillStyle = bc.gold; ctx.fillRect(9, 1, 4, 3);
+  } else if (type === 'workshop') {
+    ctx.fillStyle = bc.blueDark; ctx.fillRect(4, 16, 12, 6);
+    ctx.fillStyle = bc.blue; ctx.fillRect(3, 6, 14, 10);
+    ctx.fillStyle = bc.stone; ctx.fillRect(4, 7, 12, 8);
+    ctx.fillStyle = bc.gold; ctx.fillRect(6, 9, 4, 2); ctx.fillRect(13, 10, 2, 4);
+    ctx.fillStyle = '#757575'; ctx.fillRect(9, 1, 4, 4); ctx.fillRect(10, 0, 2, 6); ctx.fillRect(8, 2, 6, 2);
+  }
+}
+</script>
+</body>
+</html>
