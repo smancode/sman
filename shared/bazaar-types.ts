@@ -214,3 +214,38 @@ export interface BazaarConfig {
   mode: CollaborationMode;  // 协作模式
   maxConcurrentTasks: number;  // 最大并发槽位，默认 3
 }
+
+// ── World 消息 Payload ──
+
+export interface WorldMovePayload {
+  agentId: string;
+  x: number;
+  y: number;
+  state: 'idle' | 'walking' | 'busy';
+  facing: 'up' | 'down' | 'left' | 'right';
+}
+
+export interface WorldAgentUpdatePayload {
+  agentId: string;
+  x: number;
+  y: number;
+  state: 'idle' | 'walking' | 'busy';
+  facing: 'up' | 'down' | 'left' | 'right';
+}
+
+export interface WorldZoneSnapshotPayload {
+  agents: Array<{
+    agentId: string;
+    x: number;
+    y: number;
+    state: string;
+    facing: string;
+    zone: string | null;
+  }>;
+}
+
+export interface WorldZoneEventPayload {
+  agentId: string;
+  zone: string;
+  action: 'enter' | 'leave';
+}
