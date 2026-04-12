@@ -151,6 +151,17 @@ export class BazaarBridge {
         break;
       }
 
+      case 'bazaar.world.move': {
+        const identity = this.store.getIdentity();
+        if (!identity) break;
+        this.client.send({
+          id: uuidv4(),
+          type: 'world.move',
+          payload: { agentId: identity.agentId, ...payload },
+        });
+        break;
+      }
+
       default:
         this.log.warn(`Unknown frontend message type: ${type}`);
     }
@@ -208,6 +219,19 @@ export class BazaarBridge {
           delta: msg.payload.delta,
           newTotal: msg.payload.newTotal,
           reason: msg.payload.reason,
+        }));
+        break;
+
+      case 'world.agent_update':
+      case 'world.agent_enter':
+      case 'world.agent_leave':
+      case 'world.zone_snapshot':
+      case 'world.enter_zone':
+      case 'world.leave_zone':
+      case 'world.event':
+        this.deps.broadcast(JSON.stringify({
+          type: `bazaar.${msg.type}`,
+          ...msg.payload,
         }));
         break;
 
