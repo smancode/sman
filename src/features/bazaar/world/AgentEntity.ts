@@ -10,6 +10,7 @@ export class AgentEntity {
   avatar: string; // emoji
   reputation: number;
   shirtColor: string;
+  isSelf: boolean = false;
 
   // 像素坐标
   x: number;
@@ -56,6 +57,13 @@ export class AgentEntity {
     this.state = 'walking';
   }
 
+  /** 命中测试（圆形碰撞，半径 16px，中心在脚底上方 16px） */
+  hitTest(worldX: number, worldY: number): boolean {
+    const dx = worldX - this.x;
+    const dy = worldY - (this.y - 16);
+    return dx * dx + dy * dy <= 256;
+  }
+
   /** 随机游走（自主行为） */
   wander(bounds: { minX: number; maxX: number; minY: number; maxY: number }): void {
     const padding = 48;
@@ -95,6 +103,9 @@ export class AgentEntity {
       this.y = this.targetY;
       this.state = 'idle';
       this.frame = 0;
+
+      // 自己 Agent 不自动游走
+      if (this.isSelf) return;
 
       // 自主游走计时
       this.wanderTimer++;
