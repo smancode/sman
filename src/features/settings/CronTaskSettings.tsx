@@ -371,10 +371,25 @@ export function CronTaskSettings() {
           </div>
         )}
         {!loading && [...tasks].sort((a, b) => {
-          // 按 workspace 分组，同一 workspace 内 scan 排前
-          const wsComp = a.workspace.localeCompare(b.workspace);
-          if (wsComp !== 0) return wsComp;
-          if (a.source !== b.source) return a.source === 'scan' ? -1 : 1;
+          // 解析 crontab 字段: 分 时 日 月 周
+          const parseCron = (expr: string) => {
+            const parts = expr.trim().split(/\s+/);
+            return {
+              minute: parts[0] === '*' ? 60 : parseInt(parts[0], 10),
+              hour: parts[1] === '*' ? 24 : parseInt(parts[1], 10),
+              day: parts[2] === '*' ? 32 : parseInt(parts[2], 10),
+              month: parts[3] === '*' ? 13 : parseInt(parts[3], 10),
+              dow: parts[4] === '*' ? 7 : parseInt(parts[4], 10),
+            };
+          };
+          const ca = parseCron(a.cronExpression);
+          const cb = parseCron(b.cronExpression);
+          // 排序: 小时 → 分钟 → 月 → 日 → 周
+          if (ca.hour !== cb.hour) return ca.hour - cb.hour;
+          if (ca.minute !== cb.minute) return ca.minute - cb.minute;
+          if (ca.month !== cb.month) return ca.month - cb.month;
+          if (ca.day !== cb.day) return ca.day - cb.day;
+          if (ca.dow !== cb.dow) return ca.dow - cb.dow;
           return 0;
         }).map((task) => (
           <TaskItem

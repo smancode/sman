@@ -9,7 +9,7 @@ const TS = DESIGN.TILE_SIZE;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 // 程序化生成 Agent 精灵到离屏 Canvas
-export function createAgentSprite(facing: Facing, frame: number, shirtColor = AGENT_COLORS.shirt): OffscreenCanvas {
+export function createAgentSprite(facing: Facing, frame: number, shirtColor: string = AGENT_COLORS.shirt): OffscreenCanvas {
   const w = DESIGN.AGENT_W;
   const h = DESIGN.AGENT_H;
   const canvas = new OffscreenCanvas(w, h);
