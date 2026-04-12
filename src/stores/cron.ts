@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
+import { cronCache } from '@/lib/cron-cache';
 import type { CronTask, CronRun, CronSkill } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
@@ -121,11 +122,26 @@ export const useCronStore = create<CronState>((storeSet) => {
       const client = getWsClient();
       if (!client) return;
 
-      set({ loading: true, error: null });
+      // Read from cache: memory first, then IndexedDB
+      let cached = cronCache.get();
+      if (!cached) {
+        cached = await cronCache.getAsync();
+      }
+
+      if (cached && cached.length > 0) {
+        // Show cached data immediately
+        set({ tasks: cached, loading: false, error: null });
+      } else {
+        set({ loading: true, error: null });
+      }
+
+      // Always sync from backend
       return new Promise<void>((resolve) => {
         const unsub = wrapHandler(client, 'cron.list', (data) => {
           unsub();
-          set({ tasks: data.tasks as CronTask[], loading: false });
+          const tasks = data.tasks as CronTask[];
+          cronCache.set(tasks);
+          set({ tasks, loading: false });
           resolve();
         });
         client.send({ type: 'cron.list' });
@@ -283,3 +299,10 @@ function registerPushListeners() {
 }
 
 registerPushListeners();
+
+// Auto-sync cache whenever tasks change
+useCronStore.subscribe((state) => {
+  if (state.tasks.length > 0) {
+    cronCache.set(state.tasks);
+  }
+});

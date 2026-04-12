@@ -2,6 +2,8 @@
  * Session Message Cache
  *
  * Two-layer cache: in-memory Map (sync) + IndexedDB (persistent).
+ * Keys are namespaced by backend URL so switching backends doesn't mix data.
+ *
  * - set() writes to both layers (DB write is async, non-blocking).
  * - get() reads from memory (sync, used by existing callers).
  * - getAsync() reads from memory then falls back to IndexedDB.
@@ -26,12 +28,17 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
+function getBackendKey(): string {
+  if (typeof window === 'undefined') return '_local';
+  return localStorage.getItem('sman-backend-url') || '_local';
+}
+
 /** Fire-and-forget write to IndexedDB */
-async function dbPut(sessionId: string, messages: unknown[]): Promise<void> {
+async function dbPut(key: string, messages: unknown[]): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(messages, sessionId);
+    tx.objectStore(STORE_NAME).put(messages, key);
     tx.oncomplete = () => db.close();
     tx.onerror = () => db.close();
   } catch (e) {
@@ -40,11 +47,11 @@ async function dbPut(sessionId: string, messages: unknown[]): Promise<void> {
 }
 
 /** Fire-and-forget delete from IndexedDB */
-async function dbDelete(sessionId: string): Promise<void> {
+async function dbDelete(key: string): Promise<void> {
   try {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).delete(sessionId);
+    tx.objectStore(STORE_NAME).delete(key);
     tx.oncomplete = () => db.close();
     tx.onerror = () => db.close();
   } catch (e) {
@@ -55,12 +62,20 @@ async function dbDelete(sessionId: string): Promise<void> {
 class SessionCache {
   private cache = new Map<string, unknown[]>();
   private dbReady: Promise<void> | null = null;
+  private loadedBackend: string | null = null;
 
-  /** Load all cached sessions from IndexedDB into memory (call once on startup) */
+  /** Get namespaced key for current backend */
+  private nk(sessionId: string): string {
+    return `${getBackendKey()}:${sessionId}`;
+  }
+
+  /** Load all cached sessions for current backend from IndexedDB into memory (call once on startup) */
   async loadAll(): Promise<void> {
     if (this.dbReady) return this.dbReady;
     this.dbReady = (async () => {
       try {
+        const backend = getBackendKey();
+        this.loadedBackend = backend;
         const db = await openDB();
         const tx = db.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
@@ -72,9 +87,10 @@ class SessionCache {
         });
         const keys = keysReq.result as string[];
         const values = req.result as unknown[][];
+        const prefix = `${backend}:`;
         for (let i = 0; i < keys.length; i++) {
-          // Only load into memory if not already present (memory is fresher)
-          if (!this.cache.has(keys[i])) {
+          // Only load entries for current backend, and only if not already in memory
+          if (keys[i].startsWith(prefix) && !this.cache.has(keys[i])) {
             this.cache.set(keys[i], values[i]);
           }
         }
@@ -87,24 +103,25 @@ class SessionCache {
   }
 
   get(sessionId: string): unknown[] | null {
-    return this.cache.get(sessionId) ?? null;
+    return this.cache.get(this.nk(sessionId)) ?? null;
   }
 
   /** Async get — falls back to IndexedDB if memory miss */
   async getAsync(sessionId: string): Promise<unknown[] | null> {
-    const mem = this.cache.get(sessionId);
+    const key = this.nk(sessionId);
+    const mem = this.cache.get(key);
     if (mem) return mem;
     try {
       const db = await openDB();
       const tx = db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).get(sessionId);
+      const req = tx.objectStore(STORE_NAME).get(key);
       const result = await new Promise<unknown[] | null>((resolve) => {
         req.onsuccess = () => resolve(req.result ?? null);
         req.onerror = () => resolve(null);
       });
       db.close();
       if (result) {
-        this.cache.set(sessionId, result);
+        this.cache.set(key, result);
       }
       return result;
     } catch {
@@ -113,17 +130,19 @@ class SessionCache {
   }
 
   set(sessionId: string, messages: unknown[]): void {
-    this.cache.set(sessionId, [...messages]);
-    dbPut(sessionId, messages);
+    const key = this.nk(sessionId);
+    this.cache.set(key, [...messages]);
+    dbPut(key, messages);
   }
 
   has(sessionId: string): boolean {
-    return this.cache.has(sessionId);
+    return this.cache.has(this.nk(sessionId));
   }
 
   invalidate(sessionId: string): void {
-    this.cache.delete(sessionId);
-    dbDelete(sessionId);
+    const key = this.nk(sessionId);
+    this.cache.delete(key);
+    dbDelete(key);
   }
 
   clear(): void {
