@@ -6,6 +6,7 @@ import { AgentStore } from './agent-store.js';
 import { TaskStore } from './task-store.js';
 import { TaskEngine } from './task-engine.js';
 import { MessageRouter } from './message-router.js';
+import { WorldState } from './world-state.js';
 import { ReputationEngine } from './reputation.js';
 import { createLogger } from './utils/logger.js';
 import fs from 'fs';
@@ -39,7 +40,18 @@ const sendToAgent = (agentId: string, data: unknown) => {
 
 const reputationEngine = new ReputationEngine(store);
 const taskEngine = new TaskEngine(taskStore, store, connections, sendToAgent, reputationEngine);
-const router = new MessageRouter(store, taskEngine, connections);
+
+// 世界状态广播
+const broadcastAll = (data: unknown) => {
+  for (const [, ws] of connections) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(data));
+    }
+  }
+};
+
+const worldState = new WorldState(sendToAgent, broadcastAll);
+const router = new MessageRouter(store, taskEngine, connections, worldState);
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +86,8 @@ wss.on('connection', (ws) => {
       if (raw.type === 'agent.register' && raw.payload?.agentId) {
         agentId = raw.payload.agentId as string;
         connections.set(agentId, ws);
+        // 通知 WorldState 新 Agent 上线
+        worldState.handleAgentOnline(raw.payload.agentId as string);
       }
     } catch (err) {
       log.error('Failed to parse message', { error: String(err) });
@@ -83,6 +97,7 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     if (agentId) {
+      worldState.removeAgent(agentId);
       store.setAgentOffline(agentId);
       store.logAudit('agent.offline', agentId);
       connections.delete(agentId);
