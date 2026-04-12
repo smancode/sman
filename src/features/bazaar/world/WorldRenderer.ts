@@ -6,6 +6,7 @@ import { MAP_DATA, BUILDINGS } from './map-data';
 import { TileMap } from './TileMap';
 import { getAgentSprite, getBuildingSprite } from './SpriteSheet';
 import { AgentEntity } from './AgentEntity';
+import { CameraSystem } from './CameraSystem';
 
 const TS = DESIGN.TILE_SIZE;
 
@@ -17,9 +18,8 @@ export class WorldRenderer {
   private animFrameId: number = 0;
   private running = false;
 
-  // 相机（视口偏移）
-  private cameraX = 0;
-  private cameraY = 0;
+  // 相机系统（外部注入）
+  private camera: CameraSystem | null = null;
 
   // 碰撞边界（像素）
   private bounds = {
@@ -48,9 +48,10 @@ export class WorldRenderer {
     canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
 
-    // 居中相机
-    this.cameraX = (this.bounds.maxX - rect.width) / 2;
-    this.cameraY = (this.bounds.maxY - rect.height) / 2;
+    // 相机视口由外部 CameraSystem 管理（setCamera 须在 init 前调用）
+    if (this.camera) {
+      this.camera.setViewport(rect.width, rect.height);
+    }
   }
 
   start(): void {
@@ -82,10 +83,19 @@ export class WorldRenderer {
     return Array.from(this.agents.values());
   }
 
+  setCamera(camera: CameraSystem): void {
+    this.camera = camera;
+  }
+
+  getCamera(): CameraSystem | null {
+    return this.camera;
+  }
+
   private loop = (): void => {
-    if (!this.running || !this.ctx || !this.canvas) return;
+    if (!this.running || !this.ctx || !this.canvas || !this.camera) return;
 
     const rect = this.canvas.getBoundingClientRect();
+    const { x: cameraX, y: cameraY } = this.camera.getOffset();
 
     // 更新所有 Agent
     for (const agent of this.agents.values()) {
@@ -99,29 +109,29 @@ export class WorldRenderer {
     const groundCanvas = this.tileMap.render();
     this.ctx.drawImage(
       groundCanvas,
-      this.cameraX, this.cameraY, rect.width, rect.height,
+      cameraX, cameraY, rect.width, rect.height,
       0, 0, rect.width, rect.height,
     );
 
     // Layer 1: 建筑
-    this.renderBuildings();
+    this.renderBuildings(cameraX, cameraY);
 
     // Layer 2: Agent 精灵（按 Y 坐标排序，实现遮挡）
     const sortedAgents = Array.from(this.agents.values()).sort((a, b) => a.y - b.y);
     for (const agent of sortedAgents) {
-      this.renderAgent(agent);
+      this.renderAgent(agent, cameraX, cameraY);
     }
 
     this.animFrameId = requestAnimationFrame(this.loop);
   };
 
-  private renderBuildings(): void {
+  private renderBuildings(cameraX: number, cameraY: number): void {
     if (!this.ctx) return;
 
     for (const b of BUILDINGS) {
       const sprite = getBuildingSprite(b.type);
-      const x = b.col * TS - this.cameraX;
-      const y = b.row * TS - this.cameraY;
+      const x = b.col * TS - cameraX;
+      const y = b.row * TS - cameraY;
 
       this.ctx.drawImage(sprite, x, y);
 
@@ -139,11 +149,11 @@ export class WorldRenderer {
     }
   }
 
-  private renderAgent(agent: AgentEntity): void {
+  private renderAgent(agent: AgentEntity, cameraX: number, cameraY: number): void {
     if (!this.ctx) return;
 
-    const screenX = agent.x - this.cameraX;
-    const screenY = agent.y - this.cameraY;
+    const screenX = agent.x - cameraX;
+    const screenY = agent.y - cameraY;
 
     // 精灵
     const sprite = getAgentSprite(agent.facing, agent.frame, agent.shirtColor);
@@ -178,6 +188,13 @@ export class WorldRenderer {
       this.ctx.font = '10px serif';
       this.ctx.fillText('💬', screenX + 14, screenY - DESIGN.AGENT_H - 2);
     }
+  }
+
+  /** 屏幕坐标 → 世界坐标 */
+  screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
+    if (!this.camera) return { x: screenX, y: screenY };
+    const { x, y } = this.camera.getOffset();
+    return { x: screenX + x, y: screenY + y };
   }
 
   destroy(): void {
