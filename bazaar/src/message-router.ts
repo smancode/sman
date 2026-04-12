@@ -3,6 +3,7 @@ import type WebSocket from 'ws';
 import { validateMessage } from './protocol.js';
 import type { AgentStore } from './agent-store.js';
 import type { TaskEngine } from './task-engine.js';
+import type { WorldState } from './world-state.js';
 import { createLogger, type Logger } from './utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,11 +19,13 @@ export class MessageRouter {
   private log: Logger;
   private store: AgentStore;
   private taskEngine: TaskEngine | null;
+  private worldState: WorldState | null;
   private connections: Map<string, WebSocket>;
 
-  constructor(store: AgentStore, taskEngine?: TaskEngine, connections?: Map<string, WebSocket>) {
+  constructor(store: AgentStore, taskEngine?: TaskEngine, connections?: Map<string, WebSocket>, worldState?: WorldState) {
     this.store = store;
     this.taskEngine = taskEngine ?? null;
+    this.worldState = worldState ?? null;
     this.connections = connections ?? new Map();
     this.log = createLogger('MessageRouter');
   }
@@ -61,6 +64,8 @@ export class MessageRouter {
         return this.handleOffline(payload, send);
       } else if (type.startsWith('task.')) {
         return this.handleTaskMessage(type, payload, ws, send);
+      } else if (type.startsWith('world.')) {
+        return this.handleWorldMessage(type, payload, ws);
       } else {
         this.log.warn(`Unhandled message type: ${type}`);
         return { handled: true }; // 已知类型但当前 phase 未实现
@@ -223,6 +228,29 @@ export class MessageRouter {
       return { handled: true };
     } else if (type === 'task.cancel') {
       this.taskEngine.handleTaskCancel(msg, fromAgentId);
+      return { handled: true };
+    }
+
+    return { handled: true };
+  }
+
+  private handleWorldMessage(type: string, payload: Record<string, unknown>, ws: WebSocket): RouteResult {
+    if (!this.worldState) {
+      this.log.warn('WorldState not initialized, ignoring world message');
+      return { handled: false, error: 'WorldState not available' };
+    }
+
+    const agentId = wsToAgent.get(ws);
+    if (!agentId) return { handled: false, error: 'Agent not registered' };
+
+    if (type === 'world.move') {
+      this.worldState.handleMove(
+        agentId,
+        payload.x as number,
+        payload.y as number,
+        (payload.state as string) ?? 'walking',
+        (payload.facing as string) ?? 'down',
+      );
       return { handled: true };
     }
 
