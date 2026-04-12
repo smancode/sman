@@ -11,6 +11,7 @@ import { TaskNotify } from './TaskNotify';
 import { OnboardingGuide } from './OnboardingGuide';
 import { WorldCanvas } from './world/WorldCanvas';
 import { WorldRenderer } from './world/WorldRenderer';
+import type { ActivePanel } from './world/types';
 import { ArrowLeft, Globe, LayoutDashboard, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ export function BazaarPage() {
   const { connection, fetchTasks, fetchOnlineAgents, fetchLeaderboard, loading } = useBazaarStore();
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('world');
+  const [activePanel, setActivePanel] = useState<ActivePanel>('leaderboard');
 
   useEffect(() => {
     fetchTasks();
@@ -35,7 +37,7 @@ export function BazaarPage() {
       <div className="flex flex-col h-full relative">
         {/* 像素世界预览（即使未连接也显示） */}
         <div className="flex-1 relative">
-          <WorldCanvas rendererRef={rendererRef} />
+          <WorldCanvas rendererRef={rendererRef} onPanelChange={(panel) => setActivePanel(panel)} />
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 gap-4 text-white">
             <p className="text-lg font-medium">未连接到集市服务器</p>
             <p className="text-sm text-white/70">请在「设置」中配置集市服务器地址</p>
@@ -94,16 +96,20 @@ export function BazaarPage() {
         <div className="flex-1 flex overflow-hidden">
           {/* 左：像素世界 */}
           <div className="w-[60%] border-r">
-            <WorldCanvas rendererRef={rendererRef} />
+            <WorldCanvas
+              rendererRef={rendererRef}
+              onPanelChange={(panel) => setActivePanel(panel)}
+              onAgentClick={(agent) => { /* TODO: show agent info toast */ }}
+            />
           </div>
 
           {/* 右：信息面板 */}
           <div className="w-[40%] flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <LeaderboardPanel />
-              <TaskPanel />
-              <CollaborationChat />
-              <OnlineAgents />
+              {activePanel === 'leaderboard' && <LeaderboardPanel />}
+              {activePanel === 'tasks' && <TaskPanel />}
+              {activePanel === 'chat' && <CollaborationChat />}
+              {activePanel === 'agents' && <OnlineAgents />}
             </div>
             <ControlBar />
           </div>

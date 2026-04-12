@@ -1,55 +1,93 @@
 // src/features/bazaar/world/WorldCanvas.tsx
-// Canvas 容器组件 — 初始化渲染引擎 + 动画循环
+// Canvas 容器组件 — 交互管道 + 数据同步 + 事件绑定
 
 import { useEffect, useRef, useCallback } from 'react';
 import { WorldRenderer } from './WorldRenderer';
-import { AgentEntity } from './AgentEntity';
+import { CameraSystem } from './CameraSystem';
+import { InputPipeline } from './InputPipeline';
+import { InteractionSystem } from './InteractionSystem';
+import { WorldSync } from './WorldSync';
+import { BuildingRegistry } from './BuildingRegistry';
+import { BUILDINGS } from './map-data';
 import { DESIGN } from './palette';
+import { useBazaarStore } from '@/stores/bazaar';
+import type { ActivePanel } from './types';
 
 interface WorldCanvasProps {
   rendererRef: React.MutableRefObject<WorldRenderer | null>;
+  onPanelChange?: (panel: ActivePanel) => void;
+  onAgentClick?: (agent: { id: string; name: string; avatar: string; reputation: number }) => void;
 }
 
-export function WorldCanvas({ rendererRef }: WorldCanvasProps) {
+export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const rect = canvas.getBoundingClientRect();
     const renderer = new WorldRenderer();
+    const camera = new CameraSystem(DESIGN.MAP_COLS * DESIGN.TILE_SIZE, DESIGN.MAP_ROWS * DESIGN.TILE_SIZE);
+    camera.setViewport(rect.width, rect.height);
+
+    const sync = new WorldSync(renderer, useBazaarStore);
+    const pipeline = new InputPipeline(renderer, camera, (wx, wy) => sync.moveSelfAgent(wx, wy));
+    const registry = new BuildingRegistry();
+    const interaction = new InteractionSystem(BUILDINGS, registry);
+
+    // Register handlers in priority order
+    pipeline.register((worldX, worldY) => {
+      const hit = interaction.hitTestBuildings(worldX, worldY);
+      if (hit && hit.type === 'building') {
+        const building = hit.target as typeof BUILDINGS[number];
+        const action = interaction.handleBuildingClick(building);
+        if (action) onPanelChange?.(action.panel);
+        return hit;
+      }
+      return null;
+    });
+
+    pipeline.register((worldX, worldY) => {
+      const hit = interaction.hitTestAgents(worldX, worldY, renderer.getAllAgents());
+      if (hit && hit.type === 'agent') {
+        const agent = hit.target as import('./AgentEntity').AgentEntity;
+        onAgentClick?.({ id: agent.id, name: agent.name, avatar: agent.avatar, reputation: agent.reputation });
+        return hit;
+      }
+      return null;
+    });
+
+    renderer.setCamera(camera);
     renderer.init(canvas);
     rendererRef.current = renderer;
-
-    // 添加示例 Agent（模拟在线 Agent）
-    const demoAgents: Array<{ name: string; avatar: string; x: number; y: number; color: string }> = [
-      { name: '张三', avatar: '🧙', x: 300, y: 350, color: '#41a6f6' },
-      { name: '小李', avatar: '🧑‍💻', x: 500, y: 280, color: '#38b764' },
-      { name: '老王', avatar: '🧑‍🎓', x: 200, y: 200, color: '#ef7d57' },
-      { name: '小陈', avatar: '🦊', x: 800, y: 400, color: '#b13e53' },
-      { name: '阿花', avatar: '🐱', x: 600, y: 500, color: '#ffcd75' },
-    ];
-
-    for (const a of demoAgents) {
-      const entity = new AgentEntity({
-        id: `demo-${a.name}`,
-        name: a.name,
-        avatar: a.avatar,
-        reputation: Math.random() * 50,
-        x: a.x,
-        y: a.y,
-        shirtColor: a.color,
-      });
-      renderer.addAgent(entity);
-    }
-
     renderer.start();
 
+    // Canvas events
+    canvas.addEventListener('mousedown', pipeline.onMouseDown);
+    canvas.addEventListener('mousemove', pipeline.onMouseMove);
+    canvas.addEventListener('mouseup', pipeline.onMouseUp);
+
+    // Store → renderer sync
+    const unsub = useBazaarStore.subscribe(() => sync.syncAgents());
+    sync.syncAgents();
+
+    // Init self agent
+    const identity = useBazaarStore.getState().connection;
+    if (identity.connected && identity.agentId) {
+      sync.initSelfAgent(identity.agentId, identity.agentName ?? '我', '🧙');
+    }
+
     return () => {
+      unsub();
       renderer.destroy();
       rendererRef.current = null;
+      canvas.removeEventListener('mousedown', pipeline.onMouseDown);
+      canvas.removeEventListener('mousemove', pipeline.onMouseMove);
+      canvas.removeEventListener('mouseup', pipeline.onMouseUp);
     };
-  }, [rendererRef]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current;
@@ -65,6 +103,7 @@ export function WorldCanvas({ rendererRef }: WorldCanvasProps) {
       ctx.scale(dpr, dpr);
       ctx.imageSmoothingEnabled = false;
     }
+    renderer.getCamera()?.setViewport(rect.width, rect.height);
   }, [rendererRef]);
 
   useEffect(() => {
