@@ -9,13 +9,10 @@ import type { BazaarAgentInfo, WorldAgentPosition } from '@/types/bazaar';
 
 const TS = DESIGN.TILE_SIZE;
 
-const AGENT_COLORS = ['#41a6f6', '#38b764', '#ef7d57', '#b13e53', '#ffcd75', '#a7f070', '#73eff7'];
-
 export class WorldSync {
   private renderer: WorldRenderer;
   private store: typeof useBazaarStore;
   private selfAgentId: string | null = null;
-  private colorIndex = 0;
 
   constructor(renderer: WorldRenderer, store: typeof useBazaarStore) {
     this.renderer = renderer;
@@ -87,7 +84,6 @@ export class WorldSync {
       reputation: agent.reputation,
       x: worldPos?.x ?? 20 * TS,
       y: worldPos?.y ?? 12 * TS,
-      shirtColor: AGENT_COLORS[this.colorIndex++ % AGENT_COLORS.length],
     });
     this.renderer.addAgent(entity);
   }
