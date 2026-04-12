@@ -63,28 +63,30 @@ export interface BuildingData {
   col: number; // 瓦片坐标
   row: number;
   label: string;
+  width: number;
+  height: number;
 }
 
 export const BUILDINGS: BuildingData[] = [
   // 摆摊区（左上，6 个摊位）
-  { id: 'stall-1', type: 'stall', col: 2, row: 1, label: '摊位' },
-  { id: 'stall-2', type: 'stall', col: 7, row: 1, label: '摊位' },
-  { id: 'stall-3', type: 'stall', col: 12, row: 1, label: '摊位' },
-  { id: 'stall-4', type: 'stall', col: 2, row: 4, label: '摊位' },
-  { id: 'stall-5', type: 'stall', col: 7, row: 4, label: '摊位' },
-  { id: 'stall-6', type: 'stall', col: 12, row: 4, label: '摊位' },
+  { id: 'stall-1', type: 'stall', col: 2, row: 1, label: '摊位', width: 64, height: 64 },
+  { id: 'stall-2', type: 'stall', col: 7, row: 1, label: '摊位', width: 64, height: 64 },
+  { id: 'stall-3', type: 'stall', col: 12, row: 1, label: '摊位', width: 64, height: 64 },
+  { id: 'stall-4', type: 'stall', col: 2, row: 4, label: '摊位', width: 64, height: 64 },
+  { id: 'stall-5', type: 'stall', col: 7, row: 4, label: '摊位', width: 64, height: 64 },
+  { id: 'stall-6', type: 'stall', col: 12, row: 4, label: '摊位', width: 64, height: 64 },
 
   // 声望榜（右上）
-  { id: 'reputation', type: 'reputation', col: 33, row: 1, label: '🏆 声望榜' },
+  { id: 'reputation', type: 'reputation', col: 33, row: 1, label: '🏆 声望榜', width: 96, height: 96 },
 
   // 悬赏板（左下）
-  { id: 'bounty', type: 'bounty', col: 3, row: 19, label: '📋 悬赏板' },
+  { id: 'bounty', type: 'bounty', col: 3, row: 19, label: '📋 悬赏板', width: 96, height: 96 },
 
   // 搜索站（右下）
-  { id: 'search', type: 'search', col: 33, row: 19, label: '🔍 搜索站' },
+  { id: 'search', type: 'search', col: 33, row: 19, label: '🔍 搜索站', width: 64, height: 64 },
 
   // 工坊（右下角）
-  { id: 'workshop', type: 'workshop', col: 33, row: 23, label: '🔧 工坊' },
+  { id: 'workshop', type: 'workshop', col: 33, row: 23, label: '🔧 工坊', width: 64, height: 64 },
 ];
 
 export function getMapPixelSize() {
