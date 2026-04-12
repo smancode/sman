@@ -11,6 +11,7 @@ import type {
   BazaarNotification,
   BazaarTaskChat,
   BazaarLeaderboardEntry,
+  WorldAgentPosition,
 } from '@/types/bazaar';
 
 function getWsClient() {
@@ -33,6 +34,8 @@ interface BazaarState {
   digest: BazaarDigest | null;
   loading: boolean;
   error: string | null;
+  worldPositions: Map<string, WorldAgentPosition>;
+  sendWorldMove: (x: number, y: number, state: string, facing: string) => void;
 
   // Actions
   fetchTasks: () => void;
@@ -50,12 +53,14 @@ interface BazaarState {
 }
 
 let set: (partial: Partial<BazaarState> | ((state: BazaarState) => Partial<BazaarState>)) => void;
+let get: () => BazaarState;
 
 // 存储 notify 模式的倒计时 timer，key = notificationId
 const countdownTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export const useBazaarStore = create<BazaarState>((storeSet) => {
+export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
   set = storeSet;
+  get = storeGet;
 
   return {
     connection: {
@@ -71,6 +76,7 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
     digest: null,
     loading: false,
     error: null,
+    worldPositions: new Map(),
 
     fetchTasks: () => {
       const client = getWsClient();
@@ -113,6 +119,12 @@ export const useBazaarStore = create<BazaarState>((storeSet) => {
     },
 
     clearError: () => set({ error: null }),
+
+    sendWorldMove: (x: number, y: number, state: string, facing: string) => {
+      const client = getWsClient();
+      if (!client) return;
+      client.send({ type: 'bazaar.world.move', payload: { x, y, state, facing } });
+    },
 
     acceptTask: (taskId: string) => {
       const client = getWsClient();
@@ -248,6 +260,26 @@ function registerPushListeners() {
       }
     } else if (type === 'bazaar.digest') {
       set({ digest: msg as unknown as BazaarDigest });
+    } else if (type === 'bazaar.world.agent_update') {
+      const positions = new Map<string, WorldAgentPosition>(get().worldPositions);
+      positions.set(msg.agentId as string, {
+        agentId: msg.agentId as string,
+        x: msg.x as number,
+        y: msg.y as number,
+        state: msg.state as 'idle' | 'walking' | 'busy',
+        facing: msg.facing as 'up' | 'down' | 'left' | 'right',
+      });
+      set({ worldPositions: positions });
+    } else if (type === 'bazaar.world.zone_snapshot') {
+      const positions = new Map<string, WorldAgentPosition>();
+      for (const a of (msg.agents as WorldAgentPosition[])) {
+        positions.set(a.agentId, a);
+      }
+      set({ worldPositions: positions });
+    } else if (type === 'bazaar.world.agent_leave') {
+      const positions = new Map<string, WorldAgentPosition>(get().worldPositions);
+      positions.delete(msg.agentId as string);
+      set({ worldPositions: positions });
     }
   };
 

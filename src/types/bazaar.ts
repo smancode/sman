@@ -80,3 +80,11 @@ export interface BazaarConnectionStatus {
   activeSlots: number;
   maxSlots: number;
 }
+
+export interface WorldAgentPosition {
+  agentId: string;
+  x: number;
+  y: number;
+  state: 'idle' | 'walking' | 'busy';
+  facing: 'up' | 'down' | 'left' | 'right';
+}
