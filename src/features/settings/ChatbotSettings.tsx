@@ -11,7 +11,7 @@ import { useWsConnection } from '@/stores/ws-connection';
 
 type WeixinConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected';
 
-export function ChatbotSettings() {
+export function ChatbotSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateChatbot, clearError } = useSettingsStore();
   const [showWecomSecret, setShowWecomSecret] = useState(false);
   const [showFeishuSecret, setShowFeishuSecret] = useState(false);
@@ -158,7 +158,7 @@ export function ChatbotSettings() {
   };
 
   return (
-    <Card>
+    <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5" />

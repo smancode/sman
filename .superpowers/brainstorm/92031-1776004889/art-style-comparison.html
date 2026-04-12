@@ -1,0 +1,730 @@
+<h2>像素世界美术风格对比</h2>
+<p class="subtitle">四种风格的 Agent 小人 + 建筑 + 地面效果对比，点击选择你喜欢的</p>
+
+<style>
+  .style-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .style-card {
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .style-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .style-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .style-card h3 { margin: 0 0 4px 0; }
+  .style-card .desc { font-size: 0.85em; color: var(--muted); margin-bottom: 12px; }
+  .canvas-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 8px; }
+  .canvas-row canvas { image-rendering: pixelated; border: 1px solid var(--border); border-radius: 4px; }
+  .canvas-label { font-size: 0.75em; color: var(--muted); text-align: center; }
+</style>
+
+<div class="style-grid">
+
+  <!-- Style A: Stardew Valley -->
+  <div class="style-card" data-choice="stardew" onclick="toggleSelect(this)">
+    <h3>🌾 A. Stardew Valley 风</h3>
+    <p class="desc">温暖细腻可爱，暖色调，像牧场物语</p>
+    <div class="canvas-row">
+      <div><canvas id="stardew-agent" width="64" height="96"></canvas><div class="canvas-label">角色 32x48</div></div>
+      <div><canvas id="stardew-building" width="128" height="128"></canvas><div class="canvas-label">摊位 64x64</div></div>
+      <div><canvas id="stardew-ground" width="96" height="96"></canvas><div class="canvas-label">地面 3x3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="stardew-walk1" width="64" height="96"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="stardew-walk2" width="64" height="96"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="stardew-walk3" width="64" height="96"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+  </div>
+
+  <!-- Style B: Celeste -->
+  <div class="style-card" data-choice="celeste" onclick="toggleSelect(this)">
+    <h3>🏔️ B. Celeste / 马里奥风</h3>
+    <p class="desc">干净利落，色彩鲜明，有动感</p>
+    <div class="canvas-row">
+      <div><canvas id="celeste-agent" width="64" height="96"></canvas><div class="canvas-label">角色 32x48</div></div>
+      <div><canvas id="celeste-building" width="128" height="128"></canvas><div class="canvas-label">摊位 64x64</div></div>
+      <div><canvas id="celeste-ground" width="96" height="96"></canvas><div class="canvas-label">地面 3x3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="celeste-walk1" width="64" height="96"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="celeste-walk2" width="64" height="96"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="celeste-walk3" width="64" height="96"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+  </div>
+
+  <!-- Style C: Undertale -->
+  <div class="style-card" data-choice="undertale" onclick="toggleSelect(this)">
+    <h3>💀 C. Undertale / RPG Maker 风</h3>
+    <p class="desc">极简但有灵魂，表情夸张，独特</p>
+    <div class="canvas-row">
+      <div><canvas id="undertale-agent" width="64" height="96"></canvas><div class="canvas-label">角色 32x48</div></div>
+      <div><canvas id="undertale-building" width="128" height="128"></canvas><div class="canvas-label">摊位 64x64</div></div>
+      <div><canvas id="undertale-ground" width="96" height="96"></canvas><div class="canvas-label">地面 3x3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="undertale-walk1" width="64" height="96"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="undertale-walk2" width="64" height="96"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="undertale-walk3" width="64" height="96"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+  </div>
+
+  <!-- Style D: Cyberpunk -->
+  <div class="style-card" data-choice="cyberpunk" onclick="toggleSelect(this)">
+    <h3>🌃 D. 赛博朋克像素风</h3>
+    <p class="desc">暗色+霓虹发光，炫酷未来感</p>
+    <div class="canvas-row">
+      <div><canvas id="cyber-agent" width="64" height="96"></canvas><div class="canvas-label">角色 32x48</div></div>
+      <div><canvas id="cyber-building" width="128" height="128"></canvas><div class="canvas-label">摊位 64x64</div></div>
+      <div><canvas id="cyber-ground" width="96" height="96"></canvas><div class="canvas-label">地面 3x3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="cyber-walk1" width="64" height="96"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="cyber-walk2" width="64" height="96"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="cyber-walk3" width="64" height="96"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Helper: draw pixel at 2x scale
+function px(ctx, x, y, color, s=2) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x*s, y*s, s, s);
+}
+
+// Helper: draw pixel row
+function pxRow(ctx, y, startX, colors, s=2) {
+  colors.forEach((c, i) => {
+    if (c) px(ctx, startX + i, y, c, s);
+  });
+}
+
+// ====== STYLE A: STARDEW VALLEY ======
+function drawStardewAgent(canvasId, frame=0) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 96);
+  ctx.imageSmoothingEnabled = false;
+
+  const hair = '#8B4513';
+  const skin = '#FFDAB9';
+  const eye = '#2C1810';
+  const shirt = '#5B9BD5';
+  const shirtDark = '#4A8AC4';
+  const pants = '#6B5B4F';
+  const shoes = '#4A3728';
+  const outline = '#3E2723';
+
+  // Head with rounder shape
+  // Hair top
+  pxRow(ctx, 2, 5, [0,0,hair,hair,hair,hair,0,0]);
+  pxRow(ctx, 3, 5, [0,hair,hair,hair,hair,hair,hair,0]);
+  pxRow(ctx, 4, 4, [0,hair,hair,hair,hair,hair,hair,hair,0]);
+  // Face
+  pxRow(ctx, 5, 5, [0,hair,skin,skin,skin,skin,hair,0]);
+  pxRow(ctx, 6, 5, [0,hair,skin,eye,skin,eye,hair,0]);
+  pxRow(ctx, 7, 5, [0,0,skin,skin,skin,skin,0,0]);
+  pxRow(ctx, 8, 5, [0,0,skin,'FFB6C1',skin,skin,0,0]); // blush
+
+  // Body (shirt with collar detail)
+  pxRow(ctx, 9, 5, [0,0,outline,outline,outline,outline,0,0]); // collar
+  pxRow(ctx, 10, 4, [0,outline,shirt,shirt,shirt,shirt,outline,0,0]);
+  pxRow(ctx, 11, 4, [0,shirt,shirt,shirt,shirt,shirt,shirt,0,0]);
+  pxRow(ctx, 12, 4, [0,shirt,shirtDark,shirt,shirt,shirtDark,shirt,0,0]); // pocket detail
+  pxRow(ctx, 13, 4, [0,shirt,shirt,shirt,shirt,shirt,shirt,0,0]);
+  pxRow(ctx, 14, 4, [0,shirt,shirt,shirt,shirt,shirt,shirt,0,0]);
+
+  // Arms
+  const armOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 3, 11+armOff, skin);
+  px(ctx, 3, 12+armOff, skin);
+  px(ctx, 3, 13, skin);
+  px(ctx, 12, 11-armOff, skin);
+  px(ctx, 12, 12-armOff, skin);
+  px(ctx, 12, 13, skin);
+
+  // Pants
+  pxRow(ctx, 15, 5, [0,0,pants,pants,pants,pants,0,0]);
+  pxRow(ctx, 16, 5, [0,0,pants,0,0,pants,0,0]);
+  pxRow(ctx, 17, 5, [0,0,pants,0,0,pants,0,0]);
+
+  // Shoes
+  const legOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 5, 18+legOff, shoes);
+  px(ctx, 6, 18+legOff, shoes);
+  px(ctx, 9, 18-legOff, shoes);
+  px(ctx, 10, 18-legOff, shoes);
+}
+
+function drawStardewBuilding(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Awning with stripes
+  for (let i = 0; i < 32; i++) {
+    for (let j = 0; j < 5; j++) {
+      px(ctx, i, j, (i+j) % 4 < 2 ? '#E85D4A' : '#F4A460', s);
+    }
+  }
+  // Awning scalloped edge
+  for (let i = 0; i < 32; i += 4) {
+    px(ctx, i, 5, '#D44E3C', s);
+    px(ctx, i+1, 5, '#D44E3C', s);
+    px(ctx, i+2, 6, '#D44E3C', s);
+    px(ctx, i+3, 6, '#D44E3C', s);
+  }
+
+  // Counter
+  for (let j = 10; j < 18; j++) {
+    for (let i = 2; i < 30; i++) {
+      const wood = j < 12 ? '#B8860B' : '#A0762C';
+      px(ctx, i, j, wood, s);
+    }
+  }
+  // Counter top highlight
+  for (let i = 2; i < 30; i++) {
+    px(ctx, i, 10, '#CD9B4A', s);
+  }
+
+  // Goods on counter (fruits, jars)
+  px(ctx, 6, 9, '#FF6B6B', s); // apple
+  px(ctx, 7, 9, '#FF6B6B', s);
+  px(ctx, 6, 8, '#4CAF50', s); // leaf
+  px(ctx, 10, 8, '#FFB74D', s); // jar
+  px(ctx, 11, 8, '#FFB74D', s);
+  px(ctx, 10, 9, '#E6A23C', s);
+  px(ctx, 11, 9, '#E6A23C', s);
+  px(ctx, 15, 9, '#81C784', s); // veggie
+  px(ctx, 16, 9, '#66BB6A', s);
+  px(ctx, 15, 8, '#A5D6A7', s);
+
+  // Legs
+  for (let j = 18; j < 22; j++) {
+    px(ctx, 4, j, '#8B6914', s);
+    px(ctx, 5, j, '#8B6914', s);
+    px(ctx, 26, j, '#8B6914', s);
+    px(ctx, 27, j, '#8B6914', s);
+  }
+
+  // Sign
+  px(ctx, 13, 22, '#8B4513', s);
+  px(ctx, 14, 22, '#FFD700', s);
+  px(ctx, 15, 22, '#FFD700', s);
+  px(ctx, 16, 22, '#FFD700', s);
+  px(ctx, 17, 22, '#8B4513', s);
+  // Hanging sign rope
+  px(ctx, 15, 7, '#8B6914', s);
+  px(ctx, 16, 8, '#8B6914', s);
+}
+
+function drawStardewGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 96, 96);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Rich grass with variations
+  const grassColors = ['#5D8C3E', '#4A7A2E', '#6B9D4E', '#528B38', '#7AAF5C'];
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const hash = ((x * 7 + y * 13) & 0xFF) / 255;
+      px(ctx, x, y, grassColors[Math.floor(hash * grassColors.length)], s);
+    }
+  }
+  // Flowers
+  const flowers = [
+    {x:5,y:8,c:'#FFB6C1'},{x:15,y:12,c:'#FFD700'},{x:25,y:6,c:'#87CEEB'},
+    {x:35,y:15,c:'#FF69B4'},{x:10,y:30,c:'#DDA0DD'},{x:30,y:35,c:'#FFB6C1'},
+    {x:40,y:10,c:'#FFD700'},{x:20,y:40,c:'#87CEEB'},
+  ];
+  flowers.forEach(f => {
+    px(ctx, f.x, f.y, f.c, s);
+    px(ctx, f.x+1, f.y, f.c, s);
+    px(ctx, f.x, f.y+1, '#228B22', s); // stem
+  });
+  // Small stones
+  px(ctx, 12, 20, '#A0A0A0', s);
+  px(ctx, 13, 20, '#909090', s);
+  px(ctx, 38, 28, '#A0A0A0', s);
+  // Tall grass tufts
+  [[8,18],[22,25],[36,18],[18,38]].forEach(([x,y]) => {
+    px(ctx, x, y, '#3D7A28', s);
+    px(ctx, x+1, y-1, '#3D7A28', s);
+    px(ctx, x+2, y, '#3D7A28', s);
+  });
+}
+
+// ====== STYLE B: CELESTE ======
+function drawCelesteAgent(canvasId, frame=0) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 96);
+  ctx.imageSmoothingEnabled = false;
+
+  const hair = '#4FC3F7';
+  const skin = '#FFE0BD';
+  const eye = '#1A1A2E';
+  const jacket = '#E85D75';
+  const jacketDark = '#C74B64';
+  const pants = '#2C3E50';
+  const boots = '#E85D75';
+  const outline = '#1A1A2E';
+
+  // Messy hair (bouncy)
+  const hairBounce = frame === 1 ? -1 : frame === 2 ? 1 : 0;
+  pxRow(ctx, 1+hairBounce, 5, [0,0,hair,hair,hair,hair,0,0]);
+  pxRow(ctx, 2+hairBounce, 4, [0,hair,hair,hair,hair,hair,hair,0]);
+  pxRow(ctx, 3+hairBounce, 4, [hair,0,hair,hair,hair,hair,0,hair]); // stray strands
+  // Face
+  pxRow(ctx, 4, 5, [0,outline,skin,skin,skin,skin,outline,0]);
+  pxRow(ctx, 5, 5, [0,skin,skin,eye,skin,eye,skin,0]);
+  pxRow(ctx, 6, 5, [0,outline,skin,skin,skin,skin,outline,0]);
+  pxRow(ctx, 7, 5, [0,0,skin,'FF6B8A',skin,skin,0,0]);
+
+  // Jacket (clean geometric)
+  pxRow(ctx, 8, 4, [0,outline,jacket,jacket,jacket,jacket,outline,0,0]);
+  pxRow(ctx, 9, 4, [0,jacket,jacket,jacket,jacket,jacket,jacket,0,0]);
+  pxRow(ctx, 10, 4, [0,jacket,jacketDark,jacket,jacket,jacketDark,jacket,0,0]);
+  pxRow(ctx, 11, 4, [0,jacket,jacket,jacket,jacket,jacket,jacket,0,0]);
+  pxRow(ctx, 12, 4, [0,outline,jacket,jacket,jacket,jacket,outline,0,0]);
+
+  // Arms (dynamic)
+  const aOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 3, 9+aOff, jacket);
+  px(ctx, 3, 10, skin);
+  px(ctx, 3, 11, skin);
+  px(ctx, 12, 9-aOff, jacket);
+  px(ctx, 12, 10, skin);
+  px(ctx, 12, 11, skin);
+
+  // Pants
+  pxRow(ctx, 13, 5, [0,0,pants,pants,pants,pants,0,0]);
+  pxRow(ctx, 14, 5, [0,0,pants,0,0,pants,0,0]);
+  pxRow(ctx, 15, 5, [0,0,pants,0,0,pants,0,0]);
+
+  // Boots
+  const bOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 5, 16+bOff, boots);
+  px(ctx, 6, 16+bOff, boots);
+  px(ctx, 9, 16-bOff, boots);
+  px(ctx, 10, 16-bOff, boots);
+}
+
+function drawCelesteBuilding(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Clean geometric stall with bold colors
+  // Roof (triangular)
+  for (let row = 0; row < 6; row++) {
+    for (let col = 6 - row; col < 26 + row; col++) {
+      px(ctx, col, row, row < 2 ? '#E85D75' : '#D14B64', s);
+    }
+  }
+  // Roof edge highlight
+  for (let i = 6; i < 26; i++) {
+    px(ctx, i, 0, '#FF8A9E', s);
+  }
+
+  // Counter body
+  for (let j = 10; j < 20; j++) {
+    for (let i = 3; i < 29; i++) {
+      px(ctx, i, j, j < 12 ? '#2C3E50' : '#34495E', s);
+    }
+  }
+  // Counter top stripe
+  for (let i = 3; i < 29; i++) {
+    px(ctx, i, 10, '#4FC3F7', s);
+  }
+
+  // Neon sign "SHOP"
+  const signLetters = [13,14, 15,16, 18,19, 21,22];
+  signLetters.forEach(x => {
+    px(ctx, x, 7, '#4FC3F7', s);
+    px(ctx, x, 8, '#4FC3F7', s);
+  });
+
+  // Pillars
+  for (let j = 10; j < 24; j++) {
+    px(ctx, 4, j, '#E85D75', s);
+    px(ctx, 5, j, '#E85D75', s);
+    px(ctx, 26, j, '#E85D75', s);
+    px(ctx, 27, j, '#E85D75', s);
+  }
+}
+
+function drawCelesteGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 96, 96);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Clean bold ground with geometric feel
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const hash = ((x * 3 + y * 7) & 0xFF) / 255;
+      px(ctx, x, y, hash < 0.5 ? '#4A8C5C' : hash < 0.8 ? '#3D7A4E' : '#5A9C6C', s);
+    }
+  }
+  // Clean geometric tufts
+  [[8,10],[20,20],[35,12],[15,35],[40,30]].forEach(([x,y]) => {
+    px(ctx, x, y, '#2D5A3A', s);
+    px(ctx, x+1, y-1, '#2D5A3A', s);
+    px(ctx, x+2, y-2, '#2D5A3A', s);
+  });
+  // Crystal/geometric accents
+  [[25,8,'#4FC3F7'],[10,25,'#81C784'],[38,38,'#FFD54F']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color, s);
+    px(ctx, x+1, y-1, color, s);
+    px(ctx, x-1, y-1, color, s);
+  });
+}
+
+// ====== STYLE C: UNDERTALE ======
+function drawUndertaleAgent(canvasId, frame=0) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 96);
+  ctx.imageSmoothingEnabled = false;
+
+  const body = '#FFFFFF';
+  const outline = '#000000';
+  const eye = '#000000';
+  const accent = '#FF0000';
+  const blue = '#4FC3F7';
+
+  // Simple round head, big eyes
+  pxRow(ctx, 3, 6, [0,0,outline,outline,outline,outline,0,0]);
+  pxRow(ctx, 4, 5, [0,outline,body,body,body,body,outline,0]);
+  pxRow(ctx, 5, 5, [0,outline,body,body,body,body,outline,0]);
+  pxRow(ctx, 6, 4, [outline,body,eye,eye,body,eye,eye,outline]); // big eyes!
+  pxRow(ctx, 7, 5, [0,outline,body,body,body,body,outline,0]);
+  pxRow(ctx, 8, 5, [0,0,outline,body,body,outline,0,0]); // small mouth
+
+  // Simple body (hoodie)
+  pxRow(ctx, 9, 5, [0,0,outline,outline,outline,outline,0,0]);
+  pxRow(ctx, 10, 4, [0,outline,blue,blue,blue,blue,outline,0,0]);
+  pxRow(ctx, 11, 4, [0,blue,blue,blue,blue,blue,blue,0,0]);
+  pxRow(ctx, 12, 4, [0,blue,blue,blue,blue,blue,blue,0,0]);
+  pxRow(ctx, 13, 4, [0,blue,blue,blue,blue,blue,blue,0,0]);
+  pxRow(ctx, 14, 4, [0,blue,blue,blue,blue,blue,blue,0,0]);
+
+  // Arms
+  const aOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 3, 11+aOff, outline);
+  px(ctx, 3, 12, outline);
+  px(ctx, 12, 11-aOff, outline);
+  px(ctx, 12, 12, outline);
+
+  // Legs
+  pxRow(ctx, 15, 5, [0,0,outline,0,0,outline,0,0]);
+  pxRow(ctx, 16, 5, [0,0,outline,0,0,outline,0,0]);
+  pxRow(ctx, 17, 5, [0,0,outline,0,0,outline,0,0]);
+
+  // Shoes (accent color!)
+  px(ctx, 5, 18+(frame===1?1:0), accent);
+  px(ctx, 6, 18+(frame===1?1:0), accent);
+  px(ctx, 9, 18+(frame===2?-1:0), accent);
+  px(ctx, 10, 18+(frame===2?-1:0), accent);
+
+  // Heart (soul indicator - very Undertale)
+  px(ctx, 7, 10, accent);
+  px(ctx, 8, 10, accent);
+  px(ctx, 6, 11, accent);
+  px(ctx, 7, 11, accent);
+  px(ctx, 8, 11, accent);
+  px(ctx, 9, 11, accent);
+  px(ctx, 7, 12, accent);
+  px(ctx, 8, 12, accent);
+}
+
+function drawUndertaleBuilding(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Very simple but charming - black outlines, minimal color
+  // Box shape
+  for (let j = 4; j < 24; j++) {
+    for (let i = 3; i < 29; i++) {
+      if (i === 3 || i === 28 || j === 4 || j === 23) {
+        px(ctx, i, j, '#000000', s);
+      } else if (j < 8) {
+        px(ctx, i, j, '#FFD700', s); // golden top
+      } else {
+        px(ctx, i, j, '#F5F5DC', s); // beige body
+      }
+    }
+  }
+
+  // Big friendly sign with pixel text
+  for (let i = 8; i < 24; i++) {
+    px(ctx, i, 8, '#000000', s);
+    px(ctx, i, 13, '#000000', s);
+  }
+  for (let j = 8; j < 14; j++) {
+    px(ctx, 8, j, '#000000', s);
+    px(ctx, 23, j, '#000000', s);
+  }
+  // "HI" text inside sign
+  px(ctx, 11, 9, '#000000', s);
+  px(ctx, 11, 10, '#000000', s);
+  px(ctx, 11, 11, '#000000', s);
+  px(ctx, 13, 10, '#000000', s);
+  px(ctx, 15, 9, '#000000', s);
+  px(ctx, 15, 10, '#000000', s);
+  px(ctx, 15, 11, '#000000', s);
+
+  // Stars decoration
+  [[6,2,'#FFD700'],[24,2,'#FFD700'],[15,1,'#FF6B6B']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color, s);
+    px(ctx, x+1, y, color, s);
+    px(ctx, x-1, y, color, s);
+    px(ctx, x, y-1, color, s);
+    px(ctx, x, y+1, color, s);
+  });
+
+  // Simple counter
+  for (let i = 5; i < 27; i++) {
+    px(ctx, i, 18, '#8B7355', s);
+    px(ctx, i, 19, '#6B5335', s);
+  }
+}
+
+function drawUndertaleGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 96, 96);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Simple black and white with sparse color accents
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const hash = ((x * 11 + y * 17) & 0xFF) / 255;
+      px(ctx, x, y, hash < 0.6 ? '#FFFFFF' : hash < 0.85 ? '#F0F0F0' : '#E0E0E0', s);
+    }
+  }
+  // Random dark spots
+  [[10,10],[30,15],[20,35],[5,40],[40,8]].forEach(([x,y]) => {
+    px(ctx, x, y, '#C0C0C0', s);
+  });
+  // Yellow flowers (the only color!)
+  [[8,15,'#FFD700'],[25,10,'#FFD700'],[35,30,'#FFD700'],[15,40,'#FFD700']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color, s);
+    px(ctx, x+1, y, color, s);
+    px(ctx, x, y+1, '#228B22', s);
+  });
+}
+
+// ====== STYLE D: CYBERPUNK ======
+function drawCyberAgent(canvasId, frame=0) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 96);
+  ctx.imageSmoothingEnabled = false;
+
+  const body = '#1A1A2E';
+  const outline = '#0A0A1E';
+  const neon1 = '#FF00FF'; // magenta glow
+  const neon2 = '#00FFFF'; // cyan glow
+  const skin = '#C4A882';
+  const eye = '#00FFFF';
+  const visor = '#FF00FF';
+
+  // Head with visor
+  pxRow(ctx, 2, 5, [0,0,body,body,body,body,0,0]);
+  pxRow(ctx, 3, 5, [0,body,skin,skin,skin,skin,body,0]);
+  pxRow(ctx, 4, 4, [body,skin,visor,visor,visor,visor,skin,body]); // visor
+  pxRow(ctx, 5, 5, [0,body,skin,eye,skin,eye,body,0]); // glowing eyes behind visor
+  pxRow(ctx, 6, 5, [0,0,skin,skin,skin,skin,0,0]);
+
+  // Cyber jacket
+  pxRow(ctx, 7, 4, [0,outline,body,body,body,body,outline,0,0]);
+  pxRow(ctx, 8, 4, [0,body,neon1,body,body,neon1,body,0,0]); // neon stripes
+  pxRow(ctx, 9, 4, [0,body,body,body,body,body,body,0,0]);
+  pxRow(ctx, 10, 4, [0,body,neon2,body,body,neon2,body,0,0]); // cyan stripes
+  pxRow(ctx, 11, 4, [0,body,body,body,body,body,body,0,0]);
+  pxRow(ctx, 12, 4, [0,outline,body,body,body,body,outline,0,0]);
+
+  // Arms with neon
+  const aOff = frame === 1 ? 1 : frame === 2 ? -1 : 0;
+  px(ctx, 3, 9+aOff, neon1);
+  px(ctx, 3, 10, body);
+  px(ctx, 12, 9-aOff, neon1);
+  px(ctx, 12, 10, body);
+
+  // Pants
+  pxRow(ctx, 13, 5, [0,0,body,body,body,body,0,0]);
+  pxRow(ctx, 14, 5, [0,0,neon2,0,0,neon2,0,0]); // neon leg stripes
+  pxRow(ctx, 15, 5, [0,0,body,0,0,body,0,0]);
+
+  // Boots with glow
+  px(ctx, 5, 16+(frame===1?1:0), neon1);
+  px(ctx, 6, 16+(frame===1?1:0), neon1);
+  px(ctx, 9, 16+(frame===2?-1:0), neon1);
+  px(ctx, 10, 16+(frame===2?-1:0), neon1);
+}
+
+function drawCyberBuilding(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Dark base building
+  for (let j = 2; j < 26; j++) {
+    for (let i = 2; i < 30; i++) {
+      px(ctx, i, j, j < 4 ? '#1A1A2E' : '#16213E', s);
+    }
+  }
+  // Neon border glow
+  for (let i = 2; i < 30; i++) {
+    px(ctx, i, 2, '#FF00FF', s); // top magenta line
+    px(ctx, i, 3, '#FF00FF40', s);
+    px(ctx, i, 22, '#00FFFF', s); // bottom cyan line
+  }
+  for (let j = 2; j < 23; j++) {
+    px(ctx, 2, j, '#FF00FF', s); // left border
+    px(ctx, 29, j, '#00FFFF', s); // right border
+  }
+
+  // Holographic display (center)
+  for (let j = 6; j < 18; j++) {
+    for (let i = 6; i < 26; i++) {
+      px(ctx, i, j, '#0D1117', s);
+    }
+  }
+  // Hologram content
+  for (let i = 8; i < 24; i++) {
+    px(ctx, i, 6, '#00FFFF', s);
+    px(ctx, i, 17, '#00FFFF', s);
+  }
+  // Pixel art in hologram - a neon grid
+  for (let j = 8; j < 16; j += 2) {
+    for (let i = 9; i < 23; i += 2) {
+      px(ctx, i, j, '#00FFFF30', s);
+    }
+  }
+  // Neon "OPEN" text
+  [10,11, 13,14, 16,17, 19,20].forEach(x => {
+    px(ctx, x, 8, '#FF00FF', s);
+  });
+
+  // Floating particles
+  [[5,1,'#FF00FF'],[27,1,'#00FFFF'],[1,15,'#FF00FF'],[31,10,'#00FFFF']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color, s);
+  });
+}
+
+function drawCyberGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 96, 96);
+  ctx.imageSmoothingEnabled = false;
+  const s = 2;
+
+  // Dark ground with grid lines (Tron-like)
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const onGrid = (x % 8 === 0 || y % 8 === 0);
+      px(ctx, x, y, onGrid ? '#1A2A4A' : '#0A0F1E', s);
+    }
+  }
+  // Neon grid highlights
+  for (let i = 0; i < 48; i += 8) {
+    px(ctx, i, 0, '#FF00FF20', s);
+    px(ctx, 0, i, '#00FFFF20', s);
+  }
+  // Glowing puddles
+  [[15,15,'#FF00FF'],[35,25,'#00FFFF'],[10,40,'#FF00FF']].forEach(([x,y,color]) => {
+    px(ctx, x-1, y, color, s);
+    px(ctx, x, y, color, s);
+    px(ctx, x+1, y, color, s);
+    px(ctx, x, y-1, color, s);
+    px(ctx, x, y+1, color, s);
+  });
+  // Scattered debris
+  [[8,30,'#333355'],[25,12,'#333355'],[40,38,'#333355']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color, s);
+    px(ctx, x+1, y, color, s);
+  });
+}
+
+// Draw all
+window.addEventListener('DOMContentLoaded', () => {
+  // Stardew
+  drawStardewAgent('stardew-agent', 0);
+  drawStardewBuilding('stardew-building');
+  drawStardewGround('stardew-ground');
+  drawStardewAgent('stardew-walk1', 0);
+  drawStardewAgent('stardew-walk2', 1);
+  drawStardewAgent('stardew-walk3', 2);
+
+  // Celeste
+  drawCelesteAgent('celeste-agent', 0);
+  drawCelesteBuilding('celeste-building');
+  drawCelesteGround('celeste-ground');
+  drawCelesteAgent('celeste-walk1', 0);
+  drawCelesteAgent('celeste-walk2', 1);
+  drawCelesteAgent('celeste-walk3', 2);
+
+  // Undertale
+  drawUndertaleAgent('undertale-agent', 0);
+  drawUndertaleBuilding('undertale-building');
+  drawUndertaleGround('undertale-ground');
+  drawUndertaleAgent('undertale-walk1', 0);
+  drawUndertaleAgent('undertale-walk2', 1);
+  drawUndertaleAgent('undertale-walk3', 2);
+
+  // Cyberpunk
+  drawCyberAgent('cyber-agent', 0);
+  drawCyberBuilding('cyber-building');
+  drawCyberGround('cyber-ground');
+  drawCyberAgent('cyber-walk1', 0);
+  drawCyberAgent('cyber-walk2', 1);
+  drawCyberAgent('cyber-walk3', 2);
+
+  // Scale up canvases for visibility
+  document.querySelectorAll('canvas').forEach(cv => {
+    cv.style.width = cv.width + 'px';
+    cv.style.height = cv.height + 'px';
+  });
+});
+</script>

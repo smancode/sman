@@ -626,18 +626,32 @@ export function BatchTaskSettings() {
 
       {showForm && <NewTaskForm onCancel={() => setShowForm(false)} />}
 
-      <div className="space-y-2">
+      <div className="space-y-6">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">加载中...</div>
         ) : tasks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             暂无智能任务，点击"新建任务"开始配置
           </div>
-        ) : (
-          tasks.map((task) => (
-            <BatchTaskCard key={task.id} task={task} />
-          ))
-        )}
+        ) : (() => {
+          const grouped = new Map<string, BatchTask[]>();
+          for (const t of tasks) {
+            const name = t.workspace.split(/[/\\]/).pop() || t.workspace;
+            if (!grouped.has(name)) grouped.set(name, []);
+            grouped.get(name)!.push(t);
+          }
+          const entries = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+          return entries.map(([wsName, wsTasks]) => (
+            <div key={wsName} id={`batch-ws-${wsName}`} className="scroll-mt-4">
+              <h4 className="text-sm font-semibold text-muted-foreground mb-2">{wsName}</h4>
+              <div className="space-y-2">
+                {wsTasks.map((task) => (
+                  <BatchTaskCard key={task.id} task={task} />
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
     </div>
   );

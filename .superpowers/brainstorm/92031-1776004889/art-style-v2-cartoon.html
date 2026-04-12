@@ -1,0 +1,718 @@
+<h2>卡通像素风格对比（大头小身子版）</h2>
+<p class="subtitle">头部占 1/2 ~ 2/3 身高，Q版比例，每格放大到 4px 看得更清楚</p>
+
+<style>
+  .style-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .style-card {
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .style-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .style-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .style-card h3 { margin: 0 0 4px 0; }
+  .style-card .desc { font-size: 0.85em; color: var(--muted); margin-bottom: 12px; }
+  .canvas-row { display: flex; gap: 16px; align-items: flex-end; margin-bottom: 12px; }
+  .canvas-row canvas { image-rendering: pixelated; border: 1px solid var(--border); border-radius: 4px; background: #1a1c2c; }
+  .canvas-label { font-size: 0.75em; color: var(--muted); text-align: center; margin-top: 4px; }
+  .ref-row { display: flex; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .ref-tag { font-size: 0.7em; background: var(--muted-bg, #2a2a3a); padding: 2px 8px; border-radius: 4px; color: var(--muted); }
+</style>
+
+<div class="style-grid">
+
+  <!-- Style A: Mario 风格 -->
+  <div class="style-card" data-choice="mario" onclick="toggleSelect(this)">
+    <h3>🍄 A. 超级玛丽风</h3>
+    <p class="desc">大头+小身体，表情丰富，色彩饱和，圆润可爱</p>
+    <div class="canvas-row">
+      <div><canvas id="mario-sprite" width="96" height="128"></canvas><div class="canvas-label">正面站立</div></div>
+      <div><canvas id="mario-walk1" width="96" height="128"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="mario-walk2" width="96" height="128"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="mario-walk3" width="96" height="128"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="mario-stall" width="192" height="160"></canvas><div class="canvas-label">摊位</div></div>
+      <div><canvas id="mario-ground" width="128" height="128"></canvas><div class="canvas-label">地面</div></div>
+    </div>
+    <div class="ref-row">
+      <span class="ref-tag">参考：Super Mario Bros</span>
+      <span class="ref-tag">特征：帽子+大眼睛+圆润身体</span>
+    </div>
+  </div>
+
+  <!-- Style B: 梦幻西游 / 冒险岛风格 -->
+  <div class="style-card" data-choice="fantasy" onclick="toggleSelect(this)">
+    <h3>⚔️ B. 梦幻西游 / 冒险岛风</h3>
+    <p class="desc">Q版二头身，大眼睛+彩色头发，装备可见，精致的像素细节</p>
+    <div class="canvas-row">
+      <div><canvas id="fantasy-sprite" width="96" height="128"></canvas><div class="canvas-label">正面站立</div></div>
+      <div><canvas id="fantasy-walk1" width="96" height="128"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="fantasy-walk2" width="96" height="128"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="fantasy-walk3" width="96" height="128"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="fantasy-stall" width="192" height="160"></canvas><div class="canvas-label">摊位</div></div>
+      <div><canvas id="fantasy-ground" width="128" height="128"></canvas><div class="canvas-label">地面</div></div>
+    </div>
+    <div class="ref-row">
+      <span class="ref-tag">参考：MapleStory 冒险岛</span>
+      <span class="ref-tag">特征：大彩发+闪光眼睛+披风/斗篷</span>
+    </div>
+  </div>
+
+  <!-- Style C: 开罗游戏风 (Kairosoft) -->
+  <div class="style-card" data-choice="kairo" onclick="toggleSelect(this)">
+    <h3>🏰 C. 开罗游戏风</h3>
+    <p class="desc">极简二头身，点状眼睛，小巧圆润，亲切感强</p>
+    <div class="canvas-row">
+      <div><canvas id="kairo-sprite" width="96" height="128"></canvas><div class="canvas-label">正面站立</div></div>
+      <div><canvas id="kairo-walk1" width="96" height="128"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="kairo-walk2" width="96" height="128"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="kairo-walk3" width="96" height="128"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="kairo-stall" width="192" height="160"></canvas><div class="canvas-label">摊位</div></div>
+      <div><canvas id="kairo-ground" width="128" height="128"></canvas><div class="canvas-label">地面</div></div>
+    </div>
+    <div class="ref-row">
+      <span class="ref-tag">参考：开罗拉面店/冒险村物语</span>
+      <span class="ref-tag">特征：圆头+点眼+极简身体</span>
+    </div>
+  </div>
+
+  <!-- Style D: 赛博Q版 -->
+  <div class="style-card" data-choice="cyberq" onclick="toggleSelect(this)">
+    <h3>⚡ D. 赛博Q版风</h3>
+    <p class="desc">Q版比例 + 霓虹光效，大头+发光护目镜，科技可爱</p>
+    <div class="canvas-row">
+      <div><canvas id="cyberq-sprite" width="96" height="128"></canvas><div class="canvas-label">正面站立</div></div>
+      <div><canvas id="cyberq-walk1" width="96" height="128"></canvas><div class="canvas-label">走路帧1</div></div>
+      <div><canvas id="cyberq-walk2" width="96" height="128"></canvas><div class="canvas-label">走路帧2</div></div>
+      <div><canvas id="cyberq-walk3" width="96" height="128"></canvas><div class="canvas-label">走路帧3</div></div>
+    </div>
+    <div class="canvas-row">
+      <div><canvas id="cyberq-stall" width="192" height="160"></canvas><div class="canvas-label">摊位</div></div>
+      <div><canvas id="cyberq-ground" width="128" height="128"></canvas><div class="canvas-label">地面</div></div>
+    </div>
+    <div class="ref-row">
+      <span class="ref-tag">参考：Cyberpunk Edgerunners Q版</span>
+      <span class="ref-tag">特征：护目镜+霓虹发光线+深色底</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// pixel helper: draw at 4x scale for visibility
+const S = 4;
+function px(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * S, y * S, S, S);
+}
+function pxRow(ctx, y, startX, colors) {
+  colors.forEach((c, i) => { if (c) px(ctx, startX + i, y, c); });
+}
+
+// ============================================
+// A. MARIO STYLE - Round big head, stubby body
+// Total: ~12x16 grid (48x64 actual at 4x)
+// Head: rows 0-7, Body: rows 8-11, Legs: rows 12-15
+// ============================================
+function drawMarioChar(canvasId, frame) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Big round head (width 8, height 7) - takes up top half
+  const hat = '#E52521'; // Mario red
+  const skin = '#FFB68F';
+  const eye = '#1A1A2E';
+  const nose = '#FF8A65';
+  const mustache = '#5D4037';
+  const shirt = '#E52521';
+  const overalls = '#2196F3';
+  const button = '#FFD700';
+  const shoe = '#5D4037';
+
+  // Hat (big round cap)
+  pxRow(ctx, 0, 3, [0,hat,hat,hat,hat,hat,0,0]);
+  pxRow(ctx, 1, 2, [0,hat,hat,hat,hat,hat,hat,0]);
+  pxRow(ctx, 2, 1, [hat,hat,hat,hat,hat,hat,hat,hat]);
+  pxRow(ctx, 3, 1, [hat,hat,hat,hat,hat,hat,hat,hat]); // hat brim
+
+  // Face (big round)
+  pxRow(ctx, 4, 2, [0,skin,skin,skin,skin,skin,skin,0]);
+  pxRow(ctx, 5, 2, [0,skin,eye,skin,skin,eye,skin,0]);
+  pxRow(ctx, 6, 3, [0,skin,nose,skin,skin,skin,0,0]);
+  pxRow(ctx, 7, 2, [0,mustache,mustache,mustache,mustache,mustache,mustache,0]);
+
+  // Stubby body (just 3 rows!)
+  pxRow(ctx, 8, 3, [0,shirt,shirt,shirt,shirt,shirt,0,0]);
+  pxRow(ctx, 9, 3, [0,overalls,button,overalls,overalls,button,overalls,0]);
+  pxRow(ctx, 10, 3, [0,overalls,overalls,overalls,overalls,overalls,0,0]);
+
+  // Short legs with walk animation
+  const lOff = frame === 1 ? [0,0,1,-1] : frame === 2 ? [0,0,-1,1] : frame === 3 ? [1,-1,0,0] : [0,0,0,0];
+  // Left leg
+  px(ctx, 4, 11+lOff[0], shoe);
+  px(ctx, 5, 11+lOff[1], shoe);
+  // Right leg
+  px(ctx, 6, 11+lOff[2], shoe);
+  px(ctx, 7, 11+lOff[3], shoe);
+}
+
+function drawMarioStall(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+  const s = S;
+
+  // Toad-house style mushroom stall
+  const roof = '#E52521';
+  const roofSpot = '#FFFFFF';
+  const wall = '#F5DEB3';
+  const door = '#8B4513';
+
+  // Mushroom roof (round top)
+  for (let i = 0; i < 24; i++) px(ctx, i, 0, roof);
+  for (let i = 1; i < 23; i++) px(ctx, i, 1, roof);
+  for (let i = 2; i < 22; i++) px(ctx, i, 2, roof);
+  for (let i = 3; i < 21; i++) px(ctx, i, 3, roof);
+  for (let i = 4; i < 20; i++) px(ctx, i, 4, roof);
+  // White spots on mushroom
+  px(ctx, 5, 1, roofSpot); px(ctx, 6, 1, roofSpot);
+  px(ctx, 12, 0, roofSpot); px(ctx, 13, 0, roofSpot);
+  px(ctx, 18, 2, roofSpot); px(ctx, 19, 2, roofSpot);
+  px(ctx, 8, 3, roofSpot); px(ctx, 9, 3, roofSpot);
+  px(ctx, 16, 4, roofSpot);
+
+  // Walls
+  for (let j = 5; j < 14; j++) {
+    for (let i = 4; i < 20; i++) {
+      px(ctx, i, j, wall);
+    }
+  }
+  // Door (arch)
+  for (let j = 8; j < 14; j++) {
+    px(ctx, 10, j, door); px(ctx, 11, j, door); px(ctx, 12, j, door); px(ctx, 13, j, door);
+  }
+  px(ctx, 10, 7, door); px(ctx, 11, 7, door); px(ctx, 12, 7, door); px(ctx, 13, 7, door);
+  // Window
+  px(ctx, 7, 7, '#87CEEB'); px(ctx, 8, 7, '#87CEEB');
+  px(ctx, 7, 8, '#87CEEB'); px(ctx, 8, 8, '#87CEEB');
+  // Sign hanging
+  px(ctx, 11, 5, '#8B4513'); px(ctx, 12, 5, '#8B4513');
+  px(ctx, 11, 6, '#FFD700'); px(ctx, 12, 6, '#FFD700');
+}
+
+function drawMarioGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Bright colorful ground
+  const greens = ['#5D8C3E', '#6B9D4E', '#4A7A2E', '#7AAF5C'];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const h = ((x * 7 + y * 13) & 0xFF) / 255;
+      px(ctx, x, y, greens[Math.floor(h * greens.length)]);
+    }
+  }
+  // Question blocks (classic Mario!)
+  const qBlock = '#FFD700';
+  const qDark = '#B8860B';
+  [[8,8],[22,5],[16,18]].forEach(([x,y]) => {
+    for (let dx = 0; dx < 4; dx++) for (let dy = 0; dy < 4; dy++) {
+      px(ctx, x+dx, y+dy, qBlock);
+    }
+    px(ctx, x+1, y+1, qDark); px(ctx, x+2, y+1, qDark);
+    px(ctx, x+1, y+2, qDark);
+  });
+  // Pipes!
+  const pipe = '#4CAF50';
+  const pipeD = '#388E3C';
+  [[2,12],[26,10]].forEach(([x,y]) => {
+    for (let dx = 0; dx < 3; dx++) px(ctx, x+dx, y, pipeD);
+    for (let j = y+1; j < y+5; j++) {
+      px(ctx, x, j, pipe); px(ctx, x+1, j, pipeD); px(ctx, x+2, j, pipe);
+    }
+  });
+  // Coins
+  const coin = '#FFD700';
+  [[12,4],[18,14],[6,22]].forEach(([x,y]) => {
+    px(ctx, x, y, coin); px(ctx, x+1, y, coin);
+    px(ctx, x, y+1, '#FFA000'); px(ctx, x+1, y+1, '#FFA000');
+  });
+}
+
+// ============================================
+// B. FANTASY / MAPLESTORY STYLE
+// Big colorful hair, sparkly eyes, cape/weapon
+// ============================================
+function drawFantasyChar(canvasId, frame) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Big spiky colorful hair, huge sparkly eyes, small body with cape
+  const hair = '#7B68EE'; // purple fantasy hair
+  const hair2 = '#9C8AFF';
+  const skin = '#FFE0BD';
+  const eyeW = '#FFFFFF';
+  const eyeC = '#4FC3F7'; // blue iris
+  const eyeP = '#1A1A2E'; // pupil
+  const sparkle = '#FFFFFF';
+  const cape = '#FF6B9C';
+  const capeD = '#E91E76';
+  const tunic = '#4FC3F7';
+  const belt = '#FFD700';
+  const boots = '#8B4513';
+
+  // Big spiky hair (8 wide, flowing)
+  pxRow(ctx, 0, 1, [0,hair,hair,0,0,hair,hair,0]);
+  pxRow(ctx, 1, 0, [hair,hair,hair,0,0,hair,hair,hair]);
+  pxRow(ctx, 2, 0, [hair,hair2,hair,hair,hair,hair2,hair,hair]);
+  pxRow(ctx, 3, 1, [hair,hair2,hair,hair,hair,hair2,hair,0]);
+  pxRow(ctx, 4, 1, [hair,hair,hair,hair,hair,hair,hair,0]);
+  pxRow(ctx, 5, 2, [0,hair,skin,skin,skin,skin,hair,0]);
+
+  // Big sparkly eyes (each eye is 3px wide!)
+  pxRow(ctx, 6, 2, [0,skin,eyeW,eyeC,eyeC,eyeW,skin,0]);
+  pxRow(ctx, 7, 2, [0,skin,eyeW,eyeC,eyeP,eyeW,skin,0]);
+  // Sparkle in eyes
+  px(ctx, 3, 6, sparkle);
+  px(ctx, 4, 7, sparkle);
+  // Mouth
+  pxRow(ctx, 8, 3, [0,skin,skin,'FFB6C1',skin,skin,0,0]);
+  pxRow(ctx, 9, 3, [0,0,skin,skin,skin,0,0,0]);
+
+  // Cape (flows behind)
+  const capeOff = frame === 1 ? 1 : frame === 3 ? -1 : 0;
+  px(ctx, 1, 10+capeOff, cape);
+  px(ctx, 1, 11+capeOff, cape);
+  px(ctx, 1, 12, capeD);
+  px(ctx, 8, 10-capeOff, cape);
+  px(ctx, 8, 11-capeOff, cape);
+  px(ctx, 8, 12, capeD);
+
+  // Small tunic body
+  pxRow(ctx, 10, 3, [0,tunic,tunic,tunic,tunic,tunic,0,0]);
+  pxRow(ctx, 11, 3, [0,tunic,tunic,tunic,tunic,tunic,0,0]);
+  pxRow(ctx, 12, 3, [0,tunic,belt,belt,belt,tunic,0,0]); // gold belt
+
+  // Short legs
+  const lOff = frame === 1 ? [0,0,1,-1] : frame === 2 ? [0,0,-1,1] : frame === 3 ? [1,-1,0,0] : [0,0,0,0];
+  px(ctx, 4, 13+lOff[0], skin);
+  px(ctx, 5, 13+lOff[1], skin);
+  px(ctx, 6, 13+lOff[2], skin);
+  px(ctx, 7, 13+lOff[3], skin);
+  // Boots
+  px(ctx, 4, 14+lOff[0], boots);
+  px(ctx, 5, 14+lOff[1], boots);
+  px(ctx, 6, 14+lOff[2], boots);
+  px(ctx, 7, 14+lOff[3], boots);
+}
+
+function drawFantasyStall(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Fantasy medieval market stall with banners
+  const wood = '#B8860B';
+  const woodD = '#8B6914';
+  const banner = '#7B68EE';
+  const banner2 = '#FF6B9C';
+  const cloth = '#E8D4B2';
+  const gold = '#FFD700';
+
+  // Tall wooden poles
+  for (let j = 2; j < 20; j++) {
+    px(ctx, 3, j, woodD); px(ctx, 4, j, wood);
+    px(ctx, 22, j, woodD); px(ctx, 23, j, wood);
+  }
+  // Pointy tops on poles
+  px(ctx, 3, 1, gold); px(ctx, 4, 1, gold);
+  px(ctx, 3, 0, gold);
+  px(ctx, 22, 1, gold); px(ctx, 23, 1, gold);
+  px(ctx, 23, 0, gold);
+
+  // Triangular banner top
+  for (let row = 3; row < 7; row++) {
+    for (let col = 5; col < 22; col++) {
+      const col2 = col - 5;
+      const span = 17 - (row - 3) * 3;
+      if (col2 < span) {
+        px(ctx, col, row, col2 % 4 < 2 ? banner : banner2);
+      }
+    }
+  }
+
+  // Wavy banner
+  for (let col = 5; col < 22; col++) {
+    const wave = Math.sin((col - 5) * 0.8) > 0 ? 0 : 1;
+    px(ctx, col, 7+wave, banner);
+    px(ctx, col, 8+wave, banner2);
+  }
+
+  // Counter with cloth
+  for (let i = 5; i < 22; i++) {
+    px(ctx, i, 12, cloth);
+    px(ctx, i, 13, wood);
+    px(ctx, i, 14, woodD);
+  }
+
+  // Glowing items on counter
+  [[7,11,'#FF6B6B'],[11,11,'#7B68EE'],[15,11,'#4FC3F7'],[19,11,'#FFD700']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color); px(ctx, x+1, y, color);
+    px(ctx, x, y-1, '#FFFFFF'); // sparkle
+  });
+}
+
+function drawFantasyGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Magical forest floor
+  const greens = ['#3E7B27','#4A8C3E','#2D6B1A','#5D9D4E'];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const h = ((x * 7 + y * 13) & 0xFF) / 255;
+      px(ctx, x, y, greens[Math.floor(h * greens.length)]);
+    }
+  }
+  // Glowing mushrooms
+  [[6,8,'#FF69B4'],[22,12,'#7B68EE'],[14,22,'#4FC3F7'],[4,26,'#FF69B4']].forEach(([x,y,color]) => {
+    px(ctx, x, y+1, '#F5F5DC'); px(ctx, x+1, y+1, '#F5F5DC'); // stem
+    px(ctx, x-1, y, color); px(ctx, x, y, color); px(ctx, x+1, y, color); // cap
+    px(ctx, x, y-1, '#FFFFFF'); // glow
+  });
+  // Sparkle particles
+  [[3,3],[15,5],[28,8],[8,20],[25,25]].forEach(([x,y]) => {
+    px(ctx, x, y, '#FFFFFF');
+  });
+  // Flowers
+  [[10,10,'#FFD700'],[20,18,'#FF6B9C'],[28,28,'#FFD700']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color); px(ctx, x+1, y, color);
+    px(ctx, x, y+1, '#228B22');
+  });
+}
+
+// ============================================
+// C. KAIRO STYLE - Ultra simple, round, dot eyes
+// ============================================
+function drawKairoChar(canvasId, frame) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Perfectly round head, dot eyes, tiny body
+  const head = '#FFE0BD';
+  const hair = '#5D4037';
+  const eye = '#1A1A2E';
+  const blush = '#FFB6C1';
+  const shirt = '#4CAF50';
+  const pants = '#5D4037';
+  const shoe = '#1A1A2E';
+
+  // Hair cap (round)
+  pxRow(ctx, 1, 2, [0,hair,hair,hair,hair,hair,hair,0]);
+  pxRow(ctx, 2, 1, [hair,hair,hair,hair,hair,hair,hair,hair]);
+  pxRow(ctx, 3, 1, [hair,hair,hair,hair,hair,hair,hair,hair]);
+
+  // Round face
+  pxRow(ctx, 4, 2, [0,head,head,head,head,head,head,0]);
+  pxRow(ctx, 5, 2, [0,head,eye,head,head,eye,head,0]); // dot eyes!
+  pxRow(ctx, 6, 2, [0,head,head,head,head,head,head,0]);
+  pxRow(ctx, 7, 3, [0,head,blush,head,head,blush,head,0]); // blush
+  pxRow(ctx, 8, 4, [0,0,head,head,head,head,0,0]); // smile
+
+  // Tiny body
+  pxRow(ctx, 9, 3, [0,shirt,shirt,shirt,shirt,shirt,0,0]);
+  pxRow(ctx, 10, 3, [0,shirt,shirt,shirt,shirt,shirt,0,0]);
+
+  // Tiny legs
+  const lOff = frame === 1 ? [0,1] : frame === 3 ? [0,-1] : [0,0];
+  px(ctx, 4, 11+lOff[0], pants);
+  px(ctx, 5, 11+lOff[0], shoe);
+  px(ctx, 6, 11-lOff[1], pants);
+  px(ctx, 7, 11-lOff[1], shoe);
+
+  // Frame 2 special: bounce up
+  if (frame === 2) {
+    // Shift whole char up 1 pixel - simulate by moving legs up
+    px(ctx, 4, 10, pants);
+    px(ctx, 5, 10, shoe);
+    px(ctx, 6, 10, pants);
+    px(ctx, 7, 10, shoe);
+    px(ctx, 4, 11, 0);
+    px(ctx, 5, 11, 0);
+    px(ctx, 6, 11, 0);
+    px(ctx, 7, 11, 0);
+  }
+}
+
+function drawKairoStall(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Cute simple building, rounded corners
+  const wall = '#FFE0B2';
+  const wallD = '#FFCC80';
+  const roof = '#4CAF50';
+  const roofD = '#388E3C';
+  const door = '#8D6E63';
+  const window = '#81D4FA';
+  const sign = '#FF7043';
+
+  // Rounded roof
+  for (let i = 5; i < 20; i++) px(ctx, i, 2, roof);
+  for (let i = 4; i < 21; i++) px(ctx, i, 3, roof);
+  for (let i = 3; i < 22; i++) px(ctx, i, 4, roof);
+  for (let i = 3; i < 22; i++) px(ctx, i, 5, roofD);
+
+  // Walls with rounded corners
+  for (let j = 6; j < 18; j++) {
+    for (let i = 3; i < 22; i++) {
+      px(ctx, i, j, (i + j) % 3 === 0 ? wallD : wall);
+    }
+  }
+
+  // Cute round door
+  px(ctx, 10, 12, door); px(ctx, 11, 12, door); px(ctx, 12, 12, door); px(ctx, 13, 12, door);
+  for (let j = 13; j < 18; j++) {
+    px(ctx, 10, j, door); px(ctx, 11, j, door); px(ctx, 12, j, door); px(ctx, 13, j, door);
+  }
+  px(ctx, 12, 15, '#FFD700'); // door knob
+
+  // Windows (round)
+  [[6,9],[16,9]].forEach(([x,y]) => {
+    px(ctx, x, y, window); px(ctx, x+1, y, window);
+    px(ctx, x, y+1, window); px(ctx, x+1, y+1, window);
+    px(ctx, x, y-1, '#81D4FA80'); // shine
+  });
+
+  // Cute sign
+  for (let i = 8; i < 16; i++) px(ctx, i, 6, sign);
+}
+
+function drawKairoGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Pastel cute ground
+  const greens = ['#8BC34A','#9CCC65','#AED581','#7CB342'];
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const h = ((x * 7 + y * 13) & 0xFF) / 255;
+      px(ctx, x, y, greens[Math.floor(h * greens.length)]);
+    }
+  }
+  // Cute round bushes
+  [[6,8,'#4CAF50'],[22,6,'#66BB6A'],[14,20,'#4CAF50'],[26,24,'#66BB6A']].forEach(([x,y,color]) => {
+    px(ctx, x-1, y, color); px(ctx, x, y, color); px(ctx, x+1, y, color);
+    px(ctx, x, y-1, color);
+  });
+  // Tiny flowers
+  [[4,4,'#FF8A80'],[18,10,'#FFD54F'],[10,28,'#FF80AB'],[28,16,'#FFD54F']].forEach(([x,y,color]) => {
+    px(ctx, x, y, color);
+  });
+  // Path (stone)
+  for (let i = 10; i < 22; i++) {
+    px(ctx, i, 15, '#D7CCC8'); px(ctx, i, 16, '#BCAAA4');
+  }
+}
+
+// ============================================
+// D. CYBER Q-STYLE - Big head + neon goggles
+// ============================================
+function drawCyberQChar(canvasId, frame) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  const body = '#1A1A2E';
+  const skin = '#C4A882';
+  const visor = '#FF00FF';
+  const visor2 = '#00FFFF';
+  const eye = '#00FFFF';
+  const jacket = '#2C2C4A';
+  const neon1 = '#FF00FF';
+  const neon2 = '#00FFFF';
+  const shoe = '#1A1A2E';
+
+  // Big round head with neon visor/goggles
+  pxRow(ctx, 1, 2, [0,body,body,body,body,body,body,0]);
+  pxRow(ctx, 2, 1, [body,body,body,body,body,body,body,body]);
+  pxRow(ctx, 3, 1, [body,body,body,body,body,body,body,body]);
+  pxRow(ctx, 4, 2, [0,skin,skin,skin,skin,skin,skin,0]);
+  // Neon visor across face
+  pxRow(ctx, 5, 1, [body,visor,visor2,visor,visor2,visor,visor,body]);
+  pxRow(ctx, 6, 2, [0,skin,eye,visor2,visor2,eye,skin,0]); // glowing eyes behind visor
+  pxRow(ctx, 7, 2, [0,skin,skin,skin,skin,skin,skin,0]);
+  pxRow(ctx, 8, 3, [0,0,skin,'FF69B4',skin,skin,0,0]); // mouth
+
+  // Neon ear pieces
+  px(ctx, 0, 5, neon1);
+  px(ctx, 0, 6, neon2);
+  px(ctx, 9, 5, neon2);
+  px(ctx, 9, 6, neon1);
+
+  // Short jacket body with neon stripes
+  pxRow(ctx, 9, 3, [0,jacket,jacket,jacket,jacket,jacket,0,0]);
+  pxRow(ctx, 10, 3, [0,neon1,jacket,jacket,jacket,neon2,0,0]);
+  pxRow(ctx, 11, 3, [0,jacket,jacket,jacket,jacket,jacket,0,0]);
+  pxRow(ctx, 12, 3, [0,neon2,jacket,jacket,jacket,neon1,0,0]);
+
+  // Legs
+  const lOff = frame === 1 ? [0,0,1,-1] : frame === 2 ? [0,0,-1,1] : frame === 3 ? [1,-1,0,0] : [0,0,0,0];
+  px(ctx, 4, 13+lOff[0], body);
+  px(ctx, 5, 13+lOff[1], body);
+  px(ctx, 6, 13+lOff[2], body);
+  px(ctx, 7, 13+lOff[3], body);
+  // Glowing boots
+  px(ctx, 4, 14+lOff[0], neon1);
+  px(ctx, 5, 14+lOff[1], neon1);
+  px(ctx, 6, 14+lOff[2], neon2);
+  px(ctx, 7, 14+lOff[3], neon2);
+}
+
+function drawCyberQStall(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Neon vending machine style
+  const base = '#1A1A2E';
+  const panel = '#0D1117';
+  const neon1 = '#FF00FF';
+  const neon2 = '#00FFFF';
+
+  // Dark box
+  for (let j = 4; j < 20; j++) {
+    for (let i = 4; i < 22; i++) {
+      px(ctx, i, j, base);
+    }
+  }
+  // Screen panel
+  for (let j = 6; j < 14; j++) {
+    for (let i = 6; i < 20; i++) {
+      px(ctx, i, j, panel);
+    }
+  }
+  // Neon border
+  for (let i = 4; i < 22; i++) { px(ctx, i, 4, neon1); px(ctx, i, 19, neon2); }
+  for (let j = 4; j < 20; j++) { px(ctx, 4, j, neon2); px(ctx, 21, j, neon1); }
+  // Neon sign inside screen
+  for (let i = 8; i < 18; i++) px(ctx, i, 7, neon1);
+  // Holographic items
+  [[8,9,neon1],[12,9,neon2],[16,9,neon1]].forEach(([x,y,color]) => {
+    px(ctx, x, y, color); px(ctx, x+1, y, color); px(ctx, x, y+1, color); px(ctx, x+1, y+1, color);
+    px(ctx, x, y-1, '#FFFFFF40');
+  });
+  // Coin slot
+  px(ctx, 12, 16, '#FFD700'); px(ctx, 13, 16, '#FFD700');
+  // Bottom neon strip
+  for (let i = 5; i < 21; i++) px(ctx, i, 18, neon1);
+}
+
+function drawCyberQGround(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingEnabled = false;
+
+  // Dark grid floor
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const onGrid = (x % 4 === 0 || y % 4 === 0);
+      px(ctx, x, y, onGrid ? '#1A2A3A' : '#0A0F1A');
+    }
+  }
+  // Neon grid lines
+  for (let i = 0; i < 32; i += 4) {
+    px(ctx, i, 0, '#FF00FF30'); px(ctx, 0, i, '#00FFFF30');
+  }
+  // Glowing puddles
+  [[10,10,'#FF00FF'],[24,8,'#00FFFF'],[6,24,'#FF00FF'],[20,22,'#00FFFF']].forEach(([x,y,color]) => {
+    px(ctx, x-1, y, color+'80'); px(ctx, x, y, color); px(ctx, x+1, y, color+'80');
+  });
+}
+
+// ====== DRAW ALL ======
+window.addEventListener('DOMContentLoaded', () => {
+  ['mario','fantasy','kairo','cyberq'].forEach(style => {
+    const drawChar = {
+      mario: drawMarioChar,
+      fantasy: drawFantasyChar,
+      kairo: drawKairoChar,
+      cyberq: drawCyberQChar,
+    }[style];
+    const drawStall = {
+      mario: drawMarioStall,
+      fantasy: drawFantasyStall,
+      kairo: drawKairoStall,
+      cyberq: drawCyberQStall,
+    }[style];
+    const drawGround = {
+      mario: drawMarioGround,
+      fantasy: drawFantasyGround,
+      kairo: drawKairoGround,
+      cyberq: drawCyberQGround,
+    }[style];
+
+    drawChar(`${style}-sprite`, 0);
+    drawChar(`${style}-walk1`, 0);
+    drawChar(`${style}-walk2`, 1);
+    drawChar(`${style}-walk3`, 3);
+    drawStall(`${style}-stall`);
+    drawGround(`${style}-ground`);
+  });
+
+  // Scale canvases
+  document.querySelectorAll('canvas').forEach(cv => {
+    cv.style.width = cv.width + 'px';
+    cv.style.height = cv.height + 'px';
+  });
+});
+</script>

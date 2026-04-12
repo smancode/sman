@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,8 @@ export function Titlebar() {
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const currentSession = sessions.find((s) => s.key === currentSessionId);
   const workspace = currentSession?.workspace;
+  const location = useLocation();
+  const inChat = location.pathname === '/chat';
 
   useEffect(() => {
     if (!window.sman?.onMaximizeChanged) return;
@@ -42,9 +45,9 @@ export function Titlebar() {
       {/* Spacer - drag area */}
       <div className="flex-1" />
 
-      {/* Workspace path - centered */}
-      {workspace && (
-        <span className="text-[12px] font-mono text-muted-foreground/50 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      {/* Workspace path - centered, only in chat */}
+      {inChat && workspace && (
+        <span className="text-[13px] font-mono text-muted-foreground/60 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {workspace}
         </span>
       )}

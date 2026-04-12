@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSettingsStore } from '@/stores/settings';
 import { useWsConnection } from '@/stores/ws-connection';
 
-export function BazaarSettings() {
+export function BazaarSettings({ id }: { id?: string }) {
   const settings = useSettingsStore((s) => s.settings);
   const client = useWsConnection((s) => s.client);
   const bazaar = settings?.bazaar;
@@ -34,7 +34,7 @@ export function BazaarSettings() {
   };
 
   return (
-    <Card>
+    <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Server className="h-5 w-5" />
@@ -92,10 +92,12 @@ export function BazaarSettings() {
           </Select>
         </div>
 
-        <Button onClick={handleSave} disabled={saving || !server} className="w-full">
-          <Save className="h-4 w-4 mr-1" />
-          {saving ? '保存中...' : '保存配置'}
-        </Button>
+        <div className="flex items-center gap-2 pt-4 border-t">
+          <Button variant="outline" size="sm" onClick={handleSave} disabled={saving || !server}>
+            {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
+            保存配置
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

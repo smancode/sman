@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Plus, Trash2, Play, Pencil, CheckCircle, XCircle, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -361,7 +361,7 @@ export function CronTaskSettings() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-6">
         {loading && (
           <div className="text-center py-8 text-muted-foreground">加载中...</div>
         )}
@@ -370,37 +370,55 @@ export function CronTaskSettings() {
             暂无定时任务，点击「自动拉取」扫描或「新建任务」手动创建
           </div>
         )}
-        {!loading && [...tasks].sort((a, b) => {
-          // 解析 crontab 字段: 分 时 日 月 周
-          const parseCron = (expr: string) => {
-            const parts = expr.trim().split(/\s+/);
-            return {
-              minute: parts[0] === '*' ? 60 : parseInt(parts[0], 10),
-              hour: parts[1] === '*' ? 24 : parseInt(parts[1], 10),
-              day: parts[2] === '*' ? 32 : parseInt(parts[2], 10),
-              month: parts[3] === '*' ? 13 : parseInt(parts[3], 10),
-              dow: parts[4] === '*' ? 7 : parseInt(parts[4], 10),
+        {!loading && (() => {
+          const sorted = [...tasks].sort((a, b) => {
+            const parseCron = (expr: string) => {
+              const parts = expr.trim().split(/\s+/);
+              return {
+                minute: parts[0] === '*' ? 60 : parseInt(parts[0], 10),
+                hour: parts[1] === '*' ? 24 : parseInt(parts[1], 10),
+                day: parts[2] === '*' ? 32 : parseInt(parts[2], 10),
+                month: parts[3] === '*' ? 13 : parseInt(parts[3], 10),
+                dow: parts[4] === '*' ? 7 : parseInt(parts[4], 10),
+              };
             };
-          };
-          const ca = parseCron(a.cronExpression);
-          const cb = parseCron(b.cronExpression);
-          // 排序: 小时 → 分钟 → 月 → 日 → 周
-          if (ca.hour !== cb.hour) return ca.hour - cb.hour;
-          if (ca.minute !== cb.minute) return ca.minute - cb.minute;
-          if (ca.month !== cb.month) return ca.month - cb.month;
-          if (ca.day !== cb.day) return ca.day - cb.day;
-          if (ca.dow !== cb.dow) return ca.dow - cb.dow;
-          return 0;
-        }).map((task) => (
-          <TaskItem
-            key={task.id}
-            task={task}
-            onDelete={() => handleDelete(task.id)}
-            onToggle={() => handleToggle(task)}
-            onExecute={() => handleExecute(task.id)}
-            onEdit={() => handleEdit(task)}
-          />
-        ))}
+            const ca = parseCron(a.cronExpression);
+            const cb = parseCron(b.cronExpression);
+            if (ca.hour !== cb.hour) return ca.hour - cb.hour;
+            if (ca.minute !== cb.minute) return ca.minute - cb.minute;
+            if (ca.month !== cb.month) return ca.month - cb.month;
+            if (ca.day !== cb.day) return ca.day - cb.day;
+            if (ca.dow !== cb.dow) return ca.dow - cb.dow;
+            return 0;
+          });
+
+          // Group by workspace
+          const grouped = new Map<string, CronTask[]>();
+          for (const t of sorted) {
+            const name = t.workspace.split(/[/\\]/).pop() || t.workspace;
+            if (!grouped.has(name)) grouped.set(name, []);
+            grouped.get(name)!.push(t);
+          }
+          const entries = Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+          return entries.map(([wsName, wsTasks]) => (
+            <div key={wsName} id={`cron-ws-${wsName}`} className="scroll-mt-4">
+              <h4 className="text-sm font-semibold text-muted-foreground mb-2">{wsName}</h4>
+              <div className="space-y-2">
+                {wsTasks.map((task) => (
+                  <TaskItem
+                    key={task.id}
+                    task={task}
+                    onDelete={() => handleDelete(task.id)}
+                    onToggle={() => handleToggle(task)}
+                    onExecute={() => handleExecute(task.id)}
+                    onEdit={() => handleEdit(task)}
+                  />
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
       </div>
     </div>
   );

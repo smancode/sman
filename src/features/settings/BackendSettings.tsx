@@ -53,7 +53,7 @@ function connectAndRefresh() {
   }, 300);
 }
 
-export function BackendSettings() {
+export function BackendSettings({ id }: { id?: string }) {
   const { status, connect, disconnect } = useWsConnection();
   const [servers, setServers] = useState<ServerEntry[]>(loadServers);
   const [selectedName, setSelectedName] = useState(loadSelectedName);
@@ -186,7 +186,7 @@ export function BackendSettings() {
   };
 
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+    <div id={id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
       <div className="flex flex-col space-y-1.5 p-6">
         <h3 className="text-2xl font-semibold leading-none tracking-tight">后端连接</h3>
         <p className="text-sm text-muted-foreground">

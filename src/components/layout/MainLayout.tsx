@@ -26,6 +26,7 @@ export function MainLayout() {
   const inChat = location.pathname === '/chat';
   const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
+  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks'].includes(location.pathname);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -59,11 +60,13 @@ export function MainLayout() {
       {/* 内容层 - 半透明以透出背景 */}
       <div className="relative z-10 flex flex-col h-full">
         {/* Sidebar 全通：从顶部到底部，绝对定位 */}
-        <div className="absolute inset-y-0 left-0 z-20 w-64">
-          <Sidebar />
-        </div>
+        {!hideSidebar && (
+          <div className="absolute inset-y-0 left-0 z-20 w-64">
+            <Sidebar />
+          </div>
+        )}
         {/* 右侧区域：Titlebar + 主内容 */}
-        <div className="flex flex-col flex-1 ml-64 overflow-hidden">
+        <div className={cn('flex flex-col flex-1 overflow-hidden', !hideSidebar && 'ml-64')}>
           <Titlebar />
           <main className="flex-1 overflow-y-auto bg-transparent">
             <Outlet />

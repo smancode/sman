@@ -39,7 +39,7 @@ function CapabilitiesDisplay({ capabilities }: { capabilities?: DetectedCapabili
   );
 }
 
-export function LLMSettings() {
+export function LLMSettings({ id }: { id?: string }) {
   const { settings, testAndSaveLlm, selectLlmProfile, deleteLlmProfile } = useSettingsStore();
 
   // Local draft state
@@ -138,7 +138,7 @@ export function LLMSettings() {
     draftBaseUrl !== (settings?.llm?.baseUrl ?? '');
 
   return (
-    <Card>
+    <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="h-5 w-5" />

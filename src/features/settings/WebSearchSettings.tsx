@@ -9,7 +9,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { WEB_SEARCH_PROVIDER_OPTIONS, type WebSearchProvider } from '@/types/settings';
 import { cn } from '@/lib/utils';
 
-export function WebSearchSettings() {
+export function WebSearchSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateWebSearch, clearError } = useSettingsStore();
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,7 +44,7 @@ export function WebSearchSettings() {
   };
 
   return (
-    <Card>
+    <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Search className="h-5 w-5" />
