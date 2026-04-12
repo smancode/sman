@@ -1,7 +1,10 @@
 // src/features/bazaar/world/AgentEntity.ts
 // Agent 实体 — 位置、状态、动画
 
-type Facing = 'down' | 'up' | 'left' | 'right';
+import type { Facing } from './assets/AssetProvider';
+import type { AppearanceParams } from './assets/AssetProvider';
+import { getAppearance } from './assets/appearance';
+
 type AgentState = 'idle' | 'walking' | 'busy';
 
 export class AgentEntity {
@@ -11,6 +14,7 @@ export class AgentEntity {
   reputation: number;
   shirtColor: string;
   isSelf: boolean = false;
+  appearance: AppearanceParams;
 
   // 像素坐标
   x: number;
@@ -48,6 +52,7 @@ export class AgentEntity {
     this.targetX = opts.x;
     this.targetY = opts.y;
     this.shirtColor = opts.shirtColor ?? '#41a6f6';
+    this.appearance = getAppearance(opts.id);
   }
 
   /** 设置移动目标 */
@@ -62,6 +67,11 @@ export class AgentEntity {
     const dx = worldX - this.x;
     const dy = worldY - (this.y - 16);
     return dx * dx + dy * dy <= 256;
+  }
+
+  /** 弹跳偏移（开罗风：走路时微弹跳） */
+  get bounceOffset(): number {
+    return (this.frame === 1 || this.frame === 3) ? -1 : 0;
   }
 
   /** 随机游走（自主行为） */
@@ -92,10 +102,10 @@ export class AgentEntity {
         this.facing = dy > 0 ? 'down' : 'up';
       }
 
-      // 走路动画帧
+      // 走路动画帧（4帧循环）
       this.animTimer++;
-      if (this.animTimer >= 8) {
-        this.frame = this.frame === 0 ? 1 : 0;
+      if (this.animTimer >= 6) {
+        this.frame = (this.frame + 1) % 4;
         this.animTimer = 0;
       }
     } else {

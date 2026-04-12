@@ -156,11 +156,11 @@ export class WorldRenderer {
     const screenY = agent.y - cameraY;
 
     // 精灵
-    const sprite = getAgentSprite(agent.facing, agent.frame, agent.shirtColor);
+    const sprite = getAgentSprite(agent.facing, agent.frame, agent.appearance);
     this.ctx.drawImage(
       sprite,
       screenX - DESIGN.AGENT_W / 2,
-      screenY - DESIGN.AGENT_H + 8, // 脚底对齐
+      screenY - DESIGN.AGENT_H + agent.bounceOffset, // Q版脚底对齐 + 弹跳
     );
 
     // 名字 + emoji

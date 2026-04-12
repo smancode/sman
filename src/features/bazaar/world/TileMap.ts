@@ -1,23 +1,10 @@
 // src/features/bazaar/world/TileMap.ts
 // 地面瓦片渲染 — 离屏 Canvas 缓存
 
-import { TILE_COLORS, DESIGN } from './palette';
-import type { MAP_DATA } from './map-data';
+import { DESIGN } from './palette';
+import { getTileSprite } from './SpriteSheet';
 
 const TS = DESIGN.TILE_SIZE;
-
-// 瓦片颜色映射
-const TILE_COLOR_MAP: Record<number, string> = {
-  0: TILE_COLORS.grass,
-  1: TILE_COLORS.path,
-  2: TILE_COLORS.stone,
-  3: TILE_COLORS.water,
-  4: TILE_COLORS.dark,
-};
-
-// 草地变化色（增加自然感）
-const GRASS_VARIANTS = [TILE_COLORS.grass, TILE_COLORS.grass2, TILE_COLORS.grass];
-const PATH_VARIANTS = [TILE_COLORS.path, TILE_COLORS.path2, TILE_COLORS.path];
 
 export class TileMap {
   private offscreen: OffscreenCanvas;
@@ -45,29 +32,10 @@ export class TileMap {
         const x = col * TS;
         const y = row * TS;
 
-        // 基础颜色
-        const variants = tileId === 0 ? GRASS_VARIANTS : tileId === 1 ? PATH_VARIANTS : null;
-        if (variants) {
-          // 用坐标哈希选择变化色，产生自然纹理
-          const hash = ((col * 7 + row * 13) & 0xFF) / 255;
-          ctx.fillStyle = variants[hash < 0.3 ? 0 : hash < 0.7 ? 1 : 2];
-        } else {
-          ctx.fillStyle = TILE_COLOR_MAP[tileId] ?? TILE_COLORS.grass;
-        }
-        ctx.fillRect(x, y, TS, TS);
-
-        // 草地点缀小像素
-        if (tileId === 0) {
-          const rng = ((col * 31 + row * 17) & 0xFF) / 255;
-          if (rng < 0.3) {
-            ctx.fillStyle = '#4a7a2c';
-            ctx.fillRect(x + 8 + (rng * 16) | 0, y + 8 + (rng * 8) | 0, 2, 4);
-          }
-          if (rng > 0.7) {
-            ctx.fillStyle = '#6a9a4c';
-            ctx.fillRect(x + 4 + (rng * 12) | 0, y + 12, 2, 2);
-          }
-        }
+        const hash = ((col * 7 + row * 13) & 0xFF) / 255;
+        const variant = hash < 0.3 ? 0 : hash < 0.7 ? 1 : 2;
+        const sprite = getTileSprite(tileId, variant);
+        ctx.drawImage(sprite as OffscreenCanvas, x, y);
       }
     }
 
