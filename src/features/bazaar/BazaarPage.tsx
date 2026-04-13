@@ -31,23 +31,32 @@ export function BazaarPage() {
     fetchLeaderboard();
   }, [fetchTasks, fetchOnlineAgents, fetchLeaderboard]);
 
-  // 未连接集市时显示配置提示（但仍显示像素世界预览）
+  // 未连接集市时显示仪表盘骨架（更友好）
   if (!connection.connected) {
     return (
       <div className="flex flex-col h-full relative">
-        {/* 像素世界预览（即使未连接也显示） */}
-        <div className="flex-1 relative">
-          <WorldCanvas rendererRef={rendererRef} onPanelChange={(panel) => setActivePanel(panel)} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 gap-4 text-white">
-            <p className="text-lg font-medium">未连接到集市服务器</p>
-            <p className="text-sm text-white/70">请在「设置」中配置集市服务器地址</p>
-            <Button variant="outline" className="text-white border-white/30 hover:bg-white/10" onClick={() => navigate('/settings')}>
+        {/* 顶栏 */}
+        <div className="flex items-center justify-between px-4 py-2 border-b bg-background/80 backdrop-blur-sm z-10">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/chat')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h2 className="text-lg font-semibold">集市</h2>
+          </div>
+        </div>
+
+        {/* 仪表盘骨架 — 提示配置 */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="text-lg font-medium text-muted-foreground">未连接到集市服务器</p>
+            <p className="text-sm text-muted-foreground/70">请在「设置」中配置集市服务器地址</p>
+            <Button variant="outline" onClick={() => navigate('/settings')}>
               前往设置
             </Button>
           </div>
         </div>
+
         <AgentStatusBar />
-        <OnboardingGuide />
       </div>
     );
   }
@@ -115,19 +124,28 @@ export function BazaarPage() {
           </div>
         </div>
       ) : (
-        // 仪表盘模式：原有三栏布局
+        // 仪表盘模式：双栏布局（左: 欢迎+任务+在线Agent / 右: 协作对话）
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-1/3 border-r overflow-y-auto p-4">
-            <TaskPanel />
-          </div>
-          <div className="w-1/3 border-r overflow-hidden">
-            <CollaborationChat />
-          </div>
-          <div className="w-1/3 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <LeaderboardPanel />
-              <OnlineAgents />
+          {/* 左栏：欢迎 + 协作任务 + 在线 Agent */}
+          <div className="w-1/2 border-r overflow-y-auto p-4 space-y-4">
+            {/* 欢迎区域 */}
+            <div className="bg-muted/50 rounded-lg p-4">
+              <p className="font-medium">欢迎</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                这是管理 Agent 协作的地方。你的 Agent 会自动搜索能力并帮你找到最合适的人。
+              </p>
             </div>
+
+            {/* 协作任务 */}
+            <TaskPanel />
+
+            {/* 在线 Agent */}
+            <OnlineAgents />
+          </div>
+
+          {/* 右栏：协作对话 */}
+          <div className="w-1/2 flex flex-col overflow-hidden">
+            <CollaborationChat />
             <ControlBar />
           </div>
         </div>
