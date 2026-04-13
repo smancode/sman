@@ -8,6 +8,7 @@ import { TaskEngine } from './task-engine.js';
 import { MessageRouter } from './message-router.js';
 import { WorldState } from './world-state.js';
 import { ReputationEngine } from './reputation.js';
+import { CapabilityStore } from './capability-store.js';
 import { createLogger } from './utils/logger.js';
 import fs from 'fs';
 import path from 'path';
@@ -66,6 +67,32 @@ app.get('/api/leaderboard', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
   const board = store.getLeaderboard(limit);
   res.json(board);
+});
+
+// Capability Store HTTP API
+const dataDir = path.dirname(DB_PATH);
+const capabilityStore = new CapabilityStore(path.join(dataDir, 'capabilities.db'));
+
+app.get('/api/capabilities/search', (req, res) => {
+  const query = req.query.q as string;
+  if (!query) {
+    res.json([]);
+    return;
+  }
+  res.json(capabilityStore.search(query));
+});
+
+app.get('/api/capabilities/list', (_req, res) => {
+  res.json(capabilityStore.list());
+});
+
+app.get('/api/capabilities/:name', (req, res) => {
+  const cap = capabilityStore.get(req.params.name);
+  if (!cap) {
+    res.status(404).json({ error: 'Capability not found' });
+    return;
+  }
+  res.json(cap);
 });
 
 // WebSocket 服务器
@@ -148,6 +175,7 @@ function gracefulShutdown(signal: string) {
   }
   store.close();
   taskStore.close();
+  capabilityStore.close();
   server.close(() => {
     log.info('Server closed');
     process.exit(0);

@@ -23,6 +23,8 @@ const VALID_TYPES: Set<string> = new Set([
   'world.resync',
   // Server
   'ack', 'error', 'server.maintenance', 'reputation.update',
+  // Capabilities
+  'capabilities.search', 'capabilities.list', 'capabilities.publish', 'capabilities.remove',
 ]);
 
 // 各消息类型的必填 payload 字段
@@ -37,6 +39,10 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'task.chat': ['taskId', 'text'],
   'task.complete': ['taskId', 'rating'],
   'task.cancel': ['taskId', 'reason'],
+  'capabilities.search': ['query'],
+  'capabilities.list': [],
+  'capabilities.publish': ['name', 'description', 'version', 'category', 'packageUrl'],
+  'capabilities.remove': ['name'],
 };
 
 export interface ValidationResult {
