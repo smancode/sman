@@ -59,7 +59,6 @@ export class BazaarStore {
         capability TEXT NOT NULL,
         agent_id TEXT NOT NULL,
         agent_name TEXT NOT NULL,
-        repo TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (capability, agent_id)
       );
@@ -152,27 +151,27 @@ export class BazaarStore {
 
   // ── Learned Routes ──
 
-  saveLearnedRoute(input: { capability: string; agentId: string; agentName: string; repo: string }): void {
+  saveLearnedRoute(input: { capability: string; agentId: string; agentName: string }): void {
     this.db.prepare(`
-      INSERT OR REPLACE INTO learned_routes (capability, agent_id, agent_name, repo, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(input.capability, input.agentId, input.agentName, input.repo, new Date().toISOString());
+      INSERT OR REPLACE INTO learned_routes (capability, agent_id, agent_name, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).run(input.capability, input.agentId, input.agentName, new Date().toISOString());
   }
 
-  findLearnedRoutes(keyword: string): Array<{ capability: string; agentId: string; agentName: string; repo: string }> {
+  findLearnedRoutes(keyword: string): Array<{ capability: string; agentId: string; agentName: string }> {
     const escaped = keyword.replace(/%/g, '\\%').replace(/_/g, '\\_');
     return this.db.prepare(`
-      SELECT capability, agent_id as agentId, agent_name as agentName, repo
+      SELECT capability, agent_id as agentId, agent_name as agentName
       FROM learned_routes
       WHERE capability LIKE ? ESCAPE '\\'
-    `).all(`%${escaped}%`) as Array<{ capability: string; agentId: string; agentName: string; repo: string }>;
+    `).all(`%${escaped}%`) as Array<{ capability: string; agentId: string; agentName: string }>;
   }
 
-  listLearnedRoutes(): Array<{ capability: string; agentId: string; agentName: string; repo: string }> {
+  listLearnedRoutes(): Array<{ capability: string; agentId: string; agentName: string }> {
     return this.db.prepare(`
-      SELECT capability, agent_id as agentId, agent_name as agentName, repo
+      SELECT capability, agent_id as agentId, agent_name as agentName
       FROM learned_routes
       ORDER BY capability, updated_at DESC
-    `).all() as Array<{ capability: string; agentId: string; agentName: string; repo: string }>;
+    `).all() as Array<{ capability: string; agentId: string; agentName: string }>;
   }
 }

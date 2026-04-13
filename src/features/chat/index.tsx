@@ -26,6 +26,10 @@ function buildContent(text: string, blocks?: unknown[]): unknown {
   return [{ type: 'text', text }, ...blocks];
 }
 
+// ── Module-level scroll position cache ──
+// Survives route changes (component unmount/remount) and session switches
+const scrollPositions = new Map<string, number>();
+
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
   const isConnected = connectionStatus === 'connected';
@@ -43,34 +47,31 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
 
-  // ── Scroll position management ──
-  // Per-session scroll position cache — survives session switches
-  const scrollPositions = useRef(new Map<string, number>());
-
   // Track whether user is near bottom (within 150px) for smart auto-scroll
   const isNearBottomRef = useRef(true);
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-  }, []);
-
-  // Flag: when session changes, we need to restore scroll after React renders
-  const pendingRestoreRef = useRef<string | null>(null);
-
-  // Sync: save scroll position before the session actually changes
-  const prevSessionIdRef = useRef(currentSessionId);
-  if (currentSessionId !== prevSessionIdRef.current) {
-    const el = scrollRef.current;
-    if (el && prevSessionIdRef.current) {
-      scrollPositions.current.set(prevSessionIdRef.current, el.scrollTop);
+    // Continuously save scroll position on every scroll event
+    if (currentSessionId) {
+      scrollPositions.set(currentSessionId, el.scrollTop);
     }
+  }, [currentSessionId]);
+
+  // Flag: when session changes or component mounts, restore scroll after React renders
+  const pendingRestoreRef = useRef<string | null>(currentSessionId);
+  const prevSessionIdRef = useRef(currentSessionId);
+
+  // Detect session change during render
+  if (currentSessionId !== prevSessionIdRef.current) {
+    // Don't save here — handleScroll already saves on every scroll event
     pendingRestoreRef.current = currentSessionId;
     prevSessionIdRef.current = currentSessionId;
-    isNearBottomRef.current = true; // reset
+    isNearBottomRef.current = true;
   }
 
-  // After React commits new messages to DOM, restore the saved scroll position
+  // After React commits to DOM, restore scroll position
   useLayoutEffect(() => {
     const sid = pendingRestoreRef.current;
     if (!sid) return;
@@ -79,7 +80,7 @@ export function Chat() {
     const el = scrollRef.current;
     if (!el) return;
 
-    const saved = scrollPositions.current.get(sid);
+    const saved = scrollPositions.get(sid);
     if (saved !== undefined) {
       el.scrollTop = saved;
       isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
@@ -95,7 +96,7 @@ export function Chat() {
     if (!el) return;
     if (!isNearBottomRef.current) return;
     if (!sending) return;
-    if (pendingRestoreRef.current) return; // Don't interfere with session-switch restore
+    if (pendingRestoreRef.current) return;
 
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;

@@ -76,14 +76,12 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
             source: 'local' as const,
             agentId: r.agentId,
             name: r.agentName,
-            repo: r.repo,
             capability: r.capability,
           })),
           ...filteredRemote.map(m => ({
             source: 'remote' as const,
             agentId: m.agentId,
             name: m.name,
-            repo: m.repo,
           })),
         ];
 
@@ -93,7 +91,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
 
         const lines = allResults.map((r, i) => {
           const local = r.source === 'local' ? ' [历史协作]' : '';
-          return `${i + 1}. ${r.name} (${r.agentId})${local} — ${r.repo}`;
+          return `${i + 1}. ${r.name} (${r.agentId})${local}`;
         });
 
         return textResult(

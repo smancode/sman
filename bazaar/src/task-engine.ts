@@ -33,7 +33,7 @@ export class TaskEngine {
 
   handleTaskCreate(msg: { id: string; payload: Record<string, unknown> }, fromAgentId: string): {
     taskId: string;
-    matches: Array<{ agentId: string; name: string; status: string; reputation: number; repo: string }>;
+    matches: Array<{ agentId: string; name: string; status: string; reputation: number }>;
   } {
     const question = msg.payload.question as string;
     const capabilityQuery = msg.payload.capabilityQuery as string;

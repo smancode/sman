@@ -387,16 +387,16 @@ export class BazaarBridge {
     const rating = payload.rating as number;
     const feedback = (payload.feedback as string) ?? '';
 
-    // 保存经验路由（rating >= 3 表示成功）
+    // 保存经验路由（rating >= 3 表示成功协作）
+    // 记录"遇到这类问题找谁"，这是 Agent 进化的核心：积累协作经验
     if (rating >= 3) {
       const task = this.store.getTask(taskId);
       if (task) {
-        const capability = task.question.slice(0, 50);
+        const capability = task.question; // 保存完整问题作为经验关键词
         const agentId = task.requesterAgentId ?? task.helperAgentId;
         const agentName = task.requesterName ?? task.helperName;
-        const repo = '';
         if (agentId && agentName) {
-          this.store.saveLearnedRoute({ capability, agentId, agentName, repo });
+          this.store.saveLearnedRoute({ capability, agentId, agentName });
         }
       }
     }
