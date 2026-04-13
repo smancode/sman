@@ -399,11 +399,12 @@ export class WeixinBotConnection {
     // Shared clientId for streaming updates — same clientId lets iLink update the same message
     const streamClientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let streamStarted = false;
+    // Snapshot contextToken at creation time so it's bound to the inbound message, not shared
+    const contextToken = self.contextTokens.get(userId);
 
     const doSend = async (text: string, label: string, messageState: number) => {
       if (!text || !self.token) return;
       self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length} state=${messageState}`);
-      const contextToken = self.contextTokens.get(userId);
       try {
         await WeixinApi.sendMessage({
           baseUrl: self.baseUrl,

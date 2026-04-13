@@ -70,7 +70,7 @@ interface ChatState {
 
   // Streaming
   sending: boolean;
-  /** Ordered array of streaming blocks — rendered sequentially in UI */
+  /** Streaming blocks for the CURRENT session (derived from streamingBlocksMap) */
   streamingBlocks: StreamingBlock[];
 
   // Sessions
@@ -93,6 +93,41 @@ interface ChatState {
   toggleThinking: () => void;
   refresh: () => void;
   updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
+}
+
+// ── Per-session streaming state ──
+// sessionId → streaming blocks for that session
+// This map is outside Zustand to avoid deep-equal comparison overhead on every token.
+const streamingBlocksMap = new Map<string, StreamingBlock[]>();
+
+function getStreamingBlocks(sessionId: string): StreamingBlock[] {
+  return streamingBlocksMap.get(sessionId) ?? [];
+}
+
+function setStreamingBlocks(sessionId: string, blocks: StreamingBlock[]): void {
+  streamingBlocksMap.set(sessionId, blocks);
+}
+
+function clearStreamingBlocks(sessionId: string): void {
+  streamingBlocksMap.delete(sessionId);
+}
+
+// Track per-session streaming cleanup functions so we can unsubscribe when session changes
+const streamCleanups = new Map<string, () => void>();
+
+function registerStreamCleanup(sessionId: string, cleanup: () => void): void {
+  // If there's a previous cleanup (e.g. user sent new message before previous stream finished), call it
+  const prev = streamCleanups.get(sessionId);
+  if (prev) prev();
+  streamCleanups.set(sessionId, cleanup);
+}
+
+function cleanupStream(sessionId: string): void {
+  const fn = streamCleanups.get(sessionId);
+  if (fn) {
+    fn();
+    streamCleanups.delete(sessionId);
+  }
 }
 
 // ── Helpers for streaming block management ──
@@ -164,7 +199,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loading: false,
   error: null,
   sending: false,
-  streamingBlocks: [],
+  streamingBlocks: [],  // derived from streamingBlocksMap[currentSessionId]
   sessions: [],
   currentSessionId: '',
   showThinking: true,
@@ -287,12 +322,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Guard: user may have triggered another switch while we awaited IndexedDB
     if (get().currentSessionId !== currentSessionId) return;
 
+    // Determine if the target session has an active stream
+    const targetBlocks = getStreamingBlocks(sessionId);
+    const isTargetSending = targetBlocks.length > 0 || !!streamCleanups.has(sessionId);
+
     set({
       currentSessionId: sessionId,
       messages: cached ?? [],
-      streamingBlocks: [],
+      streamingBlocks: targetBlocks,
       error: null,
-      sending: false,
+      sending: isTargetSending,
       loading: !cached,
     });
 
@@ -388,14 +427,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed && (!media || media.length === 0)) return;
 
-    const { currentSessionId, sessions, streamingBlocks, messages } = get();
+    const { currentSessionId, sessions, messages } = get();
     if (!currentSessionId) return;
 
     // Before clearing streaming state, save any in-progress assistant content to messages
+    const prevBlocks = getStreamingBlocks(currentSessionId);
     let allMessages = messages;
-    if (streamingBlocks.length > 0) {
-      const contentBlocks = streamingBlocksToContentBlocks(streamingBlocks);
-      const textContent = streamingBlocks
+    if (prevBlocks.length > 0) {
+      const contentBlocks = streamingBlocksToContentBlocks(prevBlocks);
+      const textContent = prevBlocks
         .filter(b => b.type === 'text' || b.type === 'text_live')
         .map(b => (b as StreamingTextBlock | StreamingTextLiveBlock).content)
         .join('');
@@ -432,6 +472,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
+    // Reset per-session streaming state
+    setStreamingBlocks(currentSessionId, []);
     set({
       messages: [...allMessages, userMsg],
       sending: true,
@@ -449,11 +491,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
+    // Capture sessionId at registration time — this is the primeKey for all streaming ops
+    const streamSessionId = currentSessionId;
+
+    // Cleanup any previous stream handlers for this session
+    cleanupStream(streamSessionId);
+
     try {
       // ── Delta batching: accumulate tokens and flush every 50ms ──
       let pendingText = '';
       let pendingThinking = '';
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+      // Helper: update streamingBlocks in the per-session map AND sync to store if currently visible
+      const updateBlocks = (updater: (blocks: StreamingBlock[]) => StreamingBlock[]) => {
+        const current = getStreamingBlocks(streamSessionId);
+        const next = updater(current);
+        setStreamingBlocks(streamSessionId, next);
+        // Only update the store's streamingBlocks if this session is currently displayed
+        if (get().currentSessionId === streamSessionId) {
+          set({ streamingBlocks: next });
+        }
+      };
 
       const flushDeltas = () => {
         flushTimer = null;
@@ -462,11 +521,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const thinkBatch = pendingThinking;
         pendingText = '';
         pendingThinking = '';
-        set((s) => {
-          let blocks = s.streamingBlocks;
+        updateBlocks(blocks => {
           if (textBatch) blocks = appendLiveText(blocks, textBatch);
           if (thinkBatch) blocks = appendThinking(blocks, thinkBatch);
-          return { streamingBlocks: blocks };
+          return blocks;
         });
       };
 
@@ -478,20 +536,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Handle chat.segment: freeze the live text block, new text segment starting
       const unsubSegment = wrapHandler(client, 'chat.segment', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         const segType = String(data.segmentType || 'text');
         if (segType === 'text') {
           // Flush pending text first
           if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
           flushDeltas();
           // Freeze the live text into a completed text block
-          set((s) => ({ streamingBlocks: freezeLiveText(s.streamingBlocks) }));
+          updateBlocks(blocks => freezeLiveText(blocks));
         }
       });
 
       // Set up streaming handlers
       const unsubDelta = wrapHandler(client, 'chat.delta', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         const deltaType = String(data.deltaType || 'text');
         if (deltaType === 'thinking') {
           pendingThinking += String(data.content || '');
@@ -502,115 +560,125 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       const unsubToolStart = wrapHandler(client, 'chat.tool_start', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         // Flush pending deltas before adding tool block
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
 
         const toolId = String(data.toolId || '');
         const toolName = String(data.toolName || '');
-        set((s) => ({
-          streamingBlocks: [...s.streamingBlocks, {
-            type: 'tool_use' as const,
-            id: toolId,
-            name: toolName,
-            input: '',
-            result: '',
-            status: 'running' as const,
-          }],
-        }));
+        updateBlocks(blocks => [...blocks, {
+          type: 'tool_use' as const,
+          id: toolId,
+          name: toolName,
+          input: '',
+          result: '',
+          status: 'running' as const,
+        }]);
       });
 
       const unsubToolDelta = wrapHandler(client, 'chat.tool_delta', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         const toolId = String(data.toolId || '');
         const content = String(data.content || '');
-        set((s) => ({
-          streamingBlocks: s.streamingBlocks.map(b =>
-            b.type === 'tool_use' && b.id === toolId ? { ...b, input: b.input + content } : b
-          ),
-        }));
+        updateBlocks(blocks => blocks.map(b =>
+          b.type === 'tool_use' && b.id === toolId ? { ...b, input: b.input + content } : b
+        ));
       });
 
       const unsubToolResult = wrapHandler(client, 'chat.tool_result', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         const toolUseId = String(data.toolUseId || '');
         const content = String(data.content || '');
-        set((s) => ({
-          streamingBlocks: s.streamingBlocks.map(b =>
-            b.type === 'tool_use' && b.id === toolUseId ? { ...b, result: b.result + content } : b
-          ),
-        }));
+        updateBlocks(blocks => blocks.map(b =>
+          b.type === 'tool_use' && b.id === toolUseId ? { ...b, result: b.result + content } : b
+        ));
       });
 
       const unsubToolProgress = wrapHandler(client, 'chat.tool_progress', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         const toolUseId = String(data.toolUseId || '');
         const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds : undefined;
-        set((s) => ({
-          streamingBlocks: s.streamingBlocks.map(b =>
-            b.type === 'tool_use' && b.id === toolUseId ? { ...b, elapsedSeconds } : b
-          ),
-        }));
+        updateBlocks(blocks => blocks.map(b =>
+          b.type === 'tool_use' && b.id === toolUseId ? { ...b, elapsedSeconds } : b
+        ));
       });
 
-      const unsubToolEnd = wrapHandler(client, 'chat.tool_end', (_data) => {
-        if (_data.sessionId !== currentSessionId) return;
+      const unsubToolEnd = wrapHandler(client, 'chat.tool_end', (data) => {
+        if (data.sessionId !== streamSessionId) return;
         // Mark all running tools as completed
-        set((s) => ({
-          streamingBlocks: s.streamingBlocks.map(b =>
-            b.type === 'tool_use' && b.status === 'running' ? { ...b, status: 'completed' as const } : b
-          ),
-        }));
+        updateBlocks(blocks => blocks.map(b =>
+          b.type === 'tool_use' && b.status === 'running' ? { ...b, status: 'completed' as const } : b
+        ));
       });
 
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
-        if (data.sessionId !== currentSessionId) return;
+        if (data.sessionId !== streamSessionId) return;
         // Flush any remaining batched deltas before finalizing
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
         cleanup();
 
-        const frozen = freezeLiveText(get().streamingBlocks);
+        const frozen = freezeLiveText(getStreamingBlocks(streamSessionId));
         const contentBlocks = streamingBlocksToContentBlocks(frozen);
         const textContent = frozen
           .filter(b => b.type === 'text')
           .map(b => (b as StreamingTextBlock).content)
           .join('');
 
+        clearStreamingBlocks(streamSessionId);
+
         if (textContent.trim() || contentBlocks.length > 0) {
           const assistantMsg: Message = {
             id: crypto.randomUUID(),
-            sessionId: currentSessionId,
+            sessionId: streamSessionId,
             role: 'assistant',
             content: textContent.trim(),
             contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
             createdAt: new Date().toISOString(),
           };
-          const st = get();
-          const finalMessages = [...st.messages, assistantMsg];
-          set({
-            messages: finalMessages,
-            streamingBlocks: [],
-            sending: false,
-          });
-          // Persist to IndexedDB
-          sessionCache.set(currentSessionId, finalMessages);
+          // Only update messages if this session is currently displayed
+          if (get().currentSessionId === streamSessionId) {
+            const st = get();
+            const finalMessages = [...st.messages, assistantMsg];
+            set({
+              messages: finalMessages,
+              streamingBlocks: [],
+              sending: false,
+            });
+            sessionCache.set(streamSessionId, finalMessages);
+          } else {
+            // Session is in background — update cache only, don't touch visible messages
+            const cached = sessionCache.get(streamSessionId) as Message[] | null;
+            const cachedMessages = cached ?? [];
+            const finalMessages = [...cachedMessages, assistantMsg];
+            sessionCache.set(streamSessionId, finalMessages);
+            // Clear sending flag if this was the active session
+            if (get().currentSessionId === streamSessionId) {
+              set({ sending: false });
+            }
+          }
         } else {
-          set({ streamingBlocks: [], sending: false });
+          if (get().currentSessionId === streamSessionId) {
+            set({ streamingBlocks: [], sending: false });
+          }
         }
       });
 
-      const unsubErr = wrapHandler(client, 'chat.error', (_data) => {
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        if (data.sessionId !== streamSessionId) return;
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         pendingText = '';
         pendingThinking = '';
         cleanup();
-        set({
-          error: String(_data.error || 'Unknown error'),
-          streamingBlocks: [],
-          sending: false,
-        });
+        clearStreamingBlocks(streamSessionId);
+        if (get().currentSessionId === streamSessionId) {
+          set({
+            error: String(data.error || 'Unknown error'),
+            streamingBlocks: [],
+            sending: false,
+          });
+        }
       });
 
       const cleanup = () => {
@@ -624,10 +692,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubToolEnd();
         unsubDone();
         unsubErr();
+        streamCleanups.delete(streamSessionId);
       };
 
+      // Register cleanup so switchSession can unsubscribe if needed
+      registerStreamCleanup(streamSessionId, cleanup);
+
       // Send message
-      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: currentSessionId, content: trimmed };
+      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed };
       if (media && media.length > 0) {
         msg.media = media;
       }
@@ -640,6 +712,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortRun: () => {
     const client = getWsClient();
     const { currentSessionId } = get();
+    // Cleanup stream handlers and clear per-session streaming state
+    cleanupStream(currentSessionId);
+    clearStreamingBlocks(currentSessionId);
     set({ sending: false, streamingBlocks: [], error: null });
     if (client && currentSessionId) {
       client.send({ type: 'chat.abort', sessionId: currentSessionId });
@@ -650,7 +725,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
   refresh: () => {
     const { currentSessionId } = get();
-    if (currentSessionId) sessionCache.invalidate(currentSessionId);
+    if (currentSessionId) {
+      sessionCache.invalidate(currentSessionId);
+      cleanupStream(currentSessionId);
+      clearStreamingBlocks(currentSessionId);
+    }
     set({ messages: [], streamingBlocks: [], error: null, sending: false });
     get().loadHistory();
   },

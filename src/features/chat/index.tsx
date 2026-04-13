@@ -43,6 +43,22 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
 
+  // Track whether user is near bottom (within 150px) for smart auto-scroll
+  const isNearBottomRef = useRef(true);
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  }, []);
+
+  // Track which session the user initiated a send in — only auto-scroll in that case
+  const sendingSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (sending && currentSessionId) {
+      sendingSessionIdRef.current = currentSessionId;
+    }
+  }, [sending, currentSessionId]);
+
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
     const mediaForWs = media?.map(m => ({ type: 'image' as const, mimeType: m.mimeType, base64Data: m.base64Data, fileName: m.fileName }));
     sendMessage(_text, mediaForWs);
@@ -58,17 +74,31 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  // Auto-scroll to bottom
+  // Preserve scroll position across session switches
+  const prevSessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    if (currentSessionId !== prevSessionIdRef.current) {
+      prevSessionIdRef.current = currentSessionId;
+      // Session changed — do not scroll, let the browser restore position naturally
+      // The user will see their last scroll position from the cache
+      return;
+    }
+  }, [currentSessionId]);
+
+  // Smart auto-scroll: only scroll to bottom when actively streaming AND user is near bottom
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (messages.length === 0 && !sending) return;
+    // Don't auto-scroll if user scrolled up
+    if (!isNearBottomRef.current) return;
+    // Only auto-scroll when there's active streaming content in the current session
+    if (!sending || currentSessionId !== sendingSessionIdRef.current) return;
 
-    // Use setTimeout to let content-visibility elements render their real heights
-    setTimeout(() => {
+    // Use requestAnimationFrame to let React render first
+    requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
-    }, 0);
-  }, [messages.length, sending, streamingBlocks.length]);
+    });
+  }, [messages.length, sending, streamingBlocks.length, currentSessionId]);
 
   const hasStreamingContent = streamingBlocks.length > 0;
   const isEmpty = messages.length === 0 && !sending;
@@ -76,7 +106,7 @@ export function Chat() {
   return (
     <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
       {/* Messages */}
-      <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
+      <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'} onScroll={handleScroll}>
         <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />

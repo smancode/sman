@@ -66,6 +66,8 @@ export class ClaudeSessionManager {
   private webAccessService: WebAccessService | null = null;
   private userProfile: UserProfileManager | null = null;
   private capabilityRegistry: CapabilityRegistry | null = null;
+  /** Serializes getOrCreateV2Session calls to prevent process.chdir races */
+  private v2CreateChain: Promise<void> = Promise.resolve();
 
   setUserProfile(manager: UserProfileManager): void {
     this.userProfile = manager;
@@ -304,62 +306,81 @@ export class ClaudeSessionManager {
       }
     }
 
-    // Create new V2 session
-    const sessionInfo = this.sessions.get(sessionId);
-    const isScanner = sessionInfo?.isScanner === true;
+    // Serialize V2 session creation to prevent process.chdir races between concurrent calls.
+    // Each call awaits the previous one before proceeding.
+    let resolveChain!: () => void;
+    const chainPromise = new Promise<void>(r => { resolveChain = r; });
+    const previousChain = this.v2CreateChain;
+    this.v2CreateChain = chainPromise;
+    await previousChain;
 
-    const options = isScanner
-      ? this.buildScannerSessionOptions(session.workspace)
-      : this.buildSessionOptions(session.workspace);
-
-    // Resume from persisted SDK session ID if available
-    let sdkSessionId = this.sdkSessionIds.get(sessionId);
-    if (!sdkSessionId) {
-      sdkSessionId = this.store.getSdkSessionId(sessionId);
-      if (sdkSessionId) {
-        this.sdkSessionIds.set(sessionId, sdkSessionId);
-      }
-    }
-    if (sdkSessionId) {
-      options.resume = sdkSessionId;
-      this.log.info(`Resuming V2 session with SDK session_id: ${sdkSessionId}`);
-    }
-
-    this.log.info(`Creating V2 session for ${sessionId}...`);
-
-    // SDK's unstable_v2_createSession doesn't pass cwd to ProcessTransport,
-    // so claude CLI inherits the parent process's cwd.
-    // Fix: temporarily chdir to workspace before creating the session.
-    const prevCwd = process.cwd();
-    if (prevCwd !== session.workspace) {
-      try { process.chdir(session.workspace); } catch {
-        this.log.warn(`Failed to chdir to ${session.workspace}, using ${prevCwd}`);
-      }
-    }
-
-    let v2Session: SDKSession;
     try {
-      v2Session = await unstable_v2_createSession(options as any);
-    } finally {
-      if (prevCwd !== session.workspace) {
-        try { process.chdir(prevCwd); } catch { /* ignore */ }
+      // Double-check after awaiting chain — another call may have created this session
+      const existingAfter = this.v2Sessions.get(sessionId);
+      if (existingAfter) {
+        existingAfter.lastUsedAt = Date.now();
+        return existingAfter.session;
       }
+
+      // Create new V2 session
+      const sessionInfo = this.sessions.get(sessionId);
+      const isScanner = sessionInfo?.isScanner === true;
+
+      const options = isScanner
+        ? this.buildScannerSessionOptions(session.workspace)
+        : this.buildSessionOptions(session.workspace);
+
+      // Resume from persisted SDK session ID if available
+      let sdkSessionId = this.sdkSessionIds.get(sessionId);
+      if (!sdkSessionId) {
+        sdkSessionId = this.store.getSdkSessionId(sessionId);
+        if (sdkSessionId) {
+          this.sdkSessionIds.set(sessionId, sdkSessionId);
+        }
+      }
+      if (sdkSessionId) {
+        options.resume = sdkSessionId;
+        this.log.info(`Resuming V2 session with SDK session_id: ${sdkSessionId}`);
+      }
+
+      this.log.info(`Creating V2 session for ${sessionId}...`);
+
+      // SDK's unstable_v2_createSession doesn't pass cwd to ProcessTransport,
+      // so claude CLI inherits the parent process's cwd.
+      // Fix: temporarily chdir to workspace before creating the session.
+      const prevCwd = process.cwd();
+      if (prevCwd !== session.workspace) {
+        try { process.chdir(session.workspace); } catch {
+          this.log.warn(`Failed to chdir to ${session.workspace}, using ${prevCwd}`);
+        }
+      }
+
+      let v2Session: SDKSession;
+      try {
+        v2Session = await unstable_v2_createSession(options as any);
+      } finally {
+        if (prevCwd !== session.workspace) {
+          try { process.chdir(prevCwd); } catch { /* ignore */ }
+        }
+      }
+
+      const v2Info: V2SessionInfo = {
+        session: v2Session,
+        sessionId,
+        workspace: session.workspace,
+        createdAt: Date.now(),
+        lastUsedAt: Date.now(),
+        configGeneration: this.configGeneration,
+      };
+      this.v2Sessions.set(sessionId, v2Info);
+
+      const pid = (v2Session as any).pid;
+      this.log.info(`V2 session created for ${sessionId}, PID: ${pid ?? 'unknown'}`);
+
+      return v2Session;
+    } finally {
+      resolveChain();
     }
-
-    const v2Info: V2SessionInfo = {
-      session: v2Session,
-      sessionId,
-      workspace: session.workspace,
-      createdAt: Date.now(),
-      lastUsedAt: Date.now(),
-      configGeneration: this.configGeneration,
-    };
-    this.v2Sessions.set(sessionId, v2Info);
-
-    const pid = (v2Session as any).pid;
-    this.log.info(`V2 session created for ${sessionId}, PID: ${pid ?? 'unknown'}`);
-
-    return v2Session;
   }
 
   closeV2Session(sessionId: string): void {
@@ -1125,17 +1146,13 @@ export class ClaudeSessionManager {
         switch (sdkMsg.type) {
           case 'assistant': {
             toolInProgress = false;
+            // The SDK sends accumulated text here (includePartialMessages: true),
+            // but we already streamed it token-by-token via 'stream_event' events.
+            // Only use this as the authoritative fullContent for final output,
+            // never send it as onResponse to avoid duplicates or missed deltas.
             const text = this.extractTextContent(sdkMsg);
             if (text) {
-              const newPart = text.length > fullContent.length && text.startsWith(fullContent)
-                ? text.slice(fullContent.length)
-                : (fullContent === '' ? text : '');
-              if (newPart) {
-                fullContent = text;
-                onResponse(newPart);
-              } else {
-                fullContent = text;
-              }
+              fullContent = text;
             }
             break;
           }
