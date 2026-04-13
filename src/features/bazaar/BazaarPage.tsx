@@ -152,6 +152,11 @@ export function BazaarPage() {
                 )}
               </div>
             )}
+
+            {/* 操作提示 */}
+            <div className="absolute bottom-0 left-0 w-full text-center py-1 text-xs text-white/50 bg-black/20 pointer-events-none">
+              拖拽平移 · 滚轮缩放 · 点击建筑查看功能 · 点击 Agent 查看详情
+            </div>
           </div>
 
           {/* 右：信息面板 */}
