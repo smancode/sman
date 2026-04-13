@@ -15,3 +15,22 @@ export interface WorldZoneEvent {
 }
 
 export type ActivePanel = 'leaderboard' | 'tasks' | 'chat' | 'agents';
+
+export interface HoverInfo {
+  type: 'building' | 'agent';
+  target: unknown;
+  worldX: number;
+  worldY: number;
+}
+
+export type TooltipData = {
+  type: 'building';
+  label: string;
+} | {
+  type: 'agent';
+  name: string;
+  avatar: string;
+  status: string;
+  reputation: number;
+  isOldPartner: boolean;
+};
