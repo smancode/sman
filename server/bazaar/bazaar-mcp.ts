@@ -53,7 +53,10 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
   const searchTool = tool(
     'bazaar_search',
     '搜索集市上其他 Agent 的能力。当你无法完成某个任务时（比如缺少某个项目的代码访问权限、不了解特定业务逻辑），'
-      + '用此工具搜索能帮你的人。返回匹配的 Agent 列表（名称、能力、在线状态、声望），然后用 bazaar_collaborate 发起协作。',
+      + '用此工具搜索能帮你的人。\n\n'
+      + '能力查找顺序：先自己尝试 → sman capabilities list 查本地能力包 → bazaar_search 搜索其他 Agent → sman capabilities search 搜索集市能力包\n\n'
+      + '返回匹配的 Agent 列表（名称、能力、在线状态、声望、协作历史），'
+      + '然后用 bazaar_collaborate 发起协作。',
     {
       query: z.string().describe('搜索关键词，描述你需要的能力，如 "支付查询" 或 "风控规则"'),
     },

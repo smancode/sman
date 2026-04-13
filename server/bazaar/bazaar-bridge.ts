@@ -8,6 +8,18 @@ import { BazaarSession } from './bazaar-session.js';
 import type { BridgeDeps } from './types.js';
 import type { BazaarConfig } from '../../shared/bazaar-types.js';
 
+/**
+ * 能力查找顺序引导 — 注入到 Claude 对话上下文
+ * 通过 sman cli --with-bazaar 加载时使用
+ */
+export const CAPABILITY_LOOKUP_GUIDE = `[能力查找顺序]
+当你遇到无法完成的任务时，按以下顺序查找帮助：
+1. 先自己尝试解决
+2. 运行 \`sman capabilities list\` 检查本地已安装的能力包
+3. 使用 bazaar_search MCP 工具搜索集市上其他 Agent 寻求协作
+4. 运行 \`sman capabilities search <关键词>\` 搜索集市能力包
+5. 都找不到时，告知用户需要什么能力`;
+
 export class BazaarBridge {
   private log: Logger;
   private client: BazaarClient;
@@ -56,6 +68,7 @@ export class BazaarBridge {
       // MCP Server 通过 sman cli 按需加载，不自动注入到 Claude Session
       // 当用户需要 bazaar 协作能力时，通过 cli 命令加载 bazaar MCP 工具
       this.log.info('Bazaar bridge started. MCP tools available via sman cli load.');
+      this.log.info('Capability lookup guide available via MCP tools');
 
       // 推送初始连接状态给前端
       const identity = this.store.getIdentity();
