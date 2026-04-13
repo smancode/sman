@@ -66,6 +66,16 @@ export class BazaarStore {
 
       CREATE INDEX IF NOT EXISTS idx_learned_capability ON learned_routes(capability);
 
+      CREATE TABLE IF NOT EXISTS pair_history (
+        partner_id TEXT NOT NULL,
+        partner_name TEXT NOT NULL,
+        task_count INTEGER DEFAULT 1,
+        total_rating REAL DEFAULT 0,
+        avg_rating REAL DEFAULT 0,
+        last_collaborated_at TEXT NOT NULL,
+        PRIMARY KEY (partner_id)
+      );
+
       PRAGMA journal_mode=WAL;
     `);
 
@@ -181,5 +191,46 @@ export class BazaarStore {
       FROM learned_routes
       ORDER BY capability, updated_at DESC
     `).all() as Array<{ capability: string; agentId: string; agentName: string; experience: string }>;
+  }
+
+  // ── Pair History ──
+
+  savePairHistory(input: { partnerId: string; partnerName: string; rating: number }): void {
+    const existing = this.getPairHistory(input.partnerId);
+    const now = new Date().toISOString();
+
+    if (existing) {
+      const newCount = existing.taskCount + 1;
+      const newTotal = existing.totalRating + input.rating;
+      const newAvg = Math.round((newTotal / newCount) * 10) / 10;
+      this.db.prepare(`
+        UPDATE pair_history
+        SET partner_name = ?, task_count = ?, total_rating = ?, avg_rating = ?, last_collaborated_at = ?
+        WHERE partner_id = ?
+      `).run(input.partnerName, newCount, newTotal, newAvg, now, input.partnerId);
+    } else {
+      this.db.prepare(`
+        INSERT INTO pair_history (partner_id, partner_name, task_count, total_rating, avg_rating, last_collaborated_at)
+        VALUES (?, ?, 1, ?, ?, ?)
+      `).run(input.partnerId, input.partnerName, input.rating, input.rating, now);
+    }
+  }
+
+  getPairHistory(partnerId: string): { partnerId: string; partnerName: string; taskCount: number; totalRating: number; avgRating: number; lastCollaboratedAt: string } | undefined {
+    return this.db.prepare(`
+      SELECT partner_id as partnerId, partner_name as partnerName,
+        task_count as taskCount, total_rating as totalRating,
+        avg_rating as avgRating, last_collaborated_at as lastCollaboratedAt
+      FROM pair_history WHERE partner_id = ?
+    `).get(partnerId) as any;
+  }
+
+  listPairHistories(): Array<{ partnerId: string; partnerName: string; taskCount: number; avgRating: number; lastCollaboratedAt: string }> {
+    return this.db.prepare(`
+      SELECT partner_id as partnerId, partner_name as partnerName,
+        task_count as taskCount, avg_rating as avgRating,
+        last_collaborated_at as lastCollaboratedAt
+      FROM pair_history ORDER BY avg_rating DESC
+    `).all() as any[];
   }
 }

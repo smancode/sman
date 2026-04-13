@@ -194,4 +194,38 @@ describe('BazaarStore', () => {
       expect(results[0].experience).toBe('');
     });
   });
+
+  describe('pair_history', () => {
+    it('should save and get pair history', () => {
+      store.savePairHistory({ partnerId: 'agent-002', partnerName: '小李', rating: 4.5 });
+      const pair = store.getPairHistory('agent-002');
+      expect(pair).toBeDefined();
+      expect(pair!.partnerName).toBe('小李');
+      expect(pair!.taskCount).toBe(1);
+      expect(pair!.avgRating).toBe(4.5);
+    });
+
+    it('should accumulate pair history (upsert)', () => {
+      store.savePairHistory({ partnerId: 'a1', partnerName: 'A', rating: 4 });
+      store.savePairHistory({ partnerId: 'a1', partnerName: 'A', rating: 5 });
+
+      const pair = store.getPairHistory('a1');
+      expect(pair!.taskCount).toBe(2);
+      expect(pair!.totalRating).toBe(9);
+      expect(pair!.avgRating).toBe(4.5);
+    });
+
+    it('should return undefined for unknown partner', () => {
+      expect(store.getPairHistory('unknown')).toBeUndefined();
+    });
+
+    it('should list all pair histories sorted by avgRating', () => {
+      store.savePairHistory({ partnerId: 'a1', partnerName: 'A', rating: 3 });
+      store.savePairHistory({ partnerId: 'a2', partnerName: 'B', rating: 5 });
+
+      const pairs = store.listPairHistories();
+      expect(pairs).toHaveLength(2);
+      expect(pairs[0].partnerId).toBe('a2'); // avgRating 5 first
+    });
+  });
 });
