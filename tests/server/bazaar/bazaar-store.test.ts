@@ -165,5 +165,33 @@ describe('BazaarStore', () => {
       const all = store.listLearnedRoutes();
       expect(all).toHaveLength(2);
     });
+
+    it('should save and retrieve experience field', () => {
+      store.saveLearnedRoute({
+        capability: '支付查询',
+        agentId: 'agent-002',
+        agentName: '小李',
+        experience: '用 JOIN 优化了支付流水查询，将查询时间从 3s 降到 50ms',
+      });
+
+      const results = store.findLearnedRoutes('支付');
+      expect(results).toHaveLength(1);
+      expect(results[0].experience).toBe('用 JOIN 优化了支付流水查询，将查询时间从 3s 降到 50ms');
+    });
+
+    it('should search experience field by keyword', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A', experience: '风控规则配置需要修改白名单' });
+
+      const results = store.findLearnedRoutes('风控');
+      expect(results).toHaveLength(1);
+      expect(results[0].agentId).toBe('a1');
+    });
+
+    it('should return empty experience by default', () => {
+      store.saveLearnedRoute({ capability: '支付', agentId: 'a1', agentName: 'A' });
+
+      const results = store.findLearnedRoutes('支付');
+      expect(results[0].experience).toBe('');
+    });
   });
 });
