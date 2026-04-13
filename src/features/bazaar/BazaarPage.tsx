@@ -22,7 +22,7 @@ export function BazaarPage() {
   const navigate = useNavigate();
   const { connection, fetchTasks, fetchOnlineAgents, fetchLeaderboard, loading } = useBazaarStore();
   const rendererRef = useRef<WorldRenderer | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('world');
+  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [activePanel, setActivePanel] = useState<ActivePanel>('leaderboard');
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function BazaarPage() {
           <Button variant="ghost" size="sm" onClick={() => navigate('/chat')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h2 className="text-lg font-semibold">传送门</h2>
+          <h2 className="text-lg font-semibold">集市</h2>
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         </div>
 
