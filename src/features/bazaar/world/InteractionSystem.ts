@@ -42,6 +42,15 @@ export class InteractionSystem {
     return null;
   }
 
+  /**
+   * Hover 检测 — building priority > agent
+   */
+  hoverTest(worldX: number, worldY: number, agents: ReadonlyArray<AgentEntity>): HitResult | null {
+    const buildingHit = this.hitTestBuildings(worldX, worldY);
+    if (buildingHit) return buildingHit;
+    return this.hitTestAgents(worldX, worldY, agents);
+  }
+
   handleBuildingClick(building: BuildingData): BuildingAction | null {
     return this.registry.getAction(building.type);
   }
