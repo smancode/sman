@@ -22,8 +22,7 @@ const ILINK_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const MAX_QR_REFRESH_COUNT = 3;
 const MONITOR_BACKOFF_MS = 30_000;
 const CONSECUTIVE_FAILURE_THRESHOLD = 3;
-const MESSAGE_SPLIT_MAX_LEN = 3900;
-const STREAM_THROTTLE_MS = 3000;
+const MESSAGE_SPLIT_MAX_LEN = 2000;
 
 interface WeixinBotConfig {
   homeDir: string;
@@ -391,71 +390,50 @@ export class WeixinBotConnection {
 
   // ── ChatResponseSender ──
 
+  /**
+   * Create a ChatResponseSender for Weixin.
+   *
+   * iLink API does NOT support in-place message updates: same client_id with
+   * GENERATING then FINISH does NOT reliably update the bubble. Confirmed by
+   * openclaw-weixin which uses blockStreaming=true + FINISH only.
+   *
+   * Strategy: accumulate during streaming, send ONE FINISH message at the end.
+   * No intermediate messages — user waits until the response is complete.
+   */
   private createSender(userId: string): ChatResponseSender {
     const self = this;
-    let accumulated = '';
-    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingContent = '';
-    // Shared clientId for streaming updates — same clientId lets iLink update the same message
-    const streamClientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-    let streamStarted = false;
-    // Snapshot contextToken at creation time so it's bound to the inbound message, not shared
     const contextToken = self.contextTokens.get(userId);
 
-    const doSend = async (text: string, label: string, messageState: number) => {
+    const doSend = async (text: string, label: string) => {
       if (!text || !self.token) return;
-      self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length} state=${messageState}`);
+      const clientId = `sman_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      self.log.info(`sendMessage [${label}]: to=${userId} len=${text.length}`);
       try {
         await WeixinApi.sendMessage({
           baseUrl: self.baseUrl,
           token: self.token,
           toUserId: userId,
           text,
-          clientId: streamClientId,
-          messageState,
+          clientId,
+          messageState: 2, // Always FINISH
           contextToken,
         });
-        streamStarted = true;
       } catch (err) {
         self.log.error(`Failed to send message to ${userId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
 
-    const flushStream = () => {
-      throttleTimer = null;
-      if (!pendingContent || !self.token) return;
-      doSend(pendingContent, 'stream', 1 /* GENERATING */);
-    };
-
     return {
       start() {},
-      sendChunk(content: string) {
-        accumulated += content;
-        pendingContent = accumulated;
-        if (!throttleTimer) {
-          throttleTimer = setTimeout(flushStream, STREAM_THROTTLE_MS);
-        }
+      sendChunk() {
+        // Ignore streaming chunks — wait for complete response
       },
       async finish(fullContent: string) {
-        if (throttleTimer) {
-          clearTimeout(throttleTimer);
-          throttleTimer = null;
-        }
-        const text = fullContent || accumulated;
-        if (!text || !self.token) return;
-
-        // Final message with FINISH state
-        const chunks = self.splitMessage(text, MESSAGE_SPLIT_MAX_LEN);
-        for (const chunk of chunks) {
-          await doSend(chunk, 'finish', 2 /* FINISH */);
-        }
+        if (!fullContent || !self.token) return;
+        await doSend(fullContent, 'finish');
       },
       async error(message: string) {
-        if (throttleTimer) {
-          clearTimeout(throttleTimer);
-          throttleTimer = null;
-        }
-        await doSend(message, 'error', 2 /* FINISH */);
+        await doSend(message, 'error');
       },
     };
   }

@@ -33,20 +33,20 @@ export class ChatbotSessionManager {
 
   /** Build session label for chatbot platforms */
   private buildLabel(platform: string, userKey: string, workspacePath: string): string {
-    const projectName = path.basename(workspacePath);
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     switch (platform) {
       case 'wecom': {
         const userId = userKey.split(':').slice(1).join(':');
-        return `WeCom: ${userId} - ${projectName}`;
+        return `WeCom:${userId} ${ts}`;
       }
       case 'feishu': {
         const userId = userKey.split(':').slice(1).join(':');
-        return `Feishu: ${userId} - ${projectName}`;
+        return `Feishu:${userId} ${ts}`;
       }
-      // Weixin: no bot name from API, show generic label
       case 'weixin':
       default:
-        return `Weixin:bot - ${projectName}`;
+        return `Weixin ${ts}`;
     }
   }
 
@@ -298,6 +298,7 @@ export class ChatbotSessionManager {
     // Close old V2 session process to release SDK context
     if (oldSession?.sessionId) {
       this.sessionManager.abort(oldSession.sessionId);
+      this.sessionManager.closeV2Session(oldSession.sessionId);
     }
 
     // Create a new session (ensureSession will overwrite the old mapping)
