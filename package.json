@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "0.1.8",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",

@@ -181,8 +181,9 @@ function buildMenu(): void {
 async function startServerInProcess(): Promise<void> {
   if (isDev) return;
 
-  // Server is at: resources/app/dist/server/index.js (no asar)
-  const serverPath = path.join(process.resourcesPath, 'app', 'dist', 'server', 'index.js');
+  // Server is at: resources/app/dist/server/server/index.js (no asar)
+  // (rootDir is project root, so server/ subdir is preserved in output)
+  const serverPath = path.join(process.resourcesPath, 'app', 'dist', 'server', 'server', 'index.js');
   console.log('[Electron] Loading server from:', serverPath);
   console.log('[Electron] __dirname:', __dirname);
   console.log('[Electron] process.resourcesPath:', process.resourcesPath);
