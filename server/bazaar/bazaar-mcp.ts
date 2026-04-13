@@ -61,30 +61,57 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
       try {
         const query = args.query as string;
 
-        // 1. 先查本地经验路由
+        // 1. 查本地经验路由
         const localRoutes = deps.store.findLearnedRoutes(query);
 
-        // 2. 通过 client 发送 task.create 到集市服务器获取远程搜索结果
+        // 2. 查 pair history 用于排名
+        const pairHistories = (() => {
+          try {
+            return deps.store.listPairHistories();
+          } catch {
+            return []; // 数据损坏时静默降级
+          }
+        })();
+
+        // 3. 远程搜索
         const remoteMatches = await searchRemoteAgents(deps, query);
 
-        // 3. 合并结果：本地已知能人排在前面，远程结果去重
+        // 4. 合并结果并按磨合程度排名
+        const pairMap = new Map(pairHistories.map(p => [p.partnerId, p]));
+
         const localAgentIds = new Set(localRoutes.map(r => r.agentId));
         const filteredRemote = remoteMatches.filter(m => !localAgentIds.has(m.agentId));
 
         const allResults = [
-          ...localRoutes.map(r => ({
-            source: 'local' as const,
-            agentId: r.agentId,
-            name: r.agentName,
-            capability: r.capability,
-            badge: r.experience ? '有经验' : '历史协作',
-          })),
+          ...localRoutes.map(r => {
+            const pair = pairMap.get(r.agentId);
+            let badge = r.experience ? '有经验' : '历史协作';
+            if (pair && pair.taskCount >= 3 && pair.avgRating >= 4) {
+              badge = '老搭档';
+            } else if (pair && pair.taskCount >= 1) {
+              badge = '历史协作';
+            }
+            return {
+              source: 'local' as const,
+              agentId: r.agentId,
+              name: r.agentName,
+              capability: r.capability,
+              badge,
+              priority: badge === '老搭档' ? 0 : badge === '历史协作' ? 1 : badge === '有经验' ? 2 : 3,
+            };
+          }),
           ...filteredRemote.map(m => ({
             source: 'remote' as const,
             agentId: m.agentId,
             name: m.name,
+            capability: '',
+            badge: '',
+            priority: 4,
           })),
         ];
+
+        // 按优先级排序
+        allResults.sort((a, b) => a.priority - b.priority);
 
         if (allResults.length === 0) {
           return textResult(`没有找到拥有 "${query}" 能力的 Agent。你可以尝试换个关键词搜索，或者稍后再试。`);

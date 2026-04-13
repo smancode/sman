@@ -346,11 +346,27 @@ export class BazaarBridge {
     // 更新状态
     this.store.updateTaskStatus(taskId, 'chatting');
 
+    // 构建协作上下文（如果有历史记录）
+    const partnerId = task.requesterAgentId ?? task.helperAgentId;
+    const partnerName = task.requesterName ?? task.helperName;
+    let collaborationContext = '';
+    if (partnerId) {
+      const pair = this.store.getPairHistory(partnerId);
+      if (pair && pair.taskCount >= 1) {
+        collaborationContext = `\n[协作上下文]\n你之前和 Agent「${partnerName}」协作过 ${pair.taskCount} 次，平均评分 ${pair.avgRating}。\n`;
+        // 查找该 Agent 的最近经验路由
+        const allRoutes = this.store.listLearnedRoutes().filter(r => r.agentId === partnerId);
+        if (allRoutes.length > 0) {
+          collaborationContext += `上次协作解决了"${allRoutes[0].capability}"的问题。\n`;
+        }
+      }
+    }
+
     // 启动协作 Session
     const workspace = this.deps.homeDir;
     this.bazaarSession.startCollaboration(
       taskId,
-      task.question,
+      task.question + collaborationContext,
       task.requesterAgentId ?? 'unknown',
       task.requesterName ?? '一位同事',
       workspace,
@@ -399,6 +415,9 @@ export class BazaarBridge {
             this.log.info('Experience extraction failed, saving route without experience');
             this.store.saveLearnedRoute({ capability, agentId, agentName });
           });
+
+          // Update pair familiarity
+          this.store.savePairHistory({ partnerId: agentId, partnerName: agentName, rating });
         }
       }
     }

@@ -55,4 +55,20 @@ describe('bazaar_search ranking', () => {
     const routes = store.findLearnedRoutes('风控');
     expect(routes).toHaveLength(0);
   });
+
+  it('should rank old partners higher (pair history)', () => {
+    // Add old partner record: 3 collaborations, avg 4.5
+    store.savePairHistory({ partnerId: 'a1', partnerName: '小李', rating: 4 });
+    store.savePairHistory({ partnerId: 'a1', partnerName: '小李', rating: 5 });
+    store.savePairHistory({ partnerId: 'a1', partnerName: '小李', rating: 4.5 });
+
+    // Add regular collaboration routes
+    store.saveLearnedRoute({ capability: '支付查询', agentId: 'a1', agentName: '小李' });
+    store.saveLearnedRoute({ capability: '支付查询', agentId: 'a2', agentName: '老王' });
+
+    const pair = store.getPairHistory('a1');
+    expect(pair).toBeDefined();
+    expect(pair!.taskCount).toBe(3);
+    expect(pair!.avgRating).toBeGreaterThanOrEqual(4);
+  });
 });
