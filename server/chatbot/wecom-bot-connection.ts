@@ -23,8 +23,11 @@ export class WeComBotConnection {
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempts = 0;
+  private reconnecting = false;
   private stopped = false;
   private config: WeComBotConfig;
+  // Pending messages queued while disconnected, flushed on reconnection.
+  private pendingQueue: object[] = [];
 
   constructor(config: WeComBotConfig) {
     this.config = config;
@@ -45,6 +48,7 @@ export class WeComBotConnection {
     if (this.stopped) return;
 
     this.log.info(`Connecting to WeCom: ${WECOM_WS_URL}`);
+    this.reconnecting = true;
     this.ws = new WebSocket(WECOM_WS_URL);
 
     this.ws.on('open', () => {
@@ -52,6 +56,9 @@ export class WeComBotConnection {
       this.subscribe();
       this.startHeartbeat();
       this.reconnectAttempts = 0;
+      this.reconnecting = false;
+      // Flush any messages queued while disconnected.
+      this.flushPending();
     });
 
     this.ws.on('message', (data) => {
@@ -61,6 +68,7 @@ export class WeComBotConnection {
     this.ws.on('close', (code, reason) => {
       this.log.info(`WebSocket closed: code=${code}, reason=${reason.toString()}`);
       this.stopHeartbeat();
+      this.reconnecting = true;
       this.scheduleReconnect();
     });
 
@@ -83,7 +91,9 @@ export class WeComBotConnection {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
-      this.send({ cmd: 'ping', headers: { req_id: uuidv4() } });
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ cmd: 'ping', headers: { req_id: uuidv4() } }));
+      }
     }, HEARTBEAT_INTERVAL_MS);
   }
 
@@ -371,9 +381,38 @@ export class WeComBotConnection {
     };
   }
 
+  /**
+   * Send a message. If connected → immediate send. If disconnected → queue it,
+   * trigger immediate reconnect, flush all queued messages once reconnected.
+   */
   private send(data: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
+      return;
+    }
+
+    // Disconnected — queue and reconnect now if not already doing so.
+    this.pendingQueue.push(data);
+    this.log.info(`send: queued message (queue=${this.pendingQueue.length}), triggering reconnect`);
+    if (!this.reconnecting) {
+      this.reconnecting = true;
+      this.connect();
+    }
+  }
+
+  /** Flush all queued messages after reconnection. */
+  private flushPending(): void {
+    if (this.pendingQueue.length === 0) return;
+    const queue = this.pendingQueue;
+    this.pendingQueue = [];
+    this.log.info(`Flushing ${queue.length} pending messages`);
+    for (const data of queue) {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(data));
+      } else {
+        // Re-queue if disconnected again mid-flush.
+        this.pendingQueue.push(data);
+      }
     }
   }
 
