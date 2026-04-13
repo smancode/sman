@@ -77,6 +77,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
             agentId: r.agentId,
             name: r.agentName,
             capability: r.capability,
+            badge: r.experience ? '有经验' : '历史协作',
           })),
           ...filteredRemote.map(m => ({
             source: 'remote' as const,
@@ -90,7 +91,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
         }
 
         const lines = allResults.map((r, i) => {
-          const local = r.source === 'local' ? ' [历史协作]' : '';
+          const local = r.source === 'local' ? ` [${r.badge || '历史协作'}]` : '';
           return `${i + 1}. ${r.name} (${r.agentId})${local}`;
         });
 
