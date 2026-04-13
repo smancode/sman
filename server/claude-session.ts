@@ -1049,8 +1049,13 @@ export class ClaudeSessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
+    // If there's an active stream, wait for it to fully exit to avoid stale SDK messages
     if (this.activeStreams.has(sessionId)) {
-      throw new Error(`Session ${sessionId} already has an active query`);
+      const done = this.streamDone.get(sessionId);
+      if (done) {
+        this.log.info(`Chatbot: waiting for previous stream to exit on session ${sessionId}`);
+        await done;
+      }
     }
 
     if (!this.config?.llm?.apiKey) {
@@ -1063,6 +1068,11 @@ export class ClaudeSessionManager {
     this.store.addMessage(sessionId, { role: 'user', content });
 
     this.activeStreams.set(sessionId, abortController);
+
+    // Track when this stream fully exits so the next call can await it
+    let streamResolve!: () => void;
+    const streamPromise = new Promise<void>(r => { streamResolve = r; });
+    this.streamDone.set(sessionId, streamPromise);
 
     // Stall detector for chatbot queries (total timeout handled by caller)
     let lastActivityAt = Date.now();
@@ -1108,21 +1118,23 @@ export class ClaudeSessionManager {
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
 
-      // Inject user profile into content for Claude
+      // Inject user profile + Sman context into content for Claude
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
+      const workspace = session.workspace;
+      const projectName = path.basename(workspace);
+      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。\n重要：收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行。]`;
+      const messagePrefix = profilePrefix
+        ? `${smanContext}\n${profilePrefix}`
+        : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
       const builtContent = buildContentBlocks(content, media, capabilities);
 
       if (typeof builtContent === 'string') {
-        const contentWithProfile = profilePrefix
-          ? `${profilePrefix}\n\n${builtContent}`
-          : builtContent;
-        await v2Session.send(contentWithProfile);
+        const contentWithPrefix = `${messagePrefix}\n\n${builtContent}`;
+        await v2Session.send(contentWithPrefix);
       } else {
-        const blocks = profilePrefix
-          ? [{ type: 'text', text: profilePrefix }, ...builtContent]
-          : builtContent;
+        const blocks = [{ type: 'text', text: messagePrefix }, ...builtContent];
         await v2Session.send({
           type: 'user',
           message: { role: 'user', content: blocks },
@@ -1148,12 +1160,8 @@ export class ClaudeSessionManager {
             toolInProgress = false;
             // The SDK sends accumulated text here (includePartialMessages: true),
             // but we already streamed it token-by-token via 'stream_event' events.
-            // Only use this as the authoritative fullContent for final output,
-            // never send it as onResponse to avoid duplicates or missed deltas.
-            const text = this.extractTextContent(sdkMsg);
-            if (text) {
-              fullContent = text;
-            }
+            // Do NOT overwrite fullContent here — keep the accumulated stream_event text.
+            // Only use as a fallback if stream_events produced nothing.
             break;
           }
           case 'stream_event': {
@@ -1196,6 +1204,8 @@ export class ClaudeSessionManager {
       return '';
     } finally {
       this.activeStreams.delete(sessionId);
+      this.streamDone.delete(sessionId);
+      streamResolve();
     }
   }
 
