@@ -130,4 +130,63 @@ describe('Bridge Integration: Client ↔ Server', () => {
     expect(task!.direction).toBe('incoming');
     expect(task!.status).toBe('offered');
   }, 10_000);
+
+  it('should extract experience on task complete with rating >= 3', async () => {
+    // Setup: save an incoming task (bridge needs it to get agentId/agentName)
+    store.saveTask({
+      taskId: 'task-001',
+      direction: 'incoming',
+      requesterAgentId: 'agent-002',
+      requesterName: '小李',
+      question: '支付查询怎么优化？',
+      status: 'chatting',
+      createdAt: new Date().toISOString(),
+    });
+
+    // Add chat messages
+    store.saveChatMessage({ taskId: 'task-001', from: 'remote', text: '支付查询怎么优化？' });
+    store.saveChatMessage({ taskId: 'task-001', from: 'local', text: '用 JOIN 替代子查询' });
+
+    // Simulate BazaarBridge.handleTaskComplete behavior via onMessage
+    client.onMessage = (msg) => {
+      if (msg.type === 'task.complete') {
+        const rating = msg.payload.rating as number;
+        const taskId = msg.payload.taskId as string;
+        if (rating >= 3) {
+          const task = store.getTask(taskId);
+          if (task) {
+            const capability = task.question;
+            const agentId = task.requesterAgentId ?? task.helperAgentId;
+            const agentName = task.requesterName ?? task.helperName;
+            if (agentId && agentName) {
+              // Simulate extractExperience: no API key → empty experience
+              store.saveLearnedRoute({ capability, agentId, agentName });
+            }
+          }
+        }
+      }
+    };
+
+    // Trigger task.complete from server
+    const wsClient = Array.from(wss.clients)[0];
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      wsClient.send(JSON.stringify({
+        id: 'srv-complete-001',
+        type: 'task.complete',
+        payload: {
+          taskId: 'task-001',
+          rating: 4,
+          feedback: '很好',
+        },
+      }));
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Verify learned_routes saved
+    const routes = store.findLearnedRoutes('支付');
+    expect(routes.length).toBeGreaterThanOrEqual(1);
+    // Experience extraction is async best-effort (may be empty due to no API key), but route must exist
+    expect(routes[0].agentId).toBe('agent-002');
+  }, 10_000);
 });

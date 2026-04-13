@@ -387,22 +387,102 @@ export class BazaarBridge {
     const rating = payload.rating as number;
     const feedback = (payload.feedback as string) ?? '';
 
-    // 保存经验路由（rating >= 3 表示成功协作）
-    // 记录"遇到这类问题找谁"，这是 Agent 进化的核心：积累协作经验
     if (rating >= 3) {
       const task = this.store.getTask(taskId);
       if (task) {
-        const capability = task.question; // 保存完整问题作为经验关键词
+        const capability = task.question;
         const agentId = task.requesterAgentId ?? task.helperAgentId;
         const agentName = task.requesterName ?? task.helperName;
         if (agentId && agentName) {
-          this.store.saveLearnedRoute({ capability, agentId, agentName });
+          // Fire-and-forget async experience extraction
+          this.extractExperience(taskId, capability, agentId, agentName).catch(() => {
+            this.log.info('Experience extraction failed, saving route without experience');
+            this.store.saveLearnedRoute({ capability, agentId, agentName });
+          });
         }
       }
     }
 
     if (this.bazaarSession) {
       this.bazaarSession.completeCollaboration(taskId, rating, feedback);
+    }
+  }
+
+  /**
+   * Extract experience summary from conversation history (best-effort, non-blocking)
+   * 30s timeout, silent degradation on failure
+   */
+  private async extractExperience(
+    taskId: string,
+    capability: string,
+    agentId: string,
+    agentName: string,
+  ): Promise<void> {
+    const messages = this.store.listChatMessages(taskId);
+    if (messages.length === 0) {
+      this.store.saveLearnedRoute({ capability, agentId, agentName });
+      return;
+    }
+
+    const chatText = messages
+      .map(m => `${m.from === 'local' ? '我' : agentName}: ${m.text}`)
+      .join('\n');
+
+    const experience = await this.callClaudeForExperience(chatText);
+    this.store.saveLearnedRoute({ capability, agentId, agentName, experience });
+  }
+
+  /**
+   * Call Claude API to extract experience summary
+   * 30s timeout, returns empty string on failure
+   */
+  private async callClaudeForExperience(chatText: string): Promise<string> {
+    try {
+      const config = this.deps.settingsManager.getConfig();
+      const apiKey = config.llm?.apiKey;
+      const baseUrl = config.llm?.baseUrl || 'https://api.anthropic.com';
+      const model = config.llm?.model || 'claude-haiku-4-5-20251001';
+
+      if (!apiKey) return '';
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30_000);
+
+      const response = await fetch(`${baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 200,
+          messages: [{
+            role: 'user',
+            content: `从以下协作对话中提取经验摘要（100字以内）：
+- 解决了什么问题
+- 用了什么方法
+- 关键知识点
+
+对话内容：
+${chatText}
+
+直接输出经验摘要，不要其他内容：`,
+          }],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!response.ok) return '';
+
+      const data = await response.json() as any;
+      const text = data.content?.[0]?.text ?? '';
+      return text.slice(0, 200);
+    } catch {
+      return '';
     }
   }
 
