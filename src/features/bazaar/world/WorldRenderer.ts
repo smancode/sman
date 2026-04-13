@@ -37,6 +37,11 @@ export class WorldRenderer {
   private hoveredBuilding: BuildingData | null = null;
   private hoveredAgent: AgentEntity | null = null;
 
+  // Building pulse animation (first visit)
+  private buildingPulseActive = false;
+  private buildingPulseStart = 0;
+  private static readonly BUILDING_PULSE_DURATION = 3000; // 3 seconds
+
   constructor() {
     this.tileMap = new TileMap(MAP_DATA as number[][]);
   }
@@ -95,6 +100,11 @@ export class WorldRenderer {
   setHovered(building: BuildingData | null, agent: AgentEntity | null): void {
     this.hoveredBuilding = building;
     this.hoveredAgent = agent;
+  }
+
+  startBuildingPulse(): void {
+    this.buildingPulseActive = true;
+    this.buildingPulseStart = performance.now();
   }
 
   getCamera(): CameraSystem | null {
@@ -162,6 +172,26 @@ export class WorldRenderer {
         this.ctx!.strokeStyle = 'rgba(255, 204, 68, 0.6)';
         this.ctx!.lineWidth = 2;
         this.ctx!.strokeRect(x, y, b.width, b.height);
+      }
+    }
+
+    // Building pulse animation (first visit to world view)
+    if (this.buildingPulseActive) {
+      const elapsed = performance.now() - this.buildingPulseStart;
+      if (elapsed > WorldRenderer.BUILDING_PULSE_DURATION) {
+        this.buildingPulseActive = false;
+      } else {
+        const alpha = 0.3 * (1 - elapsed / WorldRenderer.BUILDING_PULSE_DURATION);
+        const scale = 1 + 0.05 * Math.sin(elapsed / 200);
+        this.ctx!.strokeStyle = `rgba(255, 204, 68, ${alpha})`;
+        this.ctx!.lineWidth = 3;
+        for (const b of BUILDINGS) {
+          const bx = b.col * TS - cameraX;
+          const by = b.row * TS - cameraY;
+          const w = b.width * scale;
+          const h = b.height * scale;
+          this.ctx!.strokeRect(bx - (w - b.width) / 2, by - (h - b.height) / 2, w, h);
+        }
       }
     }
   }

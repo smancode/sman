@@ -92,6 +92,13 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover 
     rendererRef.current = renderer;
     renderer.start();
 
+    // First world visit: building pulse animation
+    const hasSeenWorld = localStorage.getItem('bazaar-world-seen');
+    if (!hasSeenWorld) {
+      renderer.startBuildingPulse();
+      localStorage.setItem('bazaar-world-seen', 'true');
+    }
+
     // Canvas events
     canvas.addEventListener('mousedown', pipeline.onMouseDown);
     canvas.addEventListener('mousemove', pipeline.onMouseMove);
