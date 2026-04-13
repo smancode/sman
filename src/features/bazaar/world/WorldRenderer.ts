@@ -3,6 +3,7 @@
 
 import { DESIGN } from './palette';
 import { MAP_DATA, BUILDINGS } from './map-data';
+import type { BuildingData } from './map-data';
 import { TileMap } from './TileMap';
 import { getAgentSprite, getBuildingSprite } from './SpriteSheet';
 import { AgentEntity } from './AgentEntity';
@@ -31,6 +32,10 @@ export class WorldRenderer {
 
   // 建筑离屏缓存
   private buildingLayer: OffscreenCanvas | null = null;
+
+  // Hover state
+  private hoveredBuilding: BuildingData | null = null;
+  private hoveredAgent: AgentEntity | null = null;
 
   constructor() {
     this.tileMap = new TileMap(MAP_DATA as number[][]);
@@ -85,6 +90,11 @@ export class WorldRenderer {
 
   setCamera(camera: CameraSystem): void {
     this.camera = camera;
+  }
+
+  setHovered(building: BuildingData | null, agent: AgentEntity | null): void {
+    this.hoveredBuilding = building;
+    this.hoveredAgent = agent;
   }
 
   getCamera(): CameraSystem | null {
@@ -146,6 +156,13 @@ export class WorldRenderer {
       this.ctx!.fillStyle = '#f4f4f4';
       this.ctx!.font = '14px serif';
       this.ctx!.fillText(emoji, x + labelOffset / 2, y - 4);
+
+      // Hover highlight for building
+      if (this.hoveredBuilding && this.hoveredBuilding.id === b.id) {
+        this.ctx!.strokeStyle = 'rgba(255, 204, 68, 0.6)';
+        this.ctx!.lineWidth = 2;
+        this.ctx!.strokeRect(x, y, b.width, b.height);
+      }
     }
   }
 
@@ -187,6 +204,15 @@ export class WorldRenderer {
       this.ctx.fillStyle = '#ffcc44';
       this.ctx.font = '10px serif';
       this.ctx.fillText('💬', screenX + 14, screenY - DESIGN.AGENT_H - 2);
+    }
+
+    // Hover highlight for agent
+    if (this.hoveredAgent && this.hoveredAgent.id === agent.id) {
+      this.ctx.strokeStyle = 'rgba(255, 204, 68, 0.6)';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(screenX, screenY - 8, 20, 0, Math.PI * 2);
+      this.ctx.stroke();
     }
   }
 
