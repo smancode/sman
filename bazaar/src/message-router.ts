@@ -103,23 +103,12 @@ export class MessageRouter {
         username: payload.username as string,
         hostname: payload.hostname as string,
         name: payload.name as string,
+        description: (payload.description as string) ?? '',
         avatar: (payload.avatar as string) ?? '🧙',
       });
     }
 
-    // 更新项目列表（确保 skills 为 JSON string）
-    const rawProjects = (payload.projects as Array<{ repo: string; skills: unknown }>) ?? [];
-    const projects = rawProjects.map(p => ({
-      repo: p.repo,
-      skills: typeof p.skills === 'string' ? p.skills : JSON.stringify(p.skills),
-    }));
-    if (projects.length > 0) {
-      this.store.updateProjects(agentId, projects);
-    }
-
-    this.store.logAudit('agent.online', agentId, undefined, undefined, {
-      projects: projects.map(p => p.repo),
-    });
+    this.store.logAudit('agent.online', agentId);
 
     this.log.info(`Agent registered: ${payload.name} (${agentId})`);
 
@@ -164,9 +153,6 @@ export class MessageRouter {
 
     if (payload.status) {
       this.store.updateAgentStatus(agentId, payload.status as string);
-    }
-    if (payload.projects) {
-      this.store.updateProjects(agentId, payload.projects as Array<{ repo: string; skills: string }>);
     }
     this.store.updateHeartbeat(agentId);
 

@@ -5,7 +5,6 @@ import { createLogger, type Logger } from '../utils/logger.js';
 import { BazaarClient } from './bazaar-client.js';
 import { BazaarStore } from './bazaar-store.js';
 import { BazaarSession } from './bazaar-session.js';
-import { createBazaarMcpServer } from './bazaar-mcp.js';
 import type { BridgeDeps } from './types.js';
 import type { BazaarConfig } from '../../shared/bazaar-types.js';
 
@@ -23,7 +22,7 @@ export class BazaarBridge {
     const dbPath = `${deps.homeDir}/bazaar.db`;
     this.store = new BazaarStore(dbPath);
     this.client = new BazaarClient(this.store, {
-      getAgentProjects: () => this.getAgentProjects(),
+      getAgentDescription: () => this.getAgentDescription(),
     });
 
     // 集市消息 → 前端推送
@@ -54,13 +53,9 @@ export class BazaarBridge {
         maxConcurrentTasks: config.bazaar?.maxConcurrentTasks ?? 3,
       });
 
-      // 创建 MCP Server（bazaar_search + bazaar_collaborate）
-      const mcpServer = createBazaarMcpServer({
-        store: this.store,
-        client: this.client,
-        broadcast: this.deps.broadcast,
-      });
-      this.log.info('Bazaar MCP server created', { serverName: mcpServer.name });
+      // MCP Server 通过 sman cli 按需加载，不自动注入到 Claude Session
+      // 当用户需要 bazaar 协作能力时，通过 cli 命令加载 bazaar MCP 工具
+      this.log.info('Bazaar bridge started. MCP tools available via sman cli load.');
 
       // 推送初始连接状态给前端
       const identity = this.store.getIdentity();
@@ -326,12 +321,11 @@ export class BazaarBridge {
     }
   }
 
-  private getAgentProjects(): Array<{ repo: string; skills: string }> {
-    // 从 SkillsRegistry 获取当前项目的 skills
-    const projects: Array<{ repo: string; skills: string }> = [];
-    // Phase 1 简化版：从配置中的工作目录推断
-    // 后续 Phase 从 SkillsRegistry 动态获取
-    return projects;
+  private getAgentDescription(): string {
+    // Agent 注册到集市只给 name + description，不上传 skills/projects 详情
+    // description 可从配置中获取，描述"我是谁、我能干什么"
+    const config = this.deps.settingsManager.getConfig().bazaar;
+    return config?.agentName ? `${config.agentName} 的 Sman Agent` : 'Sman Agent';
   }
 
   // ── 协作 Session 相关处理 ──

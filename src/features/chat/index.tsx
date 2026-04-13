@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import { AlertCircle, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -43,6 +43,10 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
 
+  // ── Scroll position management ──
+  // Per-session scroll position cache — survives session switches
+  const scrollPositions = useRef(new Map<string, number>());
+
   // Track whether user is near bottom (within 150px) for smart auto-scroll
   const isNearBottomRef = useRef(true);
   const handleScroll = useCallback(() => {
@@ -51,16 +55,57 @@ export function Chat() {
     isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
   }, []);
 
-  // Track which session the user initiated a send in — only auto-scroll in that case
-  const sendingSessionIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (sending && currentSessionId) {
-      sendingSessionIdRef.current = currentSessionId;
+  // Flag: when session changes, we need to restore scroll after React renders
+  const pendingRestoreRef = useRef<string | null>(null);
+
+  // Sync: save scroll position before the session actually changes
+  const prevSessionIdRef = useRef(currentSessionId);
+  if (currentSessionId !== prevSessionIdRef.current) {
+    const el = scrollRef.current;
+    if (el && prevSessionIdRef.current) {
+      scrollPositions.current.set(prevSessionIdRef.current, el.scrollTop);
     }
-  }, [sending, currentSessionId]);
+    pendingRestoreRef.current = currentSessionId;
+    prevSessionIdRef.current = currentSessionId;
+    isNearBottomRef.current = true; // reset
+  }
+
+  // After React commits new messages to DOM, restore the saved scroll position
+  useLayoutEffect(() => {
+    const sid = pendingRestoreRef.current;
+    if (!sid) return;
+    pendingRestoreRef.current = null;
+
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const saved = scrollPositions.current.get(sid);
+    if (saved !== undefined) {
+      el.scrollTop = saved;
+      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    } else {
+      el.scrollTop = el.scrollHeight;
+      isNearBottomRef.current = true;
+    }
+  }); // Run after every commit when there's a pending restore
+
+  // Smart auto-scroll: only follow when actively streaming AND user is near bottom
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!isNearBottomRef.current) return;
+    if (!sending) return;
+    if (pendingRestoreRef.current) return; // Don't interfere with session-switch restore
+
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [messages.length, sending, streamingBlocks.length]);
 
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
     const mediaForWs = media?.map(m => ({ type: 'image' as const, mimeType: m.mimeType, base64Data: m.base64Data, fileName: m.fileName }));
+    // When user sends a message, they want to see the response — mark as near bottom
+    isNearBottomRef.current = true;
     sendMessage(_text, mediaForWs);
   }, [sendMessage]);
 
@@ -73,32 +118,6 @@ export function Chat() {
     }
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
-
-  // Preserve scroll position across session switches
-  const prevSessionIdRef = useRef(currentSessionId);
-  useEffect(() => {
-    if (currentSessionId !== prevSessionIdRef.current) {
-      prevSessionIdRef.current = currentSessionId;
-      // Session changed — do not scroll, let the browser restore position naturally
-      // The user will see their last scroll position from the cache
-      return;
-    }
-  }, [currentSessionId]);
-
-  // Smart auto-scroll: only scroll to bottom when actively streaming AND user is near bottom
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // Don't auto-scroll if user scrolled up
-    if (!isNearBottomRef.current) return;
-    // Only auto-scroll when there's active streaming content in the current session
-    if (!sending || currentSessionId !== sendingSessionIdRef.current) return;
-
-    // Use requestAnimationFrame to let React render first
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
-    });
-  }, [messages.length, sending, streamingBlocks.length, currentSessionId]);
 
   const hasStreamingContent = streamingBlocks.length > 0;
   const isEmpty = messages.length === 0 && !sending;

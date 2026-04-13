@@ -7,7 +7,7 @@ import type { BazaarStore } from './bazaar-store.js';
 import type { LocalAgentIdentity } from './types.js';
 
 interface ClientOptions {
-  getAgentProjects: () => Array<{ repo: string; skills: string }>;
+  getAgentDescription: () => string;
   heartbeatIntervalMs?: number;
 }
 
@@ -74,8 +74,7 @@ export class BazaarClient {
             username: identity.username,
             hostname: os.hostname(),
             name: identity.name,
-            projects: this.options.getAgentProjects(),
-            privateCapabilities: [],
+            description: this.options.getAgentDescription(),
           },
         });
 

@@ -12,12 +12,8 @@ interface RegisterInput {
   username: string;
   hostname: string;
   name: string;
+  description?: string;
   avatar?: string;
-}
-
-interface ProjectInput {
-  repo: string;
-  skills: string; // JSON string
 }
 
 export interface AgentRow {
@@ -30,13 +26,6 @@ export interface AgentRow {
   reputation: number;
   lastSeenAt: string | null;
   createdAt: string;
-}
-
-export interface ProjectRow {
-  agentId: string;
-  repo: string;
-  skills: string;
-  updatedAt: string;
 }
 
 export interface AuditRow {
@@ -66,31 +55,12 @@ export class AgentStore {
         username TEXT UNIQUE NOT NULL,
         hostname TEXT,
         name TEXT NOT NULL,
+        description TEXT DEFAULT '',
         avatar TEXT DEFAULT '🧙',
         status TEXT DEFAULT 'offline',
         reputation REAL DEFAULT 0,
         last_seen_at TEXT,
         created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_projects (
-        agent_id TEXT NOT NULL,
-        repo TEXT NOT NULL,
-        skills TEXT NOT NULL DEFAULT '[]',
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (agent_id, repo),
-        FOREIGN KEY (agent_id) REFERENCES agents(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_private_capabilities (
-        agent_id TEXT NOT NULL,
-        id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        triggers TEXT DEFAULT '[]',
-        source TEXT DEFAULT 'experience',
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (agent_id, id),
-        FOREIGN KEY (agent_id) REFERENCES agents(id)
       );
 
       CREATE TABLE IF NOT EXISTS audit_log (
@@ -106,8 +76,6 @@ export class AgentStore {
       CREATE INDEX IF NOT EXISTS idx_audit_agent ON audit_log(agent_id);
       CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
       CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_type);
-      CREATE INDEX IF NOT EXISTS idx_projects_agent ON agent_projects(agent_id);
-      CREATE INDEX IF NOT EXISTS idx_privcap_agent ON agent_private_capabilities(agent_id);
 
       CREATE TABLE IF NOT EXISTS reputation_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,9 +99,9 @@ export class AgentStore {
   registerAgent(input: RegisterInput): AgentRow {
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO agents (id, username, hostname, name, avatar, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'idle', ?)
-    `).run(input.id, input.username, input.hostname, input.name, input.avatar ?? '🧙', now);
+      INSERT INTO agents (id, username, hostname, name, description, avatar, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'idle', ?)
+    `).run(input.id, input.username, input.hostname, input.name, input.description ?? '', input.avatar ?? '🧙', now);
     return this.getAgent(input.id)!;
   }
 
@@ -166,40 +134,6 @@ export class AgentStore {
     return this.db.prepare(
       "SELECT id, username, hostname, name, avatar, status, reputation, last_seen_at as lastSeenAt, created_at as createdAt FROM agents WHERE status != 'offline'"
     ).all() as AgentRow[];
-  }
-
-  // ── Projects ──
-
-  updateProjects(agentId: string, projects: ProjectInput[]): void {
-    const now = new Date().toISOString();
-    const deleteStmt = this.db.prepare('DELETE FROM agent_projects WHERE agent_id = ?');
-    const insertStmt = this.db.prepare('INSERT INTO agent_projects (agent_id, repo, skills, updated_at) VALUES (?, ?, ?, ?)');
-
-    const tx = this.db.transaction(() => {
-      deleteStmt.run(agentId);
-      for (const p of projects) {
-        insertStmt.run(agentId, p.repo, p.skills, now);
-      }
-    });
-    tx();
-  }
-
-  getProjects(agentId: string): ProjectRow[] {
-    return this.db.prepare(
-      'SELECT agent_id as agentId, repo, skills, updated_at as updatedAt FROM agent_projects WHERE agent_id = ?'
-    ).all(agentId) as ProjectRow[];
-  }
-
-  findAgentsByCapability(keyword: string): { agentId: string; repo: string }[] {
-    // 转义 SQL LIKE 通配符防止非预期匹配
-    const escaped = keyword.replace(/%/g, '\\%').replace(/_/g, '\\_');
-    return this.db.prepare(`
-      SELECT ap.agent_id as agentId, ap.repo
-      FROM agent_projects ap
-      JOIN agents a ON a.id = ap.agent_id
-      WHERE a.status != 'offline'
-        AND ap.skills LIKE ? ESCAPE '\\'
-    `).all(`%${escaped}%`) as { agentId: string; repo: string }[];
   }
 
   // ── Audit Log ──

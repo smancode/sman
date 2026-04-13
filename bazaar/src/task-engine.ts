@@ -48,21 +48,23 @@ export class TaskEngine {
       status: 'searching',
     });
 
-    // 搜索有能力匹配的 Agent
-    const agentRepos = this.agentStore.findAgentsByCapability(capabilityQuery);
-    const matches = agentRepos
-      .filter(r => r.agentId !== fromAgentId) // 排除自己
-      .map(r => {
-        const agent = this.agentStore.getAgent(r.agentId);
-        return {
-          agentId: r.agentId,
-          name: agent?.name ?? '未知',
-          status: agent?.status ?? 'offline',
-          reputation: agent?.reputation ?? 0,
-          repo: r.repo,
-        };
+    // 搜索有相关能力的在线 Agent（基于 name + description 匹配）
+    const allOnline = this.agentStore.listOnlineAgents();
+    const matches = allOnline
+      .filter(a => a.id !== fromAgentId) // 排除自己
+      .filter(a => {
+        // 简单关键词匹配：在 name 和 description 中搜索
+        const keyword = capabilityQuery.toLowerCase();
+        return a.name.toLowerCase().includes(keyword)
+          || (a as any).description?.toLowerCase().includes(keyword);
       })
-      .filter(m => m.status !== 'offline') // 排除离线 Agent
+      .map(a => ({
+        agentId: a.id,
+        name: a.name,
+        status: a.status,
+        reputation: a.reputation,
+        repo: '',
+      }))
       .sort((a, b) => b.reputation - a.reputation); // 按声望排序
 
     this.agentStore.logAudit('task.created', fromAgentId, undefined, taskId, {

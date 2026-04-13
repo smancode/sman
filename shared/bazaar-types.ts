@@ -10,30 +10,11 @@ export interface AgentProfile {
   username: string;
   hostname: string;
   name: string;            // 显示名
+  description: string;     // "我是谁、我能干什么"
   avatar: string;          // emoji
   status: AgentStatus;
   reputation: number;
-  projects: AgentProject[];
-  privateCapabilities: PrivateCapability[];
   joinedAt: string;
-}
-
-export interface AgentProject {
-  repo: string;
-  path: string;
-  skills: SkillSummary[];
-}
-
-export interface SkillSummary {
-  id: string;
-  name: string;
-  triggers: string[];
-}
-
-export interface PrivateCapability {
-  id: string;
-  name: string;
-  triggers: string[];
 }
 
 // ── 消息协议 ──
@@ -64,9 +45,8 @@ export interface AgentRegisterPayload {
   username: string;
   hostname: string;
   name: string;
+  description?: string;
   avatar?: string;
-  projects: AgentProject[];
-  privateCapabilities: PrivateCapability[];
   protocolVersion?: string;
 }
 
@@ -78,8 +58,7 @@ export interface AgentHeartbeatPayload {
 
 export interface AgentUpdatePayload {
   agentId: string;
-  projects?: AgentProject[];
-  privateCapabilities?: PrivateCapability[];
+  description?: string;
   status?: AgentStatus;
 }
 
