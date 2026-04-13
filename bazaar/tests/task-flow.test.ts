@@ -14,7 +14,6 @@ import os from 'os';
 
 function createMockAgentStore(): AgentStore {
   const agents = new Map<string, any>();
-  const projects = new Map<string, any[]>();
 
   return {
     getAgent: (id: string) => agents.get(id),
@@ -23,18 +22,6 @@ function createMockAgentStore(): AgentStore {
     updateAgentStatus: (id: string, status: string) => { const a = agents.get(id); if (a) a.status = status; },
     updateHeartbeat: () => {},
     setAgentOffline: (id: string) => { const a = agents.get(id); if (a) a.status = 'offline'; },
-    updateProjects: (agentId: string, p: any[]) => projects.set(agentId, p),
-    findAgentsByCapability: (query: string) => {
-      const results: Array<{ agentId: string; repo: string }> = [];
-      for (const [id, pList] of projects) {
-        for (const p of pList) {
-          if (p.skills && (p.skills as string).includes(query.split(' ')[0])) {
-            results.push({ agentId: id, repo: p.repo });
-          }
-        }
-      }
-      return results;
-    },
     listOnlineAgents: () => Array.from(agents.values()).filter((a: any) => a.status !== 'offline'),
     logAudit: () => {},
     close: () => {},
@@ -89,25 +76,25 @@ describe('Task Flow Integration', () => {
     const ws1 = createMockWs();
     router.route({
       id: 'msg-001', type: 'agent.register',
-      payload: { agentId: 'req-1', username: 'alice', hostname: 'mac1', name: 'Alice', projects: [] },
+      payload: { agentId: 'req-1', username: 'alice', hostname: 'mac1', name: 'Alice', description: '请求者' },
     }, ws1);
     connections.set('req-1', ws1);
 
-    // 2. Register helper with matching capability
+    // 2. Register helper with matching name (capability 搜索基于 name + description)
     const ws2 = createMockWs();
     router.route({
       id: 'msg-002', type: 'agent.register',
       payload: {
         agentId: 'help-1', username: 'bob', hostname: 'mac2', name: 'Bob',
-        projects: [{ repo: 'payment', skills: JSON.stringify(['支付', '查询']) }],
+        description: '擅长支付查询',
       },
     }, ws2);
     connections.set('help-1', ws2);
 
-    // 3. Create task
+    // 3. Create task — capabilityQuery "支付" 会匹配 help-1 的 description
     const createResult = router.route({
       id: 'msg-003', type: 'task.create',
-      payload: { question: '支付查询怎么做？', capabilityQuery: '支付 查询' },
+      payload: { question: '支付查询怎么做？', capabilityQuery: '支付' },
     }, ws1);
 
     // route() returns RouteResult, but task.create sends search_result via ws callback
@@ -175,7 +162,7 @@ describe('Task Flow Integration', () => {
     const ws1 = createMockWs();
     router.route({
       id: 'msg-010', type: 'agent.register',
-      payload: { agentId: 'req-2', username: 'carol', hostname: 'mac3', name: 'Carol', projects: [] },
+      payload: { agentId: 'req-2', username: 'carol', hostname: 'mac3', name: 'Carol', description: '' },
     }, ws1);
     connections.set('req-2', ws1);
 
@@ -184,15 +171,15 @@ describe('Task Flow Integration', () => {
       id: 'msg-011', type: 'agent.register',
       payload: {
         agentId: 'help-2', username: 'dave', hostname: 'mac4', name: 'Dave',
-        projects: [{ repo: 'auth', skills: JSON.stringify(['认证', '登录']) }],
+        description: '擅长认证登录',
       },
     }, ws2);
     connections.set('help-2', ws2);
 
-    // Create task
+    // Create task — "认证" 匹配 help-2 的 description
     router.route({
       id: 'msg-012', type: 'task.create',
-      payload: { question: '认证问题', capabilityQuery: '认证 登录' },
+      payload: { question: '认证问题', capabilityQuery: '认证' },
     }, ws1);
 
     const ws1Messages = (ws1 as any)._sent;
@@ -224,7 +211,7 @@ describe('Task Flow Integration', () => {
     const ws1 = createMockWs();
     router.route({
       id: 'msg-020', type: 'agent.register',
-      payload: { agentId: 'req-3', username: 'eve', hostname: 'mac5', name: 'Eve', projects: [] },
+      payload: { agentId: 'req-3', username: 'eve', hostname: 'mac5', name: 'Eve', description: '' },
     }, ws1);
     connections.set('req-3', ws1);
 
@@ -233,15 +220,15 @@ describe('Task Flow Integration', () => {
       id: 'msg-021', type: 'agent.register',
       payload: {
         agentId: 'help-3', username: 'frank', hostname: 'mac6', name: 'Frank',
-        projects: [{ repo: 'core', skills: JSON.stringify(['核心', '模块']) }],
+        description: '擅长核心模块',
       },
     }, ws2);
     connections.set('help-3', ws2);
 
-    // Create + Offer + Accept
+    // Create + Offer + Accept — "核心" 匹配 help-3 的 description
     router.route({
       id: 'msg-022', type: 'task.create',
-      payload: { question: '核心模块问题', capabilityQuery: '核心 模块' },
+      payload: { question: '核心模块问题', capabilityQuery: '核心' },
     }, ws1);
 
     const ws1Messages = (ws1 as any)._sent;

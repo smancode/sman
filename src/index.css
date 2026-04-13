@@ -255,8 +255,8 @@
 .code-block-content {
   position: relative;
   overflow-x: auto;
-  /* 使用 muted 背景色，与主题协调 */
-  background: hsl(var(--muted));
+  /* Let shiki theme backgrounds control code area for proper token contrast */
+  background: transparent;
 }
 
 .code-block-with-line-numbers {
@@ -270,9 +270,9 @@
   flex-shrink: 0;
   padding: 1rem 0.75rem;
   text-align: right;
-  /* 使用 muted-foreground 颜色，与主题协调 */
-  color: hsl(var(--muted-foreground) / 0.6);
-  background: hsl(var(--muted) / 0.8);
+  /* Dim but visible line numbers */
+  color: hsl(var(--foreground) / 0.35);
+  background: transparent;
   border-right: 1px solid hsl(var(--border));
   user-select: none;
 }
@@ -303,7 +303,6 @@
 .code-content pre {
   margin: 0;
   padding: 0;
-  background: transparent !important;
 }
 
 .code-content code {
@@ -337,9 +336,9 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* Ensure shiki generated code doesn't have extra backgrounds */
+/* Let shiki themes control their own background for proper token contrast */
 .code-content .shiki {
-  background: transparent !important;
+  border-radius: 0;
 }
 
 .code-content .shiki code {

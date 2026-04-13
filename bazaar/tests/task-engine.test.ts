@@ -27,7 +27,7 @@ function createMockStores() {
   } as unknown as TaskStore;
 
   const mockAgentStore = {
-    findAgentsByCapability: vi.fn(() => []),
+    listOnlineAgents: vi.fn(() => []),
     getAgent: vi.fn(),
     logAudit: vi.fn(),
     updateAgentStatus: vi.fn(),
@@ -53,17 +53,14 @@ describe('TaskEngine', () => {
 
   describe('handleTaskCreate', () => {
     it('should create task, search capabilities, and return results', () => {
-      ctx.mockAgentStore.findAgentsByCapability = vi.fn(() => [
-        { agentId: 'a1', repo: 'payment' },
-        { agentId: 'a2', repo: 'payment' },
+      ctx.mockAgentStore.listOnlineAgents = vi.fn(() => [
+        { id: 'a1', name: '支付Agent', status: 'idle', reputation: 10, description: '擅长支付查询' },
+        { id: 'a2', name: '查询Agent', status: 'idle', reputation: 8, description: '擅长支付' },
       ]);
-      (ctx.mockAgentStore.getAgent as any) = vi.fn((id: string) => ({
-        id, name: `Agent-${id}`, status: 'idle', reputation: 10,
-      }));
 
       const result = engine.handleTaskCreate({
         id: 'msg-001',
-        payload: { question: '支付查询', capabilityQuery: '支付 查询' },
+        payload: { question: '支付查询', capabilityQuery: '支付' },
       }, 'agent-req');
 
       expect(result.taskId).toBeDefined();
@@ -73,7 +70,7 @@ describe('TaskEngine', () => {
     });
 
     it('should return empty matches when no agents found', () => {
-      ctx.mockAgentStore.findAgentsByCapability = vi.fn(() => []);
+      ctx.mockAgentStore.listOnlineAgents = vi.fn(() => []);
 
       const result = engine.handleTaskCreate({
         id: 'msg-001',

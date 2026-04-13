@@ -73,10 +73,7 @@ describe('Integration: Full Agent Connection Flow', () => {
         username: 'testuser',
         hostname: 'test-host',
         name: '测试用户',
-        projects: [
-          { repo: 'payment-service', skills: JSON.stringify([{ id: 'pay', name: '支付', triggers: ['支付'] }]) },
-        ],
-        privateCapabilities: [],
+        description: '擅长支付系统',
       },
     }));
 
@@ -88,10 +85,6 @@ describe('Integration: Full Agent Connection Flow', () => {
     expect(agent).toBeDefined();
     expect(agent!.username).toBe('testuser');
     expect(agent!.status).toBe('idle');
-
-    const projects = store.getProjects('agent-test-001');
-    expect(projects).toHaveLength(1);
-    expect(projects[0].repo).toBe('payment-service');
 
     // 2. Heartbeat
     received.length = 0;
@@ -130,8 +123,8 @@ describe('Integration: Full Agent Connection Flow', () => {
     ws.close();
   });
 
-  it('should handle two agents and capability search', async () => {
-    // 注册两个 Agent
+  it('should handle two agents with description-based search', async () => {
+    // 注册两个 Agent，各自只有 name + description
     const ws1 = new WebSocket(`ws://localhost:${port}`);
     const ws2 = new WebSocket(`ws://localhost:${port}`);
     await new Promise<void>((r) => { ws1.on('open', () => r()); });
@@ -139,29 +132,19 @@ describe('Integration: Full Agent Connection Flow', () => {
 
     ws1.send(JSON.stringify({
       id: 'msg-a1', type: 'agent.register',
-      payload: { agentId: 'a1', username: 'user1', hostname: 'h1', name: '用户1', projects: [
-        { repo: 'payment', skills: JSON.stringify([{ id: 'pay', name: '支付', triggers: ['支付', '查询'] }]) },
-      ], privateCapabilities: [] },
+      payload: { agentId: 'a1', username: 'user1', hostname: 'h1', name: '支付专家', description: '擅长支付和查询' },
     }));
 
     ws2.send(JSON.stringify({
       id: 'msg-a2', type: 'agent.register',
-      payload: { agentId: 'a2', username: 'user2', hostname: 'h2', name: '用户2', projects: [
-        { repo: 'risk', skills: JSON.stringify([{ id: 'risk', name: '风控', triggers: ['风控'] }]) },
-      ], privateCapabilities: [] },
+      payload: { agentId: 'a2', username: 'user2', hostname: 'h2', name: '风控专家', description: '擅长风控和规则引擎' },
     }));
 
     await new Promise((r) => setTimeout(r, 300));
 
-    // 搜索"支付"能力
-    const results = store.findAgentsByCapability('支付');
-    expect(results).toHaveLength(1);
-    expect(results[0].agentId).toBe('a1');
-
-    // 搜索"风控"能力
-    const riskResults = store.findAgentsByCapability('风控');
-    expect(riskResults).toHaveLength(1);
-    expect(riskResults[0].agentId).toBe('a2');
+    // 验证在线 Agent 列表
+    const online = store.listOnlineAgents();
+    expect(online).toHaveLength(2);
 
     ws1.close();
     ws2.close();

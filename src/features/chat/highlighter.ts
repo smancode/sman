@@ -22,11 +22,11 @@ export async function highlightCode(code: string, lang: string): Promise<Highlig
     const [lightHtml, darkHtml] = await Promise.all([
       codeToHtml(code, {
         lang: normalizedLang,
-        theme: 'github-light',
+        theme: 'light-plus',
       }),
       codeToHtml(code, {
         lang: normalizedLang,
-        theme: 'github-dark',
+        theme: 'dark-plus',
       }),
     ]);
 

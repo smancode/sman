@@ -73,7 +73,7 @@ describe('Bridge Integration: Client ↔ Server', () => {
     });
 
     const received: any[] = [];
-    client = new BazaarClient(store, { getAgentProjects: () => [] });
+    client = new BazaarClient(store, { getAgentDescription: () => '测试 Agent' });
     client.onMessage = (msg) => received.push(msg);
 
     await client.connect();

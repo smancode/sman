@@ -108,38 +108,6 @@ describe('AgentStore', () => {
     });
   });
 
-  // === Projects ===
-
-  describe('updateProjects', () => {
-    it('should replace projects for an agent', () => {
-      store.registerAgent({ id: 'agent-001', username: 'zhangsan', hostname: 'h1', name: '张三' });
-      store.updateProjects('agent-001', [
-        { repo: 'payment-service', skills: JSON.stringify([{ id: 'pay', name: '支付', triggers: ['支付'] }]) },
-        { repo: 'risk-engine', skills: JSON.stringify([]) },
-      ]);
-      const projects = store.getProjects('agent-001');
-      expect(projects).toHaveLength(2);
-      expect(projects[0].repo).toBe('payment-service');
-    });
-  });
-
-  describe('findAgentsByCapability', () => {
-    it('should find agents with matching skill keywords', () => {
-      store.registerAgent({ id: 'a1', username: 'u1', hostname: 'h1', name: '张三' });
-      store.updateProjects('a1', [
-        { repo: 'payment-service', skills: JSON.stringify([{ id: 'pay', name: '支付查询', triggers: ['支付', '查询'] }]) },
-      ]);
-      store.registerAgent({ id: 'a2', username: 'u2', hostname: 'h2', name: '李四' });
-      store.updateProjects('a2', [
-        { repo: 'risk-engine', skills: JSON.stringify([{ id: 'risk', name: '风控', triggers: ['风控', '规则'] }]) },
-      ]);
-
-      const results = store.findAgentsByCapability('支付');
-      expect(results).toHaveLength(1);
-      expect(results[0].agentId).toBe('a1');
-    });
-  });
-
   // === Audit Log ===
 
   describe('logAudit', () => {

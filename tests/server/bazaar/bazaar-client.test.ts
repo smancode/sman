@@ -69,7 +69,7 @@ describe('BazaarClient', () => {
     });
 
     client = new BazaarClient(mockStore, {
-      getAgentProjects: () => [],
+      getAgentDescription: () => '测试 Agent',
     });
 
     await client.connect();
@@ -94,7 +94,7 @@ describe('BazaarClient', () => {
     });
 
     client = new BazaarClient(mockStore, {
-      getAgentProjects: () => [],
+      getAgentDescription: () => '测试 Agent',
       heartbeatIntervalMs: 500, // 快速测试
     });
 
