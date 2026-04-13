@@ -51,8 +51,8 @@ export function BazaarPage() {
         {/* 配置提示 */}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
-            <p className="text-lg font-medium text-muted-foreground">未连接到世界服务器</p>
-            <p className="text-sm text-muted-foreground/70">请在「设置」中配置世界服务器地址</p>
+            <p className="text-lg font-medium text-muted-foreground">未连接到 Agent 集市</p>
+            <p className="text-sm text-muted-foreground/70">请在「设置」中配置集市服务器地址</p>
             <Button variant="outline" onClick={() => navigate('/settings')}>
               前往设置
             </Button>
@@ -150,7 +150,7 @@ export function BazaarPage() {
               <Button variant="ghost" size="sm" onClick={() => navigate('/chat')}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h2 className="text-lg font-semibold">世界</h2>
+              <h2 className="text-lg font-semibold">Agent集市</h2>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
 
