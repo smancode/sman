@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -107,6 +107,28 @@
       "!node_modules/.pnpm/**/vendor/**/arm64-win32",
       "!node_modules/.pnpm/**/vendor/**/arm64-win32/**/*",
       "!node_modules/.pnpm/**/@img/**/*",
+      "!node_modules/.pnpm/**/sharp-win32-arm64/**/*",
+      "!node_modules/.pnpm/**/@rollup/**/*",
+      "!node_modules/.pnpm/**/esbuild/**/*",
+      "!node_modules/.pnpm/**/prebuild-install/**/*",
+      "!node_modules/.pnpm/**/node-gyp/**/*",
+      "!node_modules/.pnpm/**/cmake-js/**/*",
+      "!node_modules/.pnpm/**/source-map/**/*",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/LICENSE*",
+      "!node_modules/**/CHANGELOG*",
+      "!node_modules/**/README*",
+      "!node_modules/**/readme*",
+      "!node_modules/**/.eslintrc*",
+      "!node_modules/**/.prettierrc*",
+      "!node_modules/**/tsconfig.json",
+      "!node_modules/**/.github/**/*",
+      "!node_modules/**/test/**/*",
+      "!node_modules/**/tests/**/*",
+      "!node_modules/**/__tests__/**/*",
+      "!node_modules/**/docs/**/*",
       "plugins/**/*",
       "!plugins/office-skills/venv/**/*",
       "!plugins/office-skills/node_modules/**/*",
@@ -146,14 +168,19 @@
       "signingHashAlgorithms": []
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
       "allowElevation": true
     },
     "forceCodeSigning": false,
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
     "directories": {
       "output": "release"
     }
