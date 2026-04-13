@@ -172,7 +172,7 @@ export class ClaudeSessionManager {
     }
 
     // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
-    const pluginsDir = path.join(__dirname, '..', 'plugins');
+    const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
     for (const name of ['superpowers', 'dev-workflow']) {
       const pluginPath = path.join(pluginsDir, name);

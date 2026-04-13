@@ -198,7 +198,7 @@ webAccessService.detectEngine().then(() => {
 sessionManager.setWebAccessService(webAccessService);
 
 // Initialize capability registry (on-demand capability loading)
-const pluginsDir = path.join(__dirname, '..', 'plugins');
+const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
 initCapabilities(homeDir, pluginsDir);
 const capabilityRegistry = new CapabilityRegistry(homeDir);
 sessionManager.setCapabilityRegistry(capabilityRegistry);
@@ -223,9 +223,9 @@ cronScheduler.getExecutor().onRunStatusChange((taskId: string, status: string) =
 });
 
 // HTTP server with static file serving for production (Electron mode)
-// __dirname after tsc compilation = dist/server/
+// __dirname after tsc compilation = dist/server/server/ (rootDir is project root)
 // Frontend build output = dist/ (index.html, assets/)
-const distDir = path.resolve(path.join(__dirname, '..'));
+const distDir = path.resolve(path.join(__dirname, '..', '..'));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -1027,7 +1027,7 @@ function shutdown(): void {
  * Non-blocking: errors are logged but don't prevent server startup.
  */
 async function setupOfficeSkills(): Promise<void> {
-  const officeDir = path.join(__dirname, '..', 'plugins', 'office-skills');
+  const officeDir = path.join(__dirname, '..', '..', 'plugins', 'office-skills');
   const venvDir = path.join(officeDir, 'venv');
   const nodeModulesDir = path.join(officeDir, 'node_modules');
 
