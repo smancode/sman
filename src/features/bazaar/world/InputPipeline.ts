@@ -16,6 +16,7 @@ export class InputPipeline {
   private camera: CameraSystem;
   private handlers: InputHandler[] = [];
   private onGroundClick: ((worldX: number, worldY: number) => void) | null;
+  private onHover: ((screenX: number, screenY: number) => void) | null;
   private dragThreshold = 5;
 
   private isDragging = false;
@@ -29,10 +30,12 @@ export class InputPipeline {
     renderer: WorldRenderer,
     camera: CameraSystem,
     onGroundClick?: (worldX: number, worldY: number) => void,
+    onHover?: (screenX: number, screenY: number) => void,
   ) {
     this.renderer = renderer;
     this.camera = camera;
     this.onGroundClick = onGroundClick ?? null;
+    this.onHover = onHover ?? null;
   }
 
   register(handler: InputHandler): void {
@@ -50,7 +53,14 @@ export class InputPipeline {
   };
 
   onMouseMove = (e: MouseEvent): void => {
-    if (!this.mouseIsDown) return;
+    if (!this.mouseIsDown) {
+      // Non-dragging state — hover event
+      if (this.onHover) {
+        const rect = (e.target as HTMLElement).getBoundingClientRect();
+        this.onHover(e.clientX - rect.left, e.clientY - rect.top);
+      }
+      return;
+    }
 
     const dx = e.clientX - this.lastMoveX;
     const dy = e.clientY - this.lastMoveY;

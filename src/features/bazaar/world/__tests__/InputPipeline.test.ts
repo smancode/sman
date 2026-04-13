@@ -83,4 +83,33 @@ describe('InputPipeline', () => {
     expect(handlerResults).toEqual(['h1', 'h2']);
     expect(groundClicks).toHaveLength(0);
   });
+
+  it('should call onHover on mousemove when not dragging', () => {
+    const hoverCalls: Array<{ x: number; y: number }> = [];
+    const mockRenderer = createMockRenderer();
+    const hoverPipeline = new InputPipeline(mockRenderer, camera, undefined, (screenX: number, screenY: number) => {
+      hoverCalls.push({ x: screenX, y: screenY });
+    });
+
+    // Simulate mouse move without mouse down
+    hoverPipeline.onMouseMove({ clientX: 200, clientY: 150, target: { getBoundingClientRect: () => ({ left: 10, top: 20 }) } } as unknown as MouseEvent);
+
+    expect(hoverCalls).toHaveLength(1);
+    expect(hoverCalls[0].x).toBe(190); // 200 - 10
+    expect(hoverCalls[0].y).toBe(130); // 150 - 20
+  });
+
+  it('should NOT call onHover when dragging', () => {
+    const hoverCalls: Array<{ x: number; y: number }> = [];
+    const mockRenderer = createMockRenderer();
+    const hoverPipeline = new InputPipeline(mockRenderer, camera, undefined, (screenX: number, screenY: number) => {
+      hoverCalls.push({ x: screenX, y: screenY });
+    });
+
+    // Mouse down then move = drag
+    hoverPipeline.onMouseDown({ clientX: 100, clientY: 100, button: 0, target: { getBoundingClientRect: () => ({ left: 0, top: 0 }) } } as unknown as MouseEvent);
+    hoverPipeline.onMouseMove({ clientX: 200, clientY: 150, target: {} } as MouseEvent);
+
+    expect(hoverCalls).toHaveLength(0);
+  });
 });
