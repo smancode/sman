@@ -20,7 +20,7 @@ body{background:#1a1c2c;color:#f4f4f4;font-family:-apple-system,BlinkMacSystemFo
 /* World viewport */
 .viewport{flex:1;position:relative;overflow:hidden;background:#0d1117;cursor:grab}
 .viewport:active{cursor:grabbing}
-.viewport canvas{display:block;image-rendering:pixelated}
+.viewport canvas{display:block;image-rendering:pixelated;position:absolute;top:0;left:0;width:100%;height:100%}
 
 /* Sidebar */
 .sidebar{width:280px;background:#0d1117;border-left:2px solid #333;padding:12px;overflow-y:auto;flex-shrink:0;font-size:12px}
@@ -140,7 +140,7 @@ const OUTFIT_COLORS=['#4CAF50','#2196F3','#E52521','#FF9800','#9C27B0','#FFEB3B'
 const HAIR_NAMES=['尖刺','长发','卷发','双马尾','鸭舌帽','头盔','尖帽','光头'];
 const EYE='#212121',BLUSH='#FFB6C1',OUTLINE='#4E342E',SHOES='#4E342E';
 const TILE_SIZE=32;
-const COLS=40,ROWS=30;
+const COLS=41,ROWS=30;
 const BASE_ZOOM=3;
 let zoom=BASE_ZOOM;
 
@@ -327,7 +327,8 @@ function drawBuilding(ctx,b,cameraX,cameraY,z){
 function buildTileLayer(z){
   const w=COLS*TILE_SIZE*z;
   const h=ROWS*TILE_SIZE*z;
-  const tl=new OffscreenCanvas(w,h);
+  const tl=document.createElement('canvas');
+  tl.width=w;tl.height=h;
   const tc=tl.getContext('2d');
   tc.imageSmoothingEnabled=false;
   const ts=TILE_SIZE*z;
@@ -340,12 +341,12 @@ function buildTileLayer(z){
       const h2=((col*7+row*13)&0xFF)/255;
       const v=h2<0.3?0:h2<0.7?1:2;
       const x=col*ts,y=row*ts;
+      const r=ts/32;
 
       if(tid===0){
         const cs=[tc2.grass,tc2.grass2,tc2.grass3];
         tc.fillStyle=cs[v%3];tc.fillRect(x,y,ts,ts);
         tc.fillStyle='#7CB342';
-        const r=ts/32;
         if(v===0){tc.fillRect(x+8*r,y+10*r,2*r,4*r);tc.fillRect(x+22*r,y+20*r,2*r,4*r);}
         if(v===1){tc.fillRect(x+14*r,y+6*r,2*r,4*r);tc.fillRect(x+6*r,y+24*r,2*r,4*r);}
         if(v===2){tc.fillRect(x+18*r,y+14*r,2*r,4*r);tc.fillRect(x+4*r,y+8*r,2*r,4*r);}
@@ -411,9 +412,9 @@ function gameLoop(time){
   }
 
   // Render
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#1a1c2c';ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.imageSmoothingEnabled=false;
-  ctx.drawImage(tileLayer,cameraX,cameraY,canvas.width,canvas.height,0,0,canvas.width,canvas.height);
+  ctx.drawImage(tileLayer,-cameraX,-cameraY);
 
   // Buildings
   for(const b of BUILDINGS) drawBuilding(ctx,b,cameraX,cameraY,zoom);
@@ -539,6 +540,7 @@ window.removeAllAgents=function(){agents=[];updateSidebar();};
 
 // ── Init ──
 window.addEventListener('DOMContentLoaded',()=>{
+  try {
   canvas=document.getElementById('world-canvas');
   const vp=document.getElementById('viewport');
   canvas.width=vp.clientWidth;canvas.height=vp.clientHeight;
@@ -559,6 +561,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 
   // Periodic sidebar update
   setInterval(updateSidebar,2000);
+  } catch(e) { document.title='ERROR: '+e.message; document.body.prepend(Object.assign(document.createElement('pre'),{style:'color:red;padding:20px;background:#111',textContent:e.stack})); }
 });
 </script>
 </body>
