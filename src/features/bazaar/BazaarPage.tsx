@@ -12,6 +12,7 @@ import { OnboardingGuide } from './OnboardingGuide';
 import { WorldCanvas } from './world/WorldCanvas';
 import { WorldRenderer } from './world/WorldRenderer';
 import type { ActivePanel } from './world/types';
+import type { TooltipData } from './world/types';
 import { ArrowLeft, Globe, LayoutDashboard, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,11 @@ export function BazaarPage() {
   const rendererRef = useRef<WorldRenderer | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [activePanel, setActivePanel] = useState<ActivePanel>('leaderboard');
+  const [tooltip, setTooltip] = useState<{
+    data: TooltipData;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -104,12 +110,48 @@ export function BazaarPage() {
         // 世界模式：Canvas 60% + 信息面板 40%
         <div className="flex-1 flex overflow-hidden">
           {/* 左：像素世界 */}
-          <div className="w-[60%] border-r">
+          <div className="w-[60%] border-r relative"
+            onMouseMove={(e) => {
+              if (tooltip) {
+                setTooltip({ ...tooltip, x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY });
+              }
+            }}
+          >
             <WorldCanvas
               rendererRef={rendererRef}
               onPanelChange={(panel) => setActivePanel(panel)}
               onAgentClick={(agent) => { /* TODO: show agent info toast */ }}
+              onHover={(data) => {
+                if (data) {
+                  setTooltip(prev => ({ data, x: prev?.x ?? 0, y: prev?.y ?? 0 }));
+                } else {
+                  setTooltip(null);
+                }
+              }}
             />
+
+            {/* Tooltip */}
+            {tooltip && (
+              <div
+                className="absolute z-30 pointer-events-none bg-background/95 backdrop-blur-sm border border-border rounded px-2 py-1 text-xs shadow-md"
+                style={{ left: tooltip.x + 12, top: tooltip.y - 8 }}
+              >
+                {tooltip.data.type === 'building' && (
+                  <span>{tooltip.data.label}</span>
+                )}
+                {tooltip.data.type === 'agent' && (
+                  <div className="space-y-0.5">
+                    <div className="font-medium">{tooltip.data.avatar} {tooltip.data.name}</div>
+                    <div className="text-muted-foreground">
+                      状态: {tooltip.data.status === 'busy' ? '忙碌' : '空闲'} · 声望: {tooltip.data.reputation}
+                    </div>
+                    {tooltip.data.isOldPartner && (
+                      <div className="text-primary font-medium">[老搭档]</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 右：信息面板 */}

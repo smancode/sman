@@ -19,9 +19,10 @@ interface WorldCanvasProps {
   rendererRef: React.MutableRefObject<WorldRenderer | null>;
   onPanelChange?: (panel: ActivePanel) => void;
   onAgentClick?: (agent: { id: string; name: string; avatar: string; reputation: number }) => void;
+  onHover?: (data: { type: 'building'; label: string } | { type: 'agent'; name: string; avatar: string; status: string; reputation: number; isOldPartner: boolean } | null) => void;
 }
 
-export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick }: WorldCanvasProps) {
+export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -40,9 +41,29 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick }: WorldC
     camera.setViewport(rect.width, rect.height);
 
     const sync = new WorldSync(renderer, useBazaarStore);
-    const pipeline = new InputPipeline(renderer, camera, (wx, wy) => sync.moveSelfAgent(wx, wy));
     const registry = new BuildingRegistry();
     const interaction = new InteractionSystem(BUILDINGS, registry);
+    const pipeline = new InputPipeline(renderer, camera, (wx, wy) => sync.moveSelfAgent(wx, wy), (screenX, screenY) => {
+      // Hover event: detect what's under cursor
+      const world = renderer.screenToWorld(screenX, screenY);
+      const agents = renderer.getAllAgents();
+      const hoverResult = interaction.hoverTest(world.x, world.y, agents);
+
+      if (hoverResult) {
+        if (hoverResult.type === 'building') {
+          const building = hoverResult.target as typeof BUILDINGS[number];
+          renderer.setHovered(building, null);
+          onHover?.({ type: 'building', label: building.label });
+        } else {
+          const agent = hoverResult.target as import('./AgentEntity').AgentEntity;
+          renderer.setHovered(null, agent);
+          onHover?.({ type: 'agent', name: agent.name, avatar: agent.avatar, status: agent.state, reputation: agent.reputation, isOldPartner: false });
+        }
+      } else {
+        renderer.setHovered(null, null);
+        onHover?.(null);
+      }
+    });
 
     // Register handlers in priority order
     pipeline.register((worldX, worldY) => {
