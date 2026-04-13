@@ -1,15 +1,20 @@
 # WS session.preheat
 
-## Signature
-```
-WS message: { type: "session.preheat", sessionId: string }
-```
+Preheat (pre-create) a V2 session process without sending a message.
+
+**Signature:** `session.preheat` → `{ sessionId: string }` (fire-and-forget)
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | Yes | Session UUID |
 
 ## Business Flow
-Fires a non-blocking pre-warming of the session (pre-creates the Claude SDK session so first real message is faster). No response sent to client.
 
-## Called Services
-`sessionManager.preheatSession()`
+Called when user starts typing to pre-warm the Claude V2 process. Reduces perceived latency when the message is actually sent. Errors are swallowed.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'session.preheat'`
+Calls: `sessionManager.preheatSession()` in `server/claude-session.ts`

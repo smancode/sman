@@ -1,15 +1,14 @@
 # WS cron.list
 
-## Signature
-```
-WS message: { type: "cron.list" }
-```
+List all cron tasks with next run time and latest run info.
+
+**Signature:** `cron.list` → `cron.list` with tasks + metadata
 
 ## Business Flow
-Returns all cron tasks with `latestRun` and `nextRunAt` computed. Tasks sourced from SQLite, schedule info from `CronScheduler`.
 
-## Called Services
-`cronTaskStore.listTasks()` + `cronScheduler.getNextRunAt()` + `cronTaskStore.getLatestRun()`
+Reads from `CronTaskStore`, enriches each task with `getLatestRun()` and `getNextRunAt()` from the scheduler.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'cron.list'`
+Calls: `cronTaskStore.listTasks()`, `cronScheduler.getNextRunAt()` in `server/cron-scheduler.ts`

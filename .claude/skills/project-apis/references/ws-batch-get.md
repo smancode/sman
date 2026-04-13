@@ -1,15 +1,14 @@
 # WS batch.get
 
-## Signature
-```
-WS message: { type: "batch.get", taskId: string }
-```
+Get a single batch task by ID.
+
+**Signature:** `batch.get` → `{ taskId: string }` → `batch.get` with full task
 
 ## Business Flow
-Returns full task details including `mdContent`, `execTemplate`, `envVars`, `concurrency`, `retryOnFailure`.
 
-## Called Services
-`batchStore.getTask()`
+Retrieves full task record including `mdContent`, `execTemplate`, `envVars`.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.get'`
+Calls: `batchStore.getTask()` in `server/batch-store.ts`

@@ -1,15 +1,14 @@
 # WS batch.cancel
 
-## Signature
-```
-WS message: { type: "batch.cancel", taskId: string }
-```
+Cancel a running or paused batch task.
+
+**Signature:** `batch.cancel` → `{ taskId: string }` → `batch.cancelled`
 
 ## Business Flow
-Stops a running batch and marks remaining items as cancelled. Returns `batch.cancelled`.
 
-## Called Services
-`batchEngine.cancel()`
+Aborts all in-flight executions and marks the task as cancelled. No further items will run.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.cancel'`
+Calls: `batchEngine.cancel()` in `server/batch-engine.ts`

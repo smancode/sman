@@ -1,21 +1,25 @@
 # WS cron.create
 
-## Signature
-```
-WS message: {
-  type: "cron.create",
-  workspace: string,
-  skillName: string,
-  cronExpression: string,
-  source?: "manual"
-}
-```
+Create a new cron task and schedule it.
+
+**Signature:** `cron.create` → `{ workspace, skillName, cronExpression }` → `cron.created`
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `workspace` | string | Yes | Project path |
+| `skillName` | string | Yes | Skill directory name |
+| `cronExpression` | string | Yes | Standard 5-field cron expression |
 
 ## Business Flow
-Validates cron expression via `cron-parser`. Creates task in SQLite. Schedules via `CronScheduler.schedule()`. Broadcasts `cron.changed` to all clients.
 
-## Called Services
-`CronExpressionParser.parse()` (validation) + `cronTaskStore.createTask()` + `cronScheduler.schedule()`
+1. Validates cron expression via `CronExpressionParser.parse()`
+2. Creates SQLite record in `CronTaskStore`
+3. Registers with `CronScheduler.schedule()`
+4. Broadcasts `cron.changed` to all clients
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'cron.create'`
+Calls: `cronTaskStore.createTask()`, `cronScheduler.schedule()` in `server/cron-scheduler.ts`

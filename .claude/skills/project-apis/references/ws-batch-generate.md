@@ -1,15 +1,14 @@
 # WS batch.generate
 
-## Signature
-```
-WS message: { type: "batch.generate", taskId: string }
-```
+Parse markdown template and generate execution items.
+
+**Signature:** `batch.generate` → `{ taskId: string }` → `batch.generated` with code
 
 ## Business Flow
-Calls `batchEngine.generateCode()` which uses Claude to generate execution code from `mdContent` + `execTemplate`. Returns `{ type: "batch.generated", taskId, code }`.
 
-## Called Services
-`batchEngine.generateCode()`
+Calls `batchEngine.generateCode(taskId)` which parses the task's `mdContent` markdown, extracts items (e.g. rows from a table), and stores the generated item list in the database.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.generate'`
+Calls: `batchEngine.generateCode()` in `server/batch-engine.ts`

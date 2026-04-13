@@ -1,25 +1,22 @@
-# Chrome CDP
-
-## Overview
-Browser automation via Chrome DevTools Protocol (CDP). Connects to user running Chrome (reusing cookies/sessions) or launches headless Chrome with copied profile.
+# Chrome CDP (Browser Automation)
 
 ## Call Method
-Native WebSocket (ws npm package) to Chrome CDP debugging port. No external packages required for CDP itself.
+WebSocket to local Chrome instance via ws package or native WebSocket
 
 ## Config Source
-- Auto-discovers Chrome debugging port from platform-specific paths:
-  - macOS: ~/Library/Application Support/Google/Chrome/DevToolsActivePort
-  - Linux: ~/.config/google-chrome/
-  - Windows: via registry
-- Can auto-launch Chrome on port 9333
-- Profile copy sources: Chrome Cookies, Login Data, Bookmarks, History, Preferences (SQLite files)
+- Default: localhost:9222 (Chrome remote debugging port, auto-discovered)
+- Chrome profile path: ~/.sman/chrome-profile/ (cookies, bookmarks)
+- Windows: LOCALAPPDATA/Google/Chrome/User Data
 
 ## Call Locations
-- server/web-access/cdp-engine.ts - Full CDP engine (navigate, snapshot, screenshot, click, fill, pressKey, evaluate)
-- server/web-access/chrome-sites.ts - Reads Chrome Bookmarks + History (SQLite) for site discovery
-- server/web-access/mcp-server.ts - Exposes web_access_* tools as MCP server
-- server/web-access/browser-engine.ts - Abstract browser interface
-- server/web-access/web-access-service.ts - High-level service
+| File | Purpose |
+|------|---------|
+| server/web-access/cdp-engine.ts | Full CDP client: DOM snapshots, click, fill, evaluate, screenshot |
+| server/web-access/chrome-sites.ts | Chrome bookmark/history DB read (better-sqlite3) |
+| server/web-access/browser-engine.ts | Browser launch abstraction |
+| server/web-access/mcp-server.ts | MCP Server exposing 9 web_access_* tools |
 
 ## Purpose
-Browser automation for web access. 9 tools: navigate, snapshot, screenshot, click, fill, press_key, evaluate, list_tabs, close_tab. Profile copy includes cookies for SSO.
+Controls a running Chrome browser via Chrome DevTools Protocol for web automation:
+navigate, snapshot (accessibility tree), screenshot, click, fill, press key,
+JS evaluate, list tabs, close tab. Also reads Chrome bookmarks/history to auto-discover enterprise sites.

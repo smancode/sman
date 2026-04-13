@@ -1,12 +1,25 @@
 # GET /api/auth/token
 
-## Signature
+Retrieve the server auth token — **loopback connections only**.
+
+**Signature:** `GET /api/auth/token`
+
+## Request
+
+No parameters. Must originate from `127.0.0.1` or `::1`.
+
+## Response
+
+```json
+{ "token": "<auth-token>" }
 ```
-GET /api/auth/token
-```
+
+Returns `403 Forbidden` for non-loopback requests.
 
 ## Business Flow
-Returns `{ token: "..." }` containing the server's auth Bearer token. **Loopback connections only** (127.0.0.1 / ::1). External requests get 403. Frontend calls this on startup to obtain the token for WebSocket auth.
+
+Called by Electron frontend on first launch to obtain the auth token without manual entry. Electron connects via loopback so this is safe.
 
 ## Source
-`server/index.ts` — `isLoopback()` guard, no Bearer auth required.
+
+`server/index.ts` — HTTP handler at `req.url === '/api/auth/token'`

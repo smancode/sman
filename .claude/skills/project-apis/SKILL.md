@@ -1,54 +1,74 @@
 ---
 name: project-apis
-description: "smanbase API endpoints catalog — signatures, params, business flows. Use when understanding, modifying, or adding endpoints."
+description: "smanbase API endpoints catalog. Consult when modifying or adding endpoints."
 _scanned:
-  commitHash: "74f4bbc6b4bfc811384eabcc73070c20f12be381"
-  scannedAt: "2026-04-09T15:29:13.791Z"
+  commitHash: "719682a1415b0f56538eee4bcf2a429abb1f4f8d"
+  scannedAt: "2026-04-13T00:00:00.000Z"
   branch: "base"
 ---
 
-# smanbase API Endpoints
+# Smanbase API Endpoints
 
-Hybrid: **HTTP REST** (browser/file) + **WebSocket** (session/chat CRUD). Source: `server/index.ts`.
+All use WebSocket `/ws` unless **HTTP**. Auth: WS `auth.verify` or HTTP `Bearer <token>`.
 
-## HTTP REST
+## HTTP (no auth except `/api/`)
 
-| Method | Path | Description | Ref |
-|--------|------|-------------|-----|
-| GET | `/api/health` | Health check (no auth) | `references/GET-api-health.md` |
-| GET | `/api/auth/token` | Auth token (loopback only) | `references/GET-api-auth-token.md` |
+| Method | Path | Description | Reference |
+|--------|------|-------------|-----------|
+| GET | `/api/health` | Health check | `references/GET-api-health.md` |
+| GET | `/api/auth/token` | Auth token (loopback) | `references/GET-api-auth-token.md` |
 | GET | `/api/directory/read?path=` | Read directory | `references/GET-api-directory-read.md` |
 | GET | `/api/directory/home` | User home path | `references/GET-api-directory-home.md` |
 
-## WS — Session (`session.*`)
+## Session
 
-`create` · `list` · `updateLabel` · `delete` · `history` · `preheat`
-→ `references/ws-session-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `session.create/list/updateLabel/delete/history/preheat` | Session lifecycle | `references/ws-session-create.md` |
 
-## WS — Chat (`chat.*`)
+## Chat
 
-`send` · `abort` → `references/ws-chat-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `chat.send` | Send + stream response | `references/ws-chat-send.md` |
+| `chat.abort` | Abort active query | `references/ws-chat-abort.md` |
 
-## WS — Skills (`skills.*`)
+## Skills
 
-`list` · `listProject` → `references/ws-skills-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `skills.list/listProject` | Global + project skills | `references/ws-skills-list.md` |
 
-## WS — Settings (`settings.*`)
+## Settings
 
-`get` · `update` · `testAndSave` · `selectLlmProfile` · `deleteLlmProfile`
-→ `references/ws-settings-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `settings.get/update/testAndSave/selectLlmProfile/deleteLlmProfile` | Config + LLM profiles | `references/ws-settings-get.md` |
 
-## WS — Cron (`cron.*`)
+## Cron Tasks
 
-`workspaces` · `skills` · `list` · `create` · `update` · `delete` · `runs` · `execute` · `scan`
-→ `references/ws-cron-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `cron.workspaces/skills/list/create/update/delete/runs/execute/scan` | Full lifecycle | `references/ws-cron-list.md` |
 
-## WS — Batch (`batch.*`)
+## Batch Tasks
 
-`list` · `get` · `create` · `update` · `delete` · `generate` · `test` · `save` · `execute` · `pause` · `resume` · `cancel` · `items` · `retry`
-→ `references/ws-batch-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `batch.list/get/create/update/delete` | CRUD | `references/ws-batch-list.md` |
+| `batch.generate/test/save` | Code gen | `references/ws-batch-generate.md` |
+| `batch.execute/pause/resume/cancel/retry` | Execution | `references/ws-batch-execute.md` |
+| `batch.items` | List items | `references/ws-batch-items.md` |
 
-## WS — WeChat Bot (`chatbot.weixin.*`)
+## WeChat Personal Bot
 
-`qr.request` · `qr.poll` · `disconnect` · `getStatus`
-→ `references/ws-chatbot-weixin-*.md`
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `chatbot.weixin.qr.request/poll` | QR login | `references/ws-chatbot-weixin-qr-request.md` |
+| `chatbot.weixin.disconnect/getStatus` | Connection mgmt | `references/ws-chatbot-weixin-disconnect.md` |
+
+## Bazaar Bridge
+
+| Type | Description | Reference |
+|------|-------------|-----------|
+| `bazaar.*` | Protocol messages | `server/bazaar/` |

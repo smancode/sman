@@ -1,15 +1,31 @@
 # WS session.history
 
-## Signature
-```
-WS message: { type: "session.history", sessionId: string }
+Retrieve full message history for a session.
+
+**Signature:** `session.history` → `{ sessionId: string }` → `session.history` with messages
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | Yes | Session UUID |
+
+## Response
+
+```json
+{
+  "sessionId": "uuid",
+  "messages": [
+    { "role": "user", "content": "...", "createdAt": "ISO8601", "contentBlocks": [...] }
+  ]
+}
 ```
 
 ## Business Flow
-Returns `{ type: "session.history", sessionId, messages: [...] }` containing the full message history for the session. Used when resuming a session.
 
-## Called Services
-`sessionManager.getHistory()` → `store.getMessages()`
+Loads messages from SQLite for display in the chat UI. Messages include content blocks for thinking/tool_use blocks.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'session.history'`
+Calls: `sessionManager.getHistory()` in `server/claude-session.ts`

@@ -1,15 +1,14 @@
 # WS batch.resume
 
-## Signature
-```
-WS message: { type: "batch.resume", taskId: string }
-```
+Resume a paused batch task.
+
+**Signature:** `batch.resume` → `{ taskId: string }` → `batch.resumed`
 
 ## Business Flow
-Resumes a paused batch execution. Returns `batch.resumed`.
 
-## Called Services
-`batchEngine.resume()`
+Restores the semaphore to the task's concurrency limit, allowing new item executions to start.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.resume'`
+Calls: `batchEngine.resume()` in `server/batch-engine.ts`

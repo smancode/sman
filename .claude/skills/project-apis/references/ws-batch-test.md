@@ -1,15 +1,14 @@
 # WS batch.test
 
-## Signature
-```
-WS message: { type: "batch.test", taskId: string }
-```
+Test generated code against the first item.
+
+**Signature:** `batch.test` → `{ taskId: string }` → `batch.tested` with results
 
 ## Business Flow
-Runs the generated code against a single item (dry run). Returns test result with `{ type: "batch.tested", taskId, ...result }`.
 
-## Called Services
-`batchEngine.testCode()`
+Executes the generated code against item[0] only to validate the template before running the full batch. Returns stdout/stderr.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.test'`
+Calls: `batchEngine.testCode()` in `server/batch-engine.ts`

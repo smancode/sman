@@ -1,15 +1,19 @@
 # WS chatbot.weixin.getStatus
 
-## Signature
-```
-WS message: { type: "chatbot.weixin.getStatus" }
+Get current WeChat bot connection status.
+
+**Signature:** `chatbot.weixin.getStatus` → `chatbot.weixin.status` with current status
+
+## Response
+
+```json
+{ "status": "idle" | "connecting" | "connected" | "error" }
 ```
 
 ## Business Flow
-Returns current connection status of WeChat bot: `idle`, `connecting`, `connected`, `error`.
 
-## Called Services
-`weixinConnection.getConnectionStatus()`
+Returns the in-memory connection state of `WeixinBotConnection`.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'chatbot.weixin.getStatus'`

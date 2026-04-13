@@ -1,15 +1,20 @@
 # WS session.delete
 
-## Signature
-```
-WS message: { type: "session.delete", sessionId: string }
-```
+Delete a session and abort any active query.
+
+**Signature:** `session.delete` → `{ sessionId: string }` → `session.deleted`
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | Yes | Session UUID |
 
 ## Business Flow
-Aborts any in-progress response for the session, then deletes it from SQLite. Returns `{ type: "session.deleted", sessionId }`.
 
-## Called Services
-`sessionManager.abort()` + `store.deleteSession()`
+Aborts any active V2 session stream, then deletes the session record from SQLite. The in-memory `ActiveSession` is also cleared.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'session.delete'`
+Calls: `sessionManager.abort()`, `store.deleteSession()` in `server/session-store.ts`

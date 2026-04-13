@@ -1,15 +1,20 @@
 # WS skills.listProject
 
-## Signature
-```
-WS message: { type: "skills.listProject", sessionId: string }
-```
+List skills specific to the current session's workspace.
+
+**Signature:** `skills.listProject` → `{ sessionId: string }` → `skills.listProject` with skills
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | Yes | Session UUID (to derive workspace) |
 
 ## Business Flow
-Returns project-specific skills from `{workspace}/.claude/skills/`. Resolves `sessionId` → workspace path.
 
-## Called Services
-`skillsRegistry.getProjectSkills(workspace)`
+Looks up session's workspace from SQLite, then reads skills from `{workspace}/.claude/skills/`. These are project-specific skills.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'skills.listProject'`
+Calls: `skillsRegistry.getProjectSkills()` in `server/skills-registry.ts`

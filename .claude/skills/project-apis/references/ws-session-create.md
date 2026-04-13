@@ -1,21 +1,24 @@
 # WS session.create
 
-## Signature
-```
-WS message: { type: "session.create", workspace: string }
-```
+Create a new chat session bound to a workspace directory.
+
+**Signature:** `session.create` → `{ sessionId: string, workspace: string }`
 
 ## Request Parameters
+
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `workspace` | string | Yes | Absolute path to workspace directory |
-| `sessionId` | string | — | Returned in response |
+| `workspace` | string | Yes | Absolute path to project directory |
+
+## Response
+
+`session.created` — `{ sessionId: string, workspace: string }`
 
 ## Business Flow
-Creates a new Claude session linked to `workspace`. Persists to SQLite via `SessionStore`. Triggers an async knowledge scan if needed. Returns `{ type: "session.created", sessionId, workspace }`.
 
-## Called Services
-`sessionManager.createSession()` → `store.createSession()` (SQLite)
+Creates a SQLite session record and an in-memory `ActiveSession`. Triggers async knowledge scan of the workspace. Workspace must exist on disk.
 
 ## Source
-`server/index.ts` — WebSocket `session.create` handler.
+
+`server/index.ts` — `case 'session.create'`
+Called by: `ClaudeSessionManager.createSession()` in `server/claude-session.ts`

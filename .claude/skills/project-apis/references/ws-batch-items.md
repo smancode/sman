@@ -1,21 +1,23 @@
 # WS batch.items
 
-## Signature
-```
-WS message: {
-  type: "batch.items",
-  taskId: string,
-  status?: string,
-  offset?: number,
-  limit?: number
-}
-```
+List items within a batch task with optional status filter and pagination.
+
+**Signature:** `batch.items` → `{ taskId, status?, offset?, limit? }` → `batch.items`
+
+## Request Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `taskId` | string | Yes | Batch task UUID |
+| `status` | string | No | Filter: `pending`, `running`, `success`, `failed`, `skipped` |
+| `offset` | number | No | Pagination offset |
+| `limit` | number | No | Page size |
 
 ## Business Flow
-Returns paginated batch items for a task. Optional `status` filter (pending/running/done/failed/cancelled). Used by the UI to display per-item progress.
 
-## Called Services
-`batchStore.listItems()`
+Returns batch items from `BatchStore` with execution results.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.items'`
+Calls: `batchStore.listItems()` in `server/batch-store.ts`

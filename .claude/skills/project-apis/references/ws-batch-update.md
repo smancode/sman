@@ -1,12 +1,14 @@
 # WS batch.update
 
-## Signature
-```
-WS message: { type: "batch.update", taskId: string, ...updates }
-```
+Update fields of an existing batch task.
+
+**Signature:** `batch.update` → `{ taskId, ...partialTaskFields }` → `batch.updated`
 
 ## Business Flow
-Partial update of task fields in SQLite. Returns `{ type: "batch.updated", task }`.
+
+Partial update — only provided fields are updated in SQLite.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.update'`
+Calls: `batchStore.updateTask()` in `server/batch-store.ts`

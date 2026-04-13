@@ -1,24 +1,17 @@
 # Feishu Bot
 
-## Overview
-Feishu (Lark) AI bot. Receives Feishu messages via WebSocket long connection and streams Claude responses back via im.message.create.
-
 ## Call Method
-SDK - @larksuiteoapi/node-sdk npm package. Uses WSClient for long connection + REST HTTP for file download.
+@larkSuiteoapi/node-sdk — official Feishu/Lark Node.js SDK (HTTP under the hood)
 
 ## Config Source
-- chatbot.feishu.appId - Feishu app ID
-- chatbot.feishu.appSecret - Feishu app secret
-
-Source: ~/.sman/config.json
+- ~/.sman/config.json — chatbot.feishu.appId, chatbot.feishu.appSecret
 
 ## Call Locations
-- server/chatbot/feishu-bot-connection.ts - Lark.Client + Lark.WSClient for event dispatch
-- server/chatbot/chatbot-session-manager.ts - Routes messages to Claude, sends responses via im.message.create
-
-## Endpoints
-- WebSocket: WSClient (Feishu SDK handles transport)
-- REST: https://open.feishu.cn/open-apis/ (file downloads, message sending)
+| File | Purpose |
+|------|---------|
+| server/chatbot/feishu-bot-connection.ts | SDK event listener for messages, send replies |
+| server/chatbot/chatbot-session-manager.ts | Message routing to Claude session |
 
 ## Purpose
-Feishu/Lark bot. Supports text, image, audio, file, video messages. Streams responses with 3-second throttle.
+Feishu (Lark) enterprise messaging bot — receives events via Feishu SDK and relays
+messages to Claude for AI responses.

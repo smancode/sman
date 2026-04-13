@@ -1,15 +1,14 @@
 # WS batch.pause
 
-## Signature
-```
-WS message: { type: "batch.pause", taskId: string }
-```
+Pause a running batch task (stops after current item completes).
+
+**Signature:** `batch.pause` → `{ taskId: string }` → `batch.paused`
 
 ## Business Flow
-Pauses execution via the semaphore pause signal. Currently running items complete, queued items wait. Returns `batch.paused`.
 
-## Called Services
-`batchEngine.pause()`
+Sets the semaphore to 0, preventing new item starts. Current in-flight executions complete normally. Semaphore state is managed by `Semaphore` class.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'batch.pause'`
+Calls: `batchEngine.pause()` in `server/batch-engine.ts`

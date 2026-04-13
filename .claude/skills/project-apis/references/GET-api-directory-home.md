@@ -1,12 +1,23 @@
 # GET /api/directory/home
 
-## Signature
-```
-GET /api/directory/home
+Return the user's home directory path.
+
+**Signature:** `GET /api/directory/home`
+
+## Request
+
+No parameters.
+
+## Response
+
+```json
+{ "home": "/Users/username" }
 ```
 
 ## Business Flow
-Returns `{ home: "<os.homedir()>" }`. Provides the user's home directory path for the frontend directory browser.
+
+Used by the frontend to initialize the directory browser at the user's home directory.
 
 ## Source
-`server/index.ts` — no path param, returns `os.homedir()`.
+
+`server/index.ts` — HTTP handler at `req.url === '/api/directory/home'`

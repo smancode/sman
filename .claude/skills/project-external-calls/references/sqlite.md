@@ -1,29 +1,22 @@
-# SQLite (better-sqlite3)
-
-## Overview
-All persistent state stored in SQLite via better-sqlite3 (synchronous native SQLite bindings for Node.js).
+# SQLite (local)
 
 ## Call Method
-ORM-like synchronous API via better-sqlite3 npm package. No query builder - raw SQL strings.
+better-sqlite3 — synchronous SQLite driver, ESM interop
 
 ## Config Source
-- Main DB: ~/.sman/sman.db
-- Bazaar DB: ~/.sman/bazaar.db
-- Both paths configured via SMANBASE_HOME env var (default: ~/.sman)
-
-Source: ~/.sman/config.json (sets data directory)
+- Database path: hardcoded ~/.sman/sman.db (passed as homeDir + '/sman.db')
+- No dynamic path config; always at ~/.sman/sman.db
 
 ## Call Locations
-
-| File | Schema |
-|------|--------|
-| server/session-store.ts | sessions, messages + migrations |
-| server/cron-task-store.ts | cron_tasks, cron_runs |
-| server/batch-store.ts | batch_tasks, batch_items, batch_env_vars |
-| server/chatbot/chatbot-store.ts | chatbot_users, chatbot_sessions, chatbot_workspaces |
-| server/chatbot/weixin-store.ts | WeChat bot token + cursor |
-| server/bazaar/bazaar-store.ts | Bazaar agent identity, tasks, reputation |
-| server/web-access/chrome-sites.ts | Reads Chrome History SQLite for URL discovery |
+| File | Purpose |
+|------|---------|
+| server/session-store.ts | Session + message storage |
+| server/cron-task-store.ts | Cron task + run storage |
+| server/batch-store.ts | Batch task + item storage |
+| server/chatbot/chatbot-store.ts | Chatbot user state storage |
+| server/bazaar/bazaar-store.ts | Bazaar agent + task registry |
+| server/web-access/chrome-sites.ts | Chrome bookmark/history DB (read-only) |
 
 ## Purpose
-All persistent storage. Sessions, messages, cron/batch tasks, chatbot state, bazaar state, Chrome browsing history for URL discovery.
+Local SQLite DB for all persistent state: sessions, messages, cron/batch tasks,
+chatbot sessions, Bazaar registry, and Chrome browser data (bookmarks/history read-only).

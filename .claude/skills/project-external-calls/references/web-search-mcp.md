@@ -1,30 +1,26 @@
 # Web Search MCP
 
-## Overview
-Enables web search for Claude agent sessions via Model Context Protocol (MCP) servers. One provider active at a time based on user settings.
-
 ## Call Method
-MCP via child process (npx -y) with stdio communication. Config passed as environment variables to the spawned process.
+External MCP Server via npx -y @anthropic-ai/mcp-server-{provider} (stdio)
 
 ## Config Source
-- webSearch.provider - builtin | brave | tavily | bing
-- webSearch.braveApiKey - BRAVE_API_KEY env var
-- webSearch.tavilyApiKey - TAVILY_API_KEY env var
-- webSearch.bingApiKey - BING_SEARCH_V7_SUBSCRIPTION_KEY env var
+- ~/.sman/config.json — webSearch.provider, webSearch.braveApiKey,
+  webSearch.tavilyApiKey, webSearch.bingApiKey
+- API key passed as env var to MCP server process
 
-Source: ~/.sman/config.json
-
-## Providers
-
-| Provider | Package | Env Var |
-|----------|---------|---------|
-| Brave | @anthropic-ai/mcp-server-brave | BRAVE_API_KEY |
-| Tavily | @anthropic-ai/mcp-server-tavily | TAVILY_API_KEY |
-| Bing | @anthropic-ai/mcp-server-bing | BING_SEARCH_V7_SUBSCRIPTION_KEY |
-| Builtin | (none) | (none) |
+## Provider / Env Var Mapping
+| Provider | MCP Server | Env Var |
+|----------|-----------|---------|
+| brave | @anthropic-ai/mcp-server-brave | BRAVE_API_KEY |
+| tavily | @anthropic-ai/mcp-server-tavily | TAVILY_API_KEY |
+| bing | @anthropic-ai/mcp-server-bing | BING_SEARCH_V7_SUBSCRIPTION_KEY |
+| builtin | (none) | - |
 
 ## Call Locations
-- server/mcp-config.ts - Builds MCP server config per provider, launches via npx -y
+| File | Purpose |
+|------|---------|
+| server/mcp-config.ts | Builds MCP server config from settings |
+| server/index.ts | Passes servers to Claude Agent SDK |
 
 ## Purpose
-Provides search tool to Claude sessions for web search capability. builtin uses Claude Code built-in search (no MCP server).
+Web search via configurable MCP provider (Brave, Tavily, Bing, or built-in Claude Code search).

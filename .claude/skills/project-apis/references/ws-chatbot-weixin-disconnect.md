@@ -1,15 +1,13 @@
 # WS chatbot.weixin.disconnect
 
-## Signature
-```
-WS message: { type: "chatbot.weixin.disconnect" }
-```
+Disconnect the WeChat personal bot.
+
+**Signature:** `chatbot.weixin.disconnect` → `chatbot.weixin.status` with `status: 'idle'`
 
 ## Business Flow
-Disconnects the WeChat personal bot. Sets status to `idle`. Returns `{ type: "chatbot.weixin.status", status: "idle" }`.
 
-## Called Services
-`weixinConnection.disconnect()`
+Calls `weixinConnection.disconnect()`. Stops the WeChat protocol listener.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'chatbot.weixin.disconnect'`

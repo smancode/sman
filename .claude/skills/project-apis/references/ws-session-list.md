@@ -1,15 +1,34 @@
 # WS session.list
 
-## Signature
-```
-WS message: { type: "session.list" }
+List all persisted sessions with metadata.
+
+**Signature:** `session.list` → `{ sessions: ActiveSession[] }`
+
+## Request Parameters
+
+None.
+
+## Response
+
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "workspace": "/path/to/project",
+      "label": "optional-label",
+      "createdAt": "ISO8601",
+      "lastActiveAt": "ISO8601"
+    }
+  ]
+}
 ```
 
 ## Business Flow
-Returns `{ type: "session.list", sessions: [{ id, workspace, label, createdAt, lastActiveAt }] }`. Reads all sessions from SQLite, returns summary fields (no message history).
 
-## Called Services
-`sessionManager.listSessions()` → `store.listSessions()`
+Returns all sessions from SQLite merged with in-memory labels. Used to populate the session tree sidebar.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'session.list'`
+Calls: `sessionManager.listSessions()` in `server/claude-session.ts`

@@ -1,15 +1,20 @@
 # WS cron.workspaces
 
-## Signature
-```
-WS message: { type: "cron.workspaces" }
+List all workspaces that have at least one session.
+
+**Signature:** `cron.workspaces` → `cron.workspaces` with workspace list
+
+## Response
+
+```json
+{ "workspaces": ["/path/to/project1", "/path/to/project2"] }
 ```
 
 ## Business Flow
-Returns unique workspace paths from all sessions in SQLite. Used to populate the workspace dropdown when creating cron tasks.
 
-## Called Services
-`store.listSessions()` → deduplicate workspaces
+Derived from session list — used to populate the workspace selector when creating/editing cron tasks.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'cron.workspaces'`
+Calls: `store.listSessions()` in `server/session-store.ts`

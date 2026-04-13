@@ -1,12 +1,13 @@
 # WS cron.delete
 
-## Signature
-```
-WS message: { type: "cron.delete", taskId: string }
-```
+Delete a cron task and remove it from the scheduler.
+
+**Signature:** `cron.delete` → `{ taskId: string }` → `cron.deleted`
 
 ## Business Flow
-Unschedules from `CronScheduler` and deletes from SQLite. Broadcasts `cron.changed`.
+
+Calls `cronScheduler.unschedule()` then `cronTaskStore.deleteTask()`. Broadcasts `cron.changed`.
 
 ## Source
-`server/index.ts`
+
+`server/index.ts` — `case 'cron.delete'`
