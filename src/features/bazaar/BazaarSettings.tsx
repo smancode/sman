@@ -38,18 +38,18 @@ export function BazaarSettings({ id }: { id?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Server className="h-5 w-5" />
-          集市配置
+          世界配置
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>集市服务器地址</Label>
+          <Label>世界服务器地址</Label>
           <Input
             placeholder="bazaar.company.com:5890"
             value={server}
             onChange={(e) => setServer(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">企业内网集市服务器地址</p>
+          <p className="text-xs text-muted-foreground">企业内网世界服务器地址</p>
         </div>
 
         <div className="space-y-2">
