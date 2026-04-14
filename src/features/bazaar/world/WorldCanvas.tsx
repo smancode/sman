@@ -82,6 +82,13 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover 
       if (hit && hit.type === 'agent') {
         const agent = hit.target as import('./AgentEntity').AgentEntity;
         onAgentClick?.({ id: agent.id, name: agent.name, avatar: agent.avatar, reputation: agent.reputation });
+        // 点击爆发粒子（屏幕坐标）
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        renderer.spawnClickBurst(
+          worldX - camera.getOffset().x,
+          worldY - camera.getOffset().y,
+        );
         return hit;
       }
       return null;

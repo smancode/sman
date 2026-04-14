@@ -1,5 +1,5 @@
 // src/features/bazaar/world/assets/ImageAssets.ts
-// PNG 图片素材加载器 — 加载预生成的 spritesheet PNG 文件
+// PNG 图片素材加载器 — 加载 mmx 生成的 spritesheet PNG
 
 import type { AssetProvider, AppearanceParams, Facing } from './AssetProvider';
 import { facingToRow } from './AssetProvider';
@@ -8,60 +8,61 @@ import { ProceduralAssets } from './ProceduralAssets';
 const SPRITE_W = 32;
 const SPRITE_H = 32;
 const FRAMES = 4;
-const DIRECTIONS = 4;
 
 const BASE_PATH = '/bazaar/assets';
+
+// Agent 外观组合 → spritesheet 文件映射
+// 只加载 5 种预设 spritesheet，fallback 到 ProceduralAssets
+const AGENT_SHEETS = [
+  'agent_h0_o0', // blue + brown hair
+  'agent_h1_o1', // green + black hair
+  'agent_h2_o2', // red + blonde hair
+  'agent_h3_o3', // purple + pink hair
+  'agent_h4_o4', // orange + blue hair
+] as const;
+
+// outfitColor → spritesheet 索引 (循环)
+function outfitToSheetIndex(outfitColor: number): number {
+  return outfitColor % AGENT_SHEETS.length;
+}
 
 export class ImageAssets implements AssetProvider {
   private loaded = false;
   private fallback = new ProceduralAssets();
 
-  // Spritesheet images
   private agentSheets = new Map<string, HTMLImageElement>();
   private buildingImages = new Map<string, HTMLImageElement>();
   private tileImages = new Map<string, HTMLImageElement>();
 
-  /** Load all assets. Returns true if all loaded successfully. */
   async load(): Promise<boolean> {
     try {
+      const promises: Promise<void>[] = [];
+
       // Load building images
       const buildingTypes = ['stall', 'reputation', 'bounty', 'search', 'workshop'];
-      const buildingPromises = buildingTypes.map(async (type) => {
-        const img = new Image();
-        img.src = `${BASE_PATH}/building_${type}.png`;
-        await img.decode();
-        this.buildingImages.set(type, img);
-      });
+      for (const type of buildingTypes) {
+        promises.push(this.loadImage(`${BASE_PATH}/building_${type}.png`, (img) => {
+          this.buildingImages.set(type, img);
+        }));
+      }
 
-      // Load tile images
-      const tilePromises: Promise<void>[] = [];
+      // Load tile images (tileId 0-4, variant 0-2)
       for (let tileId = 0; tileId < 5; tileId++) {
         for (let variant = 0; variant < 3; variant++) {
-          const p = (async () => {
-            const img = new Image();
-            img.src = `${BASE_PATH}/tile_${tileId}_${variant}.png`;
-            await img.decode();
+          promises.push(this.loadImage(`${BASE_PATH}/tile_${tileId}_${variant}.png`, (img) => {
             this.tileImages.set(`${tileId}:${variant}`, img);
-          })();
-          tilePromises.push(p);
+          }));
         }
       }
 
-      // Load agent spritesheets (8 hair × 7 outfit)
-      const agentPromises: Promise<void>[] = [];
-      for (let h = 0; h < 8; h++) {
-        for (let o = 0; o < 7; o++) {
-          const p = (async () => {
-            const img = new Image();
-            img.src = `${BASE_PATH}/agent_h${h}_o${o}.png`;
-            await img.decode();
-            this.agentSheets.set(`${h}:${o}`, img);
-          })();
-          agentPromises.push(p);
-        }
+      // Load agent spritesheets (5 preset combos)
+      for (const name of AGENT_SHEETS) {
+        promises.push(this.loadImage(`${BASE_PATH}/${name}.png`, (img) => {
+          this.agentSheets.set(name, img);
+        }));
       }
 
-      await Promise.all([...buildingPromises, ...tilePromises, ...agentPromises]);
+      await Promise.all(promises);
       this.loaded = true;
       return true;
     } catch {
@@ -71,8 +72,9 @@ export class ImageAssets implements AssetProvider {
   }
 
   getAgentSprite(appearance: AppearanceParams, facing: Facing, frame: number): OffscreenCanvas | HTMLCanvasElement {
-    const key = `${appearance.hairStyle}:${appearance.outfitColor}`;
-    const img = this.agentSheets.get(key);
+    const idx = outfitToSheetIndex(appearance.outfitColor);
+    const sheetName = AGENT_SHEETS[idx];
+    const img = this.agentSheets.get(sheetName);
     if (img) {
       const row = facingToRow(facing);
       const col = frame % FRAMES;
@@ -86,13 +88,25 @@ export class ImageAssets implements AssetProvider {
 
   getBuildingSprite(type: string): OffscreenCanvas | HTMLCanvasElement {
     const img = this.buildingImages.get(type);
-    if (img) return this.cropBuilding(img, type);
+    if (img) {
+      const isLarge = type === 'reputation' || type === 'bounty';
+      const size = isLarge ? 96 : 64;
+      const canvas = new OffscreenCanvas(size, size);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, size, size);
+      return canvas;
+    }
     return this.fallback.getBuildingSprite(type);
   }
 
   getTileSprite(tileId: number, variant: number): OffscreenCanvas | HTMLCanvasElement {
     const img = this.tileImages.get(`${tileId}:${variant}`);
-    if (img) return this.cropTile(img);
+    if (img) {
+      const canvas = new OffscreenCanvas(32, 32);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, 32, 32);
+      return canvas;
+    }
     return this.fallback.getTileSprite(tileId, variant);
   }
 
@@ -100,19 +114,12 @@ export class ImageAssets implements AssetProvider {
     return this.loaded;
   }
 
-  private cropBuilding(img: HTMLImageElement, type: string): OffscreenCanvas {
-    const isLarge = type === 'reputation' || type === 'bounty';
-    const size = isLarge ? 96 : 64;
-    const canvas = new OffscreenCanvas(size, size);
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, size, size);
-    return canvas;
-  }
-
-  private cropTile(img: HTMLImageElement): OffscreenCanvas {
-    const canvas = new OffscreenCanvas(32, 32);
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, 32, 32);
-    return canvas;
+  private loadImage(src: string, onLoad: (img: HTMLImageElement) => void): Promise<void> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { onLoad(img); resolve(); };
+      img.onerror = () => resolve(); // skip missing assets silently
+      img.src = src;
+    });
   }
 }
