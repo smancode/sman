@@ -9,7 +9,7 @@ import { InteractionSystem } from './InteractionSystem';
 import { WorldSync } from './WorldSync';
 import { BuildingRegistry } from './BuildingRegistry';
 import { BUILDINGS } from './map-data';
-import { DESIGN } from './palette';
+import { DESIGN, CANVAS_BG } from './palette';
 import { setAssetProvider } from './SpriteSheet';
 import { ImageAssets } from './assets/ImageAssets';
 import { useBazaarStore } from '@/stores/bazaar';
@@ -96,6 +96,8 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover 
 
     renderer.setCamera(camera);
     renderer.init(canvas);
+    // 相机初始居中到中央广场
+    camera.centerOn(19 * 32, 13 * 32);
     rendererRef.current = renderer;
     renderer.start();
 
@@ -162,7 +164,8 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover 
         height: '100%',
         display: 'block',
         imageRendering: 'pixelated',
-        background: '#1a1c2c',
+        background: CANVAS_BG,
+        cursor: 'pointer',
       }}
     />
   );

@@ -4,6 +4,7 @@
 import type { Facing } from './assets/AssetProvider';
 import type { AppearanceParams } from './assets/AssetProvider';
 import { getAppearance } from './assets/appearance';
+import { AGENT_COLORS } from './palette';
 
 type AgentState = 'idle' | 'walking' | 'busy';
 
@@ -51,7 +52,7 @@ export class AgentEntity {
     this.y = opts.y;
     this.targetX = opts.x;
     this.targetY = opts.y;
-    this.shirtColor = opts.shirtColor ?? '#41a6f6';
+    this.shirtColor = opts.shirtColor ?? AGENT_COLORS.defaultShirt;
     this.appearance = getAppearance(opts.id);
   }
 

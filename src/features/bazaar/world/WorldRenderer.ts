@@ -1,7 +1,8 @@
 // src/features/bazaar/world/WorldRenderer.ts
-// 世界渲染引擎 — 管理瓦片、建筑、Agent、粒子、装饰的分层渲染
+// 世界渲染引擎 — 冷色奇幻学院风格
+// 分层渲染：Layer 0 地面 → Layer 0.5 粒子 → Layer 0.7 水面闪烁 → Layer 1 建筑+装饰 Y-sort → Layer 2 Agent
 
-import { DESIGN } from './palette';
+import { DESIGN, UI_COLORS, TILE_COLORS } from './palette';
 import { MAP_DATA, BUILDINGS } from './map-data';
 import type { BuildingData } from './map-data';
 import { DECORATIONS, DecoLayer } from './DecoLayer';
@@ -23,10 +24,8 @@ export class WorldRenderer {
   private running = false;
   private frame = 0;
 
-  // 相机系统（外部注入）
   private camera: CameraSystem | null = null;
 
-  // 碰撞边界（像素）
   private bounds = {
     minX: 0,
     maxX: DESIGN.MAP_COLS * TS,
@@ -34,10 +33,6 @@ export class WorldRenderer {
     maxY: DESIGN.MAP_ROWS * TS,
   };
 
-  // 建筑离屏缓存
-  private buildingLayer: OffscreenCanvas | null = null;
-
-  // 新增层
   private particles = new ParticleLayer();
   private decoLayer = new DecoLayer();
 
@@ -48,11 +43,13 @@ export class WorldRenderer {
   // Building pulse animation (first visit)
   private buildingPulseActive = false;
   private buildingPulseStart = 0;
-  private static readonly BUILDING_PULSE_DURATION = 3000;
+  private static readonly BUILDING_PULSE_DURATION = 5000;
+
+  // 建筑标签缓存（OffscreenCanvas）
+  private buildingLabelCache = new Map<string, OffscreenCanvas>();
 
   constructor() {
     this.tileMap = new TileMap(MAP_DATA as number[][]);
-    // 异步加载装饰物图片（不影响启动）
     this.decoLayer.loadImages();
   }
 
@@ -61,19 +58,21 @@ export class WorldRenderer {
     this.ctx = canvas.getContext('2d')!;
     this.ctx.imageSmoothingEnabled = false;
 
-    // HiDPI 适配
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
 
-    // 粒子层视口
     this.particles.setViewport(rect.width, rect.height);
 
-    // 相机视口
     if (this.camera) {
       this.camera.setViewport(rect.width, rect.height);
+    }
+
+    // 预生成建筑标签缓存
+    for (const b of BUILDINGS) {
+      this.cacheBuildingLabel(b);
     }
   }
 
@@ -124,7 +123,6 @@ export class WorldRenderer {
     return this.camera;
   }
 
-  /** 触发点击爆发粒子 */
   spawnClickBurst(screenX: number, screenY: number): void {
     this.particles.spawnBurst(screenX, screenY);
   }
@@ -156,10 +154,13 @@ export class WorldRenderer {
     // Layer 0.5: 环境粒子（建筑后面）
     this.particles.render(this.ctx);
 
+    // Layer 0.7: 水面闪烁 overlay
+    this.renderWaterShimmer(cameraX, cameraY);
+
     // Layer 1: 建筑 + 装饰物（按 Y 排序混合）
     this.renderBuildingsAndDecos(cameraX, cameraY);
 
-    // Layer 2: Agent 精灵（按 Y 坐标排序，实现遮挡）
+    // Layer 2: Agent 精灵（按 Y 坐标排序）
     const sortedAgents = Array.from(this.agents.values()).sort((a, b) => a.y - b.y);
     for (const agent of sortedAgents) {
       this.renderAgent(agent, cameraX, cameraY);
@@ -168,11 +169,29 @@ export class WorldRenderer {
     this.animFrameId = requestAnimationFrame(this.loop);
   };
 
-  /** 建筑 + 装饰物混合渲染（按 Y 排序） */
+  /** 水面闪烁 — 在地面缓存之上叠加半透明冰蓝 */
+  private renderWaterShimmer(cameraX: number, cameraY: number): void {
+    if (!this.ctx) return;
+    const mapData = MAP_DATA as number[][];
+    const alpha = 0.08 + Math.sin(this.frame * 0.06) * 0.04;
+    this.ctx.fillStyle = `rgba(168,216,234,${alpha})`;
+    for (let row = 0; row < mapData.length; row++) {
+      for (let col = 0; col < mapData[row].length; col++) {
+        if (mapData[row][col] === 3) { // 水瓦片
+          this.ctx.fillRect(
+            col * TS - cameraX,
+            row * TS - cameraY,
+            TS, TS,
+          );
+        }
+      }
+    }
+  }
+
+  /** 建筑 + 装饰物混合渲染 */
   private renderBuildingsAndDecos(cameraX: number, cameraY: number): void {
     if (!this.ctx) return;
 
-    // 收集所有可渲染项的 Y 坐标并排序
     type RenderItem =
       | { kind: 'building'; data: BuildingData }
       | { kind: 'deco'; data: DecoData };
@@ -186,7 +205,6 @@ export class WorldRenderer {
       items.push({ kind: 'deco', data: d });
     }
 
-    // 按 Y 坐标排序
     items.sort((a, b) => {
       const ay = a.kind === 'building' ? a.data.row * TS : this.decoLayer.getSortY(a.data);
       const by = b.kind === 'building' ? b.data.row * TS : this.decoLayer.getSortY(b.data);
@@ -201,14 +219,14 @@ export class WorldRenderer {
       }
     }
 
-    // Building pulse animation
+    // Building pulse animation（白色半透明）
     if (this.buildingPulseActive) {
       const elapsed = performance.now() - this.buildingPulseStart;
       if (elapsed > WorldRenderer.BUILDING_PULSE_DURATION) {
         this.buildingPulseActive = false;
       } else {
         const alpha = 0.3 * (1 - elapsed / WorldRenderer.BUILDING_PULSE_DURATION);
-        this.ctx!.strokeStyle = `rgba(255, 204, 68, ${alpha})`;
+        this.ctx!.strokeStyle = `rgba(255,255,255,${alpha})`;
         this.ctx!.lineWidth = 3;
         for (const b of BUILDINGS) {
           const bx = b.col * TS - cameraX;
@@ -226,28 +244,75 @@ export class WorldRenderer {
     const x = b.col * TS - cameraX;
     const y = b.row * TS - cameraY;
 
-    // Hover: 半透明金色填充高亮
+    // Hover: 冰蓝半透明高亮
     if (this.hoveredBuilding && this.hoveredBuilding.id === b.id) {
-      this.ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
+      this.ctx.fillStyle = UI_COLORS.hoverBuildingFill;
       this.ctx.fillRect(x - 2, y - 2, b.width + 4, b.height + 4);
     }
 
     this.ctx.drawImage(sprite, x, y);
 
-    // 建筑标签
-    const labelOffset = b.type === 'reputation' || b.type === 'bounty' ? 96 : 64;
-    const emoji = b.label.split(' ')[0];
-    this.ctx.font = '14px serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.fillStyle = '#f4f4f4';
-    this.ctx.fillText(emoji, x + labelOffset / 2, y - 4);
+    // 建筑标签（从缓存）
+    const label = this.buildingLabelCache.get(b.id);
+    if (label) {
+      this.ctx.drawImage(label, x + b.width / 2 - label.width / 2, y - label.height - 2);
+    }
 
-    // Hover 描边
+    // Hover 金色描边
     if (this.hoveredBuilding && this.hoveredBuilding.id === b.id) {
-      this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
-      this.ctx.lineWidth = 2;
+      this.ctx.strokeStyle = UI_COLORS.hoverBuildingStroke;
+      this.ctx.lineWidth = 3;
       this.ctx.strokeRect(x - 1, y - 1, b.width + 2, b.height + 2);
     }
+  }
+
+  /** 预生成建筑标签到 OffscreenCanvas */
+  private cacheBuildingLabel(b: BuildingData): void {
+    // 摊位不显示独立标签
+    if (b.type === 'stall') return;
+
+    const emoji = b.label.split(' ')[0];
+    const name = b.label.split(' ').slice(1).join(' ') || '';
+
+    // 测量文字宽度
+    const tempCanvas = new OffscreenCanvas(200, 30);
+    const tempCtx = tempCanvas.getContext('2d')!;
+
+    tempCtx.font = UI_COLORS.buildingEmojiFont;
+    const emojiW = tempCtx.measureText(emoji).width;
+    tempCtx.font = UI_COLORS.buildingLabelFont;
+    const nameW = name ? tempCtx.measureText(name).width : 0;
+
+    const totalW = Math.max(emojiW + (name ? nameW + 4 : 0), 20);
+    const totalH = name ? 24 : 18;
+    const padX = 4;
+
+    const labelCanvas = new OffscreenCanvas(Math.ceil(totalW + padX * 2), totalH);
+    const ctx = labelCanvas.getContext('2d')!;
+
+    // 背景
+    ctx.fillStyle = UI_COLORS.labelBg;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, labelCanvas.width, labelCanvas.height, 3);
+    ctx.fill();
+
+    // emoji
+    ctx.font = UI_COLORS.buildingEmojiFont;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = UI_COLORS.labelEmoji;
+    const centerY = totalH / 2;
+    if (name) {
+      ctx.fillText(emoji, padX + emojiW / 2, centerY - 2);
+      // 中文名
+      ctx.font = UI_COLORS.buildingLabelFont;
+      ctx.fillStyle = UI_COLORS.labelText;
+      ctx.fillText(name, padX + emojiW + 4 + nameW / 2, centerY);
+    } else {
+      ctx.fillText(emoji, labelCanvas.width / 2, centerY);
+    }
+
+    this.buildingLabelCache.set(b.id, labelCanvas);
   }
 
   private renderAgent(agent: AgentEntity, cameraX: number, cameraY: number): void {
@@ -256,9 +321,9 @@ export class WorldRenderer {
     const screenX = agent.x - cameraX;
     const screenY = agent.y - cameraY;
 
-    // Hover: 金色底光
+    // Hover: 冰蓝底光
     if (this.hoveredAgent && this.hoveredAgent.id === agent.id) {
-      this.ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
+      this.ctx.fillStyle = UI_COLORS.hoverAgentFill;
       this.ctx.beginPath();
       this.ctx.arc(screenX, screenY - 8, 22, 0, Math.PI * 2);
       this.ctx.fill();
@@ -272,30 +337,34 @@ export class WorldRenderer {
       screenY - DESIGN.AGENT_H + agent.bounceOffset,
     );
 
-    // 状态气泡（idle/busy/老搭档）
+    // 状态气泡
     this.renderStatusBubble(agent, screenX, screenY);
 
-    // 名字
+    // 名字（11px 银白 + 描边）
     this.ctx.textAlign = 'center';
-    this.ctx.font = 'bold 9px monospace';
+    this.ctx.font = UI_COLORS.nameFont;
     const nameWidth = this.ctx.measureText(agent.name).width;
-    this.ctx.fillStyle = 'rgba(61, 37, 16, 0.75)';
-    this.roundRect(screenX - nameWidth / 2 - 3, screenY - DESIGN.AGENT_H + 5, nameWidth + 6, 13, 3);
+    this.ctx.fillStyle = UI_COLORS.nameBg;
+    this.roundRect(screenX - nameWidth / 2 - 3, screenY - DESIGN.AGENT_H + 5, nameWidth + 6, 14, 3);
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(255, 224, 102, 0.2)';
+    this.ctx.strokeStyle = UI_COLORS.nameBorder;
     this.ctx.lineWidth = 0.5;
     this.ctx.stroke();
-    this.ctx.fillStyle = '#FFE066';
-    this.ctx.fillText(agent.name, screenX, screenY - DESIGN.AGENT_H + 14);
+    // 描边文字提升可读性
+    this.ctx.strokeStyle = '#1A2332';
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeText(agent.name, screenX, screenY - DESIGN.AGENT_H + 16);
+    this.ctx.fillStyle = UI_COLORS.nameText;
+    this.ctx.fillText(agent.name, screenX, screenY - DESIGN.AGENT_H + 16);
 
     // Avatar emoji
-    this.ctx.font = '12px serif';
-    this.ctx.fillStyle = '#f4f4f4';
+    this.ctx.font = UI_COLORS.avatarFont;
+    this.ctx.fillStyle = UI_COLORS.avatarEmoji;
     this.ctx.fillText(agent.avatar, screenX, screenY - DESIGN.AGENT_H - 2);
 
-    // Hover 描边光环
+    // Hover 冰蓝光环
     if (this.hoveredAgent && this.hoveredAgent.id === agent.id) {
-      this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.7)';
+      this.ctx.strokeStyle = UI_COLORS.hoverAgentRing;
       this.ctx.lineWidth = 2;
       this.ctx.beginPath();
       this.ctx.arc(screenX, screenY - 8, 20, 0, Math.PI * 2);
@@ -314,23 +383,22 @@ export class WorldRenderer {
 
     if (agent.state === 'busy') {
       text = '⚙';
-      textColor = '#E65100';
-      bgColor = '#FFF3E0';
-      borderColor = '#E65100';
+      textColor = UI_COLORS.bubbleBusyText;
+      bgColor = UI_COLORS.bubbleBusyBg;
+      borderColor = UI_COLORS.bubbleBusyBorder;
     } else if (agent.state === 'idle') {
       text = '···';
-      textColor = '#888';
-      bgColor = 'rgba(255,255,255,0.85)';
-      borderColor = '#bbb';
+      textColor = UI_COLORS.bubbleIdleText;
+      bgColor = UI_COLORS.bubbleIdleBg;
+      borderColor = UI_COLORS.bubbleIdleBorder;
     } else {
-      return; // walking 等状态不显示气泡
+      return;
     }
 
     const bubbleY = screenY - DESIGN.AGENT_H - 12;
     this.ctx.font = 'bold 8px monospace';
     const textW = this.ctx.measureText(text).width + 6;
 
-    // 气泡背景
     this.ctx.fillStyle = bgColor;
     this.roundRect(screenX - textW / 2, bubbleY - 5, textW, 11, 4);
     this.ctx.fill();
@@ -346,13 +414,11 @@ export class WorldRenderer {
     this.ctx.lineTo(screenX, bubbleY + 9);
     this.ctx.fill();
 
-    // 文字
     this.ctx.fillStyle = textColor;
     this.ctx.textAlign = 'center';
     this.ctx.fillText(text, screenX, bubbleY + 3);
   }
 
-  /** 圆角矩形工具 */
   private roundRect(x: number, y: number, w: number, h: number, r: number): void {
     if (!this.ctx) return;
     this.ctx.beginPath();
@@ -368,7 +434,6 @@ export class WorldRenderer {
     this.ctx.closePath();
   }
 
-  /** 屏幕坐标 → 世界坐标 */
   screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
     if (!this.camera) return { x: screenX, y: screenY };
     const { x, y } = this.camera.getOffset();
@@ -380,5 +445,6 @@ export class WorldRenderer {
     this.canvas = null;
     this.ctx = null;
     this.agents.clear();
+    this.buildingLabelCache.clear();
   }
 }

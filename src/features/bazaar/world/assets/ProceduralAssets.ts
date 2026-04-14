@@ -1,15 +1,16 @@
 // src/features/bazaar/world/assets/ProceduralAssets.ts
-// 开罗风程序化绘制 — 大头小身子、点眼、圆润、暖色调
+// 冷色奇幻学院程序化绘制 — 深蓝+银+紫+冰蓝
 // Canvas API fallback，不依赖外部图片
 
 import type { AssetProvider, AppearanceParams, Facing } from './AssetProvider';
 import {
   HAIR_STYLES, HAIR_COLORS, SKIN_TONES, OUTFIT_COLORS,
-  BUILDING_COLORS, TILE_COLORS,
+  BUILDING_COLORS, TILE_COLORS, TILE_DETAIL_COLORS, ZONE_COLORS,
+  AGENT_COLORS,
 } from '../palette';
 
-const W = 32; // Agent sprite width
-const H = 32; // Agent sprite height (Q版正方形)
+const W = 32;
+const H = 32;
 
 type PixelColor = string | null;
 
@@ -47,7 +48,7 @@ export class ProceduralAssets implements AssetProvider {
 
   isReady(): boolean { return true; }
 
-  // ── Agent Drawing (Kairo Style) ──
+  // ── Agent Drawing ──
 
   private drawAgent(ap: AppearanceParams, facing: Facing, frame: number): OffscreenCanvas {
     const canvas = new OffscreenCanvas(W, H);
@@ -57,27 +58,25 @@ export class ProceduralAssets implements AssetProvider {
     const skin = SKIN_TONES[ap.skinTone] as string;
     const hair = HAIR_COLORS[ap.hairColor] as string;
     const outfit = OUTFIT_COLORS[ap.outfitColor] as string;
-    const eye = '#212121';
-    const blush = '#FFB6C1';
-    const outline = '#4E342E';
-    const shoes = '#4E342E';
+    const eye = AGENT_COLORS.eye;
+    const blush = AGENT_COLORS.blush;
+    const outline = AGENT_COLORS.outline;
+    const shoes = AGENT_COLORS.shoes;
 
-    // 弹跳偏移：帧1和帧3上移1像素
     const bounceY = (frame === 1 || frame === 3) ? -1 : 0;
 
-    // ── 大圆头 (占上半部分 16px) ──
+    // ── 大圆头 ──
     const headRows: PixelColor[][] = [
-      [null, null, null, hair, hair, hair, hair, null, null, null],   // row 0
-      [null, null, hair, hair, hair, hair, hair, hair, null, null],   // row 1
-      [null, outline, skin, skin, skin, skin, skin, skin, outline, null], // row 2
-      [null, skin, skin, skin, skin, skin, skin, skin, skin, null],   // row 3
-      [null, skin, skin, eye, skin, skin, eye, skin, skin, null],    // row 4: 点眼!
-      [null, skin, skin, skin, skin, skin, skin, skin, skin, null],   // row 5
-      [null, null, skin, skin, blush, skin, blush, skin, null, null], // row 6: 腮红
-      [null, null, null, skin, skin, skin, skin, null, null, null],   // row 7
+      [null, null, null, hair, hair, hair, hair, null, null, null],
+      [null, null, hair, hair, hair, hair, hair, hair, null, null],
+      [null, outline, skin, skin, skin, skin, skin, skin, outline, null],
+      [null, skin, skin, skin, skin, skin, skin, skin, skin, null],
+      [null, skin, skin, eye, skin, skin, eye, skin, skin, null],
+      [null, skin, skin, skin, skin, skin, skin, skin, skin, null],
+      [null, null, skin, skin, blush, skin, blush, skin, null, null],
+      [null, null, null, skin, skin, skin, skin, null, null, null],
     ];
 
-    // 根据方向微调眼睛位置
     if (facing === 'left') {
       headRows[4] = [null, skin, skin, null, skin, eye, skin, skin, skin, null];
     } else if (facing === 'right') {
@@ -86,7 +85,6 @@ export class ProceduralAssets implements AssetProvider {
       headRows[4] = [null, skin, null, hair, skin, skin, hair, null, skin, null];
     }
 
-    // 绘制头部
     for (let row = 0; row < headRows.length; row++) {
       for (let col = 0; col < headRows[row].length; col++) {
         if (headRows[row][col]) {
@@ -96,26 +94,21 @@ export class ProceduralAssets implements AssetProvider {
       }
     }
 
-    // 发型覆盖（根据 hairStyle）
     this.drawHairOverlay(ctx, ap.hairStyle, hair, facing, bounceY);
 
-    // ── 小身体 (下半部分 8px) ──
+    // ── 小身体 ──
     const bodyStart = 18 + bounceY;
-    // 服装（小身体）
     ctx.fillStyle = outline;
-    ctx.fillRect(14, (bodyStart) * 2, 6, 2); // 领口线
+    ctx.fillRect(14, (bodyStart) * 2, 6, 2);
 
     ctx.fillStyle = outfit;
     ctx.fillRect(12, (bodyStart + 1) * 2, 10, 2);
     ctx.fillRect(12, (bodyStart + 2) * 2, 10, 2);
 
-    // 腿（走路动画）
     const legSpread = frame === 1 ? 2 : frame === 3 ? -2 : 0;
-    // 左腿
     ctx.fillStyle = shoes;
     ctx.fillRect(14, (bodyStart + 3) * 2, 2, 2);
     ctx.fillRect(14 + legSpread, (bodyStart + 4) * 2, 2, 2);
-    // 右腿
     ctx.fillRect(18, (bodyStart + 3) * 2, 2, 2);
     ctx.fillRect(18 - legSpread, (bodyStart + 4) * 2, 2, 2);
 
@@ -127,42 +120,18 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = color;
 
     switch (style) {
-      case 0: // spiky - 尖刺
-        ctx.fillRect(10, y0, 2, 2);
-        ctx.fillRect(20, y0, 2, 2);
-        ctx.fillRect(14, y0 - 2, 4, 2);
-        break;
-      case 1: // long - 长发（垂到肩膀）
-        ctx.fillRect(8, y0 + 2, 2, 6);
-        ctx.fillRect(22, y0 + 2, 2, 6);
-        break;
-      case 2: // curly - 卷发
-        ctx.fillRect(8, y0, 2, 2);
-        ctx.fillRect(22, y0, 2, 2);
-        ctx.fillRect(12, y0 - 2, 2, 2);
-        ctx.fillRect(18, y0 - 2, 2, 2);
-        break;
-      case 3: // twin - 双马尾
-        ctx.fillRect(6, y0 + 2, 2, 8);
-        ctx.fillRect(24, y0 + 2, 2, 8);
-        break;
-      case 4: // cap - 鸭舌帽
-        ctx.fillRect(8, y0 + 2, 16, 2);
-        ctx.fillRect(6, y0 + 4, 2, 2);
-        break;
-      case 5: // helmet - 头盔
-        ctx.fillRect(8, y0, 16, 4);
-        break;
-      case 6: // pointed - 尖尖帽
-        ctx.fillRect(14, y0 - 4, 4, 2);
-        ctx.fillRect(12, y0 - 2, 8, 2);
-        break;
-      case 7: // bald - 光头（不画额外头发）
-        break;
+      case 0: ctx.fillRect(10, y0, 2, 2); ctx.fillRect(20, y0, 2, 2); ctx.fillRect(14, y0 - 2, 4, 2); break;
+      case 1: ctx.fillRect(8, y0 + 2, 2, 6); ctx.fillRect(22, y0 + 2, 2, 6); break;
+      case 2: ctx.fillRect(8, y0, 2, 2); ctx.fillRect(22, y0, 2, 2); ctx.fillRect(12, y0 - 2, 2, 2); ctx.fillRect(18, y0 - 2, 2, 2); break;
+      case 3: ctx.fillRect(6, y0 + 2, 2, 8); ctx.fillRect(24, y0 + 2, 2, 8); break;
+      case 4: ctx.fillRect(8, y0 + 2, 16, 2); ctx.fillRect(6, y0 + 4, 2, 2); break;
+      case 5: ctx.fillRect(8, y0, 16, 4); break;
+      case 6: ctx.fillRect(14, y0 - 4, 4, 2); ctx.fillRect(12, y0 - 2, 8, 2); break;
+      case 7: break;
     }
   }
 
-  // ── Building Drawing (Kairo Style) ──
+  // ── Building Drawing ──
 
   private drawBuilding(type: string): OffscreenCanvas {
     const isLarge = type === 'reputation' || type === 'bounty';
@@ -189,7 +158,7 @@ export class ProceduralAssets implements AssetProvider {
   }
 
   private drawStall(ctx: OffscreenCanvasRenderingContext2D, bc: typeof BUILDING_COLORS): void {
-    // 圆润顶棚（开罗风：圆弧形）
+    // 圆润顶棚（紫色）
     ctx.fillStyle = bc.roof;
     ctx.beginPath();
     ctx.ellipse(32, 16, 30, 14, 0, Math.PI, 0);
@@ -197,7 +166,7 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.roofDark;
     ctx.fillRect(4, 16, 56, 4);
 
-    // 条纹装饰
+    // 条纹装饰（紫色系）
     ctx.fillStyle = bc.banner;
     for (let i = 0; i < 8; i++) {
       ctx.fillRect(i * 8 + 4, 6, 4, 8);
@@ -209,12 +178,12 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.gold;
     ctx.fillRect(6, 28, 52, 2);
 
-    // 可爱的小物品
-    ctx.fillStyle = '#FF7043';
+    // 冷色小物品
+    ctx.fillStyle = bc.stallItem1;
     ctx.fillRect(12, 22, 6, 6);
-    ctx.fillStyle = '#4CAF50';
+    ctx.fillStyle = bc.stallItem2;
     ctx.fillRect(26, 22, 6, 6);
-    ctx.fillStyle = '#FFD700';
+    ctx.fillStyle = bc.stallItem3;
     ctx.fillRect(40, 22, 6, 6);
 
     // 小腿
@@ -230,8 +199,8 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.stone;
     this.roundRect(ctx, 16, 58, 64, 14, 4);
 
-    // 圆角告示板
-    ctx.fillStyle = '#FFF8E1';
+    // 圆角告示板（浅银白）
+    ctx.fillStyle = '#C8D8E8';
     this.roundRect(ctx, 18, 10, 60, 48, 6);
     ctx.fillStyle = bc.stoneDark;
     ctx.fillRect(16, 6, 64, 4);
@@ -241,10 +210,11 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.gold;
     ctx.fillRect(38, 0, 20, 8);
     ctx.fillRect(42, 0, 12, 4);
-    ctx.fillStyle = '#FF5252';
+    // 紫色宝石（替代红宝石）
+    ctx.fillStyle = bc.roof;
     ctx.fillRect(46, 2, 4, 4);
 
-    // 可爱星星
+    // 银色星星
     ctx.fillStyle = bc.gold;
     const stars = [[30, 24], [50, 20], [40, 34], [56, 30], [30, 42], [50, 40]];
     stars.forEach(([x, y]) => {
@@ -259,7 +229,7 @@ export class ProceduralAssets implements AssetProvider {
   }
 
   private drawBounty(ctx: OffscreenCanvasRenderingContext2D, bc: typeof BUILDING_COLORS): void {
-    // 圆润木质框架
+    // 木质框架（冷灰，无紫色）
     ctx.fillStyle = bc.woodDark;
     this.roundRect(ctx, 8, 6, 80, 62, 8);
 
@@ -267,13 +237,13 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.wood;
     this.roundRect(ctx, 12, 10, 72, 54, 6);
 
-    // 可爱小纸条
-    ctx.fillStyle = '#FFF8E1';
+    // 纸条（冷白）
+    ctx.fillStyle = '#C8D8E8';
     this.roundRect(ctx, 18, 16, 22, 16, 3);
     this.roundRect(ctx, 48, 14, 26, 18, 3);
     this.roundRect(ctx, 22, 40, 18, 16, 3);
 
-    // 小钉子
+    // 小钉子（金色）
     ctx.fillStyle = bc.gold;
     ctx.fillRect(27, 14, 2, 2);
     ctx.fillRect(59, 12, 2, 2);
@@ -287,11 +257,11 @@ export class ProceduralAssets implements AssetProvider {
   }
 
   private drawSearch(ctx: OffscreenCanvasRenderingContext2D, bc: typeof BUILDING_COLORS): void {
-    // 圆润底座
+    // 底座
     ctx.fillStyle = bc.stone;
     this.roundRect(ctx, 14, 46, 36, 14, 4);
 
-    // 圆球（搜索站标志）
+    // 水晶球（搜索站标志 — 偏蓝）
     ctx.fillStyle = bc.blue;
     ctx.beginPath();
     ctx.ellipse(32, 30, 16, 18, 0, 0, Math.PI * 2);
@@ -299,8 +269,8 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fillStyle = bc.blueDark;
     ctx.fillRect(16, 36, 32, 8);
 
-    // 可爱高光
-    ctx.fillStyle = '#B3E5FC';
+    // 高光（深冰蓝，非 #A8D8EA）
+    ctx.fillStyle = bc.blueLight;
     ctx.fillRect(24, 20, 8, 6);
 
     // 顶部星星
@@ -310,23 +280,24 @@ export class ProceduralAssets implements AssetProvider {
   }
 
   private drawWorkshop(ctx: OffscreenCanvasRenderingContext2D, bc: typeof BUILDING_COLORS): void {
-    // 圆润底座
-    ctx.fillStyle = bc.blueDark;
+    // 底座
+    ctx.fillStyle = bc.workshop;
     this.roundRect(ctx, 14, 46, 36, 14, 4);
 
     // 工作台
-    ctx.fillStyle = bc.blue;
+    ctx.fillStyle = bc.workshop;
     this.roundRect(ctx, 10, 18, 44, 28, 4);
     ctx.fillStyle = bc.stone;
     this.roundRect(ctx, 14, 22, 36, 20, 3);
 
-    // 可爱工具
+    // 工具（金色+浅银蓝）
     ctx.fillStyle = bc.gold;
     ctx.fillRect(20, 26, 8, 4);
+    ctx.fillStyle = bc.workshopLight;
     ctx.fillRect(36, 30, 4, 8);
 
     // 齿轮
-    ctx.fillStyle = '#757575';
+    ctx.fillStyle = '#5A6E7E';
     ctx.fillRect(28, 4, 8, 8);
     ctx.fillRect(30, 2, 4, 12);
     ctx.fillRect(26, 6, 12, 4);
@@ -347,7 +318,7 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fill();
   }
 
-  // ── Tile Drawing (Kairo Style) ──
+  // ── Tile Drawing ──
 
   private drawTile(tileId: number, variant: number): OffscreenCanvas {
     const canvas = new OffscreenCanvas(32, 32);
@@ -355,44 +326,47 @@ export class ProceduralAssets implements AssetProvider {
     ctx.imageSmoothingEnabled = false;
 
     const tc = TILE_COLORS;
+    const dc = TILE_DETAIL_COLORS;
 
     if (tileId === 0) {
-      // 草地（3种变体）
+      // 草地：冷青绿（3种变体）
       const grassColors = [tc.grass, tc.grass2, tc.grass3];
       ctx.fillStyle = grassColors[variant % 3];
       ctx.fillRect(0, 0, 32, 32);
-      // 可爱草丛点缀
-      ctx.fillStyle = '#7CB342';
+      // 冷色微光点（替代暖绿草丛）
+      ctx.fillStyle = dc.grassDot;
       if (variant === 0) { ctx.fillRect(8, 10, 2, 4); ctx.fillRect(22, 20, 2, 4); }
       if (variant === 1) { ctx.fillRect(14, 6, 2, 4); ctx.fillRect(6, 24, 2, 4); }
       if (variant === 2) { ctx.fillRect(18, 14, 2, 4); ctx.fillRect(4, 8, 2, 4); }
-      // 小花
-      if (variant === 0) { ctx.fillStyle = '#FFD700'; ctx.fillRect(26, 8, 2, 2); }
-      if (variant === 1) { ctx.fillStyle = '#FF8A80'; ctx.fillRect(10, 18, 2, 2); }
+      // 冷色小花
+      if (variant === 0) { ctx.fillStyle = dc.flowerCold1; ctx.fillRect(26, 8, 2, 2); }
+      if (variant === 1) { ctx.fillStyle = dc.flowerCold2; ctx.fillRect(10, 18, 2, 2); }
     } else if (tileId === 1) {
-      // 路径（2种变体）
+      // 路径：冷灰蓝石板
       ctx.fillStyle = variant === 0 ? tc.path : tc.path2;
       ctx.fillRect(0, 0, 32, 32);
-      ctx.fillStyle = variant === 0 ? '#C8B8AE' : '#B0A094';
+      ctx.fillStyle = dc.pathLine;
       ctx.fillRect(4, 4, 2, 2);
       ctx.fillRect(20, 16, 2, 2);
       ctx.fillRect(12, 24, 2, 2);
     } else if (tileId === 2) {
-      // 石砖
+      // 石砖：银灰
       ctx.fillStyle = tc.stone;
       ctx.fillRect(0, 0, 32, 32);
-      ctx.fillStyle = '#A0A0A0';
+      ctx.fillStyle = dc.stoneLine;
       ctx.fillRect(0, 15, 32, 2);
       ctx.fillRect(15, 0, 2, 15);
       ctx.fillRect(8, 17, 2, 15);
       ctx.fillRect(24, 17, 2, 15);
     } else if (tileId === 3) {
-      // 水
+      // 水面：靛蓝 + 冰蓝高光
       ctx.fillStyle = tc.water;
       ctx.fillRect(0, 0, 32, 32);
-      ctx.fillStyle = '#81D4FA';
+      ctx.fillStyle = dc.waterHighlight;
       ctx.fillRect(4, 4, 8, 2);
       ctx.fillRect(20, 14, 6, 2);
+      ctx.fillStyle = dc.waterHighlight2;
+      ctx.fillRect(12, 22, 4, 2);
     } else {
       // 深色装饰
       ctx.fillStyle = tc.dark;

@@ -3,7 +3,7 @@
 
 import type { WorldRenderer } from './WorldRenderer';
 import { AgentEntity } from './AgentEntity';
-import { DESIGN } from './palette';
+import { DESIGN, AGENT_COLORS } from './palette';
 import { useBazaarStore } from '@/stores/bazaar';
 import type { BazaarAgentInfo, WorldAgentPosition } from '@/types/bazaar';
 
@@ -69,7 +69,7 @@ export class WorldSync {
       reputation: 0,
       x: 20 * TS,
       y: 12 * TS,
-      shirtColor: '#41a6f6',
+      shirtColor: AGENT_COLORS.defaultShirt,
     });
     entity.isSelf = true;
     this.renderer.addAgent(entity);
