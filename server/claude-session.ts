@@ -849,6 +849,8 @@ export class ClaudeSessionManager {
               });
             }
 
+            const resultError = isError && 'errors' in result ? result.errors?.join(', ') : undefined;
+            const classified = isError && resultError ? this.classifyErrorMessage(resultError) : undefined;
             wsSend(JSON.stringify({
               type: isError ? 'chat.error' : 'chat.done',
               sessionId,
@@ -857,7 +859,7 @@ export class ClaudeSessionManager {
                 inputTokens: result.usage.input_tokens,
                 outputTokens: result.usage.output_tokens,
               } : undefined,
-              ...(isError && 'errors' in result ? { error: result.errors?.join(', ') } : {}),
+              ...(isError ? { error: classified?.userMessage ?? resultError ?? 'Unknown error', errorCode: classified?.errorCode, rawError: resultError } : {}),
             }));
 
             this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}`);
@@ -889,15 +891,57 @@ export class ClaudeSessionManager {
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
         wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
       } else {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        this.log.error(`Query error for session ${sessionId}`, { error: errorMessage });
-        wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: errorMessage }));
+        const { errorCode, userMessage } = this.classifyError(err);
+        const rawMessage = err instanceof Error ? err.message : String(err);
+        this.log.error(`Query error for session ${sessionId}`, { error: rawMessage, errorCode });
+        wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
       }
     } finally {
       this.activeStreams.delete(sessionId);
       this.streamDone.delete(sessionId);
       streamResolve();
     }
+  }
+
+  /**
+   * Classify an error from the Claude API into a user-friendly error code and message.
+   */
+  private classifyError(err: unknown): { errorCode: string; userMessage: string } {
+    const msg = err instanceof Error ? err.message : String(err);
+    return this.classifyErrorMessage(msg);
+  }
+
+  private classifyErrorMessage(msg: string): { errorCode: string; userMessage: string } {
+    // HTTP status patterns
+    if (/\b429\b/.test(msg) || /rate.?limit/i.test(msg) || /too many requests/i.test(msg)) {
+      return { errorCode: 'rate_limit', userMessage: '请求过于频繁，请稍后再试' };
+    }
+    if (/\b400\b/.test(msg) || /bad request/i.test(msg)) {
+      return { errorCode: 'bad_request', userMessage: '请求参数有误，请检查输入内容' };
+    }
+    if (/\b401\b/.test(msg) || /unauthorized/i.test(msg) || /invalid.*api.?key/i.test(msg)) {
+      return { errorCode: 'auth_error', userMessage: 'API Key 无效或已过期，请在设置中检查' };
+    }
+    if (/\b403\b/.test(msg) || /forbidden/i.test(msg)) {
+      return { errorCode: 'forbidden', userMessage: '无权访问此资源，请检查 API Key 权限' };
+    }
+    if (/\b404\b/.test(msg) || /not found/i.test(msg)) {
+      return { errorCode: 'not_found', userMessage: '请求的资源不存在，请检查模型名称' };
+    }
+    if (/\b500\b/.test(msg) || /\b502\b/.test(msg) || /\b503\b/.test(msg) || /internal server error/i.test(msg) || /server error/i.test(msg)) {
+      return { errorCode: 'server_error', userMessage: '模型服务暂时不可用，请稍后重试' };
+    }
+    if (/overloaded/i.test(msg) || /capacity/i.test(msg)) {
+      return { errorCode: 'overloaded', userMessage: '模型当前负载过高，请稍后重试' };
+    }
+    if (/context.*(window|length|limit)/i.test(msg) || /max.*token/i.test(msg) || /too (many|long)/i.test(msg)) {
+      return { errorCode: 'context_too_long', userMessage: '对话内容过长，超出模型上下文限制' };
+    }
+    if (/timeout/i.test(msg) || /timed? ?out/i.test(msg) || /ECONNRESET/i.test(msg) || /ECONNREFUSED/i.test(msg)) {
+      return { errorCode: 'network_error', userMessage: '网络连接失败，请检查网络或模型服务地址' };
+    }
+    // Default
+    return { errorCode: 'unknown', userMessage: msg || '未知错误' };
   }
 
   /**

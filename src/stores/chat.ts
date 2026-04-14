@@ -62,11 +62,31 @@ interface StreamingThinkingBlock {
 
 export type StreamingBlock = StreamingTextBlock | StreamingTextLiveBlock | StreamingToolBlock | StreamingThinkingBlock;
 
+// ── Error types ──
+
+export interface ChatError {
+  message: string;
+  errorCode: string;
+  rawError?: string;
+}
+
+export const ERROR_SUGGESTIONS: Record<string, string> = {
+  rate_limit: '请等待 30 秒后重试',
+  bad_request: '请修改输入内容后重试',
+  auth_error: '前往「设置」页面检查 API Key',
+  forbidden: '前往「设置」页面检查 API Key 权限',
+  not_found: '前往「设置」页面检查模型名称是否正确',
+  server_error: '等待几分钟后重试，或切换到其他模型',
+  overloaded: '模型负载过高，请稍后重试',
+  context_too_long: '尝试缩短对话或开启新会话',
+  network_error: '检查网络连接和模型服务地址',
+};
+
 interface ChatState {
   // Messages
   messages: Message[];
   loading: boolean;
-  error: string | null;
+  error: ChatError | null;
 
   // Streaming
   sending: boolean;
@@ -674,7 +694,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         clearStreamingBlocks(streamSessionId);
         if (get().currentSessionId === streamSessionId) {
           set({
-            error: String(data.error || 'Unknown error'),
+            error: {
+              message: String(data.error || 'Unknown error'),
+              errorCode: String(data.errorCode || 'unknown'),
+              rawError: data.rawError ? String(data.rawError) : undefined,
+            },
             streamingBlocks: [],
             sending: false,
           });
@@ -705,7 +729,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       client.send(msg);
     } catch (err) {
-      set({ error: String(err), sending: false });
+      set({ error: { message: String(err), errorCode: 'unknown' }, sending: false });
     }
   },
 

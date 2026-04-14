@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
-import { AlertCircle, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
-import { useChatStore, type StreamingBlock } from '@/stores/chat';
+import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
@@ -157,20 +157,8 @@ export function Chat() {
         </div>
       </div>
 
-      {/* Error bar */}
-      {error && (
-        <div className="px-4 py-2 bg-muted border-t border-border">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <p className="text-sm text-foreground/80 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive" />
-              {error}
-            </p>
-            <button onClick={clearError} className="text-xs text-muted-foreground hover:text-foreground underline">
-              关闭
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Error card */}
+      {error && <ErrorCard error={error} onDismiss={clearError} />}
 
       {/* Input */}
       {hasActiveSession && (
@@ -447,6 +435,72 @@ function TypingIndicator() {
           <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
           <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
           <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Error card with categorized display ──
+
+type ErrorSeverity = 'warning' | 'error';
+
+const ERROR_STYLES: Record<string, { icon: typeof AlertCircle; severity: ErrorSeverity }> = {
+  rate_limit:      { icon: AlertCircle,    severity: 'warning' },
+  overloaded:      { icon: Server,         severity: 'warning' },
+  server_error:    { icon: Server,         severity: 'error' },
+  bad_request:     { icon: AlertTriangle,  severity: 'warning' },
+  auth_error:      { icon: Key,            severity: 'error' },
+  forbidden:       { icon: Key,            severity: 'error' },
+  not_found:       { icon: AlertTriangle,  severity: 'warning' },
+  context_too_long:{ icon: FileWarning,    severity: 'warning' },
+  network_error:   { icon: WifiOff,        severity: 'error' },
+  unknown:         { icon: AlertCircle,    severity: 'error' },
+};
+
+function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => void }) {
+  const style = ERROR_STYLES[error.errorCode] ?? ERROR_STYLES.unknown;
+  const Icon = style.icon;
+  const suggestion = ERROR_SUGGESTIONS[error.errorCode];
+  const isWarning = style.severity === 'warning';
+
+  return (
+    <div className={cn(
+      'px-4 py-3 border-t',
+      isWarning
+        ? 'bg-warning/10 border-warning/30'
+        : 'bg-destructive/10 border-destructive/30',
+    )}>
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <Icon className={cn(
+              'h-4 w-4 mt-0.5 shrink-0',
+              isWarning ? 'text-warning' : 'text-destructive',
+            )} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{error.message}</p>
+              {suggestion && (
+                <p className="text-xs text-muted-foreground mt-1">{suggestion}</p>
+              )}
+              {error.errorCode === 'unknown' && error.rawError && (
+                <details className="mt-1.5">
+                  <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                    查看详情
+                  </summary>
+                  <pre className="text-[11px] text-foreground/60 whitespace-pre-wrap break-all mt-1 font-mono leading-relaxed max-h-32 overflow-y-auto">
+                    {error.rawError.slice(0, 300)}{error.rawError.length > 300 ? '...' : ''}
+                  </pre>
+                </details>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-foreground/5"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>
