@@ -555,6 +555,7 @@ export class ClaudeSessionManager {
     let allThinking = '';
     let allToolUses: Array<{ id: string; name: string; input: string }> = [];
     let currentToolUse: { id: string; name: string; input: string } | null = null;
+    let stallAbortReason: string | undefined;
 
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
@@ -610,6 +611,7 @@ export class ClaudeSessionManager {
           const v2Info = this.v2Sessions.get(sessionId);
           if (!v2Info) {
             this.log.warn(`V2 session lost while tool in progress for ${sessionId}, aborting...`);
+            stallAbortReason = 'v2_session_lost';
             abortController.abort();
             clearInterval(stallChecker!);
             return;
@@ -621,6 +623,7 @@ export class ClaudeSessionManager {
               return; // process alive, keep waiting
             } catch {
               this.log.warn(`V2 session process dead (PID: ${pid}) while tool in progress for ${sessionId}, aborting...`);
+              stallAbortReason = 'process_dead';
               abortController.abort();
               clearInterval(stallChecker!);
               return;
@@ -629,6 +632,7 @@ export class ClaudeSessionManager {
           // Process alive but exceeded hard limit — likely rate-limited/stuck
           if (elapsed > ClaudeSessionManager.TOOL_STALL_MS) {
             this.log.warn(`Tool/sub-agent hard limit reached for ${sessionId} (${Math.round(elapsed / 1000)}s), aborting...`);
+            stallAbortReason = 'stall';
             abortController.abort();
             clearInterval(stallChecker!);
           }
@@ -636,6 +640,7 @@ export class ClaudeSessionManager {
         }
         if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
           this.log.warn(`Stream stalled for session ${sessionId} (no data for ${Math.round(ClaudeSessionManager.STREAM_STALL_MS / 1000)}s), aborting...`);
+          stallAbortReason = 'stall';
           abortController.abort();
           clearInterval(stallChecker!);
         }
@@ -889,7 +894,11 @@ export class ClaudeSessionManager {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         // Save partial assistant content so the user doesn't lose what was already streamed
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
-        wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
+        wsSend(JSON.stringify({
+          type: 'chat.aborted',
+          sessionId,
+          ...(stallAbortReason ? { reason: stallAbortReason } : {}),
+        }));
       } else {
         const { errorCode, userMessage } = this.classifyError(err);
         const rawMessage = err instanceof Error ? err.message : String(err);
@@ -1356,12 +1365,13 @@ export class ClaudeSessionManager {
     }
   }
 
-  abort(sessionId: string): void {
+  abort(sessionId: string, reason?: string): void {
     const controller = this.activeStreams.get(sessionId);
     if (controller) {
+      (controller as any)._abortReason = reason;
       controller.abort();
       this.activeStreams.delete(sessionId);
-      this.log.info(`Session aborted: ${sessionId}`);
+      this.log.info(`Session aborted: ${sessionId}${reason ? ` (${reason})` : ''}`);
     }
     // Also try to interrupt V2 session
     const info = this.v2Sessions.get(sessionId);

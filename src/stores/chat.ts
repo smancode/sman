@@ -88,6 +88,9 @@ interface ChatState {
   loading: boolean;
   error: ChatError | null;
 
+  /** Shown when Claude takes too long to start responding */
+  waitingHint: string | null;
+
   // Streaming
   sending: boolean;
   /** Streaming blocks for the CURRENT session (derived from streamingBlocksMap) */
@@ -218,6 +221,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
   error: null,
+  waitingHint: null,
   sending: false,
   streamingBlocks: [],  // derived from streamingBlocksMap[currentSessionId]
   sessions: [],
@@ -567,9 +571,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       });
 
+      // Waiting hint: show after 20s if no stream activity received
+      let waitingTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        if (get().sending && get().currentSessionId === streamSessionId) {
+          set({ waitingHint: 'Claude 正在响应中，请耐心等待…' });
+        }
+      }, 20_000);
+      const clearWaitingHint = () => {
+        if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null; }
+        if (get().waitingHint) set({ waitingHint: null });
+      };
+
+      // Monitor chat.aborted (stall or user-initiated)
+      const unsubAborted = wrapHandler(client, 'chat.aborted', (data) => {
+        if (data.sessionId !== streamSessionId) return;
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        pendingText = '';
+        pendingThinking = '';
+        cleanup();
+        clearStreamingBlocks(streamSessionId);
+        const reason = String(data.reason || '');
+        if (reason && get().currentSessionId === streamSessionId) {
+          const reasonMessages: Record<string, string> = {
+            stall: '响应超时，已自动中断',
+            v2_session_lost: '会话进程丢失，已自动中断',
+            process_dead: '会话进程异常退出，已自动中断',
+          };
+          set({
+            error: {
+              message: reasonMessages[reason] ?? '响应已中断',
+              errorCode: reason,
+            },
+            streamingBlocks: [],
+            sending: false,
+            waitingHint: null,
+          });
+        } else {
+          // User-initiated abort — silent cleanup
+          if (get().currentSessionId === streamSessionId) {
+            set({ streamingBlocks: [], sending: false, waitingHint: null });
+          }
+        }
+      });
+
+      // Any stream activity cancels the waiting hint
+      const clearWaitingOnActivity = () => {
+        clearWaitingHint();
+      };
+
       // Set up streaming handlers
       const unsubDelta = wrapHandler(client, 'chat.delta', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         const deltaType = String(data.deltaType || 'text');
         if (deltaType === 'thinking') {
           pendingThinking += String(data.content || '');
@@ -581,6 +634,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolStart = wrapHandler(client, 'chat.tool_start', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         // Flush pending deltas before adding tool block
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
@@ -665,6 +719,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               messages: finalMessages,
               streamingBlocks: [],
               sending: false,
+              waitingHint: null,
             });
             sessionCache.set(streamSessionId, finalMessages);
           } else {
@@ -680,7 +735,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
         } else {
           if (get().currentSessionId === streamSessionId) {
-            set({ streamingBlocks: [], sending: false });
+            set({ streamingBlocks: [], sending: false, waitingHint: null });
           }
         }
       });
@@ -701,12 +756,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
             },
             streamingBlocks: [],
             sending: false,
+            waitingHint: null,
           });
         }
       });
 
       const cleanup = () => {
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null; }
         unsubSegment();
         unsubDelta();
         unsubToolStart();
@@ -716,6 +773,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubToolEnd();
         unsubDone();
         unsubErr();
+        unsubAborted();
         streamCleanups.delete(streamSessionId);
       };
 

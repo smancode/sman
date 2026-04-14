@@ -513,7 +513,7 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chat.abort': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           sessionManager.abort(msg.sessionId);
-          ws.send(JSON.stringify({ type: 'chat.aborted', sessionId: msg.sessionId }));
+          // chat.aborted is sent by sendMessage's catch block after abort completes
           break;
         }
 

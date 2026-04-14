@@ -41,6 +41,7 @@ export function Chat() {
   const streamingBlocks = useChatStore((s) => s.streamingBlocks);
   const showThinking = useChatStore((s) => s.showThinking);
   const error = useChatStore((s) => s.error);
+  const waitingHint = useChatStore((s) => s.waitingHint);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearError = useChatStore((s) => s.clearError);
 
@@ -150,8 +151,17 @@ export function Chat() {
                 <StreamingBlocksRenderer blocks={streamingBlocks} showThinking={showThinking} />
               )}
 
-              {/* Typing indicator */}
-              {sending && !hasStreamingContent && <TypingIndicator />}
+              {/* Typing indicator with optional waiting hint */}
+              {sending && !hasStreamingContent && (
+                <div>
+                  <TypingIndicator />
+                  {waitingHint && (
+                    <p className="text-xs text-muted-foreground/70 mt-2 ml-11 animate-pulse">
+                      {waitingHint}
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
