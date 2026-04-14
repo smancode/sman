@@ -26,6 +26,16 @@ import type { MediaAttachment } from './chatbot/types.js';
 import { UserProfileManager } from './user-profile.js';
 import path from 'path';
 import fs from 'fs';
+
+// Resolve project root for plugin loading
+// dev mode (tsx): __dirname = .../smanbase/server/
+// prod mode (compiled): __dirname = .../smanbase/dist/server/server/
+function resolveProjectRoot(): string {
+  if (fs.existsSync(path.join(__dirname, '..', 'plugins'))) {
+    return path.resolve(__dirname, '..');
+  }
+  return path.resolve(__dirname, '..', '..', '..');
+}
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -174,8 +184,7 @@ export class ClaudeSessionManager {
     }
 
     // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
-    // dist/server/server/ → need 3 levels up to reach project root
-    const pluginsDir = path.join(__dirname, '..', '..', '..', 'plugins');
+    const pluginsDir = path.join(resolveProjectRoot(), 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
     for (const name of ['superpowers', 'dev-workflow']) {
       const pluginPath = path.join(pluginsDir, name);

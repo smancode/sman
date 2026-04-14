@@ -9,6 +9,16 @@ import { createLogger, type Logger } from './utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Resolve project root directory containing plugins/
+// dev mode (tsx): __dirname = .../smanbase/server/
+// prod mode (compiled): __dirname = .../smanbase/dist/server/server/
+function resolveProjectRoot(): string {
+  if (fs.existsSync(path.join(__dirname, '..', 'plugins'))) {
+    return path.resolve(__dirname, '..'); // dev: server/ → project root
+  }
+  return path.resolve(__dirname, '..', '..', '..'); // prod: dist/server/server/ → project root
+}
+
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager } from './claude-session.js';
@@ -198,8 +208,7 @@ webAccessService.detectEngine().then(() => {
 sessionManager.setWebAccessService(webAccessService);
 
 // Initialize capability registry (on-demand capability loading)
-// dist/server/server/ → need 3 levels up to reach project root
-const pluginsDir = path.join(__dirname, '..', '..', '..', 'plugins');
+const pluginsDir = path.join(resolveProjectRoot(), 'plugins');
 initCapabilities(homeDir, pluginsDir);
 const capabilityRegistry = new CapabilityRegistry(homeDir);
 sessionManager.setCapabilityRegistry(capabilityRegistry);
@@ -1026,7 +1035,7 @@ function shutdown(): void {
  * Non-blocking: errors are logged but don't prevent server startup.
  */
 async function setupOfficeSkills(): Promise<void> {
-  const officeDir = path.join(__dirname, '..', '..', '..', 'plugins', 'office-skills');
+  const officeDir = path.join(resolveProjectRoot(), 'plugins', 'office-skills');
   const venvDir = path.join(officeDir, 'venv');
   const nodeModulesDir = path.join(officeDir, 'node_modules');
 
