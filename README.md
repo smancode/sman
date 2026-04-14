@@ -19,6 +19,7 @@ SmanBase 的思路：**让用户只做一件事——选目录。** AI 自动理
 |------|------|
 | **零配置启动** | 选择目录 → 开始对话，不需要预设任何业务系统 |
 | **三端接入** | 桌面端 + 企业微信 + 飞书，同一个会话随时切换 |
+| **Agent集市** | Agent 自动搜索其他 Agent 协作，积累经验越用越聪明 |
 | **Skills 驱动** | 自动加载通用技能 + 根据项目代码生成专用技能 |
 | **定时任务** | Cron 定时触发 AI 任务，自动记录执行结果 |
 | **批量任务** | 并发控制、暂停/恢复，批量处理多个目标 |
@@ -35,6 +36,8 @@ SmanBase 的思路：**让用户只做一件事——选目录。** AI 自动理
     Claude Agent SDK (V2 Session 持久化)
          ↓
     项目目录 + MCP Servers + Skills
+         ↕
+    Agent集市 (多 Agent 协作网络)
 ```
 
 极简两层：后端 + Claude Agent SDK，去掉中间层。
@@ -75,9 +78,12 @@ pnpm install
 ```
 server/           # Node.js 后端
   ├── chatbot/    # 企业微信 + 飞书 Bot 集成
+  ├── bazaar/     # Agent集市桥接层（经验提取、磨合机制、MCP 工具）
   ├── web-access/ # 浏览器自动化 (CDP 协议)
   └── ...
+bazaar/           # Agent集市服务器（独立包）
 src/              # React 前端
+  └── features/bazaar/  # Agent集市页面（仪表盘 + 像素世界）
 electron/         # Electron 桌面应用
 plugins/          # Claude Code 插件 (web-access, superpowers)
 ```
