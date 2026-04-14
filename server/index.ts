@@ -450,8 +450,6 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace) throw new Error('Missing workspace');
           const sessionId = sessionManager.createSession(msg.workspace);
           ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
-          // Trigger knowledge scan if needed (fire-and-forget)
-          projectScanner.scheduleScanIfNeeded(msg.workspace).catch(() => {});
           break;
         }
 

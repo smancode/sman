@@ -181,6 +181,18 @@ export class ProjectScanner {
   }
 
   async scheduleScanIfNeeded(workspace: string): Promise<void> {
+    // Skip if a scan is already running for this workspace
+    const lockPath = path.join(workspace, '.claude', '.scanning');
+    if (fs.existsSync(lockPath) && !isLockStale(workspace)) {
+      this.log.info(`Scan already in progress for ${workspace}, skipping`);
+      return;
+    }
+    // Skip if all scanner types are up to date
+    const allUpToDate = SCANNER_TYPES.every(type => !isScanNeeded(workspace, type).needed);
+    if (allUpToDate) {
+      this.log.info(`All scanners up to date for ${workspace}, skipping`);
+      return;
+    }
     this.log.info(`Scheduling scan for ${workspace}`);
     try { await this.scanWorkspace(workspace); } catch (e: any) { this.log.error(`Scan failed: ${e.message}`); }
   }
