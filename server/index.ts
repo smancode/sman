@@ -198,7 +198,8 @@ webAccessService.detectEngine().then(() => {
 sessionManager.setWebAccessService(webAccessService);
 
 // Initialize capability registry (on-demand capability loading)
-const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
+// dist/server/server/ → need 3 levels up to reach project root
+const pluginsDir = path.join(__dirname, '..', '..', '..', 'plugins');
 initCapabilities(homeDir, pluginsDir);
 const capabilityRegistry = new CapabilityRegistry(homeDir);
 sessionManager.setCapabilityRegistry(capabilityRegistry);
@@ -1025,7 +1026,7 @@ function shutdown(): void {
  * Non-blocking: errors are logged but don't prevent server startup.
  */
 async function setupOfficeSkills(): Promise<void> {
-  const officeDir = path.join(__dirname, '..', '..', 'plugins', 'office-skills');
+  const officeDir = path.join(__dirname, '..', '..', '..', 'plugins', 'office-skills');
   const venvDir = path.join(officeDir, 'venv');
   const nodeModulesDir = path.join(officeDir, 'node_modules');
 
