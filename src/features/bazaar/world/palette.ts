@@ -19,23 +19,34 @@ export const PALETTE = {
   muted: ['#2A4A42', '#34584E', '#5A4A3A', '#6B3A4A'],
 } as const;
 
-// ── 地面瓦片颜色 ──
+// ── 地面瓦片颜色（Hue-Shifting 色坡） ──
+// 草地色坡: 暗青绿(170°) → 亮青(190°) — hue-shift +20°
+// 路径色坡: 暗灰蓝(200°) → 亮银蓝(210°)
+// 水面色坡: 暗靛(220°) → 亮冰蓝(195°) — 反向hue-shift，增加活力
 
 export const TILE_COLORS = {
-  // 草地：冷青绿（保留绿色色相）
-  grass:  '#2A4A42',
-  grass2: '#305A50',
-  grass3: '#34584E',
-  // 路径：冷灰蓝石板
-  path:   '#4A5E6E',
-  path2:  '#5A6E7E',
-  // 石砖（广场）：银灰
-  stone:  '#7B8FA8',
-  // 水面：靛蓝（明度高于草地）
-  water:  '#2C4E7B',
-  // 深色装饰（边界）
-  dark:   '#1A2332',
+  // 草地：冷青绿 hue-shift 色坡（暗→亮，色相从170°偏移到190°）
+  grass:  '#1E3E38',   // 明度18%，色相172°（最深）
+  grass2: '#2A4E45',   // 明度24%，色相178°
+  grass3: '#386558',   // 明度32%，色相183°
+  grass4: '#4A7A6A',   // 明度40%，色相188°（最亮，用于点缀）
+  // 路径：冷灰蓝 hue-shift 色坡
+  path:   '#3A4E5E',   // 明度30%，色相205°
+  path2:  '#4A5E6E',   // 明度36%，色相205°
+  path3:  '#5A7080',   // 明度44%，色相205°（路径高光）
+  // 石砖（广场）：银灰（最亮的地面）
+  stone:  '#7B8FA8',   // 明度56%
+  stone2: '#8598B0',   // 明度60%（石砖变体）
+  // 水面：靛蓝 hue-shift（暗靛→亮冰蓝）
+  water:  '#1A3A60',   // 明度22%，色相215°（深水）
+  water2: '#2C5078',   // 明度32%，色相210°（浅水）
+  // 深色装饰（边界/围栏）
+  dark:   '#0E141E',   // 明度8%（极深蓝黑边界）
 } as const;
+
+// 统一暗色 infill — 所有地形内部填充共享此暗色
+// 来源: Celeste 瓦片设计规则 — 统一infill让不同地形"属于同一世界"
+export const INFILL_COLOR = '#162832';  // 明度14%，深青灰蓝
 
 // ── 分区地面色（按瓦片坐标选择） ──
 
@@ -106,13 +117,13 @@ export const BUILDING_COLORS = {
 // ── 瓦片绘制细节色（ProceduralAssets 用） ──
 
 export const TILE_DETAIL_COLORS = {
-  // 草地微光点
-  grassDot:  '#3A6A5E',
-  grassDot2: '#4A7A6E',
-  // 路径石缝
-  pathLine:  '#3A4E5E',
-  pathLine2: '#4A5E70',
-  // 石砖缝
+  // 草地微光点（比草地稍亮）
+  grassDot:  '#4A7A6A',
+  grassDot2: '#5A8A7A',
+  // 路径石缝（比路径稍暗）
+  pathLine:  '#2E4050',
+  pathLine2: '#3A5060',
+  // 石砖缝（比石砖稍暗）
   stoneLine: '#6A7E98',
   // 水面高光像素
   waterHighlight: '#A8D8EA',

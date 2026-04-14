@@ -244,6 +244,10 @@ export class WorldRenderer {
     const x = b.col * TS - cameraX;
     const y = b.row * TS - cameraY;
 
+    // 建筑阴影（2px 向右下偏移，半透明深色）
+    this.ctx.fillStyle = 'rgba(10,14,22,0.35)';
+    this.ctx.fillRect(x + 3, y + 3, b.width, b.height);
+
     // Hover: 冰蓝半透明高亮
     if (this.hoveredBuilding && this.hoveredBuilding.id === b.id) {
       this.ctx.fillStyle = UI_COLORS.hoverBuildingFill;

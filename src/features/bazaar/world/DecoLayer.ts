@@ -15,44 +15,92 @@ export interface DecoData {
 }
 
 export const DECORATIONS: DecoData[] = [
-  // 北部市场街装饰
-  { type: 'lantern', col: 3, row: 3 },
-  { type: 'lantern', col: 8, row: 3 },
-  { type: 'lantern', col: 13, row: 3 },
-  { type: 'flowers', col: 16, row: 5 },
-  { type: 'bush', col: 1, row: 5 },
-  { type: 'tree', col: 18, row: 2 },
-  { type: 'tree', col: 6, row: 6 },
+  // ── 北部市场街（摊位周围缓冲带，3-5个一簇） ──
+  { type: 'lantern', col: 4, row: 2 },
+  { type: 'lantern', col: 9, row: 2 },
+  { type: 'lantern', col: 14, row: 2 },
+  { type: 'barrel', col: 8, row: 4 },
+  { type: 'barrel', col: 14, row: 6 },
+  { type: 'flowers', col: 3, row: 4 },
+  { type: 'flowers', col: 14, row: 4 },
+  { type: 'bush', col: 1, row: 3 },
+  { type: 'bush', col: 20, row: 3 },
 
-  // 中央广场装饰
-  { type: 'lantern', col: 18, row: 11 },
-  { type: 'lantern', col: 22, row: 11 },
-  { type: 'lantern', col: 18, row: 16 },
-  { type: 'lantern', col: 22, row: 16 },
-  { type: 'flowers', col: 20, row: 13 },
-  { type: 'tree', col: 16, row: 10 },
-  { type: 'tree', col: 24, row: 10 },
+  // ── 北部缓冲区（声望榜周围） ──
+  { type: 'tree', col: 20, row: 2 },
+  { type: 'tree', col: 25, row: 3 },
+  { type: 'tree', col: 1, row: 7 },
+  { type: 'tree', col: 27, row: 7 },
+  { type: 'lantern', col: 19, row: 5 },
+  { type: 'lantern', col: 25, row: 5 },
+  { type: 'flowers', col: 23, row: 6 },
 
-  // 西侧池塘岸边
-  { type: 'bush', col: 1, row: 12 },
-  { type: 'bush', col: 7, row: 13 },
-  { type: 'bush', col: 3, row: 15 },
-  { type: 'flowers', col: 8, row: 12 },
-  { type: 'flowers', col: 1, row: 14 },
+  // ── 中央广场（四角灯笼 + 中央花坛 + 广场入口树） ──
+  { type: 'lantern', col: 17, row: 11 },
+  { type: 'lantern', col: 23, row: 11 },
+  { type: 'lantern', col: 17, row: 16 },
+  { type: 'lantern', col: 23, row: 16 },
+  { type: 'flowers', col: 19, row: 13 },
+  { type: 'flowers', col: 21, row: 13 },
+  { type: 'flowers', col: 20, row: 14 },
+  { type: 'bush', col: 18, row: 12 },
+  { type: 'bush', col: 22, row: 15 },
+  { type: 'tree', col: 14, row: 10 },
+  { type: 'tree', col: 25, row: 10 },
+  { type: 'tree', col: 14, row: 17 },
+  { type: 'tree', col: 25, row: 17 },
 
-  // 南部区域
-  { type: 'tree', col: 6, row: 20 },
-  { type: 'lantern', col: 14, row: 19 },
-  { type: 'lantern', col: 30, row: 19 },
-  { type: 'flowers', col: 20, row: 22 },
-  { type: 'bush', col: 8, row: 26 },
-  { type: 'tree', col: 20, row: 24 },
-  { type: 'flowers', col: 36, row: 23 },
+  // ── 西侧池塘岸边（成簇排列） ──
+  { type: 'bush', col: 1, row: 11 },
+  { type: 'bush', col: 1, row: 13 },
+  { type: 'bush', col: 1, row: 15 },
+  { type: 'flowers', col: 0, row: 12 },
+  { type: 'flowers', col: 0, row: 14 },
+  { type: 'tree', col: 0, row: 10 },
+  { type: 'tree', col: 0, row: 16 },
 
-  // 边缘装饰
-  { type: 'tree', col: 10, row: 27 },
-  { type: 'tree', col: 30, row: 27 },
-  { type: 'bush', col: 38, row: 26 },
+  // ── 南部任务区（悬赏板+搜索站+工坊周围） ──
+  { type: 'tree', col: 3, row: 19 },
+  { type: 'tree', col: 3, row: 22 },
+  { type: 'tree', col: 1, row: 21 },
+  { type: 'lantern', col: 5, row: 18 },
+  { type: 'lantern', col: 10, row: 18 },
+  { type: 'barrel', col: 4, row: 21 },
+  { type: 'barrel', col: 10, row: 21 },
+  { type: 'flowers', col: 2, row: 20 },
+  { type: 'flowers', col: 10, row: 23 },
+  { type: 'bush', col: 3, row: 23 },
+  { type: 'bush', col: 9, row: 19 },
+
+  // ── 东南技术区（搜索站+工坊周围） ──
+  { type: 'lantern', col: 26, row: 19 },
+  { type: 'lantern', col: 33, row: 19 },
+  { type: 'barrel', col: 31, row: 21 },
+  { type: 'barrel', col: 31, row: 24 },
+  { type: 'tree', col: 35, row: 20 },
+  { type: 'tree', col: 35, row: 24 },
+  { type: 'flowers', col: 33, row: 22 },
+  { type: 'bush', col: 30, row: 18 },
+
+  // ── 东部填充区 ──
+  { type: 'tree', col: 37, row: 12 },
+  { type: 'tree', col: 37, row: 15 },
+  { type: 'tree', col: 35, row: 8 },
+  { type: 'bush', col: 38, row: 10 },
+  { type: 'bush', col: 38, row: 14 },
+  { type: 'flowers', col: 36, row: 11 },
+
+  // ── 南部边缘缓冲 ──
+  { type: 'tree', col: 5, row: 26 },
+  { type: 'tree', col: 15, row: 27 },
+  { type: 'tree', col: 25, row: 27 },
+  { type: 'tree', col: 35, row: 26 },
+  { type: 'bush', col: 10, row: 26 },
+  { type: 'bush', col: 20, row: 26 },
+  { type: 'bush', col: 30, row: 26 },
+  { type: 'bush', col: 38, row: 25 },
+  { type: 'flowers', col: 12, row: 25 },
+  { type: 'flowers', col: 22, row: 25 },
 ];
 
 const TS = 32;
@@ -149,18 +197,20 @@ export class DecoLayer {
         break;
       }
       case 'flowers': {
-        // 三色冷系花（冷粉+冰蓝+紫）
+        // 三色冷系花（冷粉+冰蓝+紫）+ 微摆动
+        const sway = Math.sin(frame * 0.08 + px * 0.1) * 0.8;
         for (let i = 0; i < 3; i++) {
-          const fx = px - 5 + i * 5;
-          const fy = py - 3 - Math.random() * 2;
+          const fx = px - 5 + i * 5 + sway * (i === 1 ? -1 : 1);
+          const fy = py - 3;
           ctx.fillStyle = DECO_FLOWER_COLORS[i];
           ctx.fillRect(fx, fy, 4, 4);
         }
         break;
       }
       case 'bush': {
+        const bushSway = Math.sin(frame * 0.06 + py * 0.1) * 0.5;
         ctx.fillStyle = colors.main;
-        ctx.beginPath(); ctx.arc(px, py - 6, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(px + bushSway, py - 6, 7, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = colors.dark;
         ctx.beginPath(); ctx.arc(px + 3, py - 4, 4, 0, Math.PI * 2); ctx.fill();
         // 冷粉果

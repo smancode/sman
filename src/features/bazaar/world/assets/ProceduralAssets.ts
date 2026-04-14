@@ -318,7 +318,7 @@ export class ProceduralAssets implements AssetProvider {
     ctx.fill();
   }
 
-  // ── Tile Drawing ──
+  // ── Tile Drawing（Hue-Shifting 色坡 + 统一 Infill + 多变体） ──
 
   private drawTile(tileId: number, variant: number): OffscreenCanvas {
     const canvas = new OffscreenCanvas(32, 32);
@@ -329,48 +329,102 @@ export class ProceduralAssets implements AssetProvider {
     const dc = TILE_DETAIL_COLORS;
 
     if (tileId === 0) {
-      // 草地：冷青绿（3种变体）
-      const grassColors = [tc.grass, tc.grass2, tc.grass3];
-      ctx.fillStyle = grassColors[variant % 3];
+      // 草地：hue-shifting 色坡（4种变体，暗→亮）
+      const grassRamp = [tc.grass, tc.grass2, tc.grass3, tc.grass4];
+      ctx.fillStyle = grassRamp[variant % 4];
       ctx.fillRect(0, 0, 32, 32);
-      // 冷色微光点（替代暖绿草丛）
+
+      // 微妙纹理：草丛点缀（3种布局）
       ctx.fillStyle = dc.grassDot;
-      if (variant === 0) { ctx.fillRect(8, 10, 2, 4); ctx.fillRect(22, 20, 2, 4); }
-      if (variant === 1) { ctx.fillRect(14, 6, 2, 4); ctx.fillRect(6, 24, 2, 4); }
-      if (variant === 2) { ctx.fillRect(18, 14, 2, 4); ctx.fillRect(4, 8, 2, 4); }
-      // 冷色小花
-      if (variant === 0) { ctx.fillStyle = dc.flowerCold1; ctx.fillRect(26, 8, 2, 2); }
-      if (variant === 1) { ctx.fillStyle = dc.flowerCold2; ctx.fillRect(10, 18, 2, 2); }
+      if (variant === 0) {
+        ctx.fillRect(6, 8, 2, 3);
+        ctx.fillRect(18, 16, 2, 3);
+        ctx.fillRect(28, 24, 2, 2);
+      } else if (variant === 1) {
+        ctx.fillRect(12, 4, 2, 3);
+        ctx.fillRect(4, 22, 2, 3);
+        ctx.fillRect(24, 10, 2, 2);
+      } else if (variant === 2) {
+        ctx.fillRect(2, 14, 2, 3);
+        ctx.fillRect(20, 6, 2, 3);
+        ctx.fillRect(14, 26, 2, 2);
+      } else {
+        ctx.fillRect(8, 20, 2, 3);
+        ctx.fillRect(26, 4, 2, 3);
+        ctx.fillRect(16, 14, 2, 2);
+      }
+
+      // 冷色小花（低概率出现）
+      if (variant === 0) { ctx.fillStyle = dc.flowerCold1; ctx.fillRect(26, 6, 2, 2); }
+      if (variant === 2) { ctx.fillStyle = dc.flowerCold2; ctx.fillRect(10, 18, 2, 2); }
+      if (variant === 3) { ctx.fillStyle = dc.flowerCold1; ctx.fillRect(22, 22, 2, 2); }
+
     } else if (tileId === 1) {
-      // 路径：冷灰蓝石板
-      ctx.fillStyle = variant === 0 ? tc.path : tc.path2;
+      // 路径：冷灰蓝石板（2种变体 + 石缝纹理）
+      ctx.fillStyle = variant === 0 ? tc.path : (variant === 1 ? tc.path2 : tc.path3);
       ctx.fillRect(0, 0, 32, 32);
+      // 石缝线（不完美直线，打破网格感）
       ctx.fillStyle = dc.pathLine;
-      ctx.fillRect(4, 4, 2, 2);
-      ctx.fillRect(20, 16, 2, 2);
-      ctx.fillRect(12, 24, 2, 2);
+      if (variant === 0) {
+        ctx.fillRect(3, 3, 2, 2);
+        ctx.fillRect(14, 10, 2, 2);
+        ctx.fillRect(26, 18, 2, 2);
+      } else if (variant === 1) {
+        ctx.fillRect(8, 6, 2, 2);
+        ctx.fillRect(20, 16, 2, 2);
+        ctx.fillRect(6, 24, 2, 2);
+      } else {
+        ctx.fillRect(4, 12, 2, 2);
+        ctx.fillRect(16, 4, 2, 2);
+        ctx.fillRect(24, 22, 2, 2);
+      }
+      // 路径边缘微亮线（模拟磨损高光）
+      if (variant === 0) {
+        ctx.fillStyle = tc.path3;
+        ctx.fillRect(0, 0, 32, 1);
+      }
+
     } else if (tileId === 2) {
-      // 石砖：银灰
-      ctx.fillStyle = tc.stone;
+      // 石砖广场（银灰 + 不完美砖缝）
+      ctx.fillStyle = variant === 0 ? tc.stone : tc.stone2;
       ctx.fillRect(0, 0, 32, 32);
       ctx.fillStyle = dc.stoneLine;
-      ctx.fillRect(0, 15, 32, 2);
-      ctx.fillRect(15, 0, 2, 15);
-      ctx.fillRect(8, 17, 2, 15);
-      ctx.fillRect(24, 17, 2, 15);
+      // 水平砖缝（微偏移打破完美网格）
+      ctx.fillRect(0, 14 + (variant % 2), 32, 2);
+      // 垂直砖缝（交错排列）
+      const offset = variant % 2 === 0 ? 0 : 8;
+      ctx.fillRect(7 + offset, 0, 2, 14 + (variant % 2));
+      ctx.fillRect(23 + offset, 0, 2, 14 + (variant % 2));
+      ctx.fillRect(15 - offset, 16 + (variant % 2), 2, 16 - (variant % 2));
+      // 砖面微妙亮度变化
+      if (variant === 1) {
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillRect(0, 0, 16, 14);
+      }
+
     } else if (tileId === 3) {
-      // 水面：靛蓝 + 冰蓝高光
+      // 水面：靛蓝 + 冰蓝波光（hue-shifting，深→浅）
       ctx.fillStyle = tc.water;
       ctx.fillRect(0, 0, 32, 32);
+      // 水面深度渐变（上深下浅）
+      ctx.fillStyle = tc.water2;
+      ctx.fillRect(0, 16, 32, 16);
+      // 冰蓝高光像素（模拟波光）
       ctx.fillStyle = dc.waterHighlight;
-      ctx.fillRect(4, 4, 8, 2);
-      ctx.fillRect(20, 14, 6, 2);
+      ctx.fillRect(4 + (variant % 3) * 2, 6, 6, 2);
+      ctx.fillRect(18 - (variant % 2) * 2, 14, 8, 2);
       ctx.fillStyle = dc.waterHighlight2;
-      ctx.fillRect(12, 22, 4, 2);
+      ctx.fillRect(10, 22 + (variant % 2), 4, 2);
+      ctx.fillRect(22, 26, 4, 2);
+
     } else {
-      // 深色装饰
+      // 深色装饰（边界/围栏）
       ctx.fillStyle = tc.dark;
       ctx.fillRect(0, 0, 32, 32);
+      // 微妙纹理（不是纯黑）
+      ctx.fillStyle = '#1A2030';
+      ctx.fillRect(4, 4, 2, 2);
+      ctx.fillRect(20, 20, 2, 2);
     }
 
     return canvas;
