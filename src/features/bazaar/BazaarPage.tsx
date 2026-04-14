@@ -23,7 +23,7 @@ export function BazaarPage() {
   const navigate = useNavigate();
   const { connection, fetchTasks, fetchOnlineAgents, fetchLeaderboard, loading } = useBazaarStore();
   const rendererRef = useRef<WorldRenderer | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  const [viewMode, setViewMode] = useState<ViewMode>('world');
   const [activePanel, setActivePanel] = useState<ActivePanel>('leaderboard');
   const [tooltip, setTooltip] = useState<{
     data: TooltipData;
@@ -37,32 +37,8 @@ export function BazaarPage() {
     fetchLeaderboard();
   }, [fetchTasks, fetchOnlineAgents, fetchLeaderboard]);
 
-  // 未连接时显示骨架
-  if (!connection.connected) {
-    return (
-      <div className="flex flex-col h-full relative">
-        {/* 左上角浮动返回按钮 */}
-        <div className="absolute top-3 left-3 z-20">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm border border-border" onClick={() => navigate('/chat')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* 配置提示 */}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <p className="text-lg font-medium text-muted-foreground">未连接到 Agent 集市</p>
-            <p className="text-sm text-muted-foreground/70">请在「设置」中配置集市服务器地址</p>
-            <Button variant="outline" onClick={() => navigate('/settings')}>
-              前往设置
-            </Button>
-          </div>
-        </div>
-
-        <AgentStatusBar />
-      </div>
-    );
-  }
+  // 未连接时：仍然渲染世界视图，但隐藏仪表盘功能
+  // 世界视图是纯前端渲染，不需要集市连接
 
   return (
     <div className="flex flex-col h-full relative">

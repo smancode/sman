@@ -75,7 +75,7 @@ export class DecoLayer {
         const img = new Image();
         img.src = `/bazaar/assets/deco_${type}.png`;
         await img.decode();
-        this.images.set(type, img);
+        this.images.set(type, this.makeTransparent(img));
       } catch {
         // PNG 不存在，用程序化 fallback
       }
@@ -185,5 +185,29 @@ export class DecoLayer {
         ctx.strokeRect(px - 5, py - 12, 10, 12);
       }
     }
+  }
+
+  /** 将图片中的白色/近白色像素变为透明 */
+  private makeTransparent(img: HTMLImageElement): HTMLImageElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const threshold = 240;
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > threshold && data[i + 1] > threshold && data[i + 2] > threshold) {
+        data[i + 3] = 0;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    const result = new Image();
+    result.src = canvas.toDataURL('image/png');
+    return result;
   }
 }

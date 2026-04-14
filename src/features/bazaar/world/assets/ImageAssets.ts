@@ -117,9 +117,43 @@ export class ImageAssets implements AssetProvider {
   private loadImage(src: string, onLoad: (img: HTMLImageElement) => void): Promise<void> {
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => { onLoad(img); resolve(); };
+      img.onload = () => {
+        // 预处理：把白色/近白色背景变透明
+        const processed = this.makeTransparent(img);
+        onLoad(processed);
+        resolve();
+      };
       img.onerror = () => resolve(); // skip missing assets silently
       img.src = src;
     });
+  }
+
+  /** 将图片中的白色/近白色像素变为透明 */
+  private makeTransparent(img: HTMLImageElement): HTMLImageElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const threshold = 240; // RGB 都 > 240 视为白色
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r > threshold && g > threshold && b > threshold) {
+        data[i + 3] = 0; // alpha = 0
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // 转回 HTMLImageElement
+    const result = new Image();
+    result.src = canvas.toDataURL('image/png');
+    return result;
   }
 }
