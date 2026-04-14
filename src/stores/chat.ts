@@ -586,30 +586,65 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const unsubAborted = wrapHandler(client, 'chat.aborted', (data) => {
         if (data.sessionId !== streamSessionId) return;
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-        pendingText = '';
-        pendingThinking = '';
+        flushDeltas();
         cleanup();
+
+        // Freeze partial streaming content into an assistant message (same as chat.done)
+        const frozen = freezeLiveText(getStreamingBlocks(streamSessionId));
+        const contentBlocks = streamingBlocksToContentBlocks(frozen);
+        const textContent = frozen
+          .filter(b => b.type === 'text')
+          .map(b => (b as StreamingTextBlock).content)
+          .join('');
+
         clearStreamingBlocks(streamSessionId);
+
         const reason = String(data.reason || '');
-        if (reason && get().currentSessionId === streamSessionId) {
-          const reasonMessages: Record<string, string> = {
-            stall: '响应超时，已自动中断',
-            v2_session_lost: '会话进程丢失，已自动中断',
-            process_dead: '会话进程异常退出，已自动中断',
+
+        if (textContent.trim() || contentBlocks.length > 0) {
+          // Save partial content as a message so user doesn't lose it
+          const assistantMsg: Message = {
+            id: crypto.randomUUID(),
+            sessionId: streamSessionId,
+            role: 'assistant',
+            content: textContent.trim(),
+            contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
+            createdAt: new Date().toISOString(),
           };
-          set({
-            error: {
-              message: reasonMessages[reason] ?? '响应已中断',
-              errorCode: reason,
-            },
-            streamingBlocks: [],
-            sending: false,
-            waitingHint: null,
-          });
-        } else {
-          // User-initiated abort — silent cleanup
           if (get().currentSessionId === streamSessionId) {
-            set({ streamingBlocks: [], sending: false, waitingHint: null });
+            const st = get();
+            const finalMessages = [...st.messages, assistantMsg];
+            set({
+              messages: finalMessages,
+              streamingBlocks: [],
+              sending: false,
+              waitingHint: null,
+              ...(reason ? {
+                error: {
+                  message: { stall: '响应超时，已自动中断', v2_session_lost: '会话进程丢失，已自动中断', process_dead: '会话进程异常退出，已自动中断' }[reason] ?? '响应已中断',
+                  errorCode: reason,
+                },
+              } : {}),
+            });
+            sessionCache.set(streamSessionId, finalMessages);
+          } else {
+            const cached = sessionCache.get(streamSessionId) as Message[] | null;
+            const cachedMessages = cached ?? [];
+            sessionCache.set(streamSessionId, [...cachedMessages, assistantMsg]);
+          }
+        } else {
+          if (get().currentSessionId === streamSessionId) {
+            set({
+              streamingBlocks: [],
+              sending: false,
+              waitingHint: null,
+              ...(reason ? {
+                error: {
+                  message: { stall: '响应超时，已自动中断', v2_session_lost: '会话进程丢失，已自动中断', process_dead: '会话进程异常退出，已自动中断' }[reason] ?? '响应已中断',
+                  errorCode: reason,
+                },
+              } : {}),
+            });
           }
         }
       });
