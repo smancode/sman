@@ -79,7 +79,8 @@ export type TaskMessageType =
   | 'task.timeout'
   | 'task.cancel'
   | 'task.cancelled'
-  | 'task.escalate';
+  | 'task.escalate'
+  | 'task.sync';
 
 // ── World 消息类型 ──
 
@@ -183,6 +184,10 @@ export interface TaskEscalatePayload {
   taskId: string;
   reason: string;
   options: string[];
+}
+
+export interface TaskSyncPayload {
+  taskId: string;
 }
 
 // ── Bazaar 配置（嵌入 SmanConfig） ──
