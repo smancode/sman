@@ -1,5 +1,5 @@
 // src/features/bazaar/components/ActivityFeed.tsx
-// 中间区域 — 活动时间线 + 展开协作详情
+// 活动时间线 — 深色科技风
 
 import { useState } from 'react';
 import { useBazaarStore } from '@/stores/bazaar';
@@ -19,14 +19,16 @@ export function ActivityFeed() {
 
   if (activityLog.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-        等待 Agent 活动...
+      <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: 'var(--bz-text-dim)' }}>
+        <div className="text-3xl opacity-30">◎</div>
+        <p className="text-sm">分身网络待命中，等待世界事件...</p>
+        <p className="text-xs opacity-60">Agent 活动将实时显示在此</p>
       </div>
     );
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <ScrollArea className="h-full">
       <div>
         {activityLog.map((entry) => {
           const taskId = entry.metadata?.taskId as string | undefined;

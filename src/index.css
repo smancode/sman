@@ -95,6 +95,76 @@
   }
 }
 
+/* ── Bazaar Dark Sci-Fi Theme ── */
+.bazaar-dark {
+  --bz-bg: #0a0e17;
+  --bz-bg-card: #111827;
+  --bz-bg-panel: #0d1321;
+  --bz-bg-hover: #1a2332;
+  --bz-border: #1e293b;
+  --bz-border-glow: #0ea5e9;
+  --bz-text: #e2e8f0;
+  --bz-text-dim: #64748b;
+  --bz-cyan: #06b6d4;
+  --bz-cyan-glow: #22d3ee;
+  --bz-amber: #f59e0b;
+  --bz-amber-glow: #fbbf24;
+  --bz-green: #10b981;
+  --bz-green-glow: #34d399;
+  --bz-red: #ef4444;
+  --bz-purple: #8b5cf6;
+  --bz-blue: #3b82f6;
+}
+
+/* Bazaar pulse animations */
+@keyframes bz-pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+@keyframes bz-pulse-yellow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+}
+@keyframes bz-pulse-blue {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+@keyframes bz-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+@keyframes bz-glow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@keyframes bz-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes bz-node-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+@keyframes bz-link-pulse {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes bz-event-pop {
+  0% { transform: scale(0.95); opacity: 0; }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.bz-status-idle { background: var(--bz-green); animation: bz-pulse-green 2s ease-in-out infinite; }
+.bz-status-busy { background: var(--bz-amber); animation: bz-pulse-yellow 1.5s ease-in-out infinite; }
+.bz-status-collaborating { background: var(--bz-blue); animation: bz-pulse-blue 2s ease-in-out infinite; }
+.bz-status-error { background: var(--bz-red); animation: bz-pulse-red 1.2s ease-in-out infinite; }
+
+.bz-card-enter { animation: bz-event-pop 0.3s ease-out; }
+
+.bz-glow-text { text-shadow: 0 0 8px currentColor; }
+.bz-glow-border { box-shadow: 0 0 0 1px var(--bz-border-glow), 0 0 15px -3px rgba(14, 165, 233, 0.2); }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
