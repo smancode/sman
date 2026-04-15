@@ -76,6 +76,13 @@ export class BazaarStore {
         PRIMARY KEY (partner_id)
       );
 
+      CREATE TABLE IF NOT EXISTS cached_results (
+        task_id TEXT PRIMARY KEY,
+        result_text TEXT NOT NULL,
+        from_agent TEXT NOT NULL,
+        cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
       PRAGMA journal_mode=WAL;
     `);
 
@@ -232,5 +239,37 @@ export class BazaarStore {
         last_collaborated_at as lastCollaboratedAt
       FROM pair_history ORDER BY avg_rating DESC
     `).all() as any[];
+  }
+
+  // ── Cached Results (async task delivery) ──
+
+  saveCachedResult(input: { taskId: string; resultText: string; fromAgent: string }): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO cached_results (task_id, result_text, from_agent, cached_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `).run(input.taskId, input.resultText, input.fromAgent);
+  }
+
+  getCachedResult(taskId: string): { taskId: string; resultText: string; fromAgent: string; cachedAt: string } | undefined {
+    return this.db.prepare(`
+      SELECT task_id as taskId, result_text as resultText, from_agent as fromAgent, cached_at as cachedAt
+      FROM cached_results WHERE task_id = ?
+    `).get(taskId) as any;
+  }
+
+  deleteCachedResult(taskId: string): void {
+    this.db.prepare('DELETE FROM cached_results WHERE task_id = ?').run(taskId);
+  }
+
+  /** List all tasks in active state (chatting/matched) — used for sync on reconnect */
+  listActiveTasks(): BazaarLocalTask[] {
+    return this.db.prepare(`
+      SELECT task_id as taskId, direction, helper_agent_id as helperAgentId,
+        helper_name as helperName, requester_agent_id as requesterAgentId,
+        requester_name as requesterName, question, status, rating,
+        created_at as createdAt, completed_at as completedAt
+      FROM tasks WHERE status IN ('chatting', 'matched')
+      ORDER BY created_at DESC
+    `).all() as BazaarLocalTask[];
   }
 }
