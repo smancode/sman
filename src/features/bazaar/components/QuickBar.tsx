@@ -4,11 +4,11 @@
 import { Dna, Map, Trophy, FileText, Network } from 'lucide-react';
 
 const QUICK_ITEMS = [
-  { icon: Network, label: '网络沙盘', key: 'network' },
+  { icon: Network, label: '协作星图', key: 'network' },
   { icon: Dna, label: '进化仓', key: 'evolution' },
-  { icon: Trophy, label: '声望档案', key: 'reputation' },
-  { icon: Map, label: '协作战线', key: 'battles' },
-  { icon: FileText, label: '每日战报', key: 'report' },
+  { icon: Trophy, label: '贡献沉积', key: 'reputation' },
+  { icon: Map, label: '行动流', key: 'battles' },
+  { icon: FileText, label: '星域战报', key: 'report' },
 ];
 
 export function QuickBar() {

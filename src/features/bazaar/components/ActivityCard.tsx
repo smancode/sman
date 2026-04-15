@@ -5,12 +5,12 @@
 import type { ActivityEntry } from '@/types/bazaar';
 import { cn } from '@/lib/utils';
 
-// 世界事件图标 — 战略指挥风格
+// 世界事件图标 — Atlas 星图风格
 const TYPE_ICONS: Record<string, string> = {
   status_change: '◉',
-  task_event: '⚡',
+  task_event: '⬡',
   capability_search: '◈',
-  collab_start: '⬡',
+  collab_start: '⟐',
   collab_complete: '★',
   reputation_change: '◆',
   system: '▣',
@@ -37,7 +37,7 @@ function timeAgo(timestamp: number): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-// 世界事件转译：底层行为 → 战略语言
+// 世界事件转译：底层行为 → Atlas 星图语言
 function translateToWorldEvent(entry: ActivityEntry): string {
   const meta = entry.metadata ?? {};
   const direction = meta.direction as string;
@@ -46,23 +46,23 @@ function translateToWorldEvent(entry: ActivityEntry): string {
   switch (entry.type) {
     case 'task_event': {
       if (direction === 'outgoing') {
-        if (status === 'searching') return `分身网络已发出协作召集信号: ${entry.description}`;
-        if (status === 'matched') return `协作链路已建立，执行分身已部署至战线`;
-        if (status === 'chatting') return `协作战线进入实时联动状态`;
+        if (status === 'searching') return `星域扫描启动，正在寻找能力节点: ${entry.description}`;
+        if (status === 'matched') return `协作星路已建立，节点链路激活`;
+        if (status === 'chatting') return `星路进入实时协同状态，数据流传输中`;
         return entry.description;
       }
-      if (status === 'offered') return `邻近能力节点发来协同支援请求`;
-      if (status === 'matched') return `已与协作节点完成握手，链路激活`;
+      if (status === 'offered') return `邻近星域发来协作链路请求`;
+      if (status === 'matched') return `星路握手完成，协作通道已激活`;
       return entry.description;
     }
     case 'collab_start':
-      return `执行分身已进入新的协作现场`;
+      return `新协作星路开辟，节点已进入协同轨道`;
     case 'collab_complete':
-      return `本轮协作行动完成，协作信用与影响力已结算`;
+      return `星路协作完成，贡献沉积已结算`;
     case 'reputation_change':
-      return entry.description.replace('声望', '网络影响力');
+      return entry.description.replace('声望', '贡献沉积').replace('网络影响力', '贡献沉积');
     case 'capability_search':
-      return `正在扫描分身网络中的能力节点`;
+      return `正在扫描星域中的能力节点分布`;
     case 'status_change':
       return entry.description;
     default:

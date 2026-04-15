@@ -64,11 +64,11 @@ export function ResourceBar() {
         <span className="text-xs font-medium">{sending ? '处理中' : connection.connected ? '在线' : '离线'}</span>
       </div>
 
-      <ResourceItem icon={Cpu} label="活跃任务" value={activeTasks} max={maxSlots} color="var(--bz-cyan)" glow="var(--bz-cyan)" />
-      <ResourceItem icon={Trophy} label="声望" value={reputation} color="var(--bz-amber)" glow="var(--bz-amber)" />
+      <ResourceItem icon={Cpu} label="行动流" value={activeTasks} max={maxSlots} color="var(--bz-cyan)" glow="var(--bz-cyan)" />
+      <ResourceItem icon={Trophy} label="贡献沉积" value={reputation} color="var(--bz-amber)" glow="var(--bz-amber)" />
       <ResourceItem icon={Zap} label={level.title} value={`Lv.${level.level}`} color="var(--bz-purple)" />
-      <ResourceItem icon={Users} label="在线节点" value={onlineAgents.length} color="var(--bz-green)" />
-      <ResourceItem icon={Radio} label="信号" value={connection.connected ? '强' : '无'} color={connection.connected ? 'var(--bz-green)' : 'var(--bz-red)'} />
+      <ResourceItem icon={Users} label="活跃节点" value={onlineAgents.length} color="var(--bz-green)" />
+      <ResourceItem icon={Radio} label="星域信号" value={connection.connected ? '强' : '无'} color={connection.connected ? 'var(--bz-green)' : 'var(--bz-red)'} />
     </div>
   );
 }

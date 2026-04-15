@@ -61,7 +61,7 @@ export function MyAgentPanel() {
         <div className="p-3 space-y-4">
           {/* Status indicator with pulse */}
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>Status</div>
+            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>节点状态</div>
             <div className="flex items-center gap-2">
               {sending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--bz-amber)' }} />
@@ -76,7 +76,7 @@ export function MyAgentPanel() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>
               <Trophy className="h-3 w-3" style={{ color: 'var(--bz-amber)' }} />
-              声望 · {repLevel.title}
+              贡献沉积 · {repLevel.title}
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-lg font-mono font-bold" style={{ color: repLevel.color, textShadow: `0 0 8px ${repLevel.glow}` }}>
@@ -105,7 +105,7 @@ export function MyAgentPanel() {
           {/* Collaboration Mode */}
           {connected && (
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>协作模式</div>
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>响应策略</div>
               <RadioGroup
                 value={connection.collabMode ?? 'notify'}
                 onValueChange={(v) => setMode(v as 'auto' | 'notify' | 'manual')}
@@ -134,7 +134,7 @@ export function MyAgentPanel() {
               </div>
               {myRank > 0 && (
                 <div className="flex items-center justify-between text-xs">
-                  <span style={{ color: 'var(--bz-text-dim)' }}>排名</span>
+                  <span style={{ color: 'var(--bz-text-dim)' }}>沉积排名</span>
                   <span className="font-mono" style={{ color: 'var(--bz-cyan)' }}>#{myRank}</span>
                 </div>
               )}

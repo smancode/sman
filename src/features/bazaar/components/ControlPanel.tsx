@@ -37,10 +37,10 @@ function SectionHeader({ label, count, open }: { label: string; count?: number; 
 
 const TASK_PHASES = ['searching', 'offered', 'matched', 'chatting', 'completed'] as const;
 const PHASE_LABELS: Record<string, string> = {
-  searching: '搜索',
+  searching: '扫描',
   offered: '邀约',
-  matched: '匹配',
-  chatting: '执行',
+  matched: '链路',
+  chatting: '激活',
   completed: '结算',
 };
 const PHASE_COLORS: Record<string, string> = {
@@ -87,11 +87,11 @@ function TaskQueue() {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="任务队列" count={pending.length} open={open} />
+      <SectionHeader label="行动流" count={pending.length} open={open} />
       <CollapsibleContent>
         <div className="space-y-2 px-3 pb-2">
           {pending.length === 0 ? (
-            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>所有战线静默</p>
+            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>星域平静，无待处理行动</p>
           ) : (
             pending.map((task) => (
               <div key={task.taskId} className="rounded p-2 space-y-1.5" style={{ background: 'var(--bz-bg)', border: '1px solid var(--bz-border)' }}>
@@ -120,39 +120,69 @@ function TaskQueue() {
   );
 }
 
-// ── Leaderboard ──
+// ── Leaderboard → Contribution Sediment ──
 
 function Leaderboard() {
   const { leaderboard, connection } = useBazaarStore();
   const [open, setOpen] = useState(true);
 
+  // Max reputation for normalization
+  const maxRep = Math.max(...leaderboard.map(e => e.reputation), 1);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="声望排行" open={open as boolean} />
+      <SectionHeader label="贡献沉积" open={open as boolean} />
       <CollapsibleContent>
-        <div className="px-3 pb-2 space-y-0.5">
+        <div className="px-3 pb-2 space-y-1">
           {leaderboard.slice(0, 10).map((entry, i) => {
             const isMe = entry.agentId === connection.agentId;
             const level = getReputationLevel(entry.reputation);
+            const sedimentPct = Math.round((entry.reputation / maxRep) * 100);
+            const isBridge = i > 0 && entry.helpCount >= 5; // Bridge node: high collaboration count
+
             return (
               <div
                 key={entry.agentId}
-                className={cn('flex items-center justify-between py-1 px-1.5 rounded text-xs')}
-                style={isMe ? { background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)' } : {}}
+                className="rounded px-2 py-1.5 space-y-1"
+                style={{
+                  background: isMe ? 'rgba(6, 182, 212, 0.08)' : 'transparent',
+                  border: isMe ? '1px solid rgba(6, 182, 212, 0.15)' : '1px solid transparent',
+                }}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-4 font-mono text-[10px]" style={{ color: 'var(--bz-text-dim)' }}>{i + 1}.</span>
-                  <span className="text-[10px]" style={{ color: level.color }}>{level.icon}</span>
-                  <span className={cn('truncate', isMe && 'font-medium')} style={{ color: 'var(--bz-text)' }}>{entry.name}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-4 text-[10px] font-mono flex-shrink-0" style={{ color: 'var(--bz-text-dim)' }}>{i + 1}</span>
+                    <span className="text-[10px] flex-shrink-0" style={{ color: level.color, textShadow: `0 0 4px ${level.glow}` }}>{level.icon}</span>
+                    <span className={cn('truncate text-xs', isMe && 'font-medium')} style={{ color: 'var(--bz-text)' }}>{entry.name}</span>
+                    {isBridge && (
+                      <span className="text-[8px] px-1 rounded" style={{ background: 'var(--bz-blue)20', color: 'var(--bz-blue)' }}>桥接</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono flex-shrink-0" style={{ color: level.color }}>{entry.reputation}</span>
                 </div>
-                <span className="font-mono text-[10px] flex items-center gap-0.5" style={{ color: 'var(--bz-amber)' }}>
-                  <Trophy className="h-2.5 w-2.5" />{entry.reputation}
-                </span>
+                {/* Sediment bar — contribution thickness */}
+                <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--bz-bg)' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${sedimentPct}%`,
+                      background: level.color,
+                      boxShadow: i === 0 ? `0 0 6px ${level.glow}` : undefined,
+                    }}
+                  />
+                </div>
+                {/* Hotspot glow for top contributor */}
+                {i === 0 && (
+                  <div className="h-0.5 rounded-full opacity-50" style={{
+                    background: `linear-gradient(90deg, transparent, ${level.color}, transparent)`,
+                    boxShadow: `0 0 8px ${level.glow}`,
+                  }} />
+                )}
               </div>
             );
           })}
           {leaderboard.length === 0 && (
-            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>排行榜数据待加载</p>
+            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>沉积数据待加载</p>
           )}
         </div>
       </CollapsibleContent>
@@ -168,7 +198,7 @@ function OnlineAgentList() {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="在线节点" count={onlineAgents.length} open={open} />
+      <SectionHeader label="活跃节点" count={onlineAgents.length} open={open} />
       <CollapsibleContent>
         <div className="px-3 pb-2 space-y-0.5">
           {onlineAgents.map((agent) => {

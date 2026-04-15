@@ -1,88 +1,181 @@
 // src/features/bazaar/components/CapabilityTree.tsx
-// 能力树 / 进化仓 — 可视化 learned_routes 数据
-// 六大能力分支：执行 / 推理 / 协调 / 工具 / 风控 / 学习
+// 进化仓 — 能力数字化三层架构
+// 第一层：可完全数字协作(绿) / 第二层：协作增强(蓝) / 第三层：辅助支持(灰)
+// 五维评分：可表达性 × 可观察性 × 可重复性 × 可评估性 × 可拆分性
 
 import { useBazaarStore } from '@/stores/bazaar';
 import { useState, useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-interface CapabilityBranch {
+// ── 三层数字化适配模型 ──
+
+interface DigitizationLayer {
   key: string;
-  label: string;
+  title: string;
+  subtitle: string;
   icon: string;
   color: string;
   glow: string;
+  bgColor: string;
   keywords: string[];
 }
 
-const CAPABILITY_BRANCHES: CapabilityBranch[] = [
-  { key: 'execution', label: '执行能力', icon: '⚡', color: 'var(--bz-cyan)', glow: 'var(--bz-cyan-glow)', keywords: ['执行', '部署', '构建', '运行', '编译', '测试', '代码', '实现'] },
-  { key: 'reasoning', label: '推理能力', icon: '🧠', color: 'var(--bz-purple)', glow: 'var(--bz-purple)', keywords: ['分析', '推理', '判断', '决策', '评估', '诊断', '排查'] },
-  { key: 'coordination', label: '协调能力', icon: '⬡', color: 'var(--bz-green)', glow: 'var(--bz-green-glow)', keywords: ['协作', '协调', '沟通', '路由', '分配', '调度', '编排'] },
-  { key: 'tools', label: '工具调用', icon: '🔧', color: 'var(--bz-amber)', glow: 'var(--bz-amber-glow)', keywords: ['工具', 'API', 'MCP', '搜索', '查询', '调用', '浏览器'] },
-  { key: 'risk', label: '风控能力', icon: '🛡', color: 'var(--bz-red)', glow: 'var(--bz-red)', keywords: ['风控', '安全', '审计', '合规', '检测', '验证', '校验'] },
-  { key: 'learning', label: '学习适应', icon: '📡', color: 'var(--bz-blue)', glow: 'var(--bz-blue)', keywords: ['学习', '适应', '进化', '经验', '提取', '记忆', '总结'] },
+const LAYERS: DigitizationLayer[] = [
+  {
+    key: 'auto',
+    title: '全自动能力层',
+    subtitle: '高度 agent 化 · 可自主执行',
+    icon: '⬡',
+    color: 'var(--bz-green)',
+    glow: 'var(--bz-green-glow)',
+    bgColor: 'rgba(16, 185, 129, 0.05)',
+    keywords: ['文档', '数据', '检索', '整理', '清洗', '分类', '摘要', '生成', '报告', '抽取', '自动化', '规则', '校验', '格式', '转换', '归档', '索引', '扫描', '监控', '同步', '编译', '测试', '代码', '部署', '构建'],
+  },
+  {
+    key: 'enhanced',
+    title: '协作增强能力层',
+    subtitle: '人机协同 · 可增强数字化',
+    icon: '◈',
+    color: 'var(--bz-cyan)',
+    glow: 'var(--bz-cyan-glow)',
+    bgColor: 'rgba(6, 182, 212, 0.05)',
+    keywords: ['管理', '分析', '策划', '研究', '协调', '设计', '支持', '辅助', '决策', '评估', '方案', '规划', '排期', '拆解', '风险', '合规', '培训', '客户', '沟通', '协作', '编排', '调度'],
+  },
+  {
+    key: 'assist',
+    title: '辅助支持能力层',
+    subtitle: '弱数字化 · 以辅助为主',
+    icon: '◉',
+    color: 'var(--bz-text-dim)',
+    glow: 'transparent',
+    bgColor: 'rgba(100, 116, 139, 0.05)',
+    keywords: ['领导', '战略', '谈判', '创意', '审美', '关系', '信任', '激励', '文化', '愿景', '判断', '直觉', '现场', '情感', '博弈'],
+  },
 ];
 
-function classifyCapability(cap: string, experience: string): string {
-  const text = (cap + ' ' + experience).toLowerCase();
-  for (const branch of CAPABILITY_BRANCHES) {
-    if (branch.keywords.some(kw => text.includes(kw))) return branch.key;
+// ── 五维评分计算 ──
+
+function calculateDigitizationScore(capability: string, experience: string): number {
+  const text = (capability + ' ' + experience).toLowerCase();
+
+  // 每个维度 0-1，关键词命中越多分数越高
+  const dimensions = [
+    { keywords: ['规则', '流程', '标准', '模板', '方法', 'SOP', '规范', '框架'], weight: 1 },       // 可表达性
+    { keywords: ['记录', '日志', '追踪', '监控', '数据', '指标', '反馈', '结果'], weight: 1 },         // 可观察性
+    { keywords: ['重复', '常规', '批量', '周期', '标准', '模式', '复用', '通用'], weight: 1 },          // 可重复性
+    { keywords: ['评分', '质量', '正确率', '完整度', '时效', '评估', '达标', '效果'], weight: 1 },      // 可评估性
+    { keywords: ['拆解', '分解', '模块', '步骤', '子任务', '单元', '组件', '分工'], weight: 1 },        // 可拆分性
+  ];
+
+  let totalScore = 0;
+  for (const dim of dimensions) {
+    const hits = dim.keywords.filter(kw => text.includes(kw)).length;
+    // 基础分 + 关键词加分，上限 1
+    const dimScore = Math.min(1, 0.3 + hits * 0.35);
+    totalScore += dimScore * dim.weight;
   }
-  return 'execution'; // default
+
+  return Math.round((totalScore / dimensions.length) * 100);
 }
 
-function BranchNode({ branch, items }: { branch: CapabilityBranch; items: Array<{ capability: string; experience: string; agentName: string }> }) {
-  const [expanded, setExpanded] = useState(false);
-  const count = items.length;
-  const level = Math.min(5, Math.floor(count / 2) + 1);
+function classifyLayer(capability: string, experience: string): string {
+  const text = (capability + ' ' + experience).toLowerCase();
+
+  // 先检查辅助层（最低优先级但最明确）
+  for (const kw of LAYERS[2].keywords) {
+    if (text.includes(kw)) return 'assist';
+  }
+  // 再检查全自动层
+  for (const kw of LAYERS[0].keywords) {
+    if (text.includes(kw)) return 'auto';
+  }
+  // 再检查协作增强层
+  for (const kw of LAYERS[1].keywords) {
+    if (text.includes(kw)) return 'enhanced';
+  }
+  // 默认归为协作增强层
+  return 'enhanced';
+}
+
+// ── 单条能力卡片 ──
+
+function CapabilityItem({ capability, experience, agentName, score }: {
+  capability: string;
+  experience: string;
+  agentName: string;
+  score: number;
+}) {
+  const scoreColor = score >= 70 ? 'var(--bz-green)' : score >= 40 ? 'var(--bz-cyan)' : 'var(--bz-text-dim)';
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: 'var(--bz-bg-card)', border: `1px solid var(--bz-border)` }}>
-      {/* Branch header */}
+    <div className="rounded px-2.5 py-2 space-y-1.5" style={{ background: 'var(--bz-bg)', border: '1px solid var(--bz-border)' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium" style={{ color: 'var(--bz-text)' }}>{capability}</span>
+        <span className="text-[10px] font-mono" style={{ color: scoreColor }}>{score}%</span>
+      </div>
+      {/* 适配度条 */}
+      <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--bz-bg-card)' }}>
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${score}%`, background: scoreColor, boxShadow: `0 0 4px ${scoreColor}` }}
+        />
+      </div>
+      {experience && (
+        <p className="text-[10px] line-clamp-2" style={{ color: 'var(--bz-text-dim)' }}>{experience}</p>
+      )}
+      <div className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>
+        沉积来源: {agentName}
+      </div>
+    </div>
+  );
+}
+
+// ── 层级面板 ──
+
+function LayerPanel({ layer, items }: {
+  layer: DigitizationLayer;
+  items: Array<{ capability: string; experience: string; agentName: string; score: number }>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const count = items.length;
+  const avgScore = count > 0 ? Math.round(items.reduce((s, i) => s + i.score, 0) / count) : 0;
+
+  return (
+    <div className="rounded-lg overflow-hidden" style={{ background: layer.bgColor, border: `1px solid var(--bz-border)` }}>
       <button
         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className="text-lg" style={{ filter: `drop-shadow(0 0 4px ${branch.color})` }}>{branch.icon}</span>
+        <span className="text-lg flex-shrink-0" style={{ color: layer.color, textShadow: `0 0 8px ${layer.glow}` }}>
+          {layer.icon}
+        </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium" style={{ color: branch.color }}>{branch.label}</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: branch.color + '20', color: branch.color }}>
-              Lv.{level}
+            <span className="text-sm font-medium" style={{ color: layer.color }}>{layer.title}</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: layer.color + '20', color: layer.color }}>
+              {count} 项
             </span>
           </div>
-          {/* Level progress bar */}
-          <div className="w-full h-1 rounded-full mt-1.5 overflow-hidden" style={{ background: 'var(--bz-bg)' }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(100, (count / 10) * 100)}%`,
-                background: branch.color,
-                boxShadow: `0 0 4px ${branch.glow}`,
-              }}
-            />
-          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--bz-text-dim)' }}>{layer.subtitle}</div>
+          {/* 平均适配度 */}
+          {count > 0 && (
+            <div className="w-full h-0.5 rounded-full mt-1.5 overflow-hidden" style={{ background: 'var(--bz-bg)' }}>
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${avgScore}%`, background: layer.color }} />
+            </div>
+          )}
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-xs font-mono" style={{ color: branch.color }}>{count}</span>
-          <span className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>技能</span>
+        <div className="flex flex-col items-end flex-shrink-0">
+          <span className="text-sm font-mono font-bold" style={{ color: layer.color, textShadow: `0 0 6px ${layer.glow}` }}>
+            {avgScore}%
+          </span>
+          <span className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>平均适配度</span>
         </div>
       </button>
 
-      {/* Expanded items */}
       {expanded && count > 0 && (
-        <div className="px-3 pb-2 space-y-1" style={{ borderTop: '1px solid var(--bz-border)' }}>
+        <div className="px-3 pb-2 space-y-1.5" style={{ borderTop: '1px solid var(--bz-border)' }}>
           {items.map((item, i) => (
-            <div key={i} className="rounded px-2 py-1.5 space-y-0.5" style={{ background: 'var(--bz-bg)' }}>
-              <div className="text-xs font-medium" style={{ color: 'var(--bz-text)' }}>{item.capability}</div>
-              {item.experience && (
-                <p className="text-[10px] line-clamp-2" style={{ color: 'var(--bz-text-dim)' }}>{item.experience}</p>
-              )}
-              <div className="text-[9px]" style={{ color: branch.color }}>
-                来源: {item.agentName}
-              </div>
-            </div>
+            <CapabilityItem key={i} {...item} />
           ))}
         </div>
       )}
@@ -90,50 +183,88 @@ function BranchNode({ branch, items }: { branch: CapabilityBranch; items: Array<
   );
 }
 
+// ── 主组件 ──
+
 export function CapabilityTree() {
   const { capabilities } = useBazaarStore();
 
-  // Classify capabilities into branches
-  const branches = useMemo(() => {
-    const result: Record<string, Array<{ capability: string; experience: string; agentName: string }>> = {};
-    for (const branch of CAPABILITY_BRANCHES) {
-      result[branch.key] = [];
-    }
+  const layerData = useMemo(() => {
+    const result: Record<string, Array<{ capability: string; experience: string; agentName: string; score: number }>> = {
+      auto: [],
+      enhanced: [],
+      assist: [],
+    };
+
     for (const cap of capabilities) {
-      const branchKey = classifyCapability(cap.capability, cap.experience);
-      result[branchKey].push({ capability: cap.capability, experience: cap.experience, agentName: cap.agentName });
+      const layerKey = classifyLayer(cap.capability, cap.experience);
+      const score = calculateDigitizationScore(cap.capability, cap.experience);
+      result[layerKey].push({
+        capability: cap.capability,
+        experience: cap.experience,
+        agentName: cap.agentName,
+        score,
+      });
     }
+
+    // 每层内按适配度降序
+    for (const key of Object.keys(result)) {
+      result[key].sort((a, b) => b.score - a.score);
+    }
+
     return result;
   }, [capabilities]);
 
   const totalCapabilities = capabilities.length;
+  const autoCount = layerData.auto.length;
+  const autoPct = totalCapabilities > 0 ? Math.round((autoCount / totalCapabilities) * 100) : 0;
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--bz-bg)' }}>
       {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--bz-border)' }}>
-        <div>
-          <h2 className="text-sm font-medium" style={{ color: 'var(--bz-text)' }}>
-            <span style={{ color: 'var(--bz-cyan)', textShadow: '0 0 6px var(--bz-cyan)' }}>⬡</span> 进化仓
-          </h2>
-          <p className="text-[10px] mt-0.5" style={{ color: 'var(--bz-text-dim)' }}>
-            已习得 {totalCapabilities} 项能力 · 持续进化中
-          </p>
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--bz-border)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--bz-text)' }}>
+              <span style={{ color: 'var(--bz-cyan)', textShadow: '0 0 8px var(--bz-cyan)' }}>⬡</span>
+              进化仓
+            </h2>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--bz-text-dim)' }}>
+              已沉积 {totalCapabilities} 项能力 · 数字显影度 {autoPct}%
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full" style={{ background: 'var(--bz-green)', boxShadow: '0 0 6px var(--bz-green-glow)', animation: 'bz-node-breathe 3s ease-in-out infinite' }} />
+            <span className="text-[10px]" style={{ color: 'var(--bz-green)' }}>EVOLVING</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ background: 'var(--bz-green)', boxShadow: '0 0 6px var(--bz-green-glow)', animation: 'bz-node-breathe 3s ease-in-out infinite' }} />
-          <span className="text-[10px]" style={{ color: 'var(--bz-green)' }}>ACTIVE</span>
-        </div>
+
+        {/* 三层总览条 */}
+        {totalCapabilities > 0 && (
+          <div className="flex mt-2.5 h-2 rounded-full overflow-hidden gap-0.5" style={{ background: 'var(--bz-bg-card)' }}>
+            {LAYERS.map((layer) => {
+              const count = layerData[layer.key].length;
+              if (count === 0) return null;
+              return (
+                <div
+                  key={layer.key}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${(count / totalCapabilities) * 100}%`, background: layer.color, boxShadow: `0 0 4px ${layer.glow}` }}
+                  title={`${layer.title}: ${count} 项`}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Capability branches */}
+      {/* 三层列表 */}
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-2">
-          {CAPABILITY_BRANCHES.map((branch) => (
-            <BranchNode
-              key={branch.key}
-              branch={branch}
-              items={branches[branch.key]}
+          {LAYERS.map((layer) => (
+            <LayerPanel
+              key={layer.key}
+              layer={layer}
+              items={layerData[layer.key]}
             />
           ))}
         </div>
@@ -144,9 +275,9 @@ export function CapabilityTree() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center space-y-2">
             <div className="text-4xl opacity-20">⬡</div>
-            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>暂无习得能力</p>
+            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>等待能力沉积</p>
             <p className="text-xs" style={{ color: 'var(--bz-text-dim)', opacity: 0.6 }}>
-              完成协作任务后，经验将自动沉淀为能力节点
+              完成协作任务后，经验将自动转化为能力接口
             </p>
           </div>
         </div>

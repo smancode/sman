@@ -1,5 +1,5 @@
 // src/features/bazaar/BazaarDashboard.tsx
-// Agent 集市 — 硬核科技风指挥中心
+// Agent 集市 — Collaboration Atlas 协作星图
 // 深色基底 + 网络沙盘 + 世界事件流 + 资源条 + 进化仓
 
 import { useEffect, useState } from 'react';
@@ -52,7 +52,7 @@ export function BazaarDashboard() {
               style={{ color: subView === 'main' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               onClick={() => setSubView('main')}
             >
-              指挥中心
+              星图总览
             </button>
             <button
               className={cn('text-xs font-medium px-2 py-0.5 rounded transition-colors flex items-center gap-1', subView === 'evolution' && 'bg-white/10')}
