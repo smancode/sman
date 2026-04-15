@@ -80,6 +80,27 @@ describe('validateMessage', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('should validate task.sync message', () => {
+    const msg = {
+      id: 'msg-010',
+      type: 'task.sync',
+      payload: { taskId: 'task-123' },
+    };
+    const result = validateMessage(msg);
+    expect(result.valid).toBe(true);
+  });
+
+  it('should reject task.sync without taskId', () => {
+    const msg = {
+      id: 'msg-011',
+      type: 'task.sync',
+      payload: {},
+    };
+    const result = validateMessage(msg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('taskId'))).toBe(true);
+  });
+
   it('should accept ack message', () => {
     const msg = {
       id: 'msg-006',

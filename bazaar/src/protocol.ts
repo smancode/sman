@@ -16,7 +16,7 @@ const VALID_TYPES: Set<string> = new Set([
   'task.create', 'task.search_result', 'task.offer', 'task.incoming',
   'task.accept', 'task.reject', 'task.matched', 'task.chat',
   'task.progress', 'task.complete', 'task.result', 'task.timeout',
-  'task.cancel', 'task.cancelled', 'task.escalate',
+  'task.cancel', 'task.cancelled', 'task.escalate', 'task.sync',
   // World
   'world.move', 'world.agent_update', 'world.enter_zone', 'world.leave_zone',
   'world.zone_snapshot', 'world.agent_enter', 'world.agent_leave', 'world.event',
@@ -39,6 +39,7 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   'task.chat': ['taskId', 'text'],
   'task.complete': ['taskId', 'rating'],
   'task.cancel': ['taskId', 'reason'],
+  'task.sync': ['taskId'],
   'capabilities.search': ['query'],
   'capabilities.list': [],
   'capabilities.publish': ['name', 'description', 'version', 'category', 'packageUrl'],
