@@ -39,6 +39,9 @@ export class BazaarBridge {
 
     // 集市消息 → 前端推送
     this.client.onMessage = (msg) => this.handleBazaarMessage(msg);
+
+    // 重连后同步活跃任务
+    this.client.onReconnect = () => this.syncActiveTasks();
   }
 
   async start(): Promise<void> {
@@ -187,6 +190,10 @@ export class BazaarBridge {
 
       case 'task.chat':
         this.handleIncomingChat(msg.payload);
+        break;
+
+      case 'task.sync':
+        this.handleIncomingSync(msg.payload);
         break;
 
       case 'task.accept':
@@ -409,6 +416,14 @@ export class BazaarBridge {
         this.log.error(`Failed to send collaboration message for ${taskId}`, { error: String(err) });
       });
     }
+
+    // 缓存本地 Agent 的回复（用于异步 task.sync 恢复）
+    if (from === 'local') {
+      const task = this.store.getTask(taskId);
+      if (task && ['chatting', 'matched'].includes(task.status)) {
+        this.store.saveCachedResult({ taskId, resultText: text, fromAgent: 'local' });
+      }
+    }
   }
 
   private handleTaskComplete(payload: Record<string, unknown>): void {
@@ -525,6 +540,54 @@ ${chatText}
     if (timer) {
       clearTimeout(timer);
       this.notifyTimeouts.delete(taskId);
+    }
+  }
+
+  // ── 任务同步（断线重连恢复） ──
+
+  /**
+   * 重连后对每个活跃任务发送 task.sync
+   * 对端（如果在线）会检查缓存并回复结果
+   */
+  private syncActiveTasks(): void {
+    const activeTasks = this.store.listActiveTasks();
+    if (activeTasks.length === 0) return;
+
+    this.log.info(`Reconnected, syncing ${activeTasks.length} active tasks`);
+    for (const task of activeTasks) {
+      this.client.sendTaskSync(task.taskId);
+    }
+  }
+
+  /**
+   * 处理收到的 task.sync 请求
+   * 对端重连后查询任务状态，我们检查本地缓存并回复
+   */
+  private handleIncomingSync(payload: Record<string, unknown>): void {
+    const taskId = payload.taskId as string;
+    const task = this.store.getTask(taskId);
+    if (!task) return;
+
+    // 检查是否有缓存的回复结果
+    const cached = this.store.getCachedResult(taskId);
+    if (cached) {
+      // 有缓存：通过 task.chat 发给对端，然后清除缓存
+      this.client.send({
+        id: uuidv4(),
+        type: 'task.chat',
+        payload: { taskId, text: cached.resultText, from: 'local' },
+      });
+      this.store.deleteCachedResult(taskId);
+      this.log.info(`Delivered cached result for task ${taskId}`);
+    } else {
+      // 没有缓存，检查是否还在处理中
+      if (task.status === 'chatting' || task.status === 'matched') {
+        this.client.send({
+          id: uuidv4(),
+          type: 'task.chat',
+          payload: { taskId, text: '[系统] 对方重连，当前协作仍在处理中', from: 'local' },
+        });
+      }
     }
   }
 
