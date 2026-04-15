@@ -27,6 +27,9 @@ export class BazaarClient {
   // 外部消息处理器
   public onMessage: ((msg: { type: string; payload: Record<string, unknown> }) => void) | null = null;
 
+  // Called after successful connection/reconnection
+  public onReconnect: (() => void) | null = null;
+
   constructor(store: BazaarStore, options: ClientOptions) {
     this.store = store;
     this.options = options;
@@ -80,6 +83,12 @@ export class BazaarClient {
 
         // 启动心跳
         this.startHeartbeat(identity.agentId);
+
+        // Notify bridge to sync active tasks
+        if (this.onReconnect) {
+          this.onReconnect();
+        }
+
         resolve();
       });
 
@@ -117,6 +126,15 @@ export class BazaarClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
+  }
+
+  /** Send task.sync for a specific task to the bazaar server */
+  sendTaskSync(taskId: string): void {
+    this.send({
+      id: uuidv4(),
+      type: 'task.sync',
+      payload: { taskId },
+    });
   }
 
   disconnect(): void {
