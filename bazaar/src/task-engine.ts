@@ -226,6 +226,51 @@ export class TaskEngine {
     });
   }
 
+  /**
+   * task.sync: Agent A reconnects and queries task status from B
+   * Server forwards to B if online, otherwise replies with waiting_helper
+   */
+  handleTaskSync(msg: { id: string; payload: Record<string, unknown> }, fromAgentId: string): { error?: string } {
+    const taskId = msg.payload.taskId as string;
+    const task = this.taskStore.getTask(taskId);
+    if (!task) {
+      return { error: 'Task not found' };
+    }
+
+    // Verify caller is a participant
+    if (task.requesterId !== fromAgentId && task.helperId !== fromAgentId) {
+      return { error: 'Not a task participant' };
+    }
+
+    // Determine the peer to forward to
+    const peerId = task.requesterId === fromAgentId ? task.helperId : task.requesterId;
+    if (!peerId) {
+      return { error: 'No peer agent found for this task' };
+    }
+
+    // Check if peer has an active connection
+    const peerWs = this.connections.get(peerId);
+    if (!peerWs || peerWs.readyState !== 1) {
+      // Peer is offline — inform the requester
+      this.sendTo(fromAgentId, {
+        type: 'task.progress',
+        id: uuidv4(),
+        payload: { taskId, status: 'waiting_helper', detail: `Agent ${peerId} is offline` },
+      });
+      return {};
+    }
+
+    // Forward task.sync to the peer
+    this.sendTo(peerId, {
+      type: 'task.sync',
+      id: uuidv4(),
+      payload: { taskId },
+    });
+
+    this.agentStore.logAudit('task.sync', fromAgentId, peerId, taskId, {});
+    return {};
+  }
+
   handleTaskCancel(msg: { id: string; payload: Record<string, unknown> }, fromAgentId: string): void {
     const taskId = msg.payload.taskId as string;
     const reason = msg.payload.reason as string;

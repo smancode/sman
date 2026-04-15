@@ -202,6 +202,72 @@ describe('TaskEngine', () => {
     });
   });
 
+  describe('handleTaskSync', () => {
+    it('should forward task.sync to the helper agent', () => {
+      ctx.mockTaskStore.createTask({ id: 't1', requesterId: 'a1', question: 'q', capabilityQuery: 'c', status: 'chatting', helperId: 'a2' });
+      // Simulate helper has an active connection
+      const mockWs = { readyState: 1 } as any;
+      ctx.connections.set('a2', mockWs);
+
+      const result = engine.handleTaskSync(
+        { id: 'm1', payload: { taskId: 't1' } },
+        'a1',
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(ctx.sent).toEqual([
+        expect.objectContaining({
+          agentId: 'a2',
+          data: expect.objectContaining({
+            type: 'task.sync',
+            payload: expect.objectContaining({ taskId: 't1' }),
+          }),
+        }),
+      ]);
+    });
+
+    it('should reply waiting_helper when peer is offline', () => {
+      ctx.mockTaskStore.createTask({ id: 't1', requesterId: 'a1', question: 'q', capabilityQuery: 'c', status: 'chatting', helperId: 'a2' });
+      // No connection for helper
+
+      const result = engine.handleTaskSync(
+        { id: 'm1', payload: { taskId: 't1' } },
+        'a1',
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(ctx.sent).toEqual([
+        expect.objectContaining({
+          agentId: 'a1',
+          data: expect.objectContaining({
+            type: 'task.progress',
+            payload: expect.objectContaining({ taskId: 't1', status: 'waiting_helper' }),
+          }),
+        }),
+      ]);
+    });
+
+    it('should reject sync from non-participant', () => {
+      ctx.mockTaskStore.createTask({ id: 't1', requesterId: 'a1', question: 'q', capabilityQuery: 'c', status: 'chatting', helperId: 'a2' });
+
+      const result = engine.handleTaskSync(
+        { id: 'm1', payload: { taskId: 't1' } },
+        'random-agent',
+      );
+
+      expect(result.error).toBeTruthy();
+    });
+
+    it('should reject sync for nonexistent task', () => {
+      const result = engine.handleTaskSync(
+        { id: 'm1', payload: { taskId: 'nonexistent' } },
+        'a1',
+      );
+
+      expect(result.error).toBe('Task not found');
+    });
+  });
+
   describe('checkTimeouts', () => {
     it('should timeout idle chatting tasks and notify both agents', () => {
       const timedOutTask = { id: 't1', requesterId: 'a1', helperId: 'a2', helperName: null, question: 'q', capabilityQuery: 'c', status: 'chatting', rating: null, feedback: null, createdAt: '2026-01-01', updatedAt: '2026-01-01', completedAt: null, deadline: null };
