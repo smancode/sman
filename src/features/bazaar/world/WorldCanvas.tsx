@@ -96,8 +96,8 @@ export function WorldCanvas({ rendererRef, onPanelChange, onAgentClick, onHover 
 
     renderer.setCamera(camera);
     renderer.init(canvas);
-    // 相机初始居中到中央广场
-    camera.centerOn(20 * 32, 14 * 32);
+    // 相机初始居中到中央广场（col 19, row 13）
+    camera.centerOn(19 * 32, 13 * 32);
     rendererRef.current = renderer;
     renderer.start();
 
