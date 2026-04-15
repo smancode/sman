@@ -215,6 +215,12 @@ export class MessageRouter {
     } else if (type === 'task.cancel') {
       this.taskEngine.handleTaskCancel(msg, fromAgentId);
       return { handled: true };
+    } else if (type === 'task.sync') {
+      const result = this.taskEngine.handleTaskSync(msg, fromAgentId);
+      if (result.error) {
+        send({ type: 'error', id: uuidv4(), payload: { message: result.error } });
+      }
+      return { handled: true };
     }
 
     return { handled: true };
