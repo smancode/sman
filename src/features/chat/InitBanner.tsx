@@ -1,21 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chat';
+
+/** All card types auto-dismiss after 5s — init is background work, don't bother the user */
+const AUTO_DISMISS_MS = 5000;
 
 export function InitBanner() {
   const initCard = useChatStore(s => s.initCard);
   const [dismissed, setDismissed] = useState(false);
 
+  // Reset dismissed when card changes
   useEffect(() => {
     setDismissed(false);
   }, [initCard]);
 
-  // Auto-dismiss "already initialized" after 5s
+  // Auto-dismiss all cards after 5s
   useEffect(() => {
-    if (initCard?.type === 'already') {
-      const timer = setTimeout(() => setDismissed(true), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [initCard?.type]);
+    if (!initCard) return;
+    const timer = setTimeout(() => setDismissed(true), AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [initCard]);
 
   if (!initCard || dismissed) return null;
 
@@ -33,7 +36,6 @@ export function InitBanner() {
           <span className="text-lg animate-spin">&#9676;</span>
           <div className="flex-1">
             <div className="font-medium text-sm">项目初始化中</div>
-            <div className="text-xs text-gray-500 mt-0.5">{initCard.workspace}</div>
             <div className="text-xs text-gray-400 mt-1">
               {initCard.phase === 'scanning' && '正在扫描项目结构...'}
               {initCard.phase === 'matching' && '正在分析并匹配最佳能力...'}
@@ -96,13 +98,6 @@ export function InitBanner() {
           </div>
         </>
       )}
-
-      <button
-        className="text-gray-400 hover:text-gray-600 text-sm p-1"
-        onClick={() => setDismissed(true)}
-      >
-        &#10005;
-      </button>
     </div>
   );
 }

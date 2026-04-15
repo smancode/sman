@@ -1,6 +1,9 @@
 import type { WorkspaceScanResult, CapabilityMatchResult, CapabilityMatch } from './init-types.js';
 import type { CapabilityEntry, SemanticSearchLlmConfig } from '../capabilities/types.js';
+import { unstable_v2_prompt } from '@anthropic-ai/claude-agent-sdk';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('CapabilityMatcher');
 const ALWAYS_MATCH_IDS = new Set(['careful', 'guard']);
 
 export function formatCapabilityCatalog(capabilities: CapabilityEntry[]): string {
@@ -16,17 +19,27 @@ export async function matchCapabilities(
   llmConfig: SemanticSearchLlmConfig,
 ): Promise<CapabilityMatchResult> {
   const catalog = formatCapabilityCatalog(capabilities);
-  const systemPrompt = `You are a project capability advisor. Given project metadata, select the most useful capabilities from the catalog.
+  const knownIds = new Set(capabilities.map(c => c.id));
+
+  const prompt = `You are a project capability advisor. Given project metadata, select the most useful capabilities from the catalog.
 
 Rules:
 - Select capabilities that would be MOST useful for this specific project
 - Always include safety capabilities (careful, guard) for any project with code
 - Consider the project type, tech stack, and directory structure
 - Don't select browser/QA capabilities for non-web projects
-- Return a JSON object with: { "matches": [{"capabilityId": "...", "reason": "..."}], "projectSummary": "...", "techStack": ["..."] }
-- Return ONLY the JSON, no other text`;
 
-  const userPrompt = `Project metadata:
+Output format — a simple list, one capability ID per line, like:
+RECOMMENDED:
+careful
+guard
+review
+investigate
+
+SUMMARY: <one sentence project summary>
+TECHSTACK: <comma separated tech stack>
+
+Project metadata:
 - Types: ${scanResult.types.join(', ')}
 - Languages: ${Object.entries(scanResult.languages).map(([ext, count]) => `${ext}: ${count}`).join(', ')}
 - Markers: ${scanResult.markers.join(', ')}
@@ -40,46 +53,63 @@ ${scanResult.pomXml ? `- Maven: ${scanResult.pomXml.groupId}:${scanResult.pomXml
 Available capabilities:
 ${catalog}`;
 
-  const baseUrl = (llmConfig.baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
-
-  const response = await fetch(`${baseUrl}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': llmConfig.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: llmConfig.model,
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: userPrompt }],
-      system: systemPrompt,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`LLM call failed: ${response.status}`);
+  const env: Record<string, string | undefined> = { ...process.env as Record<string, string> };
+  env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
+  if (llmConfig.baseUrl) {
+    env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
   }
 
-  const data = await response.json() as any;
-  const text = data.content?.[0]?.text || '';
+  try {
+    const result = await unstable_v2_prompt(prompt, {
+      model: llmConfig.model,
+      env,
+    });
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON in LLM response');
+    if (result.is_error || result.subtype !== 'success') {
+      log.warn(`SDK prompt returned error, using minimal matches`);
+      return buildMinimalResult(scanResult);
+    }
 
-  const parsed = JSON.parse(jsonMatch[0]);
+    const text = result.result || '';
+    log.info(`SDK response: ${text.slice(0, 500)}`);
 
-  const knownIds = new Set(capabilities.map(c => c.id));
-  const validMatches = (parsed.matches || []).filter(
-    (m: CapabilityMatch) => knownIds.has(m.capabilityId),
-  );
+    // Extract capability IDs from response — find known IDs in the text
+    const matchedIds: string[] = [];
+    for (const id of knownIds) {
+      if (text.includes(id)) {
+        matchedIds.push(id);
+      }
+    }
 
-  return {
-    matches: validMatches,
-    projectSummary: parsed.projectSummary || scanResult.types.join(', '),
-    techStack: parsed.techStack || [],
-  };
+    // Ensure safety capabilities are always included
+    for (const id of ALWAYS_MATCH_IDS) {
+      if (!matchedIds.includes(id)) {
+        matchedIds.push(id);
+      }
+    }
+
+    // Extract summary and tech stack
+    const summaryMatch = text.match(/SUMMARY:\s*(.+)/i);
+    const techMatch = text.match(/TECHSTACK:\s*(.+)/i);
+
+    const projectSummary = summaryMatch?.[1]?.trim() || scanResult.types.join(', ') + ' 项目';
+    const techStack = techMatch?.[1]?.split(',').map((s: string) => s.trim()).filter(Boolean) || [
+      ...Object.keys(scanResult.languages).map(ext => ext.replace('.', '').toUpperCase()),
+      ...scanResult.markers,
+    ];
+
+    return {
+      matches: matchedIds.map(id => ({
+        capabilityId: id,
+        reason: 'AI 推荐能力',
+      })),
+      projectSummary,
+      techStack,
+    };
+  } catch (err: any) {
+    log.warn(`SDK prompt failed: ${err.message}, using minimal matches`);
+    return buildMinimalResult(scanResult);
+  }
 }
 
 export function keywordFallback(
@@ -102,6 +132,22 @@ export function keywordFallback(
     }
   }
 
+  return {
+    matches,
+    projectSummary: scanResult.types.join(', ') + ' 项目',
+    techStack: [
+      ...Object.keys(scanResult.languages).map(ext => ext.replace('.', '').toUpperCase()),
+      ...scanResult.markers,
+    ],
+  };
+}
+
+/** Build minimal result when LLM is unavailable — only safety capabilities */
+function buildMinimalResult(scanResult: WorkspaceScanResult): CapabilityMatchResult {
+  const matches: CapabilityMatch[] = [];
+  for (const id of ALWAYS_MATCH_IDS) {
+    matches.push({ capabilityId: id, reason: '安全基础能力，LLM 不可用时默认注入' });
+  }
   return {
     matches,
     projectSummary: scanResult.types.join(', ') + ' 项目',

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { WebSocket } from 'ws';
 import { createLogger, type Logger } from '../utils/logger.js';
 import { scanWorkspace } from './workspace-scanner.js';
@@ -9,6 +10,8 @@ import { generateClaudeMd } from './claude-init-runner.js';
 import type { InitResult, InitCard, CapabilityMatchResult } from './init-types.js';
 import type { CapabilityRegistry } from '../capabilities/registry.js';
 import type { SemanticSearchLlmConfig } from '../capabilities/types.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SMAN_VERSION = '1.0.0'; // TODO: read from package.json
 const LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes
