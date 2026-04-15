@@ -109,3 +109,10 @@ export interface ActivityEntry {
   description: string;
   metadata?: Record<string, unknown>;
 }
+
+export interface BazaarCapability {
+  capability: string;
+  agentId: string;
+  agentName: string;
+  experience: string;
+}

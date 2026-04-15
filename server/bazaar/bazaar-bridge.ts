@@ -173,6 +173,13 @@ export class BazaarBridge {
         break;
       }
 
+      case 'bazaar.capabilities.list':
+        this.deps.broadcast(JSON.stringify({
+          type: 'bazaar.capabilities.update',
+          capabilities: this.store.listLearnedRoutes(),
+        }));
+        break;
+
       default:
         this.log.warn(`Unknown frontend message type: ${type}`);
     }

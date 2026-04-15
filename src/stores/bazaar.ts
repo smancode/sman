@@ -12,6 +12,7 @@ import type {
   BazaarTaskChat,
   BazaarLeaderboardEntry,
   ActivityEntry,
+  BazaarCapability,
 } from '@/types/bazaar';
 
 function getWsClient() {
@@ -29,6 +30,7 @@ interface BazaarState {
   tasks: BazaarTask[];
   onlineAgents: BazaarAgentInfo[];
   leaderboard: BazaarLeaderboardEntry[];
+  capabilities: BazaarCapability[];
   activeChat: BazaarTaskChat | null;
   notifications: BazaarNotification[];
   digest: BazaarDigest | null;
@@ -43,6 +45,7 @@ interface BazaarState {
   fetchTasks: () => void;
   fetchOnlineAgents: () => void;
   fetchLeaderboard: () => void;
+  fetchCapabilities: () => void;
   cancelTask: (taskId: string) => void;
   setActiveChat: (taskId: string) => void;
   clearActiveChat: () => void;
@@ -73,6 +76,7 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
     tasks: [],
     onlineAgents: [],
     leaderboard: [],
+    capabilities: [],
     activeChat: null,
     notifications: [],
     digest: null,
@@ -98,6 +102,12 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
       const client = getWsClient();
       if (!client) return;
       client.send({ type: 'bazaar.leaderboard' });
+    },
+
+    fetchCapabilities: () => {
+      const client = getWsClient();
+      if (!client) return;
+      client.send({ type: 'bazaar.capabilities.list' });
     },
 
     cancelTask: (taskId: string) => {
@@ -315,6 +325,8 @@ function registerPushListeners() {
       });
     } else if (type === 'bazaar.digest') {
       set({ digest: msg as unknown as BazaarDigest });
+    } else if (type === 'bazaar.capabilities.update') {
+      set({ capabilities: (msg.capabilities ?? []) as BazaarCapability[] });
     } else if (type === 'bazaar.world.agent_update') {
       // World position tracking — kept for future use but not rendered
     } else if (type === 'bazaar.world.zone_snapshot') {
