@@ -141,6 +141,9 @@ function clearStreamingBlocks(sessionId: string): void {
 // Track per-session streaming cleanup functions so we can unsubscribe when session changes
 const streamCleanups = new Map<string, () => void>();
 
+// Monotonically increasing generation counter to distinguish old vs new streams for the same session
+let streamGeneration = 0;
+
 function registerStreamCleanup(sessionId: string, cleanup: () => void): void {
   // If there's a previous cleanup (e.g. user sent new message before previous stream finished), call it
   const prev = streamCleanups.get(sessionId);
@@ -522,6 +525,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
     const streamSessionId = currentSessionId;
 
+    // Capture generation to ignore stale aborted/done events from previous streams
+    const myGeneration = ++streamGeneration;
+
     // Cleanup any previous stream handlers for this session
     cleanupStream(streamSessionId);
 
@@ -586,9 +592,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (get().waitingHint) set({ waitingHint: null });
       };
 
-      // Monitor chat.aborted (stall or user-initiated)
+      // Monitor chat.aborted (stall or user-initiated) — ignore stale aborts from previous streams
       const unsubAborted = wrapHandler(client, 'chat.aborted', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        if (myGeneration !== streamGeneration) return; // Stale abort from a previous stream
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
         cleanup();
@@ -727,6 +734,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        if (myGeneration !== streamGeneration) return; // Stale done from a previous stream
         // Flush any remaining batched deltas before finalizing
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
@@ -781,6 +789,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        if (myGeneration !== streamGeneration) return; // Stale error from a previous stream
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         pendingText = '';
         pendingThinking = '';
