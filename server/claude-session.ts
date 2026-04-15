@@ -90,6 +90,7 @@ export class ClaudeSessionManager {
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
   private static readonly STREAM_STALL_MS = 3 * 60 * 1000; // 3 minutes no data = stalled
   private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
+  private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
 
   constructor(private store: SessionStore) {
     this.log = createLogger('ClaudeSessionManager');
@@ -520,7 +521,7 @@ export class ClaudeSessionManager {
   /**
    * Send a message via WebSocket (real-time streaming)
    */
-  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[]): Promise<void> {
+  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -541,7 +542,10 @@ export class ClaudeSessionManager {
     }
 
     // V2 sessions handle /slash commands natively — no conversion needed
-    this.store.addMessage(sessionId, { role: 'user', content });
+    // Don't store auto-retry messages in the database — user didn't send them
+    if (_retryCount === 0) {
+      this.store.addMessage(sessionId, { role: 'user', content });
+    }
 
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
@@ -904,15 +908,60 @@ export class ClaudeSessionManager {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         // Save partial assistant content so the user doesn't lose what was already streamed
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
+
+        // Auto-retry for recoverable errors (stall, process_dead, etc.) — max 2 retries
+        const reason = stallAbortReason || '';
+        if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(reason)) {
+          this.log.info(`Auto-retrying session ${sessionId} after ${reason} (attempt ${_retryCount + 1})`);
+          // Clean up the failed V2 session so a fresh one is created
+          this.closeV2Session(sessionId);
+          // Notify frontend that we're retrying
+          wsSend(JSON.stringify({
+            type: 'chat.delta',
+            sessionId,
+            deltaType: 'text',
+            content: '\n\n[自动重试中...]\n',
+          }));
+          // Wait a moment before retrying — check if user sent a new message during wait
+          await new Promise(r => setTimeout(r, 1000));
+          if (this.activeStreams.has(sessionId)) {
+            this.log.info(`User sent new message during retry wait for ${sessionId}, canceling auto-retry`);
+            wsSend(JSON.stringify({ type: 'chat.aborted', sessionId, reason }));
+            return;
+          }
+          // Retry with "继续" to pick up where we left off
+          return this.sendMessage(sessionId, '继续刚才的工作，不要重复已完成的部分', wsSend, undefined, _retryCount + 1);
+        }
+
         wsSend(JSON.stringify({
           type: 'chat.aborted',
           sessionId,
-          ...(stallAbortReason ? { reason: stallAbortReason } : {}),
+          ...(reason ? { reason } : {}),
         }));
       } else {
         const { errorCode, userMessage } = this.classifyError(err);
         const rawMessage = err instanceof Error ? err.message : String(err);
         this.log.error(`Query error for session ${sessionId}`, { error: rawMessage, errorCode });
+
+        // Auto-retry for recoverable API errors (400, 500, overloaded, network) — max 2 retries
+        if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(errorCode)) {
+          this.log.info(`Auto-retrying session ${sessionId} after ${errorCode} (attempt ${_retryCount + 1})`);
+          this.closeV2Session(sessionId);
+          wsSend(JSON.stringify({
+            type: 'chat.delta',
+            sessionId,
+            deltaType: 'text',
+            content: '\n\n[遇到临时错误，自动重试中...]\n',
+          }));
+          await new Promise(r => setTimeout(r, 2000));
+          if (this.activeStreams.has(sessionId)) {
+            this.log.info(`User sent new message during retry wait for ${sessionId}, canceling auto-retry`);
+            wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
+            return;
+          }
+          return this.sendMessage(sessionId, '继续刚才的工作，不要重复已完成的部分', wsSend, undefined, _retryCount + 1);
+        }
+
         wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
       }
     } finally {
