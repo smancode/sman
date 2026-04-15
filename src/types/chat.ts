@@ -56,3 +56,17 @@ export interface ToolStatus {
   updatedAt: number
 }
 
+/** Init card from workspace auto-initialization */
+export type InitCardType = 'initializing' | 'complete' | 'already' | 'error';
+
+export interface InitCard {
+  type: InitCardType;
+  workspace: string;
+  phase?: 'scanning' | 'matching' | 'injecting';
+  projectSummary?: string;
+  techStack?: string[];
+  injectedSkills?: Array<{ id: string; name: string }>;
+  initializedAt?: string;
+  error?: string;
+}
+

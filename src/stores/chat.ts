@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
 import { sessionCache } from '@/lib/session-cache';
-import type { ChatSession, ContentBlock } from '@/types/chat';
+import type { ChatSession, ContentBlock, InitCard } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -102,6 +102,9 @@ interface ChatState {
 
   // Thinking toggle
   showThinking: boolean;
+
+  // Init card
+  initCard: InitCard | null;
 
   // Actions
   createSessionWithWorkspace: (workspace: string) => Promise<string>;
@@ -227,6 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   currentSessionId: '',
   showThinking: true,
+  initCard: null,
 
   // Create a new session with workspace (directory path)
   createSessionWithWorkspace: async (workspace: string) => {

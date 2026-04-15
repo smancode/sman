@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { WsClient } from '@/lib/ws-client';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
+import { useChatStore } from './chat';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
 
@@ -33,6 +34,14 @@ function registerListeners(client: WsClient) {
   client.on('connected', () => useWsConnection.setState({ status: 'connected' }));
   client.on('disconnected', () => useWsConnection.setState({ status: 'disconnected' }));
   client.on('authFailed', () => useWsConnection.setState({ status: 'auth_failed' }));
+
+  // Forward init.card events to chat store
+  client.on('init.card', (msg: unknown) => {
+    const data = msg as { card?: unknown };
+    if (data.card) {
+      useChatStore.setState({ initCard: data.card as import('@/types/chat').InitCard });
+    }
+  });
 }
 
 /** Create or recreate WsClient — reads URL + token from localStorage */

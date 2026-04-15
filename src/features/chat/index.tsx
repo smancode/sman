@@ -6,6 +6,7 @@ import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS } 
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
+import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents } from './streamdown-components';
@@ -126,6 +127,7 @@ export function Chat() {
 
   return (
     <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
+      <InitBanner />
       {/* Messages */}
       <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'} onScroll={handleScroll}>
         <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>

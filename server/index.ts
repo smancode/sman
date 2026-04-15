@@ -39,6 +39,7 @@ import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
 import { ProjectScanner } from './capabilities/project-scanner.js';
+import { InitManager } from './init/init-manager.js';
 import { initBazaarBridge, getBazaarBridge } from './bazaar/index.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -218,6 +219,21 @@ const projectScanner = new ProjectScanner({
   homeDir,
   sessionManager,
   hasActiveStreams: sessionManager.hasActiveStreams.bind(sessionManager),
+});
+
+// Initialize workspace auto-init manager
+const initManager = new InitManager({
+  pluginsDir,
+  capabilityRegistry,
+  llmConfig: () => {
+    const config = settingsManager.getConfig();
+    if (!config?.llm?.apiKey) return null;
+    return {
+      apiKey: config.llm.apiKey,
+      model: config.llm.model || 'claude-sonnet-4-20250514',
+      baseUrl: config.llm.baseUrl,
+    };
+  },
 });
 
 // Set up cron scheduler with session manager
@@ -460,6 +476,11 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace) throw new Error('Missing workspace');
           const sessionId = sessionManager.createSession(msg.workspace);
           ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
+
+          // Auto-initialize workspace (async, non-blocking)
+          initManager.handleSessionCreate(msg.workspace, sessionId, ws).catch((err: any) => {
+            log.warn(`Workspace init failed for ${msg.workspace}: ${err.message}`);
+          });
           break;
         }
 
