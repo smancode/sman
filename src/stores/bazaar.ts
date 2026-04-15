@@ -11,7 +11,7 @@ import type {
   BazaarNotification,
   BazaarTaskChat,
   BazaarLeaderboardEntry,
-  WorldAgentPosition,
+  ActivityEntry,
 } from '@/types/bazaar';
 
 function getWsClient() {
@@ -34,8 +34,10 @@ interface BazaarState {
   digest: BazaarDigest | null;
   loading: boolean;
   error: string | null;
-  worldPositions: Map<string, WorldAgentPosition>;
+  worldPositions: Map<string, { agentId: string; x: number; y: number; state: string; facing: string }>;
   sendWorldMove: (x: number, y: number, state: string, facing: string) => void;
+  activityLog: ActivityEntry[];
+  addActivity: (entry: Omit<ActivityEntry, 'id' | 'timestamp'>) => void;
 
   // Actions
   fetchTasks: () => void;
@@ -77,6 +79,7 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
     loading: false,
     error: null,
     worldPositions: new Map(),
+    activityLog: [],
 
     fetchTasks: () => {
       const client = getWsClient();
@@ -119,6 +122,17 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
     },
 
     clearError: () => set({ error: null }),
+
+    addActivity: (entry) => {
+      const fullEntry: ActivityEntry = {
+        ...entry,
+        id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: Date.now(),
+      };
+      set((s) => ({
+        activityLog: [fullEntry, ...s.activityLog].slice(0, 200),
+      }));
+    },
 
     sendWorldMove: (x: number, y: number, state: string, facing: string) => {
       const client = getWsClient();
@@ -186,17 +200,50 @@ function registerPushListeners() {
             reputation: (msg.reputation as number) ?? 0,
             activeSlots: (msg.activeSlots as number) ?? 0,
             maxSlots: (msg.maxSlots as number) ?? 3,
+            collabMode: (msg.collabMode as BazaarMode) ?? 'notify',
           },
         }));
       } else if (event === 'disconnected') {
         set((s) => ({ connection: { ...s.connection, connected: false } }));
       }
     } else if (type === 'bazaar.task.list.update') {
+      const prevTasks = get().tasks;
       set({ tasks: msg.tasks as BazaarTask[], loading: false });
+      // Log new tasks
+      const newTasks = (msg.tasks as BazaarTask[]).filter(
+        (t) => !prevTasks.some((p) => p.taskId === t.taskId)
+      );
+      for (const t of newTasks) {
+        get().addActivity({
+          type: 'task_event',
+          agentId: t.direction === 'outgoing' ? get().connection.agentId : t.helperAgentId,
+          agentName: t.direction === 'outgoing' ? get().connection.agentName : t.helperName,
+          description: t.direction === 'outgoing'
+            ? `发出协作请求: ${t.question}`
+            : `收到协作请求: ${t.question}`,
+          metadata: { taskId: t.taskId, direction: t.direction, status: t.status },
+        });
+      }
     } else if (type === 'bazaar.agent.list.update') {
       set({ onlineAgents: msg.agents as BazaarAgentInfo[] });
     } else if (type === 'bazaar.leaderboard.update') {
+      const prevReputation = get().connection.reputation ?? 0;
       set({ leaderboard: msg.leaderboard as BazaarLeaderboardEntry[] });
+      // Log reputation change
+      const myId = get().connection.agentId;
+      const myEntry = (msg.leaderboard as BazaarLeaderboardEntry[]).find(
+        (e: BazaarLeaderboardEntry) => e.agentId === myId
+      );
+      if (myEntry && myEntry.reputation !== prevReputation) {
+        const delta = myEntry.reputation - prevReputation;
+        get().addActivity({
+          type: 'reputation_change',
+          agentId: myId,
+          agentName: get().connection.agentName,
+          description: `声望 ${delta > 0 ? '+' : ''}${delta}（当前 ${myEntry.reputation}）`,
+          metadata: { reputation: myEntry.reputation, delta },
+        });
+      }
     } else if (type === 'bazaar.task.chat.delta') {
       const taskId = msg.taskId as string;
       const from = msg.from as string;
@@ -258,28 +305,22 @@ function registerPushListeners() {
         }, NOTIFY_COUNTDOWN_MS);
         countdownTimers.set(notificationId, timer);
       }
+
+      get().addActivity({
+        type: 'task_event',
+        agentId: msg.from as string,
+        agentName: msg.from as string,
+        description: `${msg.from} 请求协作: ${(msg.question as string).slice(0, 80)}`,
+        metadata: { taskId: msg.taskId, mode: msg.mode },
+      });
     } else if (type === 'bazaar.digest') {
       set({ digest: msg as unknown as BazaarDigest });
     } else if (type === 'bazaar.world.agent_update') {
-      const positions = new Map<string, WorldAgentPosition>(get().worldPositions);
-      positions.set(msg.agentId as string, {
-        agentId: msg.agentId as string,
-        x: msg.x as number,
-        y: msg.y as number,
-        state: msg.state as 'idle' | 'walking' | 'busy',
-        facing: msg.facing as 'up' | 'down' | 'left' | 'right',
-      });
-      set({ worldPositions: positions });
+      // World position tracking — kept for future use but not rendered
     } else if (type === 'bazaar.world.zone_snapshot') {
-      const positions = new Map<string, WorldAgentPosition>();
-      for (const a of (msg.agents as WorldAgentPosition[])) {
-        positions.set(a.agentId, a);
-      }
-      set({ worldPositions: positions });
+      // World position tracking — kept for future use but not rendered
     } else if (type === 'bazaar.world.agent_leave') {
-      const positions = new Map<string, WorldAgentPosition>(get().worldPositions);
-      positions.delete(msg.agentId as string);
-      set({ worldPositions: positions });
+      // World position tracking — kept for future use but not rendered
     }
   };
 

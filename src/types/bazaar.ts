@@ -79,6 +79,7 @@ export interface BazaarConnectionStatus {
   reputation?: number;
   activeSlots: number;
   maxSlots: number;
+  collabMode?: BazaarMode;
 }
 
 export interface WorldAgentPosition {
@@ -87,4 +88,24 @@ export interface WorldAgentPosition {
   y: number;
   state: 'idle' | 'walking' | 'busy';
   facing: 'up' | 'down' | 'left' | 'right';
+}
+
+export type ActivityType =
+  | 'status_change'
+  | 'task_event'
+  | 'capability_search'
+  | 'collab_start'
+  | 'collab_complete'
+  | 'reputation_change'
+  | 'system';
+
+export interface ActivityEntry {
+  id: string;
+  timestamp: number;
+  type: ActivityType;
+  agentId?: string;
+  agentName?: string;
+  agentAvatar?: string;
+  description: string;
+  metadata?: Record<string, unknown>;
 }
