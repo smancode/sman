@@ -89,6 +89,7 @@ export class ClaudeSessionManager {
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
   private static readonly STREAM_STALL_MS = 3 * 60 * 1000; // 3 minutes no data = stalled
+  private static readonly SEND_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for v2Session.send()
   private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
   private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
 
@@ -572,7 +573,9 @@ export class ClaudeSessionManager {
     let stallAbortReason: string | undefined;
 
     try {
+      this.log.info(`[sendMessage] ${sessionId}: getting/creating V2 session...`);
       const v2Session = await this.getOrCreateV2Session(sessionId);
+      this.log.info(`[sendMessage] ${sessionId}: V2 session ready, sending content (${content.length} chars)...`);
 
       wsSend(JSON.stringify({
         type: 'chat.start',
@@ -592,19 +595,37 @@ export class ClaudeSessionManager {
       // Build content for send(): string or SDKUserMessage
       const builtContent = buildContentBlocks(content, media, capabilities);
 
+      // Wrap send() with timeout — claude CLI may hang during init (e.g. incompatible API)
+      const sendWithTimeout = async (payload: string | object) => {
+        const timeoutMs = ClaudeSessionManager.SEND_TIMEOUT_MS;
+        let timer: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            this.log.warn(`v2Session.send() timed out for session ${sessionId} after ${timeoutMs / 1000}s`);
+            reject(new Error(`发送消息超时（${timeoutMs / 1000}s），模型服务可能未响应`));
+          }, timeoutMs);
+        });
+        try {
+          await Promise.race([v2Session.send(payload as any), timeoutPromise]);
+        } finally {
+          clearTimeout(timer!);
+        }
+      };
+
       if (typeof builtContent === 'string') {
         const contentWithPrefix = `${messagePrefix}\n\n${builtContent}`;
-        await v2Session.send(contentWithPrefix);
+        await sendWithTimeout(contentWithPrefix);
       } else {
         // Content blocks array → construct SDKUserMessage
         const blocks = [{ type: 'text', text: messagePrefix }, ...builtContent];
-        await v2Session.send({
+        await sendWithTimeout({
           type: 'user',
           message: { role: 'user', content: blocks },
           parent_tool_use_id: null,
           session_id: sessionId,
-        } as any);
+        });
       }
+      this.log.info(`[sendMessage] ${sessionId}: send() completed, starting stream...`);
 
       let lastActivityAt = Date.now();
       let toolInProgress = false;
@@ -868,8 +889,21 @@ export class ClaudeSessionManager {
               });
             }
 
-            const resultError = isError && 'errors' in result ? result.errors?.join(', ') : undefined;
-            const classified = isError && resultError ? this.classifyErrorMessage(resultError) : undefined;
+            let resultError: string | undefined;
+            if (isError) {
+              if ('errors' in result && result.errors?.length) {
+                resultError = result.errors.join(', ');
+              } else if ('error' in result && result.error) {
+                resultError = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+              } else if ('message' in result && result.message) {
+                resultError = typeof result.message === 'string' ? result.message : JSON.stringify(result.message);
+              }
+              // Log full result for diagnosis when error info is sparse
+              if (!resultError) {
+                this.log.warn(`SDK error with no error details for session ${sessionId}`, { result: JSON.stringify(result).slice(0, 500) });
+              }
+            }
+            const classified = resultError ? this.classifyErrorMessage(resultError) : undefined;
             wsSend(JSON.stringify({
               type: isError ? 'chat.error' : 'chat.done',
               sessionId,
@@ -878,7 +912,7 @@ export class ClaudeSessionManager {
                 inputTokens: result.usage.input_tokens,
                 outputTokens: result.usage.output_tokens,
               } : undefined,
-              ...(isError ? { error: classified?.userMessage ?? resultError ?? 'Unknown error', errorCode: classified?.errorCode, rawError: resultError } : {}),
+              ...(isError ? { error: classified?.userMessage ?? resultError ?? '模型服务返回未知错误，请稍后重试', errorCode: classified?.errorCode ?? 'unknown', rawError: resultError } : {}),
             }));
 
             this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}`);

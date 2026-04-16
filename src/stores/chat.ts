@@ -584,7 +584,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Waiting hint: show after 20s if no stream activity received
       let waitingTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
         if (get().sending && get().currentSessionId === streamSessionId) {
-          set({ waitingHint: 'Claude 正在响应中，请耐心等待…' });
+          set({ waitingHint: 'LLM 正在响应中，请耐心等待…' });
         }
       }, 20_000);
       const clearWaitingHint = () => {

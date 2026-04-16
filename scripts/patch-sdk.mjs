@@ -3,12 +3,23 @@
 /**
  * Patch @anthropic-ai/claude-agent-sdk to support full V2 session configuration.
  *
- * The native V2 SDK only passes model/env/pathToClaudeCodeExecutable to SessionImpl,
- * ignoring systemPrompt, mcpServers, plugins, permissionMode, cwd, etc.
- * This patch mirrors what hello-halo does to make V2 sessions fully configurable.
+ * Targets SDK v0.2.110+ / claude-code v2.1.110+.
+ *
+ * The native V2 SDK SessionImpl only passes a subset of options to ProcessTransport,
+ * ignoring systemPrompt, mcpServers, plugins, permissionMode defaults, etc.
+ * This patch forwards all options so V2 sessions are fully configurable.
  *
  * Also removes CLAUDE_CODE_ENTRYPOINT/CLAUDE_AGENT_SDK_VERSION markers so the CLI
  * subprocess appears as a native invocation (enabling /skill commands natively).
+ *
+ * Patch summary:
+ *   1. spawnLocalProcess return: expose pid from child process
+ *   2. ProcessTransport.initialize: remove CLAUDE_CODE_ENTRYPOINT
+ *   3. SessionImpl constructor: remove CLAUDE_CODE_ENTRYPOINT
+ *   4. SessionImpl constructor: forward all options to ProcessTransport + Query
+ *   5. SessionImpl: add pid/interrupt/setModel/setPermissionMode methods
+ *   6. query() function: remove CLAUDE_AGENT_SDK_VERSION
+ *   7. query() function: remove CLAUDE_CODE_ENTRYPOINT
  */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -51,197 +62,53 @@ if (content.includes('[PATCHED_BY_SMAN]')) {
 }
 
 const patches = [
-  // ── Patch 1: ProcessTransport.mappedProcess - expose pid ──
+  // ── Patch 1: spawnLocalProcess - expose pid from child process ──
   {
-    name: 'Expose child process pid in mappedProcess',
-    find: `    const mappedProcess = {
-      stdin: childProcess.stdin,
-      stdout: childProcess.stdout,
-      get killed() {`,
-    replace: `    const mappedProcess = {
-      stdin: childProcess.stdin,
-      stdout: childProcess.stdout,
-      // [PATCHED_BY_SMAN] Expose pid for health system process tracking
-      get pid() {
-        return childProcess.pid;
-      },
-      get killed() {`,
+    name: 'Expose child process pid in spawnLocalProcess return',
+    find: `return{stdin:G.stdin,stdout:G.stdout,get killed(){return G.killed},get exitCode(){return G.exitCode},kill:G.kill.bind(G),on:G.on.bind(G),once:G.once.bind(G),off:G.off.bind(G)}`,
+    replace: `return{stdin:G.stdin,stdout:G.stdout,get pid(){return G.pid},get killed(){return G.killed},get exitCode(){return G.exitCode},kill:G.kill.bind(G),on:G.on.bind(G),once:G.once.bind(G),off:G.off.bind(G)}`,
   },
 
   // ── Patch 2: ProcessTransport.initialize - remove CLAUDE_CODE_ENTRYPOINT ──
   {
     name: 'Remove CLAUDE_CODE_ENTRYPOINT in ProcessTransport.initialize',
-    find: `      if (!env.CLAUDE_CODE_ENTRYPOINT) {
-        env.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";
-      }
-      delete env.NODE_OPTIONS;`,
-    replace: `      // [PATCHED_BY_SMAN] Removed CLAUDE_CODE_ENTRYPOINT to appear as native CLI
-      delete env.NODE_OPTIONS;`,
+    find: `if(!U.CLAUDE_CODE_ENTRYPOINT)U.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(delete U.NODE_OPTIONS`,
+    replace: `if(delete U.NODE_OPTIONS`,
   },
 
   // ── Patch 3: SessionImpl constructor - remove CLAUDE_CODE_ENTRYPOINT ──
   {
     name: 'Remove CLAUDE_CODE_ENTRYPOINT in SessionImpl constructor',
-    find: `    const processEnv = { ...options.env ?? process.env };
-    if (!processEnv.CLAUDE_CODE_ENTRYPOINT) {
-      processEnv.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";
-    }
-    this.abortController = createAbortController();`,
-    replace: `    // [PATCHED_BY_SMAN] Removed CLAUDE_CODE_ENTRYPOINT to appear as native CLI
-    const processEnv = { ...options.env ?? process.env };
-    this.abortController = createAbortController();`,
+    find: `let Y={...$.env??process.env};if(!Y.CLAUDE_CODE_ENTRYPOINT)Y.CLAUDE_CODE_ENTRYPOINT="sdk-ts";this.abortController=c1()`,
+    replace: `let Y={...$.env??process.env};this.abortController=c1()`,
   },
 
-  // ── Patch 4: SessionImpl constructor - forward all options to ProcessTransport ──
+  // ── Patch 4: SessionImpl constructor - forward all options to ProcessTransport + Query ──
   {
     name: 'Forward all options in SessionImpl constructor',
-    find: `    const transport = new ProcessTransport({
-      abortController: this.abortController,
-      pathToClaudeCodeExecutable,
-      env: processEnv,
-      executable: options.executable ?? (isRunningWithBun() ? "bun" : "node"),
-      executableArgs: options.executableArgs ?? [],
-      extraArgs: {},
-      maxThinkingTokens: undefined,
-      maxTurns: undefined,
-      maxBudgetUsd: undefined,
-      model: options.model,
-      fallbackModel: undefined,
-      permissionMode: "default",
-      allowDangerouslySkipPermissions: false,
-      continueConversation: false,
-      resume: options.resume,
-      settingSources: [],
-      allowedTools: [],
-      disallowedTools: [],
-      mcpServers: {},
-      strictMcpConfig: false,
-      canUseTool: false,
-      hooks: false,
-      includePartialMessages: false,
-      forkSession: false,
-      resumeSessionAt: undefined
-    });
-    this.query = new Query(transport, false, undefined, undefined, this.abortController, new Map);
-    this.query.streamInput(this.inputStream);`,
-    replace: `    // [PATCHED_BY_SMAN] Process SDK-type MCP servers
-    const sdkMcpServers = new Map;
-    const processedMcpServers = {};
-    if (options.mcpServers) {
-      for (const [name, config] of Object.entries(options.mcpServers)) {
-        if (config.type === "sdk" && "instance" in config) {
-          sdkMcpServers.set(name, config.instance);
-          processedMcpServers[name] = { type: "sdk", name };
-        } else {
-          processedMcpServers[name] = config;
-        }
-      }
-    }
-    const transport = new ProcessTransport({
-      abortController: this.abortController,
-      pathToClaudeCodeExecutable,
-      cwd: options.cwd,
-      stderr: options.stderr,
-      env: processEnv,
-      executable: options.executable ?? (isRunningWithBun() ? "bun" : "node"),
-      executableArgs: options.executableArgs ?? [],
-      extraArgs: options.extraArgs ?? {},
-      customSystemPrompt: typeof options.systemPrompt === 'string' ? options.systemPrompt : (options.systemPrompt?.append ?? ""),
-      maxThinkingTokens: options.maxThinkingTokens ?? undefined,
-      maxTurns: options.maxTurns ?? undefined,
-      maxBudgetUsd: options.maxBudgetUsd ?? undefined,
-      model: options.model,
-      fallbackModel: options.fallbackModel ?? undefined,
-      permissionMode: options.permissionMode ?? "default",
-      allowDangerouslySkipPermissions: options.allowDangerouslySkipPermissions ?? false,
-      continueConversation: options.continueConversation ?? false,
-      resume: options.resume,
-      settingSources: options.settingSources ?? [],
-      allowedTools: options.allowedTools ?? [],
-      disallowedTools: options.disallowedTools ?? [],
-      mcpServers: processedMcpServers,
-      strictMcpConfig: options.strictMcpConfig ?? false,
-      canUseTool: options.canUseTool ?? false,
-      hooks: options.hooks ?? false,
-      includePartialMessages: options.includePartialMessages ?? true,
-      forkSession: options.forkSession ?? false,
-      resumeSessionAt: options.resumeSessionAt ?? undefined,
-      plugins: options.plugins
-    });
-    // [PATCHED_BY_SMAN] Build initConfig (mirrors query() behavior)
-    const customSystemPrompt = typeof options.systemPrompt === 'string' ? options.systemPrompt : (options.systemPrompt?.append ?? "");
-    const initConfig = {
-      systemPrompt: customSystemPrompt,
-      appendSystemPrompt: options.systemPrompt?.type === 'preset' ? options.systemPrompt.append : undefined,
-      agents: options.agents
-    };
-    this.query = new Query(transport, false, options.canUseTool, options.hooks, this.abortController, sdkMcpServers, undefined, initConfig);
-    this.query.streamInput(this.inputStream);`,
+    find: `let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:{},thinkingConfig:void 0,maxTurns:void 0,maxBudgetUsd:void 0,model:$.model,fallbackModel:void 0,permissionMode:$.permissionMode??"default",allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions??!1,continueConversation:!1,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:{},strictMcpConfig:!1,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:!1,forkSession:!1,resumeSessionAt:void 0});this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,new Map),this.query.streamInput(this.inputStream)`,
+    replace: `let smanMcpServers=new Map;let smanProcessedMcp={};if($.mcpServers)for(let[k,v]of Object.entries($.mcpServers))if(v.type==="sdk"&&"instance" in v)smanMcpServers.set(k,v.instance),smanProcessedMcp[k]={type:"sdk",name:k};else smanProcessedMcp[k]=v;let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,stderr:$.stderr,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:$.extraArgs??{},thinkingConfig:$.thinkingConfig,maxTurns:$.maxTurns,maxBudgetUsd:$.maxBudgetUsd,model:$.model,fallbackModel:$.fallbackModel,permissionMode:$.permissionMode,allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions,continueConversation:$.continueConversation,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:smanProcessedMcp,strictMcpConfig:$.strictMcpConfig,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:$.includePartialMessages??!0,forkSession:$.forkSession,resumeSessionAt:$.resumeSessionAt,plugins:$.plugins});let smanInitCfg={systemPrompt:typeof $.systemPrompt==="string"?$.systemPrompt:($.systemPrompt?.append??"")};this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,smanMcpServers,void 0,smanInitCfg),this.query.streamInput(this.inputStream)`,
   },
 
   // ── Patch 5: SessionImpl - add pid/interrupt/setModel/setPermissionMode ──
   {
     name: 'Add pid/interrupt/setModel/setPermissionMode to SessionImpl',
-    find: `      if (value.type === "result") {
-        return;
-      }
-    }
-  }
-  close() {
-    if (this.closed) {
-      return;
-    }
-    this.closed = true;
-    this.inputStream.done();
-    this.abortController.abort();
-  }`,
-    replace: `      if (value.type === "result") {
-        return;
-      }
-    }
-  }
-  // [PATCHED_BY_SMAN] Expose subprocess PID
-  get pid() {
-    return this.query?.transport?.process?.pid;
-  }
-  // [PATCHED_BY_SMAN] Expose interrupt
-  async interrupt() {
-    return this.query.interrupt();
-  }
-  // [PATCHED_BY_SMAN] Expose setModel
-  async setModel(model) {
-    return this.query.setModel(model);
-  }
-  // [PATCHED_BY_SMAN] Expose setPermissionMode
-  async setPermissionMode(mode) {
-    return this.query.setPermissionMode(mode);
-  }
-  close() {
-    if (this.closed) {
-      return;
-    }
-    this.closed = true;
-    this.inputStream.done();
-    this.abortController.abort();
-  }`,
+    find: `if(yield $,$.type==="result")return}}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
+    replace: `if(yield $,$.type==="result")return}}get pid(){return this.query?.transport?.process?.pid}async interrupt(){return this.query.interrupt()}async setModel($){return this.query.setModel($)}async setPermissionMode($){return this.query.setPermissionMode($)}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
   },
 
   // ── Patch 6: query() function - remove CLAUDE_AGENT_SDK_VERSION ──
   {
     name: 'Remove CLAUDE_AGENT_SDK_VERSION in query()',
-    find: `  process.env.CLAUDE_AGENT_SDK_VERSION = "0.1.77";`,
-    replace: `  // [PATCHED_BY_SMAN] Removed CLAUDE_AGENT_SDK_VERSION to appear as native CLI`,
+    find: `process.env.CLAUDE_AGENT_SDK_VERSION="0.2.110"`,
+    replace: `/* [PATCHED_BY_SMAN] removed CLAUDE_AGENT_SDK_VERSION */`,
   },
 
   // ── Patch 7: query() function - remove CLAUDE_CODE_ENTRYPOINT ──
   {
     name: 'Remove CLAUDE_CODE_ENTRYPOINT in query()',
-    find: `  if (!processEnv.CLAUDE_CODE_ENTRYPOINT) {
-    processEnv.CLAUDE_CODE_ENTRYPOINT = "sdk-ts";
-  }
-  if (enableFileCheckpointing) {`,
-    replace: `  // [PATCHED_BY_SMAN] Removed CLAUDE_CODE_ENTRYPOINT to appear as native CLI
-  if (enableFileCheckpointing) {`,
+    find: `if(!Y4.CLAUDE_CODE_ENTRYPOINT)Y4.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
+    replace: `if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
   },
 ];
 
