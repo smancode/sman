@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, Trophy, Users, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Trophy, Users, ArrowLeft, Loader2 } from 'lucide-react';
 import { getReputationLevel, getReputationProgress, getNextLevel } from './ReputationUtils';
 
 function deriveAgentStatus(
@@ -42,10 +42,10 @@ export function MyAgentPanel() {
       {/* Header */}
       <div className="p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <button className="h-7 w-7 p-0 flex-shrink-0 rounded hover:opacity-80 transition-opacity" onClick={() => navigate('/chat')}>
-            <img src="/favicon.svg" alt="Sman" className="h-7 w-7 object-contain" />
+          <button className="h-7 w-7 p-0 flex-shrink-0 rounded hover:bg-white/10" onClick={() => navigate('/chat')} style={{ color: 'var(--bz-text-dim)' }}>
+            <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="text-2xl">{agentAvatar}</span>
+          <img src="/favicon.svg" alt="Agent" className="h-7 w-7 object-contain rounded" />
           <div className="min-w-0 flex-1">
             <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? '本地 Agent'}</div>
             <div className="flex items-center gap-1 text-xs" style={{ color: connected ? 'var(--bz-green)' : 'var(--bz-amber)' }}>
