@@ -84,7 +84,7 @@ export function LLMSettings({ id }: { id?: string }) {
     }
   }, [settings]);
 
-  const handleProfileChange = (name: string) => {
+  const handleProfileChange = async (name: string) => {
     if (name === '__new__') {
       setSelectedProfile('');
       setDraftApiKey('');
@@ -93,6 +93,8 @@ export function LLMSettings({ id }: { id?: string }) {
       setDraftProfileName('');
     } else {
       setSelectedProfile(name);
+      // Immediately activate the selected profile
+      await selectLlmProfile(name);
     }
     setTestResult(null);
   };
