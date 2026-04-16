@@ -18,7 +18,7 @@ function wrapHandler(client: { on: (e: string, h: (...a: unknown[]) => void) => 
   return () => client.off(event, wrapped);
 }
 
-interface Message {
+export interface Message {
   id: string;
   sessionId: string;
   role: 'user' | 'assistant';

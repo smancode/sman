@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -10,6 +10,7 @@ import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
+import { groupMessagesByTurn } from './message-utils';
 import type { RawMessage } from '@/types/chat';
 
 function safeTimestamp(createdAt: string): number | undefined {
@@ -29,7 +30,10 @@ function buildContent(text: string, blocks?: unknown[]): unknown {
 
 // ── Module-level scroll position cache ──
 // Survives route changes (component unmount/remount) and session switches
-const scrollPositions = new Map<string, number>();
+const scrollPositions = new Map<string, { scrollTop: number; turnCount: number }>();
+
+const DEFAULT_TURN_COUNT = 6;
+const LOAD_MORE_TURNS = 4;
 
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
@@ -49,6 +53,54 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
 
+  // ── Turn-based rendering window ──
+  const [renderedTurnCount, setRenderedTurnCount] = useState(DEFAULT_TURN_COUNT);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const prevHeightRef = useRef(0);
+
+  // Reset turn count on session change
+  const turnResetRef = useRef(currentSessionId);
+  if (currentSessionId !== turnResetRef.current) {
+    turnResetRef.current = currentSessionId;
+    setRenderedTurnCount(DEFAULT_TURN_COUNT);
+  }
+
+  const turns = useMemo(() => groupMessagesByTurn(messages), [messages]);
+  const visibleTurns = turns.slice(Math.max(0, turns.length - renderedTurnCount));
+  const hasOlderTurns = renderedTurnCount < turns.length;
+
+  // Load more turns (scroll delta correction)
+  const loadMore = useCallback(() => {
+    if (!hasOlderTurns) return;
+    prevHeightRef.current = scrollRef.current?.scrollHeight ?? 0;
+    setRenderedTurnCount(prev => Math.min(prev + LOAD_MORE_TURNS, turns.length));
+  }, [hasOlderTurns, turns.length]);
+
+  // IntersectionObserver for auto-loading older turns
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root || !hasOlderTurns) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) loadMore();
+      },
+      { root, rootMargin: '200px 0px 0px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasOlderTurns, loadMore]);
+
+  // Fix scroll jump after loading older turns
+  useLayoutEffect(() => {
+    if (prevHeightRef.current > 0 && scrollRef.current) {
+      const delta = scrollRef.current.scrollHeight - prevHeightRef.current;
+      if (delta > 0) scrollRef.current.scrollTop += delta;
+      prevHeightRef.current = 0;
+    }
+  }, [renderedTurnCount]);
+
   // Track whether user is near bottom (within 150px) for smart auto-scroll
   const isNearBottomRef = useRef(true);
   const handleScroll = useCallback(() => {
@@ -57,9 +109,9 @@ export function Chat() {
     isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     // Continuously save scroll position on every scroll event
     if (currentSessionId) {
-      scrollPositions.set(currentSessionId, el.scrollTop);
+      scrollPositions.set(currentSessionId, { scrollTop: el.scrollTop, turnCount: renderedTurnCount });
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, renderedTurnCount]);
 
   // Flag: when session changes or component mounts, restore scroll after React renders
   const pendingRestoreRef = useRef<string | null>(currentSessionId);
@@ -84,7 +136,8 @@ export function Chat() {
 
     const saved = scrollPositions.get(sid);
     if (saved !== undefined) {
-      el.scrollTop = saved;
+      setRenderedTurnCount(saved.turnCount);
+      el.scrollTop = saved.scrollTop;
       isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     } else {
       el.scrollTop = el.scrollHeight;
@@ -135,18 +188,33 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={{
-                    id: msg.id,
-                    role: msg.role,
-                    content: msg.resolvedContent ?? buildContent(msg.content, msg.contentBlocks),
-                    timestamp: msg.timestamp ?? safeTimestamp(msg.createdAt),
-                  } as RawMessage}
-                  showThinking={showThinking}
-                />
-              ))}
+              {/* Load more sentinel */}
+              {hasOlderTurns && (
+                <div ref={sentinelRef} className="flex justify-center py-2">
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={loadMore}
+                  >
+                    加载更多消息...
+                  </button>
+                </div>
+              )}
+
+              {/* Render only visible turns */}
+              {visibleTurns.map((turn) =>
+                turn.map((msg) => (
+                  <ChatMessage
+                    key={msg.id}
+                    message={{
+                      id: msg.id,
+                      role: msg.role,
+                      content: msg.resolvedContent ?? buildContent(msg.content, msg.contentBlocks),
+                      timestamp: msg.timestamp ?? safeTimestamp(msg.createdAt),
+                    } as RawMessage}
+                    showThinking={showThinking}
+                  />
+                ))
+              )}
 
               {/* Streaming blocks rendered as sequential segments */}
               {sending && hasStreamingContent && (

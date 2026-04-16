@@ -4,6 +4,25 @@
  * message content formats returned by the Gateway.
  */
 import type { RawMessage, ContentBlock } from '@/types/chat';
+import type { Message } from '@/stores/chat';
+
+/**
+ * Group flat message list into conversation turns.
+ * A turn starts at each user message and includes subsequent assistant messages.
+ */
+export function groupMessagesByTurn(messages: Message[]): Message[][] {
+  const turns: Message[][] = [];
+  let current: Message[] = [];
+  for (const msg of messages) {
+    if (msg.role === 'user' && current.length > 0) {
+      turns.push(current);
+      current = [];
+    }
+    current.push(msg);
+  }
+  if (current.length > 0) turns.push(current);
+  return turns;
+}
 
 /**
  * Clean Gateway metadata from user message text for display.
