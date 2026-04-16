@@ -20,7 +20,7 @@ export function InitBanner() {
     return () => clearTimeout(timer);
   }, [initCard]);
 
-  if (!initCard || dismissed) return null;
+  if (!initCard || dismissed || initCard.type === 'already') return null;
 
   const borderColor = {
     initializing: 'border-blue-300 bg-blue-50',
