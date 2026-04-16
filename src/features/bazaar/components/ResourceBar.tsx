@@ -61,7 +61,7 @@ export function ResourceBar() {
               : 'none',
           animation: sending ? 'bz-pulse-yellow 1.5s ease-in-out infinite' : connection.connected ? 'bz-pulse-green 2s ease-in-out infinite' : 'none',
         }} />
-        <span className="text-xs font-medium">{sending ? '处理中' : connection.connected ? '在线' : '离线'}</span>
+        <span className="text-xs font-medium">{sending ? '处理中' : connection.connected ? '已连接' : '本地模式'}</span>
       </div>
 
       <ResourceItem icon={Cpu} label="行动流" value={activeTasks} max={maxSlots} color="var(--bz-cyan)" glow="var(--bz-cyan)" />

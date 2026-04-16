@@ -48,8 +48,8 @@ export function MyAgentPanel() {
           <span className="text-2xl">{agentAvatar}</span>
           <div className="min-w-0 flex-1">
             <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? '本地 Agent'}</div>
-            <div className="flex items-center gap-1 text-xs" style={{ color: connected ? 'var(--bz-green)' : 'var(--bz-text-dim)' }}>
-              {connected ? <><Wifi className="h-3 w-3" /> 已连接</> : <><WifiOff className="h-3 w-3" /> 离线</>}
+            <div className="flex items-center gap-1 text-xs" style={{ color: connected ? 'var(--bz-green)' : 'var(--bz-amber)' }}>
+              {connected ? <><Wifi className="h-3 w-3" /> 已连接星图</> : <><WifiOff className="h-3 w-3" /> 本地模式</>}
             </div>
           </div>
         </div>
