@@ -515,3 +515,53 @@
   width: 14px !important;
   height: 14px !important;
 }
+
+/* ── Code Block Collapse ── */
+
+[data-streamdown="code-block-body"] {
+  transition: max-height 0.2s ease-out;
+}
+
+/* Gradient fade at bottom of collapsed code blocks */
+[data-streamdown="code-block-body"][data-collapsed="true"]::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: linear-gradient(transparent, hsl(var(--card)));
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* No-language blocks: transparent gradient */
+[data-streamdown="code-block"][data-language=""] [data-streamdown="code-block-body"][data-collapsed="true"]::after {
+  background: linear-gradient(transparent, hsl(var(--background)));
+}
+
+.code-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.375rem 0;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.code-collapse-btn:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+}
+
+.code-collapse-btn.expanded {
+  border-radius: 0;
+  margin-top: -1px;
+}

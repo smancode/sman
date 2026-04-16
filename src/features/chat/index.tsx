@@ -9,7 +9,7 @@ import { ChatInput, type StagedMedia } from './ChatInput';
 import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
-import { streamdownComponents } from './streamdown-components';
+import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import type { RawMessage } from '@/types/chat';
 
 function safeTimestamp(createdAt: string): number | undefined {
@@ -243,11 +243,12 @@ function StreamingBlocksRenderer({
 
 function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming: boolean }) {
   const codePlugin = useCodePlugin();
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
 
   if (!text.trim()) return null;
 
   return (
-    <div className="w-full text-foreground">
+    <div className="w-full text-foreground" ref={collapseRef}>
       <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all">
         <Streamdown
           mode={isStreaming ? 'streaming' : 'static'}

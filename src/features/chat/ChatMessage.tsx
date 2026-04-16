@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import type { RawMessage, AttachedFileMeta } from '@/types/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
-import { streamdownComponents } from './streamdown-components';
+import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -353,8 +353,10 @@ function MessageBubble({
   }
 
   // Assistant message: no bubble — plain text rendering
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
+
   return (
-    <div className="w-full">
+    <div className="w-full" ref={collapseRef}>
       <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words break-all text-foreground">
         <Streamdown
           mode={isStreaming ? 'streaming' : 'static'}
@@ -377,6 +379,7 @@ function MessageBubble({
 function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
   const codePlugin = useCodePlugin();
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
 
   return (
     <div className="w-full text-[14px]">
@@ -388,7 +391,7 @@ function ThinkingBlock({ content }: { content: string }) {
         <span className="font-medium">思考</span>
       </button>
       {expanded && (
-        <div className="text-muted-foreground">
+        <div className="text-muted-foreground" ref={collapseRef}>
           <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none opacity-75">
             <Streamdown
               mode="static"
