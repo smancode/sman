@@ -88,7 +88,7 @@ export class ClaudeSessionManager {
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
-  private static readonly STREAM_STALL_MS = 3 * 60 * 1000; // 3 minutes no data = stalled
+  private static readonly STREAM_STALL_MS = 5 * 60 * 1000; // 5 minutes no data = stalled
   private static readonly SEND_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for v2Session.send()
   private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
   private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
@@ -673,6 +673,18 @@ export class ClaudeSessionManager {
           }
           return;
         }
+        // Check if process is dead — abort immediately regardless of elapsed time
+        const v2Info = this.v2Sessions.get(sessionId);
+        const pid = v2Info ? (v2Info.session as any).pid : undefined;
+        if (pid !== undefined) {
+          try { process.kill(pid, 0); } catch {
+            this.log.warn(`V2 session process dead (PID: ${pid}) for ${sessionId}, aborting...`);
+            stallAbortReason = 'process_dead';
+            abortController.abort();
+            clearInterval(stallChecker!);
+            return;
+          }
+        }
         if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
           this.log.warn(`Stream stalled for session ${sessionId} (no data for ${Math.round(ClaudeSessionManager.STREAM_STALL_MS / 1000)}s), aborting...`);
           stallAbortReason = 'stall';
@@ -1106,6 +1118,17 @@ export class ClaudeSessionManager {
         }
         return;
       }
+      // Check if process is dead — abort immediately
+      const cronV2Info = this.v2Sessions.get(sessionId);
+      const cronPid = cronV2Info ? (cronV2Info.session as any).pid : undefined;
+      if (cronPid !== undefined) {
+        try { process.kill(cronPid, 0); } catch {
+          this.log.warn(`Cron: V2 session process dead (PID: ${cronPid}) for ${sessionId}, aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+          return;
+        }
+      }
       if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
         this.log.warn(`Cron stream stalled for session ${sessionId}, aborting...`);
         abortController.abort();
@@ -1252,6 +1275,17 @@ export class ClaudeSessionManager {
           clearInterval(stallChecker);
         }
         return;
+      }
+      // Check if process is dead — abort immediately
+      const chatbotV2Info = this.v2Sessions.get(sessionId);
+      const chatbotPid = chatbotV2Info ? (chatbotV2Info.session as any).pid : undefined;
+      if (chatbotPid !== undefined) {
+        try { process.kill(chatbotPid, 0); } catch {
+          this.log.warn(`Chatbot: V2 session process dead (PID: ${chatbotPid}) for ${sessionId}, aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+          return;
+        }
       }
       if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
         this.log.warn(`Chatbot stream stalled for session ${sessionId}, aborting...`);
