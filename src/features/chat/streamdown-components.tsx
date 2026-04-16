@@ -47,61 +47,76 @@ export const streamdownComponents: Components = {
 
 // ── Code Block Collapse Logic ──────────────────────────────────
 
-const COLLAPSE_THRESHOLD = 15;
-const COLLAPSED_MAX_HEIGHT = 384; // ~15 lines * ~25.6px per line
+const COLLAPSED_MAX_HEIGHT = 320; // px
+const PROCESSED_ATTR = 'data-code-collapse-processed';
 
 /**
  * Adds collapse/expand behavior to code blocks rendered by Streamdown.
- * Called via useEffect after DOM is ready.
+ * Uses actual rendered height to decide whether to collapse.
+ * Button is placed inside code-block-actions alongside copy/download.
  */
 export function applyCodeBlockCollapse(container: HTMLElement | null) {
   if (!container) return;
 
-  const codeBlocks = container.querySelectorAll('[data-streamdown="code-block-body"]');
+  const codeBlocks = container.querySelectorAll(
+    '[data-streamdown="code-block"]:not([data-language=""])'
+  );
 
   codeBlocks.forEach((block) => {
-    // Skip already processed blocks
-    if ((block as HTMLElement).dataset.collapsed !== undefined) return;
-
     const el = block as HTMLElement;
-    const lines = el.querySelectorAll('.line');
-    const lineCount = lines.length;
 
-    // Also check via newline count as fallback
-    const textContent = el.textContent || '';
-    const textLineCount = textContent.split('\n').filter(l => l.trim()).length;
-    const effectiveLines = Math.max(lineCount, textLineCount);
+    if (el.hasAttribute(PROCESSED_ATTR)) return;
+    el.setAttribute(PROCESSED_ATTR, '');
 
-    if (effectiveLines <= COLLAPSE_THRESHOLD) return;
+    const body = el.querySelector('[data-streamdown="code-block-body"]') as HTMLElement | null;
+    const target = body || el;
 
-    // Mark as processed and set initial collapsed state
-    el.dataset.collapsed = 'true';
-    el.style.maxHeight = `${COLLAPSED_MAX_HEIGHT}px`;
-    el.style.overflow = 'hidden';
-    el.style.position = 'relative';
+    requestAnimationFrame(() => {
+      if (target.scrollHeight <= COLLAPSED_MAX_HEIGHT + 20) {
+        el.removeAttribute(PROCESSED_ATTR);
+        return;
+      }
 
-    // Create expand button
-    const expandBtn = document.createElement('button');
-    expandBtn.className = 'code-collapse-btn';
-    expandBtn.textContent = `展开全部 (${effectiveLines} 行)`;
-    expandBtn.addEventListener('click', () => {
-      if (el.dataset.collapsed === 'true') {
-        el.dataset.collapsed = 'false';
-        el.style.maxHeight = 'none';
-        expandBtn.textContent = '收起';
-        expandBtn.classList.add('expanded');
+      // Set collapsed state
+      target.dataset.collapsed = 'true';
+      target.style.maxHeight = `${COLLAPSED_MAX_HEIGHT}px`;
+      target.style.overflow = 'hidden';
+      target.style.position = 'relative';
+
+      // Find or create the actions container
+      const actionsWrapper = el.querySelector(':scope > :has([data-streamdown="code-block-actions"])');
+      let actionsContainer: HTMLElement | null = null;
+      if (actionsWrapper) {
+        actionsContainer = actionsWrapper.querySelector('[data-streamdown="code-block-actions"]');
+      }
+
+      // Create toggle button
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'code-collapse-toggle';
+      toggleBtn.title = '展开全部';
+      toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
+      toggleBtn.addEventListener('click', () => {
+        const isCollapsed = target.dataset.collapsed === 'true';
+        if (isCollapsed) {
+          target.dataset.collapsed = 'false';
+          target.style.maxHeight = 'none';
+          toggleBtn.title = '收起';
+          toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>';
+        } else {
+          target.dataset.collapsed = 'true';
+          target.style.maxHeight = `${COLLAPSED_MAX_HEIGHT}px`;
+          toggleBtn.title = '展开全部';
+          toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
+        }
+      });
+
+      // Insert into actions container if found, otherwise append to el
+      if (actionsContainer) {
+        actionsContainer.prepend(toggleBtn);
       } else {
-        el.dataset.collapsed = 'false';
-        // Re-collapse
-        el.dataset.collapsed = 'true';
-        el.style.maxHeight = `${COLLAPSED_MAX_HEIGHT}px`;
-        expandBtn.textContent = `展开全部 (${effectiveLines} 行)`;
-        expandBtn.classList.remove('expanded');
+        el.appendChild(toggleBtn);
       }
     });
-
-    // Insert button after the code block body
-    el.insertAdjacentElement('afterend', expandBtn);
   });
 }
 
@@ -120,22 +135,8 @@ export function useCodeBlockCollapse<T extends HTMLElement = HTMLDivElement>() {
     applyCodeBlockCollapse(container);
 
     // Watch for new code blocks added during streaming
-    const observer = new MutationObserver((mutations) => {
-      let hasNewBlocks = false;
-      for (const mutation of mutations) {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          hasNewBlocks = true;
-          break;
-        }
-        // Also handle text changes during streaming
-        if (mutation.type === 'characterData') {
-          hasNewBlocks = true;
-          break;
-        }
-      }
-      if (hasNewBlocks) {
-        applyCodeBlockCollapse(container);
-      }
+    const observer = new MutationObserver(() => {
+      applyCodeBlockCollapse(container);
     });
 
     observer.observe(container, {
