@@ -52,7 +52,7 @@ export function BazaarDashboard() {
               style={{ color: subView === 'main' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               onClick={() => setSubView('main')}
             >
-              星图总览
+              协作星图
             </button>
             <button
               className={cn('text-xs font-medium px-2 py-0.5 rounded transition-colors flex items-center gap-1', subView === 'evolution' && 'bg-white/10')}
