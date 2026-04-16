@@ -45,7 +45,7 @@ export function MyAgentPanel() {
           <button className="h-7 w-7 p-0 flex-shrink-0 rounded hover:bg-white/10" onClick={() => navigate('/chat')} style={{ color: 'var(--bz-text-dim)' }}>
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <img src="/favicon.svg" alt="Agent" className="h-7 w-7 object-contain rounded dark:brightness-0 dark:invert" />
+          <img src="/favicon.svg" alt="Agent" className="h-7 w-7 object-contain rounded dark:brightness-0 dark:invert dark:opacity-80" />
           <div className="min-w-0 flex-1">
             <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? '本地 Agent'}</div>
             <div className="flex items-center gap-1 text-xs" style={{ color: connected ? 'var(--bz-green)' : 'var(--bz-amber)' }}>
