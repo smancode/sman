@@ -1,5 +1,5 @@
 // src/features/bazaar/BazaarDashboard.tsx
-// Agent 集市 — Collaboration Atlas 协作星图
+// Agent 星图 — Collaboration Atlas
 // 深色基底 + 网络沙盘 + 世界事件流 + 资源条 + 进化仓
 
 import { useEffect, useState } from 'react';

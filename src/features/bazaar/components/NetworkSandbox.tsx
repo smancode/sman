@@ -339,7 +339,7 @@ export function NetworkSandbox() {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center space-y-1">
             <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>星图待绘制</p>
-            <p className="text-[10px]" style={{ color: 'var(--bz-text-dim)', opacity: 0.5 }}>连接集市后，协作星路将在此显现</p>
+            <p className="text-[10px]" style={{ color: 'var(--bz-text-dim)', opacity: 0.5 }}>连接星图服务器后，协作星路将在此显现</p>
           </div>
         </div>
       )}

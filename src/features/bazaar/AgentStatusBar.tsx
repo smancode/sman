@@ -16,7 +16,7 @@ export function AgentStatusBar() {
         </div>
         <div className="flex items-center gap-1.5">
           <Zap className="h-3.5 w-3.5 text-muted-foreground/50" />
-          <span className="text-muted-foreground/50">集市未连接</span>
+          <span className="text-muted-foreground/50">星图未连接</span>
         </div>
       </div>
     );

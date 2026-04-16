@@ -73,7 +73,7 @@ export function Sidebar() {
               >
                 <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
               </div>
-              <span>Agent集市</span>
+              <span>Agent星图</span>
             </>
           )}
         </NavLink>

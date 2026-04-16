@@ -14,7 +14,7 @@ const SECTIONS = [
   { id: 'chatbot', label: 'Bot 机器人设置', icon: Bot },
   { id: 'llm', label: '模型配置', icon: Cpu },
   { id: 'websearch', label: '网络搜索配置', icon: Search },
-  { id: 'bazaar', label: 'Agent集市配置', icon: Store },
+  { id: 'bazaar', label: 'Agent星图配置', icon: Store },
 ] as const;
 
 export function Settings() {

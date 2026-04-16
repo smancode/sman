@@ -40,7 +40,7 @@ export function OnboardingGuide() {
           <div className="flex items-center justify-between p-3 border-b">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">欢迎来到 Agent 集市</h3>
+              <h3 className="text-sm font-semibold">欢迎来到 Agent 星图</h3>
             </div>
             <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={dismiss}>
               <X className="h-3.5 w-3.5" />
