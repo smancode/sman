@@ -280,12 +280,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Remove from local state and switch session if needed
           const state = get();
           const remaining = state.sessions.filter(s => s.key !== sessionId);
-          const newId = state.currentSessionId === sessionId
+          const switchingToDeleted = state.currentSessionId === sessionId;
+          const newId = switchingToDeleted
             ? (remaining.length > 0 ? remaining[0].key : '')
             : state.currentSessionId;
           set({ sessions: remaining, currentSessionId: newId });
-          if (newId && newId !== state.currentSessionId) {
-            get().switchSession(newId);
+          if (switchingToDeleted) {
+            // Deleted the active session — load the replacement session's messages
+            sessionCache.invalidate(newId);
+            get().loadHistory();
           }
           resolve();
         }

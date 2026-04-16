@@ -12,12 +12,12 @@
  * Also removes CLAUDE_CODE_ENTRYPOINT/CLAUDE_AGENT_SDK_VERSION markers so the CLI
  * subprocess appears as a native invocation (enabling /skill commands natively).
  *
- * Patch summary:
- *   1. spawnLocalProcess return: expose pid from child process
+ * Patch summary (SDK 0.2.110):
+ *   1. [SKIPPED] pid exposure — already built into SDK 0.2.110+
  *   2. ProcessTransport.initialize: remove CLAUDE_CODE_ENTRYPOINT
  *   3. SessionImpl constructor: remove CLAUDE_CODE_ENTRYPOINT
  *   4. SessionImpl constructor: forward all options to ProcessTransport + Query
- *   5. SessionImpl: add pid/interrupt/setModel/setPermissionMode methods
+ *   5. SessionImpl: add interrupt/setModel/setPermissionMode methods (pid built-in)
  *   6. query() function: remove CLAUDE_AGENT_SDK_VERSION
  *   7. query() function: remove CLAUDE_CODE_ENTRYPOINT
  */
@@ -31,11 +31,8 @@ const __dirname = dirname(__filename);
 
 // Resolve SDK file path
 const sdkPaths = [
-  // Local dev: scripts/patch-sdk.mjs → node_modules/ is at project root
   join(__dirname, '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
-  // pnpm monorepo
   join(__dirname, '..', 'node_modules', '.pnpm', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
-  // Remote deploy: patch-sdk.mjs is in /root/sman/app/ alongside node_modules/
   join(__dirname, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs'),
 ];
 
@@ -62,12 +59,7 @@ if (content.includes('[PATCHED_BY_SMAN]')) {
 }
 
 const patches = [
-  // ── Patch 1: spawnLocalProcess - expose pid from child process ──
-  {
-    name: 'Expose child process pid in spawnLocalProcess return',
-    find: `return{stdin:G.stdin,stdout:G.stdout,get killed(){return G.killed},get exitCode(){return G.exitCode},kill:G.kill.bind(G),on:G.on.bind(G),once:G.once.bind(G),off:G.off.bind(G)}`,
-    replace: `return{stdin:G.stdin,stdout:G.stdout,get pid(){return G.pid},get killed(){return G.killed},get exitCode(){return G.exitCode},kill:G.kill.bind(G),on:G.on.bind(G),once:G.once.bind(G),off:G.off.bind(G)}`,
-  },
+  // ── Patch 1: SKIPPED — pid already built into SDK 0.2.110+ ──
 
   // ── Patch 2: ProcessTransport.initialize - remove CLAUDE_CODE_ENTRYPOINT ──
   {
@@ -79,22 +71,24 @@ const patches = [
   // ── Patch 3: SessionImpl constructor - remove CLAUDE_CODE_ENTRYPOINT ──
   {
     name: 'Remove CLAUDE_CODE_ENTRYPOINT in SessionImpl constructor',
-    find: `let Y={...$.env??process.env};if(!Y.CLAUDE_CODE_ENTRYPOINT)Y.CLAUDE_CODE_ENTRYPOINT="sdk-ts";this.abortController=c1()`,
-    replace: `let Y={...$.env??process.env};this.abortController=c1()`,
+    find: `if(!Y.CLAUDE_CODE_ENTRYPOINT)Y.CLAUDE_CODE_ENTRYPOINT="sdk-ts";this.abortController=c1()`,
+    replace: `this.abortController=c1()`,
   },
 
   // ── Patch 4: SessionImpl constructor - forward all options to ProcessTransport + Query ──
+  // Split into 2 sub-patches: ProcessTransport args + includePartialMessages + Query initConfig
   {
-    name: 'Forward all options in SessionImpl constructor',
+    name: 'Forward ProcessTransport options + Query initConfig',
     find: `let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:{},thinkingConfig:void 0,maxTurns:void 0,maxBudgetUsd:void 0,model:$.model,fallbackModel:void 0,permissionMode:$.permissionMode??"default",allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions??!1,continueConversation:!1,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:{},strictMcpConfig:!1,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:!1,forkSession:!1,resumeSessionAt:void 0});this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,new Map),this.query.streamInput(this.inputStream)`,
     replace: `let smanMcpServers=new Map;let smanProcessedMcp={};if($.mcpServers)for(let[k,v]of Object.entries($.mcpServers))if(v.type==="sdk"&&"instance" in v)smanMcpServers.set(k,v.instance),smanProcessedMcp[k]={type:"sdk",name:k};else smanProcessedMcp[k]=v;let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,stderr:$.stderr,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:$.extraArgs??{},thinkingConfig:$.thinkingConfig,maxTurns:$.maxTurns,maxBudgetUsd:$.maxBudgetUsd,model:$.model,fallbackModel:$.fallbackModel,permissionMode:$.permissionMode,allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions,continueConversation:$.continueConversation,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:smanProcessedMcp,strictMcpConfig:$.strictMcpConfig,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:$.includePartialMessages??!0,forkSession:$.forkSession,resumeSessionAt:$.resumeSessionAt,plugins:$.plugins});let smanInitCfg={systemPrompt:typeof $.systemPrompt==="string"?$.systemPrompt:($.systemPrompt?.append??"")};this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,smanMcpServers,void 0,smanInitCfg),this.query.streamInput(this.inputStream)`,
   },
 
-  // ── Patch 5: SessionImpl - add pid/interrupt/setModel/setPermissionMode ──
+  // ── Patch 5: SessionImpl - add interrupt/setModel/setPermissionMode methods ──
+  // Note: pid is already built-in in 0.2.110+
   {
-    name: 'Add pid/interrupt/setModel/setPermissionMode to SessionImpl',
-    find: `if(yield $,$.type==="result")return}}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
-    replace: `if(yield $,$.type==="result")return}}get pid(){return this.query?.transport?.process?.pid}async interrupt(){return this.query.interrupt()}async setModel($){return this.query.setModel($)}async setPermissionMode($){return this.query.setPermissionMode($)}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
+    name: 'Add interrupt/setModel/setPermissionMode to SessionImpl',
+    find: `close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
+    replace: `async interrupt(){return this.query.interrupt()}async setModel($){return this.query.setModel($)}async setPermissionMode($){return this.query.setPermissionMode($)}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
   },
 
   // ── Patch 6: query() function - remove CLAUDE_AGENT_SDK_VERSION ──
