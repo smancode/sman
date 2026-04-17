@@ -52,9 +52,29 @@ function getHomeDir(): string {
 }
 
 function ensureHomeDir(homeDir: string): void {
-  const dirs = ['skills', 'logs'];
+  const dirs = ['skills', 'logs', 'claude-config'];
   for (const dir of dirs) {
     fs.mkdirSync(path.join(homeDir, dir), { recursive: true });
+  }
+
+  // Write minimal settings.json in isolated claude-config dir
+  // to prevent CLI from reading ~/.claude/settings.json which may contain
+  // conflicting env vars (ANTHROPIC_AUTH_TOKEN, etc.)
+  const claudeSettingsDir = path.join(homeDir, 'claude-config');
+  const claudeSettingsPath = path.join(claudeSettingsDir, 'settings.json');
+  if (!fs.existsSync(claudeSettingsPath)) {
+    const minimalSettings = {
+      permissions: {
+        allow: [
+          'Bash',
+          'Write',
+          'Edit',
+          'MCP',
+        ],
+      },
+    };
+    fs.writeFileSync(claudeSettingsPath, JSON.stringify(minimalSettings, null, 2));
+    log.info(`Created isolated CLI settings at ${claudeSettingsPath}`);
   }
 
   const configPath = path.join(homeDir, 'config.json');

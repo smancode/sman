@@ -239,6 +239,42 @@ export class ClaudeSessionManager {
     return '';
   }
 
+  /**
+   * Resolve the model name to pass to Claude CLI.
+   *
+   * CLI's internal Anthropic SDK does model-specific optimizations (prompt caching,
+   * thinking token config, capability checks) that may send extra API requests.
+   * Non-Anthropic model names (e.g. "glm-5.1") trigger these checks against the
+   * proxy endpoint, which may rate-limit them. Using a standard Anthropic model name
+   * avoids these issues — the proxy maps it to the appropriate model server-side.
+   */
+  private resolveCliModel(configModel: string): string {
+    const ANTHROPIC_MODEL_PREFIXES = ['claude-', 'anthropic-'];
+    if (ANTHROPIC_MODEL_PREFIXES.some(p => configModel.toLowerCase().startsWith(p))) {
+      return configModel;
+    }
+    // Non-Anthropic model — let CLI use its default
+    this.log.info(`Non-Anthropic model "${configModel}" detected, using CLI default (proxy will map)`);
+    return 'claude-sonnet-4-6';
+  }
+
+  /**
+   * Prevents leaked vars (ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY, etc.)
+   * from ~/.claude/settings.json or parent process from overriding sman's config.
+   * Based on hello-halo's sdk-config.ts getCleanUserEnv() pattern.
+   */
+  private static readonly ENV_PREFIXES_TO_STRIP = ['ANTHROPIC_', 'OPENAI_', 'CLAUDE_'];
+
+  private getCleanEnv(): Record<string, string | undefined> {
+    const env = { ...process.env as Record<string, string | undefined> };
+    for (const key of Object.keys(env)) {
+      if (ClaudeSessionManager.ENV_PREFIXES_TO_STRIP.some(prefix => key.startsWith(prefix))) {
+        delete env[key];
+      }
+    }
+    return env;
+  }
+
   private buildSessionOptions(workspace: string): Record<string, any> {
     if (!this.config?.llm?.apiKey) {
       throw new Error('缺少 API Key，请在设置中配置');
@@ -247,11 +283,18 @@ export class ClaudeSessionManager {
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    // Clean env: strip all ANTHROPIC_*/OPENAI_*/CLAUDE_* vars first, then set exactly what we need.
+    // This prevents ~/.claude/settings.json env vars (ANTHROPIC_AUTH_TOKEN, etc.) from leaking
+    // into the CLI subprocess and conflicting with our own config.
+    const env = this.getCleanEnv();
     env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
     if (this.config.llm.baseUrl) {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
     }
+    // Use isolated config dir to avoid CLI reading ~/.claude/settings.json
+    // which may contain conflicting env vars (ANTHROPIC_AUTH_TOKEN, etc.)
+    const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
+    env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
 
     const claudeCodePath = this.getClaudeCodePath();
 
@@ -313,8 +356,15 @@ export class ClaudeSessionManager {
       this.log.warn(`[Skills] failed to inject dev-workflow: ${e.message}`);
     }
 
+    // Model resolution: CLI's internal Anthropic SDK may send additional requests
+    // (model capabilities, prompt caching) based on the model name. Non-Anthropic
+    // model names (e.g. "glm-5.1") can trigger rate limiting on third-party proxies
+    // like Zhipu. Use the default Anthropic model name and let the proxy map it.
+    // The model from config is stored for reference but not passed to CLI.
+    const cliModel = this.resolveCliModel(this.config.llm.model);
+
     const opts: Record<string, any> = {
-      model: this.config.llm.model,
+      model: cliModel,
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
       cwd: workspace,
@@ -374,11 +424,13 @@ export class ClaudeSessionManager {
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+    const env = this.getCleanEnv();
     env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
     if (this.config.llm.baseUrl) {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
     }
+    const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
+    env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
 
     const claudeCodePath = this.getClaudeCodePath();
 
@@ -388,7 +440,7 @@ export class ClaudeSessionManager {
     }
 
     return {
-      model: this.config.llm.model,
+      model: this.resolveCliModel(this.config.llm.model),
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
       cwd: workspace,

@@ -292,8 +292,9 @@ export async function testAnthropicCompat(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1,
+        max_tokens: 5,
         messages: [{ role: 'user', content: 'hi' }],
+        stream: true,
       }),
     });
 
