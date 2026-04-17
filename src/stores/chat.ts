@@ -853,8 +853,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
           }
         } else {
+          // Streaming collected nothing — backend may have stored the message in SQLite.
+          // Fallback: reload history from backend to avoid showing an empty response.
           if (get().currentSessionId === streamSessionId) {
             set({ streamingBlocks: [], sending: false, waitingHint: null });
+            get().loadHistory();
           }
         }
       });

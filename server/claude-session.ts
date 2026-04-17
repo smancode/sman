@@ -911,6 +911,7 @@ export class ClaudeSessionManager {
       stallChecker.unref();
 
       let firstEventReceived = false;
+      let deltaCount = 0;
       for await (const sdkMsg of v2Session.stream()) {
         lastActivityAt = Date.now();
         if (abortController.signal.aborted) break;
@@ -995,6 +996,10 @@ export class ClaudeSessionManager {
                   }));
                 } else {
                   fullContent += delta.content;
+                  deltaCount++;
+                  if (deltaCount <= 3) {
+                    this.log.info(`[stream] ${sessionId}: sending text delta #${deltaCount}, len=${delta.content.length}`);
+                  }
                   wsSend(JSON.stringify({
                     type: 'chat.delta',
                     sessionId,
@@ -1077,6 +1082,7 @@ export class ClaudeSessionManager {
             const result = sdkMsg as any;
             const cost = result.total_cost_usd || 0;
             const isError = result.is_error;
+            this.log.info(`[stream] ${sessionId}: result event received, is_error=${isError}, deltas_sent=${deltaCount}, fullContent_len=${fullContent.length}`);
 
             // Save SDK session ID
             if (result.session_id) {
