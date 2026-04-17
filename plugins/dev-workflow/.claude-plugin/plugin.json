@@ -1,0 +1,4 @@
+{
+  "name": "dev-workflow",
+  "description": "Structured development workflow: brainstorm → plan → implement → review → verify → simplify → summarize with constraint enforcement and divide-and-conquer"
+}

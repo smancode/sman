@@ -37,23 +37,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // prod mode (compiled, non-asar): __dirname = .../smanbase/dist/server/server/
 // prod mode (Electron asar): __dirname = .../app.asar/dist/server/server/
 //   plugins are unpacked to: .../app.asar.unpacked/plugins/
+//   IMPORTANT: Electron patches fs to read inside asar, but claude CLI subprocess cannot.
+//   So we MUST resolve to app.asar.unpacked/ path for plugins.
 function resolveProjectRoot(): string {
-  // 1. Direct relative (dev mode: __dirname/server/ → root has plugins/)
+  // 1. Direct relative (dev mode: __dirname = server/ → root has plugins/)
   if (fs.existsSync(path.join(__dirname, '..', 'plugins'))) {
     return path.resolve(__dirname, '..');
   }
-  // 2. Compiled dist layout: __dirname = dist/server/server/ → root = ../../..
-  if (fs.existsSync(path.join(__dirname, '..', '..', '..', 'plugins'))) {
-    return path.resolve(__dirname, '..', '..', '..');
-  }
-  // 3. Electron asar: plugins unpacked to app.asar.unpacked/
-  //    __dirname = .../app.asar/dist/server/server/ → replace app.asar with app.asar.unpacked
+
+  // 2. Electron asar: __dirname contains "app.asar"
+  //    The asar path works for our Node process (Electron patches fs),
+  //    but claude CLI subprocess cannot read inside asar.
+  //    Must redirect to app.asar.unpacked/ for real filesystem access.
   if (__dirname.includes('app.asar')) {
     const unpackedRoot = __dirname.replace('app.asar', 'app.asar.unpacked');
     if (fs.existsSync(path.join(unpackedRoot, '..', '..', '..', 'plugins'))) {
       return path.resolve(unpackedRoot, '..', '..', '..');
     }
   }
+
+  // 3. Compiled dist layout (non-asar): __dirname = dist/server/server/ → root = ../../..
+  if (fs.existsSync(path.join(__dirname, '..', '..', '..', 'plugins'))) {
+    return path.resolve(__dirname, '..', '..', '..');
+  }
+
   // 4. Fallback — return best guess and let caller handle missing plugins
   return path.resolve(__dirname, '..', '..', '..');
 }
@@ -116,7 +123,8 @@ export class ClaudeSessionManager {
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
   private static readonly STREAM_STALL_MS = 5 * 60 * 1000; // 5 minutes no data = stalled
-  private static readonly SEND_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for v2Session.send()
+  private static readonly SEND_TIMEOUT_MS = 120 * 1000; // 2 minutes timeout for v2Session.send()
+  private static readonly SESSION_CREATE_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for session creation
   private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
   private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
 
@@ -254,19 +262,55 @@ export class ClaudeSessionManager {
       env['CLAUDE_BYPASS_PERMISSIONS'] = '1';
     }
 
-    // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
+    // Load bundled plugins via --plugin-dir
+    // superpowers: full plugin (skills + commands + agents + hooks) loaded via --plugin-dir
+    // dev-workflow: single SKILL.md — injected into workspace .claude/skills/ for auto-discovery
     const projectRoot = resolveProjectRoot();
     const pluginsDir = path.join(projectRoot, 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
     this.log.info(`[Plugins] projectRoot=${projectRoot}, pluginsDir=${pluginsDir}`);
-    for (const name of ['superpowers', 'dev-workflow']) {
-      const pluginPath = path.join(pluginsDir, name);
-      if (fs.existsSync(pluginPath)) {
-        plugins.push({ type: 'local', path: pluginPath });
-        this.log.info(`[Plugins] loaded: ${name} from ${pluginPath}`);
-      } else {
-        this.log.warn(`[Plugins] NOT FOUND: ${name} at ${pluginPath}`);
+
+    // Load superpowers plugin via --plugin-dir (has full plugin structure)
+    const superpowersPath = path.join(pluginsDir, 'superpowers');
+    if (fs.existsSync(superpowersPath)) {
+      plugins.push({ type: 'local', path: superpowersPath });
+      this.log.info(`[Plugins] loaded: superpowers from ${superpowersPath}`);
+    } else {
+      this.log.warn(`[Plugins] NOT FOUND: superpowers at ${superpowersPath}`);
+    }
+
+    // Also try loading dev-workflow via --plugin-dir as a bonus
+    const devWorkflowPath = path.join(pluginsDir, 'dev-workflow');
+    if (fs.existsSync(devWorkflowPath)) {
+      plugins.push({ type: 'local', path: devWorkflowPath });
+      this.log.info(`[Plugins] loaded: dev-workflow from ${devWorkflowPath}`);
+    } else {
+      this.log.warn(`[Plugins] NOT FOUND: dev-workflow at ${devWorkflowPath}`);
+    }
+
+    // CRITICAL: Inject dev-workflow SKILL.md into workspace .claude/skills/
+    // This is the primary loading mechanism — CLI auto-discovers workspace skills,
+    // no path resolution issues, works in all environments (dev, prod, asar, non-asar).
+    // dev-workflow's SKILL.md references superpowers skills by name (superpowers:brainstorming etc),
+    // so superpowers plugin must also be loaded (via --plugin-dir above).
+    try {
+      const wsSkillsDir = path.join(workspace, '.claude', 'skills', 'dev-workflow');
+      const wsSkillFile = path.join(wsSkillsDir, 'SKILL.md');
+      // Try multiple source locations for the bundled SKILL.md
+      const candidateSources = [
+        path.join(projectRoot, 'plugins', 'dev-workflow', 'skills', 'dev-workflow', 'SKILL.md'),
+        path.join(__dirname, '..', '..', 'plugins', 'dev-workflow', 'skills', 'dev-workflow', 'SKILL.md'),
+      ];
+      const bundledSkill = candidateSources.find(s => fs.existsSync(s));
+      if (!fs.existsSync(wsSkillFile) && bundledSkill) {
+        fs.mkdirSync(wsSkillsDir, { recursive: true });
+        fs.copyFileSync(bundledSkill, wsSkillFile);
+        this.log.info(`[Skills] injected dev-workflow into ${wsSkillFile} (source: ${bundledSkill})`);
+      } else if (!fs.existsSync(wsSkillFile)) {
+        this.log.warn(`[Skills] could not find bundled dev-workflow SKILL.md to inject`);
       }
+    } catch (e: any) {
+      this.log.warn(`[Skills] failed to inject dev-workflow: ${e.message}`);
     }
 
     const opts: Record<string, any> = {
@@ -480,7 +524,14 @@ export class ClaudeSessionManager {
 
       let v2Session: SDKSession;
       try {
-        v2Session = await unstable_v2_createSession(options as any);
+        // Wrap session creation with timeout — CLI may hang during init (plugin loading, MCP connect, etc.)
+        const createTimeout = ClaudeSessionManager.SESSION_CREATE_TIMEOUT_MS;
+        v2Session = await Promise.race([
+          unstable_v2_createSession(options as any),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`创建会话超时（${createTimeout / 1000}s），CLI 初始化可能卡住`)), createTimeout)
+          ),
+        ]);
       } finally {
         if (prevCwd !== session.workspace) {
           try { process.chdir(prevCwd); } catch { /* ignore */ }
@@ -807,9 +858,15 @@ export class ClaudeSessionManager {
       }, 30_000); // check every 30s
       stallChecker.unref();
 
+      let firstEventReceived = false;
       for await (const sdkMsg of v2Session.stream()) {
         lastActivityAt = Date.now();
         if (abortController.signal.aborted) break;
+
+        if (!firstEventReceived) {
+          firstEventReceived = true;
+          this.log.info(`[stream] ${sessionId}: first event received, type=${sdkMsg.type}`);
+        }
 
         switch (sdkMsg.type) {
           case 'assistant': {

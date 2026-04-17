@@ -153,8 +153,12 @@ if (cliPath) {
       console.warn('[patch-sdk] WARNING: no ?beta=true found in CLI (already stripped?)');
     }
 
-    // Add marker so we don't re-patch
-    cliContent = '/* [CLI_PATCHED_BY_SMAN] removed ?beta=true for proxy compat */\n' + cliContent;
+    // Add marker after shebang (line 1) so we don't break #!/usr/bin/env node
+    const lines = cliContent.split('\n');
+    // Insert marker comment after the shebang line
+    const insertAt = lines[0]?.startsWith('#!') ? 1 : 0;
+    lines.splice(insertAt, 0, '// [CLI_PATCHED_BY_SMAN] removed ?beta=true for proxy compat');
+    cliContent = lines.join('\n');
     writeFileSync(cliPath, cliContent, 'utf-8');
     console.log(`[patch-sdk] CLI patched: ${cliPath}`);
   }

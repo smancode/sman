@@ -15,6 +15,7 @@ tmp/
 build/.tmp-*
 release/
 .VSCodeCounter/
+tests/
 
 # Office skills - large generated dirs (installed by setup script)
 plugins/office-skills/venv/
