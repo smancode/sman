@@ -535,32 +535,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // not the NEW ones. Without this, the old abort message would be picked up by new
     // handlers (since myGeneration === streamGeneration), causing a spurious error.
     if (get().sending) {
-      // Cleanup old stream handlers first so they can still receive the abort response
-      const prevCleanup = streamCleanups.get(streamSessionId);
-      if (prevCleanup) {
-        prevCleanup();
-        streamCleanups.delete(streamSessionId);
-      }
-      clearStreamingBlocks(streamSessionId);
+      // Backend queues the new message behind the active turn — no abort needed.
+      // Wait for the current turn's chat.done to arrive, then proceed normally.
+      // The old stream handlers remain active to finish receiving the current response.
+      await new Promise<void>((resolve) => {
+        const doneTimeout = setTimeout(() => {
+          unsubPrevDone();
+          resolve();
+        }, 300_000); // 5 min safety timeout
 
-      // Send abort to backend and wait for it to finish
-      if (client.connected) {
+        const unsubPrevDone = wrapHandler(client, 'chat.done', (data) => {
+          if (data.sessionId !== streamSessionId) return;
+          clearTimeout(doneTimeout);
+          unsubPrevDone();
+          resolve();
+        });
+      });
+      // Current turn finished — reload history to include the completed response,
+      // then the new message will be sent normally below.
+      const { currentSessionId: refreshedId } = get();
+      if (refreshedId) {
         await new Promise<void>((resolve) => {
-          const abortTimeout = setTimeout(() => {
-            unsubAbort();
-            resolve();
-          }, 3000);
-
-          const unsubAbort = wrapHandler(client, 'chat.aborted', (data) => {
-            if (data.sessionId !== streamSessionId) return;
-            clearTimeout(abortTimeout);
-            unsubAbort();
+          const histTimeout = setTimeout(() => { unsubHist(); resolve(); }, 5000);
+          const unsubHist = wrapHandler(client, 'session.history', (data) => {
+            if (String(data.sessionId) !== refreshedId) return;
+            unsubHist();
+            clearTimeout(histTimeout);
+            if (Array.isArray(data.messages)) {
+              const serverMsgs: Message[] = data.messages.map((m: Record<string, unknown>) => ({
+                id: String(m.id || ''),
+                sessionId: String(m.sessionId || ''),
+                role: (String(m.role || 'user') as 'user' | 'assistant'),
+                content: String(m.content || ''),
+                contentBlocks: m.contentBlocks as ContentBlock[] | undefined,
+                createdAt: String(m.createdAt || ''),
+              }));
+              sessionCache.set(refreshedId, serverMsgs);
+              allMessages = serverMsgs;
+            }
             resolve();
           });
-
-          client.send({ type: 'chat.abort', sessionId: streamSessionId });
+          client.send({ type: 'session.history', sessionId: refreshedId });
         });
       }
+      set({ sending: false, streamingBlocks: [], waitingHint: null });
     }
 
     // Update UI: show user message and start sending indicator
@@ -697,6 +715,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessionCache.set(streamSessionId, [...cachedMessages, assistantMsg]);
           }
         } else {
+          // Streaming collected nothing but backend may have saved partial content to SQLite.
           if (get().currentSessionId === streamSessionId) {
             set({
               streamingBlocks: [],
@@ -709,6 +728,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 },
               } : {}),
             });
+            get().loadHistory();
           }
         }
       });

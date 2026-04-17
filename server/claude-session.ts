@@ -741,17 +741,14 @@ export class ClaudeSessionManager {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
-    // If there's an active query, abort it and wait for the stream to fully exit
+    // Queue behind active query — wait for the current turn to finish before sending.
+    // The SDK does NOT support interrupting a turn mid-execution: sending a user message
+    // while the CLI is in stop_reason=tool_use causes ede_diagnostic errors and 401s.
     if (this.activeStreams.has(sessionId)) {
-      this.log.info(`Aborting active query for session ${sessionId} to process new message`);
-      this.abort(sessionId);
-      // Wait for the previous stream to fully exit (finally block ran, activeStreams deleted)
+      this.log.info(`Query in progress for session ${sessionId}, queuing new message behind current turn`);
       const done = this.streamDone.get(sessionId);
       if (done) await done;
-      // Close the V2 session — interrupt during tool_use leaves the CLI in an inconsistent state.
-      // A fresh session will be created for the new message.
-      this.closeV2Session(sessionId);
-      this.log.info(`Closed V2 session for ${sessionId} after abort, fresh session will be created`);
+      this.log.info(`Previous stream for ${sessionId} completed, now processing queued message`);
     }
 
     if (!this.config?.llm?.apiKey) {
@@ -1221,7 +1218,7 @@ export class ClaudeSessionManager {
       } else {
         const { errorCode, userMessage } = this.classifyError(err);
         const rawMessage = err instanceof Error ? err.message : String(err);
-        this.log.error(`Query error for session ${sessionId}`, { error: rawMessage, errorCode });
+        this.log.error(`Query error for session ${sessionId}`, { error: rawMessage, errorCode, errorName: err instanceof Error ? err.name : undefined, errorStack: err instanceof Error ? err.stack?.slice(0, 500) : undefined });
 
         // Auto-retry for recoverable API errors (400, 500, overloaded, network) — max 2 retries
         if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(errorCode)) {
