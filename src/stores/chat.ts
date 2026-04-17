@@ -60,7 +60,21 @@ interface StreamingThinkingBlock {
   content: string;
 }
 
-export type StreamingBlock = StreamingTextBlock | StreamingTextLiveBlock | StreamingToolBlock | StreamingThinkingBlock;
+/** An interactive question block from AskUserQuestion tool */
+interface StreamingAskUserBlock {
+  type: 'ask_user';
+  askId: string;
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  answered: boolean;
+  answers?: Record<string, string[]>;
+}
+
+export type StreamingBlock = StreamingTextBlock | StreamingTextLiveBlock | StreamingToolBlock | StreamingThinkingBlock | StreamingAskUserBlock;
 
 // ── Error types ──
 
@@ -119,6 +133,7 @@ interface ChatState {
   toggleThinking: () => void;
   refresh: () => void;
   updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
+  answerAskUser: (askId: string, answers: Record<string, string[]>) => void;
 }
 
 // ── Per-session streaming state ──
@@ -772,6 +787,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ));
       });
 
+      const unsubAskUser = wrapHandler(client, 'chat.ask_user', (data) => {
+        if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
+        // Flush pending deltas before adding ask_user block
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        flushDeltas();
+        // Freeze any live text first
+        updateBlocks(blocks => freezeLiveText(blocks));
+
+        const askId = String(data.askId || '');
+        const questions = Array.isArray(data.questions) ? data.questions : [];
+        updateBlocks(blocks => [...blocks, {
+          type: 'ask_user' as const,
+          askId,
+          questions,
+          answered: false,
+        }]);
+      });
+
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
         if (data.sessionId !== streamSessionId) return;
         if (myGeneration !== streamGeneration) return; // Stale done from a previous stream
@@ -859,6 +893,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubToolResult();
         unsubToolProgress();
         unsubToolEnd();
+        unsubAskUser();
         unsubDone();
         unsubErr();
         unsubAborted();
@@ -892,6 +927,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  answerAskUser: (askId, answers) => {
+    const { currentSessionId } = get();
+    if (!currentSessionId) return;
+
+    // Update the ask_user block in streaming blocks
+    const blocks = getStreamingBlocks(currentSessionId);
+    const updated = blocks.map(b => {
+      if (b.type === 'ask_user' && b.askId === askId) {
+        return { ...b, answered: true, answers };
+      }
+      return b;
+    });
+    setStreamingBlocks(currentSessionId, updated);
+    if (get().currentSessionId === currentSessionId) {
+      set({ streamingBlocks: updated });
+    }
+
+    // Send answer to backend
+    const client = getWsClient();
+    if (client) {
+      client.send({
+        type: 'chat.answer_question',
+        sessionId: currentSessionId,
+        askId,
+        answers,
+      });
+    }
+  },
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
   refresh: () => {
     const { currentSessionId } = get();
@@ -928,6 +992,9 @@ function streamingBlocksToContentBlocks(blocks: StreamingBlock[]): ContentBlock[
         } catch {
           result.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
         }
+        break;
+      case 'ask_user':
+        // Don't persist ask_user blocks — they are transient UI state
         break;
     }
   }

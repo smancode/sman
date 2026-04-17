@@ -25,7 +25,6 @@ export function InitBanner() {
   const borderColor = {
     initializing: 'border-blue-300 bg-blue-50',
     complete: 'border-green-300 bg-green-50',
-    already: 'border-gray-300 bg-gray-50',
     error: 'border-red-300 bg-red-50',
   }[initCard.type];
 
@@ -63,26 +62,6 @@ export function InitBanner() {
               <div className="text-xs text-gray-500 mt-1">
                 已加载 {initCard.injectedSkills.length} 个能力:
                 {' ' + initCard.injectedSkills.map(s => s.name).join(', ')}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {initCard.type === 'already' && (
-        <>
-          <span className="text-lg">&#128193;</span>
-          <div className="flex-1">
-            <div className="text-sm">
-              <span className="font-medium">{initCard.projectSummary}</span>
-              {initCard.techStack && initCard.techStack.length > 0 && (
-                <span className="text-gray-500 ml-2">({initCard.techStack.join(', ')})</span>
-              )}
-            </div>
-            {initCard.injectedSkills && (
-              <div className="text-xs text-gray-400 mt-0.5">
-                已加载 {initCard.injectedSkills.length} 个能力
-                {initCard.initializedAt && ` · 初始化于 ${new Date(initCard.initializedAt).toLocaleDateString()}`}
               </div>
             )}
           </div>

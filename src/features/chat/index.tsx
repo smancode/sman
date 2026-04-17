@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loade
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS } from '@/stores/chat';
+import { AskUserCard } from './AskUserCard';
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
@@ -296,6 +297,16 @@ function StreamingBlocksRenderer({
                     durationMs: block.elapsedSeconds != null ? block.elapsedSeconds * 1000 : undefined,
                     result: block.result,
                   }}
+                />
+              );
+            case 'ask_user':
+              return (
+                <AskUserCard
+                  key={`ask-${block.askId || i}`}
+                  askId={block.askId}
+                  questions={block.questions}
+                  answered={block.answered}
+                  answers={block.answers}
                 />
               );
             default:

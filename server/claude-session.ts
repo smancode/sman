@@ -25,6 +25,7 @@ import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js
 import type { MediaAttachment } from './chatbot/types.js';
 import { UserProfileManager } from './user-profile.js';
 import path from 'path';
+import crypto from 'crypto';
 import fs from 'fs';
 
 // Resolve project root for plugin loading
@@ -78,6 +79,15 @@ export class ClaudeSessionManager {
   private capabilityRegistry: CapabilityRegistry | null = null;
   /** Serializes getOrCreateV2Session calls to prevent process.chdir races */
   private v2CreateChain: Promise<void> = Promise.resolve();
+  /** Pending AskUserQuestion promises: sessionId -> { resolve, askId, questions, timer } */
+  private pendingAskUser = new Map<string, {
+    resolve: (result: { behavior: string; updatedInput?: Record<string, unknown> }) => void;
+    askId: string;
+    questions: unknown[];
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  /** Last known wsSend callback per session (for canUseTool AskUserQuestion bridge) */
+  private sessionWsSend = new Map<string, WsSend>();
 
   setUserProfile(manager: UserProfileManager): void {
     this.userProfile = manager;
@@ -116,6 +126,31 @@ export class ClaudeSessionManager {
   /**
    * Get the path to bundled claude-code executable
    */
+  /** Resolve a pending AskUserQuestion promise with the user's answers */
+  resolveAskUser(sessionId: string, askId: string, answers: Record<string, string[]>): boolean {
+    const pending = this.pendingAskUser.get(sessionId);
+    if (!pending || pending.askId !== askId) return false;
+    clearTimeout(pending.timer);
+    this.pendingAskUser.delete(sessionId);
+    this.log.info(`AskUserQuestion answered for session ${sessionId}`);
+    pending.resolve({
+      behavior: 'allow',
+      updatedInput: { questions: pending.questions, answers } as unknown as Record<string, unknown>,
+    });
+    return true;
+  }
+
+  /** Cancel a pending AskUserQuestion (on abort/close) */
+  private cancelPendingAskUser(sessionId: string): void {
+    const pending = this.pendingAskUser.get(sessionId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingAskUser.delete(sessionId);
+      pending.resolve({ behavior: 'deny' });
+      this.log.info(`Cancelled pending AskUserQuestion for session ${sessionId}`);
+    }
+  }
+
   private buildSmanContext(projectName: string): string {
     return [
       '[Sman 开发流程]',
@@ -357,6 +392,43 @@ export class ClaudeSessionManager {
         ? this.buildScannerSessionOptions(session.workspace)
         : this.buildSessionOptions(session.workspace);
 
+      // Inject canUseTool callback for AskUserQuestion bridge (desktop sessions only)
+      if (!isScanner) {
+        const capturedSessionId = sessionId;
+        (options as any).canUseTool = async (params: { toolName: string; input: Record<string, unknown> }) => {
+          if (params.toolName !== 'AskUserQuestion') {
+            return { behavior: 'allow' as const };
+          }
+          const wsSend = this.sessionWsSend.get(capturedSessionId);
+          if (!wsSend) {
+            this.log.warn(`No wsSend for session ${capturedSessionId}, denying AskUserQuestion`);
+            return { behavior: 'deny' as const };
+          }
+          const questions = params.input?.questions ?? [];
+          const askId = crypto.randomUUID();
+          this.log.info(`AskUserQuestion intercepted for session ${capturedSessionId}, askId=${askId}`);
+
+          wsSend(JSON.stringify({
+            type: 'chat.ask_user',
+            sessionId: capturedSessionId,
+            askId,
+            questions,
+          }));
+
+          return new Promise<{ behavior: string; updatedInput?: Record<string, unknown> }>((resolve) => {
+            const ASK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+            const timer = setTimeout(() => {
+              this.pendingAskUser.delete(capturedSessionId);
+              this.log.warn(`AskUserQuestion timed out for session ${capturedSessionId}`);
+              resolve({ behavior: 'deny' });
+            }, ASK_TIMEOUT_MS);
+            timer.unref(); // Don't prevent process exit
+
+            this.pendingAskUser.set(capturedSessionId, { resolve, askId, questions: questions as unknown[], timer });
+          });
+        };
+      }
+
       // Resume from persisted SDK session ID if available
       let sdkSessionId = this.sdkSessionIds.get(sessionId);
       if (!sdkSessionId) {
@@ -412,6 +484,7 @@ export class ClaudeSessionManager {
 
   closeV2Session(sessionId: string): void {
     this.preheatPromises.delete(sessionId);
+    this.cancelPendingAskUser(sessionId);
     const info = this.v2Sessions.get(sessionId);
     if (info) {
       try {
@@ -565,6 +638,7 @@ export class ClaudeSessionManager {
 
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
+    this.sessionWsSend.set(sessionId, wsSend);
 
     // Track when this stream fully exits so the next sendMessage can await it
     let streamResolve!: () => void;
@@ -1027,6 +1101,7 @@ export class ClaudeSessionManager {
       }
     } finally {
       this.activeStreams.delete(sessionId);
+      this.sessionWsSend.delete(sessionId);
       this.streamDone.delete(sessionId);
       streamResolve();
     }
@@ -1508,6 +1583,7 @@ export class ClaudeSessionManager {
   }
 
   abort(sessionId: string, reason?: string): void {
+    this.cancelPendingAskUser(sessionId);
     const controller = this.activeStreams.get(sessionId);
     if (controller) {
       (controller as any)._abortReason = reason;

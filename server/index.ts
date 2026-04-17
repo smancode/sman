@@ -548,6 +548,20 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'chat.answer_question': {
+          if (!msg.sessionId) throw new Error('Missing sessionId');
+          if (!msg.askId) throw new Error('Missing askId');
+          const resolved = sessionManager.resolveAskUser(
+            msg.sessionId,
+            String(msg.askId),
+            (msg.answers ?? {}) as Record<string, string[]>,
+          );
+          if (!resolved) {
+            ws.send(JSON.stringify({ type: 'error', error: 'No pending question found (may have timed out)' }));
+          }
+          break;
+        }
+
         // ── Skills Registry ──
         case 'skills.list': {
           const skills = skillsRegistry.listSkills();
