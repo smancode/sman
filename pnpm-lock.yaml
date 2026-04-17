@@ -12,7 +12,7 @@ importers:
         specifier: 0.2.110
         version: 0.2.110(zod@4.3.6)
       '@anthropic-ai/claude-code':
-        specifier: ^2.1.110
+        specifier: 2.1.110
         version: 2.1.110
       '@larksuiteoapi/node-sdk':
         specifier: ^1.60.0

@@ -45,77 +45,119 @@ for (const p of sdkPaths) {
   } catch {}
 }
 
-if (!sdkPath) {
-  console.log('[patch-sdk] SDK file not found, skipping patch');
-  process.exit(0);
+if (sdkPath) {
+  let content = readFileSync(sdkPath, 'utf-8');
+
+  // Check if already patched
+  if (content.includes('[PATCHED_BY_SMAN]')) {
+    console.log('[patch-sdk] SDK already patched, skipping');
+  } else {
+    const patches = [
+      // ── Patch 1: SKIPPED — pid already built into SDK 0.2.110+ ──
+
+      // ── Patch 2: ProcessTransport.initialize - remove CLAUDE_CODE_ENTRYPOINT ──
+      {
+        name: 'Remove CLAUDE_CODE_ENTRYPOINT in ProcessTransport.initialize',
+        find: `if(!U.CLAUDE_CODE_ENTRYPOINT)U.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(delete U.NODE_OPTIONS`,
+        replace: `if(delete U.NODE_OPTIONS`,
+      },
+
+      // ── Patch 3: SessionImpl constructor - remove CLAUDE_CODE_ENTRYPOINT ──
+      {
+        name: 'Remove CLAUDE_CODE_ENTRYPOINT in SessionImpl constructor',
+        find: `if(!Y.CLAUDE_CODE_ENTRYPOINT)Y.CLAUDE_CODE_ENTRYPOINT="sdk-ts";this.abortController=c1()`,
+        replace: `this.abortController=c1()`,
+      },
+
+      // ── Patch 4: SessionImpl constructor - forward all options to ProcessTransport + Query ──
+      {
+        name: 'Forward ProcessTransport options + Query initConfig',
+        find: `let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:{},thinkingConfig:void 0,maxTurns:void 0,maxBudgetUsd:void 0,model:$.model,fallbackModel:void 0,permissionMode:$.permissionMode??"default",allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions??!1,continueConversation:!1,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:{},strictMcpConfig:!1,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:!1,forkSession:!1,resumeSessionAt:void 0});this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,new Map),this.query.streamInput(this.inputStream)`,
+        replace: `let smanMcpServers=new Map;let smanProcessedMcp={};if($.mcpServers)for(let[k,v]of Object.entries($.mcpServers))if(v.type==="sdk"&&"instance" in v)smanMcpServers.set(k,v.instance),smanProcessedMcp[k]={type:"sdk",name:k};else smanProcessedMcp[k]=v;let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,stderr:$.stderr,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:$.extraArgs??{},thinkingConfig:$.thinkingConfig,maxTurns:$.maxTurns,maxBudgetUsd:$.maxBudgetUsd,model:$.model,fallbackModel:$.fallbackModel,permissionMode:$.permissionMode,allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions,continueConversation:$.continueConversation,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:smanProcessedMcp,strictMcpConfig:$.strictMcpConfig,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:$.includePartialMessages??!0,forkSession:$.forkSession,resumeSessionAt:$.resumeSessionAt,plugins:$.plugins});let smanInitCfg={systemPrompt:typeof $.systemPrompt==="string"?$.systemPrompt:($.systemPrompt?.append??"")};this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,smanMcpServers,void 0,smanInitCfg),this.query.streamInput(this.inputStream)`,
+      },
+
+      // ── Patch 5: SessionImpl - add interrupt/setModel/setPermissionMode methods ──
+      {
+        name: 'Add interrupt/setModel/setPermissionMode to SessionImpl',
+        find: `close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
+        replace: `async interrupt(){return this.query.interrupt()}async setModel($){return this.query.setModel($)}async setPermissionMode($){return this.query.setPermissionMode($)}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
+      },
+
+      // ── Patch 6: query() function - remove CLAUDE_AGENT_SDK_VERSION ──
+      {
+        name: 'Remove CLAUDE_AGENT_SDK_VERSION in query()',
+        find: `process.env.CLAUDE_AGENT_SDK_VERSION="0.2.110"`,
+        replace: `/* [PATCHED_BY_SMAN] removed CLAUDE_AGENT_SDK_VERSION */`,
+      },
+
+      // ── Patch 7: query() function - remove CLAUDE_CODE_ENTRYPOINT ──
+      {
+        name: 'Remove CLAUDE_CODE_ENTRYPOINT in query()',
+        find: `if(!Y4.CLAUDE_CODE_ENTRYPOINT)Y4.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
+        replace: `if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
+      },
+    ];
+
+    let patched = 0;
+    for (const patch of patches) {
+      if (content.includes(patch.find)) {
+        content = content.replace(patch.find, patch.replace);
+        patched++;
+        console.log(`[patch-sdk] Applied: ${patch.name}`);
+      } else {
+        console.warn(`[patch-sdk] WARNING: Could not find patch target: ${patch.name}`);
+      }
+    }
+
+    writeFileSync(sdkPath, content, 'utf-8');
+    console.log(`[patch-sdk] Applied ${patched}/${patches.length} SDK patches to ${sdkPath}`);
+  }
+} else {
+  console.log('[patch-sdk] SDK file not found, skipping SDK patch');
 }
 
-let content = readFileSync(sdkPath, 'utf-8');
-
-// Check if already patched
-if (content.includes('[PATCHED_BY_SMAN]')) {
-  console.log('[patch-sdk] Already patched, skipping');
-  process.exit(0);
-}
-
-const patches = [
-  // ── Patch 1: SKIPPED — pid already built into SDK 0.2.110+ ──
-
-  // ── Patch 2: ProcessTransport.initialize - remove CLAUDE_CODE_ENTRYPOINT ──
-  {
-    name: 'Remove CLAUDE_CODE_ENTRYPOINT in ProcessTransport.initialize',
-    find: `if(!U.CLAUDE_CODE_ENTRYPOINT)U.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(delete U.NODE_OPTIONS`,
-    replace: `if(delete U.NODE_OPTIONS`,
-  },
-
-  // ── Patch 3: SessionImpl constructor - remove CLAUDE_CODE_ENTRYPOINT ──
-  {
-    name: 'Remove CLAUDE_CODE_ENTRYPOINT in SessionImpl constructor',
-    find: `if(!Y.CLAUDE_CODE_ENTRYPOINT)Y.CLAUDE_CODE_ENTRYPOINT="sdk-ts";this.abortController=c1()`,
-    replace: `this.abortController=c1()`,
-  },
-
-  // ── Patch 4: SessionImpl constructor - forward all options to ProcessTransport + Query ──
-  // Split into 2 sub-patches: ProcessTransport args + includePartialMessages + Query initConfig
-  {
-    name: 'Forward ProcessTransport options + Query initConfig',
-    find: `let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:{},thinkingConfig:void 0,maxTurns:void 0,maxBudgetUsd:void 0,model:$.model,fallbackModel:void 0,permissionMode:$.permissionMode??"default",allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions??!1,continueConversation:!1,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:{},strictMcpConfig:!1,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:!1,forkSession:!1,resumeSessionAt:void 0});this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,new Map),this.query.streamInput(this.inputStream)`,
-    replace: `let smanMcpServers=new Map;let smanProcessedMcp={};if($.mcpServers)for(let[k,v]of Object.entries($.mcpServers))if(v.type==="sdk"&&"instance" in v)smanMcpServers.set(k,v.instance),smanProcessedMcp[k]={type:"sdk",name:k};else smanProcessedMcp[k]=v;let Q=new $8({abortController:this.abortController,pathToClaudeCodeExecutable:X,cwd:$.cwd,stderr:$.stderr,env:Y,executable:$.executable??(p1()?"bun":"node"),executableArgs:$.executableArgs??[],extraArgs:$.extraArgs??{},thinkingConfig:$.thinkingConfig,maxTurns:$.maxTurns,maxBudgetUsd:$.maxBudgetUsd,model:$.model,fallbackModel:$.fallbackModel,permissionMode:$.permissionMode,allowDangerouslySkipPermissions:$.allowDangerouslySkipPermissions,continueConversation:$.continueConversation,resume:$.resume,settingSources:$.settingSources??[],allowedTools:$.allowedTools??[],disallowedTools:$.disallowedTools??[],mcpServers:smanProcessedMcp,strictMcpConfig:$.strictMcpConfig,canUseTool:!!$.canUseTool,hooks:!!$.hooks,includePartialMessages:$.includePartialMessages??!0,forkSession:$.forkSession,resumeSessionAt:$.resumeSessionAt,plugins:$.plugins});let smanInitCfg={systemPrompt:typeof $.systemPrompt==="string"?$.systemPrompt:($.systemPrompt?.append??"")};this.query=new X8(Q,!1,$.canUseTool,$.hooks,this.abortController,smanMcpServers,void 0,smanInitCfg),this.query.streamInput(this.inputStream)`,
-  },
-
-  // ── Patch 5: SessionImpl - add interrupt/setModel/setPermissionMode methods ──
-  // Note: pid is already built-in in 0.2.110+
-  {
-    name: 'Add interrupt/setModel/setPermissionMode to SessionImpl',
-    find: `close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
-    replace: `async interrupt(){return this.query.interrupt()}async setModel($){return this.query.setModel($)}async setPermissionMode($){return this.query.setPermissionMode($)}close(){if(this.closed)return;this.closed=!0,this.inputStream.done(),setTimeout`,
-  },
-
-  // ── Patch 6: query() function - remove CLAUDE_AGENT_SDK_VERSION ──
-  {
-    name: 'Remove CLAUDE_AGENT_SDK_VERSION in query()',
-    find: `process.env.CLAUDE_AGENT_SDK_VERSION="0.2.110"`,
-    replace: `/* [PATCHED_BY_SMAN] removed CLAUDE_AGENT_SDK_VERSION */`,
-  },
-
-  // ── Patch 7: query() function - remove CLAUDE_CODE_ENTRYPOINT ──
-  {
-    name: 'Remove CLAUDE_CODE_ENTRYPOINT in query()',
-    find: `if(!Y4.CLAUDE_CODE_ENTRYPOINT)Y4.CLAUDE_CODE_ENTRYPOINT="sdk-ts";if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
-    replace: `if(p)Y4.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING="true"`,
-  },
+// ── Patch claude-code CLI: remove ?beta=true from API URLs ──
+// Zhipu proxy (open.bigmodel.cn/api/anthropic) rejects requests with ?beta=true.
+// The CLI hardcodes beta endpoints (e.g. this.client.beta.messages.create() → /v1/messages?beta=true).
+// This patch strips ?beta=true from all relevant API paths for proxy compatibility.
+const cliPaths = [
+  join(__dirname, '..', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+  join(__dirname, '..', 'node_modules', '.pnpm', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
 ];
 
-let patched = 0;
-for (const patch of patches) {
-  if (content.includes(patch.find)) {
-    content = content.replace(patch.find, patch.replace);
-    patched++;
-    console.log(`[patch-sdk] Applied: ${patch.name}`);
-  } else {
-    console.warn(`[patch-sdk] WARNING: Could not find patch target: ${patch.name}`);
-  }
+let cliPath = null;
+for (const p of cliPaths) {
+  try {
+    readFileSync(p, 'utf-8');
+    cliPath = p;
+    break;
+  } catch {}
 }
 
-writeFileSync(sdkPath, content, 'utf-8');
-console.log(`[patch-sdk] Applied ${patched}/${patches.length} patches to ${sdkPath}`);
+if (cliPath) {
+  let cliContent = readFileSync(cliPath, 'utf-8');
+
+  if (cliContent.includes('[CLI_PATCHED_BY_SMAN]')) {
+    console.log('[patch-sdk] CLI already patched, skipping');
+  } else {
+    // Simple global replacement: strip all ?beta=true from API URLs.
+    // This covers /v1/messages, /v1/messages/count_tokens, /v1/models,
+    // /v1/messages/batches, /v1/skills — everything that uses beta endpoints.
+    const before = cliContent;
+    cliContent = cliContent.replaceAll('?beta=true', '');
+
+    const changeCount = before.split('?beta=true').length - 1;
+    if (changeCount > 0) {
+      console.log(`[patch-sdk] CLI: removed ?beta=true from ${changeCount} locations`);
+    } else {
+      console.warn('[patch-sdk] WARNING: no ?beta=true found in CLI (already stripped?)');
+    }
+
+    // Add marker so we don't re-patch
+    cliContent = '/* [CLI_PATCHED_BY_SMAN] removed ?beta=true for proxy compat */\n' + cliContent;
+    writeFileSync(cliPath, cliContent, 'utf-8');
+    console.log(`[patch-sdk] CLI patched: ${cliPath}`);
+  }
+} else {
+  console.log('[patch-sdk] CLI file not found, skipping CLI patch');
+}
