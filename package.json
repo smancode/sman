@@ -180,7 +180,8 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "plugins/**/*"
     ],
     "directories": {
       "output": "release"

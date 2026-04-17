@@ -521,24 +521,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
-    // Reset per-session streaming state
+    // Reset per-session streaming state (will set sending: true after abort below)
     setStreamingBlocks(currentSessionId, []);
-    set({
-      messages: [...allMessages, userMsg],
-      sending: true,
-      streamingBlocks: [],
-      error: null,
-    });
-
-    // Update label from first message if not set
-    const session = sessions.find(s => s.key === currentSessionId);
-    if (!session?.label) {
-      const labelText = trimmed || (media && media.length > 0 ? '[图片]' : '');
-      if (labelText) {
-        const truncated = labelText.length > 20 ? `${labelText.slice(0, 20)}...` : labelText;
-        get().updateSessionLabel(currentSessionId, truncated);
-      }
-    }
 
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
     const streamSessionId = currentSessionId;
@@ -552,7 +536,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // handlers (since myGeneration === streamGeneration), causing a spurious error.
     if (get().sending) {
       // Cleanup old stream handlers first so they can still receive the abort response
-      // (registerStreamCleanup's inner prev() call handles this, but we do it explicitly)
       const prevCleanup = streamCleanups.get(streamSessionId);
       if (prevCleanup) {
         prevCleanup();
@@ -578,9 +561,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
           client.send({ type: 'chat.abort', sessionId: streamSessionId });
         });
       }
+    }
 
-      // Now safe to mark as no longer sending — new stream will set it again
-      set({ sending: false });
+    // Update UI: show user message and start sending indicator
+    set({
+      messages: [...allMessages, userMsg],
+      sending: true,
+      streamingBlocks: [],
+      error: null,
+    });
+
+    // Update label from first message if not set
+    const session = sessions.find(s => s.key === currentSessionId);
+    if (!session?.label) {
+      const labelText = trimmed || (media && media.length > 0 ? '[图片]' : '');
+      if (labelText) {
+        const truncated = labelText.length > 20 ? `${labelText.slice(0, 20)}...` : labelText;
+        get().updateSessionLabel(currentSessionId, truncated);
+      }
     }
 
     // Cleanup any previous stream handlers for this session

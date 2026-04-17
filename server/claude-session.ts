@@ -28,18 +28,35 @@ import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
 
-// Resolve project root for plugin loading
-// dev mode (tsx): __dirname = .../smanbase/server/
-// prod mode (compiled): __dirname = .../smanbase/dist/server/server/
-function resolveProjectRoot(): string {
-  if (fs.existsSync(path.join(__dirname, '..', 'plugins'))) {
-    return path.resolve(__dirname, '..');
-  }
-  return path.resolve(__dirname, '..', '..', '..');
-}
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Resolve project root for plugin loading
+// dev mode (tsx): __dirname = .../smanbase/server/
+// prod mode (compiled, non-asar): __dirname = .../smanbase/dist/server/server/
+// prod mode (Electron asar): __dirname = .../app.asar/dist/server/server/
+//   plugins are unpacked to: .../app.asar.unpacked/plugins/
+function resolveProjectRoot(): string {
+  // 1. Direct relative (dev mode: __dirname/server/ → root has plugins/)
+  if (fs.existsSync(path.join(__dirname, '..', 'plugins'))) {
+    return path.resolve(__dirname, '..');
+  }
+  // 2. Compiled dist layout: __dirname = dist/server/server/ → root = ../../..
+  if (fs.existsSync(path.join(__dirname, '..', '..', '..', 'plugins'))) {
+    return path.resolve(__dirname, '..', '..', '..');
+  }
+  // 3. Electron asar: plugins unpacked to app.asar.unpacked/
+  //    __dirname = .../app.asar/dist/server/server/ → replace app.asar with app.asar.unpacked
+  if (__dirname.includes('app.asar')) {
+    const unpackedRoot = __dirname.replace('app.asar', 'app.asar.unpacked');
+    if (fs.existsSync(path.join(unpackedRoot, '..', '..', '..', 'plugins'))) {
+      return path.resolve(unpackedRoot, '..', '..', '..');
+    }
+  }
+  // 4. Fallback — return best guess and let caller handle missing plugins
+  return path.resolve(__dirname, '..', '..', '..');
+}
 
 export interface ActiveSession {
   id: string;
@@ -238,12 +255,17 @@ export class ClaudeSessionManager {
     }
 
     // Load bundled plugins — only reasoning/flow-guiding skills that need upfront context
-    const pluginsDir = path.join(resolveProjectRoot(), 'plugins');
+    const projectRoot = resolveProjectRoot();
+    const pluginsDir = path.join(projectRoot, 'plugins');
     const plugins: Array<{ type: 'local'; path: string }> = [];
+    this.log.info(`[Plugins] projectRoot=${projectRoot}, pluginsDir=${pluginsDir}`);
     for (const name of ['superpowers', 'dev-workflow']) {
       const pluginPath = path.join(pluginsDir, name);
       if (fs.existsSync(pluginPath)) {
         plugins.push({ type: 'local', path: pluginPath });
+        this.log.info(`[Plugins] loaded: ${name} from ${pluginPath}`);
+      } else {
+        this.log.warn(`[Plugins] NOT FOUND: ${name} at ${pluginPath}`);
       }
     }
 
@@ -998,13 +1020,15 @@ export class ClaudeSessionManager {
                 resultError = result.errors.join(', ');
               } else if ('error' in result && result.error) {
                 resultError = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+              } else if ('result' in result && typeof result.result === 'string' && result.result) {
+                // SDK puts error message in 'result' field (e.g. "API Error: Request rejected (429)...")
+                resultError = result.result;
               } else if ('message' in result && result.message) {
                 resultError = typeof result.message === 'string' ? result.message : JSON.stringify(result.message);
+              } else if ('api_error_status' in result && result.api_error_status) {
+                resultError = `API Error: HTTP ${result.api_error_status}`;
               }
-              // Log full result for diagnosis when error info is sparse
-              if (!resultError) {
-                this.log.warn(`SDK error with no error details for session ${sessionId}`, { result: JSON.stringify(result).slice(0, 500) });
-              }
+              this.log.warn(`SDK error for session ${sessionId}`, { resultError, apiStatus: result.api_error_status });
             }
             const classified = resultError ? this.classifyErrorMessage(resultError) : undefined;
             wsSend(JSON.stringify({
