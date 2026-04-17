@@ -71,6 +71,31 @@ digraph brainstorming {
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
 - Focus on understanding: purpose, constraints, success criteria
 
+## Scope Control — 分而治之
+
+<HARD-LIMIT>
+A single spec MUST NOT exceed these limits. If it does, decompose into sub-specs BEFORE writing the spec.
+</HARD-LIMIT>
+
+| 指标 | 硬性上限 | 超了怎么办 |
+|------|---------|-----------|
+| 涉及的新文件数 | ≤ 8 个 | 拆成多个子项目，每个独立 spec |
+| 修改的现有文件数 | ≤ 10 个 | 按模块拆分，每个模块一个 spec |
+| 实现步骤估算 | ≤ 20 步 | 里程碑拆分，每个里程碑一个 spec |
+| 涉及独立模块数 | ≤ 3 个 | 按模块拆成子项目 |
+
+**拆分判断原则：**
+- 如果一个改动需要同时理解 3 个以上不相关的模块 → 太大了，拆
+- 如果实现某个部分不影响其他部分 → 独立成子项目
+- 如果不确定是否需要拆 → 大概率需要拆
+- **宁可拆多了（每个子项目 3-5 步），也不要一个巨型 spec（20+ 步）**
+
+**拆分后的执行顺序：**
+1. 列出所有子项目及其依赖关系
+2. 从最底层的子项目开始（没有依赖或依赖最少的先做）
+3. 每个子项目独立走 brainstorming → spec → plan → execute 循环
+4. 前一个子项目完成后，再开始下一个
+
 **Exploring approaches:**
 
 - Propose 2-3 different approaches with trade-offs

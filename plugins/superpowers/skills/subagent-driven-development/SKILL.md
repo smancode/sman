@@ -260,6 +260,45 @@ Done!
 - Dispatch fix subagent with specific instructions
 - Don't try to fix manually (context pollution)
 
+**If subagent reports BLOCKED because task is too large:**
+1. Read the implementer's suggested split
+2. Split the task into 2-3 smaller tasks in the plan
+3. Update TodoWrite with the new tasks
+4. Execute the new smaller tasks in order
+5. This is NOT a failure — it's the correct response to an oversized task
+
+## Task Size Limits — 分而治之
+
+<HARD-LIMIT>
+If any single task exceeds these limits, the controller MUST split it before dispatching.
+</HARD-LIMIT>
+
+**Core principle: each subtask MUST be solvable within a single Agent's context window.**
+
+This is NOT about mechanically splitting by file count. A valid subtask must:
+1. **Context self-sufficient** — Agent only needs to read the files specified in the plan to understand and complete the task
+2. **Clear deliverable** — one sentence describes what this task produces
+3. **Independently verifiable** — can be verified with a specific command or checkpoint
+4. **Explicit dependencies** — declares which prior tasks it depends on
+
+| Metric | Max | Splitting criteria |
+|--------|-----|-------------------|
+| Files touched per task | 3 | Split by file pair (implementation + test) |
+| Steps per task | 8 | More steps = more context = more errors |
+| New lines per task | 150 | LLM edits degrade beyond this |
+| Files implementer must read | 5 | Context pollution beyond this |
+
+**Splitting strategy (in priority order):**
+1. By file: one task per file pair (implementation + test)
+2. By responsibility: separate data model, business logic, interface
+3. By layer: bottom-up (foundation → middle → top)
+4. By scenario: happy path, error handling, edge cases
+
+**Concurrency control:**
+- DO NOT dispatch more than 2 parallel subagents (LLM resources are scarce, parallel dispatch causes slowdowns)
+- Optimal rhythm: 1-2 agents sequential, review immediately after each completes
+- Each task declares `Depends on: Task N` for strict ordering
+
 ## Integration
 
 **Required workflow skills:**

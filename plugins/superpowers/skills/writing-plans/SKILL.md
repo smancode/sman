@@ -44,6 +44,35 @@ This structure informs the task decomposition. Each task should produce self-con
 - "Run the tests and make sure they pass" - step
 - "Commit" - step
 
+## Task Size Control — 分而治之
+
+<HARD-LIMIT>
+A single task MUST NOT exceed these limits. If it does, split into smaller tasks.
+</HARD-LIMIT>
+
+| 指标 | 硬性上限 | 超了怎么办 |
+|------|---------|-----------|
+| 涉及文件数 | ≤ 3 个文件 | 按文件/职责拆成多个 task |
+| 步骤数 | ≤ 8 步 | 拆成多个顺序 task |
+| 代码量估算 | ≤ 150 行新代码 | 按功能点拆 |
+| 预计 LLM 上下文占用 | ≤ 单个文件全量 | 拆到每个 task 只需读 1-2 个文件 |
+
+**为什么必须有这个限制：**
+- LLM 上下文窗口有限，task 太大 → 看不全代码 → 遗漏细节 → 交付质量下降
+- reviewer Agent 需要读代码做对比，task 太大 → reviewer 也看不过来 → review 形同虚设
+- 小 task = 快速反馈 = 早发现问题 = 低修复成本
+
+**拆分策略（按优先级）：**
+1. **按文件拆** — 一个 task 只创建/修改 1-3 个文件（优先选这个）
+2. **按职责拆** — 一个 task 只做一件事（数据模型 / 业务逻辑 / 接口层 / UI）
+3. **按层次拆** — 一个 task 只涉及一层（底层 → 中间层 → 顶层，逐层推进）
+4. **按场景拆** — 一个 task 只覆盖一个场景（正常流程 / 异常处理 / 边界情况）
+
+**Task 依赖声明：**
+每个 task 必须声明依赖关系：
+- `Depends on: Task N` — 必须等 Task N 完成才能开始
+- `No dependencies` — 可以并行（但 subagent-driven 不支持并行，顺序执行即可）
+
 ## Plan Document Header
 
 **Every plan MUST start with this header:**

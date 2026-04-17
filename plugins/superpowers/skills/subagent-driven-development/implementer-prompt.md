@@ -96,6 +96,12 @@ Task tool (general-purpose):
     - The task involves restructuring existing code in ways the plan didn't anticipate
     - You've been reading file after file trying to understand the system without progress
     - **A constraint seems to conflict with the task requirements**
+    - **The task touches more than 3 files or seems too large for one implementation pass**
+
+    **If the task is too large:** Report BLOCKED with a suggestion for how to split it.
+    For example: "This task modifies 5 files across 2 modules. Suggest splitting into:
+    Task A: data model changes (files X, Y) and Task B: API layer changes (files Z, W).
+    Task B depends on Task A."
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
