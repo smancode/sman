@@ -748,6 +748,10 @@ export class ClaudeSessionManager {
       // Wait for the previous stream to fully exit (finally block ran, activeStreams deleted)
       const done = this.streamDone.get(sessionId);
       if (done) await done;
+      // Close the V2 session — interrupt during tool_use leaves the CLI in an inconsistent state.
+      // A fresh session will be created for the new message.
+      this.closeV2Session(sessionId);
+      this.log.info(`Closed V2 session for ${sessionId} after abort, fresh session will be created`);
     }
 
     if (!this.config?.llm?.apiKey) {
