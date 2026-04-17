@@ -531,6 +531,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Capture generation to ignore stale aborted/done events from previous streams
     const myGeneration = ++streamGeneration;
 
+    // If there's an active stream, abort it on the backend BEFORE registering new handlers.
+    // This ensures the backend's abort (chat.aborted) is received by the OLD handlers,
+    // not the NEW ones. Without this, the old abort message would be picked up by new
+    // handlers (since myGeneration === streamGeneration), causing a spurious error.
+    if (get().sending) {
+      // Cleanup old stream handlers first so they can still receive the abort response
+      // (registerStreamCleanup's inner prev() call handles this, but we do it explicitly)
+      const prevCleanup = streamCleanups.get(streamSessionId);
+      if (prevCleanup) {
+        prevCleanup();
+        streamCleanups.delete(streamSessionId);
+      }
+      clearStreamingBlocks(streamSessionId);
+
+      // Send abort to backend and wait for it to finish
+      if (client.connected) {
+        await new Promise<void>((resolve) => {
+          const abortTimeout = setTimeout(() => {
+            unsubAbort();
+            resolve();
+          }, 3000);
+
+          const unsubAbort = wrapHandler(client, 'chat.aborted', (data) => {
+            if (data.sessionId !== streamSessionId) return;
+            clearTimeout(abortTimeout);
+            unsubAbort();
+            resolve();
+          });
+
+          client.send({ type: 'chat.abort', sessionId: streamSessionId });
+        });
+      }
+
+      // Now safe to mark as no longer sending — new stream will set it again
+      set({ sending: false });
+    }
+
     // Cleanup any previous stream handlers for this session
     cleanupStream(streamSessionId);
 
