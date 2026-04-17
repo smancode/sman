@@ -33,6 +33,7 @@ BEFORE claiming any status or expressing satisfaction:
    - If NO: State actual status with evidence
    - If YES: State claim WITH evidence
 5. ONLY THEN: Make the claim
+6. CHECK CONSTRAINTS: Read .claude/rules/*.md and verify code changes comply with ALL rules
 
 Skip any step = lying, not verifying
 ```
@@ -98,6 +99,22 @@ Skip any step = lying, not verifying
 ✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
 ❌ "Tests pass, phase complete"
 ```
+
+**Constraint compliance (MANDATORY):**
+```
+✅ Read .claude/rules/*.md → Check each changed file against rules → Report compliance
+❌ "Code looks good" (without checking against project constraints)
+```
+
+**How to verify constraint compliance:**
+1. Read all files in `.claude/rules/*.md`
+2. For each rule, check if any changed file violates it
+3. Common violations:
+   - Default values where rules say "throw exception"
+   - Parameter transformations where rules say "use as-is"
+   - Fallback/empty returns where rules say "fail fast"
+   - Naming that doesn't match project conventions
+4. Report: ✅ All constraints met, or ❌ List specific violations with file:line
 
 **Agent delegation:**
 ```

@@ -9,6 +9,8 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
 
+**Constraint-first: Before writing the plan, load project constraints from `{workspace}/.claude/rules/*.md` and `{workspace}/CLAUDE.md`. Every task MUST declare which constraints apply and how to verify compliance.**
+
 Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
@@ -57,6 +59,10 @@ This structure informs the task decomposition. Each task should produce self-con
 
 **Tech Stack:** [Key technologies/libraries]
 
+**Project Constraints (from .claude/rules/*.md and CLAUDE.md):**
+- [List each applicable constraint here — these are non-negotiable rules the implementer MUST follow]
+- [Reference the specific rule file for traceability]
+
 ---
 ```
 
@@ -69,6 +75,10 @@ This structure informs the task decomposition. Each task should produce self-con
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
 - Test: `tests/exact/path/to/test.py`
+
+**Applicable Constraints:**
+- [List specific rules from .claude/rules that apply to this task]
+- [e.g. "参数缺失必须抛异常，不返回默认值 (CODING_RULES.md §2.2)"]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -101,6 +111,12 @@ Expected: PASS
 git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
 ```
+
+- [ ] **Step 6: Verify constraint compliance**
+
+Check the implementation against applicable constraints listed above. For each constraint:
+- Confirm the code follows the rule
+- If violated, fix before proceeding
 ````
 
 ## Remember

@@ -7,9 +7,24 @@ description: "Use when user says '完整流程', /dev-workflow, or complex devel
 
 复杂开发任务的标准化流程。每步派独立 Agent 执行，主进程只做编排和用户确认。
 
+## 核心原则：约束先行
+
+```
+约束加载 → 理解约束 → 遵循约束 → 验证约束
+```
+
+每个阶段开始前必须：
+1. **加载约束** — 读取项目 `{workspace}/.claude/rules/*.md` 和 `{workspace}/CLAUDE.md` 中定义的所有编码规范
+2. **理解约束** — 摘要出与当前任务相关的规范要点
+3. **遵循约束** — 执行时严格按规范实现，不允许"差不多就行"
+4. **验证约束** — review 阶段逐条检查是否违背了规范
+
+**为什么：** 规范写在那里但不遵循 = 没写。约束先行确保每一步交付都符合项目标准，用户拿到就能用，不需要大改。
+
 ## 流水线
 
 ```
+Step 0: 约束加载（每步之前自动执行）
 Step 1: 需求分析 (brainstorming)
 Step 2: 写实施计划 (writing-plans)
 Step 3: 逐任务执行 (subagent-driven-development)
@@ -20,13 +35,37 @@ Step 6: 总结沉淀
 
 ---
 
+## Step 0: 约束加载
+
+**每进入下一步之前，执行约束检查：**
+
+```
+1. 列出 {workspace}/.claude/rules/*.md 中所有规则文件
+2. 列出 {workspace}/CLAUDE.md 中定义的规范
+3. 摘要与当前步骤相关的约束要点
+4. 将约束要点作为上下文注入到下一步的 Agent prompt 中
+```
+
+**约束传递链：**
+```
+Step 0 加载约束 → 注入 Step 1 Agent
+Step 1 结束 → 约束 + spec → 注入 Step 2 Agent
+Step 2 结束 → 约束 + spec + plan → 注入 Step 3 Agent
+Step 3 每个 task → 约束 + spec + plan + task → 注入 implementer/reviewer
+Step 4 → 约束 + 全部交付物 → 注入验证 Agent
+```
+
+---
+
 ## Step 1: 需求分析
 
 使用 superpowers:brainstorming skill 的流程:
+- **首先加载项目约束** — 读取 `.claude/rules/*.md` 和 `CLAUDE.md`
 - 探索项目上下文（读文件、看结构）
 - 向用户逐个提问澄清需求
 - 提出 2-3 个方案并推荐
 - 呈报用户确认方案
+- **Spec 中声明约束要求** — 在设计文档中明确列出必须遵循的编码规范
 
 **用户确认后才能进入 Step 2。**
 
@@ -35,8 +74,10 @@ Step 6: 总结沉淀
 ## Step 2: 写实施计划
 
 使用 superpowers:writing-plans skill 的流程:
+- **注入约束上下文** — 将 Step 0 加载的约束传递给计划 Agent
 - 把确认的方案拆成任务列表
 - 每个任务含精确文件路径 + TDD 步骤 + 验证命令
+- **每个任务声明适用约束** — 列出该任务必须遵循的 `.claude/rules` 中的具体规则
 - 保存计划到 `docs/superpowers/plans/YYYY-MM-DD-<name>.md`
 
 **用户确认计划后才能进入 Step 3。**
@@ -54,13 +95,14 @@ TDD 分级由计划 Agent 根据项目环境自动判断:
 ## Step 3: 逐任务执行
 
 使用 superpowers:subagent-driven-development skill 的流程。
-逐个任务派 Agent，每个任务走三轮:
+逐个任务派 Agent，每个任务走三轮（约束贯穿每轮）:
 
 ```
 for each task:
-  1. 派 Agent (general-purpose) → TDD + 编码 + 自检 + 提交
-  2. 派 Agent (general-purpose) → spec review: 读实际代码验证是否匹配需求
-  3. 派 Agent (general-purpose) → code quality review: 单一职责、简洁、模式一致
+  0. 约束注入 — 将 .claude/rules 中的相关规范注入 Agent prompt
+  1. 派 Agent (general-purpose) → TDD + 编码（严格按约束实现）+ 自检（对照约束检查）+ 提交
+  2. 派 Agent (general-purpose) → spec review + 约束合规检查：读实际代码验证是否匹配需求 + 是否违背编码规范
+  3. 派 Agent (general-purpose) → code quality review：单一职责、简洁、模式一致 + 约束一致性
   → review 不通过则派修复 Agent → 重新 review，循环直到通过
 ```
 
@@ -71,6 +113,7 @@ for each task:
 使用 superpowers:verification-before-completion skill 的流程:
 - 编译构建
 - 运行全部测试
+- **约束合规性验证** — 逐条检查 `.claude/rules` 中的规范，确保所有变更都符合
 - 逐条检查验收标准
 - 验证失败回到 Step 3 修复
 
@@ -83,6 +126,7 @@ for each task:
 - 简化逻辑
 - 改善命名
 - 保持功能不变
+- **优化后重新检查约束合规性** — 优化不能引入违背规范的代码
 
 ---
 
@@ -93,6 +137,7 @@ for each task:
 - 开发中遇到的问题和解法
 - 用户反馈和修正
 - 架构变化（如有）
+- **约束遵循情况** — 记录哪些约束被严格遵循、哪些有偏差
 
 ### B. 规则提取 → `.claude/rules/*.md`
 

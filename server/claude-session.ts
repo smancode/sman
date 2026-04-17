@@ -116,6 +116,21 @@ export class ClaudeSessionManager {
   /**
    * Get the path to bundled claude-code executable
    */
+  private buildSmanContext(projectName: string): string {
+    return [
+      '[Sman 开发流程]',
+      '根据任务复杂度自动选择模式:',
+      '- 直接模式(默认): 改bug、加小功能、<30行改动 → 直接写代码',
+      '- 完整模式: 复杂任务(多模块/新功能/架构变更) → 调用 dev-workflow skill，严格按其 6 步流水线执行（需求分析→计划→执行→验证→优化→沉淀），每步派独立Agent，用户确认后才进入下一步',
+      '',
+      '[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ' + projectName + '。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]',
+      '[Sman 行为要求]',
+      '1. 收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行',
+      '2. 输出风格：聚焦交付结果，描述改了什么、为什么改、效果如何',
+      '3. 代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入，不要输出大段完整代码',
+    ].join('\n');
+  }
+
   private getClaudeCodePath(): string {
     const possiblePaths: string[] = [];
 
@@ -586,7 +601,7 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。\n重要：收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行。\n输出风格：聚焦交付结果，描述改了什么、为什么改、效果如何。代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入。不要输出大段完整代码。]`;
+      const smanContext = this.buildSmanContext(projectName);
       const messagePrefix = profilePrefix
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;
@@ -1302,7 +1317,7 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = `[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。复杂任务建议走 dev-workflow。扩展能力按需挂载: capability_list 发现 → capability_load 激活。\n重要：收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行。\n输出风格：聚焦交付结果，描述改了什么、为什么改、效果如何。代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入。不要输出大段完整代码。]`;
+      const smanContext = this.buildSmanContext(projectName);
       const messagePrefix = profilePrefix
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;

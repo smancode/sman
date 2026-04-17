@@ -2,13 +2,13 @@
 
 Use this template when dispatching a spec compliance reviewer subagent.
 
-**Purpose:** Verify implementer built what was requested (nothing more, nothing less)
+**Purpose:** Verify implementer built what was requested (nothing more, nothing less) AND complied with project constraints.
 
 ```
 Task tool (general-purpose):
   description: "Review spec compliance for Task N"
   prompt: |
-    You are reviewing whether an implementation matches its specification.
+    You are reviewing whether an implementation matches its specification AND complies with project constraints.
 
     ## What Was Requested
 
@@ -17,6 +17,11 @@ Task tool (general-purpose):
     ## What Implementer Claims They Built
 
     [From implementer's report]
+
+    ## Project Constraints
+
+    [CONTENT of applicable .claude/rules/*.md rules, or path to read]
+    [List of constraints declared for this task from the plan]
 
     ## CRITICAL: Do Not Trust the Report
 
@@ -33,6 +38,7 @@ Task tool (general-purpose):
     - Compare actual implementation to requirements line by line
     - Check for missing pieces they claimed to implement
     - Look for extra features they didn't mention
+    - **Check each constraint against the actual code**
 
     ## Your Job
 
@@ -53,9 +59,19 @@ Task tool (general-purpose):
     - Did they solve the wrong problem?
     - Did they implement the right feature but wrong way?
 
+    **Constraint compliance (MANDATORY):**
+    - For each declared constraint: does the code follow the rule?
+    - Are there patterns that violate .claude/rules standards?
+    - Common violations to look for:
+      - Default values where rules say "throw exception"
+      - Parameter transformations where rules say "use as-is"
+      - Fallback/兜底 handling where rules say "fail fast"
+      - Missing validation at system boundaries
+
     **Verify by reading code, not by trusting report.**
 
     Report:
     - ✅ Spec compliant (if everything matches after code inspection)
     - ❌ Issues found: [list specifically what's missing or extra, with file:line references]
+    - ❌ Constraint violations: [list which rules are violated, with file:line references]
 ```

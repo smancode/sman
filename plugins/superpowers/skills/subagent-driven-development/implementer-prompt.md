@@ -12,6 +12,21 @@ Task tool (general-purpose):
 
     [FULL TEXT of task from plan - paste it here, don't make subagent read file]
 
+    ## Project Constraints (MANDATORY — you MUST follow these)
+
+    Read and follow ALL rules from:
+    - `.claude/rules/*.md` — project coding standards
+    - `CLAUDE.md` — project-level instructions
+
+    Applicable constraints for this task:
+    [LIST constraints declared in the plan for this task]
+
+    **Critical rules (most commonly violated — pay extra attention):**
+    - Parameter handling: no default values, no silent conversions, no fallback returns
+    - Error handling: throw exceptions on invalid input, never silently return empty
+    - Naming: follow project-specific conventions, not generic patterns
+    - Code must be self-validating against these rules before you report DONE
+
     ## Context
 
     [Scene-setting: where this fits, dependencies, architectural context]
@@ -23,23 +38,38 @@ Task tool (general-purpose):
     - The approach or implementation strategy
     - Dependencies or assumptions
     - Anything unclear in the task description
+    - **How a constraint applies to this task**
 
     **Ask them now.** Raise any concerns before starting work.
 
     ## Your Job
 
     Once you're clear on requirements:
-    1. Implement exactly what the task specifies
-    2. Write tests (following TDD if task says to)
-    3. Verify implementation works
-    4. Commit your work
-    5. Self-review (see below)
-    6. Report back
+    1. **Re-read applicable constraints** — internalize the rules before writing code
+    2. Implement exactly what the task specifies
+    3. Write tests (following TDD if task says to)
+    4. Verify implementation works
+    5. **Self-check against constraints** (see below)
+    6. Commit your work
+    7. Self-review (see below)
+    8. Report back
 
     Work from: [directory]
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It's always OK to pause and clarify. Don't guess or make assumptions.
+
+    ## Constraint Self-Check (before committing)
+
+    Before committing, verify your code against each declared constraint:
+    - [ ] No default values where rules say "throw exception"
+    - [ ] No parameter transformations where rules say "use as-is"
+    - [ ] No fallback/empty returns where rules say "fail fast"
+    - [ ] Naming follows project-specific conventions
+    - [ ] Code organization matches project patterns
+    - [ ] Error handling follows project standards
+
+    If ANY constraint is violated, fix it before proceeding.
 
     ## Code Organization
 
@@ -65,6 +95,7 @@ Task tool (general-purpose):
     - You feel uncertain about whether your approach is correct
     - The task involves restructuring existing code in ways the plan didn't anticipate
     - You've been reading file after file trying to understand the system without progress
+    - **A constraint seems to conflict with the task requirements**
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
@@ -90,6 +121,12 @@ Task tool (general-purpose):
     - Did I only build what was requested?
     - Did I follow existing patterns in the codebase?
 
+    **Constraint Compliance:**
+    - Did I follow ALL declared project constraints?
+    - No default values where rules say throw?
+    - No silent parameter handling where rules say use as-is?
+    - Naming matches project conventions?
+
     **Testing:**
     - Do tests actually verify behavior (not just mock behavior)?
     - Did I follow TDD if required?
@@ -104,6 +141,7 @@ Task tool (general-purpose):
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
     - Files changed
+    - **Constraint compliance:** which constraints you followed, any edge cases
     - Self-review findings (if any)
     - Any issues or concerns
 
