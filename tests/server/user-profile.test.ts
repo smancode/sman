@@ -62,31 +62,34 @@ describe('UserProfileManager', () => {
     });
 
     it('should serialize concurrent updates via queue', async () => {
-      const callOrder: number[] = [];
-      (manager as any).callLLMForUpdate = async (_existing: string, _userMsg: string, _assistantMsg: string, tag?: number) => {
-        callOrder.push(tag!);
+      let callCount = 0;
+      (manager as any).callLLMForUpdate = async (_existing: string, _conversations: Array<{ user: string; assistant: string }>) => {
+        callCount++;
         await new Promise(r => setTimeout(r, 50));
-        return `# 用户画像\n\n## 助手身份\n- 更新 ${tag}`;
+        return `# 用户画像\n\n## 助手身份\n- 更新 ${callCount}`;
       };
 
-      // Fire 3 concurrent updates — updateProfile is void, but the internal queue is a promise chain
+      // Override UPDATE_INTERVAL_MS to 0 so flush triggers immediately
+      (UserProfileManager as any).UPDATE_INTERVAL_MS = 0;
+
+      // Fire 3 updates — each triggers tryFlush since interval is 0
       manager.updateProfile('user1', 'assistant1');
+      manager.updateProfile('user2', 'assistant2');
+      manager.updateProfile('user3', 'assistant3');
+
       // Wait for queue to settle
       await (manager as any).updateQueue;
 
-      manager.updateProfile('user2', 'assistant2');
-      await (manager as any).updateQueue;
-
-      manager.updateProfile('user3', 'assistant3');
-      await (manager as any).updateQueue;
-
-      expect(callOrder.length).toBe(3);
+      expect(callCount).toBe(3);
     });
 
     it('should preserve profile when LLM call throws', async () => {
       (manager as any).callLLMForUpdate = async () => {
         throw new Error('LLM error');
       };
+
+      // Override interval to trigger immediately
+      (UserProfileManager as any).UPDATE_INTERVAL_MS = 0;
 
       const profileBefore = manager.loadProfile();
       manager.updateProfile('user msg', 'assistant msg');
@@ -100,6 +103,9 @@ describe('UserProfileManager', () => {
       const updatedProfile = `# 用户画像\n\n## 助手身份\n- 名字: Crumpet\n\n## 用户身份\n- 角色: 开发者`;
       (manager as any).callLLMForUpdate = async () => updatedProfile;
 
+      // Override interval to trigger immediately
+      (UserProfileManager as any).UPDATE_INTERVAL_MS = 0;
+
       manager.updateProfile('我叫Crumpet', '好的Crumpet');
       await (manager as any).updateQueue;
 
@@ -109,6 +115,9 @@ describe('UserProfileManager', () => {
 
     it('should reject invalid LLM response (missing # 用户画像)', async () => {
       (manager as any).callLLMForUpdate = async () => 'This is not a profile';
+
+      // Override interval to trigger immediately
+      (UserProfileManager as any).UPDATE_INTERVAL_MS = 0;
 
       const profileBefore = manager.loadProfile();
       manager.updateProfile('user msg', 'assistant msg');

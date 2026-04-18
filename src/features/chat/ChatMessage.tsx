@@ -98,13 +98,9 @@ export const ChatMessage = memo(function ChatMessage({
           <ThinkingBlock content={isStreaming ? (streamingThinking || visibleThinking || '') : (visibleThinking || '')} />
         )}
 
-        {/* Tool use cards */}
+        {/* Tool use cards — collapsed summary by default */}
         {visibleTools.length > 0 && (
-          <div className="space-y-1">
-            {visibleTools.map((tool, i) => (
-              <ToolCard key={tool.id || i} name={tool.name} input={tool.input} />
-            ))}
-          </div>
+          <CollapsedToolSummary tools={visibleTools} />
         )}
 
         {/* Images — rendered ABOVE text bubble for user messages */}
@@ -570,6 +566,42 @@ function ImageLightbox({
 }
 
 // ── Tool Card ───────────────────────────────────────────────────
+
+/** Collapsed tool summary — shows tool names as compact pills, expandable for details */
+function CollapsedToolSummary({ tools }: { tools: Array<{ id?: string; name: string; input?: unknown }> }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Deduplicate by name
+  const uniqueNames = [...new Set(tools.map(t => t.name))];
+
+  return (
+    <div className="text-xs">
+      <button
+        className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group/summary"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <Wrench className="h-3 w-3 shrink-0 opacity-60" />
+        <span>{tools.length} 个工具调用</span>
+        <span className="flex gap-1 flex-wrap">
+          {uniqueNames.map(name => (
+            <span key={name} className="px-1 py-0.5 bg-muted rounded text-[11px] font-mono">{name}</span>
+          ))}
+        </span>
+        {expanded
+          ? <ChevronDown className="h-3 w-3 ml-0.5" />
+          : <ChevronRight className="h-3 w-3 ml-0.5" />
+        }
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-1 pl-1">
+          {tools.map((tool, i) => (
+            <ToolCard key={tool.id || i} name={tool.name} input={tool.input} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ToolCard({ name, input }: { name: string; input: unknown }) {
   const [expanded, setExpanded] = useState(false);
