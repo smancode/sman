@@ -250,6 +250,22 @@ function formatDuration(durationMs?: number): string | null {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
+/** Tool name → Chinese label mapping (keep original name visible) */
+const TOOL_LABELS: Record<string, string> = {
+  Agent: 'Agent - 助手',
+  Read: 'Read - 读取',
+  Write: 'Write - 写入',
+  Edit: 'Edit - 编辑',
+  Bash: 'Bash - 命令',
+  Grep: 'Grep - 搜索',
+  Glob: 'Glob - 查找',
+  WebSearch: 'WebSearch - 搜网',
+  WebFetch: 'WebFetch - 网页',
+  TaskCreate: 'TaskCreate - 建任务',
+  TaskUpdate: 'TaskUpdate - 更新任务',
+  TaskList: 'TaskList - 查任务',
+};
+
 function ToolStatusBar({
   tools,
 }: {
@@ -268,6 +284,7 @@ function ToolStatusBar({
         const duration = formatDuration(tool.durationMs);
         const isRunning = tool.status === 'running';
         const isError = tool.status === 'error';
+        const label = TOOL_LABELS[tool.name] || tool.name;
         return (
           <div
             key={tool.toolCallId || tool.id || tool.name}
@@ -281,12 +298,11 @@ function ToolStatusBar({
             {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
             {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
             {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-            <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-            <span className="font-mono text-[12px] font-medium">{tool.name}</span>
-            {duration && <span className="text-[11px] opacity-60">{tool.summary ? `(${duration})` : duration}</span>}
+            <span className={cn('text-[12px]', isRunning && 'font-medium')}>{label}</span>
             {tool.summary && (
               <span className="truncate text-[11px] opacity-70">{tool.summary}</span>
             )}
+            {duration && <span className="text-[11px] opacity-60">{duration}</span>}
           </div>
         );
       })}

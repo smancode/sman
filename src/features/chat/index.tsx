@@ -410,9 +410,15 @@ function StreamingToolStatus({ tool }: {
   const isError = tool.status === 'error';
   const [expanded, setExpanded] = useState(false);
 
-  // Format input for display
+  // Human-readable display
+  const displayName = getToolDisplayName(tool.name);
   const displayInput = formatToolInput(tool.name, tool.input);
   const displayResult = tool.result?.trim();
+
+  // Compose a one-line status summary
+  const statusSummary = isRunning
+    ? `${displayName}${displayInput ? `: ${truncateDisplayInput(displayInput)}` : ''}`
+    : displayName;
 
   return (
     <div
@@ -423,7 +429,7 @@ function StreamingToolStatus({ tool }: {
         isError && 'text-destructive',
       )}
     >
-      {/* Header row: icon + name + duration + expand toggle */}
+      {/* Header row: icon + status summary + duration */}
       <button
         className="flex items-center gap-2 w-full px-1 py-0.5 text-left"
         onClick={() => setExpanded(!expanded)}
@@ -431,8 +437,9 @@ function StreamingToolStatus({ tool }: {
         {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
         {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
         {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-        <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-        <span className="font-mono text-[12px] font-medium">{tool.name}</span>
+        <span className={cn('text-[12px]', isRunning && 'font-medium')}>
+          {statusSummary}
+        </span>
         {duration && <span className="text-[11px] opacity-60">{duration}</span>}
         {(displayInput || displayResult) && (
           expanded
@@ -464,6 +471,37 @@ function StreamingToolStatus({ tool }: {
       )}
     </div>
   );
+}
+
+/** Tool name → Chinese description mapping (keep original name visible) */
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  Agent: '派出助手',
+  Read: '读取文件',
+  Write: '写入文件',
+  Edit: '编辑文件',
+  Bash: '执行命令',
+  Grep: '搜索内容',
+  Glob: '查找文件',
+  WebSearch: '搜索网络',
+  WebFetch: '获取网页',
+  LSP: '代码分析',
+  ListMcpResourcesTool: '查询资源',
+  TaskCreate: '创建任务',
+  TaskUpdate: '更新任务',
+  TaskList: '查看任务',
+  AskUserQuestion: '询问用户',
+};
+
+function getToolDisplayName(name: string): string {
+  const desc = TOOL_DISPLAY_NAMES[name];
+  return desc ? `${name} - ${desc}` : name;
+}
+
+/** Truncate display input for one-line status */
+function truncateDisplayInput(input: string): string {
+  const firstLine = input.split('\n')[0];
+  if (firstLine.length > 60) return firstLine.slice(0, 57) + '...';
+  return firstLine;
 }
 
 /** Format tool input JSON into a readable summary */
