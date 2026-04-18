@@ -26,6 +26,7 @@ describe('SmartPathEngine', () => {
       { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'skill result' }] },
     ]),
     deleteSession: vi.fn(),
+    abort: vi.fn(),
   };
 
   beforeEach(() => {
