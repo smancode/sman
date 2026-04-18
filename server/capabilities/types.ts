@@ -63,6 +63,12 @@ export interface CapabilityGatewayOptions {
   pluginsDir: string;
   /** Callback to get LLM config for semantic search and experience learning */
   getLlmConfig?: () => SemanticSearchLlmConfig | null;
+  /** dev-workflow progress: AI entered a new step */
+  onWorkflowUpdate?: (sessionId: string, step: number) => void;
+  /** dev-workflow progress: workflow activated */
+  onWorkflowActivate?: (sessionId: string, taskSummary: string) => void;
+  /** dev-workflow progress: workflow completed or reset */
+  onWorkflowReset?: (sessionId: string) => void;
 }
 
 /** LLM configuration for semantic search */

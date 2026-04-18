@@ -29,6 +29,8 @@ const loadedServers = new Map<string, Map<string, McpSdkServerConfigWithInstance
 export function createCapabilityGatewayMcpServer(options: CapabilityGatewayOptions): McpSdkServerConfigWithInstance {
   const { registry, getActiveSession, pluginsDir } = options;
 
+  const STEP_NAMES = ['约束加载', '需求分析', '写实施计划', '逐任务执行', '集成验证', '代码优化', '总结沉淀'] as const;
+
   const listTool = tool(
     'capability_list',
     'List all available on-demand capabilities. '
@@ -265,10 +267,38 @@ export function createCapabilityGatewayMcpServer(options: CapabilityGatewayOptio
     }
   }
 
+  const workflowUpdateTool = tool(
+    'workflow_update',
+    'Update dev-workflow progress. Call this when you enter a new step in the dev-workflow pipeline. '
+    + 'Steps: 1=需求分析, 2=写实施计划, 3=逐任务执行, 4=集成验证, 5=代码优化, 6=总结沉淀. '
+    + 'Pass step=-1 when the entire workflow is finished.',
+    {
+      step: z.number().int().min(-1).max(6).describe('Step number (1-6), or -1 to signal workflow completion'),
+      session_id: z.string().describe('Your session ID (shown in Sman context header)'),
+      task_summary: z.string().optional().describe('Required when step=1: brief description of the user\'s task'),
+    },
+    async (args: any) => {
+      const { step, session_id, task_summary } = args;
+
+      if (step === -1) {
+        options.onWorkflowReset?.(session_id);
+        return textResult('dev-workflow 流程已结束，进度已重置。');
+      }
+
+      if (step === 1 && task_summary) {
+        options.onWorkflowActivate?.(session_id, task_summary);
+      }
+      options.onWorkflowUpdate?.(session_id, step);
+
+      const stepName = STEP_NAMES[step - 1] ?? '未知';
+      return textResult(`进度已更新: Step ${step} - ${stepName}`);
+    },
+  );
+
   return createSdkMcpServer({
     name: 'capability-gateway',
     version: '1.0.0',
-    tools: [listTool, loadTool, runTool],
+    tools: [listTool, loadTool, runTool, workflowUpdateTool],
   });
 }
 

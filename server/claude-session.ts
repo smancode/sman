@@ -86,6 +86,19 @@ interface V2SessionInfo {
   configGeneration: number;
 }
 
+/** dev-workflow pipeline steps (1-based, matching SKILL.md) */
+type WorkflowStep = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** Tracks dev-workflow progress per session */
+interface WorkflowState {
+  currentStep: WorkflowStep | null;
+  active: boolean;
+  completedSteps: WorkflowStep[];
+  stepEnteredAt: number;
+  startedAt: number | null;
+  taskSummary: string;
+}
+
 export class ClaudeSessionManager {
   private sessions = new Map<string, ActiveSession>();
   private v2Sessions = new Map<string, V2SessionInfo>();
@@ -95,6 +108,8 @@ export class ClaudeSessionManager {
   /** Tracks in-flight preheat promises so sendMessage can await them */
   private preheatPromises = new Map<string, Promise<void>>();
   private sdkSessionIds = new Map<string, string>();
+  /** dev-workflow progress per session (runtime only, not persisted) */
+  private workflowStates = new Map<string, WorkflowState>();
   private log: Logger;
   private config: SmanConfig | null = null;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -177,21 +192,69 @@ export class ClaudeSessionManager {
     }
   }
 
-  private buildSmanContext(projectName: string): string {
-    return [
-      '[Sman 开发流程]',
-      '根据任务复杂度自动选择模式:',
-      '- 完整模式(默认): 需求分析→计划→执行→验证→优化→沉淀，每步派独立Agent，用户确认后才进入下一步。调用 dev-workflow skill 执行。',
-      '- 直接模式(仅限): 明确的改bug、加小功能、<30行改动 → 用户明确要求快速处理时使用，但仍需交付前自检。',
-      '',
-      '[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ' + projectName + '。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]',
-      '[Sman 行为要求]',
-      '1. 收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行',
-      '2. 输出风格：聚焦交付结果，描述改了什么、为什么改、效果如何',
-      '3. 代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入，不要输出大段完整代码',
-      '4. 交付前必须自检：编译通过？测试通过？改动是否符合预期？不自检就是玩具。',
-      '5. 尊重项目实际情况：尝试编译和测试，如果项目依赖复杂（二方库、三方库、本地环境缺依赖）导致无法编译或跑测试，直接告诉用户原因，不要卡死在重试上。能编译就编译验证，不能编译就做逻辑审查。',
-    ].join('\n');
+  private buildSmanContext(projectName: string, sessionId?: string): string {
+    const lines: string[] = [];
+    const workflowState = sessionId ? this.workflowStates.get(sessionId) : undefined;
+    const stepNames = ['约束加载', '需求分析', '写实施计划', '逐任务执行', '集成验证', '代码优化', '总结沉淀'] as const;
+
+    // ── 段 1：硬性触发条件 ──
+    lines.push('[Sman 开发流程 - 必须遵守]');
+    lines.push('');
+    lines.push('## 何时必须走 dev-workflow（调用 /dev-workflow skill）');
+    lines.push('以下任一条件满足，必须调用 dev-workflow:');
+    lines.push('- 新功能开发（新增页面、接口、模块、组件）');
+    lines.push('- 重构（改动 >3 个文件，或影响多个模块）');
+    lines.push('- 需求不明确（用户描述模糊，需要先澄清再动手）');
+    lines.push('- 用户说"帮我做/开发/实现/设计/重构/加一个/新功能" + 具体功能描述');
+    lines.push('- 预计改动 >30 行代码');
+    lines.push('- 多步骤任务（先改 A 再改 B 再测试 C）');
+    lines.push('');
+    lines.push('## 何时可以走直接模式');
+    lines.push('所有条件必须同时满足:');
+    lines.push('1. 用户明确说"快速处理/直接改/不要流程"');
+    lines.push('2. 改动明确且单一（改一个 bug、改一行配置、改一个文案）');
+    lines.push('3. 预计 <=30 行，<=2 个文件');
+    lines.push('4. 不涉及架构或跨模块改动');
+    lines.push('5. 交付前仍需自检');
+    lines.push('');
+    lines.push('判断优先级：不确定 → 走 dev-workflow。宁可多走流程，不可跳过。');
+
+    // ── 段 2：动态进度注入（仅在 workflow 激活时）──
+    if (workflowState?.active && workflowState.currentStep !== null) {
+      const cs = workflowState.currentStep;
+      const csName = stepNames[cs - 1] ?? '未知';
+      lines.push('');
+      lines.push('## [当前 dev-workflow 进度 - 你正在执行此流程，不可偏离]');
+      lines.push(`当前步骤: Step ${cs} - ${csName}`);
+      lines.push(`已完成步骤: ${workflowState.completedSteps.map(s => `Step ${s}`).join(', ') || '无'}`);
+      lines.push(`任务: ${workflowState.taskSummary || '(未记录)'}`);
+      lines.push('');
+      lines.push('完成当前步骤后，必须调用 workflow_update 工具通知后端进入下一步。');
+      // 给出当前步骤的明确指令
+      const stepHints: Record<number, string> = {
+        1: '当前在需求分析阶段。使用 superpowers:brainstorming，向用户提问澄清需求，确认方案后调用 workflow_update(step=2)。',
+        2: '当前在写计划阶段。使用 superpowers:writing-plans，完成计划后交用户确认，确认后调用 workflow_update(step=3)。',
+        3: '当前在逐任务执行阶段。使用 superpowers:subagent-driven-development，逐个任务派 Agent 执行。全部完成后调用 workflow_update(step=4)。',
+        4: '当前在集成验证阶段。使用 superpowers:verification-before-completion，验证通过后调用 workflow_update(step=5)。',
+        5: '当前在代码优化阶段。派优化 Agent 消除重复、简化逻辑。完成后调用 workflow_update(step=6)。',
+        6: '当前在总结沉淀阶段。完成 Memory 记录、规则提取、Skills 审计后，调用 workflow_update(step=-1) 结束流程。',
+      };
+      if (stepHints[cs]) {
+        lines.push(`→ ${stepHints[cs]}`);
+      }
+    }
+
+    // ── 段 3：身份和行为要求 ──
+    lines.push('');
+    lines.push(`[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。你的 session_id: ${sessionId ?? 'unknown'}。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]`);
+    lines.push('[Sman 行为要求]');
+    lines.push('1. 收到消息后必须立刻先输出一句话说明你接下来要做什么，让用户知道你在工作，然后再开始执行');
+    lines.push('2. 输出风格：聚焦交付结果，描述改了什么、为什么改、效果如何');
+    lines.push('3. 代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入，不要输出大段完整代码');
+    lines.push('4. 交付前必须自检：编译通过？测试通过？改动是否符合预期？不自检就是玩具。');
+    lines.push('5. 尊重项目实际情况：尝试编译和测试，如果项目依赖复杂（二方库、三方库、本地环境缺依赖）导致无法编译或跑测试，直接告诉用户原因，不要卡死在重试上。能编译就编译验证，不能编译就做逻辑审查。');
+
+    return lines.join('\n');
   }
 
   private getClaudeCodePath(): string {
@@ -424,6 +487,7 @@ export class ClaudeSessionManager {
 
     // Inject capability gateway MCP Server (in-process, always present)
     if (this.capabilityRegistry) {
+      const self = this;
       const gatewayServer = createCapabilityGatewayMcpServer({
         registry: this.capabilityRegistry,
         getActiveSession: (sid: string) => {
@@ -431,6 +495,15 @@ export class ClaudeSessionManager {
           return entry?.session ?? null;
         },
         pluginsDir,
+        onWorkflowUpdate: (sid: string, step: number) => {
+          self.updateWorkflowStep(sid, step);
+        },
+        onWorkflowActivate: (sid: string, taskSummary: string) => {
+          self.activateWorkflow(sid, taskSummary);
+        },
+        onWorkflowReset: (sid: string) => {
+          self.resetWorkflow(sid);
+        },
       });
       (opts.mcpServers as any)['capability-gateway'] = gatewayServer;
     }
@@ -635,9 +708,50 @@ export class ClaudeSessionManager {
     }
   }
 
+  // ── Workflow progress tracking ──
+
+  /** AI notifies backend it entered a new dev-workflow step (via MCP tool) */
+  updateWorkflowStep(sessionId: string, step: number): void {
+    let state = this.workflowStates.get(sessionId);
+    if (!state) {
+      state = { currentStep: null, active: false, completedSteps: [], stepEnteredAt: Date.now(), startedAt: null, taskSummary: '' };
+      this.workflowStates.set(sessionId, state);
+    }
+    if (state.currentStep !== null && !state.completedSteps.includes(state.currentStep)) {
+      state.completedSteps.push(state.currentStep);
+    }
+    state.currentStep = step as WorkflowStep;
+    state.stepEnteredAt = Date.now();
+    if (!state.active) {
+      state.active = true;
+      state.startedAt = Date.now();
+    }
+    this.log.info(`Workflow step updated: session=${sessionId}, step=${step}, completed=[${state.completedSteps.join(',')}]`);
+  }
+
+  /** Activate workflow with task summary (called when AI enters Step 1) */
+  activateWorkflow(sessionId: string, taskSummary: string): void {
+    let state = this.workflowStates.get(sessionId);
+    if (!state) {
+      state = { currentStep: null, active: false, completedSteps: [], stepEnteredAt: Date.now(), startedAt: null, taskSummary: '' };
+      this.workflowStates.set(sessionId, state);
+    }
+    state.active = true;
+    state.startedAt = Date.now();
+    state.taskSummary = taskSummary;
+    this.log.info(`Workflow activated: session=${sessionId}, task="${taskSummary.slice(0, 60)}"`);
+  }
+
+  /** Reset workflow state (task completed or session closed) */
+  resetWorkflow(sessionId: string): void {
+    this.workflowStates.delete(sessionId);
+    this.log.info(`Workflow reset: session=${sessionId}`);
+  }
+
   closeV2Session(sessionId: string): void {
     this.preheatPromises.delete(sessionId);
     this.cancelPendingAskUser(sessionId);
+    this.workflowStates.delete(sessionId);
     const info = this.v2Sessions.get(sessionId);
     if (info) {
       try {
@@ -829,7 +943,7 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = this.buildSmanContext(projectName);
+      const smanContext = this.buildSmanContext(projectName, sessionId);
       const messagePrefix = profilePrefix
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;
@@ -1578,7 +1692,7 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = this.buildSmanContext(projectName);
+      const smanContext = this.buildSmanContext(projectName, sessionId);
       const messagePrefix = profilePrefix
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;

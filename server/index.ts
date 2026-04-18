@@ -548,13 +548,24 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chat.send': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');
+          // Capture sessionId for the closure
+          const chatSessionId = msg.sessionId;
           const wsSend = (d: string) => {
-            // Try original client first; fall back to broadcast if disconnected
+            // Try original client first
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(d);
-            } else {
-              broadcast(d);
+              return;
             }
+            // Client disconnected — find any other authenticated client to deliver to.
+            // This avoids broadcasting session-specific messages to all clients.
+            for (const client of authenticatedClients) {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(d);
+                return;
+              }
+            }
+            // No client available — message is lost, but this is acceptable for a disconnected user
+            log.warn(`No active client to deliver message for session ${chatSessionId}`);
           };
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
           await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media);

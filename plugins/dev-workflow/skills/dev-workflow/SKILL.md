@@ -1,11 +1,17 @@
 ---
 name: dev-workflow
-description: "Use when user says '完整流程', /dev-workflow, or complex development tasks. Structured development: brainstorm → plan → implement → review → verify → simplify → summarize."
+description: "TRIGGER on: new feature, refactoring (>3 files), multi-step task, unclear requirements, or task >30 lines. ALSO: '帮我做/开发/实现/设计/重构/加一个/新功能'. Workflow: brainstorm→plan→implement→verify→optimize→summarize. Use workflow_update tool to track progress."
 ---
 
 # 实战开发流程
 
 复杂开发任务的标准化流程。每步派独立 Agent 执行，主进程只做编排和用户确认。
+
+## 强制规则
+
+1. **每进入新步骤必须调用 `workflow_update` 工具** — `workflow_update(step=N, session_id=你的session_id)`。后端会在你的每条消息前注入当前进度，防止你忘记。
+2. **不确定就进流程** — 宁可多走流程，不可跳过。
+3. **每步必须等用户确认** — Step 1、2 结束后必须等用户确认才能进入下一步。
 
 ## 核心原则
 

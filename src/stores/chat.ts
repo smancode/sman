@@ -141,6 +141,12 @@ interface ChatState {
 // This map is outside Zustand to avoid deep-equal comparison overhead on every token.
 const streamingBlocksMap = new Map<string, StreamingBlock[]>();
 
+// ── Per-session sending state ──
+// Tracks which sessions are currently streaming a response.
+// This replaces a single global `sending` boolean to prevent session A's stream
+// from blocking message submission in session B.
+const sendingSessions = new Set<string>();
+
 function getStreamingBlocks(sessionId: string): StreamingBlock[] {
   return streamingBlocksMap.get(sessionId) ?? [];
 }
@@ -373,7 +379,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Determine if the target session has an active stream
     const targetBlocks = getStreamingBlocks(sessionId);
-    const isTargetSending = targetBlocks.length > 0 || !!streamCleanups.has(sessionId);
+    const isTargetSending = sendingSessions.has(sessionId);
 
     set({
       currentSessionId: sessionId,
@@ -424,13 +430,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Update cache
       sessionCache.set(sessionId, serverMsgs);
 
-      // Backend has more messages than what's showing → update UI
-      const { messages } = get();
-      if (serverMsgs.length > messages.length) {
-        set({ messages: serverMsgs, loading: false });
-      } else {
-        set({ loading: false });
-      }
+      // Always update UI with server data (content may differ even if length matches)
+      set({ messages: serverMsgs, loading: false });
 
       // Auto-label from first user message
       const { sessions } = get();
@@ -479,8 +480,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId, sessions, messages } = get();
     if (!currentSessionId) return;
 
-    // Cannot send while a response is in progress — frontend enforces this via UI
-    if (get().sending) return;
+    // Cannot send while a response is in progress for THIS session
+    if (sendingSessions.has(currentSessionId)) return;
 
     // Build contentBlocks from media so images render in chat
     const mediaContentBlocks: ContentBlock[] = [];
@@ -506,6 +507,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Reset per-session streaming state
     setStreamingBlocks(currentSessionId, []);
+    sendingSessions.add(currentSessionId);
 
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
     const streamSessionId = currentSessionId;
@@ -602,6 +604,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
         cleanup();
+        sendingSessions.delete(streamSessionId);
 
         // Freeze partial streaming content into an assistant message (same as chat.done)
         const frozen = freezeLiveText(getStreamingBlocks(streamSessionId));
@@ -763,6 +766,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
         cleanup();
+        sendingSessions.delete(streamSessionId);
 
         const frozen = freezeLiveText(getStreamingBlocks(streamSessionId));
         const contentBlocks = streamingBlocksToContentBlocks(frozen);
@@ -799,8 +803,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const cachedMessages = cached ?? [];
             const finalMessages = [...cachedMessages, assistantMsg];
             sessionCache.set(streamSessionId, finalMessages);
-            // Clear sending flag if this was the active session
-            if (get().currentSessionId === streamSessionId) {
+            // Also clear visible sending if this background session was the one showing
+            if (get().sending && !sendingSessions.has(get().currentSessionId)) {
               set({ sending: false });
             }
           }
@@ -821,6 +825,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pendingText = '';
         pendingThinking = '';
         cleanup();
+        sendingSessions.delete(streamSessionId);
         clearStreamingBlocks(streamSessionId);
         if (get().currentSessionId === streamSessionId) {
           set({
