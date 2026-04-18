@@ -105,6 +105,8 @@ export class ClaudeSessionManager {
   private activeStreams = new Map<string, AbortController>();
   /** Resolves when the current stream loop for a session fully exits (finally block ran) */
   private streamDone = new Map<string, Promise<void>>();
+  /** Active stream() generators — used to call interrupt() on abort to unblock the for-await loop */
+  private activeQueries = new Map<string, AsyncGenerator<unknown, void>>();
   /** Tracks in-flight preheat promises so sendMessage can await them */
   private preheatPromises = new Map<string, Promise<void>>();
   private sdkSessionIds = new Map<string, string>();
@@ -1053,7 +1055,9 @@ export class ClaudeSessionManager {
 
       let firstEventReceived = false;
       let deltaCount = 0;
-      for await (const sdkMsg of v2Session.stream()) {
+      const queryGen = v2Session.stream();
+      this.activeQueries.set(sessionId, queryGen);
+      for await (const sdkMsg of queryGen) {
         lastActivityAt = Date.now();
         if (abortController.signal.aborted) break;
 
@@ -1401,6 +1405,7 @@ export class ClaudeSessionManager {
       }
     } finally {
       this.activeStreams.delete(sessionId);
+      this.activeQueries.delete(sessionId);
       this.sessionWsSend.delete(sessionId);
       this.streamDone.delete(sessionId);
       streamResolve();
@@ -1893,10 +1898,13 @@ export class ClaudeSessionManager {
       // after saving partial content and sending chat.aborted to the frontend.
       this.log.info(`Session aborted: ${sessionId}${reason ? ` (${reason})` : ''}`);
     }
-    // Also try to interrupt V2 session to speed up stream loop exit
-    const info = this.v2Sessions.get(sessionId);
-    if (info) {
-      (info.session as any).interrupt?.()?.catch(() => {});
+    // Interrupt the active stream() generator to unblock the for-await loop.
+    // The Query object (returned by v2Session.stream()) has an interrupt() method
+    // that signals the CLI to stop the current tool execution and yield control back.
+    const query = this.activeQueries.get(sessionId);
+    if (query && typeof (query as any).interrupt === 'function') {
+      this.log.info(`Interrupting active query for session ${sessionId}`);
+      (query as any).interrupt().catch(() => {});
     }
   }
 
