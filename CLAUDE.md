@@ -4,33 +4,36 @@
 
 ## 项目定位
 
-Sman 是一个简化的智能业务平台，用户只需选择项目目录即可开始对话，无需预先配置业务系统。支持桌面端（Electron）、WeCom Bot、飞书 Bot 三端交互。
+Sman 是一个简化的智能业务平台，用户只需选择项目目录即可开始对话，无需预先配置业务系统。支持桌面端（Electron）、企业微信 Bot、飞书 Bot、微信 Bot 四端交互。
 
 ## 核心架构
 
 ```
-用户 (桌面端 / WeCom Bot / 飞书 Bot)
+用户 (桌面端 / 企业微信 / 飞书 / 微信)
          ↓
     Sman 后端 (Express + WebSocket)
          ↓
     Claude Agent SDK (V2 Session)
          ↓
-    项目目录 (用户选择) + MCP Servers + Plugins
+    项目目录 (用户选择) + MCP Servers + Plugins + Capabilities
+         ↕
+    Agent 集市 (多 Agent 协作网络)
 ```
 
-### 三端入口
+### 四端入口
 
 | 入口 | 连接方式 | 文件 |
 |------|---------|------|
 | 桌面端 | WebSocket (`ws://localhost:5880/ws`) | `electron/main.ts` |
-| WeCom Bot | WebSocket 长连接 (`wss://openws.work.weixin.qq.com`) | `server/chatbot/wecom-bot-connection.ts` |
-| 飞书 Bot | 飞书 SDK 事件监听 | `server/chatbot/feishu-bot-connection.ts` |
+| 企业微信 | WebSocket 长连接 (`wss://openws.work.weixin.qq.com`) | `server/chatbot/wecom-bot-connection.ts` |
+| 飞书 | 飞书 SDK 事件监听 | `server/chatbot/feishu-bot-connection.ts` |
+| 微信 | 微信 Bot 连接 | `server/chatbot/weixin-bot-connection.ts` |
 
 ## 使用流程
 
 1. **新建会话** → 点击"新建会话"按钮 → 选择项目目录 → 开始对话
 2. **会话管理** → 按目录分组显示 → 点击切换会话
-3. **WeCom/飞书** → 直接在 Bot 对话中发消息，用 `//cd <项目名>` 切换工作目录
+3. **企业微信/飞书/微信** → 直接在 Bot 对话中发消息，用 `//cd <项目名>` 切换工作目录
 
 **设计理念**：越简单越好，不要让用户看不懂。
 
@@ -39,11 +42,13 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 ```
 ├── server/                  # Node.js 后端
 │   ├── index.ts             # 后端入口，WebSocket + HTTP + 所有 handler 注册
-│   ├── claude-session.ts    # Claude Agent SDK V2 会话管理（生命周期、idle 清理、resume）
+│   ├── claude-session.ts    # Claude Agent SDK V2 会话管理（生命周期、idle 清理、resume、消息排队）
 │   ├── session-store.ts     # SQLite 会话和消息存储
 │   ├── settings-manager.ts  # ~/.sman/config.json 读写
 │   ├── skills-registry.ts   # Skills 注册和加载
 │   ├── mcp-config.ts        # MCP Server 自动配置（Brave/Tavily/Bing 搜索）
+│   ├── model-capabilities.ts # 模型能力检测（支持的特性、上下文窗口等）
+│   ├── user-profile.ts      # 用户画像管理（注入到 system prompt）
 │   ├── types.ts             # 共享 TypeScript 类型（SmanConfig, CronTask, BatchTask 等）
 │   ├── cron-scheduler.ts    # Cron 定时任务调度器
 │   ├── cron-executor.ts     # Cron 任务执行器（调用 Claude session）
@@ -52,12 +57,17 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   ├── batch-store.ts       # 批量任务 SQLite 存储
 │   ├── batch-utils.ts       # 批量任务工具函数
 │   ├── semaphore.ts         # 并发控制原语（暂停/恢复/停止）
-│   ├── chatbot/             # Chatbot 子模块（WeCom + 飞书）
+│   ├── chatbot/             # Chatbot 子模块（企业微信 + 飞书 + 微信）
 │   │   ├── chatbot-session-manager.ts  # Chatbot 会话管理（消息路由、命令处理）
 │   │   ├── chatbot-store.ts            # Chatbot 用户状态 SQLite 存储
 │   │   ├── chat-command-parser.ts      # //cd, //pwd, //help 等命令解析
-│   │   ├── wecom-bot-connection.ts     # WeCom Bot WebSocket 连接（心跳、重连、流式推送）
+│   │   ├── wecom-bot-connection.ts     # 企业微信 Bot WebSocket（心跳、重连、流式推送）
 │   │   ├── feishu-bot-connection.ts    # 飞书 Bot 连接
+│   │   ├── weixin-bot-connection.ts    # 微信 Bot 连接
+│   │   ├── weixin-store.ts             # 微信用户状态存储
+│   │   ├── weixin-api.ts               # 微信 API 封装
+│   │   ├── weixin-types.ts             # 微信类型定义
+│   │   ├── wecom-media.ts              # 企业微信媒体文件处理
 │   │   └── types.ts                    # Chatbot 类型定义
 │   ├── web-access/          # Web Access 子模块（浏览器自动化）
 │   │   ├── web-access-service.ts  # Web Access 服务层
@@ -66,8 +76,37 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── mcp-server.ts          # MCP Server（暴露 web_access_* 工具）
 │   │   ├── chrome-sites.ts        # Chrome 书签/历史自动发现企业站点
 │   │   └── index.ts               # 导出
+│   ├── capabilities/        # Capabilities 系统（按需发现和激活的能力包）
+│   │   ├── gateway-mcp-server.ts  # Capability Gateway MCP（注入每个会话）
+│   │   ├── registry.ts            # 能力注册表（搜索、匹配、加载）
+│   │   ├── types.ts               # Capability 类型定义
+│   │   ├── project-scanner.ts     # 项目能力扫描
+│   │   ├── scanner-prompts.ts     # 扫描提示词
+│   │   ├── experience-learner.ts  # 经验学习（从对话中提取知识）
+│   │   ├── office-skills-runner.ts    # Office 技能执行器
+│   │   ├── frontend-slides-runner.ts  # 前端幻灯片生成器
+│   │   ├── generic-instruction-runner.ts # 通用指令执行器
+│   │   ├── frontmatter-utils.ts   # Frontmatter 解析工具
+│   │   └── init-registry.ts       # 初始化注册表
+│   ├── init/                # 会话初始化（新建会话时的自动流程）
+│   │   ├── init-manager.ts        # 初始化流程编排
+│   │   ├── workspace-scanner.ts   # 工作区扫描
+│   │   ├── skill-injector.ts      # Skill 注入
+│   │   ├── capability-matcher.ts  # 能力匹配
+│   │   ├── claude-init-runner.ts  # Claude 初始化执行
+│   │   ├── init-types.ts          # 初始化类型
+│   │   └── templates/             # 初始化模板
+│   ├── bazaar/              # Agent 集市桥接层（主项目 ↔ 集市服务器）
+│   │   ├── bazaar-store.ts        # 本地存储（tasks, learned_routes, pair_history, chat）
+│   │   ├── bazaar-bridge.ts       # 连接管理 + 消息处理（经验提取、磨合记录、上下文注入）
+│   │   ├── bazaar-client.ts       # WebSocket 客户端（注册、心跳、重连）
+│   │   ├── bazaar-mcp.ts          # MCP 工具（bazaar_search, bazaar_collaborate）
+│   │   ├── bazaar-session.ts      # 协作会话管理（Claude Agent SDK 集成）
+│   │   ├── types.ts               # 桥接层类型
+│   │   └── index.ts               # 导出
 │   └── utils/
-│       └── logger.ts              # 日志工具
+│       ├── logger.ts              # 日志工具
+│       └── content-blocks.ts      # 消息内容块构建（文本、图片、媒体）
 ├── src/                     # React 前端
 │   ├── app/
 │   │   ├── App.tsx          # 顶层应用组件
@@ -78,19 +117,24 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   │   ├── ChatInput.tsx      # 消息输入框
 │   │   │   ├── ChatMessage.tsx    # 消息渲染（Markdown、代码高亮、tool_use 展示）
 │   │   │   ├── ChatToolbar.tsx    # 聊天工具栏
+│   │   │   ├── AskUserCard.tsx    # 用户交互卡片（Claude 提问时显示）
+│   │   │   ├── InitBanner.tsx     # 初始化进度横幅
 │   │   │   ├── message-utils.ts   # 消息处理工具
-│   │   │   └── highlighter.ts     # 代码高亮（Shiki）
+│   │   │   ├── highlighter.ts     # 代码高亮（Shiki）
+│   │   │   ├── streamdown-components.tsx # Streamdown 自定义组件
+│   │   │   └── streamdown-plugins.ts     # Streamdown 插件配置
 │   │   ├── settings/        # 设置页面
 │   │   │   ├── index.tsx          # 设置页面主入口（Tab 面板）
 │   │   │   ├── LLMSettings.tsx    # LLM 配置（API Key, Model, BaseURL）
 │   │   │   ├── WebSearchSettings.tsx  # Web 搜索提供商配置（Brave/Tavily/Bing）
-│   │   │   ├── ChatbotSettings.tsx    # Chatbot 配置（WeCom/飞书 Bot）
+│   │   │   ├── ChatbotSettings.tsx    # Chatbot 配置（企业微信/飞书/微信 Bot）
+│   │   │   ├── UserProfileSettings.tsx # 用户画像配置
 │   │   │   ├── CronTaskSettings.tsx   # Cron 任务管理
 │   │   │   ├── BatchTaskSettings.tsx  # 批量任务管理
 │   │   │   └── BackendSettings.tsx    # 后端服务 URL 配置
-│   │   ├── cron-tasks/      # Cron 任务页面（占位）
-│   │   ├── batch-tasks/     # 批量任务页面（占位）
-│   │   └── bazaar/          # Agent集市页面（仪表盘 + 像素世界）
+│   │   ├── cron-tasks/      # Cron 任务页面
+│   │   ├── batch-tasks/     # 批量任务页面
+│   │   └── bazaar/          # Agent 集市页面（仪表盘 + 像素世界）
 │   ├── components/          # 通用组件
 │   │   ├── SessionTree.tsx         # 会话树（按目录分组、内置目录选择器）
 │   │   ├── DirectorySelectorDialog.tsx  # 目录选择对话框
@@ -99,15 +143,18 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── common/                 # 通用组件
 │   │   └── ui/                     # Radix UI 基础组件
 │   ├── stores/              # Zustand 状态管理
-│   │   ├── chat.ts          # 聊天状态（消息、会话管理）
+│   │   ├── chat.ts          # 聊天状态（消息、会话管理、流式渲染、消息排队）
 │   │   ├── settings.ts      # 设置状态（同步后端配置）
-│   │   ├── bazaar.ts        # Agent集市状态（连接、任务、Agent列表、世界坐标）
+│   │   ├── bazaar.ts        # Agent 集市状态（连接、任务、Agent 列表、世界坐标）
 │   │   ├── cron.ts          # Cron 任务状态
 │   │   ├── batch.ts         # 批量任务状态
 │   │   └── ws-connection.ts # WebSocket 连接状态
 │   ├── lib/                 # 工具库
 │   │   ├── ws-client.ts     # WebSocket 客户端（自动重连、认证）
 │   │   ├── auth.ts          # Auth token 工具
+│   │   ├── session-cache.ts # 会话消息缓存
+│   │   ├── cron-cache.ts    # Cron 缓存
+│   │   ├── streamdown-plugins.ts # Streamdown 插件
 │   │   └── utils.ts         # 通用工具函数
 │   └── types/               # TypeScript 类型
 │       ├── chat.ts          # 聊天类型（ContentBlock, Message 等）
@@ -123,49 +170,71 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   └── server/
 │       ├── claude-session.test.ts
 │       ├── mcp-config.test.ts
+│       ├── model-capabilities.test.ts
 │       ├── settings-manager.test.ts
 │       ├── session-store.test.ts
+│       ├── skills-registry.test.ts
+│       ├── user-profile.test.ts
+│       ├── content-blocks.test.ts
 │       ├── semaphore.test.ts
 │       ├── batch-engine.test.ts
 │       ├── batch-store.test.ts
 │       ├── batch-utils.test.ts
+│       ├── cron-scheduler.test.ts
+│       ├── cron-task-store.test.ts
+│       ├── bazaar/          # Bazaar 桥接层测试
+│       │   ├── bazaar-client.test.ts
+│       │   ├── bazaar-mcp-ranking.test.ts
+│       │   ├── bazaar-session.test.ts
+│       │   ├── bazaar-store.test.ts
+│       │   └── bridge-integration.test.ts
+│       ├── capabilities/    # Capabilities 测试
+│       │   ├── registry.test.ts
+│       │   ├── registry-search.test.ts
+│       │   ├── project-scanner.test.ts
+│       │   ├── scanner-prompts.test.ts
+│       │   ├── scanner-v2-integration.test.ts
+│       │   ├── experience-learning.test.ts
+│       │   ├── frontmatter-utils.test.ts
+│       │   └── usage-tracking.test.ts
 │       ├── chatbot/         # Chatbot 测试
 │       │   ├── chatbot-session-manager.test.ts
 │       │   ├── chatbot-store.test.ts
 │       │   ├── chat-command-parser.test.ts
 │       │   ├── wecom-bot-connection.test.ts
-│       │   └── feishu-bot-connection.test.ts
+│       │   ├── fecom-media.test.ts
+│       │   ├── feishu-bot-connection.test.ts
+│       │   └── weixin-bot-connection.test.ts
+│       ├── init/            # 初始化流程测试
+│       │   ├── init-manager.test.ts
+│       │   ├── workspace-scanner.test.ts
+│       │   ├── skill-injector.test.ts
+│       │   └── capability-matcher.test.ts
 │       └── web-access/      # Web Access 测试
 │           ├── cdp-engine.test.ts
 │           ├── mcp-server.test.ts
+│           ├── url-experience-store.test.ts
 │           └── web-access-service.test.ts
 ├── scripts/                 # 工具脚本
 │   ├── init-skills.ts       # Skills 初始化
 │   ├── init-system.ts       # 系统初始化
 │   └── patch-sdk.mjs        # Claude Agent SDK postinstall 补丁
-├── bazaar/                  # Agent集市服务器（独立包边界）
+├── bazaar/                  # Agent 集市服务器（独立包边界）
 │   ├── package.json         # 独立依赖
 │   ├── tsconfig.json        # 独立编译配置
 │   └── src/
 │       ├── index.ts         # 集市服务器入口（HTTP API + WebSocket）
 │       ├── message-router.ts # WS 消息分发
 │       ├── agent-store.ts   # Agent 注册/心跳
-│       ├── project-index.ts # 项目能力索引
 │       ├── task-engine.ts   # 任务路由/排队
-│       ├── capability-search.ts # 能力发现
+│       ├── task-store.ts    # 任务持久化
 │       ├── capability-store.ts  # 通用能力包存储（CRUD + 搜索）
 │       ├── reputation.ts    # 声望计算
-│       ├── audit-log.ts     # 审计日志
 │       ├── world-state.ts   # 世界状态
-│       └── protocol.ts      # 消息协议定义
-├── server/bazaar/           # Agent集市桥接层（主项目 ↔ 集市服务器）
-│   ├── bazaar-store.ts      # 本地存储（tasks, learned_routes, pair_history, chat）
-│   ├── bazaar-bridge.ts     # 连接管理 + 消息处理（经验提取、磨合记录、上下文注入）
-│   ├── bazaar-client.ts     # WebSocket 客户端（注册、心跳、重连）
-│   ├── bazaar-mcp.ts        # MCP 工具（bazaar_search, bazaar_collaborate）
-│   └── bazaar-session.ts    # 协作会话管理（Claude Agent SDK 集成）
+│       ├── protocol.ts      # 消息协议定义
+│       └── utils/           # 集市工具函数
 ├── shared/                  # 共享类型（Sman + Bazaar 共用）
-│   └── bazaar-types.ts      # Agent集市消息协议类型
+│   └── bazaar-types.ts      # Agent 集市消息协议类型
 ├── docs/                    # 文档
 │   ├── windows-packaging.md
 │   └── superpowers/         # 设计文档和规格
@@ -179,6 +248,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 ├── config.json          # LLM + WebSearch + Chatbot + Auth 配置
 ├── registry.json        # Skills 注册表
 ├── sman.db              # SQLite 数据库（会话、消息、Cron、Batch、Chatbot 状态）
+├── claude-config/       # 隔离的 Claude CLI 配置目录（防止全局 settings.json 干扰）
 ├── skills/              # 全局 Skills（预制通用技能）
 └── logs/                # 日志文件
 ```
@@ -203,30 +273,59 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 存放到 {workspace}/.claude/skills/
 ```
 
+## Capabilities 系统
+
+按需发现和激活的能力包，通过 Gateway MCP Server 注入每个会话：
+
+| 模块 | 说明 |
+|------|------|
+| `registry.ts` | 能力注册表（搜索、匹配、加载） |
+| `project-scanner.ts` | 扫描项目发现可用能力 |
+| `experience-learner.ts` | 从对话中提取经验知识 |
+| `office-skills-runner.ts` | Office 文档技能执行器 |
+| `frontend-slides-runner.ts` | 前端幻灯片生成 |
+| `generic-instruction-runner.ts` | 通用指令执行器 |
+
+## 会话初始化流程
+
+新建会话时自动执行（`server/init/`）：
+
+1. **workspace-scanner** → 扫描项目结构
+2. **skill-injector** → 注入匹配的 Skills
+3. **capability-matcher** → 匹配可用的 Capabilities
+4. **claude-init-runner** → 执行 Claude 初始化对话
+
 ## 关键文件速查
 
 | 文件 | 说明 |
 |------|------|
 | `server/index.ts` | 后端入口，所有 WebSocket handler 注册、服务初始化 |
-| `server/claude-session.ts` | Claude Agent SDK V2 会话管理（创建、resume、idle 清理、流式推送） |
+| `server/claude-session.ts` | Claude Agent SDK V2 会话管理（创建、resume、idle 清理、流式推送、消息排队） |
+| `server/capabilities/gateway-mcp-server.ts` | Capability Gateway MCP（注入每个会话） |
+| `server/capabilities/registry.ts` | Capabilities 注册表 |
+| `server/init/init-manager.ts` | 会话初始化流程编排 |
+| `server/user-profile.ts` | 用户画像（注入到 system prompt） |
+| `server/model-capabilities.ts` | 模型能力检测 |
 | `server/chatbot/chatbot-session-manager.ts` | Chatbot 消息路由（命令解析 → Claude 查询） |
-| `server/chatbot/wecom-bot-connection.ts` | WeCom Bot WebSocket（心跳、重连、流式消息节流） |
+| `server/chatbot/wecom-bot-connection.ts` | 企业微信 Bot WebSocket（心跳、重连、流式消息节流） |
 | `server/chatbot/feishu-bot-connection.ts` | 飞书 Bot 连接 |
+| `server/chatbot/weixin-bot-connection.ts` | 微信 Bot 连接 |
 | `server/web-access/cdp-engine.ts` | Chrome DevTools Protocol 引擎 |
 | `server/web-access/mcp-server.ts` | Web Access MCP Server（9 个工具） |
 | `server/mcp-config.ts` | Web Search MCP 自动配置 |
 | `server/session-store.ts` | SQLite 会话和消息存储 |
 | `electron/main.ts` | Electron 主进程（窗口、后端启动、GPU 兼容） |
 | `src/features/chat/` | 聊天功能组件 |
-| `src/features/bazaar/BazaarPage.tsx` | Agent集市页面（仪表盘 + 像素世界双视图） |
+| `src/features/bazaar/BazaarPage.tsx` | Agent 集市页面（仪表盘 + 像素世界双视图） |
 | `src/features/bazaar/world/` | 像素世界渲染引擎（Canvas、交互、精灵） |
 | `src/features/settings/` | 设置页面组件 |
-| `src/stores/chat.ts` | 聊天状态管理 |
-| `src/stores/bazaar.ts` | Agent集市状态管理 |
+| `src/stores/chat.ts` | 聊天状态管理（流式渲染、消息排队） |
+| `src/stores/bazaar.ts` | Agent 集市状态管理 |
 | `src/components/SessionTree.tsx` | 会话树 + 目录选择器 |
-| `server/bazaar/bazaar-bridge.ts` | Agent集市桥接层（连接管理、经验提取、磨合机制） |
-| `server/bazaar/bazaar-store.ts` | Agent集市本地存储（SQLite） |
-| `server/bazaar/bazaar-mcp.ts` | Agent集市 MCP 工具（bazaar_search, bazaar_collaborate） |
+| `src/lib/session-cache.ts` | 会话消息缓存层 |
+| `server/bazaar/bazaar-bridge.ts` | Agent 集市桥接层（连接管理、经验提取、磨合机制） |
+| `server/bazaar/bazaar-store.ts` | Agent 集市本地存储（SQLite） |
+| `server/bazaar/bazaar-mcp.ts` | Agent 集市 MCP 工具（bazaar_search, bazaar_collaborate） |
 | `bazaar/src/capability-store.ts` | 集市通用能力包存储 |
 
 ## WebSocket API
@@ -239,6 +338,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `session.list` | 列出所有会话 |
 | `session.delete` | 删除会话，参数: `{ sessionId: string }` |
 | `session.history` | 获取会话历史 |
+| `session.updateLabel` | 更新会话标签，参数: `{ sessionId, label }` |
 
 ### 聊天
 
@@ -250,8 +350,12 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `chat.delta` | 服务端→客户端 | 流式文本/thinking/tool_use 增量 |
 | `chat.tool_start` | 服务端→客户端 | 工具调用开始 |
 | `chat.tool_delta` | 服务端→客户端 | 工具调用参数增量 |
+| `chat.tool_end` | 服务端→客户端 | 工具调用结束 |
 | `chat.done` | 服务端→客户端 | 响应完成（含 cost, usage） |
+| `chat.aborted` | 服务端→客户端 | 响应被中止（含已流式内容） |
 | `chat.error` | 服务端→客户端 | 错误 |
+| `chat.ask_user` | 服务端→客户端 | Claude 向用户提问 |
+| `chat.answer_question` | 客户端→服务端 | 回答 Claude 提问 |
 
 ### 设置
 
@@ -270,7 +374,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `batch.create/generate/test/save/run` | 批量任务生命周期 |
 | `batch.pause/resume/cancel/retry` | 批量任务控制 |
 
-### Agent集市
+### Agent 集市
 
 | 类型 | 说明 |
 |------|------|
@@ -284,7 +388,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `bazaar.notify` | 收到协作请求通知 |
 | `bazaar.task.chat.delta` | 协作对话增量消息 |
 
-## Chatbot 命令（WeCom/飞书）
+## Chatbot 命令（企业微信/飞书/微信）
 
 | 命令 | 别名 | 说明 |
 |------|------|------|
@@ -357,6 +461,8 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 4. **Windows GPU**: VDI 环境需 `app.disableHardwareAcceleration()` 防白屏
 5. **Auth 边界**: 只有 `/api/` 路径需要 Bearer auth，静态文件直接放行
 6. **安装包选择**: NSIS 安装包启动快（推荐）；Portable 每次启动要解压，VDI 环境较慢
+7. **环境隔离**: `getCleanEnv()` 清除 `ANTHROPIC_*/OPENAI_*/CLAUDE_*` 环境变量，使用隔离的 `CLAUDE_CONFIG_DIR` 防止全局配置干扰
+8. **消息排队**: SDK 不支持打断正在执行的 turn，后端通过 `await streamDone` 排队，前端等待 `chat.done` 后再发新消息
 
 ## 端口使用
 
@@ -378,8 +484,8 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 - **后端**: Node.js + TypeScript + Express + WebSocket (ws)
 - **桌面**: Electron + electron-vite
 - **数据库**: SQLite (better-sqlite3)
-- **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` v0.1 + `@anthropic-ai/claude-code` v2.1)
-- **代码高亮**: Shiki
+- **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` v0.2 + `@anthropic-ai/claude-code` v2.1)
+- **渲染**: Shiki + Streamdown
 - **Schema 校验**: Zod
 
 ## 注意事项
@@ -389,11 +495,13 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 3. **会话分组**: 按目录名分组显示，目录名即为显示名称
 4. **无预配置**: 用户无需预先配置业务系统，直接选择目录即可
 5. **离线部署**: 设置页配置内网模型 URL + API Key + Model 即可使用，支持 `ANTHROPIC_BASE_URL`
-6. **Chatbot 多轮对话**: WeCom/飞书 Bot 支持多轮对话，Claude 可在回复中询问用户信息，用户补充后继续
-7. **WeCom 流式推送**: 通过 `aibot_respond_msg` + `msgtype: 'stream'` 实现流式回复，2 秒节流
+6. **Chatbot 多轮对话**: 企业微信/飞书/微信 Bot 支持多轮对话，Claude 可在回复中询问用户信息，用户补充后继续
+7. **企业微信流式推送**: 通过 `aibot_respond_msg` + `msgtype: 'stream'` 实现流式回复，2 秒节流
 8. **Web Access 浏览器**: 通过 CDP 协议控制 Chrome，自动发现书签/历史中的企业站点
 9. **V2 Session 持久化**: SDK session_id 持久化到 SQLite，支持进程重启后恢复会话
-10. **Agent集市三层架构**: 前端 (`src/features/bazaar/`) → 桥接层 (`server/bazaar/`) → 集市服务器 (`bazaar/src/`)
+10. **Agent 集市三层架构**: 前端 (`src/features/bazaar/`) → 桥接层 (`server/bazaar/`) → 集市服务器 (`bazaar/src/`)
 11. **集市全屏模式**: `/bazaar` 路由隐藏侧边栏，世界视图全屏 Canvas + 浮动控件
-12. **Agent进化机制**: 对话经验自动提取 → learned_routes.experience 字段；磨合记录 → pair_history 表；搜索排序优先级：老搭档 > 历史协作 > 有经验 > 远程
-13. **能力包**: 通过 sman CLI 子命令管理（`sman capabilities search/install/list`），集市服务器提供 HTTP API (`/api/capabilities/*`)
+12. **Agent 进化机制**: 对话经验自动提取 → learned_routes.experience 字段；磨合记录 → pair_history 表；搜索排序优先级：老搭档 > 历史协作 > 有经验 > 远程
+13. **Capabilities 系统**: Gateway MCP 注入每个会话，按需发现和激活能力包（Office 技能、PPT 生成等）
+14. **会话初始化**: 新建会话自动扫描项目 → 注入 Skills → 匹配 Capabilities → 执行初始化对话
+15. **消息隔离**: 多会话并行不串 — 后端 Map 全部以 sessionId 为 key，前端 handler 过滤 sessionId，streamingBlocksMap 按 sessionId 独立存储

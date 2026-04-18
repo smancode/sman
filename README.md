@@ -1,8 +1,8 @@
-# SmanBase
+# Sman
 
 **零配置的 Claude Code 业务助手。** 选个项目目录，就能和 AI 聊你的代码。
 
-支持桌面端（Electron）、企业微信 Bot、飞书 Bot 三端同时接入。
+支持桌面端（Electron）、企业微信 Bot、飞书 Bot、微信 Bot 四端同时接入。
 
 ## 解决的问题
 
@@ -11,33 +11,35 @@ Claude Code 很强，但配置门槛高：
 - 需要为每个项目手动配置上下文
 - 在团队中推广时，配置同步是噩梦
 
-SmanBase 的思路：**让用户只做一件事——选目录。** AI 自动理解你的项目，主动调用 Skills，把知识留在本地。
+Sman 的思路：**让用户只做一件事——选目录。** AI 自动理解你的项目，主动调用 Skills，把知识留在本地。
 
 ## 核心能力
 
 | 能力 | 说明 |
 |------|------|
 | **零配置启动** | 选择目录 → 开始对话，不需要预设任何业务系统 |
-| **三端接入** | 桌面端 + 企业微信 + 飞书，同一个会话随时切换 |
-| **Agent集市** | Agent 自动搜索其他 Agent 协作，积累经验越用越聪明 |
+| **四端接入** | 桌面端 + 企业微信 + 飞书 + 微信，同一个会话随时切换 |
+| **Agent 集市** | Agent 自动搜索其他 Agent 协作，积累经验越用越聪明 |
 | **Skills 驱动** | 自动加载通用技能 + 根据项目代码生成专用技能 |
+| **Capabilities 系统** | Office 技能、PPT 生成等按需发现和激活的能力包 |
 | **定时任务** | Cron 定时触发 AI 任务，自动记录执行结果 |
 | **批量任务** | 并发控制、暂停/恢复，批量处理多个目标 |
 | **浏览器自动化** | AI 直接操控 Chrome，可用于自动填表、数据抓取 |
+| **消息排队** | 应答中发新消息自动排队，不会打断或丢失内容 |
 | **私有化部署** | 配置内网模型 URL + API Key，纯本地运行 |
 
 ## 架构
 
 ```
-用户 (桌面端 / 企业微信 / 飞书)
+用户 (桌面端 / 企业微信 / 飞书 / 微信)
          ↓
-    SmanBase 后端 (Express + WebSocket)
+    Sman 后端 (Express + WebSocket)
          ↓
     Claude Agent SDK (V2 Session 持久化)
          ↓
-    项目目录 + MCP Servers + Skills
+    项目目录 + MCP Servers + Skills + Capabilities
          ↕
-    Agent集市 (多 Agent 协作网络)
+    Agent 集市 (多 Agent 协作网络)
 ```
 
 极简两层：后端 + Claude Agent SDK，去掉中间层。
@@ -55,15 +57,16 @@ pnpm install
 启动后：
 1. 点击「新建会话」→ 选择项目目录
 2. 开始对话，AI 自动分析代码结构
-3. 通过桌面端、企业微信或飞书随时访问
+3. 通过桌面端、企业微信、飞书或微信随时访问
 
-## 三端入口
+## 四端入口
 
 | 入口 | 连接方式 |
 |------|---------|
 | 桌面端 | 打开 Electron 应用（自动连接 `ws://localhost:5880/ws`）|
 | 企业微信 | 配置 WebSocket 机器人，推送消息到 `wss://openws.work.weixin.qq.com` |
 | 飞书 | 配置飞书事件订阅，接收消息并回复 |
+| 微信 | 配置微信 Bot 连接，接收消息并回复 |
 
 ## 技术栈
 
@@ -71,26 +74,30 @@ pnpm install
 - **后端**: Node.js + Express + WebSocket (ws) + SQLite
 - **桌面**: Electron + electron-vite
 - **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` + `@anthropic-ai/claude-code`)
-- **代码高亮**: Shiki
+- **代码高亮**: Shiki + Streamdown
+- **Schema 校验**: Zod
 
 ## 项目结构
 
 ```
-server/           # Node.js 后端
-  ├── chatbot/    # 企业微信 + 飞书 Bot 集成
-  ├── bazaar/     # Agent集市桥接层（经验提取、磨合机制、MCP 工具）
-  ├── web-access/ # 浏览器自动化 (CDP 协议)
-  └── ...
-bazaar/           # Agent集市服务器（独立包）
-src/              # React 前端
-  └── features/bazaar/  # Agent集市页面（仪表盘 + 像素世界）
-electron/         # Electron 桌面应用
-plugins/          # Claude Code 插件 (web-access, superpowers)
+server/              # Node.js 后端
+  ├── chatbot/       # 企业微信 + 飞书 + 微信 Bot 集成
+  ├── bazaar/        # Agent 集市桥接层（经验提取、磨合机制、MCP 工具）
+  ├── capabilities/  # Capabilities 系统（Gateway MCP、技能执行、项目扫描）
+  ├── init/          # 会话初始化（workspace 扫描、skill 注入、capability 匹配）
+  ├── web-access/    # 浏览器自动化 (CDP 协议)
+  └── utils/         # 工具函数（日志、内容块构建）
+bazaar/              # Agent 集市服务器（独立包）
+src/                 # React 前端
+  └── features/     # chat、settings、bazaar、cron-tasks、batch-tasks
+electron/           # Electron 桌面应用
+plugins/            # Claude Code 插件 (web-access, superpowers)
+shared/             # Sman + Bazaar 共享类型
 ```
 
 ## 使用技巧
 
-**在企业微信/飞书中切换项目目录：**
+**在企业微信/飞书/微信中切换项目目录：**
 
 ```
 //cd my-project
