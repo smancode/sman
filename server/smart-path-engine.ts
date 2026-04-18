@@ -159,8 +159,8 @@ export class SmartPathEngine {
         .map(b => b.text)
         .join('') || '';
     } finally {
-      // Cleanup session
-      this.sessionManager.deleteSession(sessionId);
+      // Session will be cleaned up by idle cleanup mechanism
+      this.sessionManager.abort(sessionId);
     }
   }
 

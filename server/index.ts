@@ -30,6 +30,8 @@ import { CronScheduler } from './cron-scheduler.js';
 import { CronExpressionParser } from 'cron-parser';
 import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
+import { SmartPathStore } from './smart-path-store.js';
+import { SmartPathEngine } from './smart-path-engine.js';
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
 import { CapabilityRegistry } from './capabilities/registry.js';
@@ -145,6 +147,10 @@ batchEngine.setOnProgress((taskId, data) => {
   broadcast(JSON.stringify({ type: 'batch.progress', taskId, ...data }));
 });
 batchEngine.start();
+
+// SmartPath execution engine
+const smartPathStore = new SmartPathStore(dbPath);
+const smartPathEngine = new SmartPathEngine(smartPathStore, skillsRegistry, sessionManager);
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
@@ -998,6 +1004,69 @@ wss.on('connection', (ws: WebSocket) => {
             const errorMessage = err instanceof Error ? err.message : String(err);
             ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
           }
+          break;
+        }
+
+        // ── Smart Paths ──
+        case 'smartpath.list': {
+          const paths = smartPathStore.listPaths();
+          ws.send(JSON.stringify({ type: 'smartpath.list', paths }));
+          break;
+        }
+
+        case 'smartpath.create': {
+          if (!msg.name || !msg.workspace || !msg.steps) {
+            throw new Error('Missing required fields: name, workspace, steps');
+          }
+          const path = smartPathStore.createPath({
+            name: msg.name as string,
+            workspace: msg.workspace as string,
+            steps: msg.steps as string,
+            status: msg.status as any,
+          });
+          ws.send(JSON.stringify({ type: 'smartpath.created', path }));
+          break;
+        }
+
+        case 'smartpath.update': {
+          if (!msg.pathId) throw new Error('Missing pathId');
+          const { pathId, ...updates } = msg;
+          const path = smartPathStore.updatePath(pathId as string, updates as any);
+          ws.send(JSON.stringify({ type: 'smartpath.updated', path }));
+          break;
+        }
+
+        case 'smartpath.delete': {
+          if (!msg.pathId) throw new Error('Missing pathId');
+          smartPathStore.deletePath(msg.pathId as string);
+          ws.send(JSON.stringify({ type: 'smartpath.deleted', pathId: msg.pathId }));
+          break;
+        }
+
+        case 'smartpath.run': {
+          if (!msg.pathId) throw new Error('Missing pathId');
+          try {
+            smartPathEngine.runPath(msg.pathId as string, (data) => {
+              broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: msg.pathId, ...data }));
+            }).then(() => {
+              const path = smartPathStore.getPath(msg.pathId as string);
+              broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: msg.pathId, path }));
+            }).catch((err) => {
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              broadcast(JSON.stringify({ type: 'smartpath.failed', pathId: msg.pathId, error: errorMessage }));
+            });
+            ws.send(JSON.stringify({ type: 'smartpath.running', pathId: msg.pathId }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'smartpath.runs': {
+          if (!msg.pathId) throw new Error('Missing pathId');
+          const runs = smartPathStore.listRuns(msg.pathId as string);
+          ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs }));
           break;
         }
 
