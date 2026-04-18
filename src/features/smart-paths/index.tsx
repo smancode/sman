@@ -84,14 +84,18 @@ function ActionEditor({
 }) {
   const [generating, setGenerating] = useState(false);
   const [description, setDescription] = useState('');
+  const [genError, setGenError] = useState<string | null>(null);
   const generatePython = useSmartPathStore((s) => s.generatePython);
 
   const handleGenerate = async () => {
     if (!description.trim() || !workspace) return;
     setGenerating(true);
+    setGenError(null);
     try {
       const code = await generatePython(description, workspace);
       onChange({ ...action, code });
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : String(err));
     } finally {
       setGenerating(false);
     }
@@ -150,6 +154,9 @@ function ActionEditor({
                   生成
                 </Button>
               </div>
+              {genError && (
+                <div className="text-xs text-red-500">{genError}</div>
+              )}
             </div>
           )}
           <div className="space-y-1">
