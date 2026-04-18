@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
-  FolderOpen, Code, Wand2, Save, RotateCcw,
+  FolderOpen, Code, Wand2, Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useSmartPathStore } from '@/stores/smart-path';
+import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
 import type { SmartPath, SmartPathStep, SmartPathAction } from '@/types/settings';
 
@@ -45,10 +46,10 @@ function PathCard({
     <button
       onClick={onClick}
       className={cn(
-        'flex flex-col gap-1 w-full rounded-lg px-3 py-2.5 text-left transition-colors border',
+        'flex flex-col gap-1 w-full rounded-lg px-3 py-2.5 text-left transition-colors',
         isSelected
-          ? 'bg-primary/10 border-primary/30 text-primary'
-          : 'bg-card border-border text-foreground hover:bg-muted',
+          ? 'bg-primary/10 text-primary'
+          : 'text-foreground hover:bg-muted',
       )}
     >
       <div className="flex items-center justify-between">
@@ -80,7 +81,7 @@ function ActionEditor({
   onDelete: () => void;
 }) {
   return (
-    <div className="border rounded-md p-3 space-y-2 bg-muted/30">
+    <div className="rounded-md p-3 space-y-2 border">
       <div className="flex items-center gap-2">
         <Select
           value={action.type}
@@ -151,7 +152,7 @@ function StepEditor({
   };
 
   return (
-    <div className="border rounded-lg p-4 space-y-3 bg-card">
+    <div className="rounded-lg p-4 space-y-3 border">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">步骤 {index + 1}</span>
@@ -211,6 +212,10 @@ export function SmartPathPage() {
   const setCurrentPath = useSmartPathStore((s) => s.setCurrentPath);
   const clearError = useSmartPathStore((s) => s.clearError);
 
+  // 复用 cron store 的 workspaces 获取逻辑（从会话建立过的业务系统中选择）
+  const workspaces = useCronStore((s) => s.workspaces);
+  const fetchWorkspaces = useCronStore((s) => s.fetchWorkspaces);
+
   const [editingPath, setEditingPath] = useState<SmartPath | null>(null);
   const [editName, setEditName] = useState('');
   const [editSteps, setEditSteps] = useState<SmartPathStep[]>([]);
@@ -218,8 +223,11 @@ export function SmartPathPage() {
   const [newWorkspace, setNewWorkspace] = useState('');
 
   useEffect(() => {
-    if (wsStatus === 'connected') fetchPaths();
-  }, [wsStatus, fetchPaths]);
+    if (wsStatus === 'connected') {
+      fetchPaths();
+      fetchWorkspaces();
+    }
+  }, [wsStatus, fetchPaths, fetchWorkspaces]);
 
   useEffect(() => {
     if (currentPath) {
@@ -284,21 +292,30 @@ export function SmartPathPage() {
     setEditSteps([]);
   };
 
+  // workspace 选项：显示目录名，值为完整路径
+  const workspaceOptions = useMemo(() => {
+    return workspaces.map((ws) => ({
+      value: ws,
+      label: ws.split(/[/\\]/).pop() || ws,
+    }));
+  }, [workspaces]);
+
   return (
     <div className="flex h-full">
       {/* Left sidebar */}
-      <div className="w-64 shrink-0 border-r flex flex-col">
-        <div className="p-3 border-b">
+      <div className="w-64 shrink-0 flex flex-col">
+        <div className="p-3">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3"
           >
             <ChevronLeft className="h-4 w-4" /> 返回
           </button>
-          <Button size="sm" className="w-full" onClick={() => {
+          <Button variant="outline" size="sm" className="w-full" onClick={() => {
             setShowCreate(true);
             setEditingPath(null);
             setEditName('');
+            setNewWorkspace('');
             setEditSteps([]);
           }}>
             <Plus className="h-4 w-4 mr-1" /> 新建 Path
@@ -347,7 +364,21 @@ export function SmartPathPage() {
             </div>
             <div className="space-y-2">
               <Label>工作目录</Label>
-              <Input value={newWorkspace} onChange={(e) => setNewWorkspace(e.target.value)} placeholder="/path/to/workspace" />
+              <Select value={newWorkspace} onValueChange={setNewWorkspace}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择业务系统" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaceOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <div className="flex items-center gap-2">
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        <span>{opt.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-3">
               <Label>步骤配置</Label>
@@ -359,7 +390,7 @@ export function SmartPathPage() {
               </Button>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleCreate} disabled={!editName.trim() || !newWorkspace.trim()}><Save className="h-4 w-4 mr-1" /> 创建</Button>
+              <Button variant="outline" onClick={handleCreate} disabled={!editName.trim() || !newWorkspace}><Save className="h-4 w-4 mr-1" /> 创建</Button>
               <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
             </div>
           </div>
@@ -380,7 +411,7 @@ export function SmartPathPage() {
               </Button>
             </div>
             <div className="flex gap-2">
-              <Button onClick={saveEdit}><Save className="h-4 w-4 mr-1" /> 保存</Button>
+              <Button variant="outline" onClick={saveEdit}><Save className="h-4 w-4 mr-1" /> 保存</Button>
               <Button variant="outline" onClick={() => setEditingPath(null)}>取消</Button>
             </div>
           </div>
@@ -396,6 +427,7 @@ export function SmartPathPage() {
                   编辑
                 </Button>
                 <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => runPath(currentPath.id)}
                   disabled={running || currentPath.status === 'running'}
@@ -420,7 +452,7 @@ export function SmartPathPage() {
                   return (
                     <div className="space-y-2">
                       {steps.map((step, i) => (
-                        <div key={i} className="border rounded-md p-3 bg-muted/30">
+                        <div key={i} className="rounded-md p-3 border">
                           <div className="flex items-center gap-2 text-sm">
                             <span className="text-muted-foreground">步骤 {i + 1}</span>
                             <span className={cn(
@@ -433,7 +465,7 @@ export function SmartPathPage() {
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {step.actions.map((a, j) => (
-                              <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-card border">
+                              <span key={j} className="text-[10px] px-1.5 py-0.5 rounded border">
                                 {a.type === 'skill' ? a.skillId || 'skill' : 'python'}
                               </span>
                             ))}
@@ -453,7 +485,7 @@ export function SmartPathPage() {
                 <Label className="text-sm font-medium">执行历史</Label>
                 <div className="space-y-1">
                   {runs.map((run) => (
-                    <div key={run.id} className="border rounded-md p-2 text-sm flex items-center justify-between bg-muted/30">
+                    <div key={run.id} className="rounded-md p-2 text-sm flex items-center justify-between border">
                       <div className="flex items-center gap-2">
                         {run.status === 'completed' ? (
                           <CheckCircle className="h-4 w-4 text-green-500" />

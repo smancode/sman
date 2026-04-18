@@ -26,7 +26,7 @@ export function MainLayout() {
   const inChat = location.pathname === '/chat';
   const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
-  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/bazaar'].includes(location.pathname);
+  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/bazaar'].includes(location.pathname);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
