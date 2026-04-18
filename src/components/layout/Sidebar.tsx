@@ -7,6 +7,7 @@ import {
   Clock,
   Layers,
   Sparkles,
+  Route,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -124,6 +125,31 @@ export function Sidebar() {
                 <Layers className="h-[18px] w-[18px]" strokeWidth={2} />
               </div>
               <span>智能任务</span>
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/smart-paths"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <div
+                className={cn(
+                  'flex shrink-0 items-center justify-center',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <Route className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              <span>智能路径</span>
             </>
           )}
         </NavLink>
