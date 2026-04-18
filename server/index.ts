@@ -1112,11 +1112,19 @@ wss.on('connection', (ws: WebSocket) => {
               '- Use `import json` at the top.',
             ].join('\n');
 
+            // Model resolution: non-Anthropic model names (e.g. third-party proxies)
+            // cause the SDK to send unrecognized model names to the API endpoint.
+            // Use a standard Anthropic model name and let the proxy map it server-side.
+            const configModel = llmConfig.model;
+            const resolvedModel = configModel.toLowerCase().startsWith('claude-') || configModel.toLowerCase().startsWith('anthropic-')
+              ? configModel
+              : 'claude-sonnet-4-6';
+
             const q = query({
               prompt,
               options: {
                 cwd: workspace || process.cwd(),
-                model: llmConfig.model,
+                model: resolvedModel,
                 permissionMode: 'bypassPermissions' as const,
                 allowDangerouslySkipPermissions: true,
                 env,
