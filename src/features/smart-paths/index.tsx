@@ -480,7 +480,7 @@ export function SmartPathPage() {
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             选择一个 Path 查看详情，或点击"新建 Path"创建
-          㰉3d>
+          </div>
         )}
       </div>
     </div>

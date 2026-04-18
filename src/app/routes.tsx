@@ -5,6 +5,7 @@ import { Settings } from '@/features/settings';
 import { CronTasksPage } from '@/features/cron-tasks';
 import { BatchTasksPage } from '@/features/batch-tasks';
 import { BazaarDashboard } from '@/features/bazaar/BazaarDashboard';
+import { SmartPathPage } from '@/features/smart-paths';
 
 export const router = createBrowserRouter([
   {
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
       { path: 'chat', element: <Chat /> },
       { path: 'cron-tasks', element: <CronTasksPage /> },
       { path: 'batch-tasks', element: <BatchTasksPage /> },
+      { path: 'smart-paths', element: <SmartPathPage /> },
       { path: 'bazaar', element: <BazaarDashboard /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/chat" replace /> },
