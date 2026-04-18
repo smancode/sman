@@ -142,3 +142,41 @@ export interface BatchItem {
   cost: number;
   retries: number;
 }
+
+// === Smart Path Types ===
+
+export type SmartPathStatus = 'draft' | 'ready' | 'running' | 'completed' | 'failed';
+export type SmartPathRunStatus = 'running' | 'completed' | 'failed';
+export type SmartPathStepMode = 'serial' | 'parallel';
+export type SmartPathActionType = 'skill' | 'python';
+
+export interface SmartPathAction {
+  type: SmartPathActionType;
+  skillId?: string;
+  code?: string;
+}
+
+export interface SmartPathStep {
+  mode: SmartPathStepMode;
+  actions: SmartPathAction[];
+}
+
+export interface SmartPath {
+  id: string;
+  name: string;
+  workspace: string;
+  steps: SmartPathStep[];
+  status: SmartPathStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SmartPathRun {
+  id: string;
+  pathId: string;
+  status: SmartPathRunStatus;
+  stepResults: string;
+  startedAt: string;
+  finishedAt?: string;
+  errorMessage?: string;
+}
