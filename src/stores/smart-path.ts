@@ -41,6 +41,7 @@ interface SmartPathState {
   deletePath: (pathId: string) => Promise<void>;
   runPath: (pathId: string) => Promise<void>;
   fetchRuns: (pathId: string) => Promise<void>;
+  generatePython: (description: string, workspace: string) => Promise<string>;
   setCurrentPath: (path: SmartPath | null) => void;
   clearError: () => void;
 }
@@ -210,6 +211,26 @@ export const useSmartPathStore = create<SmartPathState>((set, get) => ({
         resolve();
       });
       client.send({ type: 'smartpath.runs', pathId });
+    });
+  },
+
+  generatePython: async (description, workspace) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<string>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'smartpath.pythonGenerated', (data) => {
+        unsub();
+        unsubErr();
+        resolve(String(data.code));
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'smartpath.generatePython', description, workspace });
     });
   },
 

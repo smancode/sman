@@ -138,6 +138,22 @@ function broadcast(data: string): void {
   }
 }
 
+function extractTextFromMessage(msg: any): string {
+  if (msg.type === 'assistant') {
+    const content = msg.message?.content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('');
+    }
+  }
+  if (msg.type === 'stream_event') {
+    return msg.event?.delta?.type === 'text_delta' ? msg.event.delta.text : '';
+  }
+  return '';
+}
+
 // Batch execution engine
 const batchStore = new BatchStore(dbPath);
 const batchEngine = new BatchEngine(batchStore);
@@ -1067,6 +1083,64 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.pathId) throw new Error('Missing pathId');
           const runs = smartPathStore.listRuns(msg.pathId as string);
           ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs }));
+          break;
+        }
+
+        case 'smartpath.generatePython': {
+          const description = msg.description as string;
+          const workspace = msg.workspace as string;
+          if (!description) throw new Error('Missing description');
+
+          try {
+            const { query } = await import('@anthropic-ai/claude-agent-sdk');
+            const llmConfig = settingsManager.getConfig().llm;
+
+            const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
+            if (llmConfig.apiKey) env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
+            if (llmConfig.baseUrl) env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
+
+            const prompt = [
+              'Generate a Python script based on the following description.',
+              '',
+              'Description:',
+              description,
+              '',
+              'Requirements:',
+              '- The script receives input data via a `ctx` variable (dict-like).',
+              '- Output MUST be a JSON object printed to stdout using `print(json.dumps(result))`.',
+              '- Do not include any interactive input prompts.',
+              '- Use `import json` at the top.',
+            ].join('\n');
+
+            const q = query({
+              prompt,
+              options: {
+                cwd: workspace || process.cwd(),
+                model: llmConfig.model,
+                permissionMode: 'bypassPermissions' as const,
+                allowDangerouslySkipPermissions: true,
+                env,
+                systemPrompt: {
+                  type: 'preset' as const,
+                  preset: 'claude_code' as const,
+                  append: 'You are a Python script generator. Generate ONLY the script code, wrapped in a code block.',
+                },
+              } as any,
+            });
+
+            let fullText = '';
+            for await (const msg of q) {
+              fullText += extractTextFromMessage(msg);
+            }
+
+            const codeMatch = fullText.match(/```(?:python)?\n([\s\S]*?)```/);
+            const code = codeMatch ? codeMatch[1].trim() : fullText.trim();
+
+            ws.send(JSON.stringify({ type: 'smartpath.pythonGenerated', code }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
           break;
         }
 

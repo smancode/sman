@@ -50,6 +50,9 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
 const ACCEPTED_TYPES = 'image/*,.pdf';
 
+// Per-session input cache — survives session switches
+const inputCache = new Map<string, { input: string; stagedMedia: StagedMedia[] }>();
+
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -91,6 +94,25 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   useEffect(() => {
     if (!sending) abortingRef.current = false;
   }, [sending]);
+
+  // Save/restore input on session switch
+  const prevSessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    const prevId = prevSessionIdRef.current;
+    if (prevId === currentSessionId) return;
+
+    // Save current input to previous session
+    if (prevId) {
+      inputCache.set(prevId, { input, stagedMedia });
+    }
+
+    // Restore input for new session (or reset if none cached)
+    const cached = currentSessionId ? inputCache.get(currentSessionId) : undefined;
+    setInput(cached?.input ?? '');
+    setStagedMedia(cached?.stagedMedia ?? []);
+
+    prevSessionIdRef.current = currentSessionId;
+  }); // run every render to detect session changes
 
   // Auto-resize textarea
   useEffect(() => {
@@ -159,11 +181,12 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const textToSend = input.trim();
     setInput('');
     setStagedMedia([]);
+    if (currentSessionId) inputCache.delete(currentSessionId);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
     onSend(textToSend || ' ', undefined, null, stagedMedia.length > 0 ? stagedMedia : undefined);
-  }, [input, canSend, sending, onSend, stagedMedia]);
+  }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -378,6 +401,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
           {/* Send / Stop Button */}
           {sending ? (
             <Button
+              variant="outline"
               onClick={() => {
                 if (!abortingRef.current) {
                   abortingRef.current = true;
@@ -388,9 +412,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
               size="icon"
               className={cn(
                 'shrink-0 h-9 w-9 rounded-lg transition-colors',
-                abortingRef.current
-                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                abortingRef.current && 'opacity-50 cursor-not-allowed'
               )}
               title={abortingRef.current ? '正在停止...' : '停止'}
             >
@@ -398,14 +420,13 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             </Button>
           ) : (
             <Button
+              variant="outline"
               onClick={handleSend}
               disabled={!canSend}
               size="icon"
               className={cn(
                 'shrink-0 h-9 w-9 rounded-lg transition-colors',
-                canSend
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'text-muted-foreground/50 hover:bg-transparent bg-transparent'
+                !canSend && 'opacity-50'
               )}
               title="发送"
             >

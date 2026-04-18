@@ -75,11 +75,28 @@ function ActionEditor({
   action,
   onChange,
   onDelete,
+  workspace,
 }: {
   action: SmartPathAction;
   onChange: (a: SmartPathAction) => void;
   onDelete: () => void;
+  workspace?: string;
 }) {
+  const [generating, setGenerating] = useState(false);
+  const [description, setDescription] = useState('');
+  const generatePython = useSmartPathStore((s) => s.generatePython);
+
+  const handleGenerate = async () => {
+    if (!description.trim() || !workspace) return;
+    setGenerating(true);
+    try {
+      const code = await generatePython(description, workspace);
+      onChange({ ...action, code });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="rounded-md p-3 space-y-2 border">
       <div className="flex items-center gap-2">
@@ -111,14 +128,39 @@ function ActionEditor({
           />
         </div>
       ) : (
-        <div className="space-y-1">
-          <Label className="text-xs">Python 代码</Label>
-          <Textarea
-            value={action.code || ''}
-            onChange={(e) => onChange({ ...action, code: e.target.value })}
-            placeholder="print(json.dumps({&quot;result&quot;: 42}))"
-            className="min-h-[80px] text-xs font-mono"
-          />
+        <div className="space-y-2">
+          {workspace && (
+            <div className="space-y-1">
+              <Label className="text-xs">需求描述（自然语言）</Label>
+              <div className="flex gap-2">
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="描述你想让这段 Python 代码做什么..."
+                  className="min-h-[60px] text-xs flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-auto"
+                  disabled={!description.trim() || generating}
+                  onClick={handleGenerate}
+                >
+                  {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                  生成
+                </Button>
+              </div>
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Python 代码</Label>
+            <Textarea
+              value={action.code || ''}
+              onChange={(e) => onChange({ ...action, code: e.target.value })}
+              placeholder="print(json.dumps({&quot;result&quot;: 42}))"
+              className="min-h-[80px] text-xs font-mono"
+            />
+          </div>
         </div>
       )}
     </div>
@@ -130,11 +172,13 @@ function StepEditor({
   index,
   onChange,
   onDelete,
+  workspace,
 }: {
   step: SmartPathStep;
   index: number;
   onChange: (s: SmartPathStep) => void;
   onDelete: () => void;
+  workspace?: string;
 }) {
   const updateAction = (j: number, action: SmartPathAction) => {
     const newActions = [...step.actions];
@@ -181,6 +225,7 @@ function StepEditor({
             action={action}
             onChange={(a) => updateAction(j, a)}
             onDelete={() => removeAction(j)}
+            workspace={workspace}
           />
         ))}
       </div>
@@ -383,7 +428,7 @@ export function SmartPathPage() {
             <div className="space-y-3">
               <Label>步骤配置</Label>
               {editSteps.map((step, i) => (
-                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} />
+                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={newWorkspace} />
               ))}
               <Button variant="outline" className="w-full" onClick={addStep}>
                 <Plus className="h-4 w-4 mr-1" /> 添加步骤
@@ -404,7 +449,7 @@ export function SmartPathPage() {
             <div className="space-y-3">
               <Label>步骤配置</Label>
               {editSteps.map((step, i) => (
-                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} />
+                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={editingPath.workspace} />
               ))}
               <Button variant="outline" className="w-full" onClick={addStep}>
                 <Plus className="h-4 w-4 mr-1" /> 添加步骤
