@@ -255,6 +255,12 @@ export class ClaudeSessionManager {
     lines.push('3. 代码变更只展示关键片段（不超过15行），完整文件通过工具直接写入，不要输出大段完整代码');
     lines.push('4. 交付前必须自检：编译通过？测试通过？改动是否符合预期？不自检就是玩具。');
     lines.push('5. 尊重项目实际情况：尝试编译和测试，如果项目依赖复杂（二方库、三方库、本地环境缺依赖）导致无法编译或跑测试，直接告诉用户原因，不要卡死在重试上。能编译就编译验证，不能编译就做逻辑审查。');
+    lines.push('6. 复杂任务必须拆分执行：用 Task 工具派子 agent 处理子任务，子 agent 天然隔离上下文，避免主会话膨胀。你只汇总节点和结论，不输出子 agent 的中间过程。');
+    lines.push('7. 输出纪律（交付结果导向）：');
+    lines.push('   - 文件变更：只给路径 + 改动摘要（如 "UserService.java:42 新增参数校验"），不输出完整代码');
+    lines.push('   - 子任务：只给节点状态（如 "✓ 编译通过" "✓ 测试通过"），不输出执行过程');
+    lines.push('   - 用户追问细节时才展开，否则保持精简');
+    lines.push('8. 上下文过长时（感觉到注意力下降或遗漏信息），主动建议用户开启新会话或拆分任务。不要硬撑。');
 
     return lines.join('\n');
   }
@@ -1303,6 +1309,30 @@ export class ClaudeSessionManager {
             }));
 
             this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}`);
+
+            // Context length warning: notify frontend when approaching context limit
+            if (!isError && result.usage?.input_tokens) {
+              const inputTokens = result.usage.input_tokens;
+              const CONTEXT_WARN_THRESHOLD = 80_000; // ~50% of typical 200k window
+              const CONTEXT_CRITICAL_THRESHOLD = 140_000; // ~70% of typical 200k window
+              if (inputTokens >= CONTEXT_CRITICAL_THRESHOLD) {
+                wsSend(JSON.stringify({
+                  type: 'chat.context_warning',
+                  sessionId,
+                  level: 'critical',
+                  inputTokens,
+                  message: '对话上下文已接近模型上限，建议开启新会话继续',
+                }));
+              } else if (inputTokens >= CONTEXT_WARN_THRESHOLD) {
+                wsSend(JSON.stringify({
+                  type: 'chat.context_warning',
+                  sessionId,
+                  level: 'warning',
+                  inputTokens,
+                  message: '对话较长，如果感觉回复质量下降，建议开启新会话',
+                }));
+              }
+            }
 
             // Fire-and-forget: update user profile after conversation turn
             if (this.userProfile && this.config?.llm?.userProfile !== false && !isError) {

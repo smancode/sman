@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS } from '@/stores/chat';
@@ -47,9 +47,11 @@ export function Chat() {
   const streamingBlocks = useChatStore((s) => s.streamingBlocks);
   const showThinking = useChatStore((s) => s.showThinking);
   const error = useChatStore((s) => s.error);
+  const contextWarning = useChatStore((s) => s.contextWarning);
   const waitingHint = useChatStore((s) => s.waitingHint);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearError = useChatStore((s) => s.clearError);
+  const clearContextWarning = useChatStore((s) => s.clearContextWarning);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
@@ -242,6 +244,16 @@ export function Chat() {
 
       {/* Error card */}
       {error && <ErrorCard error={error} onDismiss={clearError} />}
+
+      {/* Context length warning */}
+      {contextWarning && !error && (
+        <ContextWarningCard
+          level={contextWarning.level}
+          inputTokens={contextWarning.inputTokens}
+          message={contextWarning.message}
+          onDismiss={clearContextWarning}
+        />
+      )}
 
       {/* Input */}
       {hasActiveSession && (
@@ -551,6 +563,43 @@ const ERROR_STYLES: Record<string, { icon: typeof AlertCircle; severity: ErrorSe
   network_error:   { icon: WifiOff,        severity: 'error' },
   unknown:         { icon: AlertCircle,    severity: 'error' },
 };
+
+function ContextWarningCard({ level, inputTokens, message, onDismiss }: {
+  level: 'warning' | 'critical';
+  inputTokens: number;
+  message: string;
+  onDismiss: () => void;
+}) {
+  const isCritical = level === 'critical';
+  return (
+    <div className={cn(
+      'px-4 py-2.5 border-t',
+      isCritical ? 'bg-warning/10 border-warning/30' : 'bg-muted/50 border-border',
+    )}>
+      <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {isCritical ? (
+            <FileWarning className="h-4 w-4 text-warning shrink-0" />
+          ) : (
+            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+          )}
+          <span className="text-xs text-muted-foreground">
+            {(inputTokens / 1000).toFixed(0)}k tokens
+          </span>
+          <span className={cn('text-sm', isCritical ? 'text-foreground' : 'text-muted-foreground')}>
+            {message}
+          </span>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-foreground/5"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => void }) {
   const style = ERROR_STYLES[error.errorCode] ?? ERROR_STYLES.unknown;

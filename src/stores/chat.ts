@@ -102,6 +102,9 @@ interface ChatState {
   loading: boolean;
   error: ChatError | null;
 
+  /** Context length warning for current session */
+  contextWarning: { level: 'warning' | 'critical'; inputTokens: number; message: string } | null;
+
   /** Shown when Claude takes too long to start responding */
   waitingHint: string | null;
 
@@ -131,6 +134,7 @@ interface ChatState {
   abortRun: () => void;
   clearError: () => void;
   toggleThinking: () => void;
+  clearContextWarning: () => void;
   refresh: () => void;
   updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
   answerAskUser: (askId: string, answers: Record<string, string[]>) => void;
@@ -248,6 +252,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
   error: null,
+  contextWarning: null,
   waitingHint: null,
   sending: false,
   streamingBlocks: [],  // derived from streamingBlocksMap[currentSessionId]
@@ -386,6 +391,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: cached ?? [],
       streamingBlocks: targetBlocks,
       error: null,
+      contextWarning: null,
       sending: isTargetSending,
       loading: !cached,
     });
@@ -521,6 +527,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sending: true,
       streamingBlocks: [],
       error: null,
+      contextWarning: null,
     });
 
     // Update label from first message if not set
@@ -759,6 +766,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }]);
       });
 
+      const unsubContextWarn = wrapHandler(client, 'chat.context_warning', (data: Record<string, unknown>) => {
+        if (data.sessionId !== streamSessionId) return;
+        if (myGeneration !== streamGeneration) return;
+        if (get().currentSessionId === streamSessionId) {
+          set({
+            contextWarning: {
+              level: data.level as 'warning' | 'critical',
+              inputTokens: data.inputTokens as number,
+              message: data.message as string,
+            },
+          });
+        }
+      });
+
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
         if (data.sessionId !== streamSessionId) return;
         if (myGeneration !== streamGeneration) return; // Stale done from a previous stream
@@ -852,6 +873,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubToolProgress();
         unsubToolEnd();
         unsubAskUser();
+        unsubContextWarn();
         unsubDone();
         unsubErr();
         unsubAborted();
@@ -916,6 +938,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
+  clearContextWarning: () => set({ contextWarning: null }),
   refresh: () => {
     const { currentSessionId } = get();
     if (currentSessionId) {
@@ -923,7 +946,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       cleanupStream(currentSessionId);
       clearStreamingBlocks(currentSessionId);
     }
-    set({ messages: [], streamingBlocks: [], error: null, sending: false });
+    set({ messages: [], streamingBlocks: [], error: null, contextWarning: null, sending: false });
     get().loadHistory();
   },
 }));
