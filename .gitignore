@@ -26,3 +26,4 @@ plugins/office-skills/node_modules/
 shared/*.d.ts
 shared/*.js
 /.superpowers/
+.worktrees/
