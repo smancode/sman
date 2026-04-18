@@ -32,7 +32,7 @@ export interface LlmProfile {
   capabilities?: DetectedCapabilities;
 }
 
-export type WebSearchProvider = 'builtin' | 'brave' | 'tavily' | 'bing';
+export type WebSearchProvider = 'builtin' | 'brave' | 'tavily';
 
 export interface WebSearchConfig {
   provider: WebSearchProvider;
@@ -81,9 +81,9 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  { value: 'builtin', label: 'Claude 内置', description: '零配置，$10/千次 + token 费用' },
-  { value: 'brave', label: 'Brave Search', description: '$5/千次，有免费额度' },
-  { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费' },
+  { value: 'builtin', label: '内置搜索', description: '仅 Anthropic 官方 API 可用，第三方代理需配 Brave/Tavily' },
+  { value: 'brave', label: 'Brave Search', description: '$5/千次，有免费额度，国内可用' },
+  { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费，国内可用' },
   // Bing Search API 已于 2025-08-11 停用，隐藏选项但保留后端支持以防复活
   // { value: 'bing', label: 'Bing Search', description: 'Azure 认知服务，$7/千次' },
 ];

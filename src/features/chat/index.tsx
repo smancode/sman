@@ -146,18 +146,20 @@ export function Chat() {
     }
   }); // Run after every commit when there's a pending restore
 
-  // Smart auto-scroll: only follow when actively streaming AND user is near bottom
+  // Smart auto-scroll: follow content growth when user is near bottom
+  // Triggers on streaming deltas, message additions, and the final chat.done message
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     if (!isNearBottomRef.current) return;
-    if (!sending) return;
     if (pendingRestoreRef.current) return;
 
     requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      if (isNearBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
     });
-  }, [messages.length, sending, streamingBlocks.length]);
+  }, [messages.length, streamingBlocks.length]);
 
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
     const mediaForWs = media?.map(m => ({ type: 'image' as const, mimeType: m.mimeType, base64Data: m.base64Data, fileName: m.fileName }));

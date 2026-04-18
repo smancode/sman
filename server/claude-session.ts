@@ -19,6 +19,7 @@ import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
 import type { CapabilityRegistry } from './capabilities/registry.js';
+import { createWebSearchMcpServer, needsFallbackWebSearch } from './web-search/mcp-server.js';
 
 // Chrome site discovery removed from system prompt — now served on-demand via web_access_find_url MCP tool
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
@@ -389,6 +390,12 @@ export class ClaudeSessionManager {
     // Build MCP servers if configured
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
+
+    // Inject fallback web-search MCP when on non-Anthropic proxy (built-in WebSearch won't work)
+    if (needsFallbackWebSearch(this.config)) {
+      const webSearchServer = createWebSearchMcpServer();
+      (opts.mcpServers as any)['web-search'] = webSearchServer;
+    }
 
     // Inject web-access MCP Server (in-process)
     if (this.webAccessService) {

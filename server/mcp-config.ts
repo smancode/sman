@@ -35,17 +35,9 @@ export function buildMcpServers(config: SmanConfig): Record<string, McpServerCon
       }
       break;
     }
-    case 'bing': {
-      if (webSearch.bingApiKey) {
-        servers['bing-search'] = {
-          type: 'stdio',
-          command: 'npx',
-          args: ['-y', '@anthropic-ai/mcp-server-bing'],
-          env: { BING_SEARCH_V7_SUBSCRIPTION_KEY: webSearch.bingApiKey },
-        };
-      }
+    case 'bing':
+      // Bing search removed — not accessible in China
       break;
-    }
     case 'builtin':
     default:
       // Claude Code has built-in web search, no MCP server needed

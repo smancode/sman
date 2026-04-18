@@ -38,8 +38,6 @@ export function WebSearchSettings({ id }: { id?: string }) {
       updateWebSearch({ braveApiKey: value }).catch(() => {});
     } else if (provider === 'tavily') {
       updateWebSearch({ tavilyApiKey: value }).catch(() => {});
-    } else if (provider === 'bing') {
-      updateWebSearch({ bingApiKey: value }).catch(() => {});
     }
   };
 
@@ -86,13 +84,13 @@ export function WebSearchSettings({ id }: { id?: string }) {
 
         {provider !== 'builtin' && (
           <div className="space-y-2">
-            <Label>{provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : 'Bing'} API Key</Label>
+            <Label>{provider === 'brave' ? 'Brave' : 'Tavily'} API Key</Label>
             <div className="relative">
               <Input
                 type={showApiKey ? 'text' : 'password'}
                 value={activeApiKeyField ?? ''}
                 onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={`输入 ${provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : 'Bing'} API Key`}
+                placeholder={`输入 ${provider === 'brave' ? 'Brave' : 'Tavily'} API Key`}
                 className="pr-10"
               />
               <button
