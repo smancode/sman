@@ -6,7 +6,7 @@
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, RefreshCw, Brain, ImagePlus, X } from 'lucide-react';
+import { SendHorizontal, RefreshCw, Brain, ImagePlus, X, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -76,13 +76,21 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const slashTriggeredRef = useRef(false);
+  const abortingRef = useRef(false);
 
   // Chat toolbar states
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
+  const sending = useChatStore((s) => s.sending);
+  const abortRun = useChatStore((s) => s.abortRun);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
+
+  // Reset aborting flag when sending finishes
+  useEffect(() => {
+    if (!sending) abortingRef.current = false;
+  }, [sending]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -147,7 +155,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   }, []);
 
   const handleSend = useCallback(() => {
-    if (!canSend) return;
+    if (!canSend || sending) return;
     const textToSend = input.trim();
     setInput('');
     setStagedMedia([]);
@@ -155,7 +163,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       textareaRef.current.style.height = 'auto';
     }
     onSend(textToSend || ' ', undefined, null, stagedMedia.length > 0 ? stagedMedia : undefined);
-  }, [input, canSend, onSend, stagedMedia]);
+  }, [input, canSend, sending, onSend, stagedMedia]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -367,21 +375,43 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             </TooltipContent>
           </Tooltip>
 
-          {/* Send Button */}
-          <Button
-            onClick={handleSend}
-            disabled={!canSend}
-            size="icon"
-            className={cn(
-              'shrink-0 h-9 w-9 rounded-lg transition-colors',
-              canSend
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                : 'text-muted-foreground/50 hover:bg-transparent bg-transparent'
-            )}
-            title="发送"
-          >
-            <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
-          </Button>
+          {/* Send / Stop Button */}
+          {sending ? (
+            <Button
+              onClick={() => {
+                if (!abortingRef.current) {
+                  abortingRef.current = true;
+                  abortRun();
+                }
+              }}
+              disabled={abortingRef.current}
+              size="icon"
+              className={cn(
+                'shrink-0 h-9 w-9 rounded-lg transition-colors',
+                abortingRef.current
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              )}
+              title={abortingRef.current ? '正在停止...' : '停止'}
+            >
+              <Square className="h-[18px] w-[18px]" fill="currentColor" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!canSend}
+              size="icon"
+              className={cn(
+                'shrink-0 h-9 w-9 rounded-lg transition-colors',
+                canSend
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'text-muted-foreground/50 hover:bg-transparent bg-transparent'
+              )}
+              title="发送"
+            >
+              <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
+            </Button>
+          )}
         </div>
       </div>
     </div>

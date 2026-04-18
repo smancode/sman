@@ -479,25 +479,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId, sessions, messages } = get();
     if (!currentSessionId) return;
 
-    // Before clearing streaming state, save any in-progress assistant content to messages
-    const prevBlocks = getStreamingBlocks(currentSessionId);
-    let allMessages = messages;
-    if (prevBlocks.length > 0) {
-      const contentBlocks = streamingBlocksToContentBlocks(prevBlocks);
-      const textContent = prevBlocks
-        .filter(b => b.type === 'text' || b.type === 'text_live')
-        .map(b => (b as StreamingTextBlock | StreamingTextLiveBlock).content)
-        .join('');
-      const partialAssistantMsg: Message = {
-        id: crypto.randomUUID(),
-        sessionId: currentSessionId,
-        role: 'assistant',
-        content: textContent.trim(),
-        contentBlocks: contentBlocks.length > 0 ? contentBlocks : undefined,
-        createdAt: new Date().toISOString(),
-      };
-      allMessages = [...messages, partialAssistantMsg];
-    }
+    // Cannot send while a response is in progress — frontend enforces this via UI
+    if (get().sending) return;
 
     // Build contentBlocks from media so images render in chat
     const mediaContentBlocks: ContentBlock[] = [];
@@ -521,7 +504,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
-    // Reset per-session streaming state (will set sending: true after abort below)
+    // Reset per-session streaming state
     setStreamingBlocks(currentSessionId, []);
 
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
@@ -530,60 +513,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Capture generation to ignore stale aborted/done events from previous streams
     const myGeneration = ++streamGeneration;
 
-    // If there's an active stream, abort it on the backend BEFORE registering new handlers.
-    // This ensures the backend's abort (chat.aborted) is received by the OLD handlers,
-    // not the NEW ones. Without this, the old abort message would be picked up by new
-    // handlers (since myGeneration === streamGeneration), causing a spurious error.
-    if (get().sending) {
-      // Backend queues the new message behind the active turn — no abort needed.
-      // Wait for the current turn's chat.done to arrive, then proceed normally.
-      // The old stream handlers remain active to finish receiving the current response.
-      await new Promise<void>((resolve) => {
-        const doneTimeout = setTimeout(() => {
-          unsubPrevDone();
-          resolve();
-        }, 300_000); // 5 min safety timeout
-
-        const unsubPrevDone = wrapHandler(client, 'chat.done', (data) => {
-          if (data.sessionId !== streamSessionId) return;
-          clearTimeout(doneTimeout);
-          unsubPrevDone();
-          resolve();
-        });
-      });
-      // Current turn finished — reload history to include the completed response,
-      // then the new message will be sent normally below.
-      const { currentSessionId: refreshedId } = get();
-      if (refreshedId) {
-        await new Promise<void>((resolve) => {
-          const histTimeout = setTimeout(() => { unsubHist(); resolve(); }, 5000);
-          const unsubHist = wrapHandler(client, 'session.history', (data) => {
-            if (String(data.sessionId) !== refreshedId) return;
-            unsubHist();
-            clearTimeout(histTimeout);
-            if (Array.isArray(data.messages)) {
-              const serverMsgs: Message[] = data.messages.map((m: Record<string, unknown>) => ({
-                id: String(m.id || ''),
-                sessionId: String(m.sessionId || ''),
-                role: (String(m.role || 'user') as 'user' | 'assistant'),
-                content: String(m.content || ''),
-                contentBlocks: m.contentBlocks as ContentBlock[] | undefined,
-                createdAt: String(m.createdAt || ''),
-              }));
-              sessionCache.set(refreshedId, serverMsgs);
-              allMessages = serverMsgs;
-            }
-            resolve();
-          });
-          client.send({ type: 'session.history', sessionId: refreshedId });
-        });
-      }
-      set({ sending: false, streamingBlocks: [], waitingHint: null });
-    }
-
     // Update UI: show user message and start sending indicator
     set({
-      messages: [...allMessages, userMsg],
+      messages: [...messages, userMsg],
       sending: true,
       streamingBlocks: [],
       error: null,
@@ -938,13 +870,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortRun: () => {
     const client = getWsClient();
     const { currentSessionId } = get();
-    // Cleanup stream handlers and clear per-session streaming state
-    cleanupStream(currentSessionId);
-    clearStreamingBlocks(currentSessionId);
-    set({ sending: false, streamingBlocks: [], error: null });
-    if (client && currentSessionId) {
-      client.send({ type: 'chat.abort', sessionId: currentSessionId });
-    }
+    if (!client || !currentSessionId) return;
+
+    // Send abort to backend — do NOT cleanup stream handlers or clear streaming blocks here.
+    // The backend will send chat.aborted after finishing, and the existing handler will:
+    // 1. Freeze partial streaming content into an assistant message (preserves what user saw)
+    // 2. Clear streaming state and set sending=false
+    // Premature cleanup would lose the partial content the user already received.
+    client.send({ type: 'chat.abort', sessionId: currentSessionId });
   },
 
   clearError: () => set({ error: null }),

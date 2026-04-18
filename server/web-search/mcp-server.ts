@@ -133,7 +133,7 @@ async function fetchUrlContent(url: string, maxLength = 5000): Promise<string> {
   }
 }
 
-function isAnthropicFirstParty(baseUrl?: string): boolean {
+export function isAnthropicFirstParty(baseUrl?: string): boolean {
   if (!baseUrl) return true;
   const lower = baseUrl.toLowerCase();
   return lower.includes('anthropic.com');

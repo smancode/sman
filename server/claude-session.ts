@@ -19,7 +19,7 @@ import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
 import type { CapabilityRegistry } from './capabilities/registry.js';
-import { createWebSearchMcpServer, needsFallbackWebSearch } from './web-search/mcp-server.js';
+import { createWebSearchMcpServer, isAnthropicFirstParty } from './web-search/mcp-server.js';
 
 // Chrome site discovery removed from system prompt — now served on-demand via web_access_find_url MCP tool
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
@@ -387,14 +387,33 @@ export class ClaudeSessionManager {
       },
     };
 
-    // Build MCP servers if configured
+    // Build MCP servers: explicit provider config (brave/tavily) takes precedence
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
-    // Inject fallback web-search MCP when on non-Anthropic proxy (built-in WebSearch won't work)
-    if (needsFallbackWebSearch(this.config)) {
+    // Auto-degrade search chain for non-Anthropic proxies:
+    // Built-in WebSearch uses Anthropic's server_tool_use protocol — third-party
+    // proxies (Kimi, MiniMax, Zhipu) don't support it. Register fallback search
+    // tools so Claude always has a way to search:
+    //   1. SearXNG MCP (free, no key needed, requires outbound access)
+    //   2. Tavily MCP (if tavilyApiKey is set — reliable, works in China)
+    //   3. web-access browser (if Chrome available — already injected separately)
+    if (this.config.webSearch?.provider === 'builtin' && !isAnthropicFirstParty(this.config.llm?.baseUrl)) {
+      // Register SearXNG as primary fallback (free, no key needed)
       const webSearchServer = createWebSearchMcpServer();
       (opts.mcpServers as any)['web-search'] = webSearchServer;
+      this.log.info('[search] SearXNG MCP registered as fallback search provider');
+
+      // Register Tavily if key is available (more reliable in restricted networks)
+      if (this.config.webSearch.tavilyApiKey) {
+        (opts.mcpServers as any)['tavily-search'] = {
+          type: 'stdio',
+          command: 'npx',
+          args: ['-y', '@anthropic-ai/mcp-server-tavily'],
+          env: { TAVILY_API_KEY: this.config.webSearch.tavilyApiKey },
+        };
+        this.log.info('[search] Tavily MCP registered as fallback search provider');
+      }
     }
 
     // Inject web-access MCP Server (in-process)
@@ -1187,6 +1206,21 @@ export class ClaudeSessionManager {
         }
       }
       if (stallChecker) clearInterval(stallChecker);
+
+      // Stream loop exited normally (break) — check if it was due to abort
+      if (abortController.signal.aborted) {
+        this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
+        // Close V2 session immediately — aborting mid-turn leaves it in a dirty state.
+        // Next sendMessage will create a fresh V2 session.
+        this.closeV2Session(sessionId);
+        this.log.info(`V2 session closed after abort for ${sessionId}`);
+        const reason = stallAbortReason || '';
+        wsSend(JSON.stringify({
+          type: 'chat.aborted',
+          sessionId,
+          ...(reason ? { reason } : {}),
+        }));
+      }
     } catch (err: any) {
       if (stallChecker) clearInterval(stallChecker);
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
@@ -1217,6 +1251,9 @@ export class ClaudeSessionManager {
           return this.sendMessage(sessionId, '继续刚才的工作，不要重复已完成的部分', wsSend, undefined, _retryCount + 1);
         }
 
+        // Close V2 session — aborting mid-turn leaves it in a dirty state
+        this.closeV2Session(sessionId);
+        this.log.info(`V2 session closed after abort (catch) for ${sessionId}`);
         wsSend(JSON.stringify({
           type: 'chat.aborted',
           sessionId,
@@ -1737,10 +1774,12 @@ export class ClaudeSessionManager {
     if (controller) {
       (controller as any)._abortReason = reason;
       controller.abort();
-      this.activeStreams.delete(sessionId);
+      // Do NOT delete from activeStreams here — sendMessage's finally block handles cleanup.
+      // Do NOT close V2 session here — sendMessage's stream loop exit handler does it
+      // after saving partial content and sending chat.aborted to the frontend.
       this.log.info(`Session aborted: ${sessionId}${reason ? ` (${reason})` : ''}`);
     }
-    // Also try to interrupt V2 session
+    // Also try to interrupt V2 session to speed up stream loop exit
     const info = this.v2Sessions.get(sessionId);
     if (info) {
       (info.session as any).interrupt?.()?.catch(() => {});
