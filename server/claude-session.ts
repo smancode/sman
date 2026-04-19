@@ -140,10 +140,10 @@ export class ClaudeSessionManager {
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
-  private static readonly STREAM_STALL_MS = 5 * 60 * 1000; // 5 minutes no data = stalled
+  private static readonly STREAM_STALL_MS = 2 * 60 * 1000; // 2 minutes no data = stalled
   private static readonly SEND_TIMEOUT_MS = 120 * 1000; // 2 minutes timeout for v2Session.send()
   private static readonly SESSION_CREATE_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for session creation
-  private static readonly TOOL_STALL_MS = 2 * 60 * 60 * 1000; // 2 hours hard limit even if process alive
+  private static readonly TOOL_STALL_MS = 10 * 60 * 1000; // 10 minutes hard limit for tool/sub-agent execution
   private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
 
   constructor(private store: SessionStore) {

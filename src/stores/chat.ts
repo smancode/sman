@@ -149,15 +149,16 @@ interface ChatState {
 // ── Per-session streaming state ──
 // sessionId → streaming blocks for that session
 // This map is outside Zustand to avoid deep-equal comparison overhead on every token.
+export const sendingSessions = new Set<string>();
+
 const streamingBlocksMap = new Map<string, StreamingBlock[]>();
 
 // ── Per-session sending state ──
 // Tracks which sessions are currently streaming a response.
 // This replaces a single global `sending` boolean to prevent session A's stream
 // from blocking message submission in session B.
-const sendingSessions = new Set<string>();
 
-function getStreamingBlocks(sessionId: string): StreamingBlock[] {
+export function getStreamingBlocks(sessionId: string): StreamingBlock[] {
   return streamingBlocksMap.get(sessionId) ?? [];
 }
 
@@ -165,7 +166,7 @@ function setStreamingBlocks(sessionId: string, blocks: StreamingBlock[]): void {
   streamingBlocksMap.set(sessionId, blocks);
 }
 
-function clearStreamingBlocks(sessionId: string): void {
+export function clearStreamingBlocks(sessionId: string): void {
   streamingBlocksMap.delete(sessionId);
 }
 
@@ -230,7 +231,7 @@ function appendThinking(blocks: StreamingBlock[], text: string): StreamingBlock[
 }
 
 /** Freeze the current live text block into a completed text block */
-function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
+export function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
   const idx = findLiveTextIndex(blocks);
   if (idx < 0) return blocks;
   const live = blocks[idx] as StreamingTextLiveBlock;
@@ -682,7 +683,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       // Any stream activity cancels the waiting hint
-      const clearWaitingOnActivity = () => {
+      let clearWaitingOnActivity = () => {
         clearWaitingHint();
       };
 
@@ -953,6 +954,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Register cleanup so switchSession can unsubscribe if needed
       registerStreamCleanup(streamSessionId, cleanup);
+
+      // Safety net: if no chat.done/chat.error/chat.aborted received within 60s of last activity,
+      // force-close the stream to prevent UI from being stuck forever.
+      // This covers cases where backend crashes/restarts mid-stream or SDK stalls.
+      let lastStreamActivity = Date.now();
+      const stallCheckInterval = setInterval(() => {
+        if (!sendingSessions.has(streamSessionId)) {
+          clearInterval(stallCheckInterval);
+          return;
+        }
+        const elapsed = Date.now() - lastStreamActivity;
+        if (elapsed > 300_000) {
+          console.warn(`[Sman] Stream stall detected for session ${streamSessionId} (no activity for ${Math.round(elapsed / 1000)}s), force-closing`);
+          clearInterval(stallCheckInterval);
+          // Save whatever we have
+          const blocks = getStreamingBlocks(streamSessionId);
+          const frozen = freezeLiveText(blocks);
+          const textContent = frozen.filter(b => b.type === 'text').map(b => (b as { content: string }).content).join('');
+          cleanup();
+          sendingSessions.delete(streamSessionId);
+          clearStreamingBlocks(streamSessionId);
+          if (get().currentSessionId === streamSessionId) {
+            if (textContent.trim()) {
+              const assistantMsg: Message = {
+                id: crypto.randomUUID(),
+                sessionId: streamSessionId,
+                role: 'assistant',
+                content: textContent.trim(),
+                createdAt: new Date().toISOString(),
+              };
+              set({ messages: [...get().messages, assistantMsg], streamingBlocks: [], sending: false, waitingHint: null });
+            } else {
+              set({
+                sending: false,
+                streamingBlocks: [],
+                waitingHint: null,
+                error: {
+                  message: '响应超时，请重试或开启新会话',
+                  errorCode: 'network_error',
+                },
+              });
+            }
+          }
+        }
+      }, 30_000);
+      stallCheckInterval.unref?.();
+
+      // Update lastStreamActivity on any stream event — patch the clearWaitingOnActivity
+      const origClearWaiting = clearWaitingOnActivity;
+      clearWaitingOnActivity = () => {
+        lastStreamActivity = Date.now();
+        origClearWaiting();
+      };
 
       // Send message
       const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed };

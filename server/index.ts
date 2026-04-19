@@ -1099,8 +1099,20 @@ wss.on('connection', (ws: WebSocket) => {
             if (llmConfig.apiKey) env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
             if (llmConfig.baseUrl) env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
 
+            // Get available skills for context
+            const availableSkills = skillsRegistry.listSkills();
+            const skillsList = availableSkills.map(s => `- ${s.id}: ${s.description || s.name}`).join('\n');
+
             const prompt = [
               'Generate a Python script based on the following description.',
+              '',
+              'Context:',
+              `- Workspace: ${workspace}`,
+              `- Available Skills:\n${skillsList || '(none)'}`,
+              '',
+              'Skills Definition:',
+              'A skill is a predefined capability that can be invoked to perform specific tasks.',
+              'Skills are identified by their ID (e.g., "test-driven-development", "systematic-debugging").',
               '',
               'Description:',
               description,

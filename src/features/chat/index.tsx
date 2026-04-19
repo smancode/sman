@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } fr
 import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
-import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS } from '@/stores/chat';
+import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS, freezeLiveText, getStreamingBlocks, clearStreamingBlocks, sendingSessions } from '@/stores/chat';
+import type { Message } from '@/stores/chat';
 import { AskUserCard } from './AskUserCard';
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
@@ -171,11 +172,38 @@ export function Chat() {
   }, [sendMessage]);
 
   // Load history on initial connect or reconnect.
-  // Session switching is handled by switchSession() internally.
+  // Reset sending state on disconnect to prevent stuck streaming UI.
   const prevConnectedRef = useRef(false);
   useEffect(() => {
     if (isConnected && !prevConnectedRef.current && currentSessionId) {
       useChatStore.getState().loadHistory();
+    }
+    if (!isConnected && prevConnectedRef.current) {
+      // WebSocket disconnected — reset sending state to prevent stuck UI
+      const state = useChatStore.getState();
+      if (state.sending) {
+        // Freeze whatever we have so far into a message
+        const blocks = getStreamingBlocks(state.currentSessionId);
+        const frozen = freezeLiveText(blocks);
+        const textContent = frozen
+          .filter(b => b.type === 'text')
+          .map(b => (b as { content: string }).content)
+          .join('');
+        if (textContent.trim()) {
+          const assistantMsg: Message = {
+            id: crypto.randomUUID(),
+            sessionId: state.currentSessionId,
+            role: 'assistant',
+            content: textContent.trim(),
+            createdAt: new Date().toISOString(),
+          };
+          useChatStore.setState({ messages: [...state.messages, assistantMsg], sending: false, streamingBlocks: [], waitingHint: null });
+        } else {
+          useChatStore.setState({ sending: false, streamingBlocks: [], waitingHint: null });
+        }
+        clearStreamingBlocks(state.currentSessionId);
+        sendingSessions.delete(state.currentSessionId);
+      }
     }
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
