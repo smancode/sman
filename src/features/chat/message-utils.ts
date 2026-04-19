@@ -263,3 +263,63 @@ export function isInternalNotification(message: RawMessage | unknown): boolean {
   const text = extractText(message);
   return text.includes('[claude job done]') || text.includes('[claude job failed]');
 }
+
+// ── Tool display helpers ──
+
+/** Tool name → Chinese description (keep original English name visible) */
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  Agent: '派出助手',
+  Read: '读取文件',
+  Write: '写入文件',
+  Edit: '编辑文件',
+  Bash: '执行命令',
+  Grep: '搜索内容',
+  Glob: '查找文件',
+  WebSearch: '搜索网络',
+  WebFetch: '获取网页',
+  LSP: '代码分析',
+  ListMcpResourcesTool: '查询资源',
+  TaskCreate: '创建任务',
+  TaskUpdate: '更新任务',
+  TaskList: '查看任务',
+  AskUserQuestion: '询问用户',
+};
+
+/** Get display name like "Read - 读取文件" */
+export function getToolDisplayName(name: string): string {
+  const desc = TOOL_DISPLAY_NAMES[name];
+  return desc ? `${name} - ${desc}` : name;
+}
+
+/** Format tool input JSON into a readable one-line summary */
+export function formatToolSummary(name: string, input: unknown): string {
+  if (input == null) return '';
+  const str = typeof input === 'string' ? input : JSON.stringify(input);
+  if (!str.trim()) return '';
+
+  try {
+    const obj = JSON.parse(str);
+    if (name === 'Bash' && obj.command) return `$ ${obj.command}`;
+    if (name === 'Read' && obj.file_path) return obj.file_path;
+    if (name === 'Write' && obj.file_path) return obj.file_path;
+    if (name === 'Edit' && obj.file_path) return obj.file_path;
+    if (name === 'Grep' && obj.pattern) return `${obj.pattern}${obj.path ? ` in ${obj.path}` : ''}`;
+    if (name === 'Glob' && obj.pattern) return obj.pattern;
+    if (name === 'WebSearch' && obj.query) return obj.query;
+    if (name === 'WebFetch' && obj.url) return obj.url;
+    if (name === 'Agent' && obj.prompt) {
+      const prompt = String(obj.prompt);
+      return prompt.length > 80 ? prompt.slice(0, 77) + '...' : prompt;
+    }
+    // Generic: first key-value pair
+    const entries = Object.entries(obj);
+    if (entries.length > 0) {
+      const [k, v] = entries[0];
+      const val = typeof v === 'string' ? v : JSON.stringify(v);
+      return `${k}: ${val.length > 60 ? val.slice(0, 57) + '...' : val}`;
+    }
+    return '';
+  } catch {
+    return str.length > 80 ? str.slice(0, 77) + '...' : str;
+  }
+}

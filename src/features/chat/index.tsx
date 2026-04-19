@@ -11,7 +11,7 @@ import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
-import { groupMessagesByTurn } from './message-utils';
+import { groupMessagesByTurn, getToolDisplayName, formatToolSummary } from './message-utils';
 import type { RawMessage } from '@/types/chat';
 
 function safeTimestamp(createdAt: string): number | undefined {
@@ -310,6 +310,8 @@ function StreamingBlocksRenderer({
                     status: block.status,
                     durationMs: block.elapsedSeconds != null ? block.elapsedSeconds * 1000 : undefined,
                     result: block.result,
+                    summary: block.summary,
+                    taskDescription: block.taskDescription,
                   }}
                 />
               );
@@ -403,6 +405,8 @@ function StreamingToolStatus({ tool }: {
     status: 'running' | 'completed' | 'error';
     durationMs?: number;
     result?: string;
+    summary?: string;
+    taskDescription?: string;
   };
 }) {
   const duration = formatDuration(tool.durationMs);
@@ -415,32 +419,35 @@ function StreamingToolStatus({ tool }: {
   const displayInput = formatToolInput(tool.name, tool.input);
   const displayResult = tool.result?.trim();
 
-  // Compose a one-line status summary
-  const statusSummary = isRunning
-    ? `${displayName}${displayInput ? `: ${truncateDisplayInput(displayInput)}` : ''}`
-    : displayName;
+  // Build one-line status label:
+  // Priority: SDK summary > task description > parsed input > just name
+  const detail = tool.summary || tool.taskDescription || displayInput?.split('\n')[0]?.slice(0, 80) || '';
+  const statusLabel = detail ? `${displayName}: ${detail}` : displayName;
 
   return (
     <div
       className={cn(
         'text-xs transition-colors w-full',
-        isRunning && 'text-foreground',
+        isRunning && 'text-amber-600 dark:text-amber-400',
         !isRunning && !isError && 'text-muted-foreground',
         isError && 'text-destructive',
       )}
     >
-      {/* Header row: icon + status summary + duration */}
+      {/* Header row: icon + status label + duration */}
       <button
         className="flex items-center gap-2 w-full px-1 py-0.5 text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+        {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 shrink-0" />}
         {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
         {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-        <span className={cn('text-[12px]', isRunning && 'font-medium')}>
-          {statusSummary}
+        <span className={cn(
+          'text-[12px] truncate min-w-0',
+          isRunning && 'font-medium',
+        )}>
+          {statusLabel}
         </span>
-        {duration && <span className="text-[11px] opacity-60">{duration}</span>}
+        {duration && <span className="text-[11px] opacity-60 shrink-0">{duration}</span>}
         {(displayInput || displayResult) && (
           expanded
             ? <ChevronDown className="h-3 w-3 ml-auto shrink-0 opacity-50" />
@@ -473,63 +480,10 @@ function StreamingToolStatus({ tool }: {
   );
 }
 
-/** Tool name → Chinese description mapping (keep original name visible) */
-const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  Agent: '派出助手',
-  Read: '读取文件',
-  Write: '写入文件',
-  Edit: '编辑文件',
-  Bash: '执行命令',
-  Grep: '搜索内容',
-  Glob: '查找文件',
-  WebSearch: '搜索网络',
-  WebFetch: '获取网页',
-  LSP: '代码分析',
-  ListMcpResourcesTool: '查询资源',
-  TaskCreate: '创建任务',
-  TaskUpdate: '更新任务',
-  TaskList: '查看任务',
-  AskUserQuestion: '询问用户',
-};
-
-function getToolDisplayName(name: string): string {
-  const desc = TOOL_DISPLAY_NAMES[name];
-  return desc ? `${name} - ${desc}` : name;
-}
-
-/** Truncate display input for one-line status */
-function truncateDisplayInput(input: string): string {
-  const firstLine = input.split('\n')[0];
-  if (firstLine.length > 60) return firstLine.slice(0, 57) + '...';
-  return firstLine;
-}
-
-/** Format tool input JSON into a readable summary */
+/** Format tool input JSON into a readable summary for streaming (string input version) */
 function formatToolInput(name: string, input?: string): string | null {
   if (!input?.trim()) return null;
-
-  // Try to parse as JSON and format key fields
-  try {
-    const obj = JSON.parse(input);
-
-    // Common tool-specific formatting
-    if (name === 'Bash' && obj.command) return `$ ${obj.command}`;
-    if (name === 'Read' && obj.file_path) return obj.file_path;
-    if (name === 'Write' && obj.file_path) return `${obj.file_path}`;
-    if (name === 'Edit' && obj.file_path) return `${obj.file_path}`;
-    if (name === 'Grep' && obj.pattern) return `pattern: ${obj.pattern}${obj.path ? ` in ${obj.path}` : ''}`;
-    if (name === 'Glob' && obj.pattern) return obj.pattern;
-    if (name === 'WebSearch' && obj.query) return obj.query;
-    if (name === 'WebFetch' && obj.url) return obj.url;
-
-    // Generic: pretty print compact JSON
-    const compact = Object.entries(obj)
-      .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-      .join('\n');
-    return compact;
-  } catch {
-    return input.trim();
-  }
+  return formatToolSummary(name, input) || null;
 }
 
 function formatDuration(durationMs?: number): string | null {

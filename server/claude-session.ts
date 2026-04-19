@@ -1234,6 +1234,56 @@ export class ClaudeSessionManager {
               toolUseId: progress.tool_use_id,
               toolName: progress.tool_name,
               elapsedSeconds: progress.elapsed_time_seconds,
+              parentToolUseId: progress.parent_tool_use_id ?? null,
+              taskId: progress.task_id ?? undefined,
+            }));
+            break;
+          }
+
+          case 'system': {
+            const sys = sdkMsg as any;
+            const subtype = sys.subtype;
+            if (subtype === 'task_started') {
+              wsSend(JSON.stringify({
+                type: 'chat.task_started',
+                sessionId,
+                taskId: sys.task_id,
+                toolUseId: sys.tool_use_id ?? undefined,
+                description: sys.description ?? '',
+                taskType: sys.task_type ?? undefined,
+              }));
+            } else if (subtype === 'task_progress') {
+              wsSend(JSON.stringify({
+                type: 'chat.task_progress',
+                sessionId,
+                taskId: sys.task_id,
+                toolUseId: sys.tool_use_id ?? undefined,
+                description: sys.description ?? '',
+                lastToolName: sys.last_tool_name ?? undefined,
+                summary: sys.summary ?? undefined,
+                usage: sys.usage ?? undefined,
+              }));
+            } else if (subtype === 'task_notification') {
+              wsSend(JSON.stringify({
+                type: 'chat.task_notification',
+                sessionId,
+                taskId: sys.task_id,
+                toolUseId: sys.tool_use_id ?? undefined,
+                status: sys.status, // completed | failed | stopped
+                summary: sys.summary ?? '',
+                usage: sys.usage ?? undefined,
+              }));
+            }
+            break;
+          }
+
+          case 'tool_use_summary': {
+            const summary = sdkMsg as any;
+            wsSend(JSON.stringify({
+              type: 'chat.tool_use_summary',
+              sessionId,
+              summary: summary.summary ?? '',
+              precedingToolUseIds: summary.preceding_tool_use_ids ?? [],
             }));
             break;
           }

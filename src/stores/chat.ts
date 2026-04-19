@@ -52,6 +52,12 @@ interface StreamingToolBlock {
   result: string;
   status: 'running' | 'completed';
   elapsedSeconds?: number;
+  /** Human-readable summary from SDK (task_progress / tool_use_summary) */
+  summary?: string;
+  /** Task ID if this is an Agent/Task tool */
+  taskId?: string;
+  /** Description from task_started */
+  taskDescription?: string;
 }
 
 /** A thinking block */
@@ -730,12 +736,73 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ));
       });
 
-      const unsubToolProgress = wrapHandler(client, 'chat.tool_progress', (data) => {
+      const unsubToolProgress = wrapHandler(client, 'chat.tool_progress', (data: Record<string, unknown>) => {
         if (data.sessionId !== streamSessionId) return;
         const toolUseId = String(data.toolUseId || '');
-        const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds : undefined;
+        const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds as number : undefined;
+        const taskId = data.taskId ? String(data.taskId) : undefined;
         updateBlocks(blocks => blocks.map(b =>
-          b.type === 'tool_use' && b.id === toolUseId ? { ...b, elapsedSeconds } : b
+          b.type === 'tool_use' && b.id === toolUseId
+            ? { ...b, elapsedSeconds, ...(taskId ? { taskId } : {}) }
+            : b
+        ));
+      });
+
+      const unsubTaskStarted = wrapHandler(client, 'chat.task_started', (data: Record<string, unknown>) => {
+        if (data.sessionId !== streamSessionId) return;
+        const toolUseId = data.toolUseId ? String(data.toolUseId) : undefined;
+        const taskId = data.taskId ? String(data.taskId) : undefined;
+        const description = data.description ? String(data.description) : '';
+        if (toolUseId) {
+          updateBlocks(blocks => blocks.map(b =>
+            b.type === 'tool_use' && b.id === toolUseId
+              ? { ...b, taskId, taskDescription: description, summary: description || b.summary }
+              : b
+          ));
+        }
+      });
+
+      const unsubTaskProgress = wrapHandler(client, 'chat.task_progress', (data: Record<string, unknown>) => {
+        if (data.sessionId !== streamSessionId) return;
+        const taskId = data.taskId ? String(data.taskId) : undefined;
+        const description = data.description ? String(data.description) : '';
+        const lastToolName = data.lastToolName ? String(data.lastToolName) : undefined;
+        const summary = data.summary ? String(data.summary) : description;
+        if (!summary) return;
+        // Update by taskId or toolUseId
+        const toolUseId = data.toolUseId ? String(data.toolUseId) : undefined;
+        updateBlocks(blocks => blocks.map(b => {
+          if (b.type !== 'tool_use') return b;
+          if (toolUseId && b.id === toolUseId) return { ...b, summary, taskDescription: description };
+          if (taskId && b.taskId === taskId) return { ...b, summary, taskDescription: description };
+          return b;
+        }));
+      });
+
+      const unsubTaskNotification = wrapHandler(client, 'chat.task_notification', (data: Record<string, unknown>) => {
+        if (data.sessionId !== streamSessionId) return;
+        const taskId = data.taskId ? String(data.taskId) : undefined;
+        const status = String(data.status || '');
+        const summary = data.summary ? String(data.summary) : '';
+        const toolUseId = data.toolUseId ? String(data.toolUseId) : undefined;
+        // Mark tool as completed with final summary
+        updateBlocks(blocks => blocks.map(b => {
+          if (b.type !== 'tool_use') return b;
+          if (toolUseId && b.id === toolUseId) return { ...b, status: 'completed' as const, summary: summary || b.summary };
+          if (taskId && b.taskId === taskId) return { ...b, status: 'completed' as const, summary: summary || b.summary };
+          return b;
+        }));
+      });
+
+      const unsubToolUseSummary = wrapHandler(client, 'chat.tool_use_summary', (data: Record<string, unknown>) => {
+        if (data.sessionId !== streamSessionId) return;
+        const summary = data.summary ? String(data.summary) : '';
+        const precedingIds = (data.precedingToolUseIds as string[]) || [];
+        if (!summary || precedingIds.length === 0) return;
+        // Update the last preceding tool with the summary
+        const lastId = precedingIds[precedingIds.length - 1];
+        updateBlocks(blocks => blocks.map(b =>
+          b.type === 'tool_use' && b.id === lastId ? { ...b, summary } : b
         ));
       });
 
@@ -871,6 +938,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         unsubToolDelta();
         unsubToolResult();
         unsubToolProgress();
+        unsubTaskStarted();
+        unsubTaskProgress();
+        unsubTaskNotification();
+        unsubToolUseSummary();
         unsubToolEnd();
         unsubAskUser();
         unsubContextWarn();

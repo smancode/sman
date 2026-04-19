@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { RawMessage, AttachedFileMeta } from '@/types/chat';
-import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
+import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, getToolDisplayName, formatToolSummary } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 
@@ -250,22 +250,6 @@ function formatDuration(durationMs?: number): string | null {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
-/** Tool name → Chinese label mapping (keep original name visible) */
-const TOOL_LABELS: Record<string, string> = {
-  Agent: 'Agent - 助手',
-  Read: 'Read - 读取',
-  Write: 'Write - 写入',
-  Edit: 'Edit - 编辑',
-  Bash: 'Bash - 命令',
-  Grep: 'Grep - 搜索',
-  Glob: 'Glob - 查找',
-  WebSearch: 'WebSearch - 搜网',
-  WebFetch: 'WebFetch - 网页',
-  TaskCreate: 'TaskCreate - 建任务',
-  TaskUpdate: 'TaskUpdate - 更新任务',
-  TaskList: 'TaskList - 查任务',
-};
-
 function ToolStatusBar({
   tools,
 }: {
@@ -284,25 +268,23 @@ function ToolStatusBar({
         const duration = formatDuration(tool.durationMs);
         const isRunning = tool.status === 'running';
         const isError = tool.status === 'error';
-        const label = TOOL_LABELS[tool.name] || tool.name;
+        const label = getToolDisplayName(tool.name);
+        const displayLabel = tool.summary ? `${label}: ${tool.summary}` : label;
         return (
           <div
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
               'flex items-center gap-2 text-xs transition-colors',
-              isRunning && 'text-foreground',
+              isRunning && 'text-amber-600 dark:text-amber-400',
               !isRunning && !isError && 'text-muted-foreground',
               isError && 'text-destructive',
             )}
           >
-            {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />}
+            {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 shrink-0" />}
             {!isRunning && !isError && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />}
             {isError && <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
-            <span className={cn('text-[12px]', isRunning && 'font-medium')}>{label}</span>
-            {tool.summary && (
-              <span className="truncate text-[11px] opacity-70">{tool.summary}</span>
-            )}
-            {duration && <span className="text-[11px] opacity-60">{duration}</span>}
+            <span className={cn('text-[12px] truncate min-w-0', isRunning && 'font-medium')}>{displayLabel}</span>
+            {duration && <span className="text-[11px] opacity-60 shrink-0">{duration}</span>}
           </div>
         );
       })}
@@ -609,9 +591,9 @@ function CollapsedToolSummary({ tools }: { tools: Array<{ id?: string; name: str
         }
       </button>
       {expanded && (
-        <div className="mt-1 space-y-1 pl-1">
+        <div className="mt-1 space-y-0.5 pl-1">
           {tools.map((tool, i) => (
-            <ToolCard key={tool.id || i} name={tool.name} input={tool.input} />
+            <CompletedToolItem key={tool.id || i} name={tool.name} input={tool.input} />
           ))}
         </div>
       )}
@@ -619,19 +601,26 @@ function CollapsedToolSummary({ tools }: { tools: Array<{ id?: string; name: str
   );
 }
 
-function ToolCard({ name, input }: { name: string; input: unknown }) {
+/** Completed tool item — green ✓ + name + one-line summary, expandable for full input */
+function CompletedToolItem({ name, input }: { name: string; input: unknown }) {
   const [expanded, setExpanded] = useState(false);
+  const displayName = getToolDisplayName(name);
+  const summary = formatToolSummary(name, input);
+  const displayLabel = summary ? `${displayName}: ${summary}` : displayName;
 
   return (
     <div className="text-[14px]">
       <button
-        className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-        <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-        <span className="font-mono text-xs">{name}</span>
-        {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
+        <span className="text-xs truncate min-w-0">{displayLabel}</span>
+        {input != null && (
+          expanded
+            ? <ChevronDown className="h-3 w-3 ml-auto shrink-0 opacity-50" />
+            : <ChevronRight className="h-3 w-3 ml-auto shrink-0 opacity-50" />
+        )}
       </button>
       {expanded && input != null && (
         <pre className="pl-5 text-xs text-muted-foreground whitespace-pre-wrap break-all">
