@@ -27,3 +27,4 @@ shared/*.d.ts
 shared/*.js
 /.superpowers/
 .worktrees/
+*.backup
