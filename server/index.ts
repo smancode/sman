@@ -1155,6 +1155,167 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'smartpath.generateFromNL': {
+          const description = msg.description as string;
+          const workspace = msg.workspace as string;
+
+          // Strict validation
+          if (!description || !description.trim()) {
+            throw new Error('Missing description parameter');
+          }
+          if (!workspace || !workspace.trim()) {
+            throw new Error('Missing workspace parameter');
+          }
+
+          try {
+            const { query } = await import('@anthropic-ai/claude-agent-sdk');
+            const llmConfig = settingsManager.getConfig().llm;
+
+            const env: Record<string, string | undefined> = { ...process.env };
+            if (llmConfig.apiKey) env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
+            if (llmConfig.baseUrl) env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
+
+            // Get available skills
+            const availableSkills = skillsRegistry.listSkills();
+            const skillsList = availableSkills.map(s => `- ${s.id}: ${s.description || s.name}`).join('\n');
+
+            const prompt = [
+              'Generate an execution plan based on the following description.',
+              '',
+              'Context:',
+              `- Workspace: ${workspace}`,
+              `- Available Skills:\n${skillsList || '(none)'}`,
+              '',
+              'Skills Definition:',
+              'A skill is a predefined capability that can be invoked to perform specific tasks.',
+              'Skills are identified by their ID (e.g., "test-driven-development", "systematic-debugging").',
+              '',
+              'Description:',
+              description,
+              '',
+              'Output Format:',
+              'Return a JSON object with this structure:',
+              '```json',
+              '{',
+              '  "name": "Plan Name",',
+              '  "description": "Original description",',
+              '  "steps": [',
+              '    {',
+              '      "mode": "serial",',
+              '      "actions": [',
+              '        { "type": "python", "code": "..." },',
+              '        { "type": "skill", "skillId": "..." }',
+              '      ]',
+              '    }',
+              '  ]',
+              '}',
+              '```',
+            ].join('\n');
+
+            const configModel = llmConfig.model;
+            const resolvedModel = configModel.toLowerCase().startsWith('claude-') || configModel.toLowerCase().startsWith('anthropic-')
+              ? configModel
+              : 'claude-sonnet-4-6';
+
+            const q = query({
+              prompt,
+              options: {
+                cwd: workspace,
+                model: resolvedModel,
+                permissionMode: 'bypassPermissions',
+                allowDangerouslySkipPermissions: true,
+                env,
+                systemPrompt: {
+                  type: 'preset',
+                  preset: 'claude_code',
+                  append: 'You are an execution plan generator. Generate ONLY the JSON plan, wrapped in a code block.',
+                },
+              } as any,
+            });
+
+            let fullText = '';
+            for await (const msg of q) {
+              fullText += extractTextFromMessage(msg);
+            }
+
+            const jsonMatch = fullText.match(/```json\n([\s\S]*?)\n```/);
+            const jsonStr = jsonMatch ? jsonMatch[1].trim() : fullText.trim();
+
+            const plan = JSON.parse(jsonStr);
+
+            // Validate generated plan
+            if (!plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {
+              throw new Error('Generated plan has no steps');
+            }
+
+            ws.send(JSON.stringify({ type: 'smartpath.planGenerated', plan }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'smartpath.listFiles': {
+          const workspace = msg.workspace as string;
+          if (!workspace) throw new Error('Missing workspace');
+
+          const store = new SmartPathStore(workspace);
+          const plans = store.listPlans(workspace);
+          ws.send(JSON.stringify({ type: 'smartpath.fileList', plans }));
+          break;
+        }
+
+        case 'smartpath.loadFile': {
+          const filePath = msg.filePath as string;
+          if (!filePath) throw new Error('Missing filePath');
+
+          const store = new SmartPathStore(path.dirname(filePath));
+          const plan = store.loadPlan(filePath);
+          const content = fs.readFileSync(filePath, 'utf-8');
+          ws.send(JSON.stringify({ type: 'smartpath.fileLoaded', plan, content }));
+          break;
+        }
+
+        case 'smartpath.saveFile': {
+          const filePath = msg.filePath as string;
+          const plan = msg.plan as { name: string; description: string; steps: string; workspace: string };
+          if (!filePath) throw new Error('Missing filePath');
+          if (!plan) throw new Error('Missing plan');
+
+          const workspace = path.dirname(filePath).includes('.sman')
+            ? path.dirname(path.dirname(filePath))
+            : path.dirname(filePath);
+
+          const store = new SmartPathStore(workspace);
+          const existingPlan = store.loadPlan(filePath);
+
+          const planData = {
+            id: existingPlan?.id || crypto.randomUUID(),
+            name: plan.name,
+            description: plan.description,
+            workspace,
+            steps: JSON.parse(plan.steps || '[]'),
+            status: existingPlan?.status || 'draft',
+            createdAt: existingPlan?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          store.savePlan(planData);
+          ws.send(JSON.stringify({ type: 'smartpath.fileSaved', filePath }));
+          break;
+        }
+
+        case 'smartpath.deleteFile': {
+          const filePath = msg.filePath as string;
+          if (!filePath) throw new Error('Missing filePath');
+
+          const store = new SmartPathStore(path.dirname(filePath));
+          store.deletePlan(filePath);
+          ws.send(JSON.stringify({ type: 'smartpath.fileDeleted', filePath }));
+          break;
+        }
+
         // ── WeChat Personal Bot ──
         case 'chatbot.weixin.qr.request': {
           log.info('Received chatbot.weixin.qr.request');
