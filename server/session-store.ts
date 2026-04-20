@@ -118,6 +118,15 @@ export class SessionStore {
       this.log.info('Migrated: added deleted_at column to sessions table');
     }
 
+    // Migration: add token usage columns if not exists
+    try {
+      this.db.prepare('SELECT input_tokens FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN input_tokens INTEGER DEFAULT 0');
+      this.db.exec('ALTER TABLE sessions ADD COLUMN output_tokens INTEGER DEFAULT 0');
+      this.log.info('Migrated: added token usage columns to sessions table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
@@ -202,6 +211,15 @@ export class SessionStore {
   getSdkSessionId(id: string): string | undefined {
     const row = this.db.prepare('SELECT sdk_session_id FROM sessions WHERE id = ?').get(id) as { sdk_session_id: string } | undefined;
     return row?.sdk_session_id;
+  }
+
+  updateTokenUsage(id: string, inputTokens: number, outputTokens: number): void {
+    this.db.prepare('UPDATE sessions SET input_tokens = ?, output_tokens = ? WHERE id = ?').run(inputTokens, outputTokens, id);
+  }
+
+  getTokenUsage(id: string): { inputTokens: number; outputTokens: number } | undefined {
+    const row = this.db.prepare('SELECT input_tokens as inputTokens, output_tokens as outputTokens FROM sessions WHERE id = ?').get(id) as { inputTokens: number; outputTokens: number } | undefined;
+    return row;
   }
 
   close(): void {

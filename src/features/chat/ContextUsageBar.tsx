@@ -91,6 +91,9 @@ export function ContextUsageBar() {
       <TooltipContent side="top">
         <p className="text-xs">
           Input: {formatTokens(inputTokens)} / Max: {formatTokens(maxTokens)} ({percentage}%)
+          {inputTokens > maxTokens && (
+            <span className="text-amber-500 ml-1">(estimate)</span>
+          )}
         </p>
       </TooltipContent>
     </Tooltip>

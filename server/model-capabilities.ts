@@ -44,9 +44,9 @@ export const MODEL_CAPABILITIES_MAP: Record<string, DetectedCapabilities> = {
   'gpt-4-turbo':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GPT-4 Turbo', source: 'mapping' },
   'gpt-4':                   { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 8192, displayName: 'GPT-4', source: 'mapping' },
 
-  // DeepSeek — text only
-  'deepseek-chat':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Chat', source: 'mapping' },
-  'deepseek-reasoner':         { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Reasoner', source: 'mapping' },
+  // DeepSeek — text only (official API supports 128K context)
+  'deepseek-chat':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'DeepSeek Chat', source: 'mapping' },
+  'deepseek-reasoner':         { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'DeepSeek Reasoner', source: 'mapping' },
 
   // Qwen — text + vision variants
   'qwen-vl-plus':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen VL Plus', source: 'mapping' },

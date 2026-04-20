@@ -318,6 +318,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           unsubErr();
           // Invalidate cache
           sessionCache.invalidate(sessionId);
+          contextUsageCache.delete(sessionId);
           // Remove from local state and switch session if needed
           const state = get();
           const remaining = state.sessions.filter(s => s.key !== sessionId);

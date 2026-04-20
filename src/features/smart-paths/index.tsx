@@ -107,7 +107,7 @@ function ActionEditor({
   return (
     <div className="rounded-md p-3 space-y-3 border">
       <div className="flex items-center gap-2">
-        <Label className="text-xs">步骤 {previousSteps ? previousSteps.length + 1 : 1}</Label>
+        <Label className="text-xs">行动 {previousSteps ? previousSteps.length + 1 : 1}</Label>
         <Button variant="ghost" size="icon" className="h-8 w-8 ml-auto" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
@@ -219,7 +219,7 @@ function StepEditor({
       </div>
 
       <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={addAction}>
-        <Plus className="h-3 w-3 mr-1" /> 添加 Action
+        <Plus className="h-3 w-3 mr-1" /> 添加行动
       </Button>
     </div>
   );
