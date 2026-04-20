@@ -61,13 +61,8 @@ export function StepCardsEditor({ steps, onChange }: StepCardsEditorProps) {
 
           <div className="text-sm space-y-1">
             {step.actions.map((action, actionIndex) => (
-              <div key={actionIndex} className="flex items-center gap-2 text-xs">
-                <span className="px-2 py-0.5 rounded bg-muted">
-                  {action.type === 'python' ? 'Python' : action.skillId || 'skill'}
-                </span>
-                <span className="text-muted-foreground">
-                  {action.type === 'python' ? '执行 Python 代码' : `调用 ${action.skillId} skill`}
-                </span>
+              <div key={actionIndex} className="text-xs text-muted-foreground">
+                {action.description}
               </div>
             ))}
           </div>

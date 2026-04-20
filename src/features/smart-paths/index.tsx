@@ -80,101 +80,25 @@ function ActionEditor({
   action,
   onChange,
   onDelete,
-  workspace,
 }: {
   action: SmartPathAction;
   onChange: (a: SmartPathAction) => void;
   onDelete: () => void;
-  workspace?: string;
 }) {
-  const [generating, setGenerating] = useState(false);
-  const [description, setDescription] = useState('');
-  const [genError, setGenError] = useState<string | null>(null);
-  const generatePython = useSmartPathStore((s) => s.generatePython);
-
-  const handleGenerate = async () => {
-    if (!description.trim() || !workspace) return;
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const code = await generatePython(description, workspace);
-      onChange({ ...action, code });
-    } catch (err) {
-      setGenError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   return (
     <div className="rounded-md p-3 space-y-2 border">
       <div className="flex items-center gap-2">
-        <Select
-          value={action.type}
-          onValueChange={(v) => onChange({ ...action, type: v as 'skill' | 'python' })}
-        >
-          <SelectTrigger className="w-32 h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="skill"><Wand2 className="h-3 w-3 mr-1" />Skill</SelectItem>
-            <SelectItem value="python"><Code className="h-3 w-3 mr-1" />Python</SelectItem>
-          </SelectContent>
-        </Select>
+        <Label className="text-xs">步骤描述</Label>
         <Button variant="ghost" size="icon" className="h-8 w-8 ml-auto" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </div>
-
-      {action.type === 'skill' ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Skill ID</Label>
-          <Input
-            value={action.skillId || ''}
-            onChange={(e) => onChange({ ...action, skillId: e.target.value })}
-            placeholder="输入 skill 名称"
-            className="h-8 text-xs"
-          />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {workspace && (
-            <div className="space-y-1">
-              <Label className="text-xs">需求描述（自然语言）</Label>
-              <div className="flex gap-2">
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="描述你想让这段 Python 代码做什么..."
-                  className="min-h-[60px] text-xs flex-1"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 h-auto"
-                  disabled={!description.trim() || generating}
-                  onClick={handleGenerate}
-                >
-                  {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
-                  生成
-                </Button>
-              </div>
-              {genError && (
-                <div className="text-xs text-red-500">{genError}</div>
-              )}
-            </div>
-          )}
-          <div className="space-y-1">
-            <Label className="text-xs">Python 代码</Label>
-            <Textarea
-              value={action.code || ''}
-              onChange={(e) => onChange({ ...action, code: e.target.value })}
-              placeholder='print(json.dumps({"result": 42}))'
-              className="min-h-[80px] text-xs font-mono"
-            />
-          </div>
-        </div>
-      )}
+      <Textarea
+        value={action.description || ''}
+        onChange={(e) => onChange({ ...action, description: e.target.value })}
+        placeholder="描述这个步骤要做什么..."
+        className="min-h-[80px] text-xs"
+      />
     </div>
   );
 }
@@ -199,7 +123,7 @@ function StepEditor({
   };
 
   const addAction = () => {
-    onChange({ ...step, actions: [...step.actions, { type: 'skill' }] });
+    onChange({ ...step, actions: [...step.actions, { description: '' }] });
   };
 
   const removeAction = (j: number) => {
@@ -327,7 +251,7 @@ export function SmartPathPage() {
   };
 
   const addStep = () => {
-    setEditSteps([...editSteps, { mode: 'serial', actions: [{ type: 'skill' }] }]);
+    setEditSteps([...editSteps, { mode: 'serial', actions: [{ description: '' }] }]);
   };
 
   const updateStep = (i: number, step: SmartPathStep) => {

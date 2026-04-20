@@ -170,12 +170,9 @@ export interface BatchItem {
 export type SmartPathStatus = 'draft' | 'ready' | 'running' | 'completed' | 'failed';
 export type SmartPathRunStatus = 'running' | 'completed' | 'failed';
 export type SmartPathStepMode = 'serial' | 'parallel';
-export type SmartPathActionType = 'skill' | 'python';
 
 export interface SmartPathAction {
-  type: SmartPathActionType;
-  skillId?: string;
-  code?: string;
+  description: string;  // 步骤描述或代码
 }
 
 export interface SmartPathStep {
