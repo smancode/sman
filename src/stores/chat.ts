@@ -590,6 +590,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Handle chat.segment: freeze the live text block, new text segment starting
       const unsubSegment = wrapHandler(client, 'chat.segment', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         const segType = String(data.segmentType || 'text');
         if (segType === 'text') {
           // Flush pending text first
@@ -721,6 +722,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolDelta = wrapHandler(client, 'chat.tool_delta', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         const toolId = String(data.toolId || '');
         const content = String(data.content || '');
         updateBlocks(blocks => blocks.map(b =>
@@ -730,6 +732,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolResult = wrapHandler(client, 'chat.tool_result', (data) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         const toolUseId = String(data.toolUseId || '');
         const content = String(data.content || '');
         updateBlocks(blocks => blocks.map(b =>
@@ -739,6 +742,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolProgress = wrapHandler(client, 'chat.tool_progress', (data: Record<string, unknown>) => {
         if (data.sessionId !== streamSessionId) return;
+        clearWaitingOnActivity();
         const toolUseId = String(data.toolUseId || '');
         const elapsedSeconds = typeof data.elapsedSeconds === 'number' ? data.elapsedSeconds as number : undefined;
         const taskId = data.taskId ? String(data.taskId) : undefined;
