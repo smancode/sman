@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import matter from 'gray-matter';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPath, SmartPathStep, SmartPathRun } from './types.js';
@@ -122,16 +123,20 @@ export class SmartPathStore {
       const wsDir = path.join(this.basePath, ws, '.sman', 'paths');
       if (!fs.existsSync(wsDir)) continue;
       for (const file of fs.readdirSync(wsDir).filter(f => f.endsWith('.md'))) {
-        try { all.push(this.loadPlan(path.join(wsDir, file))); } catch {}
+        try {
+          all.push(this.loadPlan(path.join(wsDir, file)));
+        } catch (err) {
+          this.log.error(`Failed to load path: ${err}`);
+        }
       }
     }
     return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   createPath(input: { name: string; workspace: string; steps: string; status?: SmartPath['status'] }): SmartPath {
-    if (!input.name?.trim()) throw new Error('缺少 name 参数');
-    if (!input.workspace?.trim()) throw new Error('缺少 workspace 参数');
-    if (!input.steps?.trim()) throw new Error('缺少 steps 参数');
+    if (!input.name?.trim()) throw new Error('Missing name parameter');
+    if (!input.workspace?.trim()) throw new Error('Missing workspace parameter');
+    if (!input.steps?.trim()) throw new Error('Missing steps parameter');
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const plan: SmartPath = { id, name: input.name, workspace: input.workspace, steps: input.steps, status: input.status || 'draft', createdAt: now, updatedAt: now };
