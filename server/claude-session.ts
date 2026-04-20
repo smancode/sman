@@ -1363,7 +1363,7 @@ export class ClaudeSessionManager {
               usage: result.usage ? {
                 inputTokens: result.usage.input_tokens,
                 outputTokens: result.usage.output_tokens,
-              } : undefined,
+              } : null,
               ...(isError ? { error: classified?.userMessage ?? resultError ?? '模型服务返回未知错误，请稍后重试', errorCode: classified?.errorCode ?? 'unknown', rawError: resultError } : {}),
             }));
 
