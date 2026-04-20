@@ -6,7 +6,7 @@
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, RefreshCw, Brain, ImagePlus, X, Square } from 'lucide-react';
+import { SendHorizontal, RefreshCw, Brain, ImagePlus, X, Square, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -89,6 +89,8 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const autoConfirm = useChatStore((s) => s.autoConfirm);
+  const toggleAutoConfirm = useChatStore((s) => s.toggleAutoConfirm);
 
   // Reset aborting flag when sending finishes
   useEffect(() => {
@@ -378,6 +380,26 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             </TooltipTrigger>
             <TooltipContent>
               <p>{showThinking ? '隐藏思考与工具' : '显示思考与工具'}</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Auto-Confirm Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 rounded-lg shrink-0',
+                  autoConfirm && 'bg-amber-100 dark:bg-amber-900/30 text-amber-600',
+                )}
+                onClick={toggleAutoConfirm}
+              >
+                <Zap className="h-[18px] w-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{autoConfirm ? 'AUTO 模式：自动确认所有提问' : '开启 AUTO 模式'}</p>
             </TooltipContent>
           </Tooltip>
 

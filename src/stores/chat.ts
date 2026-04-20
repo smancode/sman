@@ -129,6 +129,9 @@ interface ChatState {
   // Thinking toggle
   showThinking: boolean;
 
+  // Auto-confirm toggle — automatically answer AskUserQuestion with "auto"
+  autoConfirm: boolean;
+
   // Init card
   initCard: InitCard | null;
 
@@ -143,6 +146,7 @@ interface ChatState {
   abortRun: () => void;
   clearError: () => void;
   toggleThinking: () => void;
+  toggleAutoConfirm: () => void;
   clearContextWarning: () => void;
   refresh: () => void;
   updateSessionLabel: (sessionId: string, label: string) => Promise<void>;
@@ -273,6 +277,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   currentSessionId: '',
   showThinking: true,
+  autoConfirm: false,
   initCard: null,
 
   // Create a new session with workspace (directory path)
@@ -848,6 +853,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           questions,
           answered: false,
         }]);
+
+        // Auto-confirm: automatically answer with "auto" for each question
+        if (get().autoConfirm) {
+          const autoAnswers: Record<string, string[]> = {};
+          for (const q of questions) {
+            const questionText = (q as { question: string }).question || '';
+            autoAnswers[questionText] = ['auto'];
+          }
+          // Defer to let the block render briefly before marking as answered
+          setTimeout(() => {
+            get().answerAskUser(askId, autoAnswers);
+          }, 100);
+        }
       });
 
       const unsubContextWarn = wrapHandler(client, 'chat.context_warning', (data: Record<string, unknown>) => {
@@ -1082,6 +1100,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   toggleThinking: () => set((s) => ({ showThinking: !s.showThinking })),
+  toggleAutoConfirm: () => set((s) => ({ autoConfirm: !s.autoConfirm })),
   clearContextWarning: () => set({ contextWarning: null }),
   refresh: () => {
     const { currentSessionId } = get();
