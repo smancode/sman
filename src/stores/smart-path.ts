@@ -42,6 +42,8 @@ interface SmartPathState {
   runPath: (pathId: string) => Promise<void>;
   fetchRuns: (pathId: string) => Promise<void>;
   generatePython: (description: string, workspace: string) => Promise<string>;
+  generatePlan: (description: string, workspace: string) => Promise<any>;
+  saveFile: (pathId: string, filePath: string) => Promise<void>;
   setCurrentPath: (path: SmartPath | null) => void;
   clearError: () => void;
 }
@@ -231,6 +233,46 @@ export const useSmartPathStore = create<SmartPathState>((set, get) => ({
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'smartpath.generatePython', description, workspace });
+    });
+  },
+
+  generatePlan: async (description, workspace) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<any>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'smartpath.planGenerated', (data) => {
+        unsub();
+        unsubErr();
+        resolve(data.plan);
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'smartpath.generatePlan', description, workspace });
+    });
+  },
+
+  saveFile: async (pathId, filePath) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'smartpath.fileSaved', (data) => {
+        unsub();
+        unsubErr();
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'smartpath.saveFile', pathId, filePath });
     });
   },
 
