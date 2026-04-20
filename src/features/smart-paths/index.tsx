@@ -15,7 +15,6 @@ import {
 import { useSmartPathStore } from '@/stores/smart-path';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
-import { PlanInput } from './PlanInput';
 import { StepCardsEditor } from './StepCardsEditor';
 import { JsonEditor } from './JsonEditor';
 import type { SmartPath, SmartPathStep, SmartPathAction } from '@/types/settings';
@@ -80,25 +79,77 @@ function ActionEditor({
   action,
   onChange,
   onDelete,
+  workspace,
+  previousSteps,
 }: {
   action: SmartPathAction;
   onChange: (a: SmartPathAction) => void;
   onDelete: () => void;
+  workspace?: string;
+  previousSteps?: SmartPathAction[];
 }) {
+  const [generating, setGenerating] = useState(false);
+  const generateStep = useSmartPathStore((s) => s.generateStep);
+
+  const handleGenerate = async () => {
+    if (!action.userInput?.trim() || !workspace) return;
+    setGenerating(true);
+    try {
+      const content = await generateStep(action.userInput, workspace, previousSteps || []);
+      onChange({ ...action, generatedContent: content });
+    } catch (err) {
+      console.error('Generation failed:', err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
-    <div className="rounded-md p-3 space-y-2 border">
+    <div className="rounded-md p-3 space-y-3 border">
       <div className="flex items-center gap-2">
-        <Label className="text-xs">步骤描述</Label>
+        <Label className="text-xs">步骤 {previousSteps ? previousSteps.length + 1 : 1}</Label>
         <Button variant="ghost" size="icon" className="h-8 w-8 ml-auto" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </div>
-      <Textarea
-        value={action.description || ''}
-        onChange={(e) => onChange({ ...action, description: e.target.value })}
-        placeholder="描述这个步骤要做什么..."
-        className="min-h-[80px] text-xs"
-      />
+
+      <div className="space-y-2">
+        <Label className="text-xs">你想做什么</Label>
+        <Textarea
+          value={action.userInput || ''}
+          onChange={(e) => onChange({ ...action, userInput: e.target.value })}
+          placeholder="描述你想让这一步做什么..."
+          className="min-h-[60px] text-xs"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={!action.userInput?.trim() || generating || !workspace}
+          onClick={handleGenerate}
+        >
+          {generating ? (
+            <>
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              生成中...
+            </>
+          ) : (
+            <>
+              <Wand2 className="h-3 w-3 mr-1" />
+              生成实现方案
+            </>
+          )}
+        </Button>
+      </div>
+
+      {action.generatedContent && (
+        <div className="space-y-1">
+          <Label className="text-xs">生成的方案</Label>
+          <div className="rounded-md bg-muted p-2 text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+            {action.generatedContent}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -123,7 +174,7 @@ function StepEditor({
   };
 
   const addAction = () => {
-    onChange({ ...step, actions: [...step.actions, { description: '' }] });
+    onChange({ ...step, actions: [...step.actions, { userInput: '' }] });
   };
 
   const removeAction = (j: number) => {
@@ -162,6 +213,7 @@ function StepEditor({
             onChange={(a) => updateAction(j, a)}
             onDelete={() => removeAction(j)}
             workspace={workspace}
+            previousSteps={step.actions.slice(0, j)}
           />
         ))}
       </div>
@@ -203,6 +255,7 @@ export function SmartPathPage() {
   const [editSteps, setEditSteps] = useState<SmartPathStep[]>([]);
   const [editorMode, setEditorMode] = useState<EditorMode>('visual');
   const [showCreate, setShowCreate] = useState(false);
+  const [showStepEditor, setShowStepEditor] = useState(false);
   const [newWorkspace, setNewWorkspace] = useState('');
   const [saveFilePath, setSaveFilePath] = useState('');
 
@@ -251,7 +304,7 @@ export function SmartPathPage() {
   };
 
   const addStep = () => {
-    setEditSteps([...editSteps, { mode: 'serial', actions: [{ description: '' }] }]);
+    setEditSteps([...editSteps, { mode: 'serial', actions: [{ userInput: '', description: '' }] }]);
   };
 
   const updateStep = (i: number, step: SmartPathStep) => {
@@ -272,9 +325,16 @@ export function SmartPathPage() {
       steps: JSON.stringify(editSteps),
     });
     setShowCreate(false);
+    setShowStepEditor(false);
     setEditName('');
     setNewWorkspace('');
     setEditSteps([]);
+  };
+
+  const startConfig = () => {
+    if (!editName.trim() || !newWorkspace.trim()) return;
+    setShowStepEditor(true);
+    setEditSteps([{ mode: 'serial', actions: [{ userInput: '' }] }]);
   };
 
   const handleSaveFile = async () => {
@@ -304,6 +364,7 @@ export function SmartPathPage() {
           </button>
           <Button variant="outline" size="sm" className="w-full" onClick={() => {
             setShowCreate(true);
+            setShowStepEditor(false);
             setEditingPath(null);
             setEditName('');
             setNewWorkspace('');
@@ -350,15 +411,6 @@ export function SmartPathPage() {
           <div className="max-w-2xl mx-auto space-y-4">
             <h2 className="text-lg font-semibold">新建 Path</h2>
 
-            <PlanInput
-              workspace={newWorkspace}
-              onPlanGenerated={(plan) => {
-                if (plan.steps) {
-                  setEditSteps(plan.steps);
-                }
-              }}
-            />
-
             <div className="space-y-2">
               <Label>名称</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Path 名称" />
@@ -381,6 +433,8 @@ export function SmartPathPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {showStepEditor && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>步骤配置</Label>
@@ -417,9 +471,21 @@ export function SmartPathPage() {
                 </div>
               )}
             </div>
+            )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleCreate} disabled={!editName.trim() || !newWorkspace}><Save className="h-4 w-4 mr-1" /> 创建</Button>
-              <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
+              {!showStepEditor ? (
+                <Button variant="default" onClick={startConfig} disabled={!editName.trim() || !newWorkspace}>
+                  下一步：配置步骤
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={handleCreate} disabled={editSteps.length === 0}>
+                  <Save className="h-4 w-4 mr-1" /> 保存 Path
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => {
+                setShowCreate(false);
+                setShowStepEditor(false);
+              }}>取消</Button>
             </div>
           </div>
         ) : editingPath ? (
@@ -521,7 +587,7 @@ export function SmartPathPage() {
                           <div className="mt-1 flex flex-wrap gap-1">
                             {step.actions.map((a, j) => (
                               <span key={j} className="text-[10px] px-1.5 py-0.5 rounded border">
-                                {a.type === 'skill' ? a.skillId || 'skill' : 'python'}
+                                {a.userInput?.slice(0, 20) || '无描述'}...
                               </span>
                             ))}
                           </div>

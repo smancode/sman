@@ -10,7 +10,7 @@
 |------|------|
 | **Path (计划)** | 一组步骤的编排配置，以 Markdown 文件存储（YAML frontmatter） |
 | **Step (步骤)** | 一个执行单元，含 `mode: serial/parallel` + `actions[]` |
-| **Action (动作)** | 最小执行单元：`{ type: 'skill', skillId: 'xxx' }` 或 `{ type: 'python', code: '...' }` |
+| **Action (动作)** | 最小执行单元：`{ description: "步骤描述" }` |
 | **Run (执行)** | 一次 Path 的执行记录 |
 | **NL Generation (自然语言生成)** | 用户输入需求，Claude SDK 自动生成执行计划 |
 
@@ -41,9 +41,7 @@ Claude SDK 生成执行计划 (JSON)
 ```typescript
 // Action 类型
 interface SmartPathAction {
-  type: 'skill' | 'python';
-  skillId?: string;        // type='skill' 时必填
-  code?: string;           // type='python' 时必填
+  description: string;  // 步骤描述或代码
 }
 
 // Step 类型
@@ -108,8 +106,9 @@ status: "draft"
 steps:
   - mode: "serial"
     actions:
-      - type: "python"
-        code: "print('分析日志')"
+      - description: "读取登录日志文件"
+      - description: "分析异常登录模式"
+      - description: "生成分析报告"
 ---
 # 分析用户登录日志
 

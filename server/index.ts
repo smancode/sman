@@ -1219,11 +1219,6 @@ wss.on('connection', (ws: WebSocket) => {
               '',
               'Context:',
               `- Workspace: ${workspace}`,
-              `- Available Skills:\n${skillsList || '(none)'}`,
-              '',
-              'Skills Definition:',
-              'A skill is a predefined capability that can be invoked to perform specific tasks.',
-              'Skills are identified by their ID (e.g., "test-driven-development", "systematic-debugging").',
               '',
               'Description:',
               description,
@@ -1238,13 +1233,15 @@ wss.on('connection', (ws: WebSocket) => {
               '    {',
               '      "mode": "serial",',
               '      "actions": [',
-              '        { "type": "python", "code": "..." },',
-              '        { "type": "skill", "skillId": "..." }',
+              '        { "description": "Step 1: ..." },',
+              '        { "description": "Step 2: ..." }',
               '      ]',
               '    }',
               '  ]',
               '}',
               '```',
+              '',
+              'Each action should be a clear, concise description of what needs to be done.',
             ].join('\n');
 
             // Use sessionManager to support all LLM providers
@@ -1290,6 +1287,98 @@ wss.on('connection', (ws: WebSocket) => {
             const errorMessage = err instanceof Error ? err.message : String(err);
             console.error('SmartPath generation error:', errorMessage);
             console.error('Stack:', err instanceof Error ? err.stack : 'No stack');
+            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+          }
+          break;
+        }
+
+        case 'smartpath.generateStep': {
+          const userInput = msg.userInput as string;
+          const workspace = msg.workspace as string;
+          const previousSteps = msg.previousSteps as Array<{ userInput: string; generatedContent?: string }>;
+
+          // Strict validation
+          if (!userInput || !userInput.trim()) {
+            throw new Error('Missing userInput parameter');
+          }
+          if (!workspace || !workspace.trim()) {
+            throw new Error('Missing workspace parameter');
+          }
+
+          try {
+            const llmConfig = settingsManager.getConfig().llm;
+            if (!llmConfig.apiKey) {
+              throw new Error('LLM API key not configured. Please check settings.');
+            }
+
+            // Build context from previous steps
+            const previousContext = previousSteps && previousSteps.length > 0
+              ? [
+                'Previous steps and their results:',
+                ...previousSteps.map((step, i) => [
+                  `Step ${i + 1}:`,
+                  `  User Request: ${step.userInput}`,
+                  step.generatedContent ? `  Generated Solution: ${step.generatedContent.slice(0, 200)}...` : '',
+                ].join('\n')),
+              ].join('\n')
+              : 'No previous steps. This is the first step.';
+
+            const systemPrompt = 'You are an expert software engineer. Generate practical implementation solutions based on user requirements.';
+            const userPrompt = [
+              'Generate an implementation solution for the following step.',
+              '',
+              'Context:',
+              `- Workspace: ${workspace}`,
+              '',
+              previousContext,
+              '',
+              'Current Step Request:',
+              userInput,
+              '',
+              'Output Format:',
+              'Provide a clear, actionable solution including:',
+              '1. Approach overview',
+              '2. Specific code examples (if applicable)',
+              '3. File locations or structure',
+              '4. Key considerations or constraints',
+            ].join('\n');
+
+            // Use sessionManager to support all LLM providers
+            const tempSessionId = sessionManager.createSession(workspace);
+            const abortController = new AbortController();
+
+            let fullResponse = '';
+            const originalSend = ws.send.bind(ws);
+            const interceptedSend = (data: string) => {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'chat.delta') {
+                  fullResponse += parsed.delta?.text || '';
+                }
+                if (parsed.type === 'chat.done') {
+                  abortController.abort();
+                }
+              } catch {}
+              originalSend(data);
+            };
+            (ws as any).send = interceptedSend;
+
+            await sessionManager.sendMessageForCron(
+              tempSessionId,
+              userPrompt,
+              abortController,
+              () => {}
+            );
+
+            (ws as any).send = originalSend;
+
+            ws.send(JSON.stringify({
+              type: 'smartpath.stepGenerated',
+              payload: { generatedContent: fullResponse.trim() }
+            }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error('SmartPath step generation error:', errorMessage);
             ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
           }
           break;

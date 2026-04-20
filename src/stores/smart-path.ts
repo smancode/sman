@@ -43,6 +43,7 @@ interface SmartPathState {
   fetchRuns: (pathId: string) => Promise<void>;
   generatePython: (description: string, workspace: string) => Promise<string>;
   generatePlan: (description: string, workspace: string) => Promise<any>;
+  generateStep: (userInput: string, workspace: string, previousSteps: Array<{ userInput?: string; generatedContent?: string }>) => Promise<string>;
   saveFile: (pathId: string, filePath: string) => Promise<void>;
   setCurrentPath: (path: SmartPath | null) => void;
   clearError: () => void;
@@ -253,6 +254,26 @@ export const useSmartPathStore = create<SmartPathState>((set, get) => ({
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'smartpath.generatePlan', description, workspace });
+    });
+  },
+
+  generateStep: async (userInput, workspace, previousSteps) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<string>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'smartpath.stepGenerated', (data) => {
+        unsub();
+        unsubErr();
+        resolve(String((data.payload as Record<string, unknown>)?.generatedContent || ''));
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'smartpath.generateStep', userInput, workspace, previousSteps });
     });
   },
 

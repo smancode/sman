@@ -62,7 +62,7 @@ export function StepCardsEditor({ steps, onChange }: StepCardsEditorProps) {
           <div className="text-sm space-y-1">
             {step.actions.map((action, actionIndex) => (
               <div key={actionIndex} className="text-xs text-muted-foreground">
-                {action.description}
+                {action.userInput?.slice(0, 50) || '无描述'}...
               </div>
             ))}
           </div>

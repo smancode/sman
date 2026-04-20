@@ -48,9 +48,42 @@ export const MODEL_CAPABILITIES_MAP: Record<string, DetectedCapabilities> = {
   'deepseek-chat':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Chat', source: 'mapping' },
   'deepseek-reasoner':         { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Reasoner', source: 'mapping' },
 
-  // Qwen VL — vision
+  // Qwen — text + vision variants
   'qwen-vl-plus':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen VL Plus', source: 'mapping' },
   'qwen-vl-max':              { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen VL Max', source: 'mapping' },
+  'qwen2.5-0.5b':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen2.5 0.5B', source: 'mapping' },
+  'qwen2.5-1.5b':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen2.5 1.5B', source: 'mapping' },
+  'qwen2.5-3b':               { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen2.5 3B', source: 'mapping' },
+  'qwen2.5-7b':               { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 7B', source: 'mapping' },
+  'qwen2.5-14b':              { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 14B', source: 'mapping' },
+  'qwen2.5-32b':              { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 32B', source: 'mapping' },
+  'qwen2.5-72b':              { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 72B', source: 'mapping' },
+  'qwen2.5-coder':            { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 Coder', source: 'mapping' },
+  'qwen2.5-math':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 Math', source: 'mapping' },
+  'qwen2.5-turbo':            { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 1000000, displayName: 'Qwen2.5 Turbo', source: 'mapping' },
+
+  // GLM — text + vision
+  'glm-4':                    { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4', source: 'mapping' },
+  'glm-4.5':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4.5', source: 'mapping' },
+  'glm-4.6':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.6', source: 'mapping' },
+  'glm-4.7':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.7', source: 'mapping' },
+  'glm-5':                    { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5', source: 'mapping' },
+  'glm-5.1':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5.1', source: 'mapping' },
+
+  // MiniMax — text
+  'minimax-text-01':          { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 4000000, displayName: 'MiniMax-Text-01', source: 'mapping' },
+  'minimax-m1':               { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 1000000, displayName: 'MiniMax-M1', source: 'mapping' },
+  'minimax-m2':               { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: 'MiniMax-M2', source: 'mapping' },
+  'minimax-m2.1':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: 'MiniMax-M2.1', source: 'mapping' },
+  'minimax-m2.5':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: 'MiniMax-M2.5', source: 'mapping' },
+  'minimax-m2.7':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: 'MiniMax-M2.7', source: 'mapping' },
+
+  // Kimi (Moonshot) — text + vision
+  'moonshot-v1-8k':           { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 8192, displayName: 'Moonshot V1 8K', source: 'mapping' },
+  'moonshot-v1-32k':          { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32768, displayName: 'Moonshot V1 32K', source: 'mapping' },
+  'moonshot-v1-128k':         { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 131072, displayName: 'Moonshot V1 128K', source: 'mapping' },
+  'kimi-k2.5':                { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 256000, displayName: 'Kimi K2.5', source: 'mapping' },
+  'kimi-k2':                  { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 256000, displayName: 'Kimi K2', source: 'mapping' },
 
   // Ollama vision models
   'llava':                   { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: 'LLaVA', source: 'mapping' },
@@ -74,25 +107,50 @@ function lookupByFuzzyName(model: string): DetectedCapabilities | null {
 
   // OpenAI GPT-4 variants
   if (lower.includes('gpt-4') && !lower.includes('gpt-3')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
   }
   if (lower.includes('gpt-3')) {
     return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: model, source: 'mapping' };
   }
 
-  // DeepSeek
+  // DeepSeek — official API supports 128K
   if (lower.includes('deepseek')) {
-    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
   }
 
-  // Qwen VL variants
-  if (lower.includes('qwen-vl') || lower.includes('qwen-vision')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: model, source: 'mapping' };
+  // Qwen variants
+  if (lower.includes('qwen')) {
+    if (lower.includes('qwen-vl')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: model, source: 'mapping' };
+    if (lower.includes('qwen2.5-0.5b') || lower.includes('qwen2.5-1.5b') || lower.includes('qwen2.5-3b')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: model, source: 'mapping' };
+    if (lower.includes('qwen2.5-turbo')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 1000000, displayName: model, source: 'mapping' };
+    if (lower.includes('qwen2.5')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+    if (lower.includes('qwen3')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
   }
 
-  // GLM vision variants
-  if (lower.includes('glm') && lower.includes('vision')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+  // GLM variants
+  if (lower.includes('glm')) {
+    if (lower.includes('glm-4.5')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+    if (lower.includes('glm-4')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+    if (lower.includes('glm-5')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+  }
+
+  // MiniMax variants
+  if (lower.includes('minimax')) {
+    if (lower.includes('text-01')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 4000000, displayName: model, source: 'mapping' };
+    if (lower.includes('m1')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 1000000, displayName: model, source: 'mapping' };
+    if (lower.includes('m2')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 204800, displayName: model, source: 'mapping' };
+  }
+
+  // Kimi (Moonshot) variants
+  if (lower.includes('kimi') || lower.includes('moonshot')) {
+    if (lower.includes('8k')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 8192, displayName: model, source: 'mapping' };
+    if (lower.includes('32k')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 32768, displayName: model, source: 'mapping' };
+    if (lower.includes('128k')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 131072, displayName: model, source: 'mapping' };
+    if (lower.includes('k2')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 256000, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
   }
 
   // Ollama vision models
@@ -352,5 +410,11 @@ export async function detectCapabilities(
 
   // Layer 3: Probe
   const probeCaps = await probeVisionCapability(apiKey, model, baseUrl);
-  return { success: true, capabilities: probeCaps };
+  return {
+    success: true,
+    capabilities: {
+      ...probeCaps,
+      maxInputTokens: probeCaps.maxInputTokens ?? 200000,
+    },
+  };
 }

@@ -58,21 +58,28 @@ export class SmartPathEngine {
     const run = this.store.createRun(planId);
     this.store.updatePath(planId, { status: 'running' });
 
-    const ctx: Record<number, unknown> = {};
-
     try {
-      for (let i = 0; i < steps.length; i++) {
-        const step = steps[i];
-        const result = await this.executeStep(step, ctx, smartPath.workspace, `${run.id}-${i}`);
-        ctx[i] = result;
-        if (onProgress) {
-          onProgress({ stepIndex: i, totalSteps: steps.length, status: 'stepComplete' });
-        }
-      }
+      // Build execution prompt from all steps
+      const prompt = this.buildExecutionPrompt(steps, smartPath.name);
+
+      // Execute using session manager
+      const sessionId = `smartpath-run-${run.id}`;
+      this.sessionManager.createSessionWithId(smartPath.workspace, sessionId);
+      const abortController = new AbortController();
+
+      await this.sessionManager.sendMessageForCron(sessionId, prompt, abortController, () => {});
+
+      // Get result from session history
+      const history = this.sessionManager.getHistory(sessionId);
+      const lastAssistant = [...history].reverse().find(m => m.role === 'assistant');
+      const result = lastAssistant?.contentBlocks
+        ?.filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('') || '';
 
       this.store.updateRun(run.id, {
         status: 'completed',
-        stepResults: JSON.stringify(ctx),
+        stepResults: JSON.stringify({ result }),
         finishedAt: isoNow(),
       });
       this.store.updatePath(planId, { status: 'completed' });
@@ -82,7 +89,7 @@ export class SmartPathEngine {
       this.store.updateRun(run.id, {
         status: 'failed',
         errorMessage,
-        stepResults: JSON.stringify(ctx),
+        stepResults: JSON.stringify({ error: errorMessage }),
         finishedAt: isoNow(),
       });
       this.store.updatePath(planId, { status: 'failed' });
@@ -91,117 +98,28 @@ export class SmartPathEngine {
     }
   }
 
-  private async executeStep(
-    step: SmartPathStep,
-    ctx: Record<number, unknown>,
-    workspace: string,
-    runKey: string,
-  ): Promise<unknown> {
-    if (!step.actions || step.actions.length === 0) {
-      throw new Error('Step has no actions');
-    }
+  private buildExecutionPrompt(steps: SmartPathStep[], planName: string): string {
+    const stepDescriptions = steps.flatMap((step, stepIndex) =>
+      step.actions.map((action, actionIndex) => {
+        const parts = [
+          `## 步骤 ${stepIndex + 1}.${actionIndex + 1}`,
+          action.userInput ? `**需求**: ${action.userInput}` : '',
+        ];
+        if (action.generatedContent) {
+          parts.push(`**实现方案**:\n${action.generatedContent}`);
+        }
+        return parts.filter(Boolean).join('\n');
+      })
+    );
 
-    if (step.mode === 'serial') {
-      let result: unknown = null;
-      for (let j = 0; j < step.actions.length; j++) {
-        const action = step.actions[j];
-        const input = result ?? ctx;
-        result = await this.executeAction(action, input, workspace, `${runKey}-${j}`);
-      }
-      return result;
-    } else {
-      const results = await Promise.all(
-        step.actions.map((action, j) =>
-          this.executeAction(action, ctx, workspace, `${runKey}-${j}`),
-        ),
-      );
-      return results;
-    }
-  }
-
-  private async executeAction(
-    action: SmartPathAction,
-    input: unknown,
-    workspace: string,
-    sessionKey: string,
-  ): Promise<unknown> {
-    if (action.type === 'skill') {
-      if (!action.skillId) throw new Error('skillId required for skill action');
-      return this.executeSkill(action.skillId, input, workspace, sessionKey);
-    } else if (action.type === 'python') {
-      if (!action.code) throw new Error('code required for python action');
-      return this.executePython(action.code, input);
-    }
-    throw new Error(`Unknown action type: ${action.type}`);
-  }
-
-  private async executeSkill(
-    skillId: string,
-    input: unknown,
-    workspace: string,
-    sessionKey: string,
-  ): Promise<string> {
-    const skillDir = this.skillsRegistry.getSkillDir(skillId);
-    const skillMdPath = path.join(skillDir, 'SKILL.md');
-    if (!fs.existsSync(skillMdPath)) {
-      throw new Error(`SKILL.md not found for skill: ${skillId}`);
-    }
-    const skillContent = fs.readFileSync(skillMdPath, 'utf-8');
-    const prompt = this.buildSkillPrompt(skillContent, input);
-    const sessionId = `smartpath-${sessionKey}`;
-
-    this.sessionManager.createSessionWithId(workspace, sessionId);
-    const abortController = new AbortController();
-
-    try {
-      await this.sessionManager.sendMessageForCron(sessionId, prompt, abortController, () => {});
-
-      const history = this.sessionManager.getHistory(sessionId);
-      const lastAssistant = [...history].reverse().find(m => m.role === 'assistant');
-      if (!lastAssistant) throw new Error('No assistant response');
-
-      return lastAssistant.contentBlocks
-        ?.filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('') || '';
-    } finally {
-      // Session will be cleaned up by idle cleanup mechanism
-      this.sessionManager.abort(sessionId);
-    }
-  }
-
-  private buildSkillPrompt(skillContent: string, input: unknown): string {
-    return `${skillContent}\n\n## Context\nPrevious results: ${JSON.stringify(input, null, 2)}`;
-  }
-
-  private async executePython(code: string, input: unknown): Promise<unknown> {
-    const ctxJson = JSON.stringify(input);
-    const wrappedCode = [
-      'import json, sys',
-      `ctx = json.loads(${JSON.stringify(ctxJson)})`,
-      code,
+    return [
+      `# 执行智能路径: ${planName}`,
+      '',
+      '请按照以下步骤依次执行任务，每个步骤都要考虑前面的结果。',
+      '',
+      ...stepDescriptions,
+      '',
+      '请开始执行，并在完成每个步骤后报告进度。',
     ].join('\n');
-
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smartpath-py-'));
-    const scriptPath = path.join(tmpDir, 'script.py');
-    fs.writeFileSync(scriptPath, wrappedCode);
-
-    try {
-      const { stdout } = await execFileAsync('python3', [scriptPath], {
-        timeout: PYTHON_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-      });
-      const trimmed = stdout.trim();
-      try {
-        return JSON.parse(trimmed);
-      } catch {
-        return trimmed;
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Python execution failed: ${errorMsg}`);
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
   }
 }

@@ -172,7 +172,12 @@ export type SmartPathRunStatus = 'running' | 'completed' | 'failed';
 export type SmartPathStepMode = 'serial' | 'parallel';
 
 export interface SmartPathAction {
-  description: string;  // 步骤描述或代码
+  type?: 'skill' | 'python';
+  skillId?: string;
+  code?: string;
+  description?: string;
+  userInput?: string;
+  generatedContent?: string;
 }
 
 export interface SmartPathStep {

@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
 import { sessionCache } from '@/lib/session-cache';
+import { contextUsageCache } from '@/lib/context-usage-cache';
 import type { ChatSession, ContentBlock, InitCard } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
@@ -155,6 +156,9 @@ interface ChatState {
 export const sendingSessions = new Set<string>();
 
 const streamingBlocksMap = new Map<string, StreamingBlock[]>();
+
+// Per-session context usage cache
+const contextUsageMap = new Map<string, { inputTokens: number; outputTokens: number }>();
 
 // ── Per-session sending state ──
 // Tracks which sessions are currently streaming a response.
@@ -378,10 +382,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   switchSession: async (sessionId: string) => {
     if (sessionId === get().currentSessionId) return;
 
-    // Save current messages to cache
-    const { currentSessionId, messages } = get();
-    if (currentSessionId && messages.length > 0) {
-      sessionCache.set(currentSessionId, messages);
+    // Save current messages and context usage to cache
+    const { currentSessionId, messages, contextUsage } = get();
+    if (currentSessionId) {
+      if (messages.length > 0) {
+        sessionCache.set(currentSessionId, messages);
+      }
+      if (contextUsage) {
+        contextUsageCache.set(currentSessionId, contextUsage);
+      }
     }
 
     // Read target session: memory first, then IndexedDB
@@ -397,13 +406,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const targetBlocks = getStreamingBlocks(sessionId);
     const isTargetSending = sendingSessions.has(sessionId);
 
+    // Restore context usage for target session
+    const cachedUsage = contextUsageCache.get(sessionId);
+
     set({
       currentSessionId: sessionId,
       messages: cached ?? [],
       streamingBlocks: targetBlocks,
       error: null,
       contextWarning: null,
-      contextUsage: null,
+      contextUsage: cachedUsage,
       sending: isTargetSending,
       loading: !cached,
     });
@@ -898,6 +910,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...(usage ? { contextUsage: usage } : {}),
             });
             sessionCache.set(streamSessionId, finalMessages);
+            if (usage) {
+              contextUsageCache.set(streamSessionId, usage);
+            }
           } else {
             // Session is in background — update cache only, don't touch visible messages
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
@@ -914,6 +929,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Fallback: reload history from backend to avoid showing an empty response.
           if (get().currentSessionId === streamSessionId) {
             set({ streamingBlocks: [], sending: false, waitingHint: null, ...(usage ? { contextUsage: usage } : {}) });
+            if (usage) {
+              contextUsageCache.set(streamSessionId, usage);
+            }
             get().loadHistory();
           }
         }
@@ -1080,6 +1098,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId } = get();
     if (currentSessionId) {
       sessionCache.invalidate(currentSessionId);
+      contextUsageCache.delete(currentSessionId);
       cleanupStream(currentSessionId);
       clearStreamingBlocks(currentSessionId);
     }
