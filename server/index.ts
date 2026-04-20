@@ -164,7 +164,7 @@ batchEngine.setOnProgress((taskId, data) => {
 batchEngine.start();
 
 // SmartPath execution engine
-const smartPathStore = new SmartPathStore(dbPath);
+const smartPathStore = new SmartPathStore(homeDir);
 const smartPathEngine = new SmartPathEngine(smartPathStore, skillsRegistry, sessionManager);
 
 // Chatbot integration (WeCom + Feishu)

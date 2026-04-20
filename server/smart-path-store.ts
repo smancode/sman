@@ -1,76 +1,62 @@
-import betterSqlite3 from 'better-sqlite3';
-import type { Database } from 'better-sqlite3';
-// @ts-expect-error - better-sqlite3 ESM interop
-const DatabaseConstructor = betterSqlite3 as unknown as typeof betterSqlite3.default;
+import fs from 'fs';
+import path from 'path';
+import matter from 'gray-matter';
 import { createLogger, type Logger } from './utils/logger.js';
-import { v4 as uuidv4 } from 'uuid';
-import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathRunStatus } from './types.js';
+import type { SmartPath, SmartPathRun } from './types.js';
 
 export class SmartPathStore {
-  private static readonly PATH_COLUMNS = [
-    'id', 'name', 'workspace', 'steps',
-    'status', 'created_at as createdAt', 'updated_at as updatedAt',
-  ].join(', ');
-
-  private static readonly RUN_COLUMNS = [
-    'id', 'path_id as pathId', 'status',
-    'step_results as stepResults', 'started_at as startedAt',
-    'finished_at as finishedAt', 'error_message as errorMessage',
-  ].join(', ');
-
-  private db: Database;
   private log: Logger;
 
-  constructor(dbPath: string) {
-    this.db = new DatabaseConstructor(dbPath);
+  constructor(private basePath: string) {
     this.log = createLogger('SmartPathStore');
-    this.init();
+    if (!fs.existsSync(basePath)) {
+      fs.mkdirSync(basePath, { recursive: true });
+    }
   }
 
-  private init(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS smart_paths (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        workspace TEXT NOT NULL,
-        steps TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'draft'
-          CHECK(status IN ('draft','ready','running','completed','failed')),
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-    `);
+  private getPathsDir(workspace: string): string {
+    if (!workspace || workspace.trim() === '') {
+      throw new Error('Workspace is required');
+    }
 
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS smart_path_runs (
-        id TEXT PRIMARY KEY,
-        path_id TEXT NOT NULL,
-        status TEXT NOT NULL
-          CHECK(status IN ('running','completed','failed')),
-        step_results TEXT NOT NULL DEFAULT '{}',
-        started_at TEXT NOT NULL,
-        finished_at TEXT,
-        error_message TEXT,
-        FOREIGN KEY (path_id) REFERENCES smart_paths(id) ON DELETE CASCADE
-      );
-    `);
-
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_smart_path_runs_path ON smart_path_runs(path_id);
-    `);
-
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    this.log.info('SmartPathStore initialized');
+    const dir = path.join(workspace, '.sman', 'paths');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
   }
 
-  // === Path CRUD ===
+  private getPlanFilePath(workspace: string, id: string): string {
+    return path.join(this.getPathsDir(workspace), `${id}.md`);
+  }
 
+  // === Alias methods for backward compatibility ===
+
+  /** @deprecated Use listPlans */
+  listPaths(): SmartPath[] {
+    // List from all workspace subdirectories under basePath
+    if (!fs.existsSync(this.basePath)) return [];
+    const workspaces = fs.readdirSync(this.basePath);
+    const all: SmartPath[] = [];
+    for (const ws of workspaces) {
+      const wsDir = path.join(this.basePath, ws, '.sman', 'paths');
+      if (!fs.existsSync(wsDir)) continue;
+      const files = fs.readdirSync(wsDir).filter(f => f.endsWith('.md'));
+      for (const file of files) {
+        try {
+          all.push(this.loadPlan(path.join(wsDir, file)));
+        } catch { /* skip corrupt files */ }
+      }
+    }
+    return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** @deprecated Use savePlan */
   createPath(input: {
     name: string;
     workspace: string;
     steps: string;
-    status?: SmartPathStatus;
+    status?: SmartPath['status'];
   }): SmartPath {
     if (!input.name || input.name.trim() === '') {
       throw new Error('缺少 name 参数');
@@ -82,173 +68,191 @@ export class SmartPathStore {
       throw new Error('缺少 steps 参数');
     }
 
-    const id = uuidv4();
+    const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO smart_paths (id, name, workspace, steps, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, input.workspace, input.steps, input.status || 'draft', now, now);
-    return this.getPath(id)!;
+    const plan: SmartPath = {
+      id,
+      name: input.name,
+      workspace: input.workspace,
+      steps: input.steps,
+      status: input.status || 'draft',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.savePlan(plan);
+    return plan;
   }
 
   getPath(id: string): SmartPath | undefined {
-    if (!id) throw new Error('缺少 id 参数');
-    const row = this.db.prepare(
-      `SELECT ${SmartPathStore.PATH_COLUMNS} FROM smart_paths WHERE id = ?`,
-    ).get(id);
-    return row ? this.rowToPath(row as Record<string, unknown>) : undefined;
+    // Search all workspace dirs for this id
+    if (!fs.existsSync(this.basePath)) return undefined;
+    const workspaces = fs.readdirSync(this.basePath);
+    for (const ws of workspaces) {
+      const filePath = path.join(this.basePath, ws, '.sman', 'paths', `${id}.md`);
+      if (fs.existsSync(filePath)) {
+        return this.loadPlan(filePath);
+      }
+    }
+    return undefined;
   }
 
-  listPaths(): SmartPath[] {
-    const rows = this.db.prepare(
-      `SELECT ${SmartPathStore.PATH_COLUMNS} FROM smart_paths ORDER BY created_at DESC`,
-    ).all() as Record<string, unknown>[];
-    return rows.map(r => this.rowToPath(r));
-  }
-
-  updatePath(id: string, updates: Partial<{
-    name: string;
-    workspace: string;
-    steps: string;
-    status: SmartPathStatus;
-  }>): SmartPath | undefined {
-    if (!id) throw new Error('缺少 id 参数');
-
-    const fields: string[] = [];
-    const values: (string | number)[] = [];
-
-    if (updates.name !== undefined) {
-      fields.push('name = ?');
-      values.push(updates.name);
-    }
-    if (updates.workspace !== undefined) {
-      fields.push('workspace = ?');
-      values.push(updates.workspace);
-    }
-    if (updates.steps !== undefined) {
-      fields.push('steps = ?');
-      values.push(updates.steps);
-    }
-    if (updates.status !== undefined) {
-      fields.push('status = ?');
-      values.push(updates.status);
-    }
-
-    if (fields.length === 0) return this.getPath(id);
-
-    fields.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
-
-    this.db.prepare(`UPDATE smart_paths SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    return this.getPath(id);
+  updatePath(id: string, updates: Partial<SmartPath>): SmartPath {
+    const existing = this.getPath(id);
+    if (!existing) throw new Error(`Path not found: ${id}`);
+    const merged = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+    this.savePlan(merged);
+    return merged;
   }
 
   deletePath(id: string): void {
-    if (!id) throw new Error('缺少 id 参数');
-    this.db.prepare('DELETE FROM smart_path_runs WHERE path_id = ?').run(id);
-    this.db.prepare('DELETE FROM smart_paths WHERE id = ?').run(id);
+    const existing = this.getPath(id);
+    if (!existing) throw new Error(`Path not found: ${id}`);
+    const filePath = this.getPlanFilePath(existing.workspace, id);
+    fs.unlinkSync(filePath);
+    this.log.info(`Deleted plan: ${filePath}`);
   }
 
-  // === Run CRUD ===
+  // === Run methods ===
+
+  private getRunsDir(workspace: string, pathId: string): string {
+    const dir = path.join(this.getPathsDir(workspace), pathId, 'runs');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
 
   createRun(pathId: string): SmartPathRun {
-    if (!pathId) throw new Error('缺少 pathId 参数');
+    const smartPath = this.getPath(pathId);
+    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
-    const id = uuidv4();
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO smart_path_runs (id, path_id, status, step_results, started_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, pathId, 'running', '{}', now);
-
-    return {
-      id,
+    const run: SmartPathRun = {
+      id: crypto.randomUUID(),
       pathId,
       status: 'running',
       stepResults: '{}',
-      startedAt: now,
+      startedAt: new Date().toISOString(),
     };
+
+    const dir = this.getRunsDir(smartPath.workspace, pathId);
+    const filePath = path.join(dir, `${run.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(run, null, 2), 'utf-8');
+    this.log.info(`Created run ${run.id} for path ${pathId}`);
+    return run;
   }
 
-  getRun(id: string): SmartPathRun | undefined {
-    if (!id) throw new Error('缺少 id 参数');
-    const row = this.db.prepare(
-      `SELECT ${SmartPathStore.RUN_COLUMNS} FROM smart_path_runs WHERE id = ?`,
-    ).get(id);
-    return row ? this.rowToRun(row as Record<string, unknown>) : undefined;
+  updateRun(runId: string, updates: Partial<SmartPathRun>): void {
+    // Search all run dirs for this runId
+    if (!fs.existsSync(this.basePath)) return;
+    const workspaces = fs.readdirSync(this.basePath);
+    for (const ws of workspaces) {
+      const pathsDir = path.join(this.basePath, ws, '.sman', 'paths');
+      if (!fs.existsSync(pathsDir)) continue;
+      const pathDirs = fs.readdirSync(pathsDir);
+      for (const pd of pathDirs) {
+        const runFile = path.join(pathsDir, pd, 'runs', `${runId}.json`);
+        if (fs.existsSync(runFile)) {
+          const existing: SmartPathRun = JSON.parse(fs.readFileSync(runFile, 'utf-8'));
+          const merged = { ...existing, ...updates };
+          fs.writeFileSync(runFile, JSON.stringify(merged, null, 2), 'utf-8');
+          return;
+        }
+      }
+    }
+    throw new Error(`Run not found: ${runId}`);
   }
 
   listRuns(pathId: string): SmartPathRun[] {
-    if (!pathId) throw new Error('缺少 pathId 参数');
-    const rows = this.db.prepare(
-      `SELECT ${SmartPathStore.RUN_COLUMNS} FROM smart_path_runs WHERE path_id = ? ORDER BY started_at DESC`,
-    ).all(pathId) as Record<string, unknown>[];
-    return rows.map(r => this.rowToRun(r));
+    const smartPath = this.getPath(pathId);
+    if (!smartPath) return [];
+
+    const runsDir = path.join(this.getPathsDir(smartPath.workspace), pathId, 'runs');
+    if (!fs.existsSync(runsDir)) return [];
+
+    const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
+    const runs: SmartPathRun[] = [];
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(runsDir, file), 'utf-8');
+        runs.push(JSON.parse(content));
+      } catch { /* skip corrupt files */ }
+    }
+    return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
-  updateRun(id: string, updates: Partial<{
-    status: SmartPathRunStatus;
-    stepResults: string;
-    finishedAt: string;
-    errorMessage: string;
-  }>): SmartPathRun | undefined {
-    if (!id) throw new Error('缺少 id 参数');
+  // === Core file-based methods ===
 
-    const fields: string[] = [];
-    const values: (string | number)[] = [];
+  listPlans(workspace: string): SmartPath[] {
+    const dir = this.getPathsDir(workspace);
+    if (!fs.existsSync(dir)) return [];
 
-    if (updates.status !== undefined) {
-      fields.push('status = ?');
-      values.push(updates.status);
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
+    const plans: SmartPath[] = [];
+    for (const file of files) {
+      try {
+        plans.push(this.loadPlan(path.join(dir, file)));
+      } catch { /* skip corrupt files */ }
     }
-    if (updates.stepResults !== undefined) {
-      fields.push('step_results = ?');
-      values.push(updates.stepResults);
-    }
-    if (updates.finishedAt !== undefined) {
-      fields.push('finished_at = ?');
-      values.push(updates.finishedAt);
-    }
-    if (updates.errorMessage !== undefined) {
-      fields.push('error_message = ?');
-      values.push(updates.errorMessage);
-    }
-
-    if (fields.length === 0) return this.getRun(id);
-
-    values.push(id);
-    this.db.prepare(`UPDATE smart_path_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-    return this.getRun(id);
+    return plans.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  close(): void {
-    this.db.close();
+  deletePlan(filePath: string): void {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Plan file not found: ${filePath}`);
+    }
+    fs.unlinkSync(filePath);
+    this.log.info(`Deleted plan: ${filePath}`);
   }
 
-  // === Helpers ===
+  savePlan(plan: SmartPath): string {
+    if (!plan.name || plan.name.trim() === '') {
+      throw new Error('Plan name is required');
+    }
+    if (!plan.workspace || plan.workspace.trim() === '') {
+      throw new Error('Workspace is required');
+    }
 
-  private rowToPath(row: Record<string, unknown>): SmartPath {
+    const dir = this.getPathsDir(plan.workspace);
+    const filePath = path.join(dir, `${plan.id}.md`);
+
+    const stepsJson = typeof plan.steps === 'string' ? plan.steps : JSON.stringify(plan.steps);
+
+    const content = matter.stringify(
+      `# ${plan.name}\n\n${plan.description || '无描述'}\n`,
+      {
+        name: plan.name,
+        description: plan.description || '',
+        workspace: plan.workspace,
+        created_at: plan.createdAt,
+        updated_at: plan.updatedAt || plan.createdAt,
+        status: plan.status,
+        steps: stepsJson,
+      },
+    );
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    this.log.info(`Saved plan to ${filePath}`);
+    return filePath;
+  }
+
+  loadPlan(filePath: string): SmartPath {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Plan file not found: ${filePath}`);
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const { data } = matter(content);
+
     return {
-      id: row.id as string,
-      name: row.name as string,
-      workspace: row.workspace as string,
-      steps: row.steps as string,
-      status: row.status as SmartPathStatus,
-      createdAt: row.createdAt as string,
-      updatedAt: row.updatedAt as string,
-    };
-  }
-
-  private rowToRun(row: Record<string, unknown>): SmartPathRun {
-    return {
-      id: row.id as string,
-      pathId: row.pathId as string,
-      status: row.status as SmartPathRunStatus,
-      stepResults: row.stepResults as string,
-      startedAt: row.startedAt as string,
-      finishedAt: row.finishedAt as string | undefined,
-      errorMessage: row.errorMessage as string | undefined,
+      id: path.basename(filePath, '.md'),
+      name: data.name || '',
+      description: data.description || '',
+      workspace: data.workspace || '',
+      steps: typeof data.steps === 'string' ? data.steps : JSON.stringify(data.steps || []),
+      status: data.status || 'draft',
+      createdAt: data.created_at || new Date().toISOString(),
+      updatedAt: data.updated_at || data.created_at || new Date().toISOString(),
     };
   }
 }
