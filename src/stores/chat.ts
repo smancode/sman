@@ -111,6 +111,9 @@ interface ChatState {
   /** Context length warning for current session */
   contextWarning: { level: 'warning' | 'critical'; inputTokens: number; message: string } | null;
 
+  /** Context usage stats for current session */
+  contextUsage: { inputTokens: number; outputTokens: number } | null;
+
   /** Shown when Claude takes too long to start responding */
   waitingHint: string | null;
 
@@ -260,6 +263,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loading: false,
   error: null,
   contextWarning: null,
+  contextUsage: null,
   waitingHint: null,
   sending: false,
   streamingBlocks: [],  // derived from streamingBlocksMap[currentSessionId]
@@ -399,6 +403,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingBlocks: targetBlocks,
       error: null,
       contextWarning: null,
+      contextUsage: null,
       sending: isTargetSending,
       loading: !cached,
     });
@@ -870,6 +875,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         clearStreamingBlocks(streamSessionId);
 
+        const usage = data.usage as { inputTokens: number; outputTokens: number } | null | undefined;
+
         if (textContent.trim() || contentBlocks.length > 0) {
           const assistantMsg: Message = {
             id: crypto.randomUUID(),
@@ -888,6 +895,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               streamingBlocks: [],
               sending: false,
               waitingHint: null,
+              ...(usage ? { contextUsage: usage } : {}),
             });
             sessionCache.set(streamSessionId, finalMessages);
           } else {
@@ -905,7 +913,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Streaming collected nothing — backend may have stored the message in SQLite.
           // Fallback: reload history from backend to avoid showing an empty response.
           if (get().currentSessionId === streamSessionId) {
-            set({ streamingBlocks: [], sending: false, waitingHint: null });
+            set({ streamingBlocks: [], sending: false, waitingHint: null, ...(usage ? { contextUsage: usage } : {}) });
             get().loadHistory();
           }
         }
@@ -1075,7 +1083,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       cleanupStream(currentSessionId);
       clearStreamingBlocks(currentSessionId);
     }
-    set({ messages: [], streamingBlocks: [], error: null, contextWarning: null, sending: false });
+    set({ messages: [], streamingBlocks: [], error: null, contextWarning: null, contextUsage: null, sending: false });
     get().loadHistory();
   },
 }));
