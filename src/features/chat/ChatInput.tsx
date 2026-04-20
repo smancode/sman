@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { SkillPicker } from '@/components/SkillPicker';
+import { ContextUsageBar } from './ContextUsageBar';
 
 export interface FileAttachment {
   id: string;
@@ -310,6 +311,11 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             ))}
           </div>
         )}
+
+        {/* Context Usage HUD */}
+        <div className="flex justify-end px-1 pb-1">
+          <ContextUsageBar />
+        </div>
 
         <div className="flex items-end gap-1.5">
           {/* Hidden file input */}
