@@ -178,7 +178,7 @@ export class InitManager {
         });
 
         const injectedSkills = injectSkills(skillSources, this.pluginsDir, workspace);
-        this.injectSelfUpdater(workspace);
+        this.injectMetaSkills(workspace);
 
         // Step 4: CLAUDE.md — silent background, no progress card
         let claudeMdGenerated = false;
@@ -197,23 +197,32 @@ export class InitManager {
     ]);
   }
 
-  private injectSelfUpdater(workspace: string): void {
-    const targetDir = path.join(workspace, '.claude', 'skills', 'skill-auto-updater');
-    if (fs.existsSync(path.join(targetDir, 'SKILL.md'))) return; // Don't overwrite
+  private static readonly META_SKILLS = [
+    'skill-auto-updater',
+    'project-structure',
+    'project-apis',
+    'project-external-calls',
+  ];
 
-    // Template path relative to this source file
-    const templateDir = path.join(__dirname, 'templates', 'skill-auto-updater');
-    if (!fs.existsSync(templateDir)) {
-      this.log.warn('Self-updater template not found');
-      return;
-    }
+  private injectMetaSkills(workspace: string): void {
+    const templatesDir = path.join(__dirname, 'templates');
+    for (const skillName of InitManager.META_SKILLS) {
+      const targetDir = path.join(workspace, '.claude', 'skills', skillName);
+      if (fs.existsSync(path.join(targetDir, 'SKILL.md'))) continue; // Don't overwrite
 
-    fs.mkdirSync(targetDir, { recursive: true });
-    for (const file of fs.readdirSync(templateDir)) {
-      fs.copyFileSync(
-        path.join(templateDir, file),
-        path.join(targetDir, file),
-      );
+      const templateDir = path.join(templatesDir, skillName);
+      if (!fs.existsSync(templateDir)) {
+        this.log.warn(`Meta skill template not found: ${skillName}`);
+        continue;
+      }
+
+      fs.mkdirSync(targetDir, { recursive: true });
+      for (const file of fs.readdirSync(templateDir)) {
+        fs.copyFileSync(
+          path.join(templateDir, file),
+          path.join(targetDir, file),
+        );
+      }
     }
   }
 

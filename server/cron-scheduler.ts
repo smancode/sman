@@ -9,7 +9,6 @@ import { CronExecutor } from './cron-executor.js';
 import type { CronTask } from './types.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SessionStore } from './session-store.js';
-import type { ProjectScanner } from './capabilities/project-scanner.js';
 
 const SCAN_INTERVAL_MS = 30 * 60 * 1000; // 30 分钟
 
@@ -19,7 +18,6 @@ export class CronScheduler {
   private executor: CronExecutor;
   private _sessionManager: ClaudeSessionManager | null = null;
   private _sessionStore: SessionStore | null = null;
-  private projectScanner: ProjectScanner | null = null;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private isStarted = false;
   private isScanning = false;
@@ -40,10 +38,6 @@ export class CronScheduler {
     this._sessionStore = store;
   }
 
-  setProjectScanner(scanner: ProjectScanner): void {
-    this.projectScanner = scanner;
-  }
-
   start(): void {
     if (this.isStarted) return;
     this.isStarted = true;
@@ -62,16 +56,6 @@ export class CronScheduler {
     this.startAutoScan();
 
     this.log.info(`CronScheduler started with ${tasks.length} tasks`);
-
-    // Built-in weekly knowledge refresh (Monday 3AM)
-    if (this.projectScanner) {
-      const weeklyRefreshJob = cron.schedule('0 3 * * 1', () => {
-        this.projectScanner!.nightlyRefresh().catch((e: any) => {
-          this.log.error(`weekly knowledge refresh failed: ${e.message}`);
-        });
-      });
-      this.jobs.set('__sixhour_knowledge_refresh__', weeklyRefreshJob);
-    }
   }
 
   /**
@@ -221,10 +205,17 @@ export class CronScheduler {
 
           const existing = this.taskStore.getTaskByWorkspaceAndSkill(workspace, entry.name);
           if (existing) {
-            if (existing.cronExpression !== parsed.expression) {
-              const updated = this.taskStore.updateTask(existing.id, { cronExpression: parsed.expression });
+            const cronChanged = existing.cronExpression !== parsed.expression;
+            const enabledChanged = parsed.enabled !== undefined && existing.enabled !== parsed.enabled;
+            if (cronChanged || enabledChanged) {
+              const updates: Partial<Pick<CronTask, 'cronExpression' | 'enabled'>> = {};
+              if (cronChanged) updates.cronExpression = parsed.expression;
+              if (enabledChanged) updates.enabled = parsed.enabled;
+              const updated = this.taskStore.updateTask(existing.id, updates);
               if (updated && updated.enabled) {
                 this.schedule(updated);
+              } else {
+                this.unschedule(existing.id);
               }
               result.updated++;
             } else {
@@ -236,8 +227,11 @@ export class CronScheduler {
               skillName: entry.name,
               cronExpression: parsed.expression,
               source: 'scan',
+              enabled: parsed.enabled ?? true,
             });
-            this.schedule(task);
+            if (task.enabled) {
+              this.schedule(task);
+            }
             result.created++;
           }
         }
@@ -281,16 +275,47 @@ const CRON_EXPR_RE = /^((?:[^\s]+\s+){4}[^\s]+)/;
 /**
  * 解析 crontab.md 文件
  * 支持格式：
- * 1. 第一行为纯 5 段 cron 表达式（推荐）
- * 2. 第一行为 cron 表达式 + 空格 + 命令/提示词（类系统 crontab）
+ * 1. 纯 5 段 cron 表达式（可选 frontmatter）
+ * 2. cron 表达式 + 空格 + 命令/提示词（类系统 crontab）
  * 3. 前面可有 # 注释行，跳过
+ * 4. YAML frontmatter（--- 包裹），提取 enabled 和 schedule 字段
  *
  * 返回 null 表示文件不包含有效 cron 表达式
  */
-export function parseCrontabMd(content: string): { expression: string; promptContent: string } | null {
+export function parseCrontabMd(content: string): { expression: string; promptContent: string; enabled?: boolean } | null {
   const trimmed = content.replace(/^\uFEFF/, '').trim(); // strip BOM
-  const lines = trimmed.split('\n');
+  let lines = trimmed.split('\n');
   if (lines.length === 0) return null;
+
+  // 跳过 YAML frontmatter（--- ... ---）
+  let enabled: boolean | undefined;
+  if (lines[0].trim() === '---') {
+    const endIdx = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
+    if (endIdx > 0) {
+      // 先遍历提取所有 frontmatter 字段
+      let scheduleExpr: string | undefined;
+      for (let i = 1; i < endIdx; i++) {
+        const fmLine = lines[i].trim();
+        const enabledMatch = fmLine.match(/^enabled:\s*(true|false)/);
+        if (enabledMatch) {
+          enabled = enabledMatch[1] === 'true';
+          continue;
+        }
+        const scheduleMatch = fmLine.match(/^schedule:\s*["'](.+)["']/);
+        if (scheduleMatch && cron.validate(scheduleMatch[1])) {
+          scheduleExpr = scheduleMatch[1];
+        }
+      }
+      // frontmatter 中有合法 schedule，优先使用并直接返回
+      if (scheduleExpr) {
+        const promptContent = lines.slice(endIdx + 1).join('\n').trim();
+        return { expression: scheduleExpr, promptContent, enabled };
+      }
+      lines = lines.slice(endIdx + 1);
+    }
+  }
+
+  if (lines.length === 0) return enabled !== undefined ? null : null;
 
   // 跳过注释行和空行，找到第一行有效内容
   let cronLineIndex = 0;
@@ -306,7 +331,7 @@ export function parseCrontabMd(content: string): { expression: string; promptCon
   // 情况 1: 整行就是 5 段 cron 表达式
   if (cron.validate(cronLine)) {
     const promptContent = lines.slice(cronLineIndex + 1).join('\n').trim();
-    return { expression: cronLine, promptContent };
+    return { expression: cronLine, promptContent, enabled };
   }
 
   // 情况 2: 行首包含 5 段 cron 表达式 + 额外内容
@@ -317,7 +342,7 @@ export function parseCrontabMd(content: string): { expression: string; promptCon
       const inlinePrompt = cronLine.slice(expression.length).trim();
       const remainingContent = lines.slice(cronLineIndex + 1).join('\n').trim();
       const promptContent = [inlinePrompt, remainingContent].filter(Boolean).join('\n');
-      return { expression, promptContent };
+      return { expression, promptContent, enabled };
     }
   }
 

@@ -97,14 +97,15 @@ export class CronTaskStore {
 
   // === Task CRUD ===
 
-  createTask(input: { workspace: string; skillName: string; cronExpression: string; source?: 'scan' | 'manual' }): CronTask {
+  createTask(input: { workspace: string; skillName: string; cronExpression: string; source?: 'scan' | 'manual'; enabled?: boolean }): CronTask {
     const id = uuidv4();
     const now = new Date().toISOString();
     const source = input.source ?? 'manual';
+    const enabled = input.enabled !== false ? 1 : 0;
     this.db.prepare(`
       INSERT INTO cron_tasks (id, workspace, skill_name, cron_expression, source, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(id, input.workspace, input.skillName, input.cronExpression, source, now, now);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.workspace, input.skillName, input.cronExpression, source, enabled, now, now);
 
     return this.getTask(id)!;
   }

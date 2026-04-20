@@ -92,4 +92,46 @@ describe('parseCrontabMd', () => {
     const result = parseCrontabMd(content);
     expect(result).toBeNull();
   });
+
+  // === YAML Frontmatter ===
+
+  it('should parse frontmatter and extract schedule expression', () => {
+    const content = '---\nschedule: "0 3 * * *"\nenabled: false\ndescription: 每日凌晨3点\n---\n\n默认关闭。';
+    const result = parseCrontabMd(content);
+    expect(result).not.toBeNull();
+    expect(result!.expression).toBe('0 3 * * *');
+    expect(result!.enabled).toBe(false);
+    expect(result!.promptContent).toContain('默认关闭');
+  });
+
+  it('should parse frontmatter with enabled: true', () => {
+    const content = '---\nschedule: "0 3 * * *"\nenabled: true\n---\n\n每日执行';
+    const result = parseCrontabMd(content);
+    expect(result).not.toBeNull();
+    expect(result!.expression).toBe('0 3 * * *');
+    expect(result!.enabled).toBe(true);
+  });
+
+  it('should parse frontmatter without schedule, falling back to body cron expression', () => {
+    const content = '---\nenabled: false\ndescription: 测试\n---\n\n0 3 * * *\n\n默认关闭。';
+    const result = parseCrontabMd(content);
+    expect(result).not.toBeNull();
+    expect(result!.expression).toBe('0 3 * * *');
+    expect(result!.enabled).toBe(false);
+    expect(result!.promptContent).toContain('默认关闭');
+  });
+
+  it('should return null for frontmatter without any cron expression', () => {
+    const content = '---\nenabled: false\ndescription: 测试\n---\n\n没有 cron 表达式';
+    const result = parseCrontabMd(content);
+    expect(result).toBeNull();
+  });
+
+  it('should return undefined enabled when frontmatter does not specify it', () => {
+    const content = '---\nschedule: "0 3 * * *"\n---\n\n执行内容';
+    const result = parseCrontabMd(content);
+    expect(result).not.toBeNull();
+    expect(result!.expression).toBe('0 3 * * *');
+    expect(result!.enabled).toBeUndefined();
+  });
 });

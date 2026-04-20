@@ -40,7 +40,6 @@ import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
-import { ProjectScanner } from './capabilities/project-scanner.js';
 import { InitManager } from './init/init-manager.js';
 import { initBazaarBridge, getBazaarBridge } from './bazaar/index.js';
 
@@ -256,13 +255,6 @@ initCapabilities(homeDir, pluginsDir);
 const capabilityRegistry = new CapabilityRegistry(homeDir);
 sessionManager.setCapabilityRegistry(capabilityRegistry);
 
-// Initialize project scanner (on-demand knowledge scanning)
-const projectScanner = new ProjectScanner({
-  homeDir,
-  sessionManager,
-  hasActiveStreams: sessionManager.hasActiveStreams.bind(sessionManager),
-});
-
 // Initialize workspace auto-init manager
 const initManager = new InitManager({
   pluginsDir,
@@ -280,7 +272,6 @@ const initManager = new InitManager({
 
 // Set up cron scheduler with session manager
 cronScheduler.setSessionManager(sessionManager);
-cronScheduler.setProjectScanner(projectScanner);
 cronScheduler.start();
 
 // Broadcast cron run status changes to all clients
