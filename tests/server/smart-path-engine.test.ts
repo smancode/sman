@@ -10,6 +10,7 @@ describe('SmartPathEngine', () => {
   let engine: SmartPathEngine;
   let dbPath: string;
   let tmpSkillDir: string;
+  let workspace: string;
 
   const mockSkillsRegistry = {
     getSkillDir: (id: string) => {
@@ -30,16 +31,19 @@ describe('SmartPathEngine', () => {
   };
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `smart-path-engine-test-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `smart-path-engine-test-${Date.now()}`);
     store = new SmartPathStore(dbPath);
     tmpSkillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-'));
     fs.writeFileSync(path.join(tmpSkillDir, 'SKILL.md'), '# Test Skill\nThis is a test skill.');
     engine = new SmartPathEngine(store, mockSkillsRegistry as any, mockSessionManager as any);
+
+    // Create a workspace directory for tests
+    workspace = path.join(dbPath, 'test-workspace');
+    fs.mkdirSync(workspace, { recursive: true });
   });
 
   afterEach(() => {
-    store.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { recursive: true, force: true });
     if (fs.existsSync(tmpSkillDir)) fs.rmSync(tmpSkillDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
@@ -48,7 +52,7 @@ describe('SmartPathEngine', () => {
     it('should execute serial step sequentially', async () => {
       const smartPath = store.createPath({
         name: 'Serial Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'serial',
@@ -75,7 +79,7 @@ describe('SmartPathEngine', () => {
     it('should execute parallel step concurrently', async () => {
       const smartPath = store.createPath({
         name: 'Parallel Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'parallel',
@@ -97,7 +101,7 @@ describe('SmartPathEngine', () => {
     it('should pass context between steps', async () => {
       const smartPath = store.createPath({
         name: 'Context Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'serial',
@@ -121,7 +125,7 @@ describe('SmartPathEngine', () => {
     it('should execute python action', async () => {
       const smartPath = store.createPath({
         name: 'Python Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'serial',
@@ -143,7 +147,7 @@ describe('SmartPathEngine', () => {
     it('should inject ctx into python', async () => {
       const smartPath = store.createPath({
         name: 'Python Ctx Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'serial',
@@ -168,7 +172,7 @@ describe('SmartPathEngine', () => {
     it('should throw when path has no steps', async () => {
       const smartPath = store.createPath({
         name: 'Empty',
-        workspace: '/tmp',
+        workspace,
         steps: '[]',
       });
       await expect(engine.runPath(smartPath.id)).rejects.toThrow('Path has no steps');
@@ -177,7 +181,7 @@ describe('SmartPathEngine', () => {
     it('should mark path as failed on error', async () => {
       const smartPath = store.createPath({
         name: 'Fail Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           {
             mode: 'serial',
@@ -200,7 +204,7 @@ describe('SmartPathEngine', () => {
       const onProgress = vi.fn();
       const smartPath = store.createPath({
         name: 'Progress Test',
-        workspace: '/tmp',
+        workspace,
         steps: JSON.stringify([
           { mode: 'serial', actions: [{ type: 'skill', skillId: 'test-skill' }] },
           { mode: 'serial', actions: [{ type: 'skill', skillId: 'test-skill' }] },
@@ -212,6 +216,53 @@ describe('SmartPathEngine', () => {
       expect(onProgress).toHaveBeenCalledTimes(2);
       expect(onProgress).toHaveBeenNthCalledWith(1, { stepIndex: 0, totalSteps: 2, status: 'stepComplete' });
       expect(onProgress).toHaveBeenNthCalledWith(2, { stepIndex: 1, totalSteps: 2, status: 'stepComplete' });
+    });
+
+    it('should execute plan from .md file path', async () => {
+      const planPath = store.savePlan({
+        id: 'test-plan',
+        name: '测试计划',
+        workspace,
+        steps: [{
+          mode: 'serial',
+          actions: [{
+            type: 'python',
+            code: 'import json\nprint(json.dumps({"result": 42}))',
+          }],
+        }],
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+      });
+
+      await engine.runPath(planPath);
+
+      const runs = store.listRuns('test-plan');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('completed');
+    });
+
+    it('should support backward compatibility with plan IDs', async () => {
+      store.savePlan({
+        id: 'backward-compat-plan',
+        name: '向后兼容测试',
+        workspace,
+        steps: [{
+          mode: 'serial',
+          actions: [{
+            type: 'python',
+            code: 'import json\nprint(json.dumps({"result": "backward-compatible"}))',
+          }],
+        }],
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+      });
+
+      // Use plan ID instead of file path
+      await engine.runPath('backward-compat-plan');
+
+      const runs = store.listRuns('backward-compat-plan');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('completed');
     });
   });
 });

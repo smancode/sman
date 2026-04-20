@@ -28,13 +28,18 @@ export class SmartPathEngine {
     this.log = createLogger('SmartPathEngine');
   }
 
-  async runPath(pathId: string, onProgress?: (data: {
+  async runPath(pathOrId: string, onProgress?: (data: {
     stepIndex: number;
     totalSteps: number;
     status: string;
   }) => void): Promise<void> {
-    const smartPath = this.store.getPath(pathId);
-    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
+    // 判断是文件路径还是 ID
+    const isFilePath = pathOrId.endsWith('.md');
+    const smartPath = isFilePath
+      ? this.store.loadPlan(pathOrId)
+      : this.store.getPath(pathOrId);
+
+    if (!smartPath) throw new Error(`Path not found: ${pathOrId}`);
     if (!smartPath.steps || smartPath.steps.length === 0) {
       throw new Error('Path has no steps');
     }
@@ -49,8 +54,9 @@ export class SmartPathEngine {
       throw new Error('Path has no steps');
     }
 
-    const run = this.store.createRun(pathId);
-    this.store.updatePath(pathId, { status: 'running' });
+    const planId = smartPath.id;
+    const run = this.store.createRun(planId);
+    this.store.updatePath(planId, { status: 'running' });
 
     const ctx: Record<number, unknown> = {};
 
@@ -69,8 +75,8 @@ export class SmartPathEngine {
         stepResults: JSON.stringify(ctx),
         finishedAt: isoNow(),
       });
-      this.store.updatePath(pathId, { status: 'completed' });
-      this.log.info(`Path ${pathId} completed`);
+      this.store.updatePath(planId, { status: 'completed' });
+      this.log.info(`Path ${planId} completed`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this.store.updateRun(run.id, {
@@ -79,8 +85,8 @@ export class SmartPathEngine {
         stepResults: JSON.stringify(ctx),
         finishedAt: isoNow(),
       });
-      this.store.updatePath(pathId, { status: 'failed' });
-      this.log.error(`Path ${pathId} failed: ${errorMessage}`);
+      this.store.updatePath(planId, { status: 'failed' });
+      this.log.error(`Path ${planId} failed: ${errorMessage}`);
       throw err;
     }
   }
