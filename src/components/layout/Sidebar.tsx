@@ -123,7 +123,7 @@ export function Sidebar() {
               >
                 <Route className="h-[18px] w-[18px]" strokeWidth={2} />
               </div>
-              <span>智能路径</span>
+              <span>地球路径</span>
             </>
           )}
         </NavLink>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, globalShortcut, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Menu, globalShortcut, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import http from 'http';
 
@@ -38,6 +38,21 @@ function createWindow(): void {
   });
 
   mainWindow.loadURL(FRONTEND_URL);
+
+  // Open all external links in system default browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow!.webContents.getURL();
+    if (url !== current && !url.startsWith(FRONTEND_URL) && !url.startsWith('http://localhost:')) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow!.show();
@@ -116,6 +131,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('window:isMaximized', () => {
     return mainWindow?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle('shell:openExternal', (_event, url: string) => {
+    shell.openExternal(url);
   });
 }
 

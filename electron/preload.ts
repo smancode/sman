@@ -19,4 +19,7 @@ contextBridge.exposeInMainWorld('sman', {
     ipcRenderer.on('window:maximizeChanged', handler);
     return () => ipcRenderer.removeListener('window:maximizeChanged', handler);
   },
+
+  // Open URL in system default browser
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
 });

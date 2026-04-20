@@ -347,6 +347,42 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Public: open URL in system default browser
+  if (req.url === '/api/open-external' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const { url: targetUrl } = JSON.parse(body);
+        if (!targetUrl || !targetUrl.startsWith('https://')) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid URL' }));
+          return;
+        }
+        import('child_process').then(({ exec }) => {
+          const cmd = process.platform === 'darwin'
+            ? `open "${targetUrl}"`
+            : process.platform === 'win32'
+              ? `start "" "${targetUrl}"`
+              : `xdg-open "${targetUrl}"`;
+          exec(cmd, (err) => {
+            if (err) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Failed to open' }));
+            } else {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: true }));
+            }
+          });
+        });
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
   // Public: token retrieval — loopback only
   if (req.url === '/api/auth/token') {
     if (!isLoopback(req)) {
@@ -1168,18 +1204,17 @@ wss.on('connection', (ws: WebSocket) => {
           }
 
           try {
-            const { query } = await import('@anthropic-ai/claude-agent-sdk');
             const llmConfig = settingsManager.getConfig().llm;
-
-            const env: Record<string, string | undefined> = { ...process.env };
-            if (llmConfig.apiKey) env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
-            if (llmConfig.baseUrl) env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
+            if (!llmConfig.apiKey) {
+              throw new Error('LLM API key not configured. Please check settings.');
+            }
 
             // Get available skills
             const availableSkills = skillsRegistry.listSkills();
             const skillsList = availableSkills.map(s => `- ${s.id}: ${s.description || s.name}`).join('\n');
 
-            const prompt = [
+            const systemPrompt = 'You are an execution plan generator. Generate ONLY the JSON plan, wrapped in a code block.';
+            const userPrompt = [
               'Generate an execution plan based on the following description.',
               '',
               'Context:',
@@ -1212,34 +1247,36 @@ wss.on('connection', (ws: WebSocket) => {
               '```',
             ].join('\n');
 
-            const configModel = llmConfig.model;
-            const resolvedModel = configModel.toLowerCase().startsWith('claude-') || configModel.toLowerCase().startsWith('anthropic-')
-              ? configModel
-              : 'claude-sonnet-4-6';
+            // Use sessionManager to support all LLM providers
+            const tempSessionId = sessionManager.createSession(workspace);
+            const abortController = new AbortController();
 
-            const q = query({
-              prompt,
-              options: {
-                cwd: workspace,
-                model: resolvedModel,
-                permissionMode: 'bypassPermissions',
-                allowDangerouslySkipPermissions: true,
-                env,
-                systemPrompt: {
-                  type: 'preset',
-                  preset: 'claude_code',
-                  append: 'You are an execution plan generator. Generate ONLY the JSON plan, wrapped in a code block.',
-                },
-              } as any,
-            });
+            let fullResponse = '';
+            const originalSend = ws.send.bind(ws);
+            const interceptedSend = (data: string) => {
+              const parsed = JSON.parse(data);
+              if (parsed.type === 'chat.delta') {
+                fullResponse += parsed.delta?.text || '';
+              }
+              if (parsed.type === 'chat.done') {
+                abortController.abort();
+              }
+              originalSend(data);
+            };
+            (ws as any).send = interceptedSend;
 
-            let fullText = '';
-            for await (const msg of q) {
-              fullText += extractTextFromMessage(msg);
-            }
+            await sessionManager.sendMessageForCron(
+              tempSessionId,
+              userPrompt,
+              abortController,
+              () => {}
+            );
 
-            const jsonMatch = fullText.match(/```json\n([\s\S]*?)\n```/);
-            const jsonStr = jsonMatch ? jsonMatch[1].trim() : fullText.trim();
+            (ws as any).send = originalSend;
+
+            // Extract JSON from response
+            const jsonMatch = fullResponse.match(/```json\n([\s\S]*?)\n```/);
+            const jsonStr = jsonMatch ? jsonMatch[1].trim() : fullResponse.trim();
 
             const plan = JSON.parse(jsonStr);
 
@@ -1248,9 +1285,11 @@ wss.on('connection', (ws: WebSocket) => {
               throw new Error('Generated plan has no steps');
             }
 
-            ws.send(JSON.stringify({ type: 'smartpath.planGenerated', plan }));
+            ws.send(JSON.stringify({ type: 'smartpath.generated', payload: { plan } }));
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error('SmartPath generation error:', errorMessage);
+            console.error('Stack:', err instanceof Error ? err.stack : 'No stack');
             ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
           }
           break;
@@ -1262,57 +1301,71 @@ wss.on('connection', (ws: WebSocket) => {
 
           const store = new SmartPathStore(workspace);
           const plans = store.listPlans(workspace);
-          ws.send(JSON.stringify({ type: 'smartpath.fileList', plans }));
+          const files = plans.map(p => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            status: p.status,
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+          }));
+          ws.send(JSON.stringify({ type: 'smartpath.fileList', payload: { files } }));
           break;
         }
 
         case 'smartpath.loadFile': {
-          const filePath = msg.filePath as string;
-          if (!filePath) throw new Error('Missing filePath');
+          const workspace = msg.workspace as string;
+          const planId = msg.planId as string;
+          if (!workspace) throw new Error('Missing workspace');
+          if (!planId) throw new Error('Missing planId');
 
-          const store = new SmartPathStore(path.dirname(filePath));
+          const store = new SmartPathStore(workspace);
+          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
           const plan = store.loadPlan(filePath);
-          const content = fs.readFileSync(filePath, 'utf-8');
-          ws.send(JSON.stringify({ type: 'smartpath.fileLoaded', plan, content }));
+          ws.send(JSON.stringify({ type: 'smartpath.fileLoaded', payload: { plan } }));
           break;
         }
 
         case 'smartpath.saveFile': {
-          const filePath = msg.filePath as string;
-          const plan = msg.plan as { name: string; description: string; steps: string; workspace: string };
-          if (!filePath) throw new Error('Missing filePath');
+          const planId = msg.planId as string;
+          const plan = msg.plan as { name: string; description: string; steps: any[]; workspace: string };
+          const workspace = msg.workspace as string;
+          if (!planId) throw new Error('Missing planId');
           if (!plan) throw new Error('Missing plan');
-
-          const workspace = path.dirname(filePath).includes('.sman')
-            ? path.dirname(path.dirname(filePath))
-            : path.dirname(filePath);
+          if (!workspace) throw new Error('Missing workspace');
 
           const store = new SmartPathStore(workspace);
-          const existingPlan = store.loadPlan(filePath);
+          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
+
+          // Load existing plan to preserve metadata
+          const existingPlan = fs.existsSync(filePath) ? store.loadPlan(filePath) : null;
 
           const planData = {
-            id: existingPlan?.id || crypto.randomUUID(),
+            id: planId,
             name: plan.name,
             description: plan.description,
             workspace,
-            steps: JSON.parse(plan.steps || '[]'),
+            steps: plan.steps || [],
             status: existingPlan?.status || 'draft',
             createdAt: existingPlan?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
 
           store.savePlan(planData);
-          ws.send(JSON.stringify({ type: 'smartpath.fileSaved', filePath }));
+          ws.send(JSON.stringify({ type: 'smartpath.fileSaved', payload: { filePath } }));
           break;
         }
 
         case 'smartpath.deleteFile': {
-          const filePath = msg.filePath as string;
-          if (!filePath) throw new Error('Missing filePath');
+          const workspace = msg.workspace as string;
+          const planId = msg.planId as string;
+          if (!workspace) throw new Error('Missing workspace');
+          if (!planId) throw new Error('Missing planId');
 
-          const store = new SmartPathStore(path.dirname(filePath));
+          const store = new SmartPathStore(workspace);
+          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
           store.deletePlan(filePath);
-          ws.send(JSON.stringify({ type: 'smartpath.fileDeleted', filePath }));
+          ws.send(JSON.stringify({ type: 'smartpath.fileDeleted', payload: { success: true } }));
           break;
         }
 
