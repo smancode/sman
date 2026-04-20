@@ -31,34 +31,34 @@ export interface ModelTestResult {
  */
 export const MODEL_CAPABILITIES_MAP: Record<string, DetectedCapabilities> = {
   // Anthropic Claude — all support vision + PDF
-  'claude-sonnet-4-6':        { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude Sonnet 4.6', source: 'mapping' },
-  'claude-opus-4-6':           { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude Opus 4.6', source: 'mapping' },
-  'claude-haiku-4-5':          { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude Haiku 4.5', source: 'mapping' },
-  'claude-3-5-sonnet':        { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude 3.5 Sonnet', source: 'mapping' },
-  'claude-3-opus':             { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude 3 Opus', source: 'mapping' },
-  'claude-3-haiku':           { text: true, image: true,  pdf: true,  audio: false, video: false, displayName: 'Claude 3 Haiku', source: 'mapping' },
+  'claude-sonnet-4-6':        { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude Sonnet 4.6', source: 'mapping' },
+  'claude-opus-4-6':           { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude Opus 4.6', source: 'mapping' },
+  'claude-haiku-4-5':          { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude Haiku 4.5', source: 'mapping' },
+  'claude-3-5-sonnet':        { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude 3.5 Sonnet', source: 'mapping' },
+  'claude-3-opus':             { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude 3 Opus', source: 'mapping' },
+  'claude-3-haiku':           { text: true, image: true,  pdf: true,  audio: false, video: false, maxInputTokens: 200000, displayName: 'Claude 3 Haiku', source: 'mapping' },
 
   // OpenAI — vision, no native PDF
-  'gpt-4o':                  { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'GPT-4o', source: 'mapping' },
-  'gpt-4o-mini':             { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'GPT-4o mini', source: 'mapping' },
-  'gpt-4-turbo':             { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'GPT-4 Turbo', source: 'mapping' },
-  'gpt-4':                   { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'GPT-4', source: 'mapping' },
+  'gpt-4o':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GPT-4o', source: 'mapping' },
+  'gpt-4o-mini':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GPT-4o mini', source: 'mapping' },
+  'gpt-4-turbo':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GPT-4 Turbo', source: 'mapping' },
+  'gpt-4':                   { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 8192, displayName: 'GPT-4', source: 'mapping' },
 
   // DeepSeek — text only
-  'deepseek-chat':             { text: true, image: false, pdf: false, audio: false, video: false, displayName: 'DeepSeek Chat', source: 'mapping' },
-  'deepseek-reasoner':         { text: true, image: false, pdf: false, audio: false, video: false, displayName: 'DeepSeek Reasoner', source: 'mapping' },
+  'deepseek-chat':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Chat', source: 'mapping' },
+  'deepseek-reasoner':         { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: 'DeepSeek Reasoner', source: 'mapping' },
 
   // Qwen VL — vision
-  'qwen-vl-plus':             { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'Qwen VL Plus', source: 'mapping' },
-  'qwen-vl-max':              { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'Qwen VL Max', source: 'mapping' },
+  'qwen-vl-plus':             { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen VL Plus', source: 'mapping' },
+  'qwen-vl-max':              { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen VL Max', source: 'mapping' },
 
   // Ollama vision models
-  'llava':                   { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'LLaVA', source: 'mapping' },
-  'llava:13b':               { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'LLaVA 13B', source: 'mapping' },
-  'bakllava':                { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'BakLLaVA', source: 'mapping' },
-  'qwen2-vl':                { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'Qwen2-VL', source: 'mapping' },
-  'llama3.2-vision':            { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'Llama 3.2 Vision', source: 'mapping' },
-  'minicpm-v':                { text: true, image: true,  pdf: false, audio: false, video: false, displayName: 'MiniCPM-V', source: 'mapping' },
+  'llava':                   { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: 'LLaVA', source: 'mapping' },
+  'llava:13b':               { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: 'LLaVA 13B', source: 'mapping' },
+  'bakllava':                { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: 'BakLLaVA', source: 'mapping' },
+  'qwen2-vl':                { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: 'Qwen2-VL', source: 'mapping' },
+  'llama3.2-vision':            { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Llama 3.2 Vision', source: 'mapping' },
+  'minicpm-v':                { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: 'MiniCPM-V', source: 'mapping' },
 };
 
 /**
@@ -69,40 +69,40 @@ function lookupByFuzzyName(model: string): DetectedCapabilities | null {
 
   // Anthropic Claude
   if (lower.includes('claude')) {
-    return { text: true, image: true, pdf: true, audio: false, video: false, displayName: `Claude (${model})`, source: 'mapping' };
+    return { text: true, image: true, pdf: true, audio: false, video: false, maxInputTokens: 200000, displayName: `Claude (${model})`, source: 'mapping' };
   }
 
   // OpenAI GPT-4 variants
   if (lower.includes('gpt-4') && !lower.includes('gpt-3')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
   }
   if (lower.includes('gpt-3')) {
-    return { text: true, image: false, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: model, source: 'mapping' };
   }
 
   // DeepSeek
   if (lower.includes('deepseek')) {
-    return { text: true, image: false, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 64000, displayName: model, source: 'mapping' };
   }
 
   // Qwen VL variants
   if (lower.includes('qwen-vl') || lower.includes('qwen-vision')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 32000, displayName: model, source: 'mapping' };
   }
 
   // GLM vision variants
   if (lower.includes('glm') && lower.includes('vision')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
   }
 
   // Ollama vision models
   if (lower.includes('llava') || lower.includes('bakllava') || lower.includes('minicpm-v')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 4096, displayName: model, source: 'mapping' };
   }
 
   // Llama vision
   if (lower.includes('llama') && lower.includes('vision')) {
-    return { text: true, image: true, pdf: false, audio: false, video: false, displayName: model, source: 'mapping' };
+    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
   }
 
   return null;
