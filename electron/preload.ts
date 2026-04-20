@@ -22,4 +22,7 @@ contextBridge.exposeInMainWorld('sman', {
 
   // Open URL in system default browser
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Git
+  getGitBranch: (dirPath: string) => ipcRenderer.invoke('git:getBranch', dirPath),
 });

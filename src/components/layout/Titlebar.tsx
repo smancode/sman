@@ -13,6 +13,7 @@ declare global {
       windowClose: () => Promise<void>;
       windowIsMaximized: () => Promise<boolean>;
       onMaximizeChanged: (callback: (maximized: boolean) => void) => () => void;
+      getGitBranch: (dirPath: string) => Promise<string | null>;
     };
   }
 }

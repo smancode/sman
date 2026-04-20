@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, globalShortcut, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import http from 'http';
+import { execSync } from 'child_process';
 
 let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
@@ -135,6 +136,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('shell:openExternal', (_event, url: string) => {
     shell.openExternal(url);
+  });
+
+  ipcMain.handle('git:getBranch', async (_event, dirPath: string) => {
+    try {
+      const result = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: dirPath,
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      const branch = result.trim();
+      return branch || null;
+    } catch {
+      return null;
+    }
   });
 }
 

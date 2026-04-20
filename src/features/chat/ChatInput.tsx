@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { SkillPicker } from '@/components/SkillPicker';
+import { triggerGitBranchRefresh } from './ContextUsageBar';
 
 export interface FileAttachment {
   id: string;
@@ -215,6 +216,8 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     // Backend deduplicates: if V2 process already exists, it's a no-op.
     if (wasEmpty && value.length > 0 && currentSessionId) {
       useChatStore.getState().preheatSession();
+      // Also refresh git branch (user may have switched branches in terminal)
+      triggerGitBranchRefresh();
     }
 
     // Check if user just typed "/" at the beginning or after a space
@@ -265,8 +268,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   return (
     <div
       className={cn(
-        "px-2 pt-2 pb-2 w-full mx-auto transition-all duration-300 relative",
-        isEmpty ? "max-w-3xl" : "max-w-4xl"
+        "px-2 pt-2 pb-2 w-full mx-auto relative",
       )}
     >
       {/* Skill Picker - positioned above the input */}

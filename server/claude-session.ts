@@ -25,7 +25,6 @@ import { createWebSearchMcpServer, isAnthropicFirstParty } from './web-search/mc
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
 import type { MediaAttachment } from './chatbot/types.js';
 import { UserProfileManager } from './user-profile.js';
-import { countTextTokens, countMessageTokens, estimateSystemPromptTokens } from './token-counter.js';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -959,33 +958,6 @@ export class ClaudeSessionManager {
       this.store.addMessage(sessionId, { role: 'user', content });
     }
 
-    // Calculate context usage by counting tokens in recent messages.
-    // Claude autocompacts old history, so we only count the last N messages
-    // to avoid the "infinite growth" problem of naive accumulation.
-    const allMessages = this.store.getMessages(sessionId, 1000);
-    const recentMessages = allMessages.slice(-10); // last 10 messages (Claude typically compacts beyond this)
-    let calculatedInputTokens = estimateSystemPromptTokens();
-    for (const msg of recentMessages) {
-      calculatedInputTokens += countTextTokens(msg.content);
-      if (msg.contentBlocks) {
-        for (const block of msg.contentBlocks) {
-          if (block.type === 'text' && block.text) {
-            calculatedInputTokens += countTextTokens(block.text);
-          } else if (block.type === 'thinking' && block.thinking) {
-            calculatedInputTokens += countTextTokens(block.thinking);
-          } else if (block.type === 'tool_use' && block.input) {
-            calculatedInputTokens += countTextTokens(JSON.stringify(block.input));
-          }
-        }
-      }
-    }
-    // If auto-retry, the current message was not stored in DB, so count it here
-    if (_retryCount > 0) {
-      calculatedInputTokens += countTextTokens(content);
-    }
-
-    const prevUsage = this.store.getTokenUsage(sessionId);
-
     const abortController = new AbortController();
     this.activeStreams.set(sessionId, abortController);
     this.sessionWsSend.set(sessionId, wsSend);
@@ -1442,32 +1414,17 @@ export class ClaudeSessionManager {
             let totalInputTokens: number;
             let totalOutputTokens: number;
 
-            if (sdkInputTokens > 0) {
-              // SDK usage is available and valid — use it directly.
-              // This is accurate for both Anthropic and third-party models that report usage.
+            if (sdkUsage && typeof sdkUsage.input_tokens === 'number') {
+              // SDK usage is available — use it directly.
+              // Note: input_tokens may be 0 on the first turn (no history yet), which is valid.
               totalInputTokens = sdkInputTokens;
               totalOutputTokens = sdkOutputTokens;
             } else {
-              // SDK usage missing or zero: fall back to counting tokens ourselves.
-              // This is an approximation — we can't know the model's internal autocompact behavior,
-              // so we count recent messages and apply a conservative estimate.
-              //
-              // Note: calculatedInputTokens already includes historical assistant messages
-              // (from allMessages.slice(-10)), so we do NOT add assistantTokens to input.
-              // assistantTokens is only for output tracking.
-              let assistantTokens = countTextTokens(finalContent);
-              if (allThinking.trim()) {
-                assistantTokens += countTextTokens(allThinking.trim());
-              }
-              for (const tu of allToolUses) {
-                assistantTokens += countTextTokens(tu.input);
-                assistantTokens += countTextTokens(tu.name);
-              }
-              // Input tokens: recent messages (already includes historical assistant replies)
-              // + current user message (if not yet in DB due to retry).
-              totalInputTokens = calculatedInputTokens;
-              // Output tokens: accumulate across turns for display purposes.
-              totalOutputTokens = (prevUsage?.outputTokens ?? 0) + assistantTokens;
+              // SDK usage missing (undefined/null): this model's API doesn't report usage.
+              // Third-party models (GLM, DeepSeek, etc.) often omit usage entirely.
+              // Set to 0 to signal "unknown" — frontend will hide the HUD.
+              totalInputTokens = 0;
+              totalOutputTokens = 0;
             }
 
             this.store.updateTokenUsage(sessionId, totalInputTokens, totalOutputTokens);
@@ -1487,7 +1444,7 @@ export class ClaudeSessionManager {
               ...(isError ? { error: classified?.userMessage ?? resultError ?? '模型服务返回未知错误，请稍后重试', errorCode: classified?.errorCode ?? 'unknown', rawError: resultError } : {}),
             }));
 
-            this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}, context: ${totalInputTokens} tokens (SDK: input=${sdkUsage?.input_tokens ?? 0}, cache_read=${sdkUsage?.cache_read_input_tokens ?? 0}, output=${sdkUsage?.output_tokens ?? 0})`);
+            this.log.info(`Query completed for session ${sessionId}, cost: $${cost.toFixed(4)}, context: ${totalInputTokens} tokens (SDK: input=${sdkUsage?.input_tokens ?? 0}, cache_read=${sdkUsage?.cache_read_input_tokens ?? 0}, output=${sdkUsage?.output_tokens ?? 0}, model=${this.config?.llm?.model ?? 'unknown'})`);
 
             // Context length warning: notify frontend when approaching context limit
             if (!isError && totalInputTokens > 0) {
