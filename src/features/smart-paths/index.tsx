@@ -15,6 +15,9 @@ import {
 import { useSmartPathStore } from '@/stores/smart-path';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
+import { PlanInput } from './PlanInput';
+import { StepCardsEditor } from './StepCardsEditor';
+import { JsonEditor } from './JsonEditor';
 import type { SmartPath, SmartPathStep, SmartPathAction } from '@/types/settings';
 
 const STATUS_TEXT: Record<string, string> = {
@@ -24,6 +27,8 @@ const STATUS_TEXT: Record<string, string> = {
   completed: '已完成',
   failed: '失败',
 };
+
+type EditorMode = 'visual' | 'json';
 
 function PathCard({
   path,
@@ -164,7 +169,7 @@ function ActionEditor({
             <Textarea
               value={action.code || ''}
               onChange={(e) => onChange({ ...action, code: e.target.value })}
-              placeholder="print(json.dumps({&quot;result&quot;: 42}))"
+              placeholder='print(json.dumps({"result": 42}))'
               className="min-h-[80px] text-xs font-mono"
             />
           </div>
@@ -263,6 +268,7 @@ export function SmartPathPage() {
   const fetchRuns = useSmartPathStore((s) => s.fetchRuns);
   const setCurrentPath = useSmartPathStore((s) => s.setCurrentPath);
   const clearError = useSmartPathStore((s) => s.clearError);
+  const saveFile = useSmartPathStore((s) => s.saveFile);
 
   // 复用 cron store 的 workspaces 获取逻辑（从会话建立过的业务系统中选择）
   const workspaces = useCronStore((s) => s.workspaces);
@@ -271,8 +277,10 @@ export function SmartPathPage() {
   const [editingPath, setEditingPath] = useState<SmartPath | null>(null);
   const [editName, setEditName] = useState('');
   const [editSteps, setEditSteps] = useState<SmartPathStep[]>([]);
+  const [editorMode, setEditorMode] = useState<EditorMode>('visual');
   const [showCreate, setShowCreate] = useState(false);
   const [newWorkspace, setNewWorkspace] = useState('');
+  const [saveFilePath, setSaveFilePath] = useState('');
 
   useEffect(() => {
     if (wsStatus === 'connected') {
@@ -305,6 +313,7 @@ export function SmartPathPage() {
     } catch {
       setEditSteps([]);
     }
+    setEditorMode('visual');
   };
 
   const saveEdit = async () => {
@@ -342,6 +351,12 @@ export function SmartPathPage() {
     setEditName('');
     setNewWorkspace('');
     setEditSteps([]);
+  };
+
+  const handleSaveFile = async () => {
+    if (!currentPath || !saveFilePath.trim()) return;
+    await saveFile(currentPath.id, saveFilePath);
+    setSaveFilePath('');
   };
 
   // workspace 选项：显示目录名，值为完整路径
@@ -410,6 +425,16 @@ export function SmartPathPage() {
         {showCreate ? (
           <div className="max-w-2xl mx-auto space-y-4">
             <h2 className="text-lg font-semibold">新建 Path</h2>
+
+            <PlanInput
+              workspace={newWorkspace}
+              onPlanGenerated={(plan) => {
+                if (plan.steps) {
+                  setEditSteps(plan.steps);
+                }
+              }}
+            />
+
             <div className="space-y-2">
               <Label>名称</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Path 名称" />
@@ -433,13 +458,40 @@ export function SmartPathPage() {
               </Select>
             </div>
             <div className="space-y-3">
-              <Label>步骤配置</Label>
-              {editSteps.map((step, i) => (
-                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={newWorkspace} />
-              ))}
-              <Button variant="outline" className="w-full" onClick={addStep}>
-                <Plus className="h-4 w-4 mr-1" /> 添加步骤
-              </Button>
+              <div className="flex items-center justify-between">
+                <Label>步骤配置</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={editorMode === 'visual' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditorMode('visual')}
+                  >
+                    可视化编辑
+                  </Button>
+                  <Button
+                    variant={editorMode === 'json' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditorMode('json')}
+                  >
+                    JSON 编辑
+                  </Button>
+                </div>
+              </div>
+
+              {editorMode === 'visual' ? (
+                <div className="space-y-2">
+                  {editSteps.map((step, i) => (
+                    <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={newWorkspace} />
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={addStep}>
+                    <Plus className="h-4 w-4 mr-1" /> 添加步骤
+                  </Button>
+                </div>
+              ) : (
+                <div className="border rounded-md h-96">
+                  <JsonEditor steps={editSteps} onChange={setEditSteps} />
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleCreate} disabled={!editName.trim() || !newWorkspace}><Save className="h-4 w-4 mr-1" /> 创建</Button>
@@ -454,13 +506,40 @@ export function SmartPathPage() {
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="space-y-3">
-              <Label>步骤配置</Label>
-              {editSteps.map((step, i) => (
-                <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={editingPath.workspace} />
-              ))}
-              <Button variant="outline" className="w-full" onClick={addStep}>
-                <Plus className="h-4 w-4 mr-1" /> 添加步骤
-              </Button>
+              <div className="flex items-center justify-between">
+                <Label>步骤配置</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={editorMode === 'visual' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditorMode('visual')}
+                  >
+                    可视化编辑
+                  </Button>
+                  <Button
+                    variant={editorMode === 'json' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditorMode('json')}
+                  >
+                    JSON 编辑
+                  </Button>
+                </div>
+              </div>
+
+              {editorMode === 'visual' ? (
+                <div className="space-y-2">
+                  {editSteps.map((step, i) => (
+                    <StepEditor key={i} step={step} index={i} onChange={(s) => updateStep(i, s)} onDelete={() => removeStep(i)} workspace={editingPath.workspace} />
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={addStep}>
+                    <Plus className="h-4 w-4 mr-1" /> 添加步骤
+                  </Button>
+                </div>
+              ) : (
+                <div className="border rounded-md h-96">
+                  <JsonEditor steps={editSteps} onChange={setEditSteps} />
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={saveEdit}><Save className="h-4 w-4 mr-1" /> 保存</Button>
@@ -530,6 +609,26 @@ export function SmartPathPage() {
                   return <div className="text-sm text-red-500">步骤解析失败</div>;
                 }
               })()}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">保存到文件</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={saveFilePath}
+                  onChange={(e) => setSaveFilePath(e.target.value)}
+                  placeholder="例如: /path/to/smart-path.md"
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleSaveFile}
+                  disabled={!saveFilePath.trim()}
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  保存
+                </Button>
+              </div>
             </div>
 
             {runs.length > 0 && (
