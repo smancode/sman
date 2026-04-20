@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Minus, Square, X, Copy } from 'lucide-react';
+import { Minus, Square, X, Copy, GitBranch } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,31 @@ export function Titlebar() {
   const location = useLocation();
   const inChat = location.pathname === '/chat';
 
+  // Git branch
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
+  const workspaceRef = useRef<string | undefined>(undefined);
+  useEffect(() => { workspaceRef.current = workspace; }, [workspace]);
+
+  const fetchBranch = useCallback(() => {
+    const ws = workspaceRef.current;
+    if (!ws || !window.sman?.getGitBranch) { setGitBranch(null); return; }
+    window.sman.getGitBranch(ws).then(setGitBranch);
+  }, []);
+
+  useEffect(() => { fetchBranch(); }, [workspace, fetchBranch]);
+  useEffect(() => {
+    const onFocus = () => fetchBranch();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchBranch]);
+
+  // Register as global git branch refresh target (triggered by ChatInput typing)
+  useEffect(() => {
+    const prev = (window as any).__sman_gitBranchRefresh;
+    (window as any).__sman_gitBranchRefresh = fetchBranch;
+    return () => { if ((window as any).__sman_gitBranchRefresh === fetchBranch) (window as any).__sman_gitBranchRefresh = prev; };
+  }, [fetchBranch]);
+
   useEffect(() => {
     if (!window.sman?.onMaximizeChanged) return;
     const unsubscribe = window.sman.onMaximizeChanged(setIsMaximized);
@@ -46,10 +71,19 @@ export function Titlebar() {
       {/* Spacer - drag area */}
       <div className="flex-1" />
 
-      {/* Workspace path - centered, only in chat */}
+      {/* Workspace path + git branch - centered, only in chat */}
       {inChat && workspace && (
-        <span className="text-[13px] font-mono text-muted-foreground/60 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          {workspace}
+        <span className="flex items-center gap-2 text-[13px] font-mono text-muted-foreground/60 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <span className="truncate">{workspace}</span>
+          {gitBranch && (
+            <>
+              <span className="text-muted-foreground/25 shrink-0">·</span>
+              <span className="flex items-center gap-1 shrink-0">
+                <GitBranch className="w-3 h-3" />
+                <span className="truncate max-w-[120px]">{gitBranch}</span>
+              </span>
+            </>
+          )}
         </span>
       )}
 

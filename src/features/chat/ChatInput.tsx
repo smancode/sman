@@ -13,7 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { SkillPicker } from '@/components/SkillPicker';
-import { triggerGitBranchRefresh } from './ContextUsageBar';
 
 export interface FileAttachment {
   id: string;
@@ -216,8 +215,8 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     // Backend deduplicates: if V2 process already exists, it's a no-op.
     if (wasEmpty && value.length > 0 && currentSessionId) {
       useChatStore.getState().preheatSession();
-      // Also refresh git branch (user may have switched branches in terminal)
-      triggerGitBranchRefresh();
+      // Refresh git branch in titlebar (user may have switched branches in terminal)
+      (window as any).__sman_gitBranchRefresh?.();
     }
 
     // Check if user just typed "/" at the beginning or after a space
