@@ -28,3 +28,4 @@ shared/*.js
 /.superpowers/
 .worktrees/
 *.backup
+settings.json
