@@ -192,6 +192,28 @@ export class SessionStore {
     }));
   }
 
+  /**
+   * Get messages with id > afterId for incremental extraction.
+   */
+  getMessagesAfterId(sessionId: string, afterId: number, limit = 2000): Message[] {
+    const rows = this.db.prepare(
+      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, created_at as createdAt FROM messages WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ?'
+    ).all(sessionId, afterId, limit) as Array<Omit<Message, 'contentBlocks'> & { contentBlocks: string | null }>;
+    return rows.map(row => ({
+      ...row,
+      contentBlocks: row.contentBlocks ? JSON.parse(row.contentBlocks) as ContentBlock[] : undefined,
+    }));
+  }
+
+  /**
+   * Get all non-deleted sessions for a workspace.
+   */
+  getSessionsByWorkspace(workspace: string): Session[] {
+    return this.db.prepare(
+      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE workspace = ? AND deleted_at IS NULL AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC'
+    ).all(workspace) as Session[];
+  }
+
   deleteSession(id: string): void {
     this.db.prepare("UPDATE sessions SET deleted_at = datetime('now') WHERE id = ?").run(id);
   }

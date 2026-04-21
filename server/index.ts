@@ -117,6 +117,13 @@ const settingsManager = new SettingsManager(homeDir);
 const userProfileManager = new UserProfileManager(homeDir, settingsManager.getConfig());
 sessionManager.setUserProfile(userProfileManager);
 
+// Knowledge extractor (extracts knowledge from conversations into .sman/knowledge/)
+import { KnowledgeExtractorStore } from './knowledge-extractor-store.js';
+import { KnowledgeExtractor } from './knowledge-extractor.js';
+const knowledgeExtractorStore = new KnowledgeExtractorStore(dbPath);
+const knowledgeExtractor = new KnowledgeExtractor(store, knowledgeExtractorStore, settingsManager.getConfig());
+sessionManager.setKnowledgeExtractor(knowledgeExtractor);
+
 // Initialize auth token (generate on first run, reuse thereafter)
 let authToken = settingsManager.ensureAuthToken();
 
@@ -677,6 +684,7 @@ wss.on('connection', (ws: WebSocket) => {
           const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
+          knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
           // Sync in-memory auth token if changed
           if ((updates as Record<string, unknown>).auth && typeof (updates as Record<string, unknown>).auth === 'object') {
@@ -726,6 +734,7 @@ wss.on('connection', (ws: WebSocket) => {
           const config = settingsManager.saveLlmProfile(llmProfile);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
+          knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
 
           ws.send(JSON.stringify({
@@ -742,6 +751,7 @@ wss.on('connection', (ws: WebSocket) => {
           const config = settingsManager.selectLlmProfile(profileName);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
+          knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
           break;
@@ -1555,6 +1565,7 @@ function shutdown(): void {
   batchEngine.stop();
   cronScheduler.stop();
   sessionManager.close();
+  knowledgeExtractorStore.close();
   wss.close();
   server.close();
 }

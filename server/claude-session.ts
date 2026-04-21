@@ -120,6 +120,7 @@ export class ClaudeSessionManager {
   private configGeneration = 0;
   private webAccessService: WebAccessService | null = null;
   private userProfile: UserProfileManager | null = null;
+  private knowledgeExtractor: import('./knowledge-extractor.js').KnowledgeExtractor | null = null;
   private capabilityRegistry: CapabilityRegistry | null = null;
   /** Serializes getOrCreateV2Session calls to prevent process.chdir races */
   private v2CreateChain: Promise<void> = Promise.resolve();
@@ -138,6 +139,12 @@ export class ClaudeSessionManager {
     // Profile updates only run LLM when no sessions are actively streaming
     manager.setIdleCheck(() => this.activeStreams.size === 0);
     this.log.info('UserProfileManager injected');
+  }
+
+  setKnowledgeExtractor(extractor: import('./knowledge-extractor.js').KnowledgeExtractor): void {
+    this.knowledgeExtractor = extractor;
+    extractor.setIdleCheck(() => this.activeStreams.size === 0);
+    this.log.info('KnowledgeExtractor injected');
   }
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -324,21 +331,10 @@ export class ClaudeSessionManager {
 
   /**
    * Resolve the model name to pass to Claude CLI.
-   *
-   * CLI's internal Anthropic SDK does model-specific optimizations (prompt caching,
-   * thinking token config, capability checks) that may send extra API requests.
-   * Non-Anthropic model names (e.g. "glm-5.1") trigger these checks against the
-   * proxy endpoint, which may rate-limit them. Using a standard Anthropic model name
-   * avoids these issues — the proxy maps it to the appropriate model server-side.
+   * Pass the user-configured model name directly.
    */
   private resolveCliModel(configModel: string): string {
-    const ANTHROPIC_MODEL_PREFIXES = ['claude-', 'anthropic-'];
-    if (ANTHROPIC_MODEL_PREFIXES.some(p => configModel.toLowerCase().startsWith(p))) {
-      return configModel;
-    }
-    // Non-Anthropic model — let CLI use its default
-    this.log.info(`Non-Anthropic model "${configModel}" detected, using CLI default (proxy will map)`);
-    return 'claude-sonnet-4-6';
+    return configModel;
   }
 
   /**
@@ -400,6 +396,25 @@ export class ClaudeSessionManager {
     env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
     if (this.config.llm.baseUrl) {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
+    }
+
+    // Disable non-essential CLI traffic (preconnect, telemetry, cost warnings, etc.)
+    // These fire-and-forget requests hit the proxy endpoint and cause rate limiting.
+    // Same approach as hello-halo's sdk-config.ts.
+    env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'] = '1';
+    env['DISABLE_TELEMETRY'] = '1';
+    env['DISABLE_COST_WARNINGS'] = '1';
+    env['CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS'] = '1';
+    env['DISABLE_INTERLEAVED_THINKING'] = '1';
+    env['CLAUDE_CODE_REMOTE'] = 'true';
+    env['CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING'] = '1';
+    env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
+
+    // For non-Anthropic proxies: skip model validation (which sends extra API requests
+    // that trigger rate limiting). Setting ANTHROPIC_CUSTOM_MODEL_OPTION tells CLI the
+    // model is pre-validated, so it won't send a test request.
+    if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
+      env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
     }
     // Use isolated config dir to avoid CLI reading ~/.claude/settings.json
     // which may contain conflicting env vars (ANTHROPIC_AUTH_TOKEN, etc.)
@@ -578,6 +593,17 @@ export class ClaudeSessionManager {
     env['ANTHROPIC_API_KEY'] = this.config.llm.apiKey;
     if (this.config.llm.baseUrl) {
       env['ANTHROPIC_BASE_URL'] = this.config.llm.baseUrl;
+    }
+    env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'] = '1';
+    env['DISABLE_TELEMETRY'] = '1';
+    env['DISABLE_COST_WARNINGS'] = '1';
+    env['CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS'] = '1';
+    env['DISABLE_INTERLEAVED_THINKING'] = '1';
+    env['CLAUDE_CODE_REMOTE'] = 'true';
+    env['CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING'] = '1';
+    env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
+    if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
+      env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
     }
     const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
     env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
@@ -1473,6 +1499,13 @@ export class ClaudeSessionManager {
             if (this.userProfile && this.config?.llm?.userProfile !== false && !isError) {
               this.userProfile.updateProfile(content, finalContent);
             }
+            // Fire-and-forget: record turn for knowledge extraction
+            if (this.knowledgeExtractor && !isError) {
+              const activeSession = this.sessions.get(sessionId);
+              if (activeSession?.workspace) {
+                this.knowledgeExtractor.recordTurn(activeSession.workspace);
+              }
+            }
             break;
           }
 
@@ -1586,6 +1619,8 @@ export class ClaudeSessionManager {
   }
 
   private classifyErrorMessage(msg: string): { errorCode: string; userMessage: string } {
+    // Log raw error for debugging proxy issues
+    this.log.warn(`[classifyError] raw message: ${msg.slice(0, 500)}`);
     // HTTP status patterns
     if (/\b429\b/.test(msg) || /rate.?limit/i.test(msg) || /too many requests/i.test(msg)) {
       return { errorCode: 'rate_limit', userMessage: '请求过于频繁，请稍后再试' };
@@ -1929,6 +1964,13 @@ export class ClaudeSessionManager {
             // Fire-and-forget: update user profile after chatbot conversation turn
             if (this.userProfile && this.config?.llm?.userProfile !== false) {
               this.userProfile.updateProfile(content, fullContent);
+            }
+            // Fire-and-forget: record turn for knowledge extraction
+            if (this.knowledgeExtractor) {
+              const chatbotSession = this.sessions.get(sessionId);
+              if (chatbotSession?.workspace) {
+                this.knowledgeExtractor.recordTurn(chatbotSession.workspace);
+              }
             }
             break;
           }
