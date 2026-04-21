@@ -202,6 +202,9 @@ export class InitManager {
     'project-structure',
     'project-apis',
     'project-external-calls',
+    'knowledge-business',
+    'knowledge-conventions',
+    'knowledge-technical',
   ];
 
   private injectMetaSkills(workspace: string): void {

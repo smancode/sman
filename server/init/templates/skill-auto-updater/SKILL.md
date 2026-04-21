@@ -14,6 +14,7 @@ description: |
 保持项目的 `.claude/skills/` 与项目当前状态同步：
 1. 更新/补充通用能力 skills（capability skills）
 2. 重新生成项目知识 skills（project-structure、project-apis、project-external-calls）
+3. 聚合团队知识 skills（knowledge-business、knowledge-conventions、knowledge-technical）
 
 ## 执行步骤
 
@@ -59,7 +60,59 @@ description: |
 - **references/{name}.md**（每个 < 100 行）— 每个外部服务：
   - Call method、Config source（env var 名，不写实际值）、Call locations、Purpose
 
-### 三、记录结果
+### 三、Team Knowledge Skills 聚合
+
+扫描 `{workspace}/.sman/knowledge/` 目录，将团队成员的知识文件聚合为 3 个 skill。
+
+#### 3.1 扫描来源
+
+列出 `.sman/knowledge/` 下所有文件，按类别分组：
+- `business-*.md` → knowledge-business skill
+- `conventions-*.md` → knowledge-conventions skill
+- `technical-*.md` → knowledge-technical skill
+
+每个文件名中的 `*` 部分即用户名（如 `business-nasakim.md` 中 `nasakim` 为贡献者）。
+
+#### 3.2 去重合并规则
+
+每个知识条目由 `<!-- hash: xxx --> ... <!-- end: xxx -->` 包裹。合并策略：
+
+1. **相同 hash**：多个文件中出现相同 hash 的条目，只保留一份（选内容最完整的）
+2. **不同 hash**：全部保留，标注贡献者
+3. **无 hash 标记的旧条目**：为它们生成 hash 并包裹标记
+4. **排序**：按主题归类（`## 标题`），同类内按贡献者排列
+
+#### 3.3 生成 skill 文件
+
+为每个类别生成 `.claude/skills/knowledge-{category}/SKILL.md`：
+
+```markdown
+---
+name: knowledge-{category}
+description: "{描述}。从团队对话中提取，由 skill-auto-updater 聚合。"
+---
+
+# {Category Label}
+
+> 贡献者: {用户A}, {用户B} | 更新时间: {当前日期}
+
+## 知识点标题
+> by {贡献者}
+- 具体内容
+- 具体内容
+
+## 另一个知识点
+> by {贡献者1}, {贡献者2}
+- 具体内容
+```
+
+#### 3.4 边界条件
+
+- 如果 `.sman/knowledge/` 目录不存在或为空，跳过本阶段（不创建空 skill）
+- 如果某个类别没有任何 md 文件，跳过该类别的 skill 更新
+- 不删除其他来源的知识 skill，只更新 knowledge-business/conventions/technical 这三个
+
+### 四、记录结果
 
 更新 `.sman/INIT.md` 时间戳和匹配结果，记录本次变更内容。
 
