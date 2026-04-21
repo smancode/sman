@@ -333,8 +333,41 @@ export class ClaudeSessionManager {
    * Resolve the model name to pass to Claude CLI.
    * Pass the user-configured model name directly.
    */
+  /**
+   * Private IP prefixes for internal enterprise proxies.
+   * Internal proxies (e.g. http://172.x.x.x) validate model names against a whitelist
+   * (e.g. "glm-5.1") and work fine with the real model name — CLI's extra requests
+   * are handled by the proxy internally.
+   * External proxies (e.g. https://open.bigmodel.cn) trigger CLI's internal model
+   * capabilities/thinking logic which sends extra API requests → rate limited.
+   * For these, pass "claude-sonnet-4-6" and let the proxy map it server-side.
+   */
+  private static readonly PRIVATE_IP_PREFIXES = ['172.', '10.', '198.', '127.', '192.168.', 'localhost'];
+
+  private isPrivateNetworkUrl(url: string): boolean {
+    try {
+      const host = new URL(url).hostname;
+      return ClaudeSessionManager.PRIVATE_IP_PREFIXES.some(p => host.startsWith(p));
+    } catch {
+      return false;
+    }
+  }
+
   private resolveCliModel(configModel: string): string {
-    return configModel;
+    // Anthropic models pass through as-is
+    const ANTHROPIC_MODEL_PREFIXES = ['claude-', 'anthropic-'];
+    if (ANTHROPIC_MODEL_PREFIXES.some(p => configModel.toLowerCase().startsWith(p))) {
+      return configModel;
+    }
+    // Internal enterprise proxy — pass real model name (proxy validates & maps)
+    const baseUrl = this.config?.llm?.baseUrl;
+    if (baseUrl && this.isPrivateNetworkUrl(baseUrl)) {
+      this.log.info(`Internal proxy detected (${baseUrl}), passing real model "${configModel}"`);
+      return configModel;
+    }
+    // External third-party proxy — use CLI default to avoid extra internal requests
+    this.log.info(`External proxy detected (${baseUrl ?? 'default'}), mapping "${configModel}" → "claude-sonnet-4-6"`);
+    return 'claude-sonnet-4-6';
   }
 
   /**
@@ -410,11 +443,17 @@ export class ClaudeSessionManager {
     env['CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING'] = '1';
     env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
 
-    // For non-Anthropic proxies: skip model validation (which sends extra API requests
-    // that trigger rate limiting). Setting ANTHROPIC_CUSTOM_MODEL_OPTION tells CLI the
-    // model is pre-validated, so it won't send a test request.
+    // For non-Anthropic proxies: disable CLI behaviors that amplify rate limiting.
+    // Third-party proxies (Zhipu, Kimi, MiniMax, enterprise internal) have stricter
+    // rate limits and model whitelists than Anthropic's API.
     if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
+      // Skip model validation (which sends extra API requests)
       env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
+      // Disable 429 retry (CLI defaults to 10 retries — each one consumes quota
+      // and prolongs the rate limit window on shared API keys)
+      env['CLAUDE_CODE_MAX_RETRIES'] = '0';
+      // Skip claude.ai MCP server fetch (hits Anthropic API, not the proxy)
+      env['ENABLE_CLAUDEAI_MCP_SERVERS'] = 'false';
     }
     // Use isolated config dir to avoid CLI reading ~/.claude/settings.json
     // which may contain conflicting env vars (ANTHROPIC_AUTH_TOKEN, etc.)
@@ -422,6 +461,7 @@ export class ClaudeSessionManager {
     env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
 
     const claudeCodePath = this.getClaudeCodePath();
+
 
     // root/sudo cannot use --dangerously-skip-permissions (claude CLI rejects it).
     // Use environment variable bypass instead.
@@ -604,6 +644,8 @@ export class ClaudeSessionManager {
     env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
     if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
       env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
+      env['CLAUDE_CODE_MAX_RETRIES'] = '0';
+      env['ENABLE_CLAUDEAI_MCP_SERVERS'] = 'false';
     }
     const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
     env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
@@ -1635,8 +1677,6 @@ export class ClaudeSessionManager {
   }
 
   private classifyErrorMessage(msg: string): { errorCode: string; userMessage: string } {
-    // Log raw error for debugging proxy issues
-    this.log.warn(`[classifyError] raw message: ${msg.slice(0, 500)}`);
     // HTTP status patterns
     if (/\b429\b/.test(msg) || /rate.?limit/i.test(msg) || /too many requests/i.test(msg)) {
       return { errorCode: 'rate_limit', userMessage: '请求过于频繁，请稍后再试' };

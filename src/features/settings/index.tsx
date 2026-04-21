@@ -207,7 +207,7 @@ export function Settings() {
                     <GitHubStarCount />
                   </button>
                   <p className="text-xs text-muted-foreground text-center leading-relaxed max-w-[180px]">
-                    你的 Star 是对开源社区最大的支持
+                    点击 Star 加入开源社区
                   </p>
                 </div>
 
