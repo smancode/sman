@@ -384,6 +384,11 @@ export class ClaudeSessionManager {
         delete env[key];
       }
     }
+    // Clear proxy vars — CLI's undici auto-detects them and routes
+    // localhost requests through the proxy, causing UND_ERR_SOCKET
+    for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']) {
+      delete env[key];
+    }
     return env;
   }
 

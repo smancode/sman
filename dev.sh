@@ -63,9 +63,22 @@ kill_port 5880
 kill_port 5881
 echo -e "${GREEN}Ports 5880 and 5881 are ready.${NC}"
 
-# ── 3. 构建 Electron main/preload ─────────────────────────
+# ── 3. 构建 ──────────────────────────────────────────
 
-echo -e "${CYAN}[1/4] Building Electron main/preload...${NC}"
+echo -e "${CYAN}[1/5] Building backend (TypeScript)...${NC}"
+pnpm tsc -p server/tsconfig.json 2>&1 | tail -5
+
+if [ $? -ne 0 ]; then
+  echo -e "${RED}Backend build failed!${NC}"
+  exit 1
+fi
+# Ensure dist/server/package.json exists (ESM marker)
+if [ ! -f "dist/server/package.json" ]; then
+  echo '{"type":"module"}' > dist/server/package.json
+fi
+echo -e "${GREEN}Backend build OK.${NC}"
+
+echo -e "${CYAN}[2/5] Building Electron main/preload...${NC}"
 pnpm build:electron 2>&1 | tail -5
 
 if [ ! -f "electron/dist/main/main.js" ]; then
@@ -86,12 +99,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # 启动后端 (5880)
-echo -e "${CYAN}[2/4] Starting backend on port 5880...${NC}"
+echo -e "${CYAN}[3/5] Starting backend on port 5880...${NC}"
 pnpm dev:server &
 BACKEND_PID=$!
 
 # 启动前端 Vite (5881)
-echo -e "${CYAN}[3/4] Starting frontend on port 5881...${NC}"
+echo -e "${CYAN}[4/5] Starting frontend on port 5881...${NC}"
 pnpm dev &
 FRONTEND_PID=$!
 
@@ -125,7 +138,7 @@ done
 
 # ── 6. 启动 Electron ─────────────────────────────────────
 
-echo -e "${CYAN}[4/4] Starting Electron...${NC}"
+echo -e "${CYAN}[5/5] Starting Electron...${NC}"
 npx electron . &
 ELECTRON_PID=$!
 

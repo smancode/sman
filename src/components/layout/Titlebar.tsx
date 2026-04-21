@@ -73,12 +73,12 @@ export function Titlebar() {
 
       {/* Workspace path + git branch - centered, only in chat */}
       {inChat && workspace && (
-        <span className="flex items-center gap-2 text-[13px] font-mono text-muted-foreground/60 truncate max-w-[400px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <span className="flex items-center gap-2 text-[13px] font-mono truncate max-w-[400px] text-foreground/70 dark:text-foreground/80" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <span className="truncate">{workspace}</span>
           {gitBranch && (
             <>
-              <span className="text-muted-foreground/25 shrink-0">·</span>
-              <span className="flex items-center gap-1 shrink-0">
+              <span className="text-foreground/30 shrink-0">·</span>
+              <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-foreground/8 dark:bg-foreground/10">
                 <GitBranch className="w-3 h-3" />
                 <span className="truncate max-w-[120px]">{gitBranch}</span>
               </span>
