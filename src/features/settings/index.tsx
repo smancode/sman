@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, ExternalLink, Users, Star } from 'lucide-react';
+import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -31,6 +31,43 @@ async function openExternalUrl(url: string) {
   } catch {}
   // 3. Last resort
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/** 从 GitHub API 获取 star 数，展示社交证明 */
+function GitHubStarCount() {
+  const [stars, setStars] = useState<number | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('https://api.github.com/repos/smancode/sman')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (!cancelled && typeof data.stargazers_count === 'number') {
+          setStars(data.stargazers_count);
+        }
+      })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (error) {
+    return (
+      <span className="text-xs text-muted-foreground">点击给个 Star ⭐</span>
+    );
+  }
+
+  if (stars === null) {
+    return (
+      <span className="text-xs text-muted-foreground animate-pulse">加载中...</span>
+    );
+  }
+
+  return (
+    <span className="text-xs text-muted-foreground">
+      已有 <span className="font-semibold text-yellow-600 dark:text-yellow-400">{stars.toLocaleString()}</span> 位开发者加星
+    </span>
+  );
 }
 
 const SECTIONS = [
@@ -152,28 +189,38 @@ export function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-around gap-6">
-                <div className="flex flex-col items-center gap-2">
-                  <p className="text-sm font-medium">Sman 微信群</p>
-                  <img
-                    src="/resources/pictures/sman-wechat-group.png"
-                    alt="Sman 微信群二维码"
-                    className="w-[150px] h-[150px] rounded-xl object-cover"
-                  />
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <p className="flex items-center gap-1 text-sm font-medium">
-                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                    Star on GitHub
-                  </p>
+              <div className="flex items-center justify-center gap-10">
+                {/* Star on GitHub — 左侧 */}
+                <div className="flex flex-col items-center gap-3">
                   <button
                     type="button"
                     onClick={() => openExternalUrl('https://github.com/smancode/sman')}
-                    className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    className="group relative flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-gradient-to-br from-yellow-50/80 via-orange-50/50 to-pink-50/80 dark:from-yellow-950/30 dark:via-orange-950/20 dark:to-pink-950/30 px-8 py-6 shadow-sm transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                   >
-                    <ExternalLink className="h-4 w-4" />
-                    链接
+                    <div className="flex items-center gap-1.5">
+                      <Star className="h-7 w-7 text-yellow-500 fill-yellow-500 group-hover:animate-pulse" />
+                      <svg viewBox="0 0 24 24" className="h-5 w-5 text-foreground/70" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </div>
+                    <span className="text-base font-semibold text-foreground">
+                      Star on GitHub
+                    </span>
+                    <GitHubStarCount />
                   </button>
+                  <p className="text-xs text-muted-foreground text-center leading-relaxed max-w-[180px]">
+                    你的 Star 是对开源社区最大的支持
+                  </p>
+                </div>
+
+                {/* 微信群 — 右侧 */}
+                <div className="flex flex-col items-center gap-2">
+                  <img
+                    src="/resources/pictures/sman-wechat-group.png"
+                    alt="Sman 微信群二维码"
+                    className="w-[150px] h-[150px] rounded-xl object-cover border-2 border-yellow-400 dark:border-border/60"
+                  />
+                  <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                    扫码加入 Sman 微信交流群
+                  </p>
                 </div>
               </div>
             </CardContent>
