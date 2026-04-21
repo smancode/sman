@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/tooltip';
 
 const DEFAULT_MAX_INPUT_TOKENS = 200_000;
-const BAR_WIDTH = 10;
+const BAR_WIDTH = 6;
 
 function getMaxInputTokensByModel(model: string): number {
   const lower = model.toLowerCase();
