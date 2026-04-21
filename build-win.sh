@@ -32,8 +32,12 @@ err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── 读取版本号 ──
-VERSION=$(node -e "console.log(require('./package.json').version)")
+# ── 自动设置日期版本号 ──
+# 格式: YY.M.DD （如 26.4.21）
+DATE_VERSION=$(date '+%y.%-m.%-d')
+info "设置版本号: ${DATE_VERSION}"
+node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${DATE_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+VERSION="${DATE_VERSION}"
 info "Sman v${VERSION} — Windows x64 打包开始"
 
 # ── 检查操作系统 ──
