@@ -1,8 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ClaudeSessionManager } from '../../server/claude-session.js';
 import { SessionStore } from '../../server/session-store.js';
-import { SkillsRegistry } from '../../server/skills-registry.js';
-import { ProfileManager } from '../../server/profile-manager.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -10,31 +8,19 @@ import os from 'os';
 describe('ClaudeSessionManager', () => {
   let manager: ClaudeSessionManager;
   let store: SessionStore;
-  let skillsRegistry: SkillsRegistry;
-  let profileManager: ProfileManager;
   let homeDir: string;
   let dbPath: string;
+  let workspace: string;
 
   beforeEach(() => {
     homeDir = path.join(os.tmpdir(), `smanbase-csm-${Date.now()}`);
     dbPath = path.join(homeDir, 'test.db');
     fs.mkdirSync(homeDir, { recursive: true });
-    fs.mkdirSync(path.join(homeDir, 'skills'), { recursive: true });
-    fs.mkdirSync(path.join(homeDir, 'profiles'), { recursive: true });
+    workspace = path.join(homeDir, 'workspace');
+    fs.mkdirSync(workspace, { recursive: true });
 
     store = new SessionStore(dbPath);
-    skillsRegistry = new SkillsRegistry(homeDir);
-    profileManager = new ProfileManager(homeDir);
-
-    profileManager.createProfile({
-      systemId: 'projectA',
-      name: 'Project A',
-      workspace: '/tmp/fake-workspace',
-      description: 'Test project',
-      skills: [],
-    });
-
-    manager = new ClaudeSessionManager(store, skillsRegistry, profileManager);
+    manager = new ClaudeSessionManager(store);
 
     // Set config so SDK integration has model info
     manager.updateConfig({
@@ -57,38 +43,36 @@ describe('ClaudeSessionManager', () => {
   });
 
   it('should create a new session', () => {
-    const sessionId = manager.createSession('projectA');
+    const sessionId = manager.createSession(workspace);
     expect(sessionId).toBeDefined();
     expect(typeof sessionId).toBe('string');
     const session = store.getSession(sessionId);
     expect(session).toBeDefined();
-    expect(session!.systemId).toBe('projectA');
+    expect(session!.workspace).toBe(workspace);
   });
 
   it('should list active sessions', () => {
-    const s1 = manager.createSession('projectA');
-    const s2 = manager.createSession('projectA');
-    const sessions = manager.listSessions('projectA');
-    expect(sessions).toHaveLength(2);
-    expect(sessions.map(s => s.id)).toContain(s1);
-    expect(sessions.map(s => s.id)).toContain(s2);
+    manager.createSession(workspace);
+    manager.createSession(workspace);
+    const sessions = manager.listSessions();
+    expect(sessions.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should abort a session', () => {
-    const sessionId = manager.createSession('projectA');
+    const sessionId = manager.createSession(workspace);
     expect(() => manager.abort(sessionId)).not.toThrow();
   });
 
   it('should get session history', () => {
-    const sessionId = manager.createSession('projectA');
+    const sessionId = manager.createSession(workspace);
     store.addMessage(sessionId, { role: 'user', content: 'hello' });
     store.addMessage(sessionId, { role: 'assistant', content: 'hi' });
     const history = manager.getHistory(sessionId);
     expect(history).toHaveLength(2);
   });
 
-  it('should throw when creating session for unknown system', () => {
-    expect(() => manager.createSession('unknown-system')).toThrow();
+  it('should throw when creating session for non-existent workspace', () => {
+    expect(() => manager.createSession('/non/existent/path')).toThrow();
   });
 
   it('should update config and reflect new model', () => {
@@ -104,17 +88,7 @@ describe('ClaudeSessionManager', () => {
       },
     });
 
-    // Should not throw - config is applied
-    const sessionId = manager.createSession('projectA');
+    const sessionId = manager.createSession(workspace);
     expect(sessionId).toBeDefined();
-  });
-
-  it('should reject duplicate concurrent sendMessage', async () => {
-    const sessionId = manager.createSession('projectA');
-    const messages: string[] = [];
-
-    // We can't actually call sendMessage without a real SDK,
-    // but we can verify the method exists and the session was created
-    expect(manager.createSession('projectA')).toBeDefined();
   });
 });

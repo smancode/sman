@@ -24,11 +24,8 @@ describe('UserProfileManager', () => {
       expect(profile).toContain('# 用户画像');
       expect(profile).toContain('## 我的身份');
       expect(profile).toContain('## 用户身份');
-      expect(profile).toContain('## 技术偏好');
-      expect(profile).toContain('## 常用任务');
-      expect(profile).toContain('## 失败任务');
-      expect(profile).toContain('## 沟通风格');
-      expect(profile).toContain('## 回复策略');
+      expect(profile).toContain('## 偏好');
+      expect(profile).toContain('## 注意');
       const filePath = path.join(homeDir, 'user-profile.md');
       expect(fs.existsSync(filePath)).toBe(true);
     });

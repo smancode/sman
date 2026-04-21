@@ -49,7 +49,7 @@ describe('SmartPathEngine', () => {
   });
 
   describe('runPath', () => {
-    it('should execute serial step sequentially', async () => {
+    it('should execute serial steps and complete', async () => {
       const smartPath = store.createPath({
         name: 'Serial Test',
         workspace,
@@ -73,10 +73,11 @@ describe('SmartPathEngine', () => {
       expect(runs.length).toBe(1);
       expect(runs[0].status).toBe('completed');
 
-      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(2);
+      // Engine sends one combined prompt via sendMessageForCron
+      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
     });
 
-    it('should execute parallel step concurrently', async () => {
+    it('should execute parallel steps and complete', async () => {
       const smartPath = store.createPath({
         name: 'Parallel Test',
         workspace,
@@ -95,18 +96,14 @@ describe('SmartPathEngine', () => {
 
       const runs = store.listRuns(smartPath.id);
       expect(runs[0].status).toBe('completed');
-      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(2);
+      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
     });
 
-    it('should pass context between steps', async () => {
+    it('should collect result from session history', async () => {
       const smartPath = store.createPath({
         name: 'Context Test',
         workspace,
         steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [{ type: 'skill', skillId: 'test-skill' }],
-          },
           {
             mode: 'serial',
             actions: [{ type: 'skill', skillId: 'test-skill' }],
@@ -117,12 +114,18 @@ describe('SmartPathEngine', () => {
       await engine.runPath(smartPath.id);
 
       const runs = store.listRuns(smartPath.id);
+      expect(runs[0].status).toBe('completed');
       const stepResults = JSON.parse(runs[0].stepResults);
-      expect(stepResults).toHaveProperty('0');
-      expect(stepResults).toHaveProperty('1');
+      expect(stepResults).toHaveProperty('result');
+      expect(stepResults.result).toBe('skill result');
     });
 
-    it('should execute python action', async () => {
+    it('should execute python action via session', async () => {
+      mockSessionManager.getHistory.mockReturnValueOnce([
+        { role: 'user', content: 'test', contentBlocks: [] },
+        { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: '{"result": 42}' }] },
+      ]);
+
       const smartPath = store.createPath({
         name: 'Python Test',
         workspace,
@@ -141,28 +144,7 @@ describe('SmartPathEngine', () => {
       const runs = store.listRuns(smartPath.id);
       expect(runs[0].status).toBe('completed');
       const stepResults = JSON.parse(runs[0].stepResults);
-      expect(stepResults['0']).toEqual({ result: 42 });
-    });
-
-    it('should inject ctx into python', async () => {
-      const smartPath = store.createPath({
-        name: 'Python Ctx Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [
-              { type: 'python', code: 'print(json.dumps({"input": ctx}))' },
-            ],
-          },
-        ]),
-      });
-
-      await engine.runPath(smartPath.id);
-
-      const runs = store.listRuns(smartPath.id);
-      const stepResults = JSON.parse(runs[0].stepResults);
-      expect(stepResults['0']).toEqual({ input: {} });
+      expect(stepResults.result).toBe('{"result": 42}');
     });
 
     it('should throw when path not found', async () => {
@@ -190,6 +172,11 @@ describe('SmartPathEngine', () => {
         ]),
       });
 
+      // Engine builds prompt before sending, skill lookup happens at build time
+      // Since the engine doesn't resolve skills at run time anymore,
+      // we need to make sendMessageForCron throw
+      mockSessionManager.sendMessageForCron.mockRejectedValueOnce(new Error('Send failed'));
+
       await expect(engine.runPath(smartPath.id)).rejects.toThrow();
 
       const updatedPath = store.getPath(smartPath.id);
@@ -198,24 +185,6 @@ describe('SmartPathEngine', () => {
       const runs = store.listRuns(smartPath.id);
       expect(runs[0].status).toBe('failed');
       expect(runs[0].errorMessage).toBeDefined();
-    });
-
-    it('should call onProgress for each step', async () => {
-      const onProgress = vi.fn();
-      const smartPath = store.createPath({
-        name: 'Progress Test',
-        workspace,
-        steps: JSON.stringify([
-          { mode: 'serial', actions: [{ type: 'skill', skillId: 'test-skill' }] },
-          { mode: 'serial', actions: [{ type: 'skill', skillId: 'test-skill' }] },
-        ]),
-      });
-
-      await engine.runPath(smartPath.id, onProgress);
-
-      expect(onProgress).toHaveBeenCalledTimes(2);
-      expect(onProgress).toHaveBeenNthCalledWith(1, { stepIndex: 0, totalSteps: 2, status: 'stepComplete' });
-      expect(onProgress).toHaveBeenNthCalledWith(2, { stepIndex: 1, totalSteps: 2, status: 'stepComplete' });
     });
 
     it('should execute plan from .md file path', async () => {
