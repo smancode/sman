@@ -981,7 +981,23 @@ export class ClaudeSessionManager {
     // V2 sessions handle /slash commands natively — no conversion needed
     // Don't store auto-retry messages in the database — user didn't send them
     if (_retryCount === 0) {
-      this.store.addMessage(sessionId, { role: 'user', content });
+      // Build contentBlocks from media for persistence (so images survive session switches)
+      const userContentBlocks: Array<import('./session-store.js').ContentBlock> = [];
+      if (media && media.length > 0) {
+        for (const m of media) {
+          if (m.mimeType?.startsWith('image/')) {
+            userContentBlocks.push({
+              type: 'image',
+              source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
+            });
+          }
+        }
+      }
+      this.store.addMessage(sessionId, {
+        role: 'user',
+        content,
+        contentBlocks: userContentBlocks.length > 0 ? userContentBlocks : undefined,
+      });
     }
 
     const abortController = new AbortController();
@@ -2141,7 +2157,7 @@ export class ClaudeSessionManager {
     });
   }
 
-  getHistory(sessionId: string): Array<Message & { timestamp: number; contentBlocks?: Array<{ type: 'text' | 'thinking' | 'tool_use'; text?: string; thinking?: string; id?: string; name?: string; input?: unknown }> }> {
+  getHistory(sessionId: string): Array<Message & { timestamp: number }> {
     const messages = this.store.getMessages(sessionId);
     return messages.map(msg => ({
       ...msg,

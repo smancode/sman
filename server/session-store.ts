@@ -21,12 +21,17 @@ export interface Message {
 }
 
 export interface ContentBlock {
-  type: 'text' | 'thinking' | 'tool_use';
+  type: 'text' | 'thinking' | 'tool_use' | 'image';
   text?: string;
   thinking?: string;
   id?: string;
   name?: string;
   input?: unknown;
+  source?: {
+    type: string;
+    media_type: string;
+    data: string;
+  };
 }
 
 interface CreateSessionInput {

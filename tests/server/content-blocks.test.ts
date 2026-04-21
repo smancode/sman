@@ -137,4 +137,36 @@ describe('buildContentBlocks', () => {
       expect(blocks.some((b: any) => b.type === 'image')).toBe(true);
     });
   });
+
+  describe('StagedMedia (no type field)', () => {
+    it('should treat media with image mimeType as image even without type field', () => {
+      // StagedMedia from frontend has no `type` field — only mimeType and base64Data
+      const stagedMedia = {
+        mimeType: 'image/png',
+        base64Data: 'iVBORw0KGgoAAAANS',
+        fileName: 'upload.png',
+      };
+      const result = buildContentBlocks('这是什么', [stagedMedia as any], IMAGE_CAPS);
+      expect(Array.isArray(result)).toBe(true);
+      const blocks = result as any[];
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0]).toEqual({ type: 'text', text: '这是什么' });
+      expect(blocks[1].type).toBe('image');
+      expect(blocks[1].source.media_type).toBe('image/png');
+      expect(blocks[1].source.data).toBe('iVBORw0KGgoAAAANS');
+    });
+
+    it('should handle StagedMedia with no text', () => {
+      const stagedMedia = {
+        mimeType: 'image/jpeg',
+        base64Data: '/9j/4AAQ',
+        fileName: 'photo.jpg',
+      };
+      const result = buildContentBlocks('', [stagedMedia as any], IMAGE_CAPS);
+      expect(Array.isArray(result)).toBe(true);
+      const blocks = result as any[];
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('image');
+    });
+  });
 });

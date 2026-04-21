@@ -49,6 +49,8 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   ├── mcp-config.ts        # MCP Server 自动配置（Brave/Tavily/Bing 搜索）
 │   ├── model-capabilities.ts # 模型能力检测（支持的特性、上下文窗口等）
 │   ├── user-profile.ts      # 用户画像管理（注入到 system prompt）
+│   ├── knowledge-extractor.ts # 知识提取器（从对话提取业务/规范/技术知识）
+│   ├── knowledge-extractor-store.ts # 知识提取进度存储（SQLite）
 │   ├── types.ts             # 共享 TypeScript 类型（SmanConfig, CronTask, BatchTask 等）
 │   ├── cron-scheduler.ts    # Cron 定时任务调度器
 │   ├── cron-executor.ts     # Cron 任务执行器（调用 Claude session）
@@ -95,7 +97,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── capability-matcher.ts  # 能力匹配
 │   │   ├── claude-init-runner.ts  # Claude 初始化执行
 │   │   ├── init-types.ts          # 初始化类型
-│   │   └── templates/             # 初始化模板
+│   │   └── templates/             # 初始化模板（含 knowledge-business/conventions/technical 知识 skill 占位）
 │   ├── bazaar/              # Agent 集市桥接层（主项目 ↔ 集市服务器）
 │   │   ├── bazaar-store.ts        # 本地存储（tasks, learned_routes, pair_history, chat）
 │   │   ├── bazaar-bridge.ts       # 连接管理 + 消息处理（经验提取、磨合记录、上下文注入）
@@ -247,10 +249,21 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 ~/.sman/
 ├── config.json          # LLM + WebSearch + Chatbot + Auth 配置
 ├── registry.json        # Skills 注册表
-├── sman.db              # SQLite 数据库（会话、消息、Cron、Batch、Chatbot 状态）
+├── sman.db              # SQLite 数据库（会话、消息、Cron、Batch、Chatbot 状态、知识提取进度）
 ├── claude-config/       # 隔离的 Claude CLI 配置目录（防止全局 settings.json 干扰）
 ├── skills/              # 全局 Skills（预制通用技能）
 └── logs/                # 日志文件
+```
+
+## 项目工作区目录 (`{workspace}/.sman/`)
+
+```
+{workspace}/.sman/
+├── INIT.md              # 初始化结果（项目类型、tech stack、注入的 skills）
+├── knowledge/           # 团队知识（每人独立文件，git push 共享）
+│   ├── business-{username}.md    # 业务知识（需求、规则、流程）
+│   ├── conventions-{username}.md # 开发规范（命名、架构决策）
+│   └── technical-{username}.md   # 技术知识（API、schema、集成）
 ```
 
 ## Skills 机制
@@ -305,6 +318,8 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `server/capabilities/registry.ts` | Capabilities 注册表 |
 | `server/init/init-manager.ts` | 会话初始化流程编排 |
 | `server/user-profile.ts` | 用户画像（注入到 system prompt） |
+| `server/knowledge-extractor.ts` | 知识提取器（从对话提取业务/规范/技术知识到 `.sman/knowledge/`） |
+| `server/knowledge-extractor-store.ts` | 知识提取进度 SQLite 存储 |
 | `server/model-capabilities.ts` | 模型能力检测 |
 | `server/chatbot/chatbot-session-manager.ts` | Chatbot 消息路由（命令解析 → Claude 查询） |
 | `server/chatbot/wecom-bot-connection.ts` | 企业微信 Bot WebSocket（心跳、重连、流式消息节流） |
@@ -505,3 +520,4 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 13. **Capabilities 系统**: Gateway MCP 注入每个会话，按需发现和激活能力包（Office 技能、PPT 生成等）
 14. **会话初始化**: 新建会话自动扫描项目 → 注入 Skills → 匹配 Capabilities → 执行初始化对话
 15. **消息隔离**: 多会话并行不串 — 后端 Map 全部以 sessionId 为 key，前端 handler 过滤 sessionId，streamingBlocksMap 按 sessionId 独立存储
+16. **知识提取**: 每 10 分钟空闲时从对话提取业务知识/开发规范/技术知识 → 存入 `{workspace}/.sman/knowledge/{category}-{username}.md`（每人独立文件，push 到 git 共享）→ skill-auto-updater 聚合所有用户文件生成 `knowledge-business/conventions/technical` 三个 skill。用 hash 标记去重，支持增量提取（记录 `last_extracted_message_id`）

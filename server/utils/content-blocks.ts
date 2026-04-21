@@ -57,16 +57,8 @@ export function buildContentBlocks(
 
   // Add image blocks
   for (const attachment of media) {
-    if (attachment.type === 'image') {
-      blocks.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: attachment.mimeType,
-          data: attachment.base64Data,
-        },
-      });
-    } else if (attachment.type === 'document' && isImageMimeType(attachment.mimeType)) {
+    if (isImageMimeType(attachment.mimeType)) {
+      // Both explicit type='image' and StagedMedia (no type field, has image/* mimeType)
       blocks.push({
         type: 'image',
         source: {

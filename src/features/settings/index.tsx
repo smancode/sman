@@ -10,7 +10,8 @@ import { BackendSettings } from './BackendSettings';
 import { BazaarSettings } from '@/features/bazaar/BazaarSettings';
 import { useSettingsStore } from '@/stores/settings';
 
-const APP_VERSION = '0.2.6';
+declare const __APP_VERSION__: string;
+const APP_VERSION = __APP_VERSION__;
 
 async function openExternalUrl(url: string) {
   // 1. Electron: use shell.openExternal via IPC
