@@ -8,7 +8,6 @@ import { AskUserCard } from './AskUserCard';
 import { useWsConnection } from '@/stores/ws-connection';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type StagedMedia } from './ChatInput';
-import { ContextUsageBar } from './ContextUsageBar';
 import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
@@ -287,7 +286,6 @@ export function Chat() {
       {/* Input */}
       {hasActiveSession && (
         <div className="mt-auto w-full mx-auto max-w-4xl px-2">
-          <ContextUsageBar />
           <ChatInput onSend={handleSend} disabled={!isConnected} isEmpty={isEmpty} />
         </div>
       )}

@@ -862,17 +862,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
           answered: false,
         }]);
 
-        // Auto-confirm: automatically answer with "auto" for each question
+        // Auto-confirm (YOLO mode): automatically approve and continue without asking
         if (get().autoConfirm) {
           const autoAnswers: Record<string, string[]> = {};
           for (const q of questions) {
             const questionText = (q as { question: string }).question || '';
-            autoAnswers[questionText] = ['auto'];
+            autoAnswers[questionText] = ['继续，用你的最佳判断推进，不要再问我'];
           }
-          // Defer to let the block render briefly before marking as answered
           setTimeout(() => {
             get().answerAskUser(askId, autoAnswers);
-          }, 100);
+          }, 500);
         }
       });
 

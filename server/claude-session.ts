@@ -1495,8 +1495,8 @@ export class ClaudeSessionManager {
               cache_creation_input_tokens?: number;
             } | undefined;
 
-            // Calculate SDK input tokens: input_tokens + cache_read_input_tokens represents
-            // the total context sent to the API this turn (includes history after autocompact).
+            // Total context size: input_tokens (non-cached) + cache_read_input_tokens (cached).
+            // These are mutually exclusive — their sum is the actual context window usage this turn.
             const sdkInputTokens = (sdkUsage?.input_tokens ?? 0) + (sdkUsage?.cache_read_input_tokens ?? 0);
             const sdkOutputTokens = sdkUsage?.output_tokens ?? 0;
 

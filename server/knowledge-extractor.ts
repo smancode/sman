@@ -239,7 +239,11 @@ export class KnowledgeExtractor {
     const model = config.llm.profileModel || config.llm.model;
     const baseUrl = (config.llm.baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
 
-    const systemPrompt = `你是一个知识提取器。分析对话内容，提取项目相关的知识，合并到已有知识文件中。
+    const currentISOTime = new Date().toISOString();
+    const systemPrompt = `你是一个严格的知识提取器。分析对话内容，提取对项目长期有价值的知识，合并到已有知识文件中。
+
+## 当前时间
+${currentISOTime}
 
 ## 输出格式
 为三个类别分别输出完整的 markdown 文件内容，用特殊分隔符隔开：
@@ -265,18 +269,18 @@ export class KnowledgeExtractor {
 \`\`\`
 # {Category Label} — ${this.username}
 
-> Last extracted: {当前 ISO 时间}
+> Last extracted: ${currentISOTime}
 
 ## 知识点标题1
 <!-- hash: {6位随机hex} -->
 - 具体内容
 - 具体内容
-<!-- end: {同上hash} -->
+<!-- end: {6位随机hex} -->
 
 ## 知识点标题2
 <!-- hash: {6位随机hex} -->
 - 具体内容
-<!-- end: {同上hash} -->
+<!-- end: {6位随机hex} -->
 \`\`\`
 
 ## 关键规则
@@ -288,7 +292,23 @@ export class KnowledgeExtractor {
 5. **精简**：每个知识点不超过 5 行，只记关键信息
 6. **如果没有新知识**：对应类别原样返回已有内容（包括空文件）
 7. **Hash 格式**：6位 hex，如 a3f2b1。对同一个知识点，开闭标记的 hash 必须一致
-8. **文件不超过 100 行**：超过时合并相似条目或删除最不重要的`;
+8. **文件不超过 100 行**：超过时合并相似条目或删除最不重要的
+
+## ⚠️ 质量门槛（最重要）
+
+不是什么都要记！只提取满足以下条件的知识：
+- ✅ 项目特有的业务规则、架构决策、踩过的坑
+- ✅ 团队达成的共识、非显而易见的约束
+- ✅ 对未来开发有实际指导意义的信息
+
+以下内容**禁止提取**：
+- ❌ 通用技术知识（语言语法、框架用法、工具常识）
+- ❌ 临时性的调试讨论、排查过程
+- ❌ LLM/SDK 自身的工作机制（如上下文窗口大小、压缩策略）
+- ❌ 通过阅读代码或文档就能直接获得的信息
+- ❌ 一过性的问题（已修复且无参考价值的 bug）
+
+**宁缺毋滥**：如果对话中没有真正有价值的知识，所有类别都原样返回已有内容。`;
 
     const conversationText = messages.map((m, i) =>
       `[${m.role}] ${m.content}`

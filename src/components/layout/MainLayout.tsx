@@ -52,7 +52,7 @@ export function MainLayout() {
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
-        style={{ opacity: isWelcome ? 1 : 0.15 }}
+        style={{ opacity: isWelcome ? 1 : 0.5 }}
       >
         {isDark ? <NebulaFlow /> : <CandyBlobs />}
       </div>
