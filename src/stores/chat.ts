@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
 import { sessionCache } from '@/lib/session-cache';
+import { contextUsageCache } from '@/lib/context-usage-cache';
 import type { ChatSession, ContentBlock, InitCard } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
@@ -159,9 +160,6 @@ interface ChatState {
 export const sendingSessions = new Set<string>();
 
 const streamingBlocksMap = new Map<string, StreamingBlock[]>();
-
-// Per-session context usage cache
-const contextUsageMap = new Map<string, { inputTokens: number; outputTokens: number }>();
 
 // ── Per-session sending state ──
 // Tracks which sessions are currently streaming a response.
@@ -387,10 +385,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (sessionId === get().currentSessionId) return;
 
     // Save current messages and context usage to cache
-    const { currentSessionId, messages } = get();
+    const { currentSessionId, messages, contextUsage } = get();
     if (currentSessionId) {
       if (messages.length > 0) {
         sessionCache.set(currentSessionId, messages);
+      }
+      if (contextUsage) {
+        contextUsageCache.set(currentSessionId, contextUsage);
       }
     }
 
@@ -400,6 +401,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       cached = (await sessionCache.getAsync(sessionId)) as Message[] | null;
     }
 
+    // Read target session context usage
+    let cachedUsage = contextUsageCache.get(sessionId);
+    if (!cachedUsage) {
+      cachedUsage = await contextUsageCache.getAsync(sessionId);
+    }
+
     // Guard: user may have triggered another switch while we awaited IndexedDB
     if (get().currentSessionId !== currentSessionId) return;
 
@@ -407,15 +414,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const targetBlocks = getStreamingBlocks(sessionId);
     const isTargetSending = sendingSessions.has(sessionId);
 
-    // Don't restore cached context usage — it may be stale.
-    // Wait for backend to push fresh usage via chat.done.
     set({
       currentSessionId: sessionId,
       messages: cached ?? [],
       streamingBlocks: targetBlocks,
       error: null,
       contextWarning: null,
-      contextUsage: null,
+      contextUsage: cachedUsage ?? null,
       sending: isTargetSending,
       loading: !cached,
     });
@@ -461,7 +466,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionCache.set(sessionId, serverMsgs);
 
       // Always update UI with server data (content may differ even if length matches)
-      set({ messages: serverMsgs, loading: false });
+      // Restore context usage from server if available
+      const serverUsage = data.usage as { inputTokens: number; outputTokens: number } | null | undefined;
+      const contextUsage = serverUsage && serverUsage.inputTokens > 0 ? serverUsage : null;
+      set({ messages: serverMsgs, loading: false, contextUsage });
 
       // Auto-label from first user message
       const { sessions } = get();
@@ -901,6 +909,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         clearStreamingBlocks(streamSessionId);
 
         const usage = data.usage as { inputTokens: number; outputTokens: number } | null | undefined;
+
+        // Update context usage cache (memory + IndexedDB)
+        if (usage && usage.inputTokens > 0) {
+          contextUsageCache.set(streamSessionId, usage);
+        }
 
         if (textContent.trim() || contentBlocks.length > 0) {
           const assistantMsg: Message = {

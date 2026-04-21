@@ -585,7 +585,13 @@ wss.on('connection', (ws: WebSocket) => {
         case 'session.history': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           const messages = sessionManager.getHistory(msg.sessionId);
-          ws.send(JSON.stringify({ type: 'session.history', sessionId: msg.sessionId, messages }));
+          const tokenUsage = store.getTokenUsage(msg.sessionId);
+          ws.send(JSON.stringify({
+            type: 'session.history',
+            sessionId: msg.sessionId,
+            messages,
+            usage: tokenUsage ?? null,
+          }));
           break;
         }
 
