@@ -38,6 +38,7 @@ interface SettingsState {
   updateWebSearch: (updates: Partial<WebSearchConfig>) => Promise<void>;
   updateChatbot: (updates: Partial<ChatbotConfig>) => Promise<void>;
   testAndSaveLlm: (apiKey: string, model: string, baseUrl?: string, profileName?: string) => Promise<TestAndSaveResult>;
+  fetchModels: (apiKey: string, baseUrl?: string) => Promise<{ models: { id: string; displayName?: string }[]; unsupported?: boolean }>;
   selectLlmProfile: (name: string) => Promise<void>;
   deleteLlmProfile: (name: string) => Promise<void>;
   clearError: () => void;
@@ -188,6 +189,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         baseUrl: baseUrl || undefined,
         profileName: profileName || undefined,
       });
+    });
+  },
+
+  fetchModels: async (apiKey, baseUrl) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    return new Promise<{ models: { id: string; displayName?: string }[]; unsupported?: boolean }>((resolve) => {
+      const timer = setTimeout(() => {
+        unsub();
+        resolve({ models: [], unsupported: true });
+      }, 15000);
+
+      const unsub = wrapHandler(client, 'settings.modelsList', (data) => {
+        clearTimeout(timer);
+        unsub();
+        resolve({
+          models: (data.models as { id: string; displayName?: string }[]) ?? [],
+          unsupported: data.unsupported === true,
+        });
+      });
+      client.send({ type: 'settings.fetchModels', apiKey, baseUrl: baseUrl || undefined });
     });
   },
 

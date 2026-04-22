@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,7 +40,7 @@ function CapabilitiesDisplay({ capabilities }: { capabilities?: DetectedCapabili
 }
 
 export function LLMSettings({ id }: { id?: string }) {
-  const { settings, testAndSaveLlm, selectLlmProfile, deleteLlmProfile } = useSettingsStore();
+  const { settings, testAndSaveLlm, fetchModels, selectLlmProfile, deleteLlmProfile } = useSettingsStore();
 
   // Local draft state
   const [draftApiKey, setDraftApiKey] = useState('');
@@ -48,6 +48,13 @@ export function LLMSettings({ id }: { id?: string }) {
   const [draftBaseUrl, setDraftBaseUrl] = useState('');
   const [draftProfileName, setDraftProfileName] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // Models dropdown state
+  const [fetchedModels, setFetchedModels] = useState<{ id: string; displayName?: string }[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [modelsUnsupported, setModelsUnsupported] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // Selected profile name (empty = not from saved list)
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -133,6 +140,40 @@ export function LLMSettings({ id }: { id?: string }) {
       // ignore
     }
   };
+
+  const handleFetchModels = async () => {
+    if (!draftApiKey) return;
+    setLoadingModels(true);
+    setFetchedModels([]);
+    setModelsUnsupported(false);
+    try {
+      const result = await fetchModels(draftApiKey, draftBaseUrl || undefined);
+      setFetchedModels(result.models);
+      setModelsUnsupported(result.unsupported ?? false);
+      setShowModelDropdown(result.models.length > 0);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const handleModelSelect = (modelId: string) => {
+    setDraftModel(modelId);
+    setShowModelDropdown(false);
+  };
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    if (!showModelDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setShowModelDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showModelDropdown]);
 
   const hasChanges =
     draftApiKey !== (settings?.llm?.apiKey ?? '') ||
@@ -228,11 +269,46 @@ export function LLMSettings({ id }: { id?: string }) {
         {/* Model */}
         <div className="space-y-2">
           <Label>Model</Label>
-          <Input
-            value={draftModel}
-            onChange={(e) => setDraftModel(e.target.value)}
-            placeholder="claude-sonnet-4-6"
-          />
+          <div className="relative" ref={modelDropdownRef}>
+            <div className="flex gap-1">
+              <Input
+                value={draftModel}
+                onChange={(e) => { setDraftModel(e.target.value); setShowModelDropdown(false); }}
+                placeholder="claude-sonnet-4-6"
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={handleFetchModels}
+                disabled={loadingModels || !draftApiKey}
+                title={draftApiKey ? '从 API 拉取模型列表' : '请先填写 API Key'}
+              >
+                {loadingModels ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+            {showModelDropdown && fetchedModels.length > 0 && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card rounded-lg shadow-lg border border-border overflow-hidden max-h-[240px] overflow-y-auto">
+                {fetchedModels.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleModelSelect(m.id)}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors ${m.id === draftModel ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    <span className="font-mono">{m.id}</span>
+                    {m.displayName && m.displayName !== m.id && (
+                      <span className="ml-2 text-muted-foreground text-xs">{m.displayName}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {modelsUnsupported && (
+              <p className="text-xs text-muted-foreground mt-1">该 API 不支持拉取模型列表，请手动输入模型名称</p>
+            )}
+          </div>
         </div>
 
         {/* Test result */}

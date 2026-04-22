@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, globalShortcut, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import http from 'http';
 import { execSync } from 'child_process';
@@ -68,34 +68,8 @@ function createWindow(): void {
     mainWindow?.webContents.send('window:maximizeChanged', false);
   });
 
-  const registerShortcuts = () => {
-    globalShortcut.register('CommandOrControl+Shift+R', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.reloadIgnoringCache();
-      }
-    });
-
-    globalShortcut.register('CommandOrControl+R', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.reload();
-      }
-    });
-    globalShortcut.register('F5', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.reload();
-      }
-    });
-  };
-
-  registerShortcuts();
-
-  mainWindow.on('focus', () => {
-    registerShortcuts();
-  });
-
   mainWindow.on('closed', () => {
     mainWindow = null;
-    globalShortcut.unregisterAll();
   });
 }
 

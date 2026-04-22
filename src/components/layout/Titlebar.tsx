@@ -78,7 +78,7 @@ export function Titlebar() {
           {gitBranch && (
             <>
               <span className="text-foreground/30 shrink-0">·</span>
-              <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-foreground/8 dark:bg-foreground/10">
+              <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded">
                 <GitBranch className="w-3 h-3" />
                 <span className="truncate max-w-[120px]">{gitBranch}</span>
               </span>

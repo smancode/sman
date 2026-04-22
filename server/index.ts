@@ -39,7 +39,7 @@ import { initCapabilities } from './capabilities/init-registry.js';
 import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
-import { testAnthropicCompat, detectCapabilities } from './model-capabilities.js';
+import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initBazaarBridge, getBazaarBridge } from './bazaar/index.js';
 
@@ -700,6 +700,17 @@ wss.on('connection', (ws: WebSocket) => {
             startChatbotConnections();
           }
           ws.send(JSON.stringify({ type: 'settings.updated', config }));
+          break;
+        }
+
+        case 'settings.fetchModels': {
+          const { apiKey, baseUrl } = msg as unknown as { apiKey: string; baseUrl?: string };
+          if (!apiKey) {
+            ws.send(JSON.stringify({ type: 'settings.modelsList', models: [], error: '缺少 API Key' }));
+            break;
+          }
+          const result = await listModels(apiKey, baseUrl);
+          ws.send(JSON.stringify({ type: 'settings.modelsList', models: result.models, unsupported: result.unsupported }));
           break;
         }
 

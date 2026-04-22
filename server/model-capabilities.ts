@@ -329,6 +329,65 @@ async function probeVisionCapability(
 }
 
 /**
+ * List available models from the API.
+ * Supports Anthropic /v1/models and OpenAI-compatible /v1/models endpoints.
+ */
+export async function listModels(
+  apiKey: string,
+  baseUrl?: string,
+): Promise<{ models: { id: string; displayName?: string }[]; unsupported?: boolean }> {
+  const url = baseUrl
+    ? `${baseUrl.replace(/\/+$/, '')}/v1/models`
+    : 'https://api.anthropic.com/v1/models';
+
+  log.info(`Listing models from: ${url}`);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      signal: controller.signal,
+    });
+
+    log.info(`List models response: ${resp.status}`);
+
+    if (!resp.ok) {
+      log.warn(`List models API returned ${resp.status}`);
+      return { models: [], unsupported: true };
+    }
+
+    const data = await resp.json() as any;
+
+    // Anthropic / OpenAI-compatible format: { data: [{ id, display_name, ... }] }
+    if (Array.isArray(data.data)) {
+      const models = data.data.map((m: any) => ({
+        id: m.id || m.name || '',
+        displayName: m.display_name || m.name || m.id || '',
+      })).filter((m: { id: string }) => m.id);
+      log.info(`Listed ${models.length} models from API`);
+      return { models };
+    }
+
+    log.warn(`Unexpected models response format`);
+    return { models: [], unsupported: true };
+  } catch (err) {
+    if (controller.signal.aborted) {
+      log.warn('List models request timed out (10s)');
+    } else {
+      log.warn(`Failed to list models: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { models: [], unsupported: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Test Anthropic API compatibility: send a minimal message to verify the endpoint.
  */
 export async function testAnthropicCompat(
