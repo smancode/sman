@@ -1058,7 +1058,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       // Send message
-      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed };
+      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed, autoConfirm: get().autoConfirm };
       if (media && media.length > 0) {
         msg.media = media;
       }

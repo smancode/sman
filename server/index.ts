@@ -611,6 +611,10 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chat.send': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');
+          // Sync AUTO mode state from frontend
+          if (msg.autoConfirm !== undefined) {
+            sessionManager.setAutoMode(msg.sessionId, !!msg.autoConfirm);
+          }
           // Capture sessionId for the closure
           const chatSessionId = msg.sessionId;
           const wsSend = (d: string) => {

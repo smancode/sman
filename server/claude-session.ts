@@ -112,6 +112,8 @@ export class ClaudeSessionManager {
   private sdkSessionIds = new Map<string, string>();
   /** dev-workflow progress per session (runtime only, not persisted) */
   private workflowStates = new Map<string, WorkflowState>();
+  /** Sessions in AUTO/YOLO mode — skip all confirmations and run straight through */
+  private autoModeSessions = new Set<string>();
   /** Cumulative token usage per session: input + output tokens accumulated across all turns */
   private sessionTokenUsage = new Map<string, { inputTokens: number; outputTokens: number }>();
   private log: Logger;
@@ -145,6 +147,16 @@ export class ClaudeSessionManager {
     this.knowledgeExtractor = extractor;
     extractor.setIdleCheck(() => this.activeStreams.size === 0);
     this.log.info('KnowledgeExtractor injected');
+  }
+
+  /** Update AUTO/YOLO mode for a session */
+  setAutoMode(sessionId: string, enabled: boolean): void {
+    if (enabled) {
+      this.autoModeSessions.add(sessionId);
+    } else {
+      this.autoModeSessions.delete(sessionId);
+    }
+    this.log.info(`AUTO mode ${enabled ? 'enabled' : 'disabled'} for session ${sessionId}`);
   }
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -253,6 +265,19 @@ export class ClaudeSessionManager {
       if (stepHints[cs]) {
         lines.push(`→ ${stepHints[cs]}`);
       }
+    }
+
+    // ── 段 2.5：AUTO/YOLO 模式 ──
+    if (sessionId && this.autoModeSessions.has(sessionId)) {
+      lines.push('');
+      lines.push('## [AUTO/YOLO 模式 - 最高优先级指令]');
+      lines.push('用户开启了 AUTO 模式。以下规则覆盖所有 skill 中的"等用户确认"要求：');
+      lines.push('1. 不要停下来等用户确认。spec、plan、方案选择等所有需要用户确认的环节，全部用你的最佳判断自行决定并继续推进。');
+      lines.push('2. 不要用 AskUserQuestion 问用户。直接做决定。');
+      lines.push('3. brainstorming 中的"逐个提问"→ 改为"基于用户初始描述，自行做出合理假设，直接产出 spec"。');
+      lines.push('4. writing-plans 中的"Ready to execute?"→ 直接进入执行。');
+      lines.push('5. dev-workflow 每步之间的确认 → 全部跳过，自动推进到下一步。');
+      lines.push('6. 只在遇到严重歧义或无法做出的技术决策时才停下来。');
     }
 
     // ── 段 3：身份和行为要求 ──
@@ -879,6 +904,7 @@ export class ClaudeSessionManager {
     this.preheatPromises.delete(sessionId);
     this.cancelPendingAskUser(sessionId);
     this.workflowStates.delete(sessionId);
+    this.autoModeSessions.delete(sessionId);
     const info = this.v2Sessions.get(sessionId);
     if (info) {
       try {
