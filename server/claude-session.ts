@@ -103,6 +103,23 @@ export class ClaudeSessionManager {
   private sessions = new Map<string, ActiveSession>();
   private v2Sessions = new Map<string, V2SessionInfo>();
   private activeStreams = new Map<string, AbortController>();
+  /** Timestamp of the last activeStreams mutation (set/delete/clear) */
+  private lastStreamActivityAt = 0;
+
+  private markStreamStart(sessionId: string, controller: AbortController): void {
+    this.activeStreams.set(sessionId, controller);
+    this.lastStreamActivityAt = Date.now();
+  }
+
+  private markStreamEnd(sessionId: string): void {
+    this.activeStreams.delete(sessionId);
+    this.lastStreamActivityAt = Date.now();
+  }
+
+  private markAllStreamsCleared(): void {
+    this.activeStreams.clear();
+    this.lastStreamActivityAt = Date.now();
+  }
   /** Resolves when the current stream loop for a session fully exits (finally block ran) */
   private streamDone = new Map<string, Promise<void>>();
   /** Active stream() generators — used to call interrupt() on abort to unblock the for-await loop */
@@ -145,7 +162,7 @@ export class ClaudeSessionManager {
 
   setKnowledgeExtractor(extractor: import('./knowledge-extractor.js').KnowledgeExtractor): void {
     this.knowledgeExtractor = extractor;
-    extractor.setIdleCheck(() => this.activeStreams.size === 0);
+    extractor.setActivityTimestampProvider(() => this.getLastStreamActivityAt());
     this.log.info('KnowledgeExtractor injected');
   }
 
@@ -920,6 +937,11 @@ export class ClaudeSessionManager {
     return this.activeStreams.size > 0;
   }
 
+  /** Timestamp (ms) of the last activeStreams mutation. 0 = never active. */
+  getLastStreamActivityAt(): number {
+    return this.lastStreamActivityAt;
+  }
+
   private startCleanup(): void {
     if (this.cleanupTimer) return;
     const timer = setInterval(() => {
@@ -1074,7 +1096,7 @@ export class ClaudeSessionManager {
     }
 
     const abortController = new AbortController();
-    this.activeStreams.set(sessionId, abortController);
+    this.markStreamStart(sessionId, abortController);
     this.sessionWsSend.set(sessionId, wsSend);
 
     // Track when this stream fully exits so the next sendMessage can await it
@@ -1444,7 +1466,9 @@ export class ClaudeSessionManager {
             const result = sdkMsg as any;
             const cost = result.total_cost_usd || 0;
             const isError = result.is_error;
-            this.log.info(`[stream] ${sessionId}: result event received, is_error=${isError}, deltas_sent=${deltaCount}, fullContent_len=${fullContent.length}`);
+            const stopReason = result.stop_reason ?? result.stopReason ?? 'unknown';
+            const subagentType = result.subagent_type ?? result.type ?? '';
+            this.log.info(`[stream] ${sessionId}: result event received, is_error=${isError}, stop_reason=${stopReason}, subagent_type=${subagentType}, deltas_sent=${deltaCount}, fullContent_len=${fullContent.length}`);
 
 
             // Save SDK session ID
@@ -1691,7 +1715,7 @@ export class ClaudeSessionManager {
         wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
       }
     } finally {
-      this.activeStreams.delete(sessionId);
+      this.markStreamEnd(sessionId);
       this.activeQueries.delete(sessionId);
       this.sessionWsSend.delete(sessionId);
       this.streamDone.delete(sessionId);
@@ -1765,7 +1789,7 @@ export class ClaudeSessionManager {
 
     this.store.addMessage(sessionId, { role: 'user', content });
 
-    this.activeStreams.set(sessionId, abortController);
+    this.markStreamStart(sessionId, abortController);
 
     // Stall detector for cron queries
     let lastActivityAt = Date.now();
@@ -1882,7 +1906,7 @@ export class ClaudeSessionManager {
         throw err;
       }
     } finally {
-      this.activeStreams.delete(sessionId);
+      this.markStreamEnd(sessionId);
     }
   }
 
@@ -1918,7 +1942,7 @@ export class ClaudeSessionManager {
 
     this.store.addMessage(sessionId, { role: 'user', content });
 
-    this.activeStreams.set(sessionId, abortController);
+    this.markStreamStart(sessionId, abortController);
 
     // Track when this stream fully exits so the next call can await it
     let streamResolve!: () => void;
@@ -2072,7 +2096,7 @@ export class ClaudeSessionManager {
       }
       return '';
     } finally {
-      this.activeStreams.delete(sessionId);
+      this.markStreamEnd(sessionId);
       this.streamDone.delete(sessionId);
       streamResolve();
     }
@@ -2266,7 +2290,7 @@ export class ClaudeSessionManager {
     for (const controller of this.activeStreams.values()) {
       controller.abort();
     }
-    this.activeStreams.clear();
+    this.markAllStreamsCleared();
     for (const [sessionId] of this.v2Sessions) {
       this.closeV2Session(sessionId);
     }

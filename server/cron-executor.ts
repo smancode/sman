@@ -5,6 +5,7 @@ import type { CronTaskStore } from './cron-task-store.js';
 import type { CronTask } from './types.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import { parseCrontabMd } from './cron-scheduler.js';
+import { SKILL_AUTO_UPDATER } from './init/init-manager.js';
 
 interface LockFile {
   triggers: Array<{
@@ -225,6 +226,21 @@ export class CronExecutor {
    * 执行定时任务
    */
   async execute(task: CronTask): Promise<void> {
+    // skill-auto-updater: check 5-min idle window and serial execution
+    if (task.skillName === SKILL_AUTO_UPDATER) {
+      const lastActivity = this.sessionManager.getLastStreamActivityAt();
+      const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
+      if (lastActivity > 0 && Date.now() - lastActivity < IDLE_THRESHOLD_MS) {
+        this.log.info(`Task ${task.id} skipped: SDK was active ${Math.round((Date.now() - lastActivity) / 1000)}s ago, need 5min idle`);
+        return;
+      }
+      // Serial: skip if any other active run exists
+      if (this.activeRuns.size > 0) {
+        this.log.info(`Task ${task.id} skipped: ${this.activeRuns.size} other task(s) running`);
+        return;
+      }
+    }
+
     const sessionId = this.canExecute(task);
     if (!sessionId) return;
 

@@ -54,7 +54,8 @@ export class KnowledgeExtractor {
   private updateQueue: Promise<void> = Promise.resolve();
   private lastUpdateTime: number = 0;
   private dirtyWorkspaces = new Set<string>();
-  private isIdle: () => boolean = () => true;
+  private getLastActivity: () => number = () => 0;
+  private static readonly IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
   private username: string;
 
   constructor(
@@ -71,8 +72,8 @@ export class KnowledgeExtractor {
     this.config = config;
   }
 
-  setIdleCheck(check: () => boolean): void {
-    this.isIdle = check;
+  setActivityTimestampProvider(getLastActivity: () => number): void {
+    this.getLastActivity = getLastActivity;
   }
 
   /**
@@ -99,7 +100,10 @@ export class KnowledgeExtractor {
     this.lastUpdateTime = Date.now();
 
     this.updateQueue = this.updateQueue.then(async () => {
-      while (!this.isIdle()) {
+      // Wait until 3 minutes since last SDK activity
+      while (true) {
+        const last = this.getLastActivity();
+        if (last === 0 || Date.now() - last >= KnowledgeExtractor.IDLE_THRESHOLD_MS) break;
         await new Promise(r => setTimeout(r, 2000));
       }
       try {
@@ -240,13 +244,44 @@ export class KnowledgeExtractor {
     const baseUrl = (config.llm.baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
 
     const currentISOTime = new Date().toISOString();
-    const systemPrompt = `你是一个严格的知识提取器。分析对话内容，提取对项目长期有价值的知识，合并到已有知识文件中。
+    const systemPrompt = `你是一个知识提取器。目标：让知识文件始终反映项目当前的真实状态。
 
 ## 当前时间
 ${currentISOTime}
 
+## 你的目标
+
+每个知识文件必须是**活的**——反映项目此刻的真实情况，不是历史记录的堆砌。
+
+具体来说：
+- 同一问题如果对话中出现了更新的答案（方案 A → 方案 B），文件里只保留 B，删除 A
+- 已有条目如果对话中没有推翻它，就原样保留
+- 已有条目如果对话中证实已过时或被推翻，就删除
+- 文件始终是当前最新的、准确的知识快照
+
+## 质量门槛
+
+只记录项目特有的、非显而易见的、对未来开发有指导意义的知识：
+- ✅ 业务规则和决策（为什么要这样做）
+- ✅ 踩过的坑和非 trivial 的解决方案
+- ✅ 团队共识和非显而易见的约束
+
+禁止记录：
+- ❌ 通用技术知识、框架用法、工具常识
+- ❌ 调试过程、LLM/SDK 机制、看代码就知道的信息
+- ❌ 一过性且无参考价值的问题
+
+宁缺毋滥。对话中没有真正有价值的知识时，原样返回已有内容。
+
+## 三个类别
+
+1. **business**: 产品需求、用户流程、业务规则、领域术语、权限规则
+2. **conventions**: 编码约定、命名规则、架构决策、项目特定规则
+3. **technical**: API 细节、数据库 schema、三方集成、基础设施、算法
+
 ## 输出格式
-为三个类别分别输出完整的 markdown 文件内容，用特殊分隔符隔开：
+
+为三个类别分别输出完整的 markdown 文件内容：
 
 ---BUSINESS_START---
 （business 类别的完整 markdown 文件内容）
@@ -258,57 +293,22 @@ ${currentISOTime}
 （technical 类别的完整 markdown 文件内容）
 ---TECHNICAL_END---
 
-## 三个类别定义
-
-1. **business**: 产品需求、用户流程、业务规则、领域术语、状态机、权限规则
-2. **conventions**: 编码约定、命名规则、架构决策、项目特定规则、代码风格
-3. **technical**: API 细节、数据库 schema、三方集成、基础设施配置、算法、性能优化
-
-## 每个文件的格式
+每个文件格式：
 
 \`\`\`
 # {Category Label} — ${this.username}
 
 > Last extracted: ${currentISOTime}
 
-## 知识点标题1
-<!-- hash: {6位随机hex} -->
+## 知识点标题
+<!-- hash: {6位hex} -->
 - 具体内容
-- 具体内容
-<!-- end: {6位随机hex} -->
-
-## 知识点标题2
-<!-- hash: {6位随机hex} -->
-- 具体内容
-<!-- end: {6位随机hex} -->
+<!-- end: {6位hex} -->
 \`\`\`
 
-## 关键规则
-
-1. **保留已有知识**：已有条目（有 hash 标记的）必须原样保留，一个字不改
-2. **追加新知识**：只追加新的知识点，给新条目分配新的 hash
-3. **不重复**：如果已有条目已覆盖某个知识点，不要追加重复条目
-4. **不编造**：只提取对话中确实提到的知识，不推断
-5. **精简**：每个知识点不超过 5 行，只记关键信息
-6. **如果没有新知识**：对应类别原样返回已有内容（包括空文件）
-7. **Hash 格式**：6位 hex，如 a3f2b1。对同一个知识点，开闭标记的 hash 必须一致
-8. **文件不超过 100 行**：超过时合并相似条目或删除最不重要的
-
-## ⚠️ 质量门槛（最重要）
-
-不是什么都要记！只提取满足以下条件的知识：
-- ✅ 项目特有的业务规则、架构决策、踩过的坑
-- ✅ 团队达成的共识、非显而易见的约束
-- ✅ 对未来开发有实际指导意义的信息
-
-以下内容**禁止提取**：
-- ❌ 通用技术知识（语言语法、框架用法、工具常识）
-- ❌ 临时性的调试讨论、排查过程
-- ❌ LLM/SDK 自身的工作机制（如上下文窗口大小、压缩策略）
-- ❌ 通过阅读代码或文档就能直接获得的信息
-- ❌ 一过性的问题（已修复且无参考价值的 bug）
-
-**宁缺毋滥**：如果对话中没有真正有价值的知识，所有类别都原样返回已有内容。`;
+- 每条知识用 \`<!-- hash: xxx --> ... <!-- end: xxx -->\` 包裹，开闭 hash 一致，6 位 hex
+- 新条目用新 hash；更新旧条目时换新 hash
+- 每条知识不超过 5 行，文件不超过 100 行（超出时合并或删最不重要的）`;
 
     const conversationText = messages.map((m, i) =>
       `[${m.role}] ${m.content}`

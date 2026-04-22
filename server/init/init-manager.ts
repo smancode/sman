@@ -16,6 +16,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SMAN_VERSION = '1.0.0'; // TODO: read from package.json
 const LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Skill name constant shared with CronExecutor for special-casing idle checks */
+export const SKILL_AUTO_UPDATER = 'skill-auto-updater';
+
 export class InitManager {
   private log: Logger;
   private pluginsDir: string;
@@ -98,6 +101,9 @@ export class InitManager {
       }
 
       if (this.isInitialized(workspace)) {
+        // Even if initialized, check and upgrade meta skills if templates are newer
+        this.injectMetaSkills(workspace);
+
         const initMd = fs.readFileSync(path.join(workspace, '.sman', 'INIT.md'), 'utf-8');
         const card = this.parseInitMdToCard(initMd, workspace);
         this.sendCard(ws, sessionId, card);
@@ -198,7 +204,7 @@ export class InitManager {
   }
 
   private static readonly META_SKILLS = [
-    'skill-auto-updater',
+    SKILL_AUTO_UPDATER,
     'project-structure',
     'project-apis',
     'project-external-calls',
@@ -211,12 +217,26 @@ export class InitManager {
     const templatesDir = path.join(__dirname, 'templates');
     for (const skillName of InitManager.META_SKILLS) {
       const targetDir = path.join(workspace, '.claude', 'skills', skillName);
-      if (fs.existsSync(path.join(targetDir, 'SKILL.md'))) continue; // Don't overwrite
-
       const templateDir = path.join(templatesDir, skillName);
       if (!fs.existsSync(templateDir)) {
         this.log.warn(`Meta skill template not found: ${skillName}`);
         continue;
+      }
+
+      const targetSkillMd = path.join(targetDir, 'SKILL.md');
+
+      // skill-auto-updater: compare mtime, upgrade if sman template is newer
+      if (skillName === SKILL_AUTO_UPDATER) {
+        const templateSkillMd = path.join(templateDir, 'SKILL.md');
+        if (fs.existsSync(targetSkillMd)) {
+          const targetMtime = fs.statSync(targetSkillMd).mtimeMs;
+          const templateMtime = fs.statSync(templateSkillMd).mtimeMs;
+          if (targetMtime >= templateMtime) continue;
+          this.log.info(`Meta skill template newer, upgrading: ${skillName}`);
+        }
+      } else {
+        // project-* and knowledge-*: only inject if missing, leave updates to skill-auto-updater
+        if (fs.existsSync(targetSkillMd)) continue;
       }
 
       fs.mkdirSync(targetDir, { recursive: true });

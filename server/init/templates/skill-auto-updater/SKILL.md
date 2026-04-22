@@ -1,7 +1,7 @@
 ---
 name: skill-auto-updater
 description: |
-  每日自动检查并更新项目 skills。包括能力匹配和项目知识扫描。
+  每30分钟自动检查并更新项目 skills。包括能力匹配、项目知识扫描和团队知识辩证聚合。
   默认关闭，需要在 Sman 设置中启用。
 ---
 
@@ -14,10 +14,11 @@ description: |
 保持项目的 `.claude/skills/` 与项目当前状态同步：
 1. 更新/补充通用能力 skills（capability skills）
 2. 重新生成项目知识 skills（project-structure、project-apis、project-external-calls）
-3. 聚合团队知识 skills（knowledge-business、knowledge-conventions、knowledge-technical）
+3. 辩证聚合团队知识 skills（knowledge-business、knowledge-conventions、knowledge-technical）
 
-## 核心原则：质量 > 数量
+## 核心原则
 
+- **可靠优先**：knowledge skill 是开发者直接依赖的知识库，每条知识必须经得起验证
 - **宁缺毋滥**：只有真正对项目长期有价值的知识才值得变成 skill
 - **总量控制**：`.claude/skills/` 下不超过 20 个 skill，超过时优先淘汰低价值
 - **已有优先**：已有 skill 能覆盖的内容，只更新不新增
@@ -66,26 +67,13 @@ description: |
 - **references/{name}.md**（每个 < 100 行）— 每个外部服务：
   - Call method、Config source（env var 名，不写实际值）、Call locations、Purpose
 
-### 三、Team Knowledge Skills 聚合
+### 三、Team Knowledge Skills 辩证聚合
 
-扫描 `{workspace}/.sman/knowledge/` 目录，将团队成员的知识文件聚合为 3 个 skill。
+扫描 `{workspace}/.sman/knowledge/` 目录，对团队知识进行**辩证聚合**：验证真实性、标记冲突、记录变迁。
 
-#### 3.0 质量过滤（执行前必读）
+#### 目标
 
-不是所有 .sman/knowledge/ 里的内容都值得聚合。在合并前，必须过滤掉：
-
-**必须过滤的内容**：
-- 通用技术知识（语言语法、框架用法、工具常识、LLM/SDK 工作机制）
-- 临时性调试信息、排查过程
-- 已过时的信息（对应的代码/配置已不存在）
-- 过于琐碎的细节（看代码就能知道的）
-- 重复或高度相似的条目
-
-**值得保留的内容**：
-- 项目特有的业务规则和决策（为什么要这样做，而不是怎么做）
-- 踩过的坑和解决方案（不是 trivial 的）
-- 团队达成共识的非显而易见的约束
-- 对未来开发有实际指导意义的经验
+生成的 knowledge skill 是开发者可以直接依赖的可靠知识库。源文件（`.sman/knowledge/*.md`）是快速变动的原始素材，可能包含错误、过时信息、个人误解。你的职责是去伪存真，生成经得起验证的知识。
 
 #### 3.1 扫描来源
 
@@ -94,49 +82,88 @@ description: |
 - `conventions-*.md` → knowledge-conventions skill
 - `technical-*.md` → knowledge-technical skill
 
-每个文件名中的 `*` 部分即用户名（如 `business-nasakim.md` 中 `nasakim` 为贡献者）。
+每个文件名中的 `*` 部分即用户名。
 
-#### 3.2 去重合并规则
+#### 3.2 辩证聚合
 
-每个知识条目由 `<!-- hash: xxx --> ... <!-- end: xxx -->` 包裹。合并策略：
+对每个类别的所有知识条目，执行以下处理：
 
-1. **相同 hash**：多个文件中出现相同 hash 的条目，只保留一份（选内容最完整的）
-2. **不同 hash**：全部保留，标注贡献者
-3. **无 hash 标记的旧条目**：为它们生成 hash 并包裹标记
-4. **排序**：按主题归类（`## 标题`），同类内按贡献者排列
+**验证**：用 Read/Grep 工具查代码，确认每条知识是否仍然成立。
 
-#### 3.3 生成 skill 文件
+**冲突处理**：多个用户对同一问题有不同说法时，以代码实际情况为准。保留所有方的说法，标注代码实际的实现。
+
+**变迁处理**：如果源文件中可观察到方案变迁（A→B），记录变迁过程。
+
+**存疑处理**：无法通过代码验证的知识，保留但标记待验证。
+
+**淘汰**：已验证为过时或错误的条目（代码中已不存在对应实现），不写入 skill。
+
+**上限**：每次验证最多处理 30 条知识条目。超出部分留到下一轮。
+
+#### 3.3 验证标记
+
+每条知识必须带一个验证标记：
+
+| 标记 | 含义 | 用法 |
+|------|------|------|
+| `✅ [已验证]` | 代码确认成立 | 后附代码位置，如 `src/auth.ts:L42` |
+| `⚠️ [冲突]` | 多用户说法不同 | 列出各方说法，以代码实际为准 |
+| `🔄 [变迁]` | 方案发生过变化 | 记录旧方案→新方案 |
+| `❓ [待验证]` | 无法通过代码验证 | 保留但提醒使用者 |
+
+#### 3.4 输出格式
 
 为每个类别生成 `.claude/skills/knowledge-{category}/SKILL.md`：
 
 ```markdown
 ---
 name: knowledge-{category}
-description: "{描述}。从团队对话中提取，由 skill-auto-updater 聚合。"
+description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 ---
 
 # {Category Label}
 
-> 贡献者: {用户A}, {用户B} | 更新时间: {当前日期}
+> 贡献者: {用户A}, {用户B} | 验证时间: {YYYY-MM-DD}
 
 ## 知识点标题
-> by {贡献者}
-- 具体内容
+> by {贡献者} | 验证: {YYYY-MM}
+✅ [已验证] src/path/file.ts:L42
 - 具体内容
 
-## 另一个知识点
-> by {贡献者1}, {贡献者2}
+## 有冲突的知识点
+> by {用户A}, {用户B} | 验证: {YYYY-MM}
+⚠️ [冲突] {用户A}: 方案A; {用户B}: 方案B → 代码实际: 方案A
+- 具体内容
+
+## 方案已变更的知识点
+> by {贡献者} | 验证: {YYYY-MM}
+🔄 [变迁] 旧: 方案A → 新: 方案B
+- 具体内容
+
+## 存疑的知识点
+> by {贡献者} | 验证: {YYYY-MM}
+❓ [待验证] 未找到对应代码实现
 - 具体内容
 ```
 
-#### 3.4 边界条件
+#### 3.5 源文件清理
 
-- 如果 `.sman/knowledge/` 目录不存在或为空，跳过本阶段（不创建空 skill）
-- 如果某个类别没有任何 md 文件，跳过该类别的 skill 更新
-- 不删除其他来源的知识 skill，只更新 knowledge-business/conventions/technical 这三个
-- 如果过滤后某个类别没有任何有价值的内容，不生成/不更新该类别的 skill（保留空比塞垃圾好）
+**安全约束**：只在 skill 文件写入成功后才清理源文件。如果写入失败，不清理。
 
-#### 3.5 Skill 数量控制
+对每个 `.sman/knowledge/{category}-{user}.md`，删除已被处理的 hash 条目（`<!-- hash: xxx --> ... <!-- end: xxx -->` 整段移除）。只保留尚未处理的新条目，作为下一轮的素材。
+
+如果清理后文件为空或只剩标题，保留文件但清空内容（下次 KnowledgeExtractor 会重新填充）。
+
+#### 3.6 边界条件
+
+- `.sman/knowledge/` 不存在或为空 → 跳过本阶段
+- 某类别无 md 文件 → 跳过该类别
+- 过滤后某类别无有价值内容 → 不生成空 skill
+- 所有条目验证失败 → 不生成 skill，源文件照常清理
+- 验证超过 30 条 → 只处理最新 30 条，剩余留到下一轮
+- 不删除用户手动创建的 skill
+
+#### 3.7 Skill 数量控制
 
 执行完所有阶段后，检查 `.claude/skills/` 下的 skill 总数：
 

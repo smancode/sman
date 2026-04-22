@@ -576,6 +576,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     cleanupStream(streamSessionId);
 
     try {
+      // ── Auto-save streaming content to session cache every 5s ──
+      // Lightweight: only saves text content, no contentBlocks.
+      // Ensures partial output survives aborts, errors, tab switches, or crashes.
+      const autoSaveInterval = setInterval(() => {
+        if (!sendingSessions.has(streamSessionId)) {
+          clearInterval(autoSaveInterval);
+          return;
+        }
+        const blocks = getStreamingBlocks(streamSessionId);
+        if (blocks.length === 0) return;
+        const frozen = freezeLiveText(blocks);
+        const textContent = frozen
+          .filter(b => b.type === 'text')
+          .map(b => (b as StreamingTextBlock).content)
+          .join('');
+        if (!textContent.trim()) return;
+        const cached = sessionCache.get(streamSessionId) as Message[] | null;
+        const existing = cached ?? [];
+        // Replace last auto-saved partial message, or append new one
+        const lastIsPartial = existing.length > 0 && existing[existing.length - 1].role === 'assistant'
+          && existing[existing.length - 1].content.startsWith('[进行中] ');
+        const partialMsg: Message = {
+          id: lastIsPartial ? existing[existing.length - 1].id : crypto.randomUUID(),
+          sessionId: streamSessionId,
+          role: 'assistant',
+          content: `[进行中] ${textContent.trim()}`,
+          createdAt: new Date().toISOString(),
+        };
+        const updated = lastIsPartial
+          ? [...existing.slice(0, -1), partialMsg]
+          : [...existing, partialMsg];
+        sessionCache.set(streamSessionId, updated);
+      }, 5_000);
+
       // ── Delta batching: accumulate tokens and flush every 50ms ──
       let pendingText = '';
       let pendingThinking = '';
@@ -670,7 +704,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
           if (get().currentSessionId === streamSessionId) {
             const st = get();
-            const finalMessages = [...st.messages, assistantMsg];
+            const finalMessages = [...removeAutoSavedPartial(st.messages), assistantMsg];
             set({
               messages: finalMessages,
               streamingBlocks: [],
@@ -686,7 +720,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessionCache.set(streamSessionId, finalMessages);
           } else {
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
-            const cachedMessages = cached ?? [];
+            const cachedMessages = removeAutoSavedPartial(cached ?? []);
             sessionCache.set(streamSessionId, [...cachedMessages, assistantMsg]);
           }
         } else {
@@ -926,7 +960,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Only update messages if this session is currently displayed
           if (get().currentSessionId === streamSessionId) {
             const st = get();
-            const finalMessages = [...st.messages, assistantMsg];
+            const finalMessages = [...removeAutoSavedPartial(st.messages), assistantMsg];
             set({
               messages: finalMessages,
               streamingBlocks: [],
@@ -938,8 +972,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           } else {
             // Session is in background — update cache only, don't touch visible messages
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
-            const cachedMessages = cached ?? [];
-            const finalMessages = [...cachedMessages, assistantMsg];
+            const finalMessages = [...removeAutoSavedPartial(cached ?? []), assistantMsg];
             sessionCache.set(streamSessionId, finalMessages);
             // Also clear visible sending if this background session was the one showing
             if (get().sending && !sendingSessions.has(get().currentSessionId)) {
@@ -982,6 +1015,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const cleanup = () => {
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null; }
+        clearInterval(autoSaveInterval);
         unsubSegment();
         unsubDelta();
         unsubToolStart();
@@ -1156,4 +1190,13 @@ function streamingBlocksToContentBlocks(blocks: StreamingBlock[]): ContentBlock[
     }
   }
   return result;
+}
+
+/** Remove the last auto-saved "[进行中]" partial message from cached messages */
+function removeAutoSavedPartial(cached: Message[]): Message[] {
+  if (cached.length > 0 && cached[cached.length - 1].role === 'assistant'
+    && cached[cached.length - 1].content.startsWith('[进行中] ')) {
+    return cached.slice(0, -1);
+  }
+  return cached;
 }
