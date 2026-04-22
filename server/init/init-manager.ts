@@ -19,6 +19,36 @@ const LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes
 /** Skill name constant shared with CronExecutor for special-casing idle checks */
 export const SKILL_AUTO_UPDATER = 'skill-auto-updater';
 
+/**
+ * Resolve templates directory across dev/prod/Electron modes.
+ * dev (tsx): __dirname = server/init/ → server/init/templates/
+ * prod (compiled): __dirname = dist/server/server/init/ → need project root based lookup
+ */
+function resolveTemplatesDir(): string {
+  // Direct relative (dev mode): templates/ is right next to this file
+  const direct = path.join(__dirname, 'templates');
+  if (fs.existsSync(path.join(direct, SKILL_AUTO_UPDATER, 'SKILL.md'))) {
+    return direct;
+  }
+  // Compiled prod mode: __dirname = dist/server/server/init/ → project root = ../../../..
+  const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
+  const prodTemplates = path.join(projectRoot, 'server', 'init', 'templates');
+  if (fs.existsSync(path.join(prodTemplates, SKILL_AUTO_UPDATER, 'SKILL.md'))) {
+    return prodTemplates;
+  }
+  // Electron asar: look in unpacked
+  if (__dirname.includes('app.asar')) {
+    const unpacked = __dirname.replace('app.asar', 'app.asar.unpacked');
+    const asarTemplates = path.join(unpacked, 'server', 'init', 'templates');
+    if (fs.existsSync(path.join(asarTemplates, SKILL_AUTO_UPDATER, 'SKILL.md'))) {
+      return asarTemplates;
+    }
+  }
+  return direct; // fallback
+}
+
+const TEMPLATES_DIR = resolveTemplatesDir();
+
 export class InitManager {
   private log: Logger;
   private pluginsDir: string;
@@ -214,7 +244,7 @@ export class InitManager {
   ];
 
   private injectMetaSkills(workspace: string): void {
-    const templatesDir = path.join(__dirname, 'templates');
+    const templatesDir = TEMPLATES_DIR;
     for (const skillName of InitManager.META_SKILLS) {
       const targetDir = path.join(workspace, '.claude', 'skills', skillName);
       const templateDir = path.join(templatesDir, skillName);
