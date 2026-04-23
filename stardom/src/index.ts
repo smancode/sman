@@ -1,4 +1,4 @@
-// bazaar/src/index.ts
+// stardom/src/index.ts
 import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -13,10 +13,10 @@ import { createLogger } from './utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 
-const log = createLogger('BazaarServer');
+const log = createLogger('StardomServer');
 
-const PORT = parseInt(process.env.BAZAAR_PORT ?? '5890', 10);
-const DB_PATH = process.env.BAZAAR_DB_PATH ?? `${process.env.HOME}/.bazaar/bazaar.db`;
+const PORT = parseInt(process.env.STARDOM_PORT ?? '5890', 10);
+const DB_PATH = process.env.STARDOM_DB_PATH ?? `${process.env.HOME}/.stardom/stardom.db`;
 const HEARTBEAT_TIMEOUT_MS = 90_000; // 3 × 30s 心跳间隔
 
 // 确保数据目录存在
@@ -25,7 +25,7 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const TASK_DB_PATH = process.env.BAZAAR_TASK_DB_PATH ?? `${process.env.HOME}/.bazaar/tasks.db`;
+const TASK_DB_PATH = process.env.STARDOM_TASK_DB_PATH ?? `${process.env.HOME}/.stardom/tasks.db`;
 
 const store = new AgentStore(DB_PATH);
 const taskStore = new TaskStore(TASK_DB_PATH);
@@ -188,6 +188,6 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 server.listen(PORT, () => {
-  log.info(`Bazaar server started on port ${PORT}`);
+  log.info(`Stardom server started on port ${PORT}`);
   log.info(`Database: ${DB_PATH}`);
 });

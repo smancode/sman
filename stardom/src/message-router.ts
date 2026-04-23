@@ -1,4 +1,4 @@
-// bazaar/src/message-router.ts
+// stardom/src/message-router.ts
 import type WebSocket from 'ws';
 import { validateMessage } from './protocol.js';
 import type { AgentStore } from './agent-store.js';

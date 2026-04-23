@@ -1,17 +1,17 @@
-// tests/server/bazaar/bazaar-mcp-ranking.test.ts
+// tests/server/stardom/stardom-mcp-ranking.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BazaarStore } from '../../../server/bazaar/bazaar-store.js';
+import { StardomStore } from '../../../server/stardom/stardom-store.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('bazaar_search ranking', () => {
-  let store: BazaarStore;
+describe('stardom_search ranking', () => {
+  let store: StardomStore;
   let dbPath: string;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `bazaar-ranking-test-${Date.now()}.db`);
-    store = new BazaarStore(dbPath);
+    dbPath = path.join(os.tmpdir(), `stardom-ranking-test-${Date.now()}.db`);
+    store = new StardomStore(dbPath);
   });
 
   afterEach(() => {

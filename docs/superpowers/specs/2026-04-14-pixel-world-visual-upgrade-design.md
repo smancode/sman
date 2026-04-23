@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # 像素世界视觉升级设计
 
 > **核心思路**: 美术是皮——用 mmx 生成 PNG 替换程序化矩形。渲染引擎已有 `AssetProvider` 换皮机制，只需生成素材 + 增加粒子/动画层。快速迭代，先出效果。

@@ -1,4 +1,4 @@
-// server/bazaar/bazaar-store.ts
+// server/stardom/stardom-store.ts
 import betterSqlite3 from 'better-sqlite3';
 import type { Database } from 'better-sqlite3';
 // @ts-expect-error - better-sqlite3 ESM interop
@@ -6,9 +6,9 @@ const DatabaseConstructor = betterSqlite3 as unknown as typeof betterSqlite3.def
 import { createLogger, type Logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
-import type { LocalAgentIdentity, BazaarLocalTask } from './types.js';
+import type { LocalAgentIdentity, StardomLocalTask } from './types.js';
 
-export class BazaarStore {
+export class StardomStore {
   private db: Database;
   private log: Logger;
 
@@ -16,7 +16,7 @@ export class BazaarStore {
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     this.db = new DatabaseConstructor(dbPath);
-    this.log = createLogger('BazaarStore');
+    this.log = createLogger('StardomStore');
     this.init();
   }
 
@@ -111,7 +111,7 @@ export class BazaarStore {
 
   // ── Tasks ──
 
-  saveTask(task: BazaarLocalTask): void {
+  saveTask(task: StardomLocalTask): void {
     this.db.prepare(`
       INSERT OR REPLACE INTO tasks (task_id, direction, helper_agent_id, helper_name,
         requester_agent_id, requester_name, question, status, rating, created_at, completed_at)
@@ -132,24 +132,24 @@ export class BazaarStore {
     }
   }
 
-  listTasks(limit = 50): BazaarLocalTask[] {
+  listTasks(limit = 50): StardomLocalTask[] {
     return this.db.prepare(`
       SELECT task_id as taskId, direction, helper_agent_id as helperAgentId,
         helper_name as helperName, requester_agent_id as requesterAgentId,
         requester_name as requesterName, question, status, rating,
         created_at as createdAt, completed_at as completedAt
       FROM tasks ORDER BY created_at DESC LIMIT ?
-    `).all(limit) as BazaarLocalTask[];
+    `).all(limit) as StardomLocalTask[];
   }
 
-  getTask(taskId: string): BazaarLocalTask | undefined {
+  getTask(taskId: string): StardomLocalTask | undefined {
     return this.db.prepare(`
       SELECT task_id as taskId, direction, helper_agent_id as helperAgentId,
         helper_name as helperName, requester_agent_id as requesterAgentId,
         requester_name as requesterName, question, status, rating,
         created_at as createdAt, completed_at as completedAt
       FROM tasks WHERE task_id = ?
-    `).get(taskId) as BazaarLocalTask | undefined;
+    `).get(taskId) as StardomLocalTask | undefined;
   }
 
   // ── Chat Messages ──
@@ -262,7 +262,7 @@ export class BazaarStore {
   }
 
   /** List all tasks in active state (chatting/matched) — used for sync on reconnect */
-  listActiveTasks(): BazaarLocalTask[] {
+  listActiveTasks(): StardomLocalTask[] {
     return this.db.prepare(`
       SELECT task_id as taskId, direction, helper_agent_id as helperAgentId,
         helper_name as helperName, requester_agent_id as requesterAgentId,
@@ -270,6 +270,6 @@ export class BazaarStore {
         created_at as createdAt, completed_at as completedAt
       FROM tasks WHERE status IN ('chatting', 'matched')
       ORDER BY created_at DESC
-    `).all() as BazaarLocalTask[];
+    `).all() as StardomLocalTask[];
   }
 }

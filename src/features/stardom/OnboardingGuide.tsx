@@ -1,14 +1,14 @@
-// src/features/bazaar/OnboardingGuide.tsx
+// src/features/stardom/OnboardingGuide.tsx
 import { useState, useEffect } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { Button } from '@/components/ui/button';
 import { Sparkles, X, HelpCircle } from 'lucide-react';
 
-const ONBOARDED_KEY = 'bazaar-onboarded';
+const ONBOARDED_KEY = 'stardom-onboarded';
 
 export function OnboardingGuide() {
   const [open, setOpen] = useState(false);
-  const { connection } = useBazaarStore();
+  const { connection } = useStardomStore();
 
   useEffect(() => {
     if (connection.connected && !localStorage.getItem(ONBOARDED_KEY)) {

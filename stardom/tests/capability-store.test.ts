@@ -1,4 +1,4 @@
-// bazaar/tests/capability-store.test.ts
+// stardom/tests/capability-store.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CapabilityStore } from '../src/capability-store.js';
 import fs from 'fs';

@@ -1,7 +1,7 @@
-// tests/server/bazaar/bridge-integration.test.ts
+// tests/server/stardom/bridge-integration.test.ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { BazaarStore } from '../../../server/bazaar/bazaar-store.js';
-import { BazaarClient } from '../../../server/bazaar/bazaar-client.js';
+import { StardomStore } from '../../../server/stardom/stardom-store.js';
+import { StardomClient } from '../../../server/stardom/stardom-client.js';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import fs from 'fs';
@@ -9,8 +9,8 @@ import path from 'path';
 import os from 'os';
 
 describe('Bridge Integration: Client ↔ Server', () => {
-  let store: BazaarStore;
-  let client: BazaarClient;
+  let store: StardomStore;
+  let client: StardomClient;
   let dbPath: string;
   let wss: WebSocketServer;
   let server: http.Server;
@@ -19,7 +19,7 @@ describe('Bridge Integration: Client ↔ Server', () => {
 
   beforeAll(async () => {
     dbPath = path.join(os.tmpdir(), `bridge-integration-${Date.now()}.db`);
-    store = new BazaarStore(dbPath);
+    store = new StardomStore(dbPath);
 
     // 模拟集市服务器
     const app = http.createServer();
@@ -73,7 +73,7 @@ describe('Bridge Integration: Client ↔ Server', () => {
     });
 
     const received: any[] = [];
-    client = new BazaarClient(store, { getAgentDescription: () => '测试 Agent' });
+    client = new StardomClient(store, { getAgentDescription: () => '测试 Agent' });
     client.onMessage = (msg) => received.push(msg);
 
     await client.connect();
@@ -147,7 +147,7 @@ describe('Bridge Integration: Client ↔ Server', () => {
     store.saveChatMessage({ taskId: 'task-001', from: 'remote', text: '支付查询怎么优化？' });
     store.saveChatMessage({ taskId: 'task-001', from: 'local', text: '用 JOIN 替代子查询' });
 
-    // Simulate BazaarBridge.handleTaskComplete behavior via onMessage
+    // Simulate StardomBridge.handleTaskComplete behavior via onMessage
     client.onMessage = (msg) => {
       if (msg.type === 'task.complete') {
         const rating = msg.payload.rating as number;

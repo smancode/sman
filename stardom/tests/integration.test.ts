@@ -1,4 +1,4 @@
-// bazaar/tests/integration.test.ts
+// stardom/tests/integration.test.ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'http';
 import express from 'express';
@@ -19,7 +19,7 @@ describe('Integration: Full Agent Connection Flow', () => {
   let port: number;
 
   beforeAll(async () => {
-    dbPath = path.join(os.tmpdir(), `bazaar-integration-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `stardom-integration-${Date.now()}.db`);
     store = new AgentStore(dbPath);
     router = new MessageRouter(store);
 

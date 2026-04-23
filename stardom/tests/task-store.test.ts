@@ -1,4 +1,4 @@
-// bazaar/tests/task-store.test.ts
+// stardom/tests/task-store.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TaskStore } from '../src/task-store.js';
 import fs from 'fs';
@@ -10,7 +10,7 @@ describe('TaskStore', () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `bazaar-task-test-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `stardom-task-test-${Date.now()}.db`);
     store = new TaskStore(dbPath);
   });
 

@@ -67,8 +67,8 @@ All use WebSocket `/ws` unless **HTTP**. Auth: WS `auth.verify` or HTTP `Bearer 
 | `chatbot.weixin.qr.request/poll` | QR login | `references/ws-chatbot-weixin-qr-request.md` |
 | `chatbot.weixin.disconnect/getStatus` | Connection mgmt | `references/ws-chatbot-weixin-disconnect.md` |
 
-## Bazaar Bridge
+## Stardom Bridge
 
 | Type | Description | Reference |
 |------|-------------|-----------|
-| `bazaar.*` | Protocol messages | `server/bazaar/` |
+| `stardom.*` | Protocol messages | `server/stardom/` |

@@ -1,8 +1,8 @@
-// src/features/bazaar/components/MyAgentPanel.tsx
+// src/features/stardom/components/MyAgentPanel.tsx
 // 左侧固定面板 — 深色科技风
 // 状态指示灯 pulse 动效 + 声望等级系统
 
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
 import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,18 +14,18 @@ import { getReputationLevel, getReputationProgress, getNextLevel } from './Reput
 
 function deriveAgentStatus(
   localSending: boolean,
-  bazaarConnected: boolean,
-  bazaarStatus?: string,
+  stardomConnected: boolean,
+  stardomStatus?: string,
 ): { status: string; label: string; cssClass: string } {
   if (localSending) return { status: 'busy', label: '处理中', cssClass: 'bz-status-busy' };
-  if (bazaarConnected && bazaarStatus === 'collaborating') return { status: 'collaborating', label: '协作中', cssClass: 'bz-status-collaborating' };
-  if (bazaarConnected && bazaarStatus === 'busy') return { status: 'busy', label: '忙碌', cssClass: 'bz-status-busy' };
+  if (stardomConnected && stardomStatus === 'collaborating') return { status: 'collaborating', label: '协作中', cssClass: 'bz-status-collaborating' };
+  if (stardomConnected && stardomStatus === 'busy') return { status: 'busy', label: '忙碌', cssClass: 'bz-status-busy' };
   return { status: 'idle', label: '空闲', cssClass: 'bz-status-idle' };
 }
 
 export function MyAgentPanel() {
   const navigate = useNavigate();
-  const { connection, setMode, leaderboard } = useBazaarStore();
+  const { connection, setMode, leaderboard } = useStardomStore();
   const sending = useChatStore((s) => s.sending);
   const { connected, agentName, reputation, agentStatus } = connection;
   const agentAvatar = connection.agentId ? '🧙' : '🤖';

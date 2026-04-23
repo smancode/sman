@@ -1,4 +1,4 @@
-// bazaar/vitest.config.ts
+// stardom/vitest.config.ts
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,7 +11,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '../../shared/bazaar-types.js': path.resolve(__dirname, '../shared/bazaar-types.ts'),
+      '../../shared/stardom-types.js': path.resolve(__dirname, '../shared/stardom-types.ts'),
     },
   },
 });

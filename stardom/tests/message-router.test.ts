@@ -1,4 +1,4 @@
-// bazaar/tests/message-router.test.ts
+// stardom/tests/message-router.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageRouter } from '../src/message-router.js';
 import type { AgentStore } from '../src/agent-store.js';

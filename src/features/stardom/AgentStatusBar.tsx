@@ -1,9 +1,9 @@
-// src/features/bazaar/AgentStatusBar.tsx
-import { useBazaarStore } from '@/stores/bazaar';
+// src/features/stardom/AgentStatusBar.tsx
+import { useStardomStore } from '@/stores/stardom';
 import { Circle, Zap } from 'lucide-react';
 
 export function AgentStatusBar() {
-  const { connection } = useBazaarStore();
+  const { connection } = useStardomStore();
 
   if (!connection.connected) {
     return (

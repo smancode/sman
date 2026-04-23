@@ -19,11 +19,11 @@ server/        # Node.js backend (ESM): WebSocket/HTTP, Claude sessions, SQLite,
   web-access/   # Chrome DevTools Protocol browser automation
   capabilities/ # Model capability registry
   utils/
-src/           # React frontend: App, features (chat/settings/cron-tasks/batch-tasks/bazaar), components, stores (Zustand), lib
+src/           # React frontend: App, features (chat/settings/cron-tasks/batch-tasks/stardom), components, stores (Zustand), lib
 electron/      # Electron main.ts + preload.ts (TypeScript)
 plugins/       # Claude Code plugins (web-access, superpowers, gstack, ...)
-bazaar/        # Standalone marketplace server (independent package)
-shared/        # bazaar-types.ts
+stardom/       # Standalone stardom server (independent package)
+shared/        # stardom-types.ts
 scripts/       # init-skills, init-system, patch-sdk
 docs/          # windows-packaging.md, superpowers specs
 tests/server/  # vitest unit tests
@@ -46,9 +46,9 @@ tests/server/  # vitest unit tests
 | Frontend | `src/app/App.tsx` + `routes.tsx` | Root component + React Router |
 | Chat UI | `src/features/chat/` | Messages, input, toolbar, markdown |
 | Settings UI | `src/features/settings/` | LLMSettings, WebSearchSettings, ChatbotSettings... |
-| State stores | `src/stores/` | Zustand: chat, settings, cron, batch, ws-connection, bazaar |
+| State stores | `src/stores/` | Zustand: chat, settings, cron, batch, ws-connection, stardom |
 | Electron | `electron/main.ts` | Window mgmt, IPC, backend lifecycle |
-| Marketplace | `bazaar/src/` | Standalone agent marketplace server |
+| Marketplace | `stardom/src/` | Standalone agent stardom server |
 
 ## Build & Run
 ```bash

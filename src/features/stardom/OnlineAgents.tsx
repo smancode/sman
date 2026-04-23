@@ -1,9 +1,9 @@
-// src/features/bazaar/OnlineAgents.tsx
-import { useBazaarStore } from '@/stores/bazaar';
+// src/features/stardom/OnlineAgents.tsx
+import { useStardomStore } from '@/stores/stardom';
 import { Users } from 'lucide-react';
 
 export function OnlineAgents() {
-  const { onlineAgents } = useBazaarStore();
+  const { onlineAgents } = useStardomStore();
 
   return (
     <div>

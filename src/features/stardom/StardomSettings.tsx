@@ -1,4 +1,4 @@
-// src/features/bazaar/BazaarSettings.tsx
+// src/features/stardom/StardomSettings.tsx
 import { useState } from 'react';
 import { Server, User, Shield, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,15 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSettingsStore } from '@/stores/settings';
 import { useWsConnection } from '@/stores/ws-connection';
 
-export function BazaarSettings({ id }: { id?: string }) {
+export function StardomSettings({ id }: { id?: string }) {
   const settings = useSettingsStore((s) => s.settings);
   const client = useWsConnection((s) => s.client);
-  const bazaar = settings?.bazaar;
+  const stardom = settings?.stardom;
 
-  const [server, setServer] = useState(bazaar?.server ?? '');
-  const [agentName, setAgentName] = useState(bazaar?.agentName ?? '');
-  const [mode, setMode] = useState<string>(bazaar?.mode ?? 'notify');
-  const [maxSlots, setMaxSlots] = useState(bazaar?.maxConcurrentTasks ?? 3);
+  const [server, setServer] = useState(stardom?.server ?? '');
+  const [agentName, setAgentName] = useState(stardom?.agentName ?? '');
+  const [mode, setMode] = useState<string>(stardom?.mode ?? 'notify');
+  const [maxSlots, setMaxSlots] = useState(stardom?.maxConcurrentTasks ?? 3);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -26,7 +26,7 @@ export function BazaarSettings({ id }: { id?: string }) {
       // 通过 settings.update WS 消息保存配置到后端
       client?.send({
         type: 'settings.update',
-        bazaar: { server, agentName: agentName || undefined, mode, maxConcurrentTasks: maxSlots },
+        stardom: { server, agentName: agentName || undefined, mode, maxConcurrentTasks: maxSlots },
       });
     } finally {
       setSaving(false);
@@ -45,7 +45,7 @@ export function BazaarSettings({ id }: { id?: string }) {
         <div className="space-y-2">
           <Label>星图服务器地址</Label>
           <Input
-            placeholder="bazaar.company.com:5890"
+            placeholder="stardom.company.com:5890"
             value={server}
             onChange={(e) => setServer(e.target.value)}
           />

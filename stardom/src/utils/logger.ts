@@ -1,4 +1,4 @@
-// bazaar/src/utils/logger.ts
+// stardom/src/utils/logger.ts
 export interface Logger {
   info(message: string, meta?: Record<string, unknown>): void;
   warn(message: string, meta?: Record<string, unknown>): void;

@@ -4,7 +4,7 @@ import { Chat } from '@/features/chat';
 import { Settings } from '@/features/settings';
 import { CronTasksPage } from '@/features/cron-tasks';
 import { BatchTasksPage } from '@/features/batch-tasks';
-import { BazaarDashboard } from '@/features/bazaar/BazaarDashboard';
+import { StardomDashboard } from '@/features/stardom/StardomDashboard';
 import { SmartPathPage } from '@/features/smart-paths';
 
 export const router = createBrowserRouter([
@@ -17,7 +17,7 @@ export const router = createBrowserRouter([
       { path: 'cron-tasks', element: <CronTasksPage /> },
       { path: 'batch-tasks', element: <BatchTasksPage /> },
       { path: 'smart-paths', element: <SmartPathPage /> },
-      { path: 'bazaar', element: <BazaarDashboard /> },
+      { path: 'stardom', element: <StardomDashboard /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/chat" replace /> },
     ],

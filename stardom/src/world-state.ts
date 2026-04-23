@@ -1,4 +1,4 @@
-// bazaar/src/world-state.ts
+// stardom/src/world-state.ts
 
 interface AgentPosition {
   agentId: string;

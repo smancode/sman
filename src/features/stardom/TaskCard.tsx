@@ -1,10 +1,10 @@
-// src/features/bazaar/TaskCard.tsx
-import type { BazaarTask } from '@/types/bazaar';
+// src/features/stardom/TaskCard.tsx
+import type { StardomTask } from '@/types/stardom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, ArrowLeft, Clock, Star } from 'lucide-react';
 
 interface TaskCardProps {
-  task: BazaarTask;
+  task: StardomTask;
   onClick: (taskId: string) => void;
   onCancel: (taskId: string) => void;
 }

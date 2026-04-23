@@ -42,7 +42,7 @@ import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
-import { initBazaarBridge, getBazaarBridge } from './bazaar/index.js';
+import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -1235,12 +1235,12 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         default:
-          if (msg.type?.startsWith('bazaar.')) {
-            const bridge = getBazaarBridge();
+          if (msg.type?.startsWith('stardom.')) {
+            const bridge = getStardomBridge();
             if (bridge) {
               bridge.handleFrontendMessage(msg.type, (msg.payload ?? msg) as Record<string, unknown>, ws);
             } else {
-              ws.send(JSON.stringify({ type: 'error', error: `Bazaar not configured: ${msg.type}` }));
+              ws.send(JSON.stringify({ type: 'error', error: `Stardom not configured: ${msg.type}` }));
             }
           } else {
             ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${msg.type}` }));
@@ -1350,8 +1350,8 @@ async function setupOfficeSkills(): Promise<void> {
 export { shutdown as stopServer };
 export { server, homeDir };
 
-// Bazaar Bridge（独立模块，未配置时无副作用）
-initBazaarBridge({
+// Stardom Bridge（独立模块，未配置时无副作用）
+initStardomBridge({
   sessionManager,
   settingsManager,
   skillsRegistry,

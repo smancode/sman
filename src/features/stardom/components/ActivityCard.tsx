@@ -1,8 +1,8 @@
-// src/features/bazaar/components/ActivityCard.tsx
+// src/features/stardom/components/ActivityCard.tsx
 // 活动流卡片 — 世界事件表述
 // 把底层行为翻译成战略指挥中心的战报语言
 
-import type { ActivityEntry } from '@/types/bazaar';
+import type { ActivityEntry } from '@/types/stardom';
 import { cn } from '@/lib/utils';
 
 // 世界事件图标 — Atlas 星图风格

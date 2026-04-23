@@ -14,9 +14,9 @@ better-sqlite3 — synchronous SQLite driver, ESM interop
 | server/cron-task-store.ts | Cron task + run storage |
 | server/batch-store.ts | Batch task + item storage |
 | server/chatbot/chatbot-store.ts | Chatbot user state storage |
-| server/bazaar/bazaar-store.ts | Bazaar agent + task registry |
+| server/stardom/stardom-store.ts | Stardom agent + task registry |
 | server/web-access/chrome-sites.ts | Chrome bookmark/history DB (read-only) |
 
 ## Purpose
 Local SQLite DB for all persistent state: sessions, messages, cron/batch tasks,
-chatbot sessions, Bazaar registry, and Chrome browser data (bookmarks/history read-only).
+chatbot sessions, Stardom registry, and Chrome browser data (bookmarks/history read-only).

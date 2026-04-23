@@ -1,4 +1,4 @@
-# 协作星图（Agent Bazaar）现状检视
+# 协作星图（Stardom）现状检视
 
 > 检视日期：2026-04-22
 > 核心定位：组织内部多 Agent 协作网络，需要一个中心服务器存储用户/Agent 运行信息
@@ -9,17 +9,17 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  前端 (src/features/bazaar/)                        │
+│  前端 (src/features/stardom/)                       │
 │  Dashboard + SVG 星图 + 任务面板 + 声望 + 能力树     │
 └──────────────────────┬──────────────────────────────┘
                        │ WebSocket (12 种消息类型)
 ┌──────────────────────▼──────────────────────────────┐
-│  桥接层 (server/bazaar/)                            │
+│  桥接层 (server/stardom/)                           │
 │  Bridge → Client → Store → Session → MCP            │
 └──────────────────────┬──────────────────────────────┘
                        │ WebSocket (30 种消息类型)
 ┌──────────────────────▼──────────────────────────────┐
-│  集市服务器 (bazaar/)                                │
+│  星域服务器 (stardom/)                               │
 │  MessageRouter → TaskEngine → Reputation → World     │
 │  SQLite × 3 (agents / tasks / capabilities)          │
 └─────────────────────────────────────────────────────┘
@@ -29,7 +29,7 @@
 
 ## 二、已完成能力清单
 
-### 2.1 集市服务器 (`bazaar/`)
+### 2.1 星域服务器 (`stardom/`)
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
@@ -47,12 +47,12 @@
 **数据库 Schema：**
 
 ```
-bazaar.db    → agents / audit_log / reputation_log
+stardom.db   → agents / audit_log / reputation_log
 tasks.db     → tasks / chat_messages
 capabilities.db → capabilities
 ```
 
-### 2.2 桥接层 (`server/bazaar/`)
+### 2.2 桥接层 (`server/stardom/`)
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
@@ -62,11 +62,11 @@ capabilities.db → capabilities
 | 经验提取 | ✅ 完整 | 评分≥3 时调用 Claude haiku 从对话提取 100 字经验，30s 超时静默降级 |
 | 磨合记录 | ✅ 完整 | pair_history 累积协作次数/平均分 |
 | 断线恢复 | ✅ 完整 | syncActiveTasks → 重发送所有活跃任务 → cached_results 交付 |
-| MCP 工具 | ✅ 完整 | bazaar_search(本地经验+远程搜索合并排序) + bazaar_collaborate(创建+邀约) |
-| Claude 会话集成 | ✅ 完整 | BazaarSession 创建 bazaar-{taskId} 前缀会话，注入协作上下文 |
+| MCP 工具 | ✅ 完整 | stardom_search(本地经验+远程搜索合并排序) + stardom_collaborate(创建+邀约) |
+| Claude 会话集成 | ✅ 完整 | StardomSession 创建 stardom-{taskId} 前缀会话，注入协作上下文 |
 | 排序智能 | ✅ 完整 | 老搭档(3+次,4+分) > 历史协作 > 有经验 > 远程 |
 
-### 2.3 前端 (`src/features/bazaar/`)
+### 2.3 前端 (`src/features/stardom/`)
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
@@ -83,14 +83,14 @@ capabilities.db → capabilities
 | 引导页 | ✅ 完整 | 首次访问引导，localStorage 持久化 |
 | 在线 Agent 列表 | ✅ 完整 | 状态徽标 |
 | 排行榜 | ✅ 完整 | Top 10 + 奖牌 |
-| 全屏模式 | ✅ 完整 | /bazaar 路由隐藏侧边栏 |
+| 全屏模式 | ✅ 完整 | /stardom 路由隐藏侧边栏 |
 
 ### 2.4 测试覆盖
 
 | 层 | 文件数 | 代码行 | 覆盖范围 |
 |----|--------|--------|----------|
-| 集市服务器 | 10 | ~1530 | agent-store, task-engine, task-flow, task-store, integration, message-router, protocol, world-state, reputation, capability-store |
-| 桥接层 | 5 | ~907 | bazaar-session, bazaar-store, bridge-integration, bazaar-client, mcp-ranking |
+| 星域服务器 | 10 | ~1530 | agent-store, task-engine, task-flow, task-store, integration, message-router, protocol, world-state, reputation, capability-store |
+| 桥接层 | 5 | ~907 | stardom-session, stardom-store, bridge-integration, stardom-client, mcp-ranking |
 
 ---
 
@@ -102,11 +102,11 @@ capabilities.db → capabilities
 | 能力包 WebSocket API | 服务器 | protocol 白名单有，router 无路由 | 无法通过 WS 发布/搜索能力包 |
 | 世界移动渲染 | 前端 | 数据流到前端但不渲染、不发送 | 像素世界地图无法交互 |
 | QuickBar 按钮 | 前端 | 无 onClick 处理器 | 底部快捷栏不可用 |
-| `bazaar.agent.list.update` | 前端+桥接 | 前端有 handler，后端不产生 | 在线 Agent 列表数据源缺失 |
-| Claude 流式回复桥接 | 桥接 | sendClaudeReplyToBazaar 需外部调用 | Claude 回复不会自动发回集市 |
+| `stardom.agent.list.update` | 前端+桥接 | 前端有 handler，后端不产生 | 在线 Agent 列表数据源缺失 |
+| Claude 流式回复桥接 | 桥接 | sendClaudeReplyToStardom 需外部调用 | Claude 回复不会自动发回星域 |
 | NetworkSandbox 位置 | 前端 | 每次渲染随机 | 星图节点位置不稳定 |
 | maxSlots 硬编码 | 服务器 | `const maxSlots = 3` | 无法配置最大并发任务数 |
-| 摘要生成 | 全栈 | bazaar.digest 类型已定义，无后端服务 | 无每日协作摘要 |
+| 摘要生成 | 全栈 | stardom.digest 类型已定义，无后端服务 | 无每日协作摘要 |
 | 星图位置持久化 | 服务器 | 世界状态纯内存 | 服务器重启所有 Agent 位置丢失 |
 
 ---
@@ -160,11 +160,11 @@ capabilities.db → capabilities
 
 | 层级 | 文件数 | 代码行(约) |
 |------|--------|-----------|
-| 集市服务器 (`bazaar/src/`) | 8 | ~1,300 |
-| 桥接层 (`server/bazaar/`) | 7 | ~1,530 |
-| 前端 (`src/features/bazaar/`) | 20+ | ~2,200 |
+| 星域服务器 (`stardom/src/`) | 8 | ~1,300 |
+| 桥接层 (`server/stardom/`) | 7 | ~1,530 |
+| 前端 (`src/features/stardom/`) | 20+ | ~2,200 |
 | 共享类型 (`shared/`) | 1 | ~200 |
-| 测试 (集市+桥接) | 15 | ~2,440 |
+| 测试 (星域+桥接) | 15 | ~2,440 |
 | **总计** | **50+** | **~7,670** |
 
 ---

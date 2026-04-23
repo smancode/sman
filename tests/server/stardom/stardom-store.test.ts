@@ -1,17 +1,17 @@
-// tests/server/bazaar/bazaar-store.test.ts
+// tests/server/stardom/stardom-store.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BazaarStore } from '../../../server/bazaar/bazaar-store.js';
+import { StardomStore } from '../../../server/stardom/stardom-store.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('BazaarStore', () => {
-  let store: BazaarStore;
+describe('StardomStore', () => {
+  let store: StardomStore;
   let dbPath: string;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `bazaar-local-test-${Date.now()}.db`);
-    store = new BazaarStore(dbPath);
+    dbPath = path.join(os.tmpdir(), `stardom-local-test-${Date.now()}.db`);
+    store = new StardomStore(dbPath);
   });
 
   afterEach(() => {
@@ -26,12 +26,12 @@ describe('BazaarStore', () => {
         hostname: 'VDI-01',
         username: 'zhangsan',
         name: '张三',
-        server: 'bazaar.company.com:5890',
+        server: 'stardom.company.com:5890',
       });
       const identity = store.getIdentity();
       expect(identity).toBeDefined();
       expect(identity!.agentId).toBe('agent-001');
-      expect(identity!.server).toBe('bazaar.company.com:5890');
+      expect(identity!.server).toBe('stardom.company.com:5890');
     });
 
     it('should return undefined when no identity saved', () => {

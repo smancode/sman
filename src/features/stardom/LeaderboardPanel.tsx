@@ -1,9 +1,9 @@
-// src/features/bazaar/LeaderboardPanel.tsx
-import { useBazaarStore } from '@/stores/bazaar';
+// src/features/stardom/LeaderboardPanel.tsx
+import { useStardomStore } from '@/stores/stardom';
 import { Trophy } from 'lucide-react';
 
 export function LeaderboardPanel() {
-  const { leaderboard } = useBazaarStore();
+  const { leaderboard } = useStardomStore();
 
   return (
     <div>

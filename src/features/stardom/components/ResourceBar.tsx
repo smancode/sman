@@ -1,8 +1,8 @@
-// src/features/bazaar/components/ResourceBar.tsx
+// src/features/stardom/components/ResourceBar.tsx
 // 顶部资源条 — 像战略游戏资源栏
 // 活跃任务 / 声望 / 协作信用 / 并行容量
 
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
 import { Cpu, Trophy, Zap, Users, Radio } from 'lucide-react';
 import { getReputationLevel } from './ReputationUtils';
@@ -40,7 +40,7 @@ function ResourceItem({ icon: Icon, label, value, max, color, glow }: {
 }
 
 export function ResourceBar() {
-  const { connection, tasks, onlineAgents } = useBazaarStore();
+  const { connection, tasks, onlineAgents } = useStardomStore();
   const sending = useChatStore((s) => s.sending);
 
   const activeTasks = tasks.filter(t => ['searching', 'offered', 'matched', 'chatting'].includes(t.status)).length;

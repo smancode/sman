@@ -1,4 +1,4 @@
-// bazaar/src/agent-store.ts
+// stardom/src/agent-store.ts
 import betterSqlite3 from 'better-sqlite3';
 import type { Database } from 'better-sqlite3';
 // @ts-expect-error - better-sqlite3 ESM interop

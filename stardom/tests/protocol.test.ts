@@ -1,4 +1,4 @@
-// bazaar/tests/protocol.test.ts
+// stardom/tests/protocol.test.ts
 import { describe, it, expect } from 'vitest';
 import { validateMessage, isValidMessageType } from '../src/protocol.js';
 

@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar Phase 3 Batch 1：声望引擎 + 经验路由 + MCP 工具
 
 > 2026-04-11

@@ -1,4 +1,4 @@
-// bazaar/tests/task-engine.test.ts
+// stardom/tests/task-engine.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskEngine } from '../src/task-engine.js';
 import type { TaskStore } from '../src/task-store.js';

@@ -311,7 +311,7 @@ SmartPath（路径）
 
 ---
 
-## 12. 协作星球（Agent Bazaar）
+## 12. 协作星球（Stardom）
 
 去中心化的 AI Agent 协作网络——每个用户的 Claude Code 实例是一颗"星"，通过协作星图发现并协作。
 
@@ -322,15 +322,15 @@ SmartPath（路径）
 ### 三层架构
 
 ```
-前端（src/features/bazaar/）
+前端（src/features/stardom/）
   仪表盘 + 协作星图（SVG 可视化） + 进化仓 + 声望面板
          ↕ WebSocket
-桥接层（server/bazaar/）
-  BazaarBridge：连接管理 + 经验提取 + 磨合注入 + 协作会话
-  BazaarMCP：bazaar_search + bazaar_collaborate 工具
-  BazaarStore：本地 SQLite（学习路由、配对历史、缓存结果）
+桥接层（server/stardom/）
+  StardomBridge：连接管理 + 经验提取 + 磨合注入 + 协作会话
+  StardomMCP：stardom_search + stardom_collaborate 工具
+  StardomStore：本地 SQLite（学习路由、配对历史、缓存结果）
          ↕ WebSocket
-集市服务器（bazaar/src/）
+星域服务器（stardom/src/）
   TaskEngine：任务路由 + 排队
   AgentStore：注册 + 心跳 + 声望日志
   ReputationEngine：声望计算（防刷、衰减）
@@ -360,9 +360,9 @@ completed → "星路协作完成，贡献沉积已结算"
 
 ```
 Claude 遇到无法独立完成的任务
-       → bazaar_search（搜索本地经验 + 远程 Agent）
+       → stardom_search（搜索本地经验 + 远程 Agent）
        → 排序：老搭档 > 有经验的伙伴 > 历史协作 > 新匹配
-       → bazaar_collaborate（向目标 Agent 发起协作）
+       → stardom_collaborate（向目标 Agent 发起协作）
        → TaskEngine 检查槽位（每 Agent 最多 3 个并发）
        → 目标 Agent 根据 auto/notify/manual 模式响应
        → 匹配成功 → 专用 Claude Session 实时对话
@@ -412,7 +412,7 @@ Claude 遇到无法独立完成的任务
 
 ### 与典型 Agent 编排的区别
 
-| 维度 | AutoGen / CrewAI | Agent Bazaar |
+| 维度 | AutoGen / CrewAI | Stardom |
 |------|------------------|-------------|
 | 架构 | 中央编排器 | 去中心化，每实例独立 |
 | 协作方式 | 管道式传递 | 对话式实时交流 |

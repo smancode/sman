@@ -1,9 +1,9 @@
-// src/features/bazaar/components/ControlPanel.tsx
+// src/features/stardom/components/ControlPanel.tsx
 // 右侧控制面板 — 深色科技风
 // 任务队列 + 声望排行 + 在线 Agent + 任务阶段进度
 
 import { useState } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -81,7 +81,7 @@ function TaskPhaseBar({ status }: { status: string }) {
 // ── Task Queue ──
 
 function TaskQueue() {
-  const { tasks, acceptTask, rejectTask } = useBazaarStore();
+  const { tasks, acceptTask, rejectTask } = useStardomStore();
   const pending = tasks.filter((t) => t.status === 'offered' || t.status === 'searching');
   const [open, setOpen] = useState(true);
 
@@ -123,7 +123,7 @@ function TaskQueue() {
 // ── Leaderboard → Contribution Sediment ──
 
 function Leaderboard() {
-  const { leaderboard, connection } = useBazaarStore();
+  const { leaderboard, connection } = useStardomStore();
   const [open, setOpen] = useState(true);
 
   // Max reputation for normalization
@@ -193,7 +193,7 @@ function Leaderboard() {
 // ── Online Agents ──
 
 function OnlineAgentList() {
-  const { onlineAgents, connection } = useBazaarStore();
+  const { onlineAgents, connection } = useStardomStore();
   const [open, setOpen] = useState(true);
 
   return (

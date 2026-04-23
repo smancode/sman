@@ -1,16 +1,16 @@
-// tests/server/bazaar/bazaar-client.test.ts
+// tests/server/stardom/stardom-client.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BazaarClient } from '../../../server/bazaar/bazaar-client.js';
-import type { BazaarStore } from '../../../server/bazaar/bazaar-store.js';
+import { StardomClient } from '../../../server/stardom/stardom-client.js';
+import type { StardomStore } from '../../../server/stardom/stardom-store.js';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('BazaarClient', () => {
-  let client: BazaarClient;
-  let mockStore: BazaarStore;
+describe('StardomClient', () => {
+  let client: StardomClient;
+  let mockStore: StardomStore;
   let dbPath: string;
   let wss: WebSocketServer;
   let server: http.Server;
@@ -18,10 +18,10 @@ describe('BazaarClient', () => {
   let receivedByServer: any[] = [];
 
   beforeEach(async () => {
-    dbPath = path.join(os.tmpdir(), `bazaar-client-test-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `stardom-client-test-${Date.now()}.db`);
 
     // 简化 mock store
-    const { BazaarStore: RealStore } = await import('../../../server/bazaar/bazaar-store.js');
+    const { StardomStore: RealStore } = await import('../../../server/stardom/stardom-store.js');
     mockStore = new RealStore(dbPath);
 
     // 启动模拟集市服务器
@@ -59,7 +59,7 @@ describe('BazaarClient', () => {
     server.close();
   }, 15_000);
 
-  it('should connect and register with bazaar server', async () => {
+  it('should connect and register with stardom server', async () => {
     mockStore.saveIdentity({
       agentId: 'agent-001',
       hostname: 'test-host',
@@ -68,7 +68,7 @@ describe('BazaarClient', () => {
       server: `localhost:${port}`,
     });
 
-    client = new BazaarClient(mockStore, {
+    client = new StardomClient(mockStore, {
       getAgentDescription: () => '测试 Agent',
     });
 
@@ -93,7 +93,7 @@ describe('BazaarClient', () => {
       server: `localhost:${port}`,
     });
 
-    client = new BazaarClient(mockStore, {
+    client = new StardomClient(mockStore, {
       getAgentDescription: () => '测试 Agent',
       heartbeatIntervalMs: 500, // 快速测试
     });

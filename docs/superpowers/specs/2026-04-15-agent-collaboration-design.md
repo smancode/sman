@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Agent 协作机制设计
 
 > **状态**: 已批准

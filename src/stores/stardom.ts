@@ -1,19 +1,19 @@
-// src/stores/bazaar.ts
+// src/stores/stardom.ts
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
 import type {
-  BazaarTask,
-  BazaarConnectionStatus,
-  BazaarChatMessage,
-  BazaarAgentInfo,
-  BazaarMode,
-  BazaarDigest,
-  BazaarNotification,
-  BazaarTaskChat,
-  BazaarLeaderboardEntry,
+  StardomTask,
+  StardomConnectionStatus,
+  StardomChatMessage,
+  StardomAgentInfo,
+  StardomMode,
+  StardomDigest,
+  StardomNotification,
+  StardomTaskChat,
+  StardomLeaderboardEntry,
   ActivityEntry,
-  BazaarCapability,
-} from '@/types/bazaar';
+  StardomCapability,
+} from '@/types/stardom';
 
 function getWsClient() {
   return useWsConnection.getState().client;
@@ -23,17 +23,17 @@ function getWsClient() {
 const NOTIFY_COUNTDOWN_MS = 30_000;
 
 // 多任务对话存储：key = taskId
-const taskChatMap = new Map<string, BazaarChatMessage[]>();
+const taskChatMap = new Map<string, StardomChatMessage[]>();
 
-interface BazaarState {
-  connection: BazaarConnectionStatus;
-  tasks: BazaarTask[];
-  onlineAgents: BazaarAgentInfo[];
-  leaderboard: BazaarLeaderboardEntry[];
-  capabilities: BazaarCapability[];
-  activeChat: BazaarTaskChat | null;
-  notifications: BazaarNotification[];
-  digest: BazaarDigest | null;
+interface StardomState {
+  connection: StardomConnectionStatus;
+  tasks: StardomTask[];
+  onlineAgents: StardomAgentInfo[];
+  leaderboard: StardomLeaderboardEntry[];
+  capabilities: StardomCapability[];
+  activeChat: StardomTaskChat | null;
+  notifications: StardomNotification[];
+  digest: StardomDigest | null;
   loading: boolean;
   error: string | null;
   worldPositions: Map<string, { agentId: string; x: number; y: number; state: string; facing: string }>;
@@ -49,21 +49,21 @@ interface BazaarState {
   cancelTask: (taskId: string) => void;
   setActiveChat: (taskId: string) => void;
   clearActiveChat: () => void;
-  setMode: (mode: BazaarMode) => void;
+  setMode: (mode: StardomMode) => void;
   clearError: () => void;
   acceptTask: (taskId: string) => void;
   rejectTask: (taskId: string) => void;
   dismissNotification: (notificationId: string) => void;
-  getTaskChat: (taskId: string) => BazaarChatMessage[];
+  getTaskChat: (taskId: string) => StardomChatMessage[];
 }
 
-let set: (partial: Partial<BazaarState> | ((state: BazaarState) => Partial<BazaarState>)) => void;
-let get: () => BazaarState;
+let set: (partial: Partial<StardomState> | ((state: StardomState) => Partial<StardomState>)) => void;
+let get: () => StardomState;
 
 // 存储 notify 模式的倒计时 timer，key = notificationId
 const countdownTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
+export const useStardomStore = create<StardomState>((storeSet, storeGet) => {
   set = storeSet;
   get = storeGet;
 
@@ -89,31 +89,31 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
       const client = getWsClient();
       if (!client) return;
       set({ loading: true });
-      client.send({ type: 'bazaar.task.list' });
+      client.send({ type: 'stardom.task.list' });
     },
 
     fetchOnlineAgents: () => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.agent.list' });
+      client.send({ type: 'stardom.agent.list' });
     },
 
     fetchLeaderboard: () => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.leaderboard' });
+      client.send({ type: 'stardom.leaderboard' });
     },
 
     fetchCapabilities: () => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.capabilities.list' });
+      client.send({ type: 'stardom.capabilities.list' });
     },
 
     cancelTask: (taskId: string) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.task.cancel', payload: { taskId } });
+      client.send({ type: 'stardom.task.cancel', payload: { taskId } });
     },
 
     setActiveChat: (taskId: string) => {
@@ -125,10 +125,10 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
       set({ activeChat: null });
     },
 
-    setMode: (mode: BazaarMode) => {
+    setMode: (mode: StardomMode) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.config.update', payload: { mode } });
+      client.send({ type: 'stardom.config.update', payload: { mode } });
     },
 
     clearError: () => set({ error: null }),
@@ -147,13 +147,13 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
     sendWorldMove: (x: number, y: number, state: string, facing: string) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.world.move', payload: { x, y, state, facing } });
+      client.send({ type: 'stardom.world.move', payload: { x, y, state, facing } });
     },
 
     acceptTask: (taskId: string) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.task.accept', payload: { taskId } });
+      client.send({ type: 'stardom.task.accept', payload: { taskId } });
       set((s) => ({
         notifications: s.notifications.filter((n) => n.taskId !== taskId),
       }));
@@ -162,7 +162,7 @@ export const useBazaarStore = create<BazaarState>((storeSet, storeGet) => {
     rejectTask: (taskId: string) => {
       const client = getWsClient();
       if (!client) return;
-      client.send({ type: 'bazaar.task.reject', payload: { taskId } });
+      client.send({ type: 'stardom.task.reject', payload: { taskId } });
       set((s) => ({
         notifications: s.notifications.filter((n) => n.taskId !== taskId),
       }));
@@ -194,11 +194,11 @@ function registerPushListeners() {
   pushListenerRegistered = true;
 
   const handle = (msg: Record<string, unknown>) => {
-    if (!msg.type?.toString().startsWith('bazaar.')) return;
+    if (!msg.type?.toString().startsWith('stardom.')) return;
 
     const type = msg.type as string;
 
-    if (type === 'bazaar.status') {
+    if (type === 'stardom.status') {
       const event = msg.event as string;
       if (event === 'connected') {
         set((s) => ({
@@ -210,17 +210,17 @@ function registerPushListeners() {
             reputation: (msg.reputation as number) ?? 0,
             activeSlots: (msg.activeSlots as number) ?? 0,
             maxSlots: (msg.maxSlots as number) ?? 3,
-            collabMode: (msg.collabMode as BazaarMode) ?? 'notify',
+            collabMode: (msg.collabMode as StardomMode) ?? 'notify',
           },
         }));
       } else if (event === 'disconnected') {
         set((s) => ({ connection: { ...s.connection, connected: false } }));
       }
-    } else if (type === 'bazaar.task.list.update') {
+    } else if (type === 'stardom.task.list.update') {
       const prevTasks = get().tasks;
-      set({ tasks: msg.tasks as BazaarTask[], loading: false });
+      set({ tasks: msg.tasks as StardomTask[], loading: false });
       // Log new tasks
-      const newTasks = (msg.tasks as BazaarTask[]).filter(
+      const newTasks = (msg.tasks as StardomTask[]).filter(
         (t) => !prevTasks.some((p) => p.taskId === t.taskId)
       );
       for (const t of newTasks) {
@@ -234,15 +234,15 @@ function registerPushListeners() {
           metadata: { taskId: t.taskId, direction: t.direction, status: t.status },
         });
       }
-    } else if (type === 'bazaar.agent.list.update') {
-      set({ onlineAgents: msg.agents as BazaarAgentInfo[] });
-    } else if (type === 'bazaar.leaderboard.update') {
+    } else if (type === 'stardom.agent.list.update') {
+      set({ onlineAgents: msg.agents as StardomAgentInfo[] });
+    } else if (type === 'stardom.leaderboard.update') {
       const prevReputation = get().connection.reputation ?? 0;
-      set({ leaderboard: msg.leaderboard as BazaarLeaderboardEntry[] });
+      set({ leaderboard: msg.leaderboard as StardomLeaderboardEntry[] });
       // Log reputation change
       const myId = get().connection.agentId;
-      const myEntry = (msg.leaderboard as BazaarLeaderboardEntry[]).find(
-        (e: BazaarLeaderboardEntry) => e.agentId === myId
+      const myEntry = (msg.leaderboard as StardomLeaderboardEntry[]).find(
+        (e: StardomLeaderboardEntry) => e.agentId === myId
       );
       if (myEntry && myEntry.reputation !== prevReputation) {
         const delta = myEntry.reputation - prevReputation;
@@ -254,11 +254,11 @@ function registerPushListeners() {
           metadata: { reputation: myEntry.reputation, delta },
         });
       }
-    } else if (type === 'bazaar.task.chat.delta') {
+    } else if (type === 'stardom.task.chat.delta') {
       const taskId = msg.taskId as string;
       const from = msg.from as string;
       const text = msg.text as string;
-      const chatMsg: BazaarChatMessage = {
+      const chatMsg: StardomChatMessage = {
         taskId,
         from,
         text,
@@ -279,13 +279,13 @@ function registerPushListeners() {
           },
         };
       });
-    } else if (type === 'bazaar.notify') {
+    } else if (type === 'stardom.notify') {
       const mode = msg.mode as 'auto' | 'notify' | 'manual';
       const notificationId = (msg.notificationId as string) ?? `notif-${Date.now()}`;
       const taskId = msg.taskId as string;
       const now = new Date();
 
-      const notification: BazaarNotification = {
+      const notification: StardomNotification = {
         notificationId,
         taskId,
         from: msg.from as string,
@@ -306,7 +306,7 @@ function registerPushListeners() {
         const timer = setTimeout(() => {
           const client = getWsClient();
           if (client) {
-            client.send({ type: 'bazaar.task.accept', payload: { taskId } });
+            client.send({ type: 'stardom.task.accept', payload: { taskId } });
           }
           set((s) => ({
             notifications: s.notifications.filter((n) => n.notificationId !== notificationId),
@@ -323,15 +323,15 @@ function registerPushListeners() {
         description: `${msg.from} 请求协作: ${(msg.question as string).slice(0, 80)}`,
         metadata: { taskId: msg.taskId, mode: msg.mode },
       });
-    } else if (type === 'bazaar.digest') {
-      set({ digest: msg as unknown as BazaarDigest });
-    } else if (type === 'bazaar.capabilities.update') {
-      set({ capabilities: (msg.capabilities ?? []) as BazaarCapability[] });
-    } else if (type === 'bazaar.world.agent_update') {
+    } else if (type === 'stardom.digest') {
+      set({ digest: msg as unknown as StardomDigest });
+    } else if (type === 'stardom.capabilities.update') {
+      set({ capabilities: (msg.capabilities ?? []) as StardomCapability[] });
+    } else if (type === 'stardom.world.agent_update') {
       // World position tracking — kept for future use but not rendered
-    } else if (type === 'bazaar.world.zone_snapshot') {
+    } else if (type === 'stardom.world.zone_snapshot') {
       // World position tracking — kept for future use but not rendered
-    } else if (type === 'bazaar.world.agent_leave') {
+    } else if (type === 'stardom.world.agent_leave') {
       // World position tracking — kept for future use but not rendered
     }
   };

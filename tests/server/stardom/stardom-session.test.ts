@@ -1,18 +1,18 @@
-// tests/server/bazaar/bazaar-session.test.ts
+// tests/server/stardom/stardom-session.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BazaarSession } from '../../../server/bazaar/bazaar-session.js';
-import { BazaarStore } from '../../../server/bazaar/bazaar-store.js';
-import type { BazaarSessionDeps } from '../../../server/bazaar/types.js';
+import { StardomSession } from '../../../server/stardom/stardom-session.js';
+import { StardomStore } from '../../../server/stardom/stardom-store.js';
+import type { StardomSessionDeps } from '../../../server/stardom/types.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('BazaarSession', () => {
-  let session: BazaarSession;
-  let store: BazaarStore;
+describe('StardomSession', () => {
+  let session: StardomSession;
+  let store: StardomStore;
   let dbPath: string;
   let broadcastMessages: string[];
-  let deps: BazaarSessionDeps;
+  let deps: StardomSessionDeps;
 
   const mockCreateSessionWithId = vi.fn();
   const mockSendMessageForCron = vi.fn();
@@ -21,8 +21,8 @@ describe('BazaarSession', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dbPath = path.join(os.tmpdir(), `bazaar-session-test-${Date.now()}.db`);
-    store = new BazaarStore(dbPath);
+    dbPath = path.join(os.tmpdir(), `stardom-session-test-${Date.now()}.db`);
+    store = new StardomStore(dbPath);
     broadcastMessages = [];
 
     deps = {
@@ -38,10 +38,10 @@ describe('BazaarSession', () => {
       maxConcurrentTasks: 3,
     };
 
-    mockCreateSessionWithId.mockReturnValue('bazaar-task-001');
+    mockCreateSessionWithId.mockReturnValue('stardom-task-001');
     mockSendMessageForCron.mockResolvedValue(undefined);
 
-    session = new BazaarSession(deps);
+    session = new StardomSession(deps);
   });
 
   afterEach(() => {
@@ -62,13 +62,13 @@ describe('BazaarSession', () => {
 
       expect(mockCreateSessionWithId).toHaveBeenCalledWith(
         '/tmp/test-workspace',
-        'bazaar-task-001',
+        'stardom-task-001',
         true,
       );
 
       expect(mockSendMessageForCron).toHaveBeenCalledTimes(1);
       const [sessionId, content, abortController, onActivity] = mockSendMessageForCron.mock.calls[0];
-      expect(sessionId).toBe('bazaar-task-001');
+      expect(sessionId).toBe('stardom-task-001');
       expect(content).toContain('小李');
       expect(content).toContain('支付系统怎么查？');
       expect(abortController).toBeInstanceOf(AbortController);
@@ -127,7 +127,7 @@ describe('BazaarSession', () => {
 
       expect(mockSendMessageForCron).toHaveBeenCalledTimes(1);
       const [sessionId, content] = mockSendMessageForCron.mock.calls[0];
-      expect(sessionId).toBe('bazaar-task-001');
+      expect(sessionId).toBe('stardom-task-001');
       expect(content).toContain('对方追问了更多细节');
     });
 
@@ -170,7 +170,7 @@ describe('BazaarSession', () => {
 
       session.abortCollaboration('task-001');
 
-      expect(mockAbort).toHaveBeenCalledWith('bazaar-task-001');
+      expect(mockAbort).toHaveBeenCalledWith('stardom-task-001');
       expect(session.getActiveCount()).toBe(0);
     });
 
@@ -180,7 +180,7 @@ describe('BazaarSession', () => {
   });
 
   describe('completeCollaboration', () => {
-    it('should end collaboration, cleanup, and send task.complete to bazaar', async () => {
+    it('should end collaboration, cleanup, and send task.complete to stardom', async () => {
       await session.startCollaboration(
         'task-001',
         '初始问题',
@@ -191,7 +191,7 @@ describe('BazaarSession', () => {
 
       session.completeCollaboration('task-001', 5, '很有帮助');
 
-      expect(mockAbort).toHaveBeenCalledWith('bazaar-task-001');
+      expect(mockAbort).toHaveBeenCalledWith('stardom-task-001');
       expect(session.getActiveCount()).toBe(0);
 
       expect(mockClientSend).toHaveBeenCalledTimes(1);
@@ -267,8 +267,8 @@ describe('BazaarSession', () => {
     });
   });
 
-  describe('sendClaudeReplyToBazaar', () => {
-    it('should save reply, send task.chat to bazaar, and broadcast', async () => {
+  describe('sendClaudeReplyToStardom', () => {
+    it('should save reply, send task.chat to stardom, and broadcast', async () => {
       await session.startCollaboration(
         'task-001',
         '初始问题',
@@ -277,7 +277,7 @@ describe('BazaarSession', () => {
         '/tmp/test-workspace',
       );
 
-      session.sendClaudeReplyToBazaar('task-001', '这是 Claude 的回复');
+      session.sendClaudeReplyToStardom('task-001', '这是 Claude 的回复');
 
       // 验证保存到 store
       const messages = store.listChatMessages('task-001');
@@ -291,12 +291,12 @@ describe('BazaarSession', () => {
       expect(mockClientSend.mock.calls[0][0].payload.text).toBe('这是 Claude 的回复');
 
       // 验证广播到前端
-      const broadcast = broadcastMessages.find(m => m.includes('bazaar.task.chat.delta'));
+      const broadcast = broadcastMessages.find(m => m.includes('stardom.task.chat.delta'));
       expect(broadcast).toBeDefined();
     });
 
     it('should skip empty reply', () => {
-      session.sendClaudeReplyToBazaar('task-001', '  ');
+      session.sendClaudeReplyToStardom('task-001', '  ');
       expect(mockClientSend).not.toHaveBeenCalled();
     });
   });

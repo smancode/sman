@@ -9,7 +9,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/bazaar/**',
+      'stardom/**',
       '**/plugins/superpowers/tests/brainstorm-server/**',
     ],
   },

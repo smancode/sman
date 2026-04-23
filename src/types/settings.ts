@@ -59,7 +59,7 @@ export interface ChatbotConfig {
   };
 }
 
-export interface BazaarSettingsConfig {
+export interface StardomSettingsConfig {
   server: string;
   agentName?: string;
   mode: 'auto' | 'notify' | 'manual';
@@ -73,7 +73,7 @@ export interface SmanSettings {
   currentLlmProfile: string;
   webSearch: WebSearchConfig;
   chatbot: ChatbotConfig;
-  bazaar?: BazaarSettingsConfig;
+  stardom?: StardomSettingsConfig;
 }
 
 export const WEB_SEARCH_PROVIDER_OPTIONS: {

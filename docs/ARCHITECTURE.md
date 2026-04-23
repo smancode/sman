@@ -44,7 +44,7 @@
 │   │  ┌──────┴──────────────────────────────────────────────┐   │     │
 │   │  │              MCP Server 层                           │   │     │
 │   │  │                                                      │   │     │
-│   │  │  Web Search    Web Access    Bazaar    Capability   │   │     │
+│   │  │  Web Search    Web Access    Stardom   Capability   │   │     │
 │   │  │  (Brave/       (CDP Chrome)  (协作)    Gateway      │   │     │
 │   │  │   Tavily/                                         │   │     │
 │   │  │   Bing)                                           │   │     │
@@ -57,15 +57,15 @@
 │   └──────────────────────────────────────────────────────────────┘     │
 │         │                          │                                  │
 │   ┌─────┴──────────┐        ┌──────┴──────────┐                      │
-│   │  SQLite 存储    │        │  Agent 集市桥接  │                     │
-│   │  ~/.sman/       │        │  BazaarBridge   │                      │
+│   │  SQLite 存储    │        │  星域桥接        │                     │
+│   │  ~/.sman/       │        │  StardomBridge  │                      │
 │   │  sman.db        │        │  (WebSocket客户端)│                     │
 │   └────────────────┘        └──────┬──────────┘                      │
 │                                     │ WebSocket                       │
 └─────────────────────────────────────┼────────────────────────────────┘
-                                      │ ws://bazaar:5890
+                                      │ ws://stardom:5890
 ┌─────────────────────────────────────┼────────────────────────────────┐
-│                      Bazaar 集市服务器 (:5890)                        │
+│                      Stardom 星域服务器 (:5890)                       │
 │                    Express + WebSocket (独立部署)                      │
 │                                                                      │
 │   ┌────────────┐ ┌──────────┐ ┌───────────┐ ┌─────────────────┐     │
@@ -74,7 +74,7 @@
 │   └─────┬──────┘ └────┬─────┘ └─────┬─────┘ └────────┬────────┘     │
 │         │              │             │                 │              │
 │   ┌─────┴──────────────┴─────────────┴─────────────────┴────────┐   │
-│   │              3x SQLite (bazaar.db / tasks.db / caps.db)      │   │
+│   │              3x SQLite (stardom.db / tasks.db / caps.db)     │   │
 │   └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -140,12 +140,12 @@ smanbase/
 │   │   ├── chrome-sites.ts            # 书签/历史 URL 发现
 │   │   ├── url-experience-store.ts    # URL 经验持久化
 │   │   └── index.ts                   # 导出
-│   ├── bazaar/                    # Agent 集市桥接层
-│   │   ├── bazaar-bridge.ts           # ★ 消息路由 + 经验提取 + 磨合
-│   │   ├── bazaar-client.ts           # WebSocket 客户端 (注册/心跳/重连)
-│   │   ├── bazaar-session.ts          # 协作会话 (Claude SDK)
-│   │   ├── bazaar-store.ts            # 本地 SQLite (routes/pairs/chat)
-│   │   ├── bazaar-mcp.ts              # 2 个 MCP 工具 (search/collaborate)
+│   ├── stardom/                   # 星域桥接层
+│   │   ├── stardom-bridge.ts          # ★ 消息路由 + 经验提取 + 磨合
+│   │   ├── stardom-client.ts          # WebSocket 客户端 (注册/心跳/重连)
+│   │   ├── stardom-session.ts         # 协作会话 (Claude SDK)
+│   │   ├── stardom-store.ts           # 本地 SQLite (routes/pairs/chat)
+│   │   ├── stardom-mcp.ts             # 2 个 MCP 工具 (search/collaborate)
 │   │   ├── types.ts                   # 桥接层类型
 │   │   └── index.ts                   # 单例初始化
 │   ├── capabilities/              # 能力注册系统
@@ -159,7 +159,7 @@ smanbase/
 ├── src/                            # React 前端
 │   ├── app/
 │   │   ├── App.tsx                    # 顶层组件
-│   │   └── routes.tsx                 # 路由 (/chat, /settings, /cron, /batch, /bazaar)
+│   │   └── routes.tsx                 # 路由 (/chat, /settings, /cron, /batch, /stardom)
 │   ├── features/
 │   │   ├── chat/                      # 聊天功能
 │   │   │   ├── index.tsx              # 聊天页面主组件
@@ -171,7 +171,7 @@ smanbase/
 │   │   ├── settings/                  # 设置 (6 个 Tab)
 │   │   ├── cron-tasks/                # Cron 任务页面
 │   │   ├── batch-tasks/               # 批量任务页面
-│   │   └── bazaar/                    # Agent 集市 (仪表盘 + 像素世界)
+│   │   └── stardom/                   # 星域 (仪表盘 + 像素世界)
 │   ├── components/                    # 通用组件
 │   │   ├── SessionTree.tsx            # 会话树 (按目录分组)
 │   │   ├── DirectorySelectorDialog.tsx # 目录选择
@@ -182,7 +182,7 @@ smanbase/
 │   ├── stores/                        # Zustand 状态管理
 │   │   ├── chat.ts                    # 聊天状态 (消息/会话)
 │   │   ├── settings.ts               # 设置状态 (后端同步)
-│   │   ├── bazaar.ts                  # 集市状态 (连接/任务/世界坐标)
+│   │   ├── stardom.ts                  # 星域状态 (连接/任务/世界坐标)
 │   │   ├── cron.ts                    # Cron 任务状态
 │   │   ├── batch.ts                   # 批量任务状态
 │   │   └── ws-connection.ts           # WebSocket 连接状态
@@ -196,7 +196,7 @@ smanbase/
 ├── electron/                       # Electron 桌面应用
 │   ├── main.ts                       # ★ 主进程 (窗口/IPC/后端启动/GPU兼容)
 │   └── preload.ts                    # 预加载 (selectDirectory/window API)
-├── bazaar/                         # Agent 集市独立服务器
+├── stardom/                        # 星域独立服务器
 │   ├── package.json                  # 独立依赖 (better-sqlite3/express/ws)
 │   └── src/
 │       ├── index.ts                  # ★ 入口 (HTTP :5890 + WebSocket)
@@ -211,7 +211,7 @@ smanbase/
 │       ├── project-index.ts          # 项目能力索引
 │       └── protocol.ts              # 消息协议 (类型白名单 + 必填字段)
 ├── shared/                         # 共享类型
-│   └── bazaar-types.ts              # Agent集市消息协议
+│   └── stardom-types.ts             # 星域消息协议
 ├── plugins/                        # 插件目录 (16 个插件)
 │   ├── superpowers/                  # 开发方法论 (TDD/调试/规划...)
 │   ├── dev-workflow/                 # 完整开发流程
@@ -250,7 +250,7 @@ ClaudeSessionManager.sendMessage()
     │       ├── process.chdir(workspace)   ← 序列化防竞态
     │       ├── unstable_v2_createSession(options)
     │       │       │
-    │       │       ├── MCP Servers: web-search + web-access + bazaar + capability-gateway
+    │       │       ├── MCP Servers: web-search + web-access + stardom + capability-gateway
     │       │       ├── Plugins: superpowers + dev-workflow
     │       │       └── System prompt: claude_code 预设
     │       │
@@ -371,35 +371,35 @@ WebAccessService.navigateOrCreateTab(sessionId, url)
         └── takeSnapshot() → 无障碍树 + 登录检测
 ```
 
-### 4.6 Agent 集市协作流
+### 4.6 星域协作流
 
 ```
-Claude 调用 MCP 工具: bazaar_collaborate(question, target?)
+Claude 调用 MCP 工具: stardom_collaborate(question, target?)
     │
     ▼
-BazaarMcpServer
+StardomMcpServer
     │
-    ├── bazaar_search → 搜索本地经验 + 远程 Agent (排序: 老搭档 > 历史 > 有经验 > 远程)
+    ├── stardom_search → 搜索本地经验 + 远程 Agent (排序: 老搭档 > 历史 > 有经验 > 远程)
     │
-    └── bazaar_collaborate
+    └── stardom_collaborate
         │
         ▼
-    BazaarBridge → BazaarClient → ws://bazaar:5890
+    StardomBridge → StardomClient → ws://stardom:5890
         │
         ▼
-    Bazaar Server TaskEngine
+    Stardom Server TaskEngine
         │
         ├── 创建 task (searching)
         ├── 关键词匹配在线 Agent (按声望排序)
         ├── 发送 task.incoming → 目标 Agent
         │
         ▼ 目标 Agent 接受
-    BazaarBridge 收到 task.accept
+    StardomBridge 收到 task.accept
         │
         ▼
-    BazaarSession.startCollaboration()
+    StardomSession.startCollaboration()
         │
-        ├── 创建独立 Claude session (bazaar-{taskId})
+        ├── 创建独立 Claude session (stardom-{taskId})
         ├── 注入协作上下文 (搭档历史 + 经验路由)
         ├── sendMessageForCron() → 获取答案
         └── task.complete → 经验提取 (Claude API 总结 100 字)
@@ -442,7 +442,7 @@ chatbot_sessions (user_id + workspace PK, session_id)
 chatbot_workspaces (workspace PK, last_used_at)
 ```
 
-### 5.2 集市本地 `~/.sman/bazaar.db`
+### 5.2 星域本地 `~/.sman/stardom.db`
 
 ```sql
 identity (agent_id PK, hostname, username, name, server)
@@ -453,10 +453,10 @@ pair_history (partner_id PK, task_count, avg_rating)      -- 磨合记录
 cached_results (task_id PK, result_text, from_agent)
 ```
 
-### 5.3 集市服务器 `~/.bazaar/`
+### 5.3 星域服务器 `~/.stardom/`
 
 ```sql
--- bazaar.db
+-- stardom.db
 agents (id PK, username UNIQUE, hostname, name, description, status,
         reputation, last_seen_at)
 audit_log (id AUTO, event_type, agent_id, detail JSON)
@@ -490,7 +490,7 @@ capabilities (name PK, description, version, category, package_url)
 | `skills.listProject` | `{workspace}` | 项目 Skills |
 | `cron.*` | 各异 | Cron CRUD + 执行 |
 | `batch.*` | 各异 | Batch 全生命周期 |
-| `bazaar.*` | 各异 | 集市操作 (转发到 Bridge) |
+| `stardom.*` | 各异 | 星域操作 (转发到 Bridge) |
 
 ### 服务端 → 客户端 (流式)
 
@@ -553,7 +553,7 @@ buildSessionOptions(workspace) {
     mcpServers: {
       'brave-search' | 'tavily-search' | 'bing-search',  // Web 搜索
       'web-access',       // 浏览器自动化 (11 工具)
-      'bazaar',           // Agent 集市 (2 工具)
+      'stardom',           // 星域 (2 工具)
       'capability-gateway' // 能力网关
     },
     skills: globalSkills + projectSkills
@@ -581,12 +581,12 @@ buildSessionOptions(workspace) {
 | `web_access_list_tabs` | 列出标签页 | CdpEngine → Target.getTargets |
 | `web_access_close_tab` | 关闭标签页 | CdpEngine → Target.closeTarget |
 
-### 8.2 Bazaar (2 个工具)
+### 8.2 Stardom (2 个工具)
 
 | 工具 | 说明 | 排序逻辑 |
 |------|------|---------|
-| `bazaar_search` | 搜索经验 + Agent | 老搭档 > 历史协作 > 有经验 > 远程 |
-| `bazaar_collaborate` | 发起协作请求 | 自动创建 task → 匹配 → 通信 |
+| `stardom_search` | 搜索经验 + Agent | 老搭档 > 历史协作 > 有经验 > 远程 |
+| `stardom_collaborate` | 发起协作请求 | 自动创建 task → 匹配 → 通信 |
 
 ### 8.3 Web Search (3 选 1)
 
@@ -640,7 +640,7 @@ CapabilityRegistry.initCapabilities()
 协作完成 (rating >= 3)
     │
     ▼
-BazaarBridge 提取经验
+StardomBridge 提取经验
     │
     ├── Claude API 直接调用 → 生成 100 字经验摘要
     │
@@ -648,7 +648,7 @@ BazaarBridge 提取经验
 写入本地 SQLite:
     │
     ├── learned_routes (capability, agent_id, experience)
-    │   └── 下次搜索 bazaar_search 时优先匹配
+    │   └── 下次搜索 stardom_search 时优先匹配
     │
     └── pair_history (partner_id, task_count, avg_rating)
         └── 搜索排序: 老搭档 > 历史协作 > 有经验 > 远程
@@ -687,7 +687,7 @@ Layer 3: 探针
 | Chrome Profile 复制 | 复用已登录的 Cookie/Session，避免重复登录 |
 | CDP 而非 Puppeteer | 直接协议控制更轻量，无额外依赖 |
 | 插件 SKILL.md 注入 | 最简实现，Claude 直接理解自然语言指令 |
-| 集市独立部署 | Agent 可跨实例协作，解耦主服务 |
+| 星域独立部署 | Agent 可跨实例协作，解耦主服务 |
 
 ---
 
@@ -697,7 +697,7 @@ Layer 3: 探针
 ┌──────────┐   ┌──────────────────────────────────────────┐
 │ Electron │   │  :5880  主服务 (HTTP + WebSocket)        │
 │ Browser  │──▶│  :5881  Vite Dev (仅开发模式)            │
-│ Window   │   │  :5890  Bazaar Server (独立部署)          │
+│ Window   │   │  :5890  Stardom Server (独立部署)         │
 └──────────┘   │  :9333  Chrome CDP (Web Access 自动启动)  │
                └──────────────────────────────────────────┘
 ```
@@ -708,11 +708,11 @@ Layer 3: 探针
 
 ```
 ~/.sman/
-├── config.json              # 主配置 (LLM/WebSearch/Chatbot/Auth/Bazaar)
+├── config.json              # 主配置 (LLM/WebSearch/Chatbot/Auth/Stardom)
 ├── registry.json            # Skills 注册表
 ├── capabilities.json        # 能力启用状态
 ├── sman.db                  # 主数据库 (会话/消息/Cron/Batch/Chatbot)
-├── bazaar.db                # 集市本地数据 (identity/tasks/routes/pairs)
+├── stardom.db               # 星域本地数据 (identity/tasks/routes/pairs)
 ├── user-profile.md          # 用户画像 (LLM 自动维护)
 ├── web-access-experiences.json  # URL 经验映射
 ├── chrome-profile/          # Chrome Profile 复制 (Cookie/书签)

@@ -1,4 +1,4 @@
-// bazaar/tests/task-flow.test.ts
+// stardom/tests/task-flow.test.ts
 // 集成测试：验证完整的 task 生命周期通过 MessageRouter + TaskEngine 走通
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MessageRouter } from '../src/message-router.js';
@@ -52,7 +52,7 @@ describe('Task Flow Integration', () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `bazaar-flow-test-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `stardom-flow-test-${Date.now()}.db`);
     taskStore = new TaskStore(dbPath);
     agentStore = createMockAgentStore();
     connections = new Map();

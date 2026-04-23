@@ -17,7 +17,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
          ↓
     项目目录 (用户选择) + MCP Servers + Plugins + Capabilities
          ↕
-    Agent 集市 (多 Agent 协作网络)
+    星域 (多 Agent 协作网络)
 ```
 
 ### 四端入口
@@ -98,21 +98,21 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── claude-init-runner.ts  # Claude 初始化执行
 │   │   ├── init-types.ts          # 初始化类型
 │   │   └── templates/             # 初始化模板（含 knowledge-business/conventions/technical 知识 skill 占位）
-│   ├── bazaar/              # Agent 集市桥接层（主项目 ↔ 集市服务器）
-│   │   ├── bazaar-store.ts        # 本地存储（tasks, learned_routes, pair_history, chat）
-│   │   ├── bazaar-bridge.ts       # 连接管理 + 消息处理（经验提取、磨合记录、上下文注入）
-│   │   ├── bazaar-client.ts       # WebSocket 客户端（注册、心跳、重连）
-│   │   ├── bazaar-mcp.ts          # MCP 工具（bazaar_search, bazaar_collaborate）
-│   │   ├── bazaar-session.ts      # 协作会话管理（Claude Agent SDK 集成）
-│   │   ├── types.ts               # 桥接层类型
-│   │   └── index.ts               # 导出
+│   ├── stardom/             # 星域桥接层（主项目 ↔ 星域服务器）
+│   │   ├── stardom-store.ts        # 本地存储（tasks, learned_routes, pair_history, chat）
+│   │   ├── stardom-bridge.ts       # 连接管理 + 消息处理（经验提取、磨合记录、上下文注入）
+│   │   ├── stardom-client.ts       # WebSocket 客户端（注册、心跳、重连）
+│   │   ├── stardom-mcp.ts          # MCP 工具（stardom_search, stardom_collaborate）
+│   │   ├── stardom-session.ts      # 协作会话管理（Claude Agent SDK 集成）
+│   │   ├── types.ts                # 桥接层类型
+│   │   └── index.ts                # 导出
 │   └── utils/
 │       ├── logger.ts              # 日志工具
 │       └── content-blocks.ts      # 消息内容块构建（文本、图片、媒体）
 ├── src/                     # React 前端
 │   ├── app/
 │   │   ├── App.tsx          # 顶层应用组件
-│   │   └── routes.tsx       # 路由定义 (/chat, /settings, /cron-tasks, /batch-tasks, /bazaar)
+│   │   └── routes.tsx       # 路由定义 (/chat, /settings, /cron-tasks, /batch-tasks, /stardom)
 │   ├── features/
 │   │   ├── chat/            # 聊天功能
 │   │   │   ├── index.tsx          # 聊天页面主组件
@@ -136,18 +136,18 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   │   └── BackendSettings.tsx    # 后端服务 URL 配置
 │   │   ├── cron-tasks/      # Cron 任务页面
 │   │   ├── batch-tasks/     # 批量任务页面
-│   │   └── bazaar/          # Agent 集市页面（仪表盘 + 像素世界）
+│   │   └── stardom/          # 星域页面（仪表盘 + 像素世界）
 │   ├── components/          # 通用组件
 │   │   ├── SessionTree.tsx         # 会话树（按目录分组、内置目录选择器）
 │   │   ├── DirectorySelectorDialog.tsx  # 目录选择对话框
 │   │   ├── SkillPicker.tsx         # Skill 选择器
-│   │   ├── layout/                 # 布局组件（MainLayout 隐藏 sidebar 用于 /bazaar 等路由）
+│   │   ├── layout/                 # 布局组件（MainLayout 隐藏 sidebar 用于 /stardom 等路由）
 │   │   ├── common/                 # 通用组件
 │   │   └── ui/                     # Radix UI 基础组件
 │   ├── stores/              # Zustand 状态管理
 │   │   ├── chat.ts          # 聊天状态（消息、会话管理、流式渲染、消息排队）
 │   │   ├── settings.ts      # 设置状态（同步后端配置）
-│   │   ├── bazaar.ts        # Agent 集市状态（连接、任务、Agent 列表、世界坐标）
+│   │   ├── stardom.ts        # 星域状态（连接、任务、Agent 列表、世界坐标）
 │   │   ├── cron.ts          # Cron 任务状态
 │   │   ├── batch.ts         # 批量任务状态
 │   │   └── ws-connection.ts # WebSocket 连接状态
@@ -184,11 +184,11 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │       ├── batch-utils.test.ts
 │       ├── cron-scheduler.test.ts
 │       ├── cron-task-store.test.ts
-│       ├── bazaar/          # Bazaar 桥接层测试
-│       │   ├── bazaar-client.test.ts
-│       │   ├── bazaar-mcp-ranking.test.ts
-│       │   ├── bazaar-session.test.ts
-│       │   ├── bazaar-store.test.ts
+│       ├── stardom/          # Stardom 桥接层测试
+│       │   ├── stardom-client.test.ts
+│       │   ├── stardom-mcp-ranking.test.ts
+│       │   ├── stardom-session.test.ts
+│       │   ├── stardom-store.test.ts
 │       │   └── bridge-integration.test.ts
 │       ├── capabilities/    # Capabilities 测试
 │       │   ├── registry.test.ts
@@ -221,11 +221,11 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   ├── init-skills.ts       # Skills 初始化
 │   ├── init-system.ts       # 系统初始化
 │   └── patch-sdk.mjs        # Claude Agent SDK postinstall 补丁
-├── bazaar/                  # Agent 集市服务器（独立包边界）
+├── stardom/                 # 星域服务器（独立包边界）
 │   ├── package.json         # 独立依赖
 │   ├── tsconfig.json        # 独立编译配置
 │   └── src/
-│       ├── index.ts         # 集市服务器入口（HTTP API + WebSocket）
+│       ├── index.ts         # 星域服务器入口（HTTP API + WebSocket）
 │       ├── message-router.ts # WS 消息分发
 │       ├── agent-store.ts   # Agent 注册/心跳
 │       ├── task-engine.ts   # 任务路由/排队
@@ -234,9 +234,9 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │       ├── reputation.ts    # 声望计算
 │       ├── world-state.ts   # 世界状态
 │       ├── protocol.ts      # 消息协议定义
-│       └── utils/           # 集市工具函数
-├── shared/                  # 共享类型（Sman + Bazaar 共用）
-│   └── bazaar-types.ts      # Agent 集市消息协议类型
+│       └── utils/           # 星域工具函数
+├── shared/                  # 共享类型（Sman + Stardom 共用）
+│   └── stardom-types.ts     # 星域消息协议类型
 ├── docs/                    # 文档
 │   ├── windows-packaging.md
 │   └── superpowers/         # 设计文档和规格
@@ -331,17 +331,17 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `server/session-store.ts` | SQLite 会话和消息存储 |
 | `electron/main.ts` | Electron 主进程（窗口、后端启动、GPU 兼容） |
 | `src/features/chat/` | 聊天功能组件 |
-| `src/features/bazaar/BazaarPage.tsx` | Agent 集市页面（仪表盘 + 像素世界双视图） |
-| `src/features/bazaar/world/` | 像素世界渲染引擎（Canvas、交互、精灵） |
+| `src/features/stardom/StardomPage.tsx` | 星域页面（仪表盘 + 像素世界双视图） |
+| `src/features/stardom/world/` | 像素世界渲染引擎（Canvas、交互、精灵） |
 | `src/features/settings/` | 设置页面组件 |
 | `src/stores/chat.ts` | 聊天状态管理（流式渲染、消息排队） |
-| `src/stores/bazaar.ts` | Agent 集市状态管理 |
+| `src/stores/stardom.ts` | 星域状态管理 |
 | `src/components/SessionTree.tsx` | 会话树 + 目录选择器 |
 | `src/lib/session-cache.ts` | 会话消息缓存层 |
-| `server/bazaar/bazaar-bridge.ts` | Agent 集市桥接层（连接管理、经验提取、磨合机制） |
-| `server/bazaar/bazaar-store.ts` | Agent 集市本地存储（SQLite） |
-| `server/bazaar/bazaar-mcp.ts` | Agent 集市 MCP 工具（bazaar_search, bazaar_collaborate） |
-| `bazaar/src/capability-store.ts` | 集市通用能力包存储 |
+| `server/stardom/stardom-bridge.ts` | 星域桥接层（连接管理、经验提取、磨合机制） |
+| `server/stardom/stardom-store.ts` | 星域本地存储（SQLite） |
+| `server/stardom/stardom-mcp.ts` | 星域 MCP 工具（stardom_search, stardom_collaborate） |
+| `stardom/src/capability-store.ts` | 星域通用能力包存储 |
 
 ## WebSocket API
 
@@ -389,19 +389,19 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `batch.create/generate/test/save/run` | 批量任务生命周期 |
 | `batch.pause/resume/cancel/retry` | 批量任务控制 |
 
-### Agent 集市
+### 星域
 
 | 类型 | 说明 |
 |------|------|
-| `bazaar.status` | 连接状态（connected/disconnected） |
-| `bazaar.task.list` | 获取协作任务列表 |
-| `bazaar.agent.list` | 获取在线 Agent 列表 |
-| `bazaar.leaderboard` | 获取声望排行榜 |
-| `bazaar.task.accept/reject` | 接受/拒绝协作任务 |
-| `bazaar.config.update` | 更新协作模式（auto/notify/manual） |
-| `bazaar.world.move` | 发送 Agent 世界坐标更新 |
-| `bazaar.notify` | 收到协作请求通知 |
-| `bazaar.task.chat.delta` | 协作对话增量消息 |
+| `stardom.status` | 连接状态（connected/disconnected） |
+| `stardom.task.list` | 获取协作任务列表 |
+| `stardom.agent.list` | 获取在线 Agent 列表 |
+| `stardom.leaderboard` | 获取声望排行榜 |
+| `stardom.task.accept/reject` | 接受/拒绝协作任务 |
+| `stardom.config.update` | 更新协作模式（auto/notify/manual） |
+| `stardom.world.move` | 发送 Agent 世界坐标更新 |
+| `stardom.notify` | 收到协作请求通知 |
+| `stardom.task.chat.delta` | 协作对话增量消息 |
 
 ## Chatbot 命令（企业微信/飞书/微信）
 
@@ -514,8 +514,8 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 7. **企业微信流式推送**: 通过 `aibot_respond_msg` + `msgtype: 'stream'` 实现流式回复，2 秒节流
 8. **Web Access 浏览器**: 通过 CDP 协议控制 Chrome，自动发现书签/历史中的企业站点
 9. **V2 Session 持久化**: SDK session_id 持久化到 SQLite，支持进程重启后恢复会话
-10. **Agent 集市三层架构**: 前端 (`src/features/bazaar/`) → 桥接层 (`server/bazaar/`) → 集市服务器 (`bazaar/src/`)
-11. **集市全屏模式**: `/bazaar` 路由隐藏侧边栏，世界视图全屏 Canvas + 浮动控件
+10. **星域三层架构**: 前端 (`src/features/stardom/`) → 桥接层 (`server/stardom/`) → 星域服务器 (`stardom/src/`)
+11. **星域全屏模式**: `/stardom` 路由隐藏侧边栏，世界视图全屏 Canvas + 浮动控件
 12. **Agent 进化机制**: 对话经验自动提取 → learned_routes.experience 字段；磨合记录 → pair_history 表；搜索排序优先级：老搭档 > 历史协作 > 有经验 > 远程
 13. **Capabilities 系统**: Gateway MCP 注入每个会话，按需发现和激活能力包（Office 技能、PPT 生成等）
 14. **会话初始化**: 新建会话自动扫描项目 → 注入 Skills → 匹配 Capabilities → 执行初始化对话

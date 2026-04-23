@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar 集市服务器骨架 实施计划
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.

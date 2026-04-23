@@ -1,10 +1,10 @@
-// src/features/bazaar/TaskPanel.tsx
-import { useBazaarStore } from '@/stores/bazaar';
+// src/features/stardom/TaskPanel.tsx
+import { useStardomStore } from '@/stores/stardom';
 import { TaskCard } from './TaskCard';
 import { ListTodo } from 'lucide-react';
 
 export function TaskPanel() {
-  const { tasks, setActiveChat, cancelTask } = useBazaarStore();
+  const { tasks, setActiveChat, cancelTask } = useStardomStore();
 
   const activeTasks = tasks.filter(t =>
     t.status === 'searching' || t.status === 'offered' || t.status === 'matched' || t.status === 'chatting'

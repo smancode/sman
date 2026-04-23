@@ -1,4 +1,4 @@
-// bazaar/src/reputation.ts
+// stardom/src/reputation.ts
 import { createLogger, type Logger } from './utils/logger.js';
 import type { AgentStore } from './agent-store.js';
 

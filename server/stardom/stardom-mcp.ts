@@ -1,6 +1,6 @@
-// server/bazaar/bazaar-mcp.ts
+// server/stardom/stardom-mcp.ts
 /**
- * MCP Server — registers bazaar_search and bazaar_collaborate tools.
+ * MCP Server — registers stardom_search and stardom_collaborate tools.
  *
  * Uses createSdkMcpServer + tool API for in-process MCP server.
  * Pattern follows server/web-access/mcp-server.ts.
@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
-import type { BazaarMcpDeps } from './types.js';
+import type { StardomMcpDeps } from './types.js';
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
@@ -21,11 +21,11 @@ function errorResult(message: string): ToolResult {
 }
 
 /**
- * 临时拦截 BazaarClient.onMessage 回调，等待特定消息类型。
- * BazaarClient 使用 onMessage 回调而非 EventEmitter，所以需要保存/恢复原始 handler。
+ * 临时拦截 StardomClient.onMessage 回调，等待特定消息类型。
+ * StardomClient 使用 onMessage 回调而非 EventEmitter，所以需要保存/恢复原始 handler。
  */
 function waitForMessage(
-  client: BazaarMcpDeps['client'],
+  client: StardomMcpDeps['client'],
   type: string,
   timeoutMs: number,
 ): Promise<Record<string, unknown>> {
@@ -49,14 +49,14 @@ function waitForMessage(
   });
 }
 
-export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWithInstance {
+export function createStardomMcpServer(deps: StardomMcpDeps): McpSdkServerConfigWithInstance {
   const searchTool = tool(
-    'bazaar_search',
+    'stardom_search',
     '搜索集市上其他 Agent 的能力。当你无法完成某个任务时（比如缺少某个项目的代码访问权限、不了解特定业务逻辑），'
       + '用此工具搜索能帮你的人。\n\n'
-      + '能力查找顺序：先自己尝试 → sman capabilities list 查本地能力包 → bazaar_search 搜索其他 Agent → sman capabilities search 搜索集市能力包\n\n'
+      + '能力查找顺序：先自己尝试 → sman capabilities list 查本地能力包 → stardom_search 搜索其他 Agent → sman capabilities search 搜索集市能力包\n\n'
       + '返回匹配的 Agent 列表（名称、能力、在线状态、声望、协作历史），'
-      + '然后用 bazaar_collaborate 发起协作。',
+      + '然后用 stardom_collaborate 发起协作。',
     {
       query: z.string().describe('搜索关键词，描述你需要的能力，如 "支付查询" 或 "风控规则"'),
     },
@@ -127,7 +127,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
 
         return textResult(
           `找到 ${allResults.length} 个匹配的 Agent：\n${lines.join('\n')}\n\n`
-          + `用 bazaar_collaborate 向其中任何一个发起协作。`,
+          + `用 stardom_collaborate 向其中任何一个发起协作。`,
         );
       } catch (e: any) {
         return errorResult(`搜索失败: ${e.message}`);
@@ -136,11 +136,11 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
   );
 
   const collaborateTool = tool(
-    'bazaar_collaborate',
-    '向指定 Agent 发起协作请求。先用 bazaar_search 找到合适的 Agent，然后用此工具请求对方协助。'
+    'stardom_collaborate',
+    '向指定 Agent 发起协作请求。先用 stardom_search 找到合适的 Agent，然后用此工具请求对方协助。'
       + '对方接受后，你们可以实时对话解决问题。协作过程会在前端传送门页面实时显示。',
     {
-      targetAgentId: z.string().describe('目标 Agent 的 ID（从 bazaar_search 结果中获取）'),
+      targetAgentId: z.string().describe('目标 Agent 的 ID（从 stardom_search 结果中获取）'),
       question: z.string().describe('你需要对方帮助解决的问题'),
     },
     async (args: any) => {
@@ -169,7 +169,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
   );
 
   return createSdkMcpServer({
-    name: 'bazaar',
+    name: 'stardom',
     version: '1.0.0',
     tools: [searchTool, collaborateTool],
   });
@@ -178,7 +178,7 @@ export function createBazaarMcpServer(deps: BazaarMcpDeps): McpSdkServerConfigWi
 // ── Helper：远程搜索（返回 matches 列表）──
 
 async function searchRemoteAgents(
-  deps: BazaarMcpDeps,
+  deps: StardomMcpDeps,
   query: string,
 ): Promise<Array<{ agentId: string; name: string; repo: string }>> {
   deps.client.send({
@@ -203,7 +203,7 @@ async function searchRemoteAgents(
 // ── Helper：远程搜索并返回含 taskId 的 payload ──
 
 async function searchRemoteWithId(
-  deps: BazaarMcpDeps,
+  deps: StardomMcpDeps,
   query: string,
 ): Promise<Record<string, unknown>> {
   deps.client.send({

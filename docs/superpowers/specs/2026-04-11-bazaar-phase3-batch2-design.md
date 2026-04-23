@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar Phase 3 Batch 2：声望排行榜 + 声望衰减
 
 > 2026-04-11

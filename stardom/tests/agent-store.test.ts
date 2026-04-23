@@ -1,4 +1,4 @@
-// bazaar/tests/agent-store.test.ts
+// stardom/tests/agent-store.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AgentStore } from '../src/agent-store.js';
 import fs from 'fs';
@@ -10,7 +10,7 @@ describe('AgentStore', () => {
   let dbPath: string;
 
   beforeEach(() => {
-    dbPath = path.join(os.tmpdir(), `bazaar-agent-test-${Date.now()}.db`);
+    dbPath = path.join(os.tmpdir(), `stardom-agent-test-${Date.now()}.db`);
     store = new AgentStore(dbPath);
   });
 

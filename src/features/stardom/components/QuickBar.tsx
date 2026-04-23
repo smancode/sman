@@ -1,4 +1,4 @@
-// src/features/bazaar/components/QuickBar.tsx
+// src/features/stardom/components/QuickBar.tsx
 // 底部快捷入口 — 战术面板入口
 
 import { Dna, Map, Trophy, FileText, Network } from 'lucide-react';

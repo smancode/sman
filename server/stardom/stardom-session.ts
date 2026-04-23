@@ -1,9 +1,9 @@
-// server/bazaar/bazaar-session.ts
+// server/stardom/stardom-session.ts
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger, type Logger } from '../utils/logger.js';
-import type { ActiveCollaboration, BazaarSessionDeps } from './types.js';
+import type { ActiveCollaboration, StardomSessionDeps } from './types.js';
 
-const SESSION_ID_PREFIX = 'bazaar-';
+const SESSION_ID_PREFIX = 'stardom-';
 
 /**
  * 协作 Session 管理器
@@ -15,17 +15,17 @@ const SESSION_ID_PREFIX = 'bazaar-';
  * - 结束：complete/abort/timeout 时清理资源
  *
  * Note: sendMessageForCron 的 onActivity 是 () => void（无回复内容），
- * 当前通过 sendClaudeReplyToBazaar() 方法由外部调用来发送回复。
+ * 当前通过 sendClaudeReplyToStardom() 方法由外部调用来发送回复。
  * 未来可以通过 stream hook 提取 Claude 回复自动调用。
  */
-export class BazaarSession {
+export class StardomSession {
   private log: Logger;
-  private deps: BazaarSessionDeps;
+  private deps: StardomSessionDeps;
   private activeCollaborations = new Map<string, ActiveCollaboration>();
 
-  constructor(deps: BazaarSessionDeps) {
+  constructor(deps: StardomSessionDeps) {
     this.deps = deps;
-    this.log = createLogger('BazaarSession');
+    this.log = createLogger('StardomSession');
   }
 
   /**
@@ -98,7 +98,7 @@ export class BazaarSession {
 
     // 推送状态更新给前端
     this.deps.broadcast(JSON.stringify({
-      type: 'bazaar.status',
+      type: 'stardom.status',
       event: 'collaboration_started',
       taskId,
       helperName,
@@ -156,7 +156,7 @@ export class BazaarSession {
     this.activeCollaborations.delete(taskId);
 
     this.deps.broadcast(JSON.stringify({
-      type: 'bazaar.status',
+      type: 'stardom.status',
       event: 'collaboration_aborted',
       taskId,
       activeSlots: this.activeCollaborations.size,
@@ -191,7 +191,7 @@ export class BazaarSession {
     });
 
     this.deps.broadcast(JSON.stringify({
-      type: 'bazaar.status',
+      type: 'stardom.status',
       event: 'collaboration_completed',
       taskId,
       rating,
@@ -216,7 +216,7 @@ export class BazaarSession {
    * 提取 Claude 最终回复并发送回集市
    * 当前由外部调用，未来可改为从 stream hook 自动提取
    */
-  sendClaudeReplyToBazaar(taskId: string, replyText: string): void {
+  sendClaudeReplyToStardom(taskId: string, replyText: string): void {
     if (!replyText.trim()) return;
 
     // 保存到本地聊天记录
@@ -235,13 +235,13 @@ export class BazaarSession {
 
     // 推送给前端
     this.deps.broadcast(JSON.stringify({
-      type: 'bazaar.task.chat.delta',
+      type: 'stardom.task.chat.delta',
       taskId,
       from: 'local',
       text: replyText,
     }));
 
-    this.log.info(`Sent Claude reply to bazaar for task ${taskId} (${replyText.length} chars)`);
+    this.log.info(`Sent Claude reply to stardom for task ${taskId} (${replyText.length} chars)`);
   }
 
   // ── 查询方法 ──

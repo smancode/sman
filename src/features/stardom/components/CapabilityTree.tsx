@@ -1,9 +1,9 @@
-// src/features/bazaar/components/CapabilityTree.tsx
+// src/features/stardom/components/CapabilityTree.tsx
 // 进化仓 — 能力数字化三层架构
 // 第一层：可完全数字协作(绿) / 第二层：协作增强(蓝) / 第三层：辅助支持(灰)
 // 五维评分：可表达性 × 可观察性 × 可重复性 × 可评估性 × 可拆分性
 
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { useState, useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -186,7 +186,7 @@ function LayerPanel({ layer, items }: {
 // ── 主组件 ──
 
 export function CapabilityTree() {
-  const { capabilities } = useBazaarStore();
+  const { capabilities } = useStardomStore();
 
   const layerData = useMemo(() => {
     const result: Record<string, Array<{ capability: string; experience: string; agentName: string; score: number }>> = {

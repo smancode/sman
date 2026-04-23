@@ -1,4 +1,4 @@
-// bazaar/src/task-engine.ts
+// stardom/src/task-engine.ts
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { TaskStore } from './task-store.js';

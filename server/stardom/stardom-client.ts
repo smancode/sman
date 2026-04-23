@@ -1,9 +1,9 @@
-// server/bazaar/bazaar-client.ts
+// server/stardom/stardom-client.ts
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 import { createLogger, type Logger } from '../utils/logger.js';
-import type { BazaarStore } from './bazaar-store.js';
+import type { StardomStore } from './stardom-store.js';
 import type { LocalAgentIdentity } from './types.js';
 
 interface ClientOptions {
@@ -15,9 +15,9 @@ const DEFAULT_HEARTBEAT_MS = 30_000;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 60_000;
 
-export class BazaarClient {
+export class StardomClient {
   private log: Logger;
-  private store: BazaarStore;
+  private store: StardomStore;
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempts = 0;
@@ -30,10 +30,10 @@ export class BazaarClient {
   // Called after successful connection/reconnection
   public onReconnect: (() => void) | null = null;
 
-  constructor(store: BazaarStore, options: ClientOptions) {
+  constructor(store: StardomStore, options: ClientOptions) {
     this.store = store;
     this.options = options;
-    this.log = createLogger('BazaarClient');
+    this.log = createLogger('StardomClient');
   }
 
   async connect(): Promise<void> {
@@ -50,7 +50,7 @@ export class BazaarClient {
   private async doConnect(identity: LocalAgentIdentity): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = `ws://${identity.server}`;
-      this.log.info(`Connecting to bazaar: ${url}`);
+      this.log.info(`Connecting to stardom: ${url}`);
 
       this.ws = new WebSocket(url);
       let settled = false;
@@ -65,7 +65,7 @@ export class BazaarClient {
         clearTimeout(timeoutId);
         if (settled) return;
         settled = true;
-        this.log.info('Connected to bazaar server');
+        this.log.info('Connected to stardom server');
         this.reconnectAttempts = 0;
 
         // 发送注册消息
@@ -107,7 +107,7 @@ export class BazaarClient {
       });
 
       this.ws.on('close', () => {
-        this.log.info('Disconnected from bazaar');
+        this.log.info('Disconnected from stardom');
         this.stopHeartbeat();
         if (!this.stopped) this.scheduleReconnect(identity);
       });
@@ -128,7 +128,7 @@ export class BazaarClient {
     }
   }
 
-  /** Send task.sync for a specific task to the bazaar server */
+  /** Send task.sync for a specific task to the stardom server */
   sendTaskSync(taskId: string): void {
     this.send({
       id: uuidv4(),

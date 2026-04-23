@@ -1,4 +1,4 @@
-import type { BazaarConfig } from '../shared/bazaar-types.js';
+import type { StardomConfig } from '../shared/stardom-types.js';
 
 export interface SkillEntry {
   name: string;
@@ -71,7 +71,7 @@ export interface SmanConfig {
   auth: {
     token: string;
   };
-  bazaar?: BazaarConfig;
+  stardom?: StardomConfig;
 }
 
 // === Cron Task Types ===

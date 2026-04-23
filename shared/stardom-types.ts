@@ -1,5 +1,5 @@
-// shared/bazaar-types.ts
-// Bazaar 集市服务器与 Sman Bridge 层的共享消息协议类型
+// shared/stardom-types.ts
+// Stardom 集市服务器与 Sman Bridge 层的共享消息协议类型
 
 // ── Agent 相关 ──
 
@@ -19,14 +19,14 @@ export interface AgentProfile {
 
 // ── 消息协议 ──
 
-export interface BazaarMessage {
+export interface StardomMessage {
   id: string;              // 消息 UUID（幂等去重）
   type: string;
   inReplyTo?: string;
   payload: Record<string, unknown>;
 }
 
-export interface BazaarAck {
+export interface StardomAck {
   type: 'ack';
   id: string;              // 原消息 ID
 }
@@ -190,10 +190,10 @@ export interface TaskSyncPayload {
   taskId: string;
 }
 
-// ── Bazaar 配置（嵌入 SmanConfig） ──
+// ── Stardom 配置（嵌入 SmanConfig） ──
 
-export interface BazaarConfig {
-  server: string;          // 集市服务器地址，如 "bazaar.company.com:5890"
+export interface StardomConfig {
+  server: string;          // 星域服务器地址，如 "stardom.company.com:5890"
   agentName?: string;      // Agent 显示名
   mode: CollaborationMode;  // 协作模式
   maxConcurrentTasks: number;  // 最大并发槽位，默认 3

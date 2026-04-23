@@ -1,9 +1,9 @@
-// src/features/bazaar/BazaarDashboard.tsx
+// src/features/stardom/StardomDashboard.tsx
 // Agent 星图 — Collaboration Atlas
 // 深色基底 + 网络沙盘 + 世界事件流 + 资源条 + 进化仓
 
 import { useEffect, useState } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { MyAgentPanel } from './components/MyAgentPanel';
 import { ActivityFeed } from './components/ActivityFeed';
 import { ControlPanel } from './components/ControlPanel';
@@ -20,8 +20,8 @@ import { Button } from '@/components/ui/button';
 type ViewMode = 'immersive' | 'professional';
 type SubView = 'main' | 'evolution';
 
-export function BazaarDashboard() {
-  const { fetchTasks, fetchOnlineAgents, fetchLeaderboard, fetchCapabilities, loading, connection, tasks, onlineAgents } = useBazaarStore();
+export function StardomDashboard() {
+  const { fetchTasks, fetchOnlineAgents, fetchLeaderboard, fetchCapabilities, loading, connection, tasks, onlineAgents } = useStardomStore();
   const [viewMode, setViewMode] = useState<ViewMode>('immersive');
   const [subView, setSubView] = useState<SubView>('main');
 
@@ -33,7 +33,7 @@ export function BazaarDashboard() {
   }, [fetchTasks, fetchOnlineAgents, fetchLeaderboard, fetchCapabilities]);
 
   return (
-    <div className="bazaar-theme flex h-full relative">
+    <div className="stardom-theme flex h-full relative">
       <TaskNotify />
 
       {/* Left: Agent Panel */}

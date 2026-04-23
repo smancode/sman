@@ -1,4 +1,4 @@
-// src/features/bazaar/components/ReputationUtils.ts
+// src/features/stardom/components/ReputationUtils.ts
 // 声望等级系统
 
 export interface ReputationLevel {

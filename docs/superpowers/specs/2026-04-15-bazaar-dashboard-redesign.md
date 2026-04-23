@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Agent 集市 Dashboard 重设计
 
 > **状态**: 已批准

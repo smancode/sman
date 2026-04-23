@@ -1,4 +1,4 @@
-// bazaar/tests/reputation.test.ts
+// stardom/tests/reputation.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ReputationEngine } from '../src/reputation.js';
 import type { AgentStore } from '../src/agent-store.js';

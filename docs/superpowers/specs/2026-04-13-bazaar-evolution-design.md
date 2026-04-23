@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar Agent 自我进化 + 前端引导 设计文档
 
 > **日期**: 2026-04-13

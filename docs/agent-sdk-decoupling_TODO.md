@@ -12,7 +12,7 @@ SDK 直接散布在 8 个源文件中，**没有抽象层**。
 | 文件 | SDK 用途 | 切换难度 |
 |------|---------|---------|
 | `server/claude-session.ts` | Session 生命周期（创建、发送、流式迭代、中断） | **高**（核心，~1580 行） |
-| `server/bazaar/bazaar-mcp.ts` | In-process MCP Server 创建 | 低 |
+| `server/stardom/stardom-mcp.ts` | In-process MCP Server 创建 | 低 |
 | `server/capabilities/gateway-mcp-server.ts` | In-process MCP Server + 动态注入 | 中 |
 | `server/capabilities/office-skills-runner.ts` | `tool()` 定义 | 低 |
 | `server/web-access/mcp-server.ts` | In-process MCP Server 创建 | 低 |
@@ -111,7 +111,7 @@ interface McpServerDefinition {
 #### Phase 2：迁移 MCP 模块
 
 1. `web-access/mcp-server.ts` → 使用 `agent/mcp-server.ts` 的封装
-2. `bazaar/bazaar-mcp.ts` → 同上
+2. `stardom/stardom-mcp.ts` → 同上
 3. `capabilities/gateway-mcp-server.ts` → 同上
 4. `capabilities/office-skills-runner.ts` → 同上
 5. 移除 `scripts/patch-sdk.mjs` 中的 hack，将必要的功能在 adapter 层解决

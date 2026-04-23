@@ -19,7 +19,7 @@ export function Sidebar() {
   const connectionStatus = useWsConnection((s) => s.status);
   const location = useLocation();
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
-  const shouldBlur = !['/chat', '/bazaar'].includes(location.pathname);
+  const shouldBlur = !['/chat', '/stardom'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
   const blurSession = shouldBlur && !dismissed;
 
@@ -54,7 +54,7 @@ export function Sidebar() {
       {/* Footer - 固定在底部 */}
       <div className="p-2 shrink-0 space-y-0.5">
         <NavLink
-          to="/bazaar"
+          to="/stardom"
           className={({ isActive }) =>
             cn(
               'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',

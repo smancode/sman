@@ -1,7 +1,7 @@
-// src/features/bazaar/components/CollaborationDetail.tsx
+// src/features/stardom/components/CollaborationDetail.tsx
 // 展开的协作对话详情面板
 
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { X, AlertTriangle } from 'lucide-react';
@@ -13,7 +13,7 @@ interface CollaborationDetailProps {
 }
 
 export function CollaborationDetail({ taskId, onClose }: CollaborationDetailProps) {
-  const { activeChat, getTaskChat, acceptTask, rejectTask, notifications } = useBazaarStore();
+  const { activeChat, getTaskChat, acceptTask, rejectTask, notifications } = useStardomStore();
   const messages = activeChat?.taskId === taskId ? activeChat.messages : getTaskChat(taskId);
   const notification = notifications.find((n) => n.taskId === taskId);
 

@@ -7,7 +7,7 @@ import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
 import { ChatbotSettings } from './ChatbotSettings';
 import { BackendSettings } from './BackendSettings';
-import { BazaarSettings } from '@/features/bazaar/BazaarSettings';
+import { StardomSettings } from '@/features/stardom/StardomSettings';
 import { useSettingsStore } from '@/stores/settings';
 
 declare const __APP_VERSION__: string;
@@ -75,7 +75,7 @@ const SECTIONS = [
   { id: 'backend', label: '后端连接', icon: Wifi },
   { id: 'chatbot', label: 'Bot 机器人设置', icon: Bot },
   { id: 'websearch', label: '网络搜索配置', icon: Search },
-  { id: 'bazaar', label: 'Agent星图配置', icon: Store },
+  { id: 'stardom', label: '星域配置', icon: Store },
   { id: 'community', label: '加入社群', icon: Users },
 ] as const;
 
@@ -178,7 +178,7 @@ export function Settings() {
           <BackendSettings id="settings-backend" />
           <ChatbotSettings id="settings-chatbot" />
           <WebSearchSettings id="settings-websearch" />
-          <BazaarSettings id="settings-bazaar" />
+          <StardomSettings id="settings-stardom" />
 
           {/* 加入社群 */}
           <Card id="settings-community">

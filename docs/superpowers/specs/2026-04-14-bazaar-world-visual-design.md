@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Agent 集市像素世界 — 冷色奇幻学院整体视觉设计
 
 > 2026-04-14 | Phase 4 迭代后（解决专家评审 42 个问题）

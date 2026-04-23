@@ -1,9 +1,9 @@
-// src/features/bazaar/components/NetworkSandbox.tsx
+// src/features/stardom/components/NetworkSandbox.tsx
 // 协作星图 — Collaboration Atlas 核心
 // 能力簇→星云发光 / 协作路径→星路流动 / 贡献沉积→节点亮度
 // 纯 SVG + CSS 动画
 
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
 import { useMemo } from 'react';
 import { getReputationLevel } from './ReputationUtils';
@@ -155,7 +155,7 @@ function layoutNodes(
 }
 
 export function NetworkSandbox() {
-  const { tasks, onlineAgents, connection } = useBazaarStore();
+  const { tasks, onlineAgents, connection } = useStardomStore();
   const sending = useChatStore((s) => s.sending);
 
   const width = 800;

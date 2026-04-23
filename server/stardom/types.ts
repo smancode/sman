@@ -1,4 +1,4 @@
-// server/bazaar/types.ts
+// server/stardom/types.ts
 import type { ClaudeSessionManager } from '../claude-session.js';
 import type { SettingsManager } from '../settings-manager.js';
 import type { SkillsRegistry } from '../skills-registry.js';
@@ -56,7 +56,7 @@ export interface NotifyTimeout {
 
 // ── 协作对话消息（本地存储） ──
 
-export interface BazaarChatMessage {
+export interface StardomChatMessage {
   id: number;
   taskId: string;
   from: string;         // 'local' | 'remote' | 'system'
@@ -64,12 +64,12 @@ export interface BazaarChatMessage {
   createdAt: string;
 }
 
-// ── BazaarSession 依赖注入 ──
+// ── StardomSession 依赖注入 ──
 
-export interface BazaarSessionDeps {
+export interface StardomSessionDeps {
   sessionManager: import('../claude-session.js').ClaudeSessionManager;
-  client: import('./bazaar-client.js').BazaarClient;
-  store: import('./bazaar-store.js').BazaarStore;
+  client: import('./stardom-client.js').StardomClient;
+  store: import('./stardom-store.js').StardomStore;
   broadcast: (data: string) => void;
   homeDir: string;
   maxConcurrentTasks: number;
@@ -77,21 +77,21 @@ export interface BazaarSessionDeps {
 
 // ── Bridge → 前端消息类型 ──
 
-export type BazaarBridgeMessageType =
-  | 'bazaar.status'          // Agent 状态更新
-  | 'bazaar.task.list'       // 任务列表请求/响应
-  | 'bazaar.task.list.update' // 任务列表推送
-  | 'bazaar.task.detail'     // 任务详情
-  | 'bazaar.task.chat.delta' // 协作对话流
-  | 'bazaar.task.cancel'     // 强制结束任务
-  | 'bazaar.task.takeover'   // 接手控制
-  | 'bazaar.config.update'   // 更新配置
-  | 'bazaar.notify'          // 协作请求通知
-  | 'bazaar.digest';         // 每日摘要
+export type StardomBridgeMessageType =
+  | 'stardom.status'          // Agent 状态更新
+  | 'stardom.task.list'       // 任务列表请求/响应
+  | 'stardom.task.list.update' // 任务列表推送
+  | 'stardom.task.detail'     // 任务详情
+  | 'stardom.task.chat.delta' // 协作对话流
+  | 'stardom.task.cancel'     // 强制结束任务
+  | 'stardom.task.takeover'   // 接手控制
+  | 'stardom.config.update'   // 更新配置
+  | 'stardom.notify'          // 协作请求通知
+  | 'stardom.digest';         // 每日摘要
 
-// ── Bazaar 本地存储接口 ──
+// ── Stardom 本地存储接口 ──
 
-export interface BazaarLocalTask {
+export interface StardomLocalTask {
   taskId: string;
   direction: 'incoming' | 'outgoing';
   helperAgentId?: string;
@@ -107,8 +107,8 @@ export interface BazaarLocalTask {
 
 // ── MCP Server 依赖注入 ──
 
-export interface BazaarMcpDeps {
-  store: import('./bazaar-store.js').BazaarStore;
-  client: import('./bazaar-client.js').BazaarClient;
+export interface StardomMcpDeps {
+  store: import('./stardom-store.js').StardomStore;
+  client: import('./stardom-client.js').StardomClient;
   broadcast: (data: string) => void;
 }

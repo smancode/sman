@@ -1,10 +1,10 @@
-// bazaar/src/protocol.ts
+// stardom/src/protocol.ts
 import type {
   AgentMessageType,
   TaskMessageType,
   WorldMessageType,
   ServerMessageType,
-} from '../../shared/bazaar-types.js';
+} from '../../shared/stardom-types.js';
 
 type AllMessageTypes = AgentMessageType | TaskMessageType | WorldMessageType | ServerMessageType;
 

@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar Phase 4 Batch 1：像素风集市世界
 
 > 2026-04-11

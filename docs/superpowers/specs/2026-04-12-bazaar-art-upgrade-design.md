@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Bazaar 像素世界美术升级：开罗Q版风设计文档
 
 > 2026-04-12

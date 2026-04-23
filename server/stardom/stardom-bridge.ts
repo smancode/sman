@@ -1,44 +1,44 @@
-// server/bazaar/bazaar-bridge.ts
+// server/stardom/stardom-bridge.ts
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 import { createLogger, type Logger } from '../utils/logger.js';
-import { BazaarClient } from './bazaar-client.js';
-import { BazaarStore } from './bazaar-store.js';
-import { BazaarSession } from './bazaar-session.js';
+import { StardomClient } from './stardom-client.js';
+import { StardomStore } from './stardom-store.js';
+import { StardomSession } from './stardom-session.js';
 import type { BridgeDeps } from './types.js';
-import type { BazaarConfig } from '../../shared/bazaar-types.js';
+import type { StardomConfig } from '../../shared/stardom-types.js';
 
 /**
  * 能力查找顺序引导 — 注入到 Claude 对话上下文
- * 通过 sman cli --with-bazaar 加载时使用
+ * 通过 sman cli --with-stardom 加载时使用
  */
 export const CAPABILITY_LOOKUP_GUIDE = `[能力查找顺序]
 当你遇到无法完成的任务时，按以下顺序查找帮助：
 1. 先自己尝试解决
 2. 运行 \`sman capabilities list\` 检查本地已安装的能力包
-3. 使用 bazaar_search MCP 工具搜索集市上其他 Agent 寻求协作
+3. 使用 stardom_search MCP 工具搜索集市上其他 Agent 寻求协作
 4. 运行 \`sman capabilities search <关键词>\` 搜索集市能力包
 5. 都找不到时，告知用户需要什么能力`;
 
-export class BazaarBridge {
+export class StardomBridge {
   private log: Logger;
-  private client: BazaarClient;
-  private store: BazaarStore;
+  private client: StardomClient;
+  private store: StardomStore;
   private deps: BridgeDeps;
-  private bazaarSession: BazaarSession | null = null;
+  private stardomSession: StardomSession | null = null;
   private notifyTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(deps: BridgeDeps) {
     this.deps = deps;
-    this.log = createLogger('BazaarBridge');
-    const dbPath = `${deps.homeDir}/bazaar.db`;
-    this.store = new BazaarStore(dbPath);
-    this.client = new BazaarClient(this.store, {
+    this.log = createLogger('StardomBridge');
+    const dbPath = `${deps.homeDir}/stardom.db`;
+    this.store = new StardomStore(dbPath);
+    this.client = new StardomClient(this.store, {
       getAgentDescription: () => this.getAgentDescription(),
     });
 
     // 集市消息 → 前端推送
-    this.client.onMessage = (msg) => this.handleBazaarMessage(msg);
+    this.client.onMessage = (msg) => this.handleStardomMessage(msg);
 
     // 重连后同步活跃任务
     this.client.onReconnect = () => this.syncActiveTasks();
@@ -46,53 +46,53 @@ export class BazaarBridge {
 
   async start(): Promise<void> {
     const config = this.deps.settingsManager.getConfig();
-    if (!config.bazaar?.server) {
-      this.log.info('Bazaar not configured, bridge not started');
+    if (!config.stardom?.server) {
+      this.log.info('Stardom not configured, bridge not started');
       return;
     }
 
     // 确保有 Agent 身份
-    this.ensureIdentity(config.bazaar);
+    this.ensureIdentity(config.stardom);
 
     try {
       await this.client.connect();
-      this.log.info('Bazaar bridge started');
+      this.log.info('Stardom bridge started');
 
       // 初始化协作 Session 管理器
-      this.bazaarSession = new BazaarSession({
+      this.stardomSession = new StardomSession({
         sessionManager: this.deps.sessionManager,
         client: this.client,
         store: this.store,
         broadcast: this.deps.broadcast,
         homeDir: this.deps.homeDir,
-        maxConcurrentTasks: config.bazaar?.maxConcurrentTasks ?? 3,
+        maxConcurrentTasks: config.stardom?.maxConcurrentTasks ?? 3,
       });
 
       // MCP Server 通过 sman cli 按需加载，不自动注入到 Claude Session
-      // 当用户需要 bazaar 协作能力时，通过 cli 命令加载 bazaar MCP 工具
-      this.log.info('Bazaar bridge started. MCP tools available via sman cli load.');
+      // 当用户需要 stardom 协作能力时，通过 cli 命令加载 stardom MCP 工具
+      this.log.info('Stardom bridge started. MCP tools available via sman cli load.');
       this.log.info('Capability lookup guide available via MCP tools');
 
       // 推送初始连接状态给前端
       const identity = this.store.getIdentity();
       this.deps.broadcast(JSON.stringify({
-        type: 'bazaar.status',
+        type: 'stardom.status',
         event: 'connected',
         agentId: identity?.agentId,
         agentName: identity?.name,
         reputation: 0,
         activeSlots: 0,
-        maxSlots: config.bazaar?.maxConcurrentTasks ?? 3,
+        maxSlots: config.stardom?.maxConcurrentTasks ?? 3,
       }));
     } catch (err) {
-      this.log.error('Failed to connect to bazaar', { error: String(err) });
+      this.log.error('Failed to connect to stardom', { error: String(err) });
     }
   }
 
   stop(): void {
     // 清理所有活跃协作
-    this.bazaarSession?.stopAll();
-    this.bazaarSession = null;
+    this.stardomSession?.stopAll();
+    this.stardomSession = null;
 
     // 清理所有 notify 超时
     for (const timer of this.notifyTimeouts.values()) {
@@ -101,21 +101,21 @@ export class BazaarBridge {
     this.notifyTimeouts.clear();
 
     this.client.disconnect();
-    this.log.info('Bazaar bridge stopped');
+    this.log.info('Stardom bridge stopped');
   }
 
   // ── 前端 → Bridge 消息处理 ──
 
   handleFrontendMessage(type: string, payload: Record<string, unknown>, ws: unknown): void {
     switch (type) {
-      case 'bazaar.task.list':
+      case 'stardom.task.list':
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.task.list.update',
+          type: 'stardom.task.list.update',
           tasks: this.store.listTasks(),
         }));
         break;
 
-      case 'bazaar.task.accept': {
+      case 'stardom.task.accept': {
         const taskId = payload.taskId as string;
         this.clearNotifyTimeout(taskId);
         this.client.send({
@@ -126,7 +126,7 @@ export class BazaarBridge {
         break;
       }
 
-      case 'bazaar.task.reject': {
+      case 'stardom.task.reject': {
         const taskId = payload.taskId as string;
         this.clearNotifyTimeout(taskId);
         this.store.updateTaskStatus(taskId, 'rejected');
@@ -138,10 +138,10 @@ export class BazaarBridge {
         break;
       }
 
-      case 'bazaar.task.cancel': {
+      case 'stardom.task.cancel': {
         const taskId = payload.taskId as string;
         // 中止协作 Session
-        this.bazaarSession?.abortCollaboration(taskId);
+        this.stardomSession?.abortCollaboration(taskId);
         this.client.send({
           id: uuidv4(),
           type: 'task.cancel',
@@ -150,19 +150,19 @@ export class BazaarBridge {
         break;
       }
 
-      case 'bazaar.leaderboard':
+      case 'stardom.leaderboard':
         this.fetchLeaderboard();
         break;
 
-      case 'bazaar.config.update': {
+      case 'stardom.config.update': {
         const config = this.deps.settingsManager.getConfig();
-        const updated = { ...config.bazaar, ...payload } as import('../../shared/bazaar-types.js').BazaarConfig | undefined;
-        this.deps.settingsManager.updateConfig({ ...config, bazaar: updated });
-        this.log.info('Bazaar config updated', { mode: payload.mode });
+        const updated = { ...config.stardom, ...payload } as import('../../shared/stardom-types.js').StardomConfig | undefined;
+        this.deps.settingsManager.updateConfig({ ...config, stardom: updated });
+        this.log.info('Stardom config updated', { mode: payload.mode });
         break;
       }
 
-      case 'bazaar.world.move': {
+      case 'stardom.world.move': {
         const identity = this.store.getIdentity();
         if (!identity) break;
         this.client.send({
@@ -173,9 +173,9 @@ export class BazaarBridge {
         break;
       }
 
-      case 'bazaar.capabilities.list':
+      case 'stardom.capabilities.list':
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.capabilities.update',
+          type: 'stardom.capabilities.update',
           capabilities: this.store.listLearnedRoutes(),
         }));
         break;
@@ -187,8 +187,8 @@ export class BazaarBridge {
 
   // ── 集市 → Bridge 消息处理 ──
 
-  private handleBazaarMessage(msg: { type: string; payload: Record<string, unknown> }): void {
-    this.log.info(`Bazaar message: ${msg.type}`);
+  private handleStardomMessage(msg: { type: string; payload: Record<string, unknown> }): void {
+    this.log.info(`Stardom message: ${msg.type}`);
 
     switch (msg.type) {
       case 'task.incoming':
@@ -213,7 +213,7 @@ export class BazaarBridge {
 
       case 'task.matched':
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.status',
+          type: 'stardom.status',
           event: 'task_matched',
           taskId: msg.payload.taskId,
           helper: msg.payload.helper,
@@ -227,7 +227,7 @@ export class BazaarBridge {
           msg.type === 'task.timeout' ? 'timeout' : 'cancelled',
         );
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.status',
+          type: 'stardom.status',
           event: msg.type,
           taskId: msg.payload.taskId,
         }));
@@ -235,7 +235,7 @@ export class BazaarBridge {
 
       case 'reputation.update':
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.status',
+          type: 'stardom.status',
           event: 'reputation_updated',
           agentId: msg.payload.agentId,
           delta: msg.payload.delta,
@@ -252,7 +252,7 @@ export class BazaarBridge {
       case 'world.leave_zone':
       case 'world.event':
         this.deps.broadcast(JSON.stringify({
-          type: `bazaar.${msg.type}`,
+          type: `stardom.${msg.type}`,
           ...msg.payload,
         }));
         break;
@@ -260,7 +260,7 @@ export class BazaarBridge {
       default:
         // 其他消息直接推送前端
         this.deps.broadcast(JSON.stringify({
-          type: 'bazaar.status',
+          type: 'stardom.status',
           event: msg.type,
           payload: msg.payload,
         }));
@@ -268,7 +268,7 @@ export class BazaarBridge {
   }
 
   private handleIncomingTask(payload: Record<string, unknown>): void {
-    const config = this.deps.settingsManager.getConfig().bazaar;
+    const config = this.deps.settingsManager.getConfig().stardom;
     const mode = config?.mode ?? 'notify';
 
     const taskId = payload.taskId as string;
@@ -296,7 +296,7 @@ export class BazaarBridge {
     } else if (mode === 'notify') {
       // 半自动模式：通知前端，30 秒超时自动接受
       this.deps.broadcast(JSON.stringify({
-        type: 'bazaar.notify',
+        type: 'stardom.notify',
         taskId,
         from: helperName,
         question,
@@ -319,7 +319,7 @@ export class BazaarBridge {
     } else {
       // manual 模式：等待前端操作
       this.deps.broadcast(JSON.stringify({
-        type: 'bazaar.notify',
+        type: 'stardom.notify',
         taskId,
         from: helperName,
         question,
@@ -328,22 +328,22 @@ export class BazaarBridge {
     }
   }
 
-  private ensureIdentity(bazaarConfig: BazaarConfig): void {
+  private ensureIdentity(stardomConfig: StardomConfig): void {
     let identity = this.store.getIdentity();
     if (!identity) {
       identity = {
         agentId: uuidv4(),
         hostname: os.hostname(),
         username: os.userInfo().username,
-        name: bazaarConfig.agentName ?? os.userInfo().username,
-        server: bazaarConfig.server,
+        name: stardomConfig.agentName ?? os.userInfo().username,
+        server: stardomConfig.server,
       };
       this.store.saveIdentity(identity);
       this.log.info(`New agent identity created: ${identity.agentId}`);
     } else {
       // 更新服务器地址（可能变了）
-      identity.server = bazaarConfig.server;
-      if (bazaarConfig.agentName) identity.name = bazaarConfig.agentName;
+      identity.server = stardomConfig.server;
+      if (stardomConfig.agentName) identity.name = stardomConfig.agentName;
       this.store.saveIdentity(identity);
     }
   }
@@ -351,14 +351,14 @@ export class BazaarBridge {
   private getAgentDescription(): string {
     // Agent 注册到集市只给 name + description，不上传 skills/projects 详情
     // description 可从配置中获取，描述"我是谁、我能干什么"
-    const config = this.deps.settingsManager.getConfig().bazaar;
+    const config = this.deps.settingsManager.getConfig().stardom;
     return config?.agentName ? `${config.agentName} 的 Sman Agent` : 'Sman Agent';
   }
 
   // ── 协作 Session 相关处理 ──
 
   private handleTaskAccepted(payload: Record<string, unknown>): void {
-    if (!this.bazaarSession) return;
+    if (!this.stardomSession) return;
 
     const taskId = payload.taskId as string;
     const task = this.store.getTask(taskId);
@@ -391,7 +391,7 @@ export class BazaarBridge {
 
     // 启动协作 Session
     const workspace = this.deps.homeDir;
-    this.bazaarSession.startCollaboration(
+    this.stardomSession.startCollaboration(
       taskId,
       task.question + collaborationContext,
       task.requesterAgentId ?? 'unknown',
@@ -403,7 +403,7 @@ export class BazaarBridge {
   }
 
   private handleIncomingChat(payload: Record<string, unknown>): void {
-    if (!this.bazaarSession) return;
+    if (!this.stardomSession) return;
 
     const taskId = payload.taskId as string;
     const from = payload.from as string;
@@ -411,7 +411,7 @@ export class BazaarBridge {
 
     // 推送到前端
     this.deps.broadcast(JSON.stringify({
-      type: 'bazaar.task.chat.delta',
+      type: 'stardom.task.chat.delta',
       taskId,
       from,
       text,
@@ -419,7 +419,7 @@ export class BazaarBridge {
 
     // 如果是对方发来的消息，注入协作 Session
     if (from !== 'local') {
-      this.bazaarSession.sendCollaborationMessage(taskId, text).catch((err) => {
+      this.stardomSession.sendCollaborationMessage(taskId, text).catch((err) => {
         this.log.error(`Failed to send collaboration message for ${taskId}`, { error: String(err) });
       });
     }
@@ -457,8 +457,8 @@ export class BazaarBridge {
       }
     }
 
-    if (this.bazaarSession) {
-      this.bazaarSession.completeCollaboration(taskId, rating, feedback);
+    if (this.stardomSession) {
+      this.stardomSession.completeCollaboration(taskId, rating, feedback);
     }
   }
 
@@ -608,7 +608,7 @@ ${chatText}
       const response = await fetch(`http://${identity.server}/api/leaderboard?limit=50`);
       const data = await response.json();
       this.deps.broadcast(JSON.stringify({
-        type: 'bazaar.leaderboard.update',
+        type: 'stardom.leaderboard.update',
         leaderboard: data,
       }));
     } catch (e) {

@@ -1,6 +1,6 @@
-// src/types/bazaar.ts
+// src/types/stardom.ts
 
-export interface BazaarAgentInfo {
+export interface StardomAgentInfo {
   agentId: string;
   name: string;
   avatar: string;
@@ -9,7 +9,7 @@ export interface BazaarAgentInfo {
   projects: string[];
 }
 
-export interface BazaarTask {
+export interface StardomTask {
   taskId: string;
   direction: 'incoming' | 'outgoing';
   helperAgentId?: string;
@@ -23,14 +23,14 @@ export interface BazaarTask {
   completedAt?: string;
 }
 
-export interface BazaarChatMessage {
+export interface StardomChatMessage {
   taskId: string;
   from: string;
   text: string;
   timestamp: string;
 }
 
-export interface BazaarNotification {
+export interface StardomNotification {
   notificationId: string;
   taskId: string;
   from: string;
@@ -40,12 +40,12 @@ export interface BazaarNotification {
   countdownEndsAt: string | null;
 }
 
-export interface BazaarTaskChat {
+export interface StardomTaskChat {
   taskId: string;
-  messages: BazaarChatMessage[];
+  messages: StardomChatMessage[];
 }
 
-export interface BazaarDigest {
+export interface StardomDigest {
   date: string;
   helpCount: number;
   helpedByCount: number;
@@ -59,9 +59,9 @@ export interface BazaarDigest {
   }>;
 }
 
-export type BazaarMode = 'auto' | 'notify' | 'manual';
+export type StardomMode = 'auto' | 'notify' | 'manual';
 
-export interface BazaarLeaderboardEntry {
+export interface StardomLeaderboardEntry {
   agentId: string;
   name: string;
   avatar: string;
@@ -70,7 +70,7 @@ export interface BazaarLeaderboardEntry {
   helpCount: number;
 }
 
-export interface BazaarConnectionStatus {
+export interface StardomConnectionStatus {
   connected: boolean;
   agentId?: string;
   agentName?: string;
@@ -79,7 +79,7 @@ export interface BazaarConnectionStatus {
   reputation?: number;
   activeSlots: number;
   maxSlots: number;
-  collabMode?: BazaarMode;
+  collabMode?: StardomMode;
 }
 
 export interface WorldAgentPosition {
@@ -110,7 +110,7 @@ export interface ActivityEntry {
   metadata?: Record<string, unknown>;
 }
 
-export interface BazaarCapability {
+export interface StardomCapability {
   capability: string;
   agentId: string;
   agentName: string;

@@ -1,3 +1,5 @@
+> **Note: Bazaar has been renamed to Stardom.**
+
 # Sman Bazaar — Agent 集群协作网络设计
 
 > 2026-04-10

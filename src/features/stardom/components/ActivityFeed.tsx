@@ -1,14 +1,14 @@
-// src/features/bazaar/components/ActivityFeed.tsx
+// src/features/stardom/components/ActivityFeed.tsx
 // 活动时间线 — 深色科技风
 
 import { useState } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ActivityCard } from './ActivityCard';
 import { CollaborationDetail } from './CollaborationDetail';
 
 export function ActivityFeed() {
-  const { activityLog } = useBazaarStore();
+  const { activityLog } = useStardomStore();
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   const handleCardClick = (entry: typeof activityLog[number]) => {

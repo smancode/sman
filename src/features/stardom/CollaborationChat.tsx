@@ -1,11 +1,11 @@
-// src/features/bazaar/CollaborationChat.tsx
+// src/features/stardom/CollaborationChat.tsx
 import { useEffect, useRef } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, X, User } from 'lucide-react';
 
 export function CollaborationChat() {
-  const { activeChat, connection, clearActiveChat, cancelTask } = useBazaarStore();
+  const { activeChat, connection, clearActiveChat, cancelTask } = useStardomStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部

@@ -1,6 +1,6 @@
-// src/features/bazaar/TaskNotify.tsx
+// src/features/stardom/TaskNotify.tsx
 import { useEffect, useState } from 'react';
-import { useBazaarStore } from '@/stores/bazaar';
+import { useStardomStore } from '@/stores/stardom';
 import { Button } from '@/components/ui/button';
 import { Bell, Check, X, Clock } from 'lucide-react';
 
@@ -31,7 +31,7 @@ function CountdownTimer({ endsAt }: { endsAt: string }) {
 }
 
 export function TaskNotify() {
-  const { notifications, acceptTask, rejectTask } = useBazaarStore();
+  const { notifications, acceptTask, rejectTask } = useStardomStore();
 
   // 只显示 notify 和 manual 模式的通知
   const visibleNotifications = notifications.filter(
