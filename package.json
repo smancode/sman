@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx server/index.ts",
-    "build": "vite build && tsc -p server/tsconfig.json && node -e \"require('fs').writeFileSync('dist/server/package.json',JSON.stringify({type:'module'},null,2))\"",
+    "build": "vite build && tsc -p server/tsconfig.json && node -e \"require('fs').writeFileSync('dist/server/package.json',JSON.stringify({type:'module'},null,2))\" && node -e \"require('fs').cpSync('server/init/templates','dist/server/server/init/templates',{recursive:true})\"",
     "build:electron": "electron-vite build",
     "electron:dev": "electron-vite dev",
     "electron:build": "pnpm build && pnpm build:electron && electron-builder",
