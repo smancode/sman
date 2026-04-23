@@ -1,6 +1,7 @@
 // server/stardom/stardom-bridge.ts
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
+import fs from 'fs';
 import { createLogger, type Logger } from '../utils/logger.js';
 import { StardomClient } from './stardom-client.js';
 import { StardomStore } from './stardom-store.js';
@@ -35,6 +36,7 @@ export class StardomBridge {
     this.store = new StardomStore(dbPath);
     this.client = new StardomClient(this.store, {
       getAgentDescription: () => this.getAgentDescription(),
+      getAgentDomains: () => this.getAgentDomains(),
     });
 
     // 集市消息 → 前端推送
@@ -349,10 +351,56 @@ export class StardomBridge {
   }
 
   private getAgentDescription(): string {
-    // Agent 注册到集市只给 name + description，不上传 skills/projects 详情
-    // description 可从配置中获取，描述"我是谁、我能干什么"
     const config = this.deps.settingsManager.getConfig().stardom;
     return config?.agentName ? `${config.agentName} 的 Sman Agent` : 'Sman Agent';
+  }
+
+  /**
+   * 从活跃 workspace 的 INIT.md 提取能力标签
+   * INIT.md 由 init-manager 在新建会话时自动生成，包含 projectType、techStack、skills 等信息
+   */
+  private getAgentDomains(): string[] {
+    const domains = new Set<string>();
+    try {
+      const sessions = this.deps.sessionManager.listSessions();
+      for (const session of sessions) {
+        const initPath = `${session.workspace}/.sman/INIT.md`;
+        try {
+          const content = fs.readFileSync(initPath, 'utf-8');
+          // 提取 techStack 行中的技术标签
+          const techMatch = content.match(/tech[_-]?stack[:\s]+(.+)/i);
+          if (techMatch) {
+            techMatch[1].split(/[,，、\s]+/).forEach(t => {
+              const trimmed = t.trim().toLowerCase();
+              if (trimmed && trimmed.length > 1 && trimmed.length < 30) {
+                domains.add(trimmed);
+              }
+            });
+          }
+          // 提取 projectType
+          const typeMatch = content.match(/project[_-]?type[:\s]+(.+)/i);
+          if (typeMatch) {
+            const t = typeMatch[1].trim().toLowerCase();
+            if (t) domains.add(t);
+          }
+          // 提取 skills 列表中的能力名
+          const skillsMatch = content.match(/skills[:\s]+(.+)/i);
+          if (skillsMatch) {
+            skillsMatch[1].split(/[,，、\s]+/).forEach(s => {
+              const trimmed = s.trim().toLowerCase();
+              if (trimmed && trimmed.length > 2 && trimmed.length < 30) {
+                domains.add(trimmed);
+              }
+            });
+          }
+        } catch {
+          // INIT.md 不存在，跳过
+        }
+      }
+    } catch {
+      // sessionManager.listSessions 不可用，静默降级
+    }
+    return Array.from(domains);
   }
 
   // ── 协作 Session 相关处理 ──

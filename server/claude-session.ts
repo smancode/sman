@@ -1772,6 +1772,7 @@ export class ClaudeSessionManager {
     content: string,
     abortController: AbortController,
     onActivity: () => void,
+    onComplete?: (reply: string) => void,
   ): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -1895,6 +1896,12 @@ export class ClaudeSessionManager {
               this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
             }
             this.log.info(`Cron query completed for session ${sessionId}`);
+            // Notify caller with the accumulated reply
+            if (onComplete && fullContent) {
+              try { onComplete(fullContent); } catch (e) {
+                this.log.warn(`onComplete callback error for ${sessionId}`, { error: String(e) });
+              }
+            }
             break;
           }
         }

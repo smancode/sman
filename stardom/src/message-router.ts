@@ -108,6 +108,12 @@ export class MessageRouter {
       });
     }
 
+    // 更新能力标签（如有）
+    const domains = payload.domains;
+    if (Array.isArray(domains) && domains.length > 0) {
+      this.store.updateCapabilities(agentId, domains);
+    }
+
     this.store.logAudit('agent.online', agentId);
 
     this.log.info(`Agent registered: ${payload.name} (${agentId})`);

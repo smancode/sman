@@ -48,16 +48,24 @@ export class TaskEngine {
       status: 'searching',
     });
 
-    // 搜索有相关能力的在线 Agent（基于 name + description 匹配）
-    const allOnline = this.agentStore.listOnlineAgents();
+    // 搜索有相关能力的在线 Agent
+    // 策略：先查 agent_capabilities 表做领域匹配，回退到 name/description 关键词匹配
+    const keyword = capabilityQuery.toLowerCase();
+    const domainMatches = this.agentStore.findAgentsByDomain(keyword);
+
+    // 如果 domain 匹配有结果，优先使用；否则回退到关键词匹配
+    const allOnline = domainMatches.length > 0
+      ? domainMatches
+      : this.agentStore.listOnlineAgents()
+          .filter(a => a.id !== fromAgentId)
+          .filter(a => {
+            return a.name.toLowerCase().includes(keyword)
+              || (a as any).description?.toLowerCase().includes(keyword);
+          })
+          .map(a => ({ ...a, domainMatch: false }));
+
     const matches = allOnline
       .filter(a => a.id !== fromAgentId) // 排除自己
-      .filter(a => {
-        // 简单关键词匹配：在 name 和 description 中搜索
-        const keyword = capabilityQuery.toLowerCase();
-        return a.name.toLowerCase().includes(keyword)
-          || (a as any).description?.toLowerCase().includes(keyword);
-      })
       .map(a => ({
         agentId: a.id,
         name: a.name,

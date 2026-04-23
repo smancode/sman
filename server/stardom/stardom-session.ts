@@ -11,12 +11,8 @@ const SESSION_ID_PREFIX = 'stardom-';
  * 负责为每个协作任务创建独立的 Claude Session，管理生命周期：
  * - 创建：收到 task.incoming + accept 后调用 startCollaboration
  * - 对话：通过 sendCollaborationMessage 注入集市发来的消息
- * - 回复：从 sendMessageForCron 的流式回调中提取 Claude 回复，发回集市
+ * - 回复：sendMessageForCron 完成后通过 onComplete 回调自动调用 sendClaudeReplyToStardom
  * - 结束：complete/abort/timeout 时清理资源
- *
- * Note: sendMessageForCron 的 onActivity 是 () => void（无回复内容），
- * 当前通过 sendClaudeReplyToStardom() 方法由外部调用来发送回复。
- * 未来可以通过 stream hook 提取 Claude 回复自动调用。
  */
 export class StardomSession {
   private log: Logger;
@@ -79,7 +75,14 @@ export class StardomSession {
       '',
       question,
       '',
-      '请用中文回复。这是来自其他 Agent 的协作请求，请尽可能清晰地回答问题。如果你不确定答案，请如实说明。',
+      [
+        '协作规范：',
+        '1. 直接回答问题，不要复述问题本身',
+        '2. 如果需要查看代码或文件，用工具查看后再回答，不要猜测',
+        '3. 给出具体的解决方案（代码/命令/步骤），不要只说方向',
+        '4. 如果问题超出你的能力范围或你没有相关代码访问权限，请明确说明',
+        '5. 用中文回复',
+      ].join('\n'),
     ].join('\n');
 
     // 发送消息到 Claude Session
@@ -89,6 +92,7 @@ export class StardomSession {
         content,
         abortController,
         () => this.handleClaudeActivity(taskId),
+        (reply) => this.sendClaudeReplyToStardom(taskId, reply),
       );
     } catch (err) {
       this.log.info(`Collaboration session completed for task ${taskId}`, {
@@ -126,7 +130,7 @@ export class StardomSession {
     });
 
     // 构造转发内容
-    const content = `[对方 Agent「${collab.helperName}」追问]\n\n${text}`;
+    const content = `[对方追问]\n\n${text}\n\n直接回答追问，不要重复之前的回复。`;
 
     // 创建新的 AbortController（复用同一 session 的新一轮对话）
     const newAbortController = new AbortController();
@@ -138,6 +142,7 @@ export class StardomSession {
       content,
       newAbortController,
       () => this.handleClaudeActivity(taskId),
+      (reply) => this.sendClaudeReplyToStardom(taskId, reply),
     );
   }
 
@@ -213,8 +218,7 @@ export class StardomSession {
   }
 
   /**
-   * 提取 Claude 最终回复并发送回集市
-   * 当前由外部调用，未来可改为从 stream hook 自动提取
+   * 将 Claude 回复发送回星域（由 sendMessageForCron 的 onComplete 回调自动触发）
    */
   sendClaudeReplyToStardom(taskId: string, replyText: string): void {
     if (!replyText.trim()) return;

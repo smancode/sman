@@ -73,7 +73,7 @@ describe('Bridge Integration: Client ↔ Server', () => {
     });
 
     const received: any[] = [];
-    client = new StardomClient(store, { getAgentDescription: () => '测试 Agent' });
+    client = new StardomClient(store, { getAgentDescription: () => '测试 Agent', getAgentDomains: () => [] });
     client.onMessage = (msg) => received.push(msg);
 
     await client.connect();

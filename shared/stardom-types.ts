@@ -48,6 +48,8 @@ export interface AgentRegisterPayload {
   description?: string;
   avatar?: string;
   protocolVersion?: string;
+  /** 结构化能力标签（从项目自动扫描提取） */
+  domains?: string[];
 }
 
 export interface AgentHeartbeatPayload {

@@ -28,6 +28,7 @@ function createMockStores() {
 
   const mockAgentStore = {
     listOnlineAgents: vi.fn(() => []),
+    findAgentsByDomain: vi.fn(() => []),
     getAgent: vi.fn(),
     logAudit: vi.fn(),
     updateAgentStatus: vi.fn(),

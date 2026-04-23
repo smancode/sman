@@ -23,6 +23,8 @@ function createMockAgentStore(): AgentStore {
     updateHeartbeat: () => {},
     setAgentOffline: (id: string) => { const a = agents.get(id); if (a) a.status = 'offline'; },
     listOnlineAgents: () => Array.from(agents.values()).filter((a: any) => a.status !== 'offline'),
+    findAgentsByDomain: () => [],
+    updateCapabilities: () => {},
     logAudit: () => {},
     close: () => {},
   } as unknown as AgentStore;

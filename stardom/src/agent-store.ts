@@ -63,6 +63,15 @@ export class AgentStore {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS agent_capabilities (
+        agent_id TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (agent_id, domain)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_capabilities_domain ON agent_capabilities(domain);
+
       CREATE TABLE IF NOT EXISTS audit_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT NOT NULL,
@@ -254,6 +263,42 @@ export class AgentStore {
       status: string;
       helpCount: number;
     }>;
+  }
+
+  // ── Agent Capabilities ──
+
+  updateCapabilities(agentId: string, domains: string[]): void {
+    const now = new Date().toISOString();
+    const deleteStmt = this.db.prepare('DELETE FROM agent_capabilities WHERE agent_id = ?');
+    const insertStmt = this.db.prepare('INSERT INTO agent_capabilities (agent_id, domain, updated_at) VALUES (?, ?, ?)');
+    const tx = this.db.transaction(() => {
+      deleteStmt.run(agentId);
+      for (const domain of domains) {
+        insertStmt.run(agentId, domain, now);
+      }
+    });
+    tx();
+  }
+
+  getCapabilities(agentId: string): string[] {
+    return this.db.prepare(
+      'SELECT domain FROM agent_capabilities WHERE agent_id = ?'
+    ).all(agentId).map((r: any) => r.domain);
+  }
+
+  /**
+   * 按领域查找在线 Agent（用于 task matching）
+   */
+  findAgentsByDomain(domain: string): Array<AgentRow & { domainMatch: boolean }> {
+    return this.db.prepare(`
+      SELECT a.id, a.username, a.hostname, a.name, a.description, a.avatar, a.status, a.reputation,
+             a.last_seen_at as lastSeenAt, a.created_at as createdAt,
+             CASE WHEN ac.domain IS NOT NULL THEN 1 ELSE 0 END as domainMatch
+      FROM agents a
+      LEFT JOIN agent_capabilities ac ON a.id = ac.agent_id AND ac.domain = ?
+      WHERE a.status != 'offline'
+      ORDER BY domainMatch DESC, a.reputation DESC
+    `).all(domain) as Array<AgentRow & { domainMatch: boolean }>;
   }
 
   close(): void {

@@ -8,6 +8,7 @@ import type { LocalAgentIdentity } from './types.js';
 
 interface ClientOptions {
   getAgentDescription: () => string;
+  getAgentDomains: () => string[];
   heartbeatIntervalMs?: number;
 }
 
@@ -69,6 +70,7 @@ export class StardomClient {
         this.reconnectAttempts = 0;
 
         // 发送注册消息
+        const domains = this.options.getAgentDomains();
         this.send({
           id: uuidv4(),
           type: 'agent.register',
@@ -78,6 +80,7 @@ export class StardomClient {
             hostname: os.hostname(),
             name: identity.name,
             description: this.options.getAgentDescription(),
+            ...(domains.length > 0 ? { domains } : {}),
           },
         });
 

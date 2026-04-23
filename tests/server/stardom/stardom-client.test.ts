@@ -70,6 +70,7 @@ describe('StardomClient', () => {
 
     client = new StardomClient(mockStore, {
       getAgentDescription: () => '测试 Agent',
+      getAgentDomains: () => ['测试', 'node'],
     });
 
     await client.connect();
@@ -95,6 +96,7 @@ describe('StardomClient', () => {
 
     client = new StardomClient(mockStore, {
       getAgentDescription: () => '测试 Agent',
+      getAgentDomains: () => [],
       heartbeatIntervalMs: 500, // 快速测试
     });
 
