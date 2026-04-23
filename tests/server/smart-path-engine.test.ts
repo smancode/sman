@@ -8,230 +8,82 @@ import os from 'os';
 describe('SmartPathEngine', () => {
   let store: SmartPathStore;
   let engine: SmartPathEngine;
-  let dbPath: string;
-  let tmpSkillDir: string;
   let workspace: string;
-
-  const mockSkillsRegistry = {
-    getSkillDir: (id: string) => {
-      if (id === 'test-skill') return tmpSkillDir;
-      throw new Error(`Skill not found: ${id}`);
-    },
-  };
+  let dbPath: string;
 
   const mockSessionManager = {
     createSessionWithId: vi.fn(),
     sendMessageForCron: vi.fn().mockResolvedValue(undefined),
     getHistory: vi.fn().mockReturnValue([
       { role: 'user', content: 'test', contentBlocks: [] },
-      { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'skill result' }] },
+      { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'done' }] },
     ]),
-    deleteSession: vi.fn(),
-    abort: vi.fn(),
   };
 
   beforeEach(() => {
     dbPath = path.join(os.tmpdir(), `smart-path-engine-test-${Date.now()}`);
-    store = new SmartPathStore(dbPath);
-    tmpSkillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-'));
-    fs.writeFileSync(path.join(tmpSkillDir, 'SKILL.md'), '# Test Skill\nThis is a test skill.');
-    engine = new SmartPathEngine(store, mockSkillsRegistry as any, mockSessionManager as any);
-
-    // Create a workspace directory for tests
     workspace = path.join(dbPath, 'test-workspace');
     fs.mkdirSync(workspace, { recursive: true });
+    store = new SmartPathStore();
+    engine = new SmartPathEngine(store, mockSessionManager as any);
   });
 
   afterEach(() => {
     if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { recursive: true, force: true });
-    if (fs.existsSync(tmpSkillDir)) fs.rmSync(tmpSkillDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
 
-  describe('runPath', () => {
-    it('should execute serial steps and complete', async () => {
-      const smartPath = store.createPath({
-        name: 'Serial Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [
-              { type: 'skill', skillId: 'test-skill' },
-              { type: 'skill', skillId: 'test-skill' },
-            ],
-          },
-        ]),
-      });
-
-      await engine.runPath(smartPath.id);
-
-      const updatedPath = store.getPath(smartPath.id);
-      expect(updatedPath!.status).toBe('completed');
-
-      const runs = store.listRuns(smartPath.id);
-      expect(runs.length).toBe(1);
-      expect(runs[0].status).toBe('completed');
-
-      // Engine sends one combined prompt via sendMessageForCron
-      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
+  it('should execute steps and complete', async () => {
+    const p = store.create({
+      name: 'Test',
+      workspace,
+      steps: JSON.stringify([{ userInput: 'step 1' }, { userInput: 'step 2' }]),
     });
 
-    it('should execute parallel steps and complete', async () => {
-      const smartPath = store.createPath({
-        name: 'Parallel Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'parallel',
-            actions: [
-              { type: 'skill', skillId: 'test-skill' },
-              { type: 'skill', skillId: 'test-skill' },
-            ],
-          },
-        ]),
-      });
+    await engine.run(p.id, workspace);
 
-      await engine.runPath(smartPath.id);
+    const updated = store.get(p.id, workspace);
+    expect(updated!.status).toBe('completed');
 
-      const runs = store.listRuns(smartPath.id);
-      expect(runs[0].status).toBe('completed');
-      expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
-    });
+    const runs = store.listRuns(p.id, workspace);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe('completed');
+    expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
+  });
 
-    it('should collect result from session history', async () => {
-      const smartPath = store.createPath({
-        name: 'Context Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [{ type: 'skill', skillId: 'test-skill' }],
-          },
-        ]),
-      });
+  it('should collect result from session history', async () => {
+    mockSessionManager.getHistory.mockReturnValueOnce([
+      { role: 'user', content: 'test', contentBlocks: [] },
+      { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'my result' }] },
+    ]);
 
-      await engine.runPath(smartPath.id);
+    const p = store.create({ name: 'Result Test', workspace, steps: JSON.stringify([{ userInput: 'do it' }]) });
+    await engine.run(p.id, workspace);
 
-      const runs = store.listRuns(smartPath.id);
-      expect(runs[0].status).toBe('completed');
-      const stepResults = JSON.parse(runs[0].stepResults);
-      expect(stepResults).toHaveProperty('result');
-      expect(stepResults.result).toBe('skill result');
-    });
+    const runs = store.listRuns(p.id, workspace);
+    expect(runs[0].status).toBe('completed');
+    expect(JSON.parse(runs[0].stepResults).result).toBe('my result');
+  });
 
-    it('should execute python action via session', async () => {
-      mockSessionManager.getHistory.mockReturnValueOnce([
-        { role: 'user', content: 'test', contentBlocks: [] },
-        { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: '{"result": 42}' }] },
-      ]);
+  it('should throw when path not found', async () => {
+    await expect(engine.run('nope', workspace)).rejects.toThrow('Path not found');
+  });
 
-      const smartPath = store.createPath({
-        name: 'Python Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [
-              { type: 'python', code: 'print(json.dumps({"result": 42}))' },
-            ],
-          },
-        ]),
-      });
+  it('should throw when path has no steps', async () => {
+    const p = store.create({ name: 'Empty', workspace, steps: '[]' });
+    await expect(engine.run(p.id, workspace)).rejects.toThrow('Path has no steps');
+  });
 
-      await engine.runPath(smartPath.id);
+  it('should mark path as failed on error', async () => {
+    mockSessionManager.sendMessageForCron.mockRejectedValueOnce(new Error('Send failed'));
 
-      const runs = store.listRuns(smartPath.id);
-      expect(runs[0].status).toBe('completed');
-      const stepResults = JSON.parse(runs[0].stepResults);
-      expect(stepResults.result).toBe('{"result": 42}');
-    });
+    const p = store.create({ name: 'Fail', workspace, steps: JSON.stringify([{ userInput: 'step' }]) });
+    await expect(engine.run(p.id, workspace)).rejects.toThrow();
 
-    it('should throw when path not found', async () => {
-      await expect(engine.runPath('non-existent')).rejects.toThrow('Path not found');
-    });
+    const updated = store.get(p.id, workspace);
+    expect(updated!.status).toBe('failed');
 
-    it('should throw when path has no steps', async () => {
-      const smartPath = store.createPath({
-        name: 'Empty',
-        workspace,
-        steps: '[]',
-      });
-      await expect(engine.runPath(smartPath.id)).rejects.toThrow('Path has no steps');
-    });
-
-    it('should mark path as failed on error', async () => {
-      const smartPath = store.createPath({
-        name: 'Fail Test',
-        workspace,
-        steps: JSON.stringify([
-          {
-            mode: 'serial',
-            actions: [{ type: 'skill', skillId: 'non-existent-skill' }],
-          },
-        ]),
-      });
-
-      // Engine builds prompt before sending, skill lookup happens at build time
-      // Since the engine doesn't resolve skills at run time anymore,
-      // we need to make sendMessageForCron throw
-      mockSessionManager.sendMessageForCron.mockRejectedValueOnce(new Error('Send failed'));
-
-      await expect(engine.runPath(smartPath.id)).rejects.toThrow();
-
-      const updatedPath = store.getPath(smartPath.id);
-      expect(updatedPath!.status).toBe('failed');
-
-      const runs = store.listRuns(smartPath.id);
-      expect(runs[0].status).toBe('failed');
-      expect(runs[0].errorMessage).toBeDefined();
-    });
-
-    it('should execute plan from .md file path', async () => {
-      const planPath = store.savePlan({
-        id: 'test-plan',
-        name: '测试计划',
-        workspace,
-        steps: [{
-          mode: 'serial',
-          actions: [{
-            type: 'python',
-            code: 'import json\nprint(json.dumps({"result": 42}))',
-          }],
-        }],
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-      });
-
-      await engine.runPath(planPath);
-
-      const runs = store.listRuns('test-plan');
-      expect(runs).toHaveLength(1);
-      expect(runs[0].status).toBe('completed');
-    });
-
-    it('should support backward compatibility with plan IDs', async () => {
-      store.savePlan({
-        id: 'backward-compat-plan',
-        name: '向后兼容测试',
-        workspace,
-        steps: [{
-          mode: 'serial',
-          actions: [{
-            type: 'python',
-            code: 'import json\nprint(json.dumps({"result": "backward-compatible"}))',
-          }],
-        }],
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-      });
-
-      // Use plan ID instead of file path
-      await engine.runPath('backward-compat-plan');
-
-      const runs = store.listRuns('backward-compat-plan');
-      expect(runs).toHaveLength(1);
-      expect(runs[0].status).toBe('completed');
-    });
+    const runs = store.listRuns(p.id, workspace);
+    expect(runs[0].status).toBe('failed');
   });
 });

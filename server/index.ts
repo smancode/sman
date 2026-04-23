@@ -32,6 +32,7 @@ import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
+
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
 import { CapabilityRegistry } from './capabilities/registry.js';
@@ -170,9 +171,9 @@ batchEngine.setOnProgress((taskId, data) => {
 });
 batchEngine.start();
 
-// SmartPath execution engine
-const smartPathStore = new SmartPathStore(homeDir);
-const smartPathEngine = new SmartPathEngine(smartPathStore, skillsRegistry, sessionManager);
+// SmartPath
+const smartPathStore = new SmartPathStore();
+const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
@@ -1084,243 +1085,59 @@ wss.on('connection', (ws: WebSocket) => {
 
         // ── Smart Paths ──
         case 'smartpath.list': {
-          const paths = smartPathStore.listPaths();
+          const wsList = msg.workspaces as string[] | undefined;
+          if (!wsList?.length) throw new Error('Missing workspaces');
+          const paths = smartPathStore.listAll(wsList);
           ws.send(JSON.stringify({ type: 'smartpath.list', paths }));
           break;
         }
 
         case 'smartpath.create': {
-          if (!msg.name || !msg.workspace || !msg.steps) {
-            throw new Error('Missing required fields: name, workspace, steps');
-          }
-          const path = smartPathStore.createPath({
-            name: msg.name as string,
-            workspace: msg.workspace as string,
-            steps: msg.steps as string,
-            status: msg.status as any,
-          });
-          ws.send(JSON.stringify({ type: 'smartpath.created', path }));
+          if (!msg.name || !msg.workspace || msg.steps === undefined) throw new Error('Missing required: name, workspace, steps');
+          const p = smartPathStore.create({ name: msg.name as string, workspace: msg.workspace as string, steps: msg.steps as string });
+          ws.send(JSON.stringify({ type: 'smartpath.created', path: p }));
           break;
         }
 
         case 'smartpath.update': {
-          if (!msg.pathId) throw new Error('Missing pathId');
-          const { pathId, ...updates } = msg;
-          const path = smartPathStore.updatePath(pathId as string, updates as any);
-          ws.send(JSON.stringify({ type: 'smartpath.updated', path }));
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          const { pathId, workspace, type: _t, ...updates } = msg;
+          const p = smartPathStore.update(pathId as string, workspace as string, updates as any);
+          ws.send(JSON.stringify({ type: 'smartpath.updated', path: p }));
           break;
         }
 
         case 'smartpath.delete': {
-          if (!msg.pathId) throw new Error('Missing pathId');
-          smartPathStore.deletePath(msg.pathId as string);
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          smartPathStore.del(msg.pathId as string, msg.workspace as string);
           ws.send(JSON.stringify({ type: 'smartpath.deleted', pathId: msg.pathId }));
           break;
         }
 
         case 'smartpath.run': {
-          if (!msg.pathId) throw new Error('Missing pathId');
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
           try {
-            smartPathEngine.runPath(msg.pathId as string, (data) => {
-              broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: msg.pathId, ...data }));
+            const runPathId = msg.pathId as string;
+            const runWorkspace = msg.workspace as string;
+            smartPathEngine.run(runPathId, runWorkspace, (data) => {
+              broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: runPathId, ...data }));
             }).then(() => {
-              const path = smartPathStore.getPath(msg.pathId as string);
-              broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: msg.pathId, path }));
+              const p = smartPathStore.get(runPathId, runWorkspace);
+              broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: p }));
             }).catch((err) => {
-              const errorMessage = err instanceof Error ? err.message : String(err);
-              broadcast(JSON.stringify({ type: 'smartpath.failed', pathId: msg.pathId, error: errorMessage }));
+              broadcast(JSON.stringify({ type: 'smartpath.failed', pathId: runPathId, error: err instanceof Error ? err.message : String(err) }));
             });
-            ws.send(JSON.stringify({ type: 'smartpath.running', pathId: msg.pathId }));
+            ws.send(JSON.stringify({ type: 'smartpath.running', pathId: runPathId }));
           } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
           }
           break;
         }
 
         case 'smartpath.runs': {
-          if (!msg.pathId) throw new Error('Missing pathId');
-          const runs = smartPathStore.listRuns(msg.pathId as string);
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          const runs = smartPathStore.listRuns(msg.pathId as string, msg.workspace as string);
           ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs }));
-          break;
-        }
-
-        case 'smartpath.generatePython': {
-          const description = msg.description as string;
-          const workspace = msg.workspace as string;
-          if (!description) throw new Error('Missing description');
-
-          try {
-            const { query } = await import('@anthropic-ai/claude-agent-sdk');
-            const llmConfig = settingsManager.getConfig().llm;
-
-            const env: Record<string, string | undefined> = { ...process.env as Record<string, string | undefined> };
-            if (llmConfig.apiKey) env['ANTHROPIC_API_KEY'] = llmConfig.apiKey;
-            if (llmConfig.baseUrl) env['ANTHROPIC_BASE_URL'] = llmConfig.baseUrl;
-
-            // Get available skills for context
-            const availableSkills = skillsRegistry.listSkills();
-            const skillsList = availableSkills.map(s => `- ${s.id}: ${s.description || s.name}`).join('\n');
-
-            const prompt = [
-              'Generate a Python script based on the following description.',
-              '',
-              'Context:',
-              `- Workspace: ${workspace}`,
-              `- Available Skills:\n${skillsList || '(none)'}`,
-              '',
-              'Skills Definition:',
-              'A skill is a predefined capability that can be invoked to perform specific tasks.',
-              'Skills are identified by their ID (e.g., "test-driven-development", "systematic-debugging").',
-              '',
-              'Description:',
-              description,
-              '',
-              'Requirements:',
-              '- The script receives input data via a `ctx` variable (dict-like).',
-              '- Output MUST be a JSON object printed to stdout using `print(json.dumps(result))`.',
-              '- Do not include any interactive input prompts.',
-              '- Use `import json` at the top.',
-            ].join('\n');
-
-            // Model resolution: non-Anthropic model names (e.g. third-party proxies)
-            // cause the SDK to send unrecognized model names to the API endpoint.
-            // Use a standard Anthropic model name and let the proxy map it server-side.
-            const configModel = llmConfig.model;
-            const resolvedModel = configModel.toLowerCase().startsWith('claude-') || configModel.toLowerCase().startsWith('anthropic-')
-              ? configModel
-              : 'claude-sonnet-4-6';
-
-            const q = query({
-              prompt,
-              options: {
-                cwd: workspace || process.cwd(),
-                model: resolvedModel,
-                permissionMode: 'bypassPermissions' as const,
-                allowDangerouslySkipPermissions: true,
-                env,
-                systemPrompt: {
-                  type: 'preset' as const,
-                  preset: 'claude_code' as const,
-                  append: 'You are a Python script generator. Generate ONLY the script code, wrapped in a code block.',
-                },
-              } as any,
-            });
-
-            let fullText = '';
-            for await (const msg of q) {
-              fullText += extractTextFromMessage(msg);
-            }
-
-            const codeMatch = fullText.match(/```(?:python)?\n([\s\S]*?)```/);
-            const code = codeMatch ? codeMatch[1].trim() : fullText.trim();
-
-            ws.send(JSON.stringify({ type: 'smartpath.pythonGenerated', code }));
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
-          }
-          break;
-        }
-
-        case 'smartpath.generateFromNL': {
-          const description = msg.description as string;
-          const workspace = msg.workspace as string;
-
-          // Strict validation
-          if (!description || !description.trim()) {
-            throw new Error('Missing description parameter');
-          }
-          if (!workspace || !workspace.trim()) {
-            throw new Error('Missing workspace parameter');
-          }
-
-          try {
-            const llmConfig = settingsManager.getConfig().llm;
-            if (!llmConfig.apiKey) {
-              throw new Error('LLM API key not configured. Please check settings.');
-            }
-
-            // Get available skills
-            const availableSkills = skillsRegistry.listSkills();
-            const skillsList = availableSkills.map(s => `- ${s.id}: ${s.description || s.name}`).join('\n');
-
-            const systemPrompt = 'You are an execution plan generator. Generate ONLY the JSON plan, wrapped in a code block.';
-            const userPrompt = [
-              'Generate an execution plan based on the following description.',
-              '',
-              'Context:',
-              `- Workspace: ${workspace}`,
-              '',
-              'Description:',
-              description,
-              '',
-              'Output Format:',
-              'Return a JSON object with this structure:',
-              '```json',
-              '{',
-              '  "name": "Plan Name",',
-              '  "description": "Original description",',
-              '  "steps": [',
-              '    {',
-              '      "mode": "serial",',
-              '      "actions": [',
-              '        { "description": "Step 1: ..." },',
-              '        { "description": "Step 2: ..." }',
-              '      ]',
-              '    }',
-              '  ]',
-              '}',
-              '```',
-              '',
-              'Each action should be a clear, concise description of what needs to be done.',
-            ].join('\n');
-
-            // Use sessionManager to support all LLM providers
-            const tempSessionId = sessionManager.createSession(workspace);
-            const abortController = new AbortController();
-
-            let fullResponse = '';
-            const originalSend = ws.send.bind(ws);
-            const interceptedSend = (data: string) => {
-              const parsed = JSON.parse(data);
-              if (parsed.type === 'chat.delta') {
-                fullResponse += parsed.delta?.text || '';
-              }
-              if (parsed.type === 'chat.done') {
-                abortController.abort();
-              }
-              originalSend(data);
-            };
-            (ws as any).send = interceptedSend;
-
-            await sessionManager.sendMessageForCron(
-              tempSessionId,
-              userPrompt,
-              abortController,
-              () => {}
-            );
-
-            (ws as any).send = originalSend;
-
-            // Extract JSON from response
-            const jsonMatch = fullResponse.match(/```json\n([\s\S]*?)\n```/);
-            const jsonStr = jsonMatch ? jsonMatch[1].trim() : fullResponse.trim();
-
-            const plan = JSON.parse(jsonStr);
-
-            // Validate generated plan
-            if (!plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {
-              throw new Error('Generated plan has no steps');
-            }
-
-            ws.send(JSON.stringify({ type: 'smartpath.generated', payload: { plan } }));
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            console.error('SmartPath generation error:', errorMessage);
-            console.error('Stack:', err instanceof Error ? err.stack : 'No stack');
-            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
-          }
           break;
         }
 
@@ -1328,165 +1145,39 @@ wss.on('connection', (ws: WebSocket) => {
           const userInput = msg.userInput as string;
           const workspace = msg.workspace as string;
           const previousSteps = msg.previousSteps as Array<{ userInput: string; generatedContent?: string }>;
-
-          // Strict validation
-          if (!userInput || !userInput.trim()) {
-            throw new Error('Missing userInput parameter');
-          }
-          if (!workspace || !workspace.trim()) {
-            throw new Error('Missing workspace parameter');
-          }
+          if (!userInput?.trim()) throw new Error('Missing userInput');
+          if (!workspace?.trim()) throw new Error('Missing workspace');
 
           try {
-            const llmConfig = settingsManager.getConfig().llm;
-            if (!llmConfig.apiKey) {
-              throw new Error('LLM API key not configured. Please check settings.');
-            }
+            const previousContext = previousSteps?.length
+              ? ['Previous steps:', ...previousSteps.map((s, i) => `Step ${i + 1}: ${s.userInput}${s.generatedContent ? `\n  Solution: ${s.generatedContent.slice(0, 200)}...` : ''}`)].join('\n')
+              : 'No previous steps.';
 
-            // Build context from previous steps
-            const previousContext = previousSteps && previousSteps.length > 0
-              ? [
-                'Previous steps and their results:',
-                ...previousSteps.map((step, i) => [
-                  `Step ${i + 1}:`,
-                  `  User Request: ${step.userInput}`,
-                  step.generatedContent ? `  Generated Solution: ${step.generatedContent.slice(0, 200)}...` : '',
-                ].join('\n')),
-              ].join('\n')
-              : 'No previous steps. This is the first step.';
-
-            const systemPrompt = 'You are an expert software engineer. Generate practical implementation solutions based on user requirements.';
             const userPrompt = [
               'Generate an implementation solution for the following step.',
-              '',
-              'Context:',
-              `- Workspace: ${workspace}`,
+              `Workspace: ${workspace}`,
               '',
               previousContext,
               '',
-              'Current Step Request:',
-              userInput,
+              'Current Step:', userInput,
               '',
-              'Output Format:',
-              'Provide a clear, actionable solution including:',
-              '1. Approach overview',
-              '2. Specific code examples (if applicable)',
-              '3. File locations or structure',
-              '4. Key considerations or constraints',
+              'Provide: approach overview, code examples, file locations, key considerations.',
             ].join('\n');
 
-            // Use sessionManager to support all LLM providers
             const tempSessionId = sessionManager.createSession(workspace);
-            const abortController = new AbortController();
-
+            const abort = new AbortController();
             let fullResponse = '';
-            const originalSend = ws.send.bind(ws);
-            const interceptedSend = (data: string) => {
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.type === 'chat.delta') {
-                  fullResponse += parsed.delta?.text || '';
-                }
-                if (parsed.type === 'chat.done') {
-                  abortController.abort();
-                }
-              } catch {}
-              originalSend(data);
+            const origSend = ws.send.bind(ws);
+            (ws as any).send = (data: string) => {
+              try { const p = JSON.parse(data); if (p.type === 'chat.delta') fullResponse += p.delta?.text || ''; if (p.type === 'chat.done') abort.abort(); } catch {}
+              origSend(data);
             };
-            (ws as any).send = interceptedSend;
-
-            await sessionManager.sendMessageForCron(
-              tempSessionId,
-              userPrompt,
-              abortController,
-              () => {}
-            );
-
-            (ws as any).send = originalSend;
-
-            ws.send(JSON.stringify({
-              type: 'smartpath.stepGenerated',
-              payload: { generatedContent: fullResponse.trim() }
-            }));
+            await sessionManager.sendMessageForCron(tempSessionId, userPrompt, abort, () => {});
+            (ws as any).send = origSend;
+            ws.send(JSON.stringify({ type: 'smartpath.stepGenerated', payload: { generatedContent: fullResponse.trim() } }));
           } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            console.error('SmartPath step generation error:', errorMessage);
-            ws.send(JSON.stringify({ type: 'chat.error', error: errorMessage }));
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
           }
-          break;
-        }
-
-        case 'smartpath.listFiles': {
-          const workspace = msg.workspace as string;
-          if (!workspace) throw new Error('Missing workspace');
-
-          const store = new SmartPathStore(workspace);
-          const plans = store.listPlans(workspace);
-          const files = plans.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            status: p.status,
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-          }));
-          ws.send(JSON.stringify({ type: 'smartpath.fileList', payload: { files } }));
-          break;
-        }
-
-        case 'smartpath.loadFile': {
-          const workspace = msg.workspace as string;
-          const planId = msg.planId as string;
-          if (!workspace) throw new Error('Missing workspace');
-          if (!planId) throw new Error('Missing planId');
-
-          const store = new SmartPathStore(workspace);
-          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
-          const plan = store.loadPlan(filePath);
-          ws.send(JSON.stringify({ type: 'smartpath.fileLoaded', payload: { plan } }));
-          break;
-        }
-
-        case 'smartpath.saveFile': {
-          const planId = msg.planId as string;
-          const plan = msg.plan as { name: string; description: string; steps: any[]; workspace: string };
-          const workspace = msg.workspace as string;
-          if (!planId) throw new Error('Missing planId');
-          if (!plan) throw new Error('Missing plan');
-          if (!workspace) throw new Error('Missing workspace');
-
-          const store = new SmartPathStore(workspace);
-          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
-
-          // Load existing plan to preserve metadata
-          const existingPlan = fs.existsSync(filePath) ? store.loadPlan(filePath) : null;
-
-          const planData = {
-            id: planId,
-            name: plan.name,
-            description: plan.description,
-            workspace,
-            steps: plan.steps || [],
-            status: existingPlan?.status || 'draft',
-            createdAt: existingPlan?.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-
-          store.savePlan(planData);
-          ws.send(JSON.stringify({ type: 'smartpath.fileSaved', payload: { filePath } }));
-          break;
-        }
-
-        case 'smartpath.deleteFile': {
-          const workspace = msg.workspace as string;
-          const planId = msg.planId as string;
-          if (!workspace) throw new Error('Missing workspace');
-          if (!planId) throw new Error('Missing planId');
-
-          const store = new SmartPathStore(workspace);
-          const filePath = path.join(workspace, '.sman', 'paths', `${planId}.md`);
-          store.deletePlan(filePath);
-          ws.send(JSON.stringify({ type: 'smartpath.fileDeleted', payload: { success: true } }));
           break;
         }
 

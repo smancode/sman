@@ -1,3 +1,9 @@
+/**
+ * SmartPathStore — 地球路径存储
+ *
+ * 所有方法都通过 workspace 参数定位文件，不依赖 basePath 遍历。
+ * 文件存储在 {workspace}/.sman/paths/{id}.md
+ */
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -8,85 +14,36 @@ import type { SmartPath, SmartPathStep, SmartPathRun } from './types.js';
 export class SmartPathStore {
   private log: Logger;
 
-  constructor(private basePath: string) {
+  constructor() {
     this.log = createLogger('SmartPathStore');
-    if (!fs.existsSync(basePath)) {
-      fs.mkdirSync(basePath, { recursive: true });
-    }
   }
 
-  getPathsDir(workspace: string): string {
-    if (!workspace || workspace.trim() === '') {
-      throw new Error('Workspace is required');
-    }
+  // ── 路径工具 ──
 
-    const dir = path.join(workspace, '.sman', 'paths');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    return dir;
+  /** {workspace}/.sman/paths/ */
+  private dir(ws: string): string {
+    const d = path.join(ws, '.sman', 'paths');
+    fs.mkdirSync(d, { recursive: true });
+    return d;
   }
 
-  savePlan(plan: Omit<SmartPath, 'steps'> & { steps: SmartPathStep[] }): string {
-    if (!plan.name || !plan.name.trim()) {
-      throw new Error('Plan name is required');
-    }
-    if (!plan.workspace) {
-      throw new Error('Workspace is required');
-    }
-
-    const dir = this.getPathsDir(plan.workspace);
-    const filename = `${plan.id}.md`;
-    const filePath = path.join(dir, filename);
-
-    const content = matter.stringify(
-      `# ${plan.name}\n\n${plan.description || '无描述'}\n`,
-      {
-        name: plan.name,
-        description: plan.description || '',
-        workspace: plan.workspace,
-        created_at: plan.createdAt,
-        updated_at: plan.updatedAt || plan.createdAt,
-        status: plan.status,
-        steps: plan.steps,
-      },
-    );
-
-    fs.writeFileSync(filePath, content, 'utf-8');
-    this.log.info(`Saved plan to ${filePath}`);
-    return filePath;
+  /** {workspace}/.sman/paths/{id}.md */
+  private file(ws: string, id: string): string {
+    return path.join(this.dir(ws), `${id}.md`);
   }
 
-  listPlans(workspace: string): SmartPath[] {
-    const dir = this.getPathsDir(workspace);
-    if (!fs.existsSync(dir)) {
-      return [];
-    }
-
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
-    const plans: SmartPath[] = [];
-
-    for (const file of files) {
-      try {
-        const filePath = path.join(dir, file);
-        const plan = this.loadPlan(filePath);
-        plans.push(plan);
-      } catch (err) {
-        this.log.error(`Failed to load plan ${file}: ${err}`);
-      }
-    }
-
-    return plans.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  /** {workspace}/.sman/paths/{pathId}/runs/ */
+  private runsDir(ws: string, pathId: string): string {
+    const d = path.join(this.dir(ws), pathId, 'runs');
+    fs.mkdirSync(d, { recursive: true });
+    return d;
   }
 
-  loadPlan(filePath: string): SmartPath {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Plan file not found: ${filePath}`);
-    }
+  // ── 文件读写 ──
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const { data } = matter(content);
-
+  private read(filePath: string): SmartPath {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const { data } = matter(raw);
     return {
       id: path.basename(filePath, '.md'),
       name: data.name || '',
@@ -99,117 +56,122 @@ export class SmartPathStore {
     };
   }
 
-  deletePlan(filePath: string): void {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Plan file not found: ${filePath}`);
-    }
-    fs.unlinkSync(filePath);
-    this.log.info(`Deleted plan: ${filePath}`);
+  private write(p: SmartPath): void {
+    if (!p.name?.trim()) throw new Error('Plan name is required');
+    if (!p.workspace) throw new Error('Workspace is required');
+    const steps = (() => { try { return JSON.parse(p.steps); } catch { return []; } })();
+    const content = matter.stringify(
+      `# ${p.name}\n\n${(p as any).description || ''}\n`,
+      {
+        name: p.name,
+        description: (p as any).description || '',
+        workspace: p.workspace,
+        created_at: p.createdAt,
+        updated_at: p.updatedAt || p.createdAt,
+        status: p.status,
+        steps,
+      },
+    );
+    const filePath = this.file(p.workspace, p.id);
+    fs.writeFileSync(filePath, content, 'utf-8');
+    this.log.info(`Saved: ${filePath}`);
   }
 
-  updatePlan(filePath: string, updates: Partial<SmartPath>): void {
-    const existing = this.loadPlan(filePath);
-    const merged = { ...existing, ...updates, updatedAt: new Date().toISOString() };
-    const stepsData = existing.steps ? JSON.parse(existing.steps) : [];
-    this.savePlan({ ...merged, steps: stepsData } as Omit<SmartPath, 'steps'> & { steps: SmartPathStep[] });
+  // ── CRUD ──
+
+  /** 列出指定 workspace 下的所有路径 */
+  list(ws: string): SmartPath[] {
+    const d = this.dir(ws);
+    if (!fs.existsSync(d)) return [];
+    return fs.readdirSync(d)
+      .filter(f => f.endsWith('.md'))
+      .map(f => { try { return this.read(path.join(d, f)); } catch { return null; } })
+      .filter((p): p is SmartPath => p !== null)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  // === Backward compatibility (file I/O wrappers only) ===
-
-  listPaths(): SmartPath[] {
-    if (!fs.existsSync(this.basePath)) return [];
-    const all: SmartPath[] = [];
-    for (const ws of fs.readdirSync(this.basePath)) {
-      const wsDir = path.join(this.basePath, ws, '.sman', 'paths');
-      if (!fs.existsSync(wsDir)) continue;
-      for (const file of fs.readdirSync(wsDir).filter(f => f.endsWith('.md'))) {
-        try {
-          all.push(this.loadPlan(path.join(wsDir, file)));
-        } catch (err) {
-          this.log.error(`Failed to load path: ${err}`);
-        }
-      }
-    }
-    return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  /** 列出多个 workspace 下的所有路径 */
+  listAll(workspaces: string[]): SmartPath[] {
+    return workspaces.flatMap(ws => this.list(ws))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  createPath(input: { name: string; workspace: string; steps: string; status?: SmartPath['status'] }): SmartPath {
-    if (!input.name?.trim()) throw new Error('Missing name parameter');
-    if (!input.workspace?.trim()) throw new Error('Missing workspace parameter');
-    if (!input.steps?.trim()) throw new Error('Missing steps parameter');
-    const id = crypto.randomUUID();
+  /** 获取单个路径，workspace 必传 */
+  get(id: string, ws: string): SmartPath | undefined {
+    const f = this.file(ws, id);
+    return fs.existsSync(f) ? this.read(f) : undefined;
+  }
+
+  /** 创建路径 */
+  create(input: { name: string; workspace: string; steps: string }): SmartPath {
+    if (!input.name?.trim()) throw new Error('Missing name');
+    if (!input.workspace?.trim()) throw new Error('Missing workspace');
+    if (input.steps === undefined || input.steps === null) throw new Error('Missing steps');
     const now = new Date().toISOString();
-    const plan: SmartPath = { id, name: input.name, workspace: input.workspace, steps: input.steps, status: input.status || 'draft', createdAt: now, updatedAt: now };
-    this.savePlan({ ...plan, steps: JSON.parse(input.steps) });
-    return plan;
+    const p: SmartPath = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      workspace: input.workspace,
+      steps: input.steps,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.write(p);
+    return p;
   }
 
-  getPath(id: string): SmartPath | undefined {
-    if (!fs.existsSync(this.basePath)) return undefined;
-    for (const ws of fs.readdirSync(this.basePath)) {
-      const filePath = path.join(this.basePath, ws, '.sman', 'paths', `${id}.md`);
-      if (fs.existsSync(filePath)) return this.loadPlan(filePath);
-    }
-    return undefined;
-  }
-
-  updatePath(id: string, updates: Partial<SmartPath>): SmartPath {
-    const existing = this.getPath(id);
+  /** 更新路径 */
+  update(id: string, ws: string, updates: Partial<SmartPath>): SmartPath {
+    const existing = this.get(id, ws);
     if (!existing) throw new Error(`Path not found: ${id}`);
-    this.updatePlan(path.join(this.getPathsDir(existing.workspace), `${id}.md`), updates);
-    return { ...existing, ...updates, updatedAt: new Date().toISOString() };
+    const merged = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+    this.write(merged);
+    return merged;
   }
 
-  deletePath(id: string): void {
-    const existing = this.getPath(id);
-    if (!existing) throw new Error(`Path not found: ${id}`);
-    this.deletePlan(path.join(this.getPathsDir(existing.workspace), `${id}.md`));
+  /** 删除路径 */
+  del(id: string, ws: string): void {
+    const f = this.file(ws, id);
+    if (!fs.existsSync(f)) throw new Error(`Path not found: ${id}`);
+    fs.unlinkSync(f);
+    // 清理 runs
+    const rd = this.runsDir(ws, id);
+    if (fs.existsSync(rd)) fs.rmSync(rd, { recursive: true });
+    this.log.info(`Deleted: ${id}`);
   }
 
-  // === Run methods (file I/O only) ===
+  // ── Runs ──
 
-  private getRunsDir(workspace: string, pathId: string): string {
-    const dir = path.join(this.getPathsDir(workspace), pathId, 'runs');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return dir;
-  }
-
-  createRun(pathId: string): SmartPathRun {
-    const smartPath = this.getPath(pathId);
-    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
-    const run: SmartPathRun = { id: crypto.randomUUID(), pathId, status: 'running', stepResults: '{}', startedAt: new Date().toISOString() };
-    const filePath = path.join(this.getRunsDir(smartPath.workspace, pathId), `${run.id}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(run, null, 2), 'utf-8');
-    this.log.info(`Created run ${run.id} for path ${pathId}`);
+  createRun(pathId: string, ws: string): SmartPathRun {
+    const run: SmartPathRun = {
+      id: crypto.randomUUID(),
+      pathId,
+      status: 'running',
+      stepResults: '{}',
+      startedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(
+      path.join(this.runsDir(ws, pathId), `${run.id}.json`),
+      JSON.stringify(run, null, 2), 'utf-8',
+    );
     return run;
   }
 
-  updateRun(runId: string, updates: Partial<SmartPathRun>): void {
-    if (!fs.existsSync(this.basePath)) return;
-    for (const ws of fs.readdirSync(this.basePath)) {
-      const pathsDir = path.join(this.basePath, ws, '.sman', 'paths');
-      if (!fs.existsSync(pathsDir)) continue;
-      for (const pd of fs.readdirSync(pathsDir)) {
-        const runFile = path.join(pathsDir, pd, 'runs', `${runId}.json`);
-        if (fs.existsSync(runFile)) {
-          const existing: SmartPathRun = JSON.parse(fs.readFileSync(runFile, 'utf-8'));
-          fs.writeFileSync(runFile, JSON.stringify({ ...existing, ...updates }, null, 2), 'utf-8');
-          return;
-        }
-      }
-    }
-    throw new Error(`Run not found: ${runId}`);
+  updateRun(runId: string, ws: string, pathId: string, updates: Partial<SmartPathRun>): void {
+    const f = path.join(this.runsDir(ws, pathId), `${runId}.json`);
+    if (!fs.existsSync(f)) throw new Error(`Run not found: ${runId}`);
+    const existing: SmartPathRun = JSON.parse(fs.readFileSync(f, 'utf-8'));
+    fs.writeFileSync(f, JSON.stringify({ ...existing, ...updates }, null, 2), 'utf-8');
   }
 
-  listRuns(pathId: string): SmartPathRun[] {
-    const smartPath = this.getPath(pathId);
-    if (!smartPath) return [];
-    const runsDir = path.join(this.getPathsDir(smartPath.workspace), pathId, 'runs');
-    if (!fs.existsSync(runsDir)) return [];
-    const runs: SmartPathRun[] = [];
-    for (const file of fs.readdirSync(runsDir).filter(f => f.endsWith('.json'))) {
-      try { runs.push(JSON.parse(fs.readFileSync(path.join(runsDir, file), 'utf-8'))); } catch {}
-    }
-    return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  listRuns(pathId: string, ws: string): SmartPathRun[] {
+    const rd = this.runsDir(ws, pathId);
+    if (!fs.existsSync(rd)) return [];
+    return fs.readdirSync(rd)
+      .filter(f => f.endsWith('.json'))
+      .map(f => { try { return JSON.parse(fs.readFileSync(path.join(rd, f), 'utf-8')); } catch { return null; } })
+      .filter((r): r is SmartPathRun => r !== null)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 }
