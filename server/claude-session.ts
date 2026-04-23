@@ -1920,6 +1920,7 @@ export class ClaudeSessionManager {
     onActivity: () => void,
     onResponse: (chunk: string) => void,
     media?: MediaAttachment[],
+    onThinking?: (chunk: string) => void,
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -2031,6 +2032,7 @@ export class ClaudeSessionManager {
 
       let fullContent = '';
       let msgCount = 0;
+      let thinkingChunks: string[] = [];
 
       for await (const sdkMsg of v2Session.stream()) {
         lastActivityAt = Date.now();
@@ -2044,14 +2046,22 @@ export class ClaudeSessionManager {
         switch (sdkMsg.type) {
           case 'assistant': {
             toolInProgress = false;
-            // The SDK sends accumulated text here (includePartialMessages: true),
-            // but we already streamed it token-by-token via 'stream_event' events.
-            // Do NOT overwrite fullContent here — keep the accumulated stream_event text.
-            // Only use as a fallback if stream_events produced nothing.
             break;
           }
           case 'stream_event': {
-            const delta = this.extractDeltaText((sdkMsg as any).event);
+            const rawEvent = (sdkMsg as any).event;
+            // Track thinking blocks: accumulate deltas, push complete text on block stop
+            if (rawEvent.type === 'content_block_start' && rawEvent.content_block?.type === 'thinking') {
+              thinkingChunks = [];
+            } else if (rawEvent.type === 'content_block_delta' && rawEvent.delta?.type === 'thinking_delta') {
+              thinkingChunks.push(rawEvent.delta.thinking);
+            } else if (rawEvent.type === 'content_block_stop' && thinkingChunks.length > 0) {
+              const fullThinking = thinkingChunks.join('');
+              thinkingChunks = [];
+              onThinking?.(fullThinking);
+            }
+            // Handle text and tool_use deltas
+            const delta = this.extractDeltaText(rawEvent);
             if (delta) {
               if (delta.type === 'text' && delta.content !== '(no content)') {
                 fullContent += delta.content;

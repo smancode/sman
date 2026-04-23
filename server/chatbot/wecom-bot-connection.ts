@@ -17,6 +17,8 @@ const RECONNECT_BASE_DELAY_MS = 1000;
 // WeCom rate limit: 30 messages/min per conversation.
 // Throttle stream updates to avoid hitting the limit.
 const STREAM_THROTTLE_MS = 1000;
+// WeCom stream message byte limit
+const MAX_CONTENT_BYTES = 20_000;
 
 export class WeComBotConnection {
   private log: Logger;
@@ -311,48 +313,81 @@ export class WeComBotConnection {
     let started = false;
     const self = this;
 
+    let thinkingLines: string[] = [];
     let accumulated = '';
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingContent = '';
+    let pendingFlush = false;
 
-    const flushStream = () => {
-      if (!pendingContent) return;
+    const buildContent = (): string => {
+      const thinkBlock = thinkingLines.length > 0
+        ? `<thinkertue>\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`
+        : '';
+      return thinkBlock + accumulated;
+    };
+
+    const sendPacket = (finish: boolean) => {
+      let content = buildContent();
+
+      // Enforce byte limit — evict oldest thinking lines from the top
+      while (
+        thinkingLines.length > 1 &&
+        Buffer.byteLength(content, 'utf8') > MAX_CONTENT_BYTES
+      ) {
+        thinkingLines.shift();
+        const truncatedThink = `<thinkertue>\n...\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`;
+        content = truncatedThink + accumulated;
+      }
+
       self.send({
         cmd: 'aibot_respond_msg',
         headers: { req_id: reqId },
         body: {
           msgtype: 'stream',
-          stream: { id: streamId, finish: false, content: pendingContent },
+          stream: { id: streamId, finish, content },
         },
       });
+    };
+
+    const flushStream = () => {
       throttleTimer = null;
+      if (!pendingFlush) return;
+      pendingFlush = false;
+      sendPacket(false);
+    };
+
+    const scheduleFlush = () => {
+      pendingFlush = true;
+      if (!throttleTimer) {
+        throttleTimer = setTimeout(flushStream, STREAM_THROTTLE_MS);
+      }
     };
 
     return {
       start() { started = true; },
+      sendThinking(content: string) {
+        if (!started) return;
+        // Truncate each thinking line to 80 chars for display
+        const line = content.length > 80 ? content.substring(0, 80) + '...' : content;
+        thinkingLines.push(`💭 ${line}`);
+        scheduleFlush();
+      },
       sendChunk(content: string) {
         if (!started) return;
         accumulated += content;
-        pendingContent = accumulated;
-        if (!throttleTimer) {
-          throttleTimer = setTimeout(flushStream, STREAM_THROTTLE_MS);
-        }
+        scheduleFlush();
       },
       finish(fullContent: string) {
-        // Cancel pending throttle and flush immediately
         if (throttleTimer) {
           clearTimeout(throttleTimer);
           throttleTimer = null;
         }
         if (started) {
-          self.send({
-            cmd: 'aibot_respond_msg',
-            headers: { req_id: reqId },
-            body: {
-              msgtype: 'stream',
-              stream: { id: streamId, finish: true, content: fullContent },
-            },
-          });
+          // Final message: include thinking block + full answer
+          const thinkBlock = thinkingLines.length > 0
+            ? `<thinkertue>\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`
+            : '';
+          const finalContent = thinkBlock + fullContent;
+          sendPacket(true);
         } else {
           self.send({
             cmd: 'aibot_respond_msg',

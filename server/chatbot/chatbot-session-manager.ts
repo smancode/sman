@@ -348,6 +348,7 @@ export class ChatbotSessionManager {
         () => {},
         (chunk) => sender.sendChunk(chunk),
         media,
+        (chunk) => sender.sendThinking(chunk),
       );
 
       // Strip all "(no content)" placeholders from the final content

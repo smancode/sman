@@ -425,6 +425,7 @@ export class WeixinBotConnection {
 
     return {
       start() {},
+      sendThinking() {},
       sendChunk() {
         // Ignore streaming chunks — wait for complete response
       },

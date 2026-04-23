@@ -256,6 +256,7 @@ export class FeishuBotConnection {
 
     return {
       start() {},
+      sendThinking() {},
       sendChunk(content: string) {
         accumulated += content;
         if (!throttleTimer) {
