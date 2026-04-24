@@ -45,6 +45,7 @@ function useExpandedSystems() {
 
 function BackendStatusBar() {
   const { status } = useWsConnection();
+  // status 作为依赖：切换后端后重连时 status 变化，触发重读 localStorage
   const info = useMemo(() => {
     try {
       const servers: Array<{ name: string; url: string; alias?: string }> = JSON.parse(
@@ -60,7 +61,7 @@ function BackendStatusBar() {
     } catch {
       return { alias: '', url: '', address: '' };
     }
-  }, []);
+  }, [status]);
 
   const { alias, url, address } = info;
   const isLocal = !url;

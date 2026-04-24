@@ -153,7 +153,8 @@ class SessionCache {
 
   set(sessionId: string, messages: unknown[]): void {
     const key = this.nk(sessionId);
-    this.cache.set(key, messages);
+    // Shallow copy to protect cache from external mutation
+    this.cache.set(key, [...messages]);
     this.touch(key);
     dbPut(key, messages);
   }
