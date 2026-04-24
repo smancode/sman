@@ -1,15 +1,28 @@
 /**
  * SmartPathEngine — 地球路径执行引擎
  * 逐步骤执行，前一步的执行结果作为下一步的输入上下文
+ * 使用临时会话，执行完即清理，不影响主会话列表
  */
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
+import type { SessionStore } from './session-store.js';
 import type { SmartPathStep } from './types.js';
 
 function isoNow(): string {
   return new Date().toISOString();
 }
+
+const STEP_SYSTEM_PROMPT = [
+  '[步骤执行模式 - 必须遵守]',
+  '',
+  '你正在执行一个自动化工作流的步骤。规则：',
+  '1. 直接执行任务，给出简洁结果。不要询问用户，不要等待用户输入。',
+  '2. 不要调用 dev-workflow 或任何需要多轮交互的流程。',
+  '3. 能使用现有 skill/tool 直接完成就使用，不能的直接实现。',
+  '4. 输出要简洁：执行了什么 + 结果。不要冗长解释。',
+  '5. 最后用一行明确总结结果（以「执行结果：」开头）。',
+].join('\n');
 
 function buildStepPrompt(userInput: string, previousResult?: string): string {
   if (previousResult) {
@@ -24,6 +37,7 @@ export class SmartPathEngine {
   constructor(
     private store: SmartPathStore,
     private sessionManager: ClaudeSessionManager,
+    private sessionStore: SessionStore,
   ) {
     this.log = createLogger('SmartPathEngine');
   }
@@ -57,23 +71,30 @@ export class SmartPathEngine {
         const abort = new AbortController();
 
         let stepFullContent = '';
-        const stepReturned = await this.sessionManager.sendMessageForStep(
-          sessionId,
-          prompt,
-          abort,
-          (delta) => {
-            stepFullContent += delta;
-            onStepProgress(i, delta);
-          },
-        );
+        try {
+          const stepReturned = await this.sessionManager.sendMessageForStep(
+            sessionId,
+            prompt,
+            abort,
+            (delta) => {
+              stepFullContent += delta;
+              onStepProgress(i, delta);
+            },
+            STEP_SYSTEM_PROMPT,
+          );
 
-        const stepResult = (stepReturned || stepFullContent).trim();
-        previousResult = stepResult;
+          const stepResult = (stepReturned || stepFullContent).trim();
+          previousResult = stepResult;
 
-        // 保存每步执行结果
-        steps[i] = { ...step, executionResult: stepResult };
-        onStepResult(i, stepResult);
-        onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
+          // 保存每步执行结果
+          steps[i] = { ...step, executionResult: stepResult };
+          onStepResult(i, stepResult);
+          onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
+        } finally {
+          // 清理临时会话 — 不留痕到主会话列表
+          this.sessionManager.closeV2Session(sessionId);
+          this.sessionStore.deleteSession(sessionId);
+        }
       }
 
       // 保存所有步骤结果到 path

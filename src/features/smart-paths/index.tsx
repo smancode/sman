@@ -5,6 +5,8 @@ import {
   FolderOpen, Save, GripVertical, Route, Pencil,
   ChevronDown,
 } from 'lucide-react';
+import { Streamdown } from 'streamdown';
+import 'streamdown/styles.css';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -145,11 +147,13 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                   {executing ? '执行过程' : '执行结果'}
                 </div>
                 <div ref={executing ? streamRef : undefined}
-                  className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words max-h-[400px] overflow-y-auto">
+                  className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
                   {executing && !executionStream ? (
                     <span className="text-muted-foreground animate-pulse">等待响应...</span>
                   ) : (
-                    executionStream || step.executionResult || ''
+                    <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
+                      {step.executionResult || executionStream || ''}
+                    </Streamdown>
                   )}
                 </div>
               </CardContent>
@@ -194,11 +198,13 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
               ) : '执行结果'}
             </div>
             <div ref={executing ? streamRef : undefined}
-              className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words max-h-[400px] overflow-y-auto">
+              className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
               {executing && !executionStream ? (
                 <span className="text-muted-foreground animate-pulse">等待响应...</span>
               ) : (
-                executionStream || step.executionResult || ''
+                <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
+                  {step.executionResult || executionStream || ''}
+                </Streamdown>
               )}
             </div>
           </div>

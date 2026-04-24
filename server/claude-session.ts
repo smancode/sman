@@ -2139,6 +2139,7 @@ export class ClaudeSessionManager {
     content: string,
     abortController: AbortController,
     onDelta: (text: string) => void,
+    systemPrompt?: string,
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -2209,10 +2210,10 @@ export class ClaudeSessionManager {
     try {
       const v2Session = await this.getOrCreateV2Session(sessionId);
       const workspace = session.workspace;
-      const projectName = path.basename(workspace);
-      const smanContext = this.buildSmanContext(projectName, sessionId);
 
-      const contentWithPrefix = `${smanContext}\n\n${content}`;
+      // 步骤执行不注入完整的 buildSmanContext（避免 dev-workflow 等复杂流程）
+      // 使用调用方提供的精简 systemPrompt，或直接发送内容
+      const contentWithPrefix = systemPrompt ? `${systemPrompt}\n\n${content}` : content;
       await v2Session.send(contentWithPrefix);
 
       let fullContent = '';

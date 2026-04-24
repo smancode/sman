@@ -173,7 +173,7 @@ batchEngine.start();
 
 // SmartPath
 const smartPathStore = new SmartPathStore();
-const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
+const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager, store);
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
@@ -1161,21 +1161,30 @@ wss.on('connection', (ws: WebSocket) => {
 
           try {
             if (execute) {
-              // 流式执行模式
+              // 流式执行模式 — 使用临时会话，执行完即清理
               const tempSessionId = sessionManager.createSession(workspace);
               const abort = new AbortController();
               const prompt = buildStepExecutionPrompt(userInput, previousSteps);
+              const stepSystemPrompt = buildStepSystemPrompt();
 
               const stepIdx = msg.stepIndex as number | undefined;
               const pId = msg.pathId as string | undefined;
-              const result = await sessionManager.sendMessageForStep(
-                tempSessionId,
-                prompt,
-                abort,
-                (delta) => {
-                  ws.send(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: pId, stepIndex: stepIdx, delta }));
-                },
-              );
+              let result = '';
+              try {
+                result = await sessionManager.sendMessageForStep(
+                  tempSessionId,
+                  prompt,
+                  abort,
+                  (delta) => {
+                    ws.send(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: pId, stepIndex: stepIdx, delta }));
+                  },
+                  stepSystemPrompt,
+                );
+              } finally {
+                // 清理临时会话 — 不留痕到主会话列表
+                sessionManager.closeV2Session(tempSessionId);
+                store.deleteSession(tempSessionId);
+              }
 
               ws.send(JSON.stringify({
                 type: 'smartpath.stepExecutionCompleted',
@@ -1414,6 +1423,23 @@ function buildStepExecutionPrompt(
   }
   parts.push(`本步骤输入：「${userInput}」`);
   return parts.join('\n');
+}
+
+/**
+ * 步骤执行的精简 system prompt
+ * 禁止 dev-workflow、禁止询问用户、直接给出结果
+ */
+function buildStepSystemPrompt(): string {
+  return [
+    '[步骤执行模式 - 必须遵守]',
+    '',
+    '你正在执行一个自动化工作流的步骤。规则：',
+    '1. 直接执行任务，给出简洁结果。不要询问用户，不要等待用户输入。',
+    '2. 不要调用 dev-workflow 或任何需要多轮交互的流程。',
+    '3. 能使用现有 skill/tool 直接完成就使用，不能的直接实现。',
+    '4. 输出要简洁：执行了什么 + 结果。不要冗长解释。',
+    '5. 最后用一行明确总结结果（以「执行结果：」开头）。',
+  ].join('\n');
 }
 
 const isMainModule = process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||

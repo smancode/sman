@@ -15,7 +15,9 @@ describe('SmartPathEngine', () => {
     sendMessageForCron: ReturnType<typeof vi.fn>;
     sendMessageForStep: ReturnType<typeof vi.fn>;
     getHistory: ReturnType<typeof vi.fn>;
+    closeV2Session: ReturnType<typeof vi.fn>;
   };
+  let mockSessionStore: { deleteSession: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     dbPath = path.join(os.tmpdir(), `smart-path-engine-test-${Date.now()}`);
@@ -30,8 +32,10 @@ describe('SmartPathEngine', () => {
         { role: 'user', content: 'test', contentBlocks: [] },
         { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'done' }] },
       ]),
+      closeV2Session: vi.fn(),
     };
-    engine = new SmartPathEngine(store, mockSessionManager as any);
+    mockSessionStore = { deleteSession: vi.fn() };
+    engine = new SmartPathEngine(store, mockSessionManager as any, mockSessionStore as any);
   });
 
   afterEach(() => {
