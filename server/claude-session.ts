@@ -1928,6 +1928,7 @@ export class ClaudeSessionManager {
     onResponse: (chunk: string) => void,
     media?: MediaAttachment[],
     onThinking?: (chunk: string) => void,
+    onToolStatus?: (toolName: string, status: 'start' | 'end') => void,
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -2040,6 +2041,7 @@ export class ClaudeSessionManager {
       let fullContent = '';
       let msgCount = 0;
       let thinkingChunks: string[] = [];
+      let pendingToolName: string | null = null;
 
       for await (const sdkMsg of v2Session.stream()) {
         lastActivityAt = Date.now();
@@ -2066,6 +2068,19 @@ export class ClaudeSessionManager {
               const fullThinking = thinkingChunks.join('');
               thinkingChunks = [];
               onThinking?.(fullThinking);
+            }
+            // Tool use start — notify with tool name
+            if (rawEvent.type === 'content_block_start' && rawEvent.content_block?.type === 'tool_use') {
+              const toolName = rawEvent.content_block.name || 'unknown';
+              pendingToolName = toolName;
+              onToolStatus?.(toolName, 'start');
+            }
+            // Tool result start — previous tool finished
+            if (rawEvent.type === 'content_block_start' && rawEvent.content_block?.type === 'tool_result') {
+              if (pendingToolName) {
+                onToolStatus?.(pendingToolName, 'end');
+                pendingToolName = null;
+              }
             }
             // Handle text and tool_use deltas
             const delta = this.extractDeltaText(rawEvent);

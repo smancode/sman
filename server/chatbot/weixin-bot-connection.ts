@@ -426,6 +426,9 @@ export class WeixinBotConnection {
     return {
       start() {},
       sendThinking() {},
+      sendToolStatus() {
+        // WeChat does not support in-place message updates — skip intermediate status
+      },
       sendChunk() {
         // Ignore streaming chunks — wait for complete response
       },

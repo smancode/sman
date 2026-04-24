@@ -19,6 +19,7 @@ export interface ChatResponseSender {
   start(): void;
   sendChunk(content: string): void;
   sendThinking(content: string): void;
+  sendToolStatus(toolName: string, status: 'start' | 'end'): void;
   finish(fullContent: string): void;
   error(message: string): void;
 }

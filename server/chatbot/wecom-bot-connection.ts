@@ -317,12 +317,32 @@ export class WeComBotConnection {
     let accumulated = '';
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
     let pendingFlush = false;
+    let activeToolName: string | null = null;
+
+    const TOOL_DISPLAY_NAMES: Record<string, string> = {
+      Read: '读取文件',
+      Write: '写入文件',
+      Edit: '编辑文件',
+      Bash: '执行命令',
+      Glob: '搜索文件',
+      Grep: '搜索内容',
+      WebSearch: '网络搜索',
+      WebFetch: '获取网页',
+      Agent: '子 Agent',
+      LSP: '代码分析',
+      NotebookEdit: '编辑笔记本',
+    };
+
+    const getToolDisplayName = (toolName: string): string => {
+      return TOOL_DISPLAY_NAMES[toolName] || toolName;
+    };
 
     const buildContent = (): string => {
+      const toolLine = activeToolName ? `🔧 ${activeToolName}...\n\n` : '';
       const thinkBlock = thinkingLines.length > 0
         ? `<thinkertue>\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`
         : '';
-      return thinkBlock + accumulated;
+      return toolLine + thinkBlock + accumulated;
     };
 
     const sendPacket = (finish: boolean) => {
@@ -335,7 +355,7 @@ export class WeComBotConnection {
       ) {
         thinkingLines.shift();
         const truncatedThink = `<thinkertue>\n...\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`;
-        content = truncatedThink + accumulated;
+        content = `🔧 ${activeToolName}...\n\n` + truncatedThink + accumulated;
       }
 
       self.send({
@@ -371,6 +391,15 @@ export class WeComBotConnection {
         thinkingLines.push(`💭 ${line}`);
         scheduleFlush();
       },
+      sendToolStatus(toolName: string, status: 'start' | 'end') {
+        if (!started) return;
+        if (status === 'start') {
+          activeToolName = getToolDisplayName(toolName);
+        } else {
+          activeToolName = null;
+        }
+        scheduleFlush();
+      },
       sendChunk(content: string) {
         if (!started) return;
         accumulated += content;
@@ -382,11 +411,12 @@ export class WeComBotConnection {
           throttleTimer = null;
         }
         if (started) {
-          // Final message: include thinking block + full answer
+          // Final message: include thinking block + full answer (no tool status)
           const thinkBlock = thinkingLines.length > 0
             ? `<thinkertue>\n${thinkingLines.join('\n')}\n</thinkertue>\n\n`
             : '';
           const finalContent = thinkBlock + fullContent;
+          activeToolName = null;
           sendPacket(true);
         } else {
           self.send({

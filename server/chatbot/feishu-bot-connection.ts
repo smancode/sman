@@ -257,6 +257,9 @@ export class FeishuBotConnection {
     return {
       start() {},
       sendThinking() {},
+      sendToolStatus() {
+        // Feishu intermediate messages look cluttered — skip
+      },
       sendChunk(content: string) {
         accumulated += content;
         if (!throttleTimer) {
