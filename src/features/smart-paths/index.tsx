@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
-  FolderOpen, Wand2, Save, GripVertical, Route, Pencil,
+  FolderOpen, Save, GripVertical, Route, Pencil,
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,9 +18,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { useSmartPathStore } from '@/stores/smart-path';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
@@ -99,12 +96,22 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
 
 // ── Step edit card ──
 
-function StepEditCard({ step, index, total, onChange, onDelete, onGenerate, generating, workspace }: {
+function StepEditCard({ step, index, total, onChange, onDelete, onExecute, executing, executionStream, workspace }: {
   step: SmartPathStep; index: number; total: number;
   onChange: (s: SmartPathStep) => void; onDelete: () => void;
-  onGenerate: () => void; generating: boolean; workspace: string;
+  onExecute: () => void;
+  executing: boolean; executionStream: string; workspace: string;
 }) {
-  const [open, setOpen] = useState(!!step.generatedContent);
+  const streamRef = useRef<HTMLDivElement>(null);
+  const hasResult = !!step.executionResult;
+
+  // auto-scroll for streaming content
+  useEffect(() => {
+    if (executing && streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [executionStream, executing]);
+
   return (
     <>
       <div className="flex justify-center"><div className="w-px h-4 bg-border" /></div>
@@ -116,28 +123,37 @@ function StepEditCard({ step, index, total, onChange, onDelete, onGenerate, gene
             <Input value={step.name || ''} onChange={(e) => onChange({ ...step, name: e.target.value })}
               placeholder="步骤名称" className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium" />
             <div className="flex-1" />
+            {/* 执行按钮 — 放在标题行最右边 */}
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0"
+              disabled={!step.userInput.trim() || executing || !workspace} onClick={onExecute}>
+              {executing ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <Play className="h-3 w-3" />}
+              {executing ? '执行中' : '执行'}
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={onDelete}>
               <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           </div>
           <Textarea value={step.userInput} onChange={(e) => onChange({ ...step, userInput: e.target.value })}
             placeholder="描述这一步要做什么..." className="min-h-[56px] text-sm resize-none" />
-          <Button variant="outline" size="sm" className="w-full"
-            disabled={!step.userInput.trim() || generating || !workspace} onClick={onGenerate}>
-            {generating ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> 生成中...</>
-              : <><Wand2 className="h-3.5 w-3.5 mr-1.5" /> 生成方案</>}
-          </Button>
-          {step.generatedContent && (
-            <Collapsible open={open} onOpenChange={setOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
-                <ChevronDown className={cn('h-3 w-3 transition-transform', open && 'rotate-180')} /> 生成的方案
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-2 rounded-md bg-muted p-3 text-xs whitespace-pre-wrap max-h-[240px] overflow-y-auto leading-relaxed">
-                  {step.generatedContent}
+
+          {/* 执行过程/结果区域 — 执行中立即显示 */}
+          {(executing || hasResult) && (
+            <Card className="border border-muted-foreground/20">
+              <CardContent className="p-3">
+                <div className="text-xs text-muted-foreground mb-1.5 font-medium">
+                  {executing ? '执行过程' : '执行结果'}
                 </div>
-              </CollapsibleContent>
-            </Collapsible>
+                <div ref={executing ? streamRef : undefined}
+                  className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words max-h-[400px] overflow-y-auto">
+                  {executing && !executionStream ? (
+                    <span className="text-muted-foreground animate-pulse">等待响应...</span>
+                  ) : (
+                    executionStream || step.executionResult || ''
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </CardContent>
       </Card>
@@ -147,7 +163,18 @@ function StepEditCard({ step, index, total, onChange, onDelete, onGenerate, gene
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total }: { step: SmartPathStep; index: number; total: number }) {
+function StepViewCard({ step, index, total, executionStream, executing }: {
+  step: SmartPathStep; index: number; total: number;
+  executionStream?: string; executing?: boolean;
+}) {
+  const streamRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (executing && streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [executionStream, executing]);
+
   return (
     <div className="flex items-start gap-3">
       <div className="flex flex-col items-center">
@@ -157,7 +184,25 @@ function StepViewCard({ step, index, total }: { step: SmartPathStep; index: numb
       <div className="flex-1 pb-3">
         {step.name && <p className="text-sm font-medium">{step.name}</p>}
         <p className="text-sm leading-relaxed text-muted-foreground">{step.userInput}</p>
-        {step.generatedContent && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{step.generatedContent.slice(0, 100)}...</p>}
+
+        {/* 执行过程/结果 */}
+        {(executing || step.executionResult) && (
+          <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
+            <div className="text-xs text-muted-foreground mb-1.5 font-medium">
+              {executing ? (
+                <><Loader2 className="h-3 w-3 inline animate-spin mr-1" />执行过程</>
+              ) : '执行结果'}
+            </div>
+            <div ref={executing ? streamRef : undefined}
+              className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words max-h-[400px] overflow-y-auto">
+              {executing && !executionStream ? (
+                <span className="text-muted-foreground animate-pulse">等待响应...</span>
+              ) : (
+                executionStream || step.executionResult || ''
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -204,19 +249,22 @@ function PathEditor({ path, onSave, onCancel }: {
 }) {
   const [name, setName] = useState(path.name);
   const [steps, setSteps] = useState<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } });
-  const [genIdx, setGenIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const generateStep = useSmartPathStore((s) => s.generateStep);
+
+  const executeStep = useSmartPathStore((s) => s.executeStep);
+  const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
+  const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
 
   const updateStep = useCallback((i: number, s: SmartPathStep) => setSteps((prev) => { const n = [...prev]; n[i] = s; return n; }), []);
   const removeStep = useCallback((i: number) => setSteps((prev) => prev.filter((_, idx) => idx !== i)), []);
 
-  const handleGen = useCallback(async (i: number) => {
+  const handleExecute = useCallback(async (i: number) => {
     const s = steps[i]; if (!s?.userInput.trim()) return;
-    setGenIdx(i);
-    try { const c = await generateStep(s.userInput, path.workspace, steps.slice(0, i)); updateStep(i, { ...s, generatedContent: c }); } catch {}
-    finally { setGenIdx(null); }
-  }, [steps, path.workspace, generateStep, updateStep]);
+    try {
+      const result = await executeStep(path.id, path.workspace, i, s, steps.slice(0, i));
+      updateStep(i, { ...s, executionResult: result });
+    } catch {}
+  }, [steps, path, executeStep, updateStep]);
 
   const handleSave = async () => {
     if (!name.trim() || steps.length === 0) return;
@@ -239,7 +287,9 @@ function PathEditor({ path, onSave, onCancel }: {
         {steps.map((s, i) => (
           <StepEditCard key={i} step={s} index={i} total={steps.length}
             onChange={(v) => updateStep(i, v)} onDelete={() => removeStep(i)}
-            onGenerate={() => handleGen(i)} generating={genIdx === i} workspace={path.workspace} />
+            onExecute={() => handleExecute(i)} executing={stepExecutionStatus[i] === 'running'}
+            executionStream={stepExecutionStream[i] || ''}
+            workspace={path.workspace} />
         ))}
         <div className="flex justify-center pt-5">
           <Button variant="outline" size="sm" onClick={() => setSteps((p) => [...p, { name: '', userInput: '' }])}>
@@ -265,6 +315,8 @@ function PathDetail({ path, runs, onEdit, onRun, onDelete }: {
 }) {
   const steps = useMemo<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } }, [path.steps]);
   const sc = STATUS_CONFIG[path.status];
+  const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
+  const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -286,7 +338,11 @@ function PathDetail({ path, runs, onEdit, onRun, onDelete }: {
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">步骤</Label>
         {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">暂无步骤</div>
-          : <div className="space-y-0">{steps.map((s, i) => <StepViewCard key={i} step={s} index={i} total={steps.length} />)}</div>}
+          : <div className="space-y-0">{steps.map((s, i) => (
+            <StepViewCard key={i} step={s} index={i} total={steps.length}
+              executionStream={stepExecutionStream[i] || ''}
+              executing={stepExecutionStatus[i] === 'running'} />
+          ))}</div>}
       </div>
       {runs.length > 0 && (
         <div className="space-y-2">

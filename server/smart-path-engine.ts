@@ -1,5 +1,6 @@
 /**
  * SmartPathEngine — 地球路径执行引擎
+ * 逐步骤执行，前一步的执行结果作为下一步的输入上下文
  */
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
@@ -8,6 +9,13 @@ import type { SmartPathStep } from './types.js';
 
 function isoNow(): string {
   return new Date().toISOString();
+}
+
+function buildStepPrompt(userInput: string, previousResult?: string): string {
+  if (previousResult) {
+    return `上个步骤执行结果：「${previousResult}」\n本步骤输入：「${userInput}」`;
+  }
+  return `本步骤输入：「${userInput}」`;
 }
 
 export class SmartPathEngine {
@@ -20,7 +28,13 @@ export class SmartPathEngine {
     this.log = createLogger('SmartPathEngine');
   }
 
-  async run(pathId: string, workspace: string, onProgress?: (data: { stepIndex: number; totalSteps: number; status: string }) => void): Promise<void> {
+  async run(
+    pathId: string,
+    workspace: string,
+    onStepProgress: (stepIndex: number, delta: string) => void,
+    onStepResult: (stepIndex: number, result: string) => void,
+    onProgress?: (data: { stepIndex: number; totalSteps: number; status: string }) => void,
+  ): Promise<void> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
@@ -32,44 +46,58 @@ export class SmartPathEngine {
     this.store.update(pathId, workspace, { status: 'running' });
 
     try {
-      const prompt = this.buildPrompt(steps, smartPath.name);
-      const sessionId = `smartpath-run-${run.id}`;
-      this.sessionManager.createSessionWithId(workspace, sessionId);
-      const abort = new AbortController();
+      let previousResult = '';
 
-      await this.sessionManager.sendMessageForCron(sessionId, prompt, abort, () => {});
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        const prompt = buildStepPrompt(step.userInput, previousResult || undefined);
 
-      const history = this.sessionManager.getHistory(sessionId);
-      const last = [...history].reverse().find(m => m.role === 'assistant');
-      const result = last?.contentBlocks?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
+        const sessionId = `smartpath-run-${run.id}-step-${i}`;
+        this.sessionManager.createSessionWithId(workspace, sessionId);
+        const abort = new AbortController();
 
-      this.store.updateRun(run.id, workspace, pathId, { status: 'completed', stepResults: JSON.stringify({ result }), finishedAt: isoNow() });
-      this.store.update(pathId, workspace, { status: 'completed' });
+        let stepFullContent = '';
+        const stepReturned = await this.sessionManager.sendMessageForStep(
+          sessionId,
+          prompt,
+          abort,
+          (delta) => {
+            stepFullContent += delta;
+            onStepProgress(i, delta);
+          },
+        );
+
+        const stepResult = (stepReturned || stepFullContent).trim();
+        previousResult = stepResult;
+
+        // 保存每步执行结果
+        steps[i] = { ...step, executionResult: stepResult };
+        onStepResult(i, stepResult);
+        onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
+      }
+
+      // 保存所有步骤结果到 path
+      this.store.update(pathId, workspace, {
+        steps: JSON.stringify(steps),
+        status: 'completed',
+      });
+      this.store.updateRun(run.id, workspace, pathId, {
+        status: 'completed',
+        stepResults: JSON.stringify(steps.map(s => s.executionResult)),
+        finishedAt: isoNow(),
+      });
       this.log.info(`Path ${pathId} completed`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.store.updateRun(run.id, workspace, pathId, { status: 'failed', errorMessage: msg, stepResults: JSON.stringify({ error: msg }), finishedAt: isoNow() });
+      this.store.updateRun(run.id, workspace, pathId, {
+        status: 'failed',
+        errorMessage: msg,
+        stepResults: JSON.stringify({ error: msg }),
+        finishedAt: isoNow(),
+      });
       this.store.update(pathId, workspace, { status: 'failed' });
       this.log.error(`Path ${pathId} failed: ${msg}`);
       throw err;
     }
-  }
-
-  private buildPrompt(steps: SmartPathStep[], name: string): string {
-    const lines = steps.map((s, i) => {
-      const parts = [`## 步骤 ${i + 1}`];
-      if (s.userInput) parts.push(`**需求**: ${s.userInput}`);
-      if (s.generatedContent) parts.push(`**实现方案**:\n${s.generatedContent}`);
-      return parts.join('\n');
-    });
-    return [
-      `# 执行智能路径: ${name}`,
-      '',
-      '请按照以下步骤依次执行任务，每个步骤都要考虑前面的结果。',
-      '',
-      ...lines,
-      '',
-      '请开始执行，并在完成每个步骤后报告进度。',
-    ].join('\n');
   }
 }

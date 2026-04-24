@@ -21,8 +21,7 @@ export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [isMaximized, setIsMaximized] = useState(false);
   const location = useLocation();
-  const messages = useChatStore((s) => s.messages);
-  const hasMessages = messages.length > 0;
+  const hasMessages = useChatStore((s) => s.messages.length > 0);
   const inChat = location.pathname === '/chat';
   const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
@@ -54,7 +53,7 @@ export function MainLayout() {
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
         style={{ opacity: isWelcome ? 1 : 0.5 }}
       >
-        {isDark ? <NebulaFlow /> : <CandyBlobs />}
+        {isDark ? <NebulaFlow active={isWelcome} /> : <CandyBlobs active={isWelcome} />}
       </div>
 
       {/* 内容层 - 半透明以透出背景 */}
@@ -79,7 +78,7 @@ export function MainLayout() {
 
 // ── 浅色主题 - 糖果色流动色块 ──────────────────────────────────
 
-function CandyBlobs() {
+function CandyBlobs({ active }: { active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -110,9 +109,10 @@ function CandyBlobs() {
 
     const blobs = Array.from({ length: 5 }, (_, i) => randomBlob(-(i / 5) * PERIOD));
     let rafId: number;
+    let running = true;
 
     function step(ts: number) {
-      if (!canvas || !ctx) return;
+      if (!running || !canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
       // 清空画布，只保留色块（不画不透明底色）
@@ -160,17 +160,32 @@ function CandyBlobs() {
       rafId = requestAnimationFrame(step);
     }
 
-    rafId = requestAnimationFrame(step);
+    if (active) {
+      rafId = requestAnimationFrame(step);
+    }
     window.addEventListener('resize', resize);
-    return () => { cancelAnimationFrame(rafId); window.removeEventListener('resize', resize); };
-  }, []);
+    return () => {
+      running = false;
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resize);
+    };
+  }, [active]);
+
+  // 当 active=false 时，清空 canvas 避免残留
+  useEffect(() => {
+    if (active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, [active]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
 // ── 深色主题 - 星云流动效果 ────────────────────────────────────
 
-function NebulaFlow() {
+function NebulaFlow({ active }: { active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -205,9 +220,10 @@ function NebulaFlow() {
 
     const nebulas = Array.from({ length: 6 }, (_, i) => randomNebula(-(i / 6) * PERIOD));
     let rafId: number;
+    let running = true;
 
     function step(ts: number) {
-      if (!canvas || !ctx) return;
+      if (!running || !canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
       // 清空画布，只保留星云色块
@@ -257,10 +273,25 @@ function NebulaFlow() {
       rafId = requestAnimationFrame(step);
     }
 
-    rafId = requestAnimationFrame(step);
+    if (active) {
+      rafId = requestAnimationFrame(step);
+    }
     window.addEventListener('resize', resize);
-    return () => { cancelAnimationFrame(rafId); window.removeEventListener('resize', resize); };
-  }, []);
+    return () => {
+      running = false;
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', resize);
+    };
+  }, [active]);
+
+  // 当 active=false 时，清空 canvas 避免残留
+  useEffect(() => {
+    if (active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, [active]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }

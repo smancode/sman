@@ -22,10 +22,10 @@ export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
   const isWindows = window.sman?.platform === 'win32';
-  const sessions = useChatStore((s) => s.sessions);
-  const currentSessionId = useChatStore((s) => s.currentSessionId);
-  const currentSession = sessions.find((s) => s.key === currentSessionId);
-  const workspace = currentSession?.workspace;
+  const workspace = useChatStore((s) => {
+    const session = s.sessions.find(ss => ss.key === s.currentSessionId);
+    return session?.workspace;
+  });
   const location = useLocation();
   const inChat = location.pathname === '/chat';
 

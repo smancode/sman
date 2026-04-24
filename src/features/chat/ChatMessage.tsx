@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  * Ported from ClawX - removed Electron IPC dependencies.
  */
-import { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -12,12 +12,13 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { RawMessage, AttachedFileMeta } from '@/types/chat';
-import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, getToolDisplayName, formatToolSummary } from './message-utils';
+import type { Message } from '@/stores/chat';
+import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, getToolDisplayName, formatToolSummary, buildContent, safeTimestamp } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 
 interface ChatMessageProps {
-  message: RawMessage;
+  message: Message;
   showThinking: boolean;
   isStreaming?: boolean;
   streamingThinking?: string;
@@ -50,15 +51,24 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === 'user';
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
-  const text = extractText(message);
+
+  // Stable RawMessage reference — only recomputed when message object reference changes
+  const rawMessage = useMemo((): RawMessage => ({
+    id: message.id,
+    role: message.role,
+    content: message.resolvedContent ?? buildContent(message.content, message.contentBlocks),
+    timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
+  }), [message]);
+
+  const text = extractText(rawMessage);
   const hasText = text.trim().length > 0;
-  const thinking = extractThinking(message);
-  const images = extractImages(message);
-  const tools = extractToolUse(message);
+  const thinking = extractThinking(rawMessage);
+  const images = extractImages(rawMessage);
+  const tools = extractToolUse(rawMessage);
   const visibleThinking = showThinking ? thinking : null;
   const visibleTools = showThinking ? tools : [];
 
-  const attachedFiles = message._attachedFiles || [];
+  const attachedFiles = (message as Message & { _attachedFiles?: AttachedFileMeta[] })._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
 
   // Never render tool result messages in chat UI
@@ -166,15 +176,15 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* Hover row for user messages — timestamp only */}
-        {isUser && message.timestamp && (
+        {isUser && rawMessage.timestamp && (
           <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
-            {formatTimestamp(message.timestamp)}
+            {formatTimestamp(rawMessage.timestamp)}
           </span>
         )}
 
         {/* Hover row for assistant messages — only when there is real text content */}
         {!isUser && hasText && (
-          <AssistantHoverBar text={text} timestamp={message.timestamp} />
+          <AssistantHoverBar text={text} timestamp={rawMessage.timestamp} />
         )}
 
         {/* Images from content blocks — assistant messages (below text) */}

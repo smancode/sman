@@ -7,6 +7,29 @@ import type { RawMessage, ContentBlock } from '@/types/chat';
 import type { Message } from '@/stores/chat';
 
 /**
+ * Build displayable content from a plain text string and optional content blocks.
+ * If blocks contain a text block, use blocks directly; otherwise prepend a text block.
+ */
+export function buildContent(text: string, blocks?: unknown[]): unknown {
+  if (!blocks || blocks.length === 0) return text;
+  const hasTextBlock = (blocks as Array<{ type: string }>).some(b => b.type === 'text');
+  if (hasTextBlock) return blocks;
+  if (!text) return blocks;
+  return [{ type: 'text', text }, ...blocks];
+}
+
+/**
+ * Convert a createdAt date string to a Unix timestamp in seconds.
+ * Returns undefined if the date is invalid or empty.
+ */
+export function safeTimestamp(createdAt: string): number | undefined {
+  if (!createdAt) return undefined;
+  const d = new Date(createdAt.includes('T') ? createdAt : createdAt.replace(' ', 'T') + 'Z');
+  const ts = d.getTime() / 1000;
+  return Number.isFinite(ts) ? ts : undefined;
+}
+
+/**
  * Group flat message list into conversation turns.
  * A turn starts at each user message and includes subsequent assistant messages.
  */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -45,24 +45,24 @@ function useExpandedSystems() {
 
 function BackendStatusBar() {
   const { status } = useWsConnection();
-  const selectedName = localStorage.getItem('sman-servers') || '';
-  let alias = '';
-  let address = '';
-  let url = '';
-
-  try {
-    const servers: Array<{ name: string; url: string; alias?: string }> = JSON.parse(
-      localStorage.getItem('sman-servers') || '[]',
-    );
-    const selected = localStorage.getItem('sman-selected-server') || 'localhost';
-    const current = servers.find((s) => s.name === selected);
-    if (current) {
-      alias = current.alias || '';
-      url = current.url;
-      address = current.name;
+  const info = useMemo(() => {
+    try {
+      const servers: Array<{ name: string; url: string; alias?: string }> = JSON.parse(
+        localStorage.getItem('sman-servers') || '[]',
+      );
+      const selected = localStorage.getItem('sman-selected-server') || 'localhost';
+      const current = servers.find((s) => s.name === selected);
+      return {
+        alias: current?.alias || '',
+        url: current?.url || '',
+        address: current?.name || '',
+      };
+    } catch {
+      return { alias: '', url: '', address: '' };
     }
-  } catch { /* ignore */ }
+  }, []);
 
+  const { alias, url, address } = info;
   const isLocal = !url;
   const statusColor = status === 'connected' ? 'bg-green-500' : 'bg-yellow-500';
   const label = isLocal
@@ -80,7 +80,7 @@ function BackendStatusBar() {
   );
 }
 
-function SessionItem({
+const SessionItem = memo(function SessionItem({
   session,
   isActive,
   onSelect,
@@ -163,9 +163,13 @@ function SessionItem({
       </div>
     </div>
   );
-}
+}, (prev, next) => {
+  return prev.session.key === next.session.key
+    && prev.isActive === next.isActive
+    && prev.session.label === next.session.label;
+});
 
-function SystemGroup({
+const SystemGroup = memo(function SystemGroup({
   system,
   sessions,
   currentSessionId,
@@ -235,7 +239,12 @@ function SystemGroup({
       )}
     </div>
   );
-}
+}, (prev, next) => {
+  return prev.system.systemId === next.system.systemId
+    && prev.expanded === next.expanded
+    && prev.currentSessionId === next.currentSessionId
+    && prev.sessions === next.sessions;
+});
 
 export function SessionTree() {
   const navigate = useNavigate();
@@ -251,28 +260,31 @@ export function SessionTree() {
   const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
   // Derive systems from sessions (group by workspace)
-  const systemsMap = sessions.reduce<Map<string, { systemId: string; name: string; workspace: string }>>((acc, session) => {
-    if (!session.workspace) return acc;
-    if (!acc.has(session.workspace)) {
-      const name = session.workspace.split(/[/\\]/).pop() || session.workspace;
-      acc.set(session.workspace, {
-        systemId: session.workspace, // use workspace as systemId
-        name,
-        workspace: session.workspace,
-      });
-    }
-    return acc;
-  }, new Map());
+  const { systems, sessionsBySystem } = useMemo(() => {
+    const map = sessions.reduce<Map<string, { systemId: string; name: string; workspace: string }>>((acc, session) => {
+      if (!session.workspace) return acc;
+      if (!acc.has(session.workspace)) {
+        const name = session.workspace.split(/[/\\]/).pop() || session.workspace;
+        acc.set(session.workspace, {
+          systemId: session.workspace,
+          name,
+          workspace: session.workspace,
+        });
+      }
+      return acc;
+    }, new Map());
+    const systems = Array.from(map.values());
+    const sessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
+      const sysId = session.workspace || '__default__';
+      if (!acc[sysId]) acc[sysId] = [];
+      acc[sysId].push(session);
+      return acc;
+    }, {});
+    return { systems, sessionsBySystem };
+  }, [sessions]);
 
-  const systems = Array.from(systemsMap.values());
-
-  // Group sessions by workspace
-  const sessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
-    const sysId = session.workspace || '__default__';
-    if (!acc[sysId]) acc[sysId] = [];
-    acc[sysId].push(session);
-    return acc;
-  }, {});
+  // Stable key for auto-expand effect
+  const systemIdsKey = useMemo(() => systems.map((s) => s.systemId).sort().join(','), [systems]);
 
   // Auto-expand all systems when sessions load (on app start or refresh)
   useEffect(() => {
@@ -283,7 +295,7 @@ export function SessionTree() {
         }
       });
     }
-  }, [systems.map((s) => s.systemId).join(',')]);
+  }, [systemIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-expand & auto-scroll to current session
   useEffect(() => {

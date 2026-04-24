@@ -13,22 +13,7 @@ import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import { groupMessagesByTurn, getToolDisplayName, formatToolSummary } from './message-utils';
-import type { RawMessage } from '@/types/chat';
 
-function safeTimestamp(createdAt: string): number | undefined {
-  if (!createdAt) return undefined;
-  const d = new Date(createdAt.includes('T') ? createdAt : createdAt.replace(' ', 'T') + 'Z');
-  const ts = d.getTime() / 1000;
-  return Number.isFinite(ts) ? ts : undefined;
-}
-
-function buildContent(text: string, blocks?: unknown[]): unknown {
-  if (!blocks || blocks.length === 0) return text;
-  const hasTextBlock = (blocks as Array<{ type: string }>).some(b => b.type === 'text');
-  if (hasTextBlock) return blocks;
-  if (!text) return blocks;
-  return [{ type: 'text', text }, ...blocks];
-}
 
 // ── Module-level scroll position cache ──
 // Survives route changes (component unmount/remount) and session switches
@@ -238,12 +223,7 @@ export function Chat() {
                 turn.map((msg) => (
                   <ChatMessage
                     key={msg.id}
-                    message={{
-                      id: msg.id,
-                      role: msg.role,
-                      content: msg.resolvedContent ?? buildContent(msg.content, msg.contentBlocks),
-                      timestamp: msg.timestamp ?? safeTimestamp(msg.createdAt),
-                    } as RawMessage}
+                    message={msg}
                     showThinking={showThinking}
                   />
                 ))

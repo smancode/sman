@@ -2134,6 +2134,145 @@ export class ClaudeSessionManager {
     }
   }
 
+  async sendMessageForStep(
+    sessionId: string,
+    content: string,
+    abortController: AbortController,
+    onDelta: (text: string) => void,
+  ): Promise<string> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+
+    if (this.activeStreams.has(sessionId)) {
+      const done = this.streamDone.get(sessionId);
+      if (done) {
+        this.log.info(`sendMessageForStep: waiting for previous stream on session ${sessionId}`);
+        await done;
+      }
+    }
+
+    if (!this.config?.llm?.apiKey) {
+      throw new Error('缺少 API Key，请在设置中配置');
+    }
+    if (!this.config?.llm?.model) {
+      throw new Error('缺少 Model 配置，请在设置中选择模型');
+    }
+
+    this.store.addMessage(sessionId, { role: 'user', content });
+    this.markStreamStart(sessionId, abortController);
+
+    let streamResolve!: () => void;
+    const streamPromise = new Promise<void>(r => { streamResolve = r; });
+    this.streamDone.set(sessionId, streamPromise);
+
+    // Stall detector
+    let lastActivityAt = Date.now();
+    let toolInProgress = false;
+    let stallChecker = setInterval(() => {
+      if (abortController.signal.aborted) {
+        clearInterval(stallChecker);
+        return;
+      }
+      const elapsed = Date.now() - lastActivityAt;
+      if (toolInProgress) {
+        const v2Info = this.v2Sessions.get(sessionId);
+        if (!v2Info) {
+          this.log.warn(`sendMessageForStep: V2 session lost while tool in progress, aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+          return;
+        }
+        const pid = (v2Info.session as any).pid;
+        if (pid !== undefined) {
+          try { process.kill(pid, 0); } catch {
+            this.log.warn(`sendMessageForStep: V2 session process dead (PID: ${pid}), aborting...`);
+            abortController.abort();
+            clearInterval(stallChecker);
+            return;
+          }
+        }
+        if (elapsed > ClaudeSessionManager.TOOL_STALL_MS) {
+          this.log.warn(`sendMessageForStep: tool no-progress timeout (${Math.round(elapsed / 1000)}s), aborting...`);
+          abortController.abort();
+          clearInterval(stallChecker);
+        }
+        return;
+      }
+      if (elapsed > ClaudeSessionManager.STREAM_STALL_MS) {
+        this.log.warn(`sendMessageForStep: stream stalled (${Math.round(elapsed / 1000)}s), aborting...`);
+        abortController.abort();
+        clearInterval(stallChecker);
+      }
+    }, 30_000);
+    stallChecker.unref();
+
+    try {
+      const v2Session = await this.getOrCreateV2Session(sessionId);
+      const workspace = session.workspace;
+      const projectName = path.basename(workspace);
+      const smanContext = this.buildSmanContext(projectName, sessionId);
+
+      const contentWithPrefix = `${smanContext}\n\n${content}`;
+      await v2Session.send(contentWithPrefix);
+
+      let fullContent = '';
+
+      for await (const sdkMsg of v2Session.stream()) {
+        lastActivityAt = Date.now();
+
+        if (abortController.signal.aborted) break;
+
+        switch (sdkMsg.type) {
+          case 'assistant': {
+            toolInProgress = false;
+            break;
+          }
+          case 'stream_event': {
+            const rawEvent = (sdkMsg as any).event;
+            if (rawEvent.type === 'content_block_delta' && rawEvent.delta?.type === 'text_delta') {
+              const text = rawEvent.delta.text;
+              if (text) {
+                fullContent += text;
+                onDelta(text);
+              }
+            }
+            // Track tool_use for stall detection
+            if (rawEvent.type === 'content_block_start' && rawEvent.content_block?.type === 'tool_use') {
+              toolInProgress = true;
+            }
+            if (rawEvent.type === 'content_block_delta' && rawEvent.delta?.type === 'input_json_delta') {
+              toolInProgress = true;
+            }
+            break;
+          }
+          case 'result': {
+            const result = sdkMsg as any;
+            if (result.session_id) {
+              this.sdkSessionIds.set(sessionId, result.session_id);
+              this.store.updateSdkSessionId(sessionId, result.session_id);
+            }
+            if (fullContent) {
+              this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
+            }
+            break;
+          }
+        }
+      }
+      clearInterval(stallChecker);
+      return fullContent;
+    } catch (err: any) {
+      clearInterval(stallChecker);
+      if (err?.name !== 'AbortError' && !abortController.signal.aborted) {
+        throw err;
+      }
+      return '';
+    } finally {
+      this.markStreamEnd(sessionId);
+      this.streamDone.delete(sessionId);
+      streamResolve();
+    }
+  }
+
   // ── Utility methods ──
 
   private extractTextContent(message: any): string {

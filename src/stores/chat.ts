@@ -255,7 +255,7 @@ export function freezeLiveText(blocks: StreamingBlock[]): StreamingBlock[] {
 }
 
 /** Pre-resolve content for memo stability — mirrors buildContent from Chat component */
-function resolveContent(text: string, blocks?: unknown[]): unknown {
+export function resolveContent(text: string, blocks?: unknown[]): unknown {
   if (!blocks || blocks.length === 0) return text;
   const hasTextBlock = (blocks as Array<{ type: string }>).some(b => b.type === 'text');
   if (hasTextBlock) return blocks;

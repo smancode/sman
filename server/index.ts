@@ -1119,9 +1119,19 @@ wss.on('connection', (ws: WebSocket) => {
           try {
             const runPathId = msg.pathId as string;
             const runWorkspace = msg.workspace as string;
-            smartPathEngine.run(runPathId, runWorkspace, (data) => {
-              broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: runPathId, ...data }));
-            }).then(() => {
+            smartPathEngine.run(
+              runPathId,
+              runWorkspace,
+              (stepIndex, delta) => {
+                broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: runPathId, stepIndex, delta }));
+              },
+              (stepIndex, result) => {
+                broadcast(JSON.stringify({ type: 'smartpath.stepExecutionResult', pathId: runPathId, stepIndex, result }));
+              },
+              (data) => {
+                broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: runPathId, ...data }));
+              },
+            ).then(() => {
               const p = smartPathStore.get(runPathId, runWorkspace);
               broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: p }));
             }).catch((err) => {
@@ -1144,37 +1154,64 @@ wss.on('connection', (ws: WebSocket) => {
         case 'smartpath.generateStep': {
           const userInput = msg.userInput as string;
           const workspace = msg.workspace as string;
-          const previousSteps = msg.previousSteps as Array<{ userInput: string; generatedContent?: string }>;
+          const previousSteps = msg.previousSteps as Array<{ userInput: string; generatedContent?: string; executionResult?: string }>;
+          const execute = msg.execute as boolean | undefined;
           if (!userInput?.trim()) throw new Error('Missing userInput');
           if (!workspace?.trim()) throw new Error('Missing workspace');
 
           try {
-            const previousContext = previousSteps?.length
-              ? ['Previous steps:', ...previousSteps.map((s, i) => `Step ${i + 1}: ${s.userInput}${s.generatedContent ? `\n  Solution: ${s.generatedContent.slice(0, 200)}...` : ''}`)].join('\n')
-              : 'No previous steps.';
+            if (execute) {
+              // 流式执行模式
+              const tempSessionId = sessionManager.createSession(workspace);
+              const abort = new AbortController();
+              const prompt = buildStepExecutionPrompt(userInput, previousSteps);
 
-            const userPrompt = [
-              'Generate an implementation solution for the following step.',
-              `Workspace: ${workspace}`,
-              '',
-              previousContext,
-              '',
-              'Current Step:', userInput,
-              '',
-              'Provide: approach overview, code examples, file locations, key considerations.',
-            ].join('\n');
+              const stepIdx = msg.stepIndex as number | undefined;
+              const pId = msg.pathId as string | undefined;
+              const result = await sessionManager.sendMessageForStep(
+                tempSessionId,
+                prompt,
+                abort,
+                (delta) => {
+                  ws.send(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: pId, stepIndex: stepIdx, delta }));
+                },
+              );
 
-            const tempSessionId = sessionManager.createSession(workspace);
-            const abort = new AbortController();
-            let fullResponse = '';
-            const origSend = ws.send.bind(ws);
-            (ws as any).send = (data: string) => {
-              try { const p = JSON.parse(data); if (p.type === 'chat.delta') fullResponse += p.delta?.text || ''; if (p.type === 'chat.done') abort.abort(); } catch {}
-              origSend(data);
-            };
-            await sessionManager.sendMessageForCron(tempSessionId, userPrompt, abort, () => {});
-            (ws as any).send = origSend;
-            ws.send(JSON.stringify({ type: 'smartpath.stepGenerated', payload: { generatedContent: fullResponse.trim() } }));
+              ws.send(JSON.stringify({
+                type: 'smartpath.stepExecutionCompleted',
+                pathId: pId,
+                stepIndex: stepIdx,
+                payload: { result: result.trim() },
+              }));
+            } else {
+              // 原有生成方案逻辑
+              const previousContext = previousSteps?.length
+                ? ['Previous steps:', ...previousSteps.map((s, i) => `Step ${i + 1}: ${s.userInput}${s.generatedContent ? `\n  Solution: ${s.generatedContent.slice(0, 200)}...` : ''}`)].join('\n')
+                : 'No previous steps.';
+
+              const userPrompt = [
+                'Generate an implementation solution for the following step.',
+                `Workspace: ${workspace}`,
+                '',
+                previousContext,
+                '',
+                'Current Step:', userInput,
+                '',
+                'Provide: approach overview, code examples, file locations, key considerations.',
+              ].join('\n');
+
+              const tempSessionId = sessionManager.createSession(workspace);
+              const abort = new AbortController();
+              let fullResponse = '';
+              const origSend = ws.send.bind(ws);
+              (ws as any).send = (data: string) => {
+                try { const p = JSON.parse(data); if (p.type === 'chat.delta') fullResponse += p.delta?.text || ''; if (p.type === 'chat.done') abort.abort(); } catch {}
+                origSend(data);
+              };
+              await sessionManager.sendMessageForCron(tempSessionId, userPrompt, abort, () => {});
+              (ws as any).send = origSend;
+              ws.send(JSON.stringify({ type: 'smartpath.stepGenerated', payload: { generatedContent: fullResponse.trim() } }));
+            }
           } catch (err) {
             ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
           }
@@ -1361,6 +1398,24 @@ initStardomBridge({
 
 // When run directly (dev mode: tsx server/index.ts), auto-start
 // When imported by Electron, electron/main.ts calls startServer()
+/**
+ * 构建步骤执行提示词
+ * 第一步：本步骤输入：「xxx」
+ * 后续步：上个步骤执行结果：「xxx」\n本步骤输入：「xxx」
+ */
+function buildStepExecutionPrompt(
+  userInput: string,
+  previousSteps: Array<{ userInput: string; generatedContent?: string; executionResult?: string }>,
+): string {
+  const parts: string[] = [];
+  const last = previousSteps.length > 0 ? previousSteps[previousSteps.length - 1] : null;
+  if (last?.executionResult) {
+    parts.push(`上个步骤执行结果：「${last.executionResult}」`);
+  }
+  parts.push(`本步骤输入：「${userInput}」`);
+  return parts.join('\n');
+}
+
 const isMainModule = process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
                      process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
                      process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js') ||

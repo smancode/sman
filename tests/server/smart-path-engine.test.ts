@@ -10,14 +10,11 @@ describe('SmartPathEngine', () => {
   let engine: SmartPathEngine;
   let workspace: string;
   let dbPath: string;
-
-  const mockSessionManager = {
-    createSessionWithId: vi.fn(),
-    sendMessageForCron: vi.fn().mockResolvedValue(undefined),
-    getHistory: vi.fn().mockReturnValue([
-      { role: 'user', content: 'test', contentBlocks: [] },
-      { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'done' }] },
-    ]),
+  let mockSessionManager: {
+    createSessionWithId: ReturnType<typeof vi.fn>;
+    sendMessageForCron: ReturnType<typeof vi.fn>;
+    sendMessageForStep: ReturnType<typeof vi.fn>;
+    getHistory: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -25,6 +22,15 @@ describe('SmartPathEngine', () => {
     workspace = path.join(dbPath, 'test-workspace');
     fs.mkdirSync(workspace, { recursive: true });
     store = new SmartPathStore();
+    mockSessionManager = {
+      createSessionWithId: vi.fn(),
+      sendMessageForCron: vi.fn().mockResolvedValue(undefined),
+      sendMessageForStep: vi.fn().mockResolvedValue('step result'),
+      getHistory: vi.fn().mockReturnValue([
+        { role: 'user', content: 'test', contentBlocks: [] },
+        { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'done' }] },
+      ]),
+    };
     engine = new SmartPathEngine(store, mockSessionManager as any);
   });
 
@@ -40,7 +46,7 @@ describe('SmartPathEngine', () => {
       steps: JSON.stringify([{ userInput: 'step 1' }, { userInput: 'step 2' }]),
     });
 
-    await engine.run(p.id, workspace);
+    await engine.run(p.id, workspace, vi.fn(), vi.fn());
 
     const updated = store.get(p.id, workspace);
     expect(updated!.status).toBe('completed');
@@ -48,37 +54,33 @@ describe('SmartPathEngine', () => {
     const runs = store.listRuns(p.id, workspace);
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('completed');
-    expect(mockSessionManager.sendMessageForCron).toHaveBeenCalledTimes(1);
+    expect(mockSessionManager.sendMessageForStep).toHaveBeenCalledTimes(2);
   });
 
   it('should collect result from session history', async () => {
-    mockSessionManager.getHistory.mockReturnValueOnce([
-      { role: 'user', content: 'test', contentBlocks: [] },
-      { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'my result' }] },
-    ]);
-
     const p = store.create({ name: 'Result Test', workspace, steps: JSON.stringify([{ userInput: 'do it' }]) });
-    await engine.run(p.id, workspace);
+    await engine.run(p.id, workspace, vi.fn(), vi.fn());
 
     const runs = store.listRuns(p.id, workspace);
     expect(runs[0].status).toBe('completed');
-    expect(JSON.parse(runs[0].stepResults).result).toBe('my result');
+    // sendMessageForStep mock returns 'step result' by default
+    expect(JSON.parse(runs[0].stepResults)).toEqual(['step result']);
   });
 
   it('should throw when path not found', async () => {
-    await expect(engine.run('nope', workspace)).rejects.toThrow('Path not found');
+    await expect(engine.run('nope', workspace, vi.fn(), vi.fn())).rejects.toThrow('Path not found');
   });
 
   it('should throw when path has no steps', async () => {
     const p = store.create({ name: 'Empty', workspace, steps: '[]' });
-    await expect(engine.run(p.id, workspace)).rejects.toThrow('Path has no steps');
+    await expect(engine.run(p.id, workspace, vi.fn(), vi.fn())).rejects.toThrow('Path has no steps');
   });
 
   it('should mark path as failed on error', async () => {
-    mockSessionManager.sendMessageForCron.mockRejectedValueOnce(new Error('Send failed'));
+    mockSessionManager.sendMessageForStep.mockRejectedValueOnce(new Error('Send failed'));
 
     const p = store.create({ name: 'Fail', workspace, steps: JSON.stringify([{ userInput: 'step' }]) });
-    await expect(engine.run(p.id, workspace)).rejects.toThrow();
+    await expect(engine.run(p.id, workspace, vi.fn(), vi.fn())).rejects.toThrow();
 
     const updated = store.get(p.id, workspace);
     expect(updated!.status).toBe('failed');

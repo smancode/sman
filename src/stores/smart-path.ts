@@ -22,6 +22,8 @@ function wrapHandler(
   return () => client.off(event, wrapped);
 }
 
+type StepExecStatus = 'idle' | 'running' | 'completed' | 'failed';
+
 interface SmartPathState {
   paths: SmartPath[];
   runs: SmartPathRun[];
@@ -30,6 +32,10 @@ interface SmartPathState {
   running: boolean;
   error: string | null;
 
+  // 步骤流式执行状态
+  stepExecutionStream: Record<number, string>;
+  stepExecutionStatus: Record<number, StepExecStatus>;
+
   fetchPaths: (workspaces: string[]) => Promise<void>;
   createPath: (input: { name: string; workspace: string; steps: string }) => Promise<SmartPath>;
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
@@ -37,6 +43,8 @@ interface SmartPathState {
   runPath: (pathId: string, workspace: string) => Promise<void>;
   fetchRuns: (pathId: string, workspace: string) => Promise<void>;
   generateStep: (userInput: string, workspace: string, previousSteps: SmartPathStep[]) => Promise<string>;
+  executeStep: (pathId: string, workspace: string, stepIndex: number, step: SmartPathStep, previousSteps: SmartPathStep[]) => Promise<string>;
+  clearStepExecutionState: () => void;
   setCurrentPath: (path: SmartPath | null) => void;
   clearError: () => void;
 }
@@ -48,6 +56,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   loading: false,
   running: false,
   error: null,
+
+  stepExecutionStream: {},
+  stepExecutionStatus: {},
 
   fetchPaths: async (workspaces) => {
     const client = getWsClient();
@@ -128,21 +139,42 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   runPath: async (pathId, workspace) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
-    set({ running: true, error: null });
+    set({ running: true, error: null, stepExecutionStream: {}, stepExecutionStatus: {} });
 
+    const unsubStepProgress = wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+      if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+        const idx = data.stepIndex as number;
+        const delta = String(data.delta || '');
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'running' },
+          stepExecutionStream: {
+            ...s.stepExecutionStream,
+            [idx]: (s.stepExecutionStream[idx] || '') + delta,
+          },
+        }));
+      }
+    });
+    const unsubStepResult = wrapHandler(client, 'smartpath.stepExecutionResult', (data) => {
+      if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+        const idx = data.stepIndex as number;
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'completed' },
+        }));
+      }
+    });
     const unsubProgress = wrapHandler(client, 'smartpath.progress', (data) => {
       if (data.pathId === pathId) set((s) => ({ paths: s.paths.map((p) => p.id === pathId ? { ...p, status: 'running' as SmartPathStatus } : p) }));
     });
     const unsubComplete = wrapHandler(client, 'smartpath.completed', (data) => {
       if (data.pathId === pathId) {
-        unsubProgress(); unsubComplete(); unsubFailed();
+        unsubStepProgress(); unsubStepResult(); unsubProgress(); unsubComplete(); unsubFailed();
         const p = data.path as SmartPath;
         set((s) => ({ running: false, paths: s.paths.map((x) => x.id === pathId ? { ...x, ...p } : x) }));
       }
     });
     const unsubFailed = wrapHandler(client, 'smartpath.failed', (data) => {
       if (data.pathId === pathId) {
-        unsubProgress(); unsubComplete(); unsubFailed();
+        unsubStepProgress(); unsubStepResult(); unsubProgress(); unsubComplete(); unsubFailed();
         set((s) => ({ running: false, paths: s.paths.map((p) => p.id === pathId ? { ...p, status: 'failed' as SmartPathStatus } : p), error: String(data.error) }));
       }
     });
@@ -150,7 +182,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     return new Promise<void>((resolve, reject) => {
       const unsub = wrapHandler(client, 'smartpath.running', () => { unsub(); resolve(); });
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
-        unsub(); unsubProgress(); unsubComplete(); unsubFailed();
+        unsub(); unsubStepProgress(); unsubStepResult(); unsubProgress(); unsubComplete(); unsubFailed();
         set({ running: false, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
@@ -188,6 +220,59 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     });
   },
 
-  setCurrentPath: (path) => set({ currentPath: path, runs: [] }),
+  executeStep: async (pathId, workspace, stepIndex, step, previousSteps) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    set((s) => ({
+      stepExecutionStream: { ...s.stepExecutionStream, [stepIndex]: '' },
+      stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'running' },
+    }));
+
+    return new Promise<string>((resolve, reject) => {
+      const unsubProgress = wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+        if (typeof (data as any).stepIndex === 'number' && (data as any).stepIndex !== stepIndex) return;
+        const delta = String(data.delta || '');
+        if (delta) {
+          set((s) => ({
+            stepExecutionStream: {
+              ...s.stepExecutionStream,
+              [stepIndex]: (s.stepExecutionStream[stepIndex] || '') + delta,
+            },
+          }));
+        }
+      });
+      const unsubComplete = wrapHandler(client, 'smartpath.stepExecutionCompleted', (data) => {
+        const payload = data.payload as Record<string, unknown> | undefined;
+        unsubProgress(); unsubComplete(); unsubFailed();
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'completed' },
+        }));
+        resolve(String(payload?.result || ''));
+      });
+      const unsubFailed = wrapHandler(client, 'chat.error', (data) => {
+        unsubProgress(); unsubComplete(); unsubFailed();
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'failed' },
+          error: String(data.error),
+        }));
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({
+        type: 'smartpath.generateStep',
+        pathId,
+        workspace,
+        stepIndex,
+        userInput: step.userInput,
+        previousSteps,
+        execute: true,
+      });
+    });
+  },
+
+  clearStepExecutionState: () => set({ stepExecutionStream: {}, stepExecutionStatus: {} }),
+
+  setCurrentPath: (path) => set({ currentPath: path, runs: [], stepExecutionStream: {}, stepExecutionStatus: {} }),
   clearError: () => set({ error: null }),
 }));

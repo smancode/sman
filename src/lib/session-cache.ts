@@ -61,12 +61,26 @@ async function dbDelete(key: string): Promise<void> {
 
 class SessionCache {
   private cache = new Map<string, unknown[]>();
+  private accessOrder: string[] = [];
   private dbReady: Promise<void> | null = null;
   private loadedBackend: string | null = null;
+  private static MAX_ENTRIES = 20;
 
   /** Get namespaced key for current backend */
   private nk(sessionId: string): string {
     return `${getBackendKey()}:${sessionId}`;
+  }
+
+  /** Update access order — move key to end (most recently used), evict oldest if over limit */
+  private touch(key: string): void {
+    const idx = this.accessOrder.indexOf(key);
+    if (idx >= 0) this.accessOrder.splice(idx, 1);
+    this.accessOrder.push(key);
+    while (this.accessOrder.length > SessionCache.MAX_ENTRIES) {
+      const oldest = this.accessOrder.shift()!;
+      this.cache.delete(oldest);
+      // Don't delete from IndexedDB — it's persistent storage, getAsync can restore it
+    }
   }
 
   /** Load all cached sessions for current backend from IndexedDB into memory (call once on startup) */
@@ -92,6 +106,7 @@ class SessionCache {
           // Only load entries for current backend, and only if not already in memory
           if (keys[i].startsWith(prefix) && !this.cache.has(keys[i])) {
             this.cache.set(keys[i], values[i]);
+            this.accessOrder.push(keys[i]);
           }
         }
         db.close();
@@ -103,14 +118,20 @@ class SessionCache {
   }
 
   get(sessionId: string): unknown[] | null {
-    return this.cache.get(this.nk(sessionId)) ?? null;
+    const key = this.nk(sessionId);
+    const result = this.cache.get(key) ?? null;
+    if (result) this.touch(key);
+    return result;
   }
 
   /** Async get — falls back to IndexedDB if memory miss */
   async getAsync(sessionId: string): Promise<unknown[] | null> {
     const key = this.nk(sessionId);
     const mem = this.cache.get(key);
-    if (mem) return mem;
+    if (mem) {
+      this.touch(key);
+      return mem;
+    }
     try {
       const db = await openDB();
       const tx = db.transaction(STORE_NAME, 'readonly');
@@ -122,6 +143,7 @@ class SessionCache {
       db.close();
       if (result) {
         this.cache.set(key, result);
+        this.touch(key);
       }
       return result;
     } catch {
@@ -131,7 +153,8 @@ class SessionCache {
 
   set(sessionId: string, messages: unknown[]): void {
     const key = this.nk(sessionId);
-    this.cache.set(key, [...messages]);
+    this.cache.set(key, messages);
+    this.touch(key);
     dbPut(key, messages);
   }
 
@@ -142,11 +165,14 @@ class SessionCache {
   invalidate(sessionId: string): void {
     const key = this.nk(sessionId);
     this.cache.delete(key);
+    const idx = this.accessOrder.indexOf(key);
+    if (idx >= 0) this.accessOrder.splice(idx, 1);
     dbDelete(key);
   }
 
   clear(): void {
     this.cache.clear();
+    this.accessOrder = [];
     // Clear IndexedDB
     (async () => {
       try {
