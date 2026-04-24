@@ -98,14 +98,14 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
 
 // ── Step edit card ──
 
-function StepEditCard({ step, index, total, onChange, onDelete, onExecute, executing, executionStream, workspace }: {
+function StepEditCard({ step, index, total, onChange, onDelete, onExecute, executing, executionStream, executionCompleted, workspace }: {
   step: SmartPathStep; index: number; total: number;
   onChange: (s: SmartPathStep) => void; onDelete: () => void;
   onExecute: () => void;
-  executing: boolean; executionStream: string; workspace: string;
+  executing: boolean; executionStream: string; executionCompleted: boolean; workspace: string;
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
-  const hasResult = !!step.executionResult;
+  const hasResult = !!step.executionResult || executionCompleted;
 
   // auto-scroll for streaming content
   useEffect(() => {
@@ -306,6 +306,7 @@ function PathEditor({ path, onSave, onCancel }: {
             onChange={(v) => updateStep(i, v)} onDelete={() => removeStep(i)}
             onExecute={() => handleExecute(i)} executing={stepExecutionStatus[i] === 'running'}
             executionStream={stepExecutionStream[i] || ''}
+            executionCompleted={stepExecutionStatus[i] === 'completed'}
             workspace={path.workspace} />
         ))}
         <div className="flex justify-center pt-5">
