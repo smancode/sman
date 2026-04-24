@@ -244,11 +244,39 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       });
       const unsubComplete = wrapHandler(client, 'smartpath.stepExecutionCompleted', (data) => {
         const payload = data.payload as Record<string, unknown> | undefined;
+        const resultStr = String(payload?.result || '');
         unsubProgress(); unsubComplete(); unsubFailed();
-        set((s) => ({
-          stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'completed' },
-        }));
-        resolve(String(payload?.result || ''));
+        set((s) => {
+          const updatedPaths = s.paths.map((p) => {
+            if (p.id !== pathId) return p;
+            try {
+              const pathSteps: SmartPathStep[] = JSON.parse(p.steps);
+              if (pathSteps[stepIndex]) {
+                pathSteps[stepIndex] = { ...pathSteps[stepIndex], executionResult: resultStr };
+                return { ...p, steps: JSON.stringify(pathSteps) };
+              }
+            } catch {}
+            return p;
+          });
+          const updatedCurrentPath = s.currentPath?.id === pathId
+            ? (() => {
+                try {
+                  const pathSteps: SmartPathStep[] = JSON.parse(s.currentPath!.steps);
+                  if (pathSteps[stepIndex]) {
+                    pathSteps[stepIndex] = { ...pathSteps[stepIndex], executionResult: resultStr };
+                    return { ...s.currentPath!, steps: JSON.stringify(pathSteps) };
+                  }
+                } catch {}
+                return s.currentPath;
+              })()
+            : s.currentPath;
+          return {
+            stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'completed' },
+            paths: updatedPaths,
+            currentPath: updatedCurrentPath,
+          };
+        });
+        resolve(resultStr);
       });
       const unsubFailed = wrapHandler(client, 'chat.error', (data) => {
         unsubProgress(); unsubComplete(); unsubFailed();

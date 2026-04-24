@@ -11,13 +11,13 @@ describe('SmartPathEngine', () => {
   let workspace: string;
   let dbPath: string;
   let mockSessionManager: {
-    createSessionWithId: ReturnType<typeof vi.fn>;
+    createEphemeralSessionWithId: ReturnType<typeof vi.fn>;
     sendMessageForCron: ReturnType<typeof vi.fn>;
     sendMessageForStep: ReturnType<typeof vi.fn>;
     getHistory: ReturnType<typeof vi.fn>;
     closeV2Session: ReturnType<typeof vi.fn>;
+    removeEphemeralSession: ReturnType<typeof vi.fn>;
   };
-  let mockSessionStore: { deleteSession: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     dbPath = path.join(os.tmpdir(), `smart-path-engine-test-${Date.now()}`);
@@ -25,7 +25,7 @@ describe('SmartPathEngine', () => {
     fs.mkdirSync(workspace, { recursive: true });
     store = new SmartPathStore();
     mockSessionManager = {
-      createSessionWithId: vi.fn(),
+      createEphemeralSessionWithId: vi.fn(),
       sendMessageForCron: vi.fn().mockResolvedValue(undefined),
       sendMessageForStep: vi.fn().mockResolvedValue('step result'),
       getHistory: vi.fn().mockReturnValue([
@@ -33,9 +33,9 @@ describe('SmartPathEngine', () => {
         { role: 'assistant', content: 'result', contentBlocks: [{ type: 'text', text: 'done' }] },
       ]),
       closeV2Session: vi.fn(),
+      removeEphemeralSession: vi.fn(),
     };
-    mockSessionStore = { deleteSession: vi.fn() };
-    engine = new SmartPathEngine(store, mockSessionManager as any, mockSessionStore as any);
+    engine = new SmartPathEngine(store, mockSessionManager as any);
   });
 
   afterEach(() => {

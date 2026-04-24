@@ -1,12 +1,11 @@
 /**
  * SmartPathEngine — 地球路径执行引擎
  * 逐步骤执行，前一步的执行结果作为下一步的输入上下文
- * 使用临时会话，执行完即清理，不影响主会话列表
+ * 使用纯内存临时会话，不写 SQLite，不污染主会话列表
  */
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
-import type { SessionStore } from './session-store.js';
 import type { SmartPathStep } from './types.js';
 
 function isoNow(): string {
@@ -37,7 +36,6 @@ export class SmartPathEngine {
   constructor(
     private store: SmartPathStore,
     private sessionManager: ClaudeSessionManager,
-    private sessionStore: SessionStore,
   ) {
     this.log = createLogger('SmartPathEngine');
   }
@@ -66,8 +64,8 @@ export class SmartPathEngine {
         const step = steps[i];
         const prompt = buildStepPrompt(step.userInput, previousResult || undefined);
 
-        const sessionId = `smartpath-run-${run.id}-step-${i}`;
-        this.sessionManager.createSessionWithId(workspace, sessionId);
+        const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;
+        this.sessionManager.createEphemeralSessionWithId(workspace, sessionId);
         const abort = new AbortController();
 
         let stepFullContent = '';
@@ -91,9 +89,9 @@ export class SmartPathEngine {
           onStepResult(i, stepResult);
           onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
         } finally {
-          // 清理临时会话 — 不留痕到主会话列表
+          // 清理内存临时会话
           this.sessionManager.closeV2Session(sessionId);
-          this.sessionStore.deleteSession(sessionId);
+          this.sessionManager.removeEphemeralSession(sessionId);
         }
       }
 

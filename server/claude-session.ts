@@ -1019,6 +1019,46 @@ export class ClaudeSessionManager {
     return id;
   }
 
+  /**
+   * 创建纯内存会话 — 不写 SQLite，不污染主会话列表。
+   * 用于地球路径步骤执行等临时场景。
+   */
+  createEphemeralSession(workspace: string): string {
+    const id = `ephemeral-${crypto.randomUUID()}`;
+    const session: ActiveSession = {
+      id,
+      workspace,
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+    };
+    this.sessions.set(id, session);
+    this.log.info(`Ephemeral session created: ${id} for workspace ${workspace}`);
+    return id;
+  }
+
+  /**
+   * 清理纯内存会话 — 从 sessions Map 中移除
+   */
+  removeEphemeralSession(sessionId: string): void {
+    this.sessions.delete(sessionId);
+    this.sdkSessionIds.delete(sessionId);
+  }
+
+  /**
+   * 用指定 ID 创建纯内存会话 — 不写 SQLite
+   */
+  createEphemeralSessionWithId(workspace: string, sessionId: string): string {
+    const session: ActiveSession = {
+      id: sessionId,
+      workspace,
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+    };
+    this.sessions.set(sessionId, session);
+    this.log.info(`Ephemeral session created with id: ${sessionId} for workspace ${workspace}`);
+    return sessionId;
+  }
+
   createSessionWithId(workspace: string, sessionId: string, isCron = true, isScanner = false): string {
     if (!fs.existsSync(workspace)) {
       throw new Error(`Workspace does not exist: ${workspace}`);
@@ -2159,7 +2199,7 @@ export class ClaudeSessionManager {
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    this.store.addMessage(sessionId, { role: 'user', content });
+    // 步骤执行不写 SQLite — 纯内存操作，不污染主会话列表
     this.markStreamStart(sessionId, abortController);
 
     let streamResolve!: () => void;
@@ -2250,11 +2290,9 @@ export class ClaudeSessionManager {
             const result = sdkMsg as any;
             if (result.session_id) {
               this.sdkSessionIds.set(sessionId, result.session_id);
-              this.store.updateSdkSessionId(sessionId, result.session_id);
+              // 不写 SQLite — 纯内存记录
             }
-            if (fullContent) {
-              this.store.addMessage(sessionId, { role: 'assistant', content: fullContent });
-            }
+            // 不保存 assistant 消息到 SQLite
             break;
           }
         }

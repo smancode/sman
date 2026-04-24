@@ -57,7 +57,7 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
   }, [paths]);
 
   return (
-    <div className="w-64 shrink-0 flex flex-col h-full border-r">
+    <div className="w-64 shrink-0 flex flex-col h-full">
       <div className="p-3 space-y-2">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronLeft className="h-4 w-4" /> 返回
@@ -260,12 +260,15 @@ function PathEditor({ path, onSave, onCancel }: {
   const executeStep = useSmartPathStore((s) => s.executeStep);
   const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
+  const clearStepExecutionState = useSmartPathStore((s) => s.clearStepExecutionState);
 
   const updateStep = useCallback((i: number, s: SmartPathStep) => setSteps((prev) => { const n = [...prev]; n[i] = s; return n; }), []);
   const removeStep = useCallback((i: number) => setSteps((prev) => prev.filter((_, idx) => idx !== i)), []);
 
   const handleExecute = useCallback(async (i: number) => {
     const s = steps[i]; if (!s?.userInput.trim()) return;
+    // 清除旧结果，开始新执行
+    updateStep(i, { ...s, executionResult: undefined });
     try {
       const result = await executeStep(path.id, path.workspace, i, s, steps.slice(0, i));
       updateStep(i, { ...s, executionResult: result });
@@ -275,7 +278,15 @@ function PathEditor({ path, onSave, onCancel }: {
   const handleSave = async () => {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
-    try { await onSave(name.trim(), steps, path.id, path.workspace); } finally { setSaving(false); }
+    try {
+      // 保存时把当前执行中的结果也带上
+      const stepsToSave = steps.map((s, i) => {
+        const execResult = stepExecutionStatus[i] === 'completed' ? (stepExecutionStream[i] || s.executionResult) : s.executionResult;
+        return { ...s, executionResult: execResult };
+      });
+      await onSave(name.trim(), stepsToSave, path.id, path.workspace);
+      // 不清理执行状态 — 执行中的步骤在查看/编辑模式切换后仍需可见
+    } finally { setSaving(false); }
   };
 
   return (
@@ -403,6 +414,7 @@ export function SmartPathPage() {
   const fetchRuns = useSmartPathStore((s) => s.fetchRuns);
   const setCurrentPath = useSmartPathStore((s) => s.setCurrentPath);
   const clearError = useSmartPathStore((s) => s.clearError);
+  const clearStepExecutionState = useSmartPathStore((s) => s.clearStepExecutionState);
   const workspaces = useCronStore((s) => s.workspaces);
   const fetchWorkspaces = useCronStore((s) => s.fetchWorkspaces);
 
@@ -454,7 +466,7 @@ export function SmartPathPage() {
         {loading && <div className="flex items-center justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}
         <div className="p-6">
           {editing && currentPath ? (
-            <PathEditor path={currentPath} onSave={handleSave} onCancel={() => setEditing(false)} />
+            <PathEditor path={currentPath} onSave={handleSave} onCancel={() => { clearStepExecutionState(); setEditing(false); }} />
           ) : currentPath ? (
             <PathDetail path={currentPath} runs={runs}
               onEdit={() => setEditing(true)}

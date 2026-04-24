@@ -173,7 +173,7 @@ batchEngine.start();
 
 // SmartPath
 const smartPathStore = new SmartPathStore();
-const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager, store);
+const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
@@ -1161,8 +1161,8 @@ wss.on('connection', (ws: WebSocket) => {
 
           try {
             if (execute) {
-              // 流式执行模式 — 使用临时会话，执行完即清理
-              const tempSessionId = sessionManager.createSession(workspace);
+              // 流式执行模式 — 纯内存临时会话，不写 SQLite，不污染主会话列表
+              const tempSessionId = sessionManager.createEphemeralSession(workspace);
               const abort = new AbortController();
               const prompt = buildStepExecutionPrompt(userInput, previousSteps);
               const stepSystemPrompt = buildStepSystemPrompt();
@@ -1181,9 +1181,9 @@ wss.on('connection', (ws: WebSocket) => {
                   stepSystemPrompt,
                 );
               } finally {
-                // 清理临时会话 — 不留痕到主会话列表
+                // 清理内存中的临时会话和 V2 进程
                 sessionManager.closeV2Session(tempSessionId);
-                store.deleteSession(tempSessionId);
+                sessionManager.removeEphemeralSession(tempSessionId);
               }
 
               ws.send(JSON.stringify({
