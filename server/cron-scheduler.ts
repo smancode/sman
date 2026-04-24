@@ -206,16 +206,13 @@ export class CronScheduler {
           const existing = this.taskStore.getTaskByWorkspaceAndSkill(workspace, entry.name);
           if (existing) {
             const cronChanged = existing.cronExpression !== parsed.expression;
-            const enabledChanged = parsed.enabled !== undefined && existing.enabled !== parsed.enabled;
-            if (cronChanged || enabledChanged) {
-              const updates: Partial<Pick<CronTask, 'cronExpression' | 'enabled'>> = {};
-              if (cronChanged) updates.cronExpression = parsed.expression;
-              if (enabledChanged) updates.enabled = parsed.enabled;
+            // Don't override enabled state from crontab.md — user's manual toggle takes precedence
+            if (cronChanged) {
+              const updates: Partial<Pick<CronTask, 'cronExpression'>> = {};
+              updates.cronExpression = parsed.expression;
               const updated = this.taskStore.updateTask(existing.id, updates);
               if (updated && updated.enabled) {
                 this.schedule(updated);
-              } else {
-                this.unschedule(existing.id);
               }
               result.updated++;
             } else {

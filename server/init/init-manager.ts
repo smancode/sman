@@ -271,6 +271,24 @@ export class InitManager {
 
       fs.mkdirSync(targetDir, { recursive: true });
       for (const file of fs.readdirSync(templateDir)) {
+        // skill-auto-updater: preserve user's crontab.md enabled state during template upgrade
+        if (skillName === SKILL_AUTO_UPDATER && file === 'crontab.md') {
+          const targetCrontab = path.join(targetDir, file);
+          if (fs.existsSync(targetCrontab)) {
+            const existingContent = fs.readFileSync(targetCrontab, 'utf-8');
+            const existingEnabled = parseEnabledFromFrontmatter(existingContent);
+            const templateContent = fs.readFileSync(path.join(templateDir, file), 'utf-8');
+            // Copy template but preserve user's enabled value
+            if (existingEnabled !== undefined) {
+              const finalContent = templateContent.replace(
+                /enabled:\s*(true|false)/,
+                `enabled: ${existingEnabled}`,
+              );
+              fs.writeFileSync(targetCrontab, finalContent);
+              continue;
+            }
+          }
+        }
         fs.copyFileSync(
           path.join(templateDir, file),
           path.join(targetDir, file),
@@ -341,4 +359,10 @@ export class InitManager {
       initializedAt,
     };
   }
+}
+
+/** Extract enabled value from crontab.md YAML frontmatter */
+function parseEnabledFromFrontmatter(content: string): boolean | undefined {
+  const match = content.match(/^---\n[\s\S]*?enabled:\s*(true|false)[\s\S]*?\n---/m);
+  return match ? match[1] === 'true' : undefined;
 }
