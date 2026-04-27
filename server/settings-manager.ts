@@ -38,7 +38,7 @@ export class SettingsManager {
 
   private read(): SmanConfig {
     if (!fs.existsSync(this.configPath)) {
-      fs.writeFileSync(this.configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf-8');
+      fs.writeFileSync(this.configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), { encoding: 'utf-8', mode: 0o600 });
       return { ...DEFAULT_CONFIG };
     }
     const raw = fs.readFileSync(this.configPath, 'utf-8');
@@ -46,7 +46,7 @@ export class SettingsManager {
   }
 
   private write(config: SmanConfig): void {
-    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), 'utf-8');
+    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
     this.log.info('Config saved');
   }
 

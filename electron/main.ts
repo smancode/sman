@@ -109,6 +109,8 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('shell:openExternal', (_event, url: string) => {
+    if (!url || typeof url !== 'string') return;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return;
     shell.openExternal(url);
   });
 

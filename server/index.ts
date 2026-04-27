@@ -92,7 +92,7 @@ function ensureHomeDir(homeDir: string): void {
       },
       auth: { token: '' },
     };
-    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
+    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), { encoding: 'utf-8', mode: 0o600 });
     log.info(`Created default config at ${configPath}`);
   }
 
@@ -312,7 +312,13 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5881',
   'http://127.0.0.1:5880',
   'http://127.0.0.1:5881',
-  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()) : []),
+  ...(process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',')
+        .map(s => s.trim())
+        .filter(s => {
+          try { new URL(s); return s.startsWith('http://') || s.startsWith('https://'); } catch { return false; }
+        })
+    : []),
 ];
 
 function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -348,6 +354,13 @@ const server = http.createServer((req, res) => {
   // Set CORS headers on all responses
   setCorsHeaders(req, res);
 
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  if (req.url?.startsWith('/api/')) {
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+  }
+
   // Public: health check (no auth)
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -367,13 +380,13 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'Invalid URL' }));
           return;
         }
-        import('child_process').then(({ exec }) => {
-          const cmd = process.platform === 'darwin'
-            ? `open "${targetUrl}"`
-            : process.platform === 'win32'
-              ? `start "" "${targetUrl}"`
-              : `xdg-open "${targetUrl}"`;
-          exec(cmd, (err) => {
+        import('child_process').then(({ execFile }) => {
+          const cmd = process.platform === 'darwin' ? 'open'
+            : process.platform === 'win32' ? 'cmd.exe' : 'xdg-open';
+          const args = process.platform === 'win32'
+            ? ['/c', 'start', '""', targetUrl]
+            : [targetUrl];
+          execFile(cmd, args, (err) => {
             if (err) {
               res.writeHead(500, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Failed to open' }));
@@ -438,10 +451,9 @@ const server = http.createServer((req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ entries: result }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to read directory', message }));
+      res.end(JSON.stringify({ error: 'Failed to read directory' }));
     }
     return;
   }
@@ -465,9 +477,19 @@ const server = http.createServer((req, res) => {
     const urlPath = req.url?.split('?')[0] || '/';
     let filePath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath);
 
+    // Prevent path traversal: ensure resolved path stays within distDir
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(path.resolve(distDir))) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+
     // SPA fallback: serve index.html for unknown paths
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    if (!fs.existsSync(resolvedPath) || fs.statSync(resolvedPath).isDirectory()) {
       filePath = path.join(distDir, 'index.html');
+    } else {
+      filePath = resolvedPath;
     }
 
     if (fs.existsSync(filePath)) {
@@ -685,20 +707,14 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'settings.update': {
-          const { type: _t, ...updates } = msg;
-          const config = settingsManager.updateConfig(updates as Partial<import('./types.js').SmanConfig>);
+          const { type: _t, auth: _auth, ...safeUpdates } = msg;
+          // Prevent modifying auth.token via settings.update — use dedicated reset mechanism instead
+          const config = settingsManager.updateConfig(safeUpdates as Partial<import('./types.js').SmanConfig>);
           sessionManager.updateConfig(config);
           userProfileManager.updateConfig(config);
           knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
-          // Sync in-memory auth token if changed
-          if ((updates as Record<string, unknown>).auth && typeof (updates as Record<string, unknown>).auth === 'object') {
-            const authUpdate = (updates as Record<string, unknown>).auth as Record<string, unknown>;
-            if (authUpdate.token) {
-              authToken = String(authUpdate.token);
-            }
-          }
-          if ((updates as Record<string, unknown>).chatbot) {
+          if ((safeUpdates as Record<string, unknown>).chatbot) {
             wecomConnection?.stop();
             feishuConnection?.stop();
             weixinConnection?.stop();

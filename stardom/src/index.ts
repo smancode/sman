@@ -16,6 +16,8 @@ import path from 'path';
 const log = createLogger('StardomServer');
 
 const PORT = parseInt(process.env.STARDOM_PORT ?? '5890', 10);
+const HOST = process.env.STARDOM_HOST ?? '127.0.0.1';
+const AUTH_TOKEN = process.env.STARDOM_AUTH_TOKEN ?? '';
 const DB_PATH = process.env.STARDOM_DB_PATH ?? `${process.env.HOME}/.stardom/stardom.db`;
 const HEARTBEAT_TIMEOUT_MS = 90_000; // 3 × 30s 心跳间隔
 
@@ -102,10 +104,41 @@ const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
   let agentId: string | null = null;
+  let authenticated = false;
+
+  // If auth token is configured, require authentication within 5 seconds
+  if (AUTH_TOKEN) {
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) {
+        ws.close(4001, 'Auth timeout');
+      }
+    }, 5_000);
+
+    ws.on('message', function authHandler(data) {
+      if (authenticated) return;
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'auth.verify' && msg.token === AUTH_TOKEN) {
+          authenticated = true;
+          clearTimeout(authTimeout);
+          ws.removeListener('message', authHandler);
+          ws.send(JSON.stringify({ type: 'auth.verified' }));
+          log.info('WebSocket client authenticated');
+        } else {
+          ws.close(4002, 'Invalid token');
+        }
+      } catch {
+        ws.close(4003, 'Invalid message');
+      }
+    });
+  } else {
+    authenticated = true;
+  }
 
   log.info('New WebSocket connection');
 
   ws.on('message', (data) => {
+    if (!authenticated) return;
     try {
       const raw = JSON.parse(data.toString());
       router.route(raw, ws);
@@ -187,7 +220,7 @@ function gracefulShutdown(signal: string) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-server.listen(PORT, () => {
-  log.info(`Stardom server started on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+  log.info(`Stardom server started on ${HOST}:${PORT}`);
   log.info(`Database: ${DB_PATH}`);
 });

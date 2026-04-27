@@ -69,6 +69,12 @@ export class StardomClient {
         this.log.info('Connected to stardom server');
         this.reconnectAttempts = 0;
 
+        // Send auth token if configured (server will validate or skip if no token configured)
+        const authToken = process.env.STARDOM_AUTH_TOKEN;
+        if (authToken) {
+          this.ws!.send(JSON.stringify({ type: 'auth.verify', token: authToken }));
+        }
+
         // 发送注册消息
         const domains = this.options.getAgentDomains();
         this.send({
