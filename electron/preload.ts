@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('sman', {
   platform: process.platform,
@@ -6,6 +6,14 @@ contextBridge.exposeInMainWorld('sman', {
     node: process.versions.node,
     chrome: process.versions.chrome,
     electron: process.versions.electron,
+  },
+  // Get local file path from File object (works for both drag-drop and file picker)
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return undefined;
+    }
   },
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
 

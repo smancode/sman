@@ -1092,7 +1092,7 @@ export class ClaudeSessionManager {
   /**
    * Send a message via WebSocket (real-time streaming)
    */
-  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0, filePaths?: string[]): Promise<void> {
+  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -1113,24 +1113,14 @@ export class ClaudeSessionManager {
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    // V2 sessions handle /slash commands natively — no conversion needed
     // Don't store auto-retry messages in the database — user didn't send them
     if (_retryCount === 0) {
-      // Build contentBlocks from media for persistence (so images survive session switches)
+      // Extract file paths from content text for persistence (format: [用户文件路径:[path1,path2]])
       const userContentBlocks: Array<import('./session-store.js').ContentBlock> = [];
-      if (media && media.length > 0) {
-        for (const m of media) {
-          if (m.mimeType?.startsWith('image/')) {
-            userContentBlocks.push({
-              type: 'image',
-              source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
-            });
-          }
-        }
-      }
-      // Persist attached file metadata for chat history display
-      if (filePaths && filePaths.length > 0) {
-        for (const fp of filePaths) {
+      const pathMatch = content.match(/\[用户文件路径:\[([^\]]+)\]\]/);
+      if (pathMatch) {
+        const paths = pathMatch[1].split(',');
+        for (const fp of paths) {
           const fn = fp.split('/').pop()?.split('\\').pop() ?? 'file';
           userContentBlocks.push({
             type: 'attached_file',
@@ -1144,9 +1134,6 @@ export class ClaudeSessionManager {
         content,
         contentBlocks: userContentBlocks.length > 0 ? userContentBlocks : undefined,
       });
-      if (userContentBlocks.length > 0) {
-        this.log.info(`[sendMessage] Persisted ${userContentBlocks.length} contentBlocks for message, types: ${userContentBlocks.map(b => b.type).join(',')}`);
-      }
     }
 
     const abortController = new AbortController();
@@ -1194,14 +1181,10 @@ export class ClaudeSessionManager {
         : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
-      let textContent = content;
-      if (filePaths && filePaths.length > 0) {
-        textContent += ` [用户文件路径:[${filePaths.join(',')}]]`;
-      }
-      this.log.info(`[sendMessage] SEND CONTENT: ${textContent.substring(0, 500)}`);
+      this.log.info(`[sendMessage] SEND CONTENT: ${content.substring(0, 500)}`);
 
       // Build content for send(): string or SDKUserMessage
-      const builtContent = buildContentBlocks(textContent, media, capabilities);
+      const builtContent = buildContentBlocks(content, media, capabilities);
 
       // Wrap send() with timeout — claude CLI may hang during init (e.g. incompatible API)
       const sendWithTimeout = async (payload: string | object) => {

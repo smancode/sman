@@ -139,6 +139,8 @@ done
 # ── 6. 启动 Electron ─────────────────────────────────────
 
 echo -e "${CYAN}[5/5] Starting Electron...${NC}"
+# Clear proxy for Electron — localhost Vite/HMR must not go through proxy
+unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY ALL_PROXY all_proxy
 npx electron . &
 ELECTRON_PID=$!
 

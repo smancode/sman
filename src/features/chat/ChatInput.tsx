@@ -2,7 +2,7 @@
  * Chat Input Component
  * Textarea with send button for web (no Electron file picker).
  * Enter to send, Shift+Enter for new line.
- * Supports image/PDF upload via file picker.
+ * Supports image/PDF upload via file picker or drag-drop.
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -14,22 +14,11 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { SkillPicker } from '@/components/SkillPicker';
 
-export interface FileAttachment {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  fileSize: number;
-  stagedPath: string;
-  preview: string | null;
-  status: 'staging' | 'ready' | 'error';
-  error?: string;
-}
-
 export interface StagedMedia {
   fileName: string;
   mimeType: string;
   base64Data: string;
-  /** Local file path (Electron only). When set, base64Data is empty for non-images. */
+  /** Local file path (Electron drag-drop or file picker). When set, base64Data is empty. */
   filePath?: string;
 }
 
@@ -41,14 +30,13 @@ interface Skill {
 }
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, media?: StagedMedia[], filePaths?: string[]) => void;
+  onSend: (text: string, attachments?: unknown, targetAgentId?: string | null, media?: StagedMedia[]) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
 const ACCEPTED_TYPES = '*/*';
 
 // Per-session input cache — survives session switches
@@ -59,7 +47,6 @@ function readFileAsBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove data URL prefix (e.g., "data:image/png;base64,")
       const base64 = result.split(',')[1];
       if (base64) {
         resolve(base64);
@@ -109,12 +96,10 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const prevId = prevSessionIdRef.current;
     if (prevId === currentSessionId) return;
 
-    // Save current input to previous session
     if (prevId) {
       inputCache.set(prevId, { input, stagedMedia });
     }
 
-    // Restore input for new session (or reset if none cached)
     const cached = currentSessionId ? inputCache.get(currentSessionId) : undefined;
     setInput(cached?.input ?? '');
     setStagedMedia(cached?.stagedMedia ?? []);
@@ -137,47 +122,39 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     }
   }, [disabled]);
 
-  const isElectron = !!(window as any).sman?.versions?.electron;
-  console.log('[ChatInput] isElectron:', isElectron, 'window.sman:', !!(window as any).sman, 'versions:', !!(window as any).sman?.versions, 'electron:', (window as any).sman?.versions?.electron);
-
   const canSend = (input.trim().length > 0 || stagedMedia.length > 0) && !disabled;
 
   const processFiles = useCallback(async (fileList: File[]) => {
     const newMedia: StagedMedia[] = [];
+    const getPathForFile = (window as any).sman?.getPathForFile as ((f: File) => string | undefined) | undefined;
 
     for (const file of fileList) {
-      const filePath = (file as any).path as string | undefined;
-      console.log('[ChatInput.processFiles] file:', file.name, 'filePath:', filePath, 'isElectron:', isElectron);
+      // Electron: get local file path via webUtils.getPathForFile (exposed by preload)
+      const filePath = getPathForFile?.(file);
 
-      // Electron with local file path: store path only, no base64
-      if (isElectron && filePath) {
+      if (filePath) {
+        // Local file: store path only, no base64 — Claude Code reads files by path
         newMedia.push({
           fileName: file.name,
           mimeType: file.type || 'application/octet-stream',
           base64Data: '',
           filePath,
         });
-        continue;
+      } else if (file.size <= MAX_FILE_SIZE) {
+        // Web: read as base64
+        const base64Data = await readFileAsBase64(file);
+        newMedia.push({
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          base64Data,
+        });
       }
-
-      // Web / fallback: read as base64
-      if (file.size > MAX_FILE_SIZE) {
-        console.warn(`File ${file.name} exceeds 10MB limit, skipping`);
-        continue;
-      }
-
-      const base64Data = await readFileAsBase64(file);
-      newMedia.push({
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        base64Data,
-      });
     }
 
     if (newMedia.length > 0) {
       setStagedMedia((prev) => [...prev, ...newMedia]);
     }
-  }, [isElectron]);
+  }, []);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -218,11 +195,16 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (!canSend || sending) return;
     const textToSend = input.trim();
 
-    // Electron: filePath media and base64 media handled separately
+    // Split into path-based (Electron local files) and base64-based (web uploads)
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
-    const filePaths = pathMedia.map(m => m.filePath!);
-    console.log('[ChatInput.handleSend] stagedMedia:', stagedMedia.length, 'pathMedia:', pathMedia.length, 'base64Media:', base64Media.length, 'filePaths:', JSON.stringify(filePaths));
+
+    // Append file paths directly into the message text for Claude
+    let finalText = textToSend || ' ';
+    if (pathMedia.length > 0) {
+      const paths = pathMedia.map(m => m.filePath!);
+      finalText += ` [用户文件路径:[${paths.join(',')}]]`;
+    }
 
     setInput('');
     setStagedMedia([]);
@@ -232,15 +214,13 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(textToSend || ' ', undefined, null, base64Media.length > 0 ? base64Media : undefined, filePaths.length > 0 ? filePaths : undefined);
+    onSend(finalText, undefined, null, base64Media.length > 0 ? base64Media : undefined);
   }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Don't handle if skill picker is open
       if (showSkillPicker) return;
 
-      // Arrow Up/Down: navigate input history when cursor is at the right position
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         const textarea = textareaRef.current;
         if (!textarea) return;
@@ -298,16 +278,11 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const wasEmpty = input.length === 0;
     setInput(value);
 
-    // Preheat V2 session when input goes from empty to non-empty.
-    // Covers all cases: new session, switch session, send then continue, next day return.
-    // Backend deduplicates: if V2 process already exists, it's a no-op.
     if (wasEmpty && value.length > 0 && currentSessionId) {
       useChatStore.getState().preheatSession();
-      // Refresh git branch in titlebar (user may have switched branches in terminal)
       (window as any).__sman_gitBranchRefresh?.();
     }
 
-    // Check if user just typed "/" at the beginning or after a space
     const cursorPosition = e.target.selectionStart;
     const charBeforeCursor = value[cursorPosition - 1];
     const charBeforeSlash = value[cursorPosition - 2];
@@ -325,23 +300,20 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   };
 
   const handleSkillSelect = (skill: Skill) => {
-    // Insert /skillId into input (not the full content), add trailing space
     const cursorPosition = textareaRef.current?.selectionStart || input.length;
-    const beforeSlash = input.slice(0, cursorPosition - 1); // Remove the "/"
+    const beforeSlash = input.slice(0, cursorPosition - 1);
     const afterCursor = input.slice(cursorPosition);
 
-    // Add /skillId with trailing space
     const newInput = beforeSlash + '/' + skill.id + ' ' + afterCursor;
 
     setInput(newInput);
     setShowSkillPicker(false);
     slashTriggeredRef.current = false;
 
-    // Focus back to textarea
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const newCursorPos = beforeSlash.length + 1 + skill.id.length + 1; // +1 for the space
+        const newCursorPos = beforeSlash.length + 1 + skill.id.length + 1;
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
     }, 0);

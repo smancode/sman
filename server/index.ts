@@ -640,7 +640,6 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'chat.send': {
-          log.info(`[chat.send] RAW MSG KEYS: ${Object.keys(msg).join(',')}, filePaths: ${(msg as any).filePaths}, media: ${JSON.stringify((msg as any).media?.map((m: any) => ({ type: m.type, fileName: m.fileName, filePath: m.filePath, hasBase64: !!m.base64Data, base64Len: m.base64Data?.length })))}`);
           if (!msg.sessionId) throw new Error('Missing sessionId');
           if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');
           // Sync AUTO mode state from frontend
@@ -667,13 +666,7 @@ wss.on('connection', (ws: WebSocket) => {
             log.warn(`No active client to deliver message for session ${chatSessionId}`);
           };
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
-          // Extract filePaths from both explicit param and media items with filePath
-          const explicitPaths = (msg as any).filePaths as string[] | undefined;
-          const mediaPaths = media?.filter((m: any) => m.filePath).map((m: any) => m.filePath as string) ?? [];
-          const allPaths = [...(explicitPaths ?? []), ...mediaPaths];
-          const filePaths = allPaths.length > 0 ? [...new Set(allPaths)] : undefined;
-          log.info(`[chat.send] filePaths resolved: ${JSON.stringify(filePaths)} (explicit: ${JSON.stringify(explicitPaths)}, mediaPaths: ${JSON.stringify(mediaPaths)})`);
-          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0, filePaths);
+          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0);
           break;
         }
 

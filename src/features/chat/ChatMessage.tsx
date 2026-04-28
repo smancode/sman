@@ -53,12 +53,16 @@ export const ChatMessage = memo(function ChatMessage({
   const isToolResult = role === 'toolresult' || role === 'tool_result';
 
   // Stable RawMessage reference — only recomputed when message object reference changes
-  const rawMessage = useMemo((): RawMessage => ({
-    id: message.id,
-    role: message.role,
-    content: message.resolvedContent ?? buildContent(message.content, message.contentBlocks),
-    timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
-  }), [message]);
+  const rawMessage = useMemo((): RawMessage => {
+    // Strip file path tags from display — file cards already show the files
+    const cleanContent = message.content.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '');
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.resolvedContent ?? buildContent(cleanContent, message.contentBlocks),
+      timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
+    };
+  }, [message]);
 
   const text = extractText(rawMessage);
   const hasText = text.trim().length > 0;
