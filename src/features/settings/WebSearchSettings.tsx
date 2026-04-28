@@ -82,7 +82,7 @@ export function WebSearchSettings({ id }: { id?: string }) {
           </RadioGroup>
         </div>
 
-        {provider !== 'builtin' && (
+        {(provider === 'brave' || provider === 'tavily') && (
           <div className="space-y-2">
             <Label>{provider === 'brave' ? 'Brave' : 'Tavily'} API Key</Label>
             <div className="relative">

@@ -607,29 +607,15 @@ export class ClaudeSessionManager {
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
-    // Auto-degrade search chain for non-Anthropic proxies:
-    // Built-in WebSearch uses Anthropic's server_tool_use protocol — third-party
-    // proxies (Kimi, MiniMax, Zhipu) don't support it. Register fallback search
-    // tools so Claude always has a way to search:
-    //   1. SearXNG MCP (free, no key needed, requires outbound access)
-    //   2. Tavily MCP (if tavilyApiKey is set — reliable, works in China)
-    //   3. web-access browser (if Chrome available — already injected separately)
-    if (this.config.webSearch?.provider === 'builtin' && !isAnthropicFirstParty(this.config.llm?.baseUrl)) {
-      // Register SearXNG as primary fallback (free, no key needed)
+    // Web search: 'builtin' relies on Claude Code's built-in WebSearch (server_tool_use).
+    // Many third-party proxies (Kimi, OpenRouter) support this protocol, so we don't
+    // inject fallback tools that would compete with the built-in one.
+    // If the proxy doesn't support server_tool_use, user can switch to Brave/Tavily.
+    // SearXNG MCP is kept as a last-resort option — only injected when explicitly needed.
+    if (this.config.webSearch?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
       (opts.mcpServers as any)['web-search'] = webSearchServer;
-      this.log.info('[search] SearXNG MCP registered as fallback search provider');
-
-      // Register Tavily if key is available (more reliable in restricted networks)
-      if (this.config.webSearch.tavilyApiKey) {
-        (opts.mcpServers as any)['tavily-search'] = {
-          type: 'stdio',
-          command: 'npx',
-          args: ['-y', '@anthropic-ai/mcp-server-tavily'],
-          env: { TAVILY_API_KEY: this.config.webSearch.tavilyApiKey },
-        };
-        this.log.info('[search] Tavily MCP registered as fallback search provider');
-      }
+      this.log.info('[search] SearXNG MCP registered as search provider');
     }
 
     // Inject web-access MCP Server (in-process)
