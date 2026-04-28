@@ -11,8 +11,8 @@ import 'streamdown/styles.css';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { RawMessage, AttachedFileMeta } from '@/types/chat';
-import type { Message } from '@/stores/chat';
+import type { RawMessage } from '@/types/chat';
+import type { Message, AttachedFileMeta } from '@/stores/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, getToolDisplayName, formatToolSummary, buildContent, safeTimestamp } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
@@ -68,7 +68,7 @@ export const ChatMessage = memo(function ChatMessage({
   const visibleThinking = showThinking ? thinking : null;
   const visibleTools = showThinking ? tools : [];
 
-  const attachedFiles = (message as Message & { _attachedFiles?: AttachedFileMeta[] })._attachedFiles || [];
+  const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
 
   // Never render tool result messages in chat UI

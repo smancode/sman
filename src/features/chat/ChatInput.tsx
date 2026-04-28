@@ -6,7 +6,7 @@
  * Type "/" to open skill picker.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { SendHorizontal, RefreshCw, Brain, ImagePlus, X, Square, Zap } from 'lucide-react';
+import { SendHorizontal, RefreshCw, Brain, FileUp, X, Square, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -29,7 +29,8 @@ export interface StagedMedia {
   fileName: string;
   mimeType: string;
   base64Data: string;
-  preview?: string;
+  /** Local file path (Electron only). When set, base64Data is empty for non-images. */
+  filePath?: string;
 }
 
 interface Skill {
@@ -140,30 +141,20 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   const canSend = (input.trim().length > 0 || stagedMedia.length > 0) && !disabled;
 
-  // In Electron, File objects expose a `path` property with the absolute filesystem path.
-  // For non-image files, we just inject the path as text so Claude Code reads it directly.
-  // For images, we still use base64 for the preview but also inject the path.
   const processFiles = useCallback(async (fileList: File[]) => {
     const newMedia: StagedMedia[] = [];
-    let totalSize = stagedMedia.reduce((sum, m) => sum + m.base64Data.length, 0);
-    const filePaths: string[] = [];
 
     for (const file of fileList) {
       const filePath = (file as any).path as string | undefined;
 
-      // Electron with local file path: inject path as text instead of reading base64
+      // Electron with local file path: store path only, no base64
       if (isElectron && filePath) {
-        filePaths.push(filePath);
-        // Only images need base64 for preview
-        if (file.type.startsWith('image/')) {
-          const base64Data = await readFileAsBase64(file);
-          newMedia.push({
-            fileName: file.name,
-            mimeType: file.type,
-            base64Data,
-            preview: `data:${file.type};base64,${base64Data}`,
-          });
-        }
+        newMedia.push({
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          base64Data: '',
+          filePath,
+        });
         continue;
       }
 
@@ -172,35 +163,19 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         console.warn(`File ${file.name} exceeds 10MB limit, skipping`);
         continue;
       }
-      totalSize += file.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        console.warn('Total upload size exceeds 20MB limit');
-        break;
-      }
 
       const base64Data = await readFileAsBase64(file);
-      const media: StagedMedia = {
+      newMedia.push({
         fileName: file.name,
         mimeType: file.type || 'application/octet-stream',
         base64Data,
-      };
-
-      if (file.type.startsWith('image/')) {
-        media.preview = `data:${file.type};base64,${base64Data}`;
-      }
-
-      newMedia.push(media);
-    }
-
-    if (filePaths.length > 0) {
-      const pathText = filePaths.join('\n');
-      setInput(prev => prev ? `${prev}\n${pathText}` : pathText);
+      });
     }
 
     if (newMedia.length > 0) {
       setStagedMedia((prev) => [...prev, ...newMedia]);
     }
-  }, [stagedMedia, isElectron]);
+  }, [isElectron]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -239,7 +214,16 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   const handleSend = useCallback(() => {
     if (!canSend || sending) return;
-    const textToSend = input.trim();
+    let textToSend = input.trim();
+
+    // Electron: merge file paths into text, keep only base64 media for web upload
+    const pathMedia = stagedMedia.filter(m => m.filePath);
+    const base64Media = stagedMedia.filter(m => !m.filePath);
+    if (pathMedia.length > 0) {
+      const pathText = pathMedia.map(m => m.filePath).join('\n');
+      textToSend = textToSend ? `${textToSend}\n${pathText}` : pathText;
+    }
+
     setInput('');
     setStagedMedia([]);
     historyIndexRef.current = -1;
@@ -248,7 +232,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(textToSend || ' ', undefined, null, stagedMedia.length > 0 ? stagedMedia : undefined);
+    onSend(textToSend || ' ', undefined, null, base64Media.length > 0 ? base64Media : undefined);
   }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(
@@ -397,26 +381,17 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Media preview row */}
+        {/* File attachments preview row */}
         {stagedMedia.length > 0 && (
-          <div className="flex gap-2 p-2 pb-0 flex-wrap">
+          <div className="flex gap-1.5 p-2 pb-0 flex-wrap">
             {stagedMedia.map((media, idx) => (
-              <div key={idx} className="relative group">
-                {media.preview ? (
-                  <img
-                    src={media.preview}
-                    alt={media.fileName}
-                    className="h-16 w-16 object-cover rounded-lg border"
-                  />
-                ) : (
-                  <div className="h-16 w-16 rounded-lg border bg-muted flex items-center justify-center text-xs text-muted-foreground p-1 text-center truncate">
-                    {media.fileName}
-                  </div>
-                )}
+              <div key={idx} className="group relative flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-sm max-w-[200px]">
+                <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{media.fileName}</span>
                 <button
                   type="button"
                   onClick={() => removeStagedMedia(idx)}
-                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  className="shrink-0 h-4 w-4 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -466,7 +441,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled}
               >
-                <ImagePlus className="h-[18px] w-[18px]" />
+                <FileUp className="h-[18px] w-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>

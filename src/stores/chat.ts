@@ -19,6 +19,14 @@ function wrapHandler(client: { on: (e: string, h: (...a: unknown[]) => void) => 
   return () => client.off(event, wrapped);
 }
 
+export interface AttachedFileMeta {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  preview: string | null;
+  filePath?: string;
+}
+
 export interface Message {
   id: string;
   sessionId: string;
@@ -28,6 +36,7 @@ export interface Message {
   createdAt: string;
   timestamp?: number;
   resolvedContent?: unknown;
+  _attachedFiles?: AttachedFileMeta[];
 }
 
 // ── Streaming Block types ──
@@ -142,7 +151,7 @@ interface ChatState {
   loadSessions: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
-  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string }>) => Promise<void>;
+  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string; filePath?: string }>) => Promise<void>;
   preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
@@ -449,15 +458,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? data.messages.map((m: Record<string, unknown>) => {
             const content = String(m.content || '');
             const blocks = m.contentBlocks as ContentBlock[] | undefined;
+            const role = String(m.role || 'user') as 'user' | 'assistant';
+            let attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> | undefined;
+
+            // Reconstruct _attachedFiles for user messages from content paths
+            if (role === 'user') {
+              const pathPattern = /^(\/[^\n]+|[A-Z]:\\[^\n]+)/gm;
+              const textPaths = content.match(pathPattern);
+              if (textPaths) {
+                attachedFiles = textPaths.map(p => ({
+                  fileName: p.split(/[/\\]/).pop() || 'file',
+                  mimeType: 'application/octet-stream',
+                  fileSize: 0,
+                  preview: null,
+                  filePath: p,
+                }));
+              }
+            }
+
             return {
               id: String(m.id || ''),
               sessionId: String(m.sessionId || ''),
-              role: (String(m.role || 'user') as 'user' | 'assistant'),
+              role,
               content,
               contentBlocks: blocks,
               createdAt: String(m.createdAt || ''),
               timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
               resolvedContent: resolveContent(content, blocks),
+              _attachedFiles: attachedFiles,
             };
           })
         : [];
@@ -523,24 +551,62 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Build contentBlocks from media so images render in chat
     const mediaContentBlocks: ContentBlock[] = [];
+    const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];
     if (media && media.length > 0) {
       for (const m of media) {
-        if (m.mimeType.startsWith('image/')) {
+        if (m.mimeType.startsWith('image/') && m.base64Data) {
           mediaContentBlocks.push({
             type: 'image',
             source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
+          });
+          // Also show as attached file card
+          attachedFiles.push({
+            fileName: m.fileName || 'image',
+            mimeType: m.mimeType,
+            fileSize: 0,
+            preview: `data:${m.mimeType};base64,${m.base64Data}`,
+            filePath: m.filePath,
+          });
+        } else {
+          attachedFiles.push({
+            fileName: m.fileName || 'file',
+            mimeType: m.mimeType,
+            fileSize: 0,
+            preview: null,
+            filePath: m.filePath,
           });
         }
       }
     }
 
-    const userMsg: Message = {
+    // Also extract file paths from text content (Electron mode: paths are merged into text)
+    // Detect lines that look like absolute file paths
+    const pathPattern = /^(\/[^\n]+|[A-Z]:\\[^\n]+)/gm;
+    const textPaths = trimmed.match(pathPattern);
+    if (textPaths) {
+      for (const p of textPaths) {
+        const fileName = p.split(/[/\\]/).pop() || 'file';
+        // Avoid duplicates if already in attachedFiles
+        if (!attachedFiles.some(f => f.filePath === p)) {
+          attachedFiles.push({
+            fileName,
+            mimeType: 'application/octet-stream',
+            fileSize: 0,
+            preview: null,
+            filePath: p,
+          });
+        }
+      }
+    }
+
+    const userMsg: Message & { _attachedFiles?: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> } = {
       id: crypto.randomUUID(),
       sessionId: currentSessionId,
       role: 'user',
       content: trimmed,
       contentBlocks: mediaContentBlocks.length > 0 ? mediaContentBlocks : undefined,
       createdAt: new Date().toISOString(),
+      _attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
     };
 
     // Reset per-session streaming state
