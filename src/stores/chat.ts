@@ -580,13 +580,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // Also extract file paths from text content (Electron mode: paths are merged into text)
-    // Detect lines that look like absolute file paths
-    const pathPattern = /^(\/[^\n]+|[A-Z]:\\[^\n]+)/gm;
+    // Detect lines like "- /absolute/path" or bare "/absolute/path"
+    const pathPattern = /^-?\s*(\/[^\s\n]+|[A-Z]:\\[^\s\n]+)/gm;
     const textPaths = trimmed.match(pathPattern);
     if (textPaths) {
-      for (const p of textPaths) {
+      for (let raw of textPaths) {
+        const p = raw.replace(/^-\s*/, '');
         const fileName = p.split(/[/\\]/).pop() || 'file';
-        // Avoid duplicates if already in attachedFiles
         if (!attachedFiles.some(f => f.filePath === p)) {
           attachedFiles.push({
             fileName,

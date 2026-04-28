@@ -220,8 +220,12 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
     if (pathMedia.length > 0) {
-      const pathText = pathMedia.map(m => m.filePath).join('\n');
-      textToSend = textToSend ? `${textToSend}\n${pathText}` : pathText;
+      const fileList = pathMedia
+        .map(m => `- ${m.filePath}`)
+        .join('\n');
+      textToSend = textToSend
+        ? `${textToSend}\n${fileList}`
+        : fileList;
     }
 
     setInput('');

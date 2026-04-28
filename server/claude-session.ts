@@ -1180,8 +1180,52 @@ export class ClaudeSessionManager {
         : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
+      // Read local files from text paths (Electron: paths merged into text by frontend)
+      let textContent = content;
+      const extraMedia: MediaAttachment[] = [];
+      // Match absolute paths with optional "- " prefix: "- /foo/bar.md" or "/foo/bar.md" or "C:\foo"
+      const filePathPattern = /(?:^|\n)\s*-?\s*(\/[^\s\n]+|[A-Za-z]:\\[^\s\n]+)/g;
+      this.log.info(`[sendMessage] Checking content for file paths (${content.length} chars): ${content.substring(0, 200)}`);
+      let match: RegExpExecArray | null;
+      const seenPaths = new Set<string>();
+      while ((match = filePathPattern.exec(content)) !== null) {
+        const filePath = match[1];
+        if (seenPaths.has(filePath)) continue;
+        seenPaths.add(filePath);
+        try {
+          if (!fs.existsSync(filePath)) continue;
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) continue;
+          if (stat.size > 10 * 1024 * 1024) continue; // 10MB limit
+          const buf = fs.readFileSync(filePath);
+          const fileName = path.basename(filePath);
+          const mimeType = guessMimeType(fileName);
+          const isBinary = buf.includes(0x00);
+
+          if (isBinary || mimeType.startsWith('image/')) {
+            extraMedia.push({
+              type: mimeType.startsWith('image/') ? 'image' : 'document',
+              fileName,
+              mimeType,
+              base64Data: buf.toString('base64'),
+            });
+            // Remove path line from text — file sent as media block
+            textContent = textContent.replace(match[0].trimStart(), '');
+          } else {
+            // Text file → inline content
+            const fileText = buf.toString('utf-8');
+            textContent = textContent.replace(filePath, `--- 文件: ${fileName} ---\n${fileText}\n--- END ---`);
+          }
+          this.log.info(`[sendMessage] Read local file: ${filePath} (${stat.size} bytes, ${isBinary ? 'binary' : 'text'})`);
+        } catch (err) {
+          this.log.warn(`[sendMessage] Failed to read file: ${filePath} ${err}`);
+        }
+      }
+
+      const allMedia = [...(media ?? []), ...extraMedia];
+
       // Build content for send(): string or SDKUserMessage
-      const builtContent = buildContentBlocks(content, media, capabilities);
+      const builtContent = buildContentBlocks(textContent, allMedia.length > 0 ? allMedia : undefined, capabilities);
 
       // Wrap send() with timeout — claude CLI may hang during init (e.g. incompatible API)
       const sendWithTimeout = async (payload: string | object) => {
@@ -2509,4 +2553,15 @@ export class ClaudeSessionManager {
     this.sessions.clear();
     this.sdkSessionIds.clear();
   }
+}
+
+function guessMimeType(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    pdf: 'application/pdf',
+    json: 'application/json', xml: 'application/xml',
+    txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', html: 'text/html', htm: 'text/html', css: 'text/css', js: 'text/javascript', ts: 'text/typescript',
+  };
+  return map[ext] ?? 'application/octet-stream';
 }
