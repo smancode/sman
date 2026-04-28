@@ -56,6 +56,9 @@ export function LLMSettings({ id }: { id?: string }) {
   const [modelsUnsupported, setModelsUnsupported] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Whether user explicitly chose "new profile" mode
+  const isNewProfile = useRef(false);
+
   // Base URL preset dropdown
   const [showBaseUrlPreset, setShowBaseUrlPreset] = useState(false);
   const baseUrlPresetRef = useRef<HTMLDivElement>(null);
@@ -69,6 +72,8 @@ export function LLMSettings({ id }: { id?: string }) {
     { label: '腾讯云', url: 'https://api.lkeap.cloud.tencent.com/coding/anthropic' },
     { label: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/coding' },
     { label: '阿里云百炼', url: 'https://coding.dashscope.aliyuncs.com/apps/anthropic' },
+    { label: 'OpenRouter', url: 'https://openrouter.ai/api' },
+    { label: '硅基流动', url: 'https://api.siliconflow.cn' },
   ];
 
   // Selected profile name (empty = not from saved list)
@@ -88,8 +93,8 @@ export function LLMSettings({ id }: { id?: string }) {
         setDraftBaseUrl(profile.baseUrl ?? '');
         setDraftProfileName(profile.name);
       }
-    } else {
-      // Show current active LLM in form
+    } else if (!isNewProfile.current) {
+      // Show current active LLM in form (only on init, not when user clicked "new")
       if (settings?.llm) {
         setDraftApiKey(settings.llm.apiKey ?? '');
         setDraftModel(settings.llm.model ?? '');
@@ -108,12 +113,16 @@ export function LLMSettings({ id }: { id?: string }) {
 
   const handleProfileChange = async (name: string) => {
     if (name === '__new__') {
+      isNewProfile.current = true;
       setSelectedProfile('');
       setDraftApiKey('');
       setDraftModel('');
       setDraftBaseUrl('');
       setDraftProfileName('');
+      setTestResult(null);
+      return;
     } else {
+      isNewProfile.current = false;
       setSelectedProfile(name);
       // Immediately activate the selected profile
       await selectLlmProfile(name);
@@ -304,6 +313,9 @@ export function LLMSettings({ id }: { id?: string }) {
                     type="button"
                     onClick={() => {
                       setDraftBaseUrl(preset.url);
+                      if (!selectedProfile) {
+                        setDraftProfileName(preset.label);
+                      }
                       setShowBaseUrlPreset(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between ${preset.url === draftBaseUrl ? 'bg-primary/10 text-primary' : ''}`}
