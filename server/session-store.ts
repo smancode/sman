@@ -21,7 +21,7 @@ export interface Message {
 }
 
 export interface ContentBlock {
-  type: 'text' | 'thinking' | 'tool_use' | 'image';
+  type: 'text' | 'thinking' | 'tool_use' | 'image' | 'attached_file';
   text?: string;
   thinking?: string;
   id?: string;
@@ -32,6 +32,8 @@ export interface ContentBlock {
     media_type: string;
     data: string;
   };
+  fileName?: string;
+  filePath?: string;
 }
 
 interface CreateSessionInput {

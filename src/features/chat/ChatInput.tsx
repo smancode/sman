@@ -41,7 +41,7 @@ interface Skill {
 }
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, media?: StagedMedia[]) => void;
+  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, media?: StagedMedia[], filePaths?: string[]) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -214,19 +214,12 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   const handleSend = useCallback(() => {
     if (!canSend || sending) return;
-    let textToSend = input.trim();
+    const textToSend = input.trim();
 
-    // Electron: merge file paths into text, keep only base64 media for web upload
+    // Electron: filePath media and base64 media handled separately
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
-    if (pathMedia.length > 0) {
-      const fileList = pathMedia
-        .map(m => `- ${m.filePath}`)
-        .join('\n');
-      textToSend = textToSend
-        ? `${textToSend}\n${fileList}`
-        : fileList;
-    }
+    const filePaths = pathMedia.map(m => m.filePath!);
 
     setInput('');
     setStagedMedia([]);
@@ -236,7 +229,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(textToSend || ' ', undefined, null, base64Media.length > 0 ? base64Media : undefined);
+    onSend(textToSend || ' ', undefined, null, base64Media.length > 0 ? base64Media : undefined, filePaths.length > 0 ? filePaths : undefined);
   }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(

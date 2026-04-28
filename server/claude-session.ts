@@ -1092,7 +1092,7 @@ export class ClaudeSessionManager {
   /**
    * Send a message via WebSocket (real-time streaming)
    */
-  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0): Promise<void> {
+  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0, filePaths?: string[]): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -1128,11 +1128,25 @@ export class ClaudeSessionManager {
           }
         }
       }
+      // Persist attached file metadata for chat history display
+      if (filePaths && filePaths.length > 0) {
+        for (const fp of filePaths) {
+          const fn = fp.split('/').pop()?.split('\\').pop() ?? 'file';
+          userContentBlocks.push({
+            type: 'attached_file',
+            fileName: fn,
+            filePath: fp,
+          } as import('./session-store.js').ContentBlock);
+        }
+      }
       this.store.addMessage(sessionId, {
         role: 'user',
         content,
         contentBlocks: userContentBlocks.length > 0 ? userContentBlocks : undefined,
       });
+      if (userContentBlocks.length > 0) {
+        this.log.info(`[sendMessage] Persisted ${userContentBlocks.length} contentBlocks for message, types: ${userContentBlocks.map(b => b.type).join(',')}`);
+      }
     }
 
     const abortController = new AbortController();
@@ -1180,52 +1194,14 @@ export class ClaudeSessionManager {
         : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
-      // Read local files from text paths (Electron: paths merged into text by frontend)
       let textContent = content;
-      const extraMedia: MediaAttachment[] = [];
-      // Match absolute paths with optional "- " prefix: "- /foo/bar.md" or "/foo/bar.md" or "C:\foo"
-      const filePathPattern = /(?:^|\n)\s*-?\s*(\/[^\s\n]+|[A-Za-z]:\\[^\s\n]+)/g;
-      this.log.info(`[sendMessage] Checking content for file paths (${content.length} chars): ${content.substring(0, 200)}`);
-      let match: RegExpExecArray | null;
-      const seenPaths = new Set<string>();
-      while ((match = filePathPattern.exec(content)) !== null) {
-        const filePath = match[1];
-        if (seenPaths.has(filePath)) continue;
-        seenPaths.add(filePath);
-        try {
-          if (!fs.existsSync(filePath)) continue;
-          const stat = fs.statSync(filePath);
-          if (!stat.isFile()) continue;
-          if (stat.size > 10 * 1024 * 1024) continue; // 10MB limit
-          const buf = fs.readFileSync(filePath);
-          const fileName = path.basename(filePath);
-          const mimeType = guessMimeType(fileName);
-          const isBinary = buf.includes(0x00);
-
-          if (isBinary || mimeType.startsWith('image/')) {
-            extraMedia.push({
-              type: mimeType.startsWith('image/') ? 'image' : 'document',
-              fileName,
-              mimeType,
-              base64Data: buf.toString('base64'),
-            });
-            // Remove path line from text — file sent as media block
-            textContent = textContent.replace(match[0].trimStart(), '');
-          } else {
-            // Text file → inline content
-            const fileText = buf.toString('utf-8');
-            textContent = textContent.replace(filePath, `--- 文件: ${fileName} ---\n${fileText}\n--- END ---`);
-          }
-          this.log.info(`[sendMessage] Read local file: ${filePath} (${stat.size} bytes, ${isBinary ? 'binary' : 'text'})`);
-        } catch (err) {
-          this.log.warn(`[sendMessage] Failed to read file: ${filePath} ${err}`);
-        }
+      if (filePaths && filePaths.length > 0) {
+        textContent += ` [用户文件路径:[${filePaths.join(',')}]]`;
       }
-
-      const allMedia = [...(media ?? []), ...extraMedia];
+      this.log.info(`[sendMessage] SEND CONTENT: ${textContent.substring(0, 500)}`);
 
       // Build content for send(): string or SDKUserMessage
-      const builtContent = buildContentBlocks(textContent, allMedia.length > 0 ? allMedia : undefined, capabilities);
+      const builtContent = buildContentBlocks(textContent, media, capabilities);
 
       // Wrap send() with timeout — claude CLI may hang during init (e.g. incompatible API)
       const sendWithTimeout = async (payload: string | object) => {
@@ -2564,4 +2540,8 @@ function guessMimeType(fileName: string): string {
     txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', html: 'text/html', htm: 'text/html', css: 'text/css', js: 'text/javascript', ts: 'text/typescript',
   };
   return map[ext] ?? 'application/octet-stream';
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

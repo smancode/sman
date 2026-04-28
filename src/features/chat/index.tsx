@@ -149,7 +149,7 @@ export function Chat() {
     });
   }, [messages.length, streamingBlocks.length]);
 
-  const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
+  const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[], filePaths?: string[]) => {
     const mediaForWs = media?.map(m => {
       const isImage = m.mimeType.startsWith('image/');
       return {
@@ -162,7 +162,7 @@ export function Chat() {
     });
     // When user sends a message, they want to see the response — mark as near bottom
     isNearBottomRef.current = true;
-    sendMessage(_text, mediaForWs);
+    sendMessage(_text, mediaForWs, filePaths);
   }, [sendMessage]);
 
   // Load history on initial connect or reconnect.

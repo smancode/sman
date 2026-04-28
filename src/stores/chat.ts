@@ -151,7 +151,7 @@ interface ChatState {
   loadSessions: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
-  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string; filePath?: string }>) => Promise<void>;
+  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string; filePath?: string }>, filePaths?: string[]) => Promise<void>;
   preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
@@ -461,18 +461,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const role = String(m.role || 'user') as 'user' | 'assistant';
             let attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> | undefined;
 
-            // Reconstruct _attachedFiles for user messages from content paths
+            // Reconstruct _attachedFiles for user messages
             if (role === 'user') {
-              const pathPattern = /^(\/[^\n]+|[A-Z]:\\[^\n]+)/gm;
-              const textPaths = content.match(pathPattern);
-              if (textPaths) {
-                attachedFiles = textPaths.map(p => ({
-                  fileName: p.split(/[/\\]/).pop() || 'file',
-                  mimeType: 'application/octet-stream',
-                  fileSize: 0,
-                  preview: null,
-                  filePath: p,
-                }));
+              // First: from persisted contentBlocks (attached_file type)
+              if (blocks) {
+                const fileBlocks = blocks.filter((b: any) => b.type === 'attached_file');
+                if (fileBlocks.length > 0) {
+                  attachedFiles = fileBlocks.map((b: any) => ({
+                    fileName: b.fileName || 'file',
+                    mimeType: 'application/octet-stream',
+                    fileSize: 0,
+                    preview: null,
+                    filePath: b.filePath,
+                  }));
+                  console.log(`[loadHistory] Reconstructed ${attachedFiles.length} attachedFiles from contentBlocks`);
+                }
+              }
+              // Fallback: extract from text paths
+              if (!attachedFiles) {
+                const pathPattern = /^-?\s*(\/[^\s\n]+|[A-Z]:\\[^\s\n]+)/gm;
+                const textPaths = content.match(pathPattern);
+                if (textPaths) {
+                  attachedFiles = textPaths.map(p => {
+                    const clean = p.replace(/^-\s*/, '');
+                    return {
+                      fileName: clean.split(/[/\\]/).pop() || 'file',
+                      mimeType: 'application/octet-stream',
+                      fileSize: 0,
+                      preview: null,
+                      filePath: clean,
+                    };
+                  });
+                }
               }
             }
 
@@ -536,7 +556,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     client.send({ type: 'session.preheat', sessionId: currentSessionId });
   },
 
-  sendMessage: async (content, media) => {
+  sendMessage: async (content, media, filePaths) => {
     const client = getWsClient();
     if (!client) return;
 
@@ -579,27 +599,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    // Also extract file paths from text content (Electron mode: paths are merged into text)
-    // Detect lines like "- /absolute/path" or bare "/absolute/path"
-    const pathPattern = /^-?\s*(\/[^\s\n]+|[A-Z]:\\[^\s\n]+)/gm;
-    const textPaths = trimmed.match(pathPattern);
-    if (textPaths) {
-      for (let raw of textPaths) {
-        const p = raw.replace(/^-\s*/, '');
-        const fileName = p.split(/[/\\]/).pop() || 'file';
-        if (!attachedFiles.some(f => f.filePath === p)) {
+    // Electron file paths (passed directly, not from text regex)
+    if (filePaths && filePaths.length > 0) {
+      for (const fp of filePaths) {
+        const fileName = fp.split(/[/\\]/).pop() || 'file';
+        if (!attachedFiles.some(f => f.filePath === fp)) {
           attachedFiles.push({
             fileName,
             mimeType: 'application/octet-stream',
             fileSize: 0,
             preview: null,
-            filePath: p,
+            filePath: fp,
           });
         }
       }
     }
 
-    const userMsg: Message & { _attachedFiles?: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> } = {
+    const userMsg: Message = {
       id: crypto.randomUUID(),
       sessionId: currentSessionId,
       role: 'user',
@@ -1161,6 +1177,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed, autoConfirm: get().autoConfirm };
       if (media && media.length > 0) {
         msg.media = media;
+      }
+      if (filePaths && filePaths.length > 0) {
+        msg.filePaths = filePaths;
       }
       client.send(msg);
     } catch (err) {
