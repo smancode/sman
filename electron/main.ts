@@ -39,6 +39,17 @@ function createWindow(): void {
   });
 
   mainWindow.loadURL(FRONTEND_URL);
+  // Dev mode: disable HTTP cache to ensure Vite HMR changes are always picked up
+  if (isDev) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Cache-Control': ['no-store'],
+        },
+      });
+    });
+  }
 
   // Open all external links in system default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -58,6 +69,13 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => {
     mainWindow!.show();
     mainWindow!.focus();
+  });
+
+  // Toggle DevTools with Cmd+Option+I (macOS) / Ctrl+Shift+I (Windows/Linux)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'I' && (input.meta || input.control) && input.alt) {
+      mainWindow!.webContents.toggleDevTools();
+    }
   });
 
   // Notify renderer of maximize state changes

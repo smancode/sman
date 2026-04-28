@@ -137,7 +137,8 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     }
   }, [disabled]);
 
-  const isElectron = !!(window as any).sman?.electron;
+  const isElectron = !!(window as any).sman?.versions?.electron;
+  console.log('[ChatInput] isElectron:', isElectron, 'window.sman:', !!(window as any).sman, 'versions:', !!(window as any).sman?.versions, 'electron:', (window as any).sman?.versions?.electron);
 
   const canSend = (input.trim().length > 0 || stagedMedia.length > 0) && !disabled;
 
@@ -146,6 +147,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
     for (const file of fileList) {
       const filePath = (file as any).path as string | undefined;
+      console.log('[ChatInput.processFiles] file:', file.name, 'filePath:', filePath, 'isElectron:', isElectron);
 
       // Electron with local file path: store path only, no base64
       if (isElectron && filePath) {
@@ -220,6 +222,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
     const filePaths = pathMedia.map(m => m.filePath!);
+    console.log('[ChatInput.handleSend] stagedMedia:', stagedMedia.length, 'pathMedia:', pathMedia.length, 'base64Media:', base64Media.length, 'filePaths:', JSON.stringify(filePaths));
 
     setInput('');
     setStagedMedia([]);
