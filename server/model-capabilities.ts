@@ -62,13 +62,13 @@ export const MODEL_CAPABILITIES_MAP: Record<string, DetectedCapabilities> = {
   'qwen2.5-math':             { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'Qwen2.5 Math', source: 'mapping' },
   'qwen2.5-turbo':            { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 1000000, displayName: 'Qwen2.5 Turbo', source: 'mapping' },
 
-  // GLM — text + vision
-  'glm-4':                    { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4', source: 'mapping' },
-  'glm-4.5':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4.5', source: 'mapping' },
-  'glm-4.6':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.6', source: 'mapping' },
-  'glm-4.7':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.7', source: 'mapping' },
-  'glm-5':                    { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5', source: 'mapping' },
-  'glm-5.1':                  { text: true, image: true,  pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5.1', source: 'mapping' },
+  // GLM — metadata only; vision verified by probe
+  'glm-4':                    { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4', source: 'mapping' },
+  'glm-4.5':                  { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: 'GLM-4.5', source: 'mapping' },
+  'glm-4.6':                  { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.6', source: 'mapping' },
+  'glm-4.7':                  { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-4.7', source: 'mapping' },
+  'glm-5':                    { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5', source: 'mapping' },
+  'glm-5.1':                  { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: 'GLM-5.1', source: 'mapping' },
 
   // MiniMax — text
   'minimax-text-01':          { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 4000000, displayName: 'MiniMax-Text-01', source: 'mapping' },
@@ -128,12 +128,12 @@ function lookupByFuzzyName(model: string): DetectedCapabilities | null {
     return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
   }
 
-  // GLM variants
+  // GLM — metadata only; vision verified by probe
   if (lower.includes('glm')) {
-    if (lower.includes('glm-4.5')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
-    if (lower.includes('glm-4')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
-    if (lower.includes('glm-5')) return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
-    return { text: true, image: true, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+    if (lower.includes('glm-4.5')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 128000, displayName: model, source: 'mapping' };
+    if (lower.includes('glm-4')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+    if (lower.includes('glm-5')) return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
+    return { text: true, image: false, pdf: false, audio: false, video: false, maxInputTokens: 200000, displayName: model, source: 'mapping' };
   }
 
   // MiniMax variants
@@ -455,25 +455,28 @@ export async function detectCapabilities(
   model: string,
   baseUrl?: string,
 ): Promise<ModelTestResult> {
-  // Layer 1: Try Anthropic API
+  // Layer 1: Try Anthropic API for metadata (context window, display name)
   const apiCaps = await queryModelCapabilities(apiKey, model, baseUrl);
-  if (apiCaps) {
-    return { success: true, capabilities: apiCaps };
-  }
 
-  // Layer 2: Mapping table
-  const mappingCaps = lookupMappingTable(model);
-  if (mappingCaps) {
-    return { success: true, capabilities: mappingCaps };
-  }
+  // Layer 2: Mapping table for metadata fallback
+  const mappingCaps = apiCaps ?? lookupMappingTable(model);
 
-  // Layer 3: Probe
+  // Layer 3: Always probe vision — don't trust API/mapping claims
   const probeCaps = await probeVisionCapability(apiKey, model, baseUrl);
+
+  // Merge: probe decides image capability, API/mapping provides metadata
+  const metadata = mappingCaps ?? apiCaps;
   return {
     success: true,
     capabilities: {
-      ...probeCaps,
-      maxInputTokens: probeCaps.maxInputTokens ?? 200000,
+      text: true,
+      image: probeCaps.image,
+      pdf: probeCaps.image ? (metadata?.pdf ?? false) : false,
+      audio: false,
+      video: false,
+      maxInputTokens: metadata?.maxInputTokens ?? 200000,
+      displayName: metadata?.displayName,
+      source: probeCaps.source,
     },
   };
 }
