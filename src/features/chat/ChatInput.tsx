@@ -81,6 +81,10 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   const slashTriggeredRef = useRef(false);
   const abortingRef = useRef(false);
 
+  // Input history for up/down arrow navigation
+  const historyIndexRef = useRef(-1);
+  const savedInputRef = useRef('');
+
   // Chat toolbar states
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
@@ -91,6 +95,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const autoConfirm = useChatStore((s) => s.autoConfirm);
   const toggleAutoConfirm = useChatStore((s) => s.toggleAutoConfirm);
+  const messages = useChatStore((s) => s.messages);
 
   // Reset aborting flag when sending finishes
   useEffect(() => {
@@ -183,6 +188,8 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     const textToSend = input.trim();
     setInput('');
     setStagedMedia([]);
+    historyIndexRef.current = -1;
+    savedInputRef.current = '';
     if (currentSessionId) inputCache.delete(currentSessionId);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -195,6 +202,47 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       // Don't handle if skill picker is open
       if (showSkillPicker) return;
 
+      // Arrow Up/Down: navigate input history when cursor is at the right position
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const cursorAtStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0;
+        const cursorAtEnd = textarea.selectionStart === input.length && textarea.selectionEnd === input.length;
+
+        if (e.key === 'ArrowUp' && cursorAtStart) {
+          e.preventDefault();
+          const userMessages = messages.filter(m => m.role === 'user' && m.content.trim());
+          if (userMessages.length === 0) return;
+
+          if (historyIndexRef.current === -1) {
+            savedInputRef.current = input;
+          }
+
+          const newIndex = Math.min(historyIndexRef.current + 1, userMessages.length - 1);
+          if (newIndex !== historyIndexRef.current) {
+            historyIndexRef.current = newIndex;
+            const historicalMsg = userMessages[userMessages.length - 1 - newIndex];
+            setInput(historicalMsg.content);
+          }
+        } else if (e.key === 'ArrowDown' && cursorAtEnd) {
+          e.preventDefault();
+          if (historyIndexRef.current === -1) return;
+
+          const userMessages = messages.filter(m => m.role === 'user' && m.content.trim());
+          const newIndex = historyIndexRef.current - 1;
+          historyIndexRef.current = newIndex;
+
+          if (newIndex === -1) {
+            setInput(savedInputRef.current);
+          } else {
+            const historicalMsg = userMessages[userMessages.length - 1 - newIndex];
+            setInput(historicalMsg.content);
+          }
+        }
+        return;
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         const nativeEvent = e.nativeEvent as KeyboardEvent;
         if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
@@ -204,7 +252,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         handleSend();
       }
     },
-    [handleSend, showSkillPicker],
+    [handleSend, showSkillPicker, messages, input],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
