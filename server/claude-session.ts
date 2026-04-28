@@ -1291,8 +1291,8 @@ export class ClaudeSessionManager {
             // Flush previous tool use
             if (currentToolUse) {
               allToolUses.push(currentToolUse);
+              wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId, toolUseId: currentToolUse.id }));
               currentToolUse = null;
-              wsSend(JSON.stringify({ type: 'chat.tool_end', sessionId }));
             }
             // Flush previous text segment so UI can freeze it
             if (fullContent.trim()) {

@@ -894,14 +894,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const unsubTaskNotification = wrapHandler(client, 'chat.task_notification', (data: Record<string, unknown>) => {
         if (data.sessionId !== streamSessionId) return;
         const taskId = data.taskId ? String(data.taskId) : undefined;
-        const status = String(data.status || '');
         const summary = data.summary ? String(data.summary) : '';
         const toolUseId = data.toolUseId ? String(data.toolUseId) : undefined;
-        // Mark tool as completed with final summary
+        // Update summary only — do NOT set status to 'completed' here.
+        // task_notification fires for each sub-task inside an Agent, not for the Agent tool itself.
+        // The tool status is only finalized by chat.tool_end (triggered by the next assistant event).
+        if (!summary) return;
         updateBlocks(blocks => blocks.map(b => {
           if (b.type !== 'tool_use') return b;
-          if (toolUseId && b.id === toolUseId) return { ...b, status: 'completed' as const, summary: summary || b.summary };
-          if (taskId && b.taskId === taskId) return { ...b, status: 'completed' as const, summary: summary || b.summary };
+          if (toolUseId && b.id === toolUseId) return { ...b, summary: summary || b.summary };
+          if (taskId && b.taskId === taskId) return { ...b, summary: summary || b.summary };
           return b;
         }));
       });
@@ -920,10 +922,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubToolEnd = wrapHandler(client, 'chat.tool_end', (data) => {
         if (data.sessionId !== streamSessionId) return;
-        // Mark all running tools as completed
-        updateBlocks(blocks => blocks.map(b =>
-          b.type === 'tool_use' && b.status === 'running' ? { ...b, status: 'completed' as const } : b
-        ));
+        const toolUseId = data.toolUseId ? String(data.toolUseId) : undefined;
+        // Mark the specific tool as completed by id; fall back to all running tools if no id
+        updateBlocks(blocks => blocks.map(b => {
+          if (b.type !== 'tool_use') return b;
+          if (toolUseId && b.id === toolUseId) return { ...b, status: 'completed' as const };
+          if (!toolUseId && b.status === 'running') return { ...b, status: 'completed' as const };
+          return b;
+        }));
       });
 
       const unsubAskUser = wrapHandler(client, 'chat.ask_user', (data) => {
