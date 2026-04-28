@@ -557,6 +557,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (content, media, filePaths) => {
+    console.log('[chat.store] sendMessage called, filePaths:', filePaths);
     const client = getWsClient();
     if (!client) return;
 

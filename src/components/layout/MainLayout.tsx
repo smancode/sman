@@ -23,6 +23,7 @@ export function MainLayout() {
   const location = useLocation();
   const hasMessages = useChatStore((s) => s.messages.length > 0);
   const inChat = location.pathname === '/chat';
+  const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
   const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom'].includes(location.pathname);
@@ -51,9 +52,9 @@ export function MainLayout() {
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
-        style={{ opacity: isWelcome ? 1 : 0.5 }}
+        style={{ opacity: isStardom ? 0 : isWelcome ? 1 : 0.2 }}
       >
-        {isDark ? <NebulaFlow active={isWelcome} /> : <CandyBlobs active={isWelcome} />}
+        {isDark ? <NebulaFlow active={!isStardom} /> : <CandyBlobs active={!isStardom} />}
       </div>
 
       {/* 内容层 - 半透明以透出背景 */}
