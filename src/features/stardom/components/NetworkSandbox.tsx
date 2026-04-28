@@ -296,7 +296,7 @@ export function NetworkSandbox() {
               textAnchor="middle"
               fill={node.type === 'self' ? 'var(--bz-text)' : 'var(--bz-text-dim)'}
               fontSize={node.type === 'self' ? 10 : 8}
-              fontFamily="ui-monospace, monospace"
+              fontFamily="JetBrains Mono, ui-monospace, monospace"
               opacity={0.5 + node.brightness * 0.5}
             >
               {node.label}
@@ -309,7 +309,7 @@ export function NetworkSandbox() {
                 textAnchor="middle"
                 fill={node.color}
                 fontSize={7}
-                fontFamily="ui-monospace, monospace"
+                fontFamily="JetBrains Mono, ui-monospace, monospace"
                 opacity={0.7}
               >
                 {node.status === 'chatting' ? 'ACTIVE' : node.status === 'matched' ? 'LINKED' : node.status.toUpperCase()}
@@ -326,7 +326,7 @@ export function NetworkSandbox() {
             fill={sending ? 'var(--bz-amber)' : 'var(--bz-cyan-glow)'}
             fontSize={8}
             fontWeight="bold"
-            fontFamily="ui-monospace, monospace"
+            fontFamily="JetBrains Mono, ui-monospace, monospace"
             filter="url(#glow)"
           >
             {sending ? 'PROCESSING' : 'ONLINE'}

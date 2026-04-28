@@ -220,6 +220,8 @@ export function Settings() {
                   />
                   <p className="text-xs text-muted-foreground text-center leading-relaxed">
                     扫码加入 Sman 微信交流群
+                    <br />
+                    (及时获取最新版本)
                   </p>
                 </div>
               </div>
