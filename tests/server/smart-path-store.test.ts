@@ -40,7 +40,8 @@ describe('SmartPathStore', () => {
     expect(updated.name).toBe('New');
     expect(updated.status).toBe('ready');
 
-    const found = store.get(p.id, tmpWs);
+    // name 变更后 ID 也会变
+    const found = store.get(updated.id, tmpWs);
     expect(found!.name).toBe('New');
   });
 

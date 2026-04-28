@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil,
-  ChevronDown,
+  Clock, FileText,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -82,7 +82,10 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
                       currentPath?.id === p.id ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted')}>
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-medium text-sm truncate">{p.name}</span>
-                      <Badge variant={sc?.variant || 'outline'} className="text-[10px] px-1.5 py-0 shrink-0">{sc?.label || p.status}</Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {p.cronExpression && <Clock className="h-3 w-3 text-muted-foreground" />}
+                        <Badge variant={sc?.variant || 'outline'} className="text-[10px] px-1.5 py-0">{sc?.label || p.status}</Badge>
+                      </div>
                     </div>
                     <span className="text-xs text-muted-foreground">{getStepCount(p)} 个步骤</span>
                   </button>
@@ -107,7 +110,6 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
   const streamRef = useRef<HTMLDivElement>(null);
   const hasResult = !!step.executionResult || executionCompleted;
 
-  // auto-scroll for streaming content
   useEffect(() => {
     if (executing && streamRef.current) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight;
@@ -125,7 +127,6 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
             <Input value={step.name || ''} onChange={(e) => onChange({ ...step, name: e.target.value })}
               placeholder="步骤名称" className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium" />
             <div className="flex-1" />
-            {/* 执行按钮 — 放在标题行最右边 */}
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0"
               disabled={!step.userInput.trim() || executing || !workspace} onClick={onExecute}>
               {executing ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -139,7 +140,6 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
           <Textarea value={step.userInput} onChange={(e) => onChange({ ...step, userInput: e.target.value })}
             placeholder="描述这一步要做什么..." className="min-h-[56px] text-sm resize-none" />
 
-          {/* 执行过程/结果区域 — 执行中立即显示 */}
           {(executing || hasResult) && (
             <Card className="border border-muted-foreground/20">
               <CardContent className="p-3">
@@ -189,7 +189,6 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
         {step.name && <p className="text-sm font-medium">{step.name}</p>}
         <p className="text-sm leading-relaxed text-muted-foreground">{step.userInput}</p>
 
-        {/* 执行过程/结果 */}
         {(executing || step.executionResult) && (
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
             <div className="text-xs text-muted-foreground mb-1.5 font-medium">
@@ -246,15 +245,70 @@ function CreateDialog({ open, onOpenChange, workspaceOptions, onSubmit }: {
   );
 }
 
+// ── Cron config ──
+
+function CronConfig({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0 9 * * 1-5（留空=不自动执行）"
+        className="h-7 text-sm font-mono"
+        disabled={disabled}
+      />
+      {value && (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {describeCron(value)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function describeCron(expr: string): string {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return '';
+  const [min, hour, dom, mon, dow] = parts;
+  if (min === '0' && hour !== '*' && dow === '1-5') return `工作日 ${hour}:00`;
+  if (min === '0' && hour !== '*' && dom === '*' && mon === '*' && dow === '*') return `每天 ${hour}:00`;
+  if (min.startsWith('*/') && hour === '*' && dom === '*' && mon === '*' && dow === '*') return `每 ${min.slice(2)} 分钟`;
+  return expr;
+}
+
+// ── Report viewer ──
+
+function ReportViewer({ content, onClose }: { content: string; onClose: () => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">执行报告</Label>
+        <Button variant="ghost" size="sm" onClick={onClose}>关闭</Button>
+      </div>
+      <Card>
+        <CardContent className="p-4">
+          <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[500px] overflow-y-auto">
+            <Streamdown mode="static" controls={{ code: true, table: true }}>
+              {content}
+            </Streamdown>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Edit mode ──
 
 function PathEditor({ path, onSave, onCancel }: {
   path: SmartPath;
-  onSave: (name: string, steps: SmartPathStep[], pathId: string, workspace: string) => Promise<void>;
+  onSave: (name: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(path.name);
   const [steps, setSteps] = useState<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } });
+  const [cronExpression, setCronExpression] = useState(path.cronExpression || '');
   const [saving, setSaving] = useState(false);
 
   const executeStep = useSmartPathStore((s) => s.executeStep);
@@ -267,7 +321,6 @@ function PathEditor({ path, onSave, onCancel }: {
 
   const handleExecute = useCallback(async (i: number) => {
     const s = steps[i]; if (!s?.userInput.trim()) return;
-    // 清除旧结果，开始新执行
     updateStep(i, { ...s, executionResult: undefined });
     try {
       const result = await executeStep(path.id, path.workspace, i, s, steps.slice(0, i));
@@ -279,13 +332,11 @@ function PathEditor({ path, onSave, onCancel }: {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
     try {
-      // 保存时把当前执行中的结果也带上
       const stepsToSave = steps.map((s, i) => {
         const execResult = stepExecutionStatus[i] === 'completed' ? (stepExecutionStream[i] || s.executionResult) : s.executionResult;
         return { ...s, executionResult: execResult };
       });
-      await onSave(name.trim(), stepsToSave, path.id, path.workspace);
-      // 不清理执行状态 — 执行中的步骤在查看/编辑模式切换后仍需可见
+      await onSave(name.trim(), stepsToSave, path.id, path.workspace, cronExpression.trim());
     } finally { setSaving(false); }
   };
 
@@ -295,6 +346,11 @@ function PathEditor({ path, onSave, onCancel }: {
         <Route className="h-5 w-5 text-primary" />
         <Input value={name} onChange={(e) => setName(e.target.value)}
           className="h-8 text-lg font-semibold border-0 p-0 shadow-none focus-visible:ring-0" />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">定时执行</Label>
+        <CronConfig value={cronExpression} onChange={setCronExpression} />
+        <p className="text-xs text-muted-foreground">Cron 表达式，如：0 9 * * 1-5 表示工作日每天 9 点执行。留空则不自动执行。</p>
       </div>
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">步骤</Label>
@@ -327,14 +383,28 @@ function PathEditor({ path, onSave, onCancel }: {
 
 // ── View mode ──
 
-function PathDetail({ path, runs, onEdit, onRun, onDelete }: {
+function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
   path: SmartPath; runs: SmartPathRun[];
+  reports: Array<{ fileName: string; createdAt: string }>;
   onEdit: () => void; onRun: () => void; onDelete: () => void;
 }) {
   const steps = useMemo<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } }, [path.steps]);
   const sc = STATUS_CONFIG[path.status];
   const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
+  const fetchReport = useSmartPathStore((s) => s.fetchReport);
+  const currentReport = useSmartPathStore((s) => s.currentReport);
+  const [viewingReport, setViewingReport] = useState<string | null>(null);
+
+  const handleViewReport = async (fileName: string) => {
+    if (viewingReport === fileName) {
+      setViewingReport(null);
+      return;
+    }
+    setViewingReport(fileName);
+    await fetchReport(path.id, path.workspace, fileName);
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-3">
@@ -353,6 +423,15 @@ function PathDetail({ path, runs, onEdit, onRun, onDelete }: {
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
         </div>
       </div>
+
+      {path.cronExpression && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="h-4 w-4" />
+          <span>定时执行：{path.cronExpression}</span>
+          <span className="text-xs">({describeCron(path.cronExpression)})</span>
+        </div>
+      )}
+
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">步骤</Label>
         {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">暂无步骤</div>
@@ -362,7 +441,39 @@ function PathDetail({ path, runs, onEdit, onRun, onDelete }: {
               executing={stepExecutionStatus[i] === 'running'} />
           ))}</div>}
       </div>
-      {runs.length > 0 && (
+
+      {/* 执行报告列表 */}
+      {reports.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">执行报告</Label>
+          <div className="space-y-1.5">
+            {reports.map((r) => (
+              <div key={r.fileName}>
+                <button
+                  onClick={() => handleViewReport(r.fileName)}
+                  className={cn(
+                    'flex items-center justify-between w-full rounded-md px-3 py-2 border text-sm text-left transition-colors',
+                    viewingReport === r.fileName ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted',
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
+                  </div>
+                </button>
+                {viewingReport === r.fileName && currentReport && (
+                  <div className="mt-1.5">
+                    <ReportViewer content={currentReport} onClose={() => setViewingReport(null)} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 执行历史（兼容旧数据） */}
+      {runs.length > 0 && reports.length === 0 && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">执行历史</Label>
           <div className="space-y-1.5">
@@ -404,6 +515,7 @@ export function SmartPathPage() {
   const { status: wsStatus } = useWsConnection();
   const paths = useSmartPathStore((s) => s.paths);
   const runs = useSmartPathStore((s) => s.runs);
+  const reports = useSmartPathStore((s) => s.reports);
   const currentPath = useSmartPathStore((s) => s.currentPath);
   const loading = useSmartPathStore((s) => s.loading);
   const error = useSmartPathStore((s) => s.error);
@@ -422,7 +534,6 @@ export function SmartPathPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  // 先加载 workspace 列表，再加载 paths
   useEffect(() => {
     if (wsStatus !== 'connected') return;
     fetchWorkspaces().then(() => {
@@ -431,12 +542,10 @@ export function SmartPathPage() {
     });
   }, [wsStatus, fetchPaths, fetchWorkspaces]);
 
-  // 切换路径时加载执行历史
   useEffect(() => {
     if (currentPath) fetchRuns(currentPath.id, currentPath.workspace);
   }, [currentPath?.id]);
 
-  // 切换路径时退出编辑模式
   useEffect(() => { setEditing(false); }, [currentPath?.id]);
 
   const workspaceOptions = useMemo(() => workspaces.map((ws) => ({ value: ws, label: ws.split(/[/\\]/).pop() || ws })), [workspaces]);
@@ -448,8 +557,8 @@ export function SmartPathPage() {
     setEditing(true);
   };
 
-  const handleSave = async (name: string, steps: SmartPathStep[], pathId: string, workspace: string) => {
-    await updatePath(pathId, workspace, { name, steps: JSON.stringify(steps), status: 'ready' });
+  const handleSave = async (name: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => {
+    await updatePath(pathId, workspace, { name, steps: JSON.stringify(steps), status: 'ready', cronExpression });
     setEditing(false);
   };
 
@@ -469,7 +578,7 @@ export function SmartPathPage() {
           {editing && currentPath ? (
             <PathEditor path={currentPath} onSave={handleSave} onCancel={() => { clearStepExecutionState(); setEditing(false); }} />
           ) : currentPath ? (
-            <PathDetail path={currentPath} runs={runs}
+            <PathDetail path={currentPath} runs={runs} reports={reports}
               onEdit={() => setEditing(true)}
               onRun={() => runPath(currentPath.id, currentPath.workspace)}
               onDelete={() => { deletePath(currentPath.id, currentPath.workspace); setCurrentPath(null); }} />

@@ -27,6 +27,8 @@ type StepExecStatus = 'idle' | 'running' | 'completed' | 'failed';
 interface SmartPathState {
   paths: SmartPath[];
   runs: SmartPathRun[];
+  reports: Array<{ fileName: string; createdAt: string }>;
+  currentReport: string | null;
   currentPath: SmartPath | null;
   loading: boolean;
   running: boolean;
@@ -42,6 +44,7 @@ interface SmartPathState {
   deletePath: (pathId: string, workspace: string) => Promise<void>;
   runPath: (pathId: string, workspace: string) => Promise<void>;
   fetchRuns: (pathId: string, workspace: string) => Promise<void>;
+  fetchReport: (pathId: string, workspace: string, fileName: string) => Promise<void>;
   generateStep: (userInput: string, workspace: string, previousSteps: SmartPathStep[]) => Promise<string>;
   executeStep: (pathId: string, workspace: string, stepIndex: number, step: SmartPathStep, previousSteps: SmartPathStep[]) => Promise<string>;
   clearStepExecutionState: () => void;
@@ -52,6 +55,8 @@ interface SmartPathState {
 export const useSmartPathStore = create<SmartPathState>((set) => ({
   paths: [],
   runs: [],
+  reports: [],
+  currentReport: null,
   currentPath: null,
   loading: false,
   running: false,
@@ -196,10 +201,26 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     return new Promise<void>((resolve) => {
       const unsub = wrapHandler(client, 'smartpath.runs', (data) => {
         unsub();
-        set({ runs: data.runs as SmartPathRun[] });
+        set({
+          runs: data.runs as SmartPathRun[],
+          reports: (data.reports as Array<{ fileName: string; createdAt: string }>) || [],
+        });
         resolve();
       });
       client.send({ type: 'smartpath.runs', pathId, workspace });
+    });
+  },
+
+  fetchReport: async (pathId, workspace, fileName) => {
+    const client = getWsClient();
+    if (!client) return;
+    return new Promise<void>((resolve) => {
+      const unsub = wrapHandler(client, 'smartpath.report', (data) => {
+        unsub();
+        set({ currentReport: (data.content as string) || null });
+        resolve();
+      });
+      client.send({ type: 'smartpath.report', pathId, workspace, fileName });
     });
   },
 
@@ -301,6 +322,6 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   clearStepExecutionState: () => set({ stepExecutionStream: {}, stepExecutionStatus: {} }),
 
-  setCurrentPath: (path) => set({ currentPath: path, runs: [], stepExecutionStream: {}, stepExecutionStatus: {} }),
+  setCurrentPath: (path) => set({ currentPath: path, runs: [], reports: [], currentReport: null, stepExecutionStream: {}, stepExecutionStatus: {} }),
   clearError: () => set({ error: null }),
 }));

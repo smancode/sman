@@ -162,6 +162,7 @@ export interface SmartPath {
   workspace: string;
   steps: string; // JSON string of SmartPathStep[]
   status: SmartPathStatus;
+  cronExpression?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -174,4 +175,5 @@ export interface SmartPathRun {
   startedAt: string;
   finishedAt?: string;
   errorMessage?: string;
+  reportFileName?: string;
 }

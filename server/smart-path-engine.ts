@@ -7,6 +7,7 @@ import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SmartPathStep } from './types.js';
+import path from 'path';
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -100,10 +101,19 @@ export class SmartPathEngine {
         steps: JSON.stringify(steps),
         status: 'completed',
       });
+
+      // 生成执行报告 MD
+      const reportFileName = this.store.createReport(
+        workspace, pathId, smartPath.name, steps, run.id,
+        'completed', run.startedAt, isoNow(),
+      );
+      const reportBasename = path.basename(reportFileName);
+
       this.store.updateRun(run.id, workspace, pathId, {
         status: 'completed',
         stepResults: JSON.stringify(steps.map(s => s.executionResult)),
         finishedAt: isoNow(),
+        reportFileName: reportBasename,
       });
       this.log.info(`Path ${pathId} completed`);
     } catch (err) {

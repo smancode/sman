@@ -32,6 +32,7 @@ import { BatchStore } from './batch-store.js';
 import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
+import { SmartPathScheduler } from './smart-path-scheduler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
@@ -174,6 +175,10 @@ batchEngine.start();
 // SmartPath
 const smartPathStore = new SmartPathStore();
 const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
+const smartPathScheduler = new SmartPathScheduler(smartPathStore, smartPathEngine);
+smartPathScheduler.setOnProgress((pathId, data) => {
+  broadcast(JSON.stringify({ type: 'smartpath.scheduledRun', pathId, ...data }));
+});
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
@@ -288,6 +293,9 @@ cronScheduler.getExecutor().onRunStatusChange((taskId: string, status: string) =
   const latestRun = cronTaskStore.getLatestRun(taskId);
   broadcast(JSON.stringify({ type: 'cron.runStatusChanged', taskId, status, task, latestRun }));
 });
+
+// Start Smart Path scheduler after session manager is ready
+smartPathScheduler.start([]); // will be populated when workspaces are discovered
 
 // HTTP server with static file serving for production (Electron mode)
 // __dirname after tsc compilation = dist/server/server/ (rootDir is project root)
@@ -1104,7 +1112,14 @@ wss.on('connection', (ws: WebSocket) => {
           const wsList = msg.workspaces as string[] | undefined;
           if (!wsList?.length) throw new Error('Missing workspaces');
           const paths = smartPathStore.listAll(wsList);
-          ws.send(JSON.stringify({ type: 'smartpath.list', paths }));
+          // 确保 scheduler 覆盖所有 workspace
+          smartPathScheduler.start(wsList);
+          // 为每个有 cron 表达式的路径附加 nextRunAt
+          const pathsWithNextRun = paths.map(p => ({
+            ...p,
+            nextRunAt: p.cronExpression ? smartPathScheduler.getNextRunAt(p.id) : null,
+          }));
+          ws.send(JSON.stringify({ type: 'smartpath.list', paths: pathsWithNextRun }));
           break;
         }
 
@@ -1119,7 +1134,15 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
           const { pathId, workspace, type: _t, ...updates } = msg;
           const p = smartPathStore.update(pathId as string, workspace as string, updates as any);
-          ws.send(JSON.stringify({ type: 'smartpath.updated', path: p }));
+          // 同步调度：cron 表达式变更时重新调度
+          if (updates.cronExpression !== undefined || updates.status !== undefined) {
+            if (p.cronExpression && p.status !== 'running') {
+              smartPathScheduler.reschedule(p);
+            } else {
+              smartPathScheduler.unschedule(p.id);
+            }
+          }
+          ws.send(JSON.stringify({ type: 'smartpath.updated', path: { ...p, nextRunAt: p.cronExpression ? smartPathScheduler.getNextRunAt(p.id) : null } }));
           break;
         }
 
@@ -1163,7 +1186,16 @@ wss.on('connection', (ws: WebSocket) => {
         case 'smartpath.runs': {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
           const runs = smartPathStore.listRuns(msg.pathId as string, msg.workspace as string);
-          ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs }));
+          // 附带报告列表
+          const reports = smartPathStore.listReports(msg.pathId as string, msg.workspace as string);
+          ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs, reports }));
+          break;
+        }
+
+        case 'smartpath.report': {
+          if (!msg.pathId || !msg.workspace || !msg.fileName) throw new Error('Missing pathId, workspace or fileName');
+          const content = smartPathStore.getReport(msg.workspace as string, msg.pathId as string, msg.fileName as string);
+          ws.send(JSON.stringify({ type: 'smartpath.report', pathId: msg.pathId, fileName: msg.fileName, content }));
           break;
         }
 
@@ -1332,6 +1364,7 @@ function shutdown(): void {
   chatbotManager.stop();
   batchEngine.stop();
   cronScheduler.stop();
+  smartPathScheduler.stop();
   sessionManager.close();
   knowledgeExtractorStore.close();
   wss.close();
