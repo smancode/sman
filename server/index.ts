@@ -666,8 +666,7 @@ wss.on('connection', (ws: WebSocket) => {
             log.warn(`No active client to deliver message for session ${chatSessionId}`);
           };
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
-          const filePaths = (msg as any).filePaths as string[] | undefined;
-          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0, filePaths);
+          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0);
           break;
         }
 

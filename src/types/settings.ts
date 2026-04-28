@@ -32,7 +32,7 @@ export interface LlmProfile {
   capabilities?: DetectedCapabilities;
 }
 
-export type WebSearchProvider = 'builtin' | 'brave' | 'tavily';
+export type WebSearchProvider = 'builtin' | 'searxng' | 'brave' | 'tavily';
 
 export interface WebSearchConfig {
   provider: WebSearchProvider;
@@ -81,7 +81,8 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  { value: 'builtin', label: '内置搜索', description: '仅 Anthropic 官方 API 可用，第三方代理需配 Brave/Tavily' },
+  { value: 'builtin', label: '内置搜索', description: '优先使用 Claude Code 内置 WebSearch，代理不支持时选 SearXNG' },
+  { value: 'searxng', label: 'SearXNG', description: '免费，无需 API Key，使用公共 SearXNG 实例，需能访问外网' },
   { value: 'brave', label: 'Brave Search', description: '$5/千次，有免费额度，国内可用' },
   { value: 'tavily', label: 'Tavily', description: '~$8/千次，1000次/月免费，国内可用' },
   // Bing Search API 已于 2025-08-11 停用，隐藏选项但保留后端支持以防复活

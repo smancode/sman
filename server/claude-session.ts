@@ -607,29 +607,15 @@ export class ClaudeSessionManager {
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
-    // Auto-degrade search chain for non-Anthropic proxies:
-    // Built-in WebSearch uses Anthropic's server_tool_use protocol — third-party
-    // proxies (Kimi, MiniMax, Zhipu) don't support it. Register fallback search
-    // tools so Claude always has a way to search:
-    //   1. SearXNG MCP (free, no key needed, requires outbound access)
-    //   2. Tavily MCP (if tavilyApiKey is set — reliable, works in China)
-    //   3. web-access browser (if Chrome available — already injected separately)
-    if (this.config.webSearch?.provider === 'builtin' && !isAnthropicFirstParty(this.config.llm?.baseUrl)) {
-      // Register SearXNG as primary fallback (free, no key needed)
+    // Web search: 'builtin' relies on Claude Code's built-in WebSearch (server_tool_use).
+    // Many third-party proxies (Kimi, OpenRouter) support this protocol, so we don't
+    // inject fallback tools that would compete with the built-in one.
+    // If the proxy doesn't support server_tool_use, user can switch to Brave/Tavily.
+    // SearXNG MCP is kept as a last-resort option — only injected when explicitly needed.
+    if (this.config.webSearch?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
       (opts.mcpServers as any)['web-search'] = webSearchServer;
-      this.log.info('[search] SearXNG MCP registered as fallback search provider');
-
-      // Register Tavily if key is available (more reliable in restricted networks)
-      if (this.config.webSearch.tavilyApiKey) {
-        (opts.mcpServers as any)['tavily-search'] = {
-          type: 'stdio',
-          command: 'npx',
-          args: ['-y', '@anthropic-ai/mcp-server-tavily'],
-          env: { TAVILY_API_KEY: this.config.webSearch.tavilyApiKey },
-        };
-        this.log.info('[search] Tavily MCP registered as fallback search provider');
-      }
+      this.log.info('[search] SearXNG MCP registered as search provider');
     }
 
     // Inject web-access MCP Server (in-process)
@@ -1092,7 +1078,7 @@ export class ClaudeSessionManager {
   /**
    * Send a message via WebSocket (real-time streaming)
    */
-  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0, filePaths?: string[]): Promise<void> {
+  async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -1113,24 +1099,14 @@ export class ClaudeSessionManager {
       throw new Error('缺少 Model 配置，请在设置中选择模型');
     }
 
-    // V2 sessions handle /slash commands natively — no conversion needed
     // Don't store auto-retry messages in the database — user didn't send them
     if (_retryCount === 0) {
-      // Build contentBlocks from media for persistence (so images survive session switches)
+      // Extract file paths from content text for persistence (format: [用户文件路径:[path1,path2]])
       const userContentBlocks: Array<import('./session-store.js').ContentBlock> = [];
-      if (media && media.length > 0) {
-        for (const m of media) {
-          if (m.mimeType?.startsWith('image/')) {
-            userContentBlocks.push({
-              type: 'image',
-              source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
-            });
-          }
-        }
-      }
-      // Persist attached file metadata for chat history display
-      if (filePaths && filePaths.length > 0) {
-        for (const fp of filePaths) {
+      const pathMatch = content.match(/\[用户文件路径:\[([^\]]+)\]\]/);
+      if (pathMatch) {
+        const paths = pathMatch[1].split(',');
+        for (const fp of paths) {
           const fn = fp.split('/').pop()?.split('\\').pop() ?? 'file';
           userContentBlocks.push({
             type: 'attached_file',
@@ -1144,9 +1120,6 @@ export class ClaudeSessionManager {
         content,
         contentBlocks: userContentBlocks.length > 0 ? userContentBlocks : undefined,
       });
-      if (userContentBlocks.length > 0) {
-        this.log.info(`[sendMessage] Persisted ${userContentBlocks.length} contentBlocks for message, types: ${userContentBlocks.map(b => b.type).join(',')}`);
-      }
     }
 
     const abortController = new AbortController();
@@ -1194,14 +1167,10 @@ export class ClaudeSessionManager {
         : smanContext;
       const capabilities = this.config?.llm?.capabilities;
 
-      let textContent = content;
-      if (filePaths && filePaths.length > 0) {
-        textContent += ` [用户文件路径:[${filePaths.join(',')}]]`;
-      }
-      this.log.info(`[sendMessage] SEND CONTENT: ${textContent.substring(0, 500)}`);
+      this.log.info(`[sendMessage] SEND CONTENT: ${content.substring(0, 500)}`);
 
       // Build content for send(): string or SDKUserMessage
-      const builtContent = buildContentBlocks(textContent, media, capabilities);
+      const builtContent = buildContentBlocks(content, media, capabilities);
 
       // Wrap send() with timeout — claude CLI may hang during init (e.g. incompatible API)
       const sendWithTimeout = async (payload: string | object) => {

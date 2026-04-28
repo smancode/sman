@@ -53,12 +53,28 @@ export const ChatMessage = memo(function ChatMessage({
   const isToolResult = role === 'toolresult' || role === 'tool_result';
 
   // Stable RawMessage reference — only recomputed when message object reference changes
-  const rawMessage = useMemo((): RawMessage => ({
-    id: message.id,
-    role: message.role,
-    content: message.resolvedContent ?? buildContent(message.content, message.contentBlocks),
-    timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
-  }), [message]);
+  const rawMessage = useMemo((): RawMessage => {
+    // Strip file path tags from display — file cards already show the files
+    const cleanContent = message.content.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '');
+    const cleanBlocks = message.contentBlocks?.map(b =>
+      b.type === 'text' ? { ...b, text: (b as any).text?.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '') } : b
+    );
+    const resolved = message.resolvedContent
+      ? (Array.isArray(message.resolvedContent)
+          ? (message.resolvedContent as any[]).map(b =>
+              b.type === 'text' ? { ...b, text: b.text?.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '') } : b
+            )
+          : typeof message.resolvedContent === 'string'
+            ? (message.resolvedContent as string).replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '')
+            : message.resolvedContent)
+      : undefined;
+    return {
+      id: message.id,
+      role: message.role,
+      content: resolved ?? buildContent(cleanContent, cleanBlocks),
+      timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
+    };
+  }, [message]);
 
   const text = extractText(rawMessage);
   const hasText = text.trim().length > 0;

@@ -151,7 +151,7 @@ interface ChatState {
   loadSessions: () => Promise<void>;
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
-  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string; filePath?: string }>, filePaths?: string[]) => Promise<void>;
+  sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string }>) => Promise<void>;
   preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
@@ -463,7 +463,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             // Reconstruct _attachedFiles for user messages
             if (role === 'user') {
-              // First: from persisted contentBlocks (attached_file type)
+              // From persisted contentBlocks (attached_file type)
               if (blocks) {
                 const fileBlocks = blocks.filter((b: any) => b.type === 'attached_file');
                 if (fileBlocks.length > 0) {
@@ -474,24 +474,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     preview: null,
                     filePath: b.filePath,
                   }));
-                  console.log(`[loadHistory] Reconstructed ${attachedFiles.length} attachedFiles from contentBlocks`);
                 }
               }
-              // Fallback: extract from text paths
+              // Fallback: extract from text [用户文件路径:[path1,path2]]
               if (!attachedFiles) {
-                const pathPattern = /^-?\s*(\/[^\s\n]+|[A-Z]:\\[^\s\n]+)/gm;
-                const textPaths = content.match(pathPattern);
-                if (textPaths) {
-                  attachedFiles = textPaths.map(p => {
-                    const clean = p.replace(/^-\s*/, '');
-                    return {
-                      fileName: clean.split(/[/\\]/).pop() || 'file',
-                      mimeType: 'application/octet-stream',
-                      fileSize: 0,
-                      preview: null,
-                      filePath: clean,
-                    };
-                  });
+                const pathMatch = content.match(/\[用户文件路径:\[([^\]]+)\]\]/);
+                if (pathMatch) {
+                  attachedFiles = pathMatch[1].split(',').map(fp => ({
+                    fileName: fp.split(/[/\\]/).pop() || 'file',
+                    mimeType: 'application/octet-stream',
+                    fileSize: 0,
+                    preview: null,
+                    filePath: fp,
+                  }));
                 }
               }
             }
@@ -556,8 +551,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     client.send({ type: 'session.preheat', sessionId: currentSessionId });
   },
 
-  sendMessage: async (content, media, filePaths) => {
-    console.log('[chat.store] sendMessage called, filePaths:', filePaths);
+  sendMessage: async (content, media) => {
     const client = getWsClient();
     if (!client) return;
 
@@ -570,49 +564,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Cannot send while a response is in progress for THIS session
     if (sendingSessions.has(currentSessionId)) return;
 
-    // Build contentBlocks from media so images render in chat
-    const mediaContentBlocks: ContentBlock[] = [];
+    // Extract file paths from text for UI display (format: [用户文件路径:[path1,path2]])
     const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];
-    if (media && media.length > 0) {
-      for (const m of media) {
-        if (m.mimeType.startsWith('image/') && m.base64Data) {
-          mediaContentBlocks.push({
-            type: 'image',
-            source: { type: 'base64', media_type: m.mimeType, data: m.base64Data },
-          });
-          // Also show as attached file card
-          attachedFiles.push({
-            fileName: m.fileName || 'image',
-            mimeType: m.mimeType,
-            fileSize: 0,
-            preview: `data:${m.mimeType};base64,${m.base64Data}`,
-            filePath: m.filePath,
-          });
-        } else {
-          attachedFiles.push({
-            fileName: m.fileName || 'file',
-            mimeType: m.mimeType,
-            fileSize: 0,
-            preview: null,
-            filePath: m.filePath,
-          });
-        }
-      }
-    }
-
-    // Electron file paths (passed directly, not from text regex)
-    if (filePaths && filePaths.length > 0) {
-      for (const fp of filePaths) {
-        const fileName = fp.split(/[/\\]/).pop() || 'file';
-        if (!attachedFiles.some(f => f.filePath === fp)) {
-          attachedFiles.push({
-            fileName,
-            mimeType: 'application/octet-stream',
-            fileSize: 0,
-            preview: null,
-            filePath: fp,
-          });
-        }
+    const pathMatch = trimmed.match(/\[用户文件路径:\[([^\]]+)\]\]/);
+    if (pathMatch) {
+      const paths = pathMatch[1].split(',');
+      for (const fp of paths) {
+        attachedFiles.push({
+          fileName: fp.split(/[/\\]/).pop() || 'file',
+          mimeType: 'application/octet-stream',
+          fileSize: 0,
+          preview: null,
+          filePath: fp,
+        });
       }
     }
 
@@ -621,7 +585,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionId: currentSessionId,
       role: 'user',
       content: trimmed,
-      contentBlocks: mediaContentBlocks.length > 0 ? mediaContentBlocks : undefined,
       createdAt: new Date().toISOString(),
       _attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
     };
@@ -648,7 +611,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Update label from first message if not set
     const session = sessions.find(s => s.key === currentSessionId);
     if (!session?.label) {
-      const labelText = trimmed || (media && media.length > 0 ? '[图片]' : '');
+      // Strip file path tags for label display
+      const labelContent = trimmed.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/, '').trim();
+      const labelText = labelContent || (attachedFiles.length > 0 ? `[${attachedFiles[0].fileName}]` : '');
       if (labelText) {
         const truncated = labelText.length > 20 ? `${labelText.slice(0, 20)}...` : labelText;
         get().updateSessionLabel(currentSessionId, truncated);
@@ -1174,14 +1139,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         origClearWaiting();
       };
 
-      // Send message
+      // Send message — file paths are already embedded in content text
       const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed, autoConfirm: get().autoConfirm };
-      if (media && media.length > 0) {
-        msg.media = media;
-      }
-      if (filePaths && filePaths.length > 0) {
-        msg.filePaths = filePaths;
-      }
       client.send(msg);
     } catch (err) {
       set({ error: { message: String(err), errorCode: 'unknown' }, sending: false });

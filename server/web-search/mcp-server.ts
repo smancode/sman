@@ -244,15 +244,10 @@ export function createWebSearchMcpServer(): McpSdkServerConfigWithInstance {
 /**
  * Should we inject the fallback web-search MCP server?
  *
- * Claude Code's built-in WebSearch uses Anthropic's server_tool_use protocol (web_search_20250305),
- * executed by Anthropic's backend. Third-party proxies (Kimi, Zhipu, etc.) don't support this
- * protocol and return errors like 'function "web_search" not found'.
- *
- * Inject our own MCP-based web_search + web_fetch tools when:
- * 1. webSearch provider is 'builtin' (user hasn't configured Brave/Tavily/Bing)
- * 2. AND the API is likely NOT Anthropic first-party
+ * Always inject when provider is 'builtin' — Claude Code's built-in WebSearch
+ * takes priority when available, and these MCP tools serve as automatic fallback
+ * when the API proxy doesn't support server_tool_use.
  */
-export function needsFallbackWebSearch(config: { llm?: { baseUrl?: string }; webSearch?: { provider: string } }): boolean {
-  if (!config.webSearch || config.webSearch.provider !== 'builtin') return false;
-  return !isAnthropicFirstParty(config.llm?.baseUrl);
+export function needsFallbackWebSearch(config: { webSearch?: { provider: string } }): boolean {
+  return config.webSearch?.provider === 'builtin';
 }
