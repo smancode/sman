@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, ChevronDown, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,6 +55,21 @@ export function LLMSettings({ id }: { id?: string }) {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [modelsUnsupported, setModelsUnsupported] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Base URL preset dropdown
+  const [showBaseUrlPreset, setShowBaseUrlPreset] = useState(false);
+  const baseUrlPresetRef = useRef<HTMLDivElement>(null);
+
+  const baseUrlPresets = [
+    { label: 'DeepSeek', url: 'https://api.deepseek.com/anthropic' },
+    { label: 'GLM', url: 'https://open.bigmodel.cn/api/anthropic' },
+    { label: 'MiniMax', url: 'https://api.minimaxi.com/anthropic' },
+    { label: 'KIMI', url: 'https://api.kimi.com/coding' },
+    { label: 'Claude', url: 'https://api.anthropic.com/' },
+    { label: '腾讯云', url: 'https://api.lkeap.cloud.tencent.com/coding/anthropic' },
+    { label: '火山方舟', url: 'https://ark.cn-beijing.volces.com/api/coding' },
+    { label: '阿里云百炼', url: 'https://coding.dashscope.aliyuncs.com/apps/anthropic' },
+  ];
 
   // Selected profile name (empty = not from saved list)
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -189,6 +204,18 @@ export function LLMSettings({ id }: { id?: string }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showModelDropdown]);
 
+  // Close base URL preset dropdown on outside click
+  useEffect(() => {
+    if (!showBaseUrlPreset) return;
+    const handleClick = (e: MouseEvent) => {
+      if (baseUrlPresetRef.current && !baseUrlPresetRef.current.contains(e.target as Node)) {
+        setShowBaseUrlPreset(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showBaseUrlPreset]);
+
   const hasChanges =
     draftApiKey !== (settings?.llm?.apiKey ?? '') ||
     draftModel !== (settings?.llm?.model ?? '') ||
@@ -251,11 +278,43 @@ export function LLMSettings({ id }: { id?: string }) {
         {/* Base URL */}
         <div className="space-y-2">
           <Label>Base URL</Label>
-          <Input
-            value={draftBaseUrl}
-            onChange={(e) => setDraftBaseUrl(e.target.value)}
-            placeholder="https://api.anthropic.com（留空使用默认）"
-          />
+          <div className="relative" ref={baseUrlPresetRef}>
+            <div className="flex gap-1">
+              <Input
+                value={draftBaseUrl}
+                onChange={(e) => setDraftBaseUrl(e.target.value)}
+                placeholder="https://api.anthropic.com（留空使用默认）"
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => setShowBaseUrlPreset(!showBaseUrlPreset)}
+                title="选择预设 Base URL"
+              >
+                <Globe className="h-4 w-4" />
+              </Button>
+            </div>
+            {showBaseUrlPreset && (
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card rounded-lg shadow-lg border border-border overflow-hidden max-h-[280px] overflow-y-auto">
+                {baseUrlPresets.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setDraftBaseUrl(preset.url);
+                      setShowBaseUrlPreset(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between ${preset.url === draftBaseUrl ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    <span className="font-medium">{preset.label}</span>
+                    <span className="text-xs text-muted-foreground truncate ml-2 max-w-[60%]">{preset.url}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">支持 Anthropic 兼容格式的 API 地址</p>
         </div>
 
