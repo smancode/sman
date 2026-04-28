@@ -375,19 +375,40 @@ export class ClaudeSessionManager {
    * Resolve the model name to pass to Claude CLI.
    * Pass the user-configured model name directly.
    */
+  /**
+   * Private IP prefixes for internal enterprise proxies.
+   * Internal proxies (e.g. http://172.x.x.x) validate model names against a whitelist
+   * (e.g. "glm-5.1") and work fine with the real model name — CLI's extra requests
+   * are handled by the proxy internally.
+   * External proxies (e.g. https://open.bigmodel.cn) trigger CLI's internal model
+   * capabilities/thinking logic which sends extra API requests → rate limited.
+   * For these, pass "claude-sonnet-4-6" and let the proxy map it server-side.
+   */
+  private static readonly PRIVATE_IP_PREFIXES = ['172.', '10.', '198.', '127.', '192.168.', 'localhost'];
+
+  private isPrivateNetworkUrl(url: string): boolean {
+    try {
+      const host = new URL(url).hostname;
+      return ClaudeSessionManager.PRIVATE_IP_PREFIXES.some(p => host.startsWith(p));
+    } catch {
+      return false;
+    }
+  }
+
   private resolveCliModel(configModel: string): string {
     // Anthropic models pass through as-is
     const ANTHROPIC_MODEL_PREFIXES = ['claude-', 'anthropic-'];
     if (ANTHROPIC_MODEL_PREFIXES.some(p => configModel.toLowerCase().startsWith(p))) {
       return configModel;
     }
-    // Non-Anthropic models (glm-5.1, deepseek, etc.) — always map to claude-sonnet-4-6.
-    // CLI >= 2.1.121 internally validates the model name via /v1/models/{model}.
-    // Passing a non-Anthropic model name causes CLI to hit the proxy with an
-    // unrecognized endpoint → 404 "请求的资源不存在，请检查模型名称".
-    // The proxy is responsible for mapping claude-sonnet-4-6 → actual model.
+    // Internal enterprise proxy — pass real model name (proxy validates & maps)
     const baseUrl = this.config?.llm?.baseUrl;
-    this.log.info(`Non-Anthropic model "${configModel}" with proxy ${baseUrl ?? 'default'}, mapping → "claude-sonnet-4-6"`);
+    if (baseUrl && this.isPrivateNetworkUrl(baseUrl)) {
+      this.log.info(`Internal proxy detected (${baseUrl}), passing real model "${configModel}"`);
+      return configModel;
+    }
+    // External third-party proxy — use CLI default to avoid extra internal requests
+    this.log.info(`External proxy detected (${baseUrl ?? 'default'}), mapping "${configModel}" → "claude-sonnet-4-6"`);
     return 'claude-sonnet-4-6';
   }
 
@@ -1765,7 +1786,7 @@ export class ClaudeSessionManager {
       return { errorCode: 'forbidden', userMessage: '无权访问此资源，请检查 API Key 权限' };
     }
     if (/\b404\b/.test(msg) || /not found/i.test(msg)) {
-      return { errorCode: 'not_found', userMessage: '请求的资源不存在，请检查模型名称' };
+      return { errorCode: 'not_found', userMessage: `请求返回 404，资源不存在: ${msg}` };
     }
     if (/\b500\b/.test(msg) || /\b502\b/.test(msg) || /\b503\b/.test(msg) || /internal server error/i.test(msg) || /server error/i.test(msg)) {
       return { errorCode: 'server_error', userMessage: '模型服务暂时不可用，请稍后重试' };

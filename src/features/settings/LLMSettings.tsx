@@ -110,9 +110,19 @@ export function LLMSettings({ id }: { id?: string }) {
     setTesting(true);
     setTestResult(null);
     try {
-      // If no profile name entered, use existing profile name or default
-      const profileName = draftProfileName || selectedProfile || '默认';
-      const result = await testAndSaveLlm(draftApiKey, draftModel, draftBaseUrl || undefined, profileName);
+      // Trim all inputs before saving
+      const apiKey = draftApiKey.trim();
+      const model = draftModel.trim();
+      const baseUrl = draftBaseUrl.trim();
+      const profileName = (draftProfileName || selectedProfile || '默认').trim();
+
+      // Sync trimmed values back to draft state
+      setDraftApiKey(apiKey);
+      setDraftModel(model);
+      setDraftBaseUrl(baseUrl);
+      setDraftProfileName(profileName);
+
+      const result = await testAndSaveLlm(apiKey, model, baseUrl || undefined, profileName);
       setTestResult(result);
       if (result.success) {
         setDraftProfileName(profileName);
@@ -142,12 +152,16 @@ export function LLMSettings({ id }: { id?: string }) {
   };
 
   const handleFetchModels = async () => {
-    if (!draftApiKey) return;
+    const apiKey = draftApiKey.trim();
+    const baseUrl = draftBaseUrl.trim();
+    if (!apiKey) return;
+    setDraftApiKey(apiKey);
+    setDraftBaseUrl(baseUrl);
     setLoadingModels(true);
     setFetchedModels([]);
     setModelsUnsupported(false);
     try {
-      const result = await fetchModels(draftApiKey, draftBaseUrl || undefined);
+      const result = await fetchModels(apiKey, baseUrl || undefined);
       setFetchedModels(result.models);
       setModelsUnsupported(result.unsupported ?? false);
       setShowModelDropdown(result.models.length > 0);

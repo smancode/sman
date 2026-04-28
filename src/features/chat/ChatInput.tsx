@@ -48,7 +48,7 @@ interface ChatInputProps {
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
-const ACCEPTED_TYPES = 'image/*,.pdf';
+const ACCEPTED_TYPES = '*/*';
 
 // Per-session input cache — survives session switches
 const inputCache = new Map<string, { input: string; stagedMedia: StagedMedia[] }>();
@@ -136,16 +136,38 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     }
   }, [disabled]);
 
+  const isElectron = !!(window as any).sman?.electron;
+
   const canSend = (input.trim().length > 0 || stagedMedia.length > 0) && !disabled;
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
+  // In Electron, File objects expose a `path` property with the absolute filesystem path.
+  // For non-image files, we just inject the path as text so Claude Code reads it directly.
+  // For images, we still use base64 for the preview but also inject the path.
+  const processFiles = useCallback(async (fileList: File[]) => {
     const newMedia: StagedMedia[] = [];
     let totalSize = stagedMedia.reduce((sum, m) => sum + m.base64Data.length, 0);
+    const filePaths: string[] = [];
 
-    for (const file of Array.from(files)) {
+    for (const file of fileList) {
+      const filePath = (file as any).path as string | undefined;
+
+      // Electron with local file path: inject path as text instead of reading base64
+      if (isElectron && filePath) {
+        filePaths.push(filePath);
+        // Only images need base64 for preview
+        if (file.type.startsWith('image/')) {
+          const base64Data = await readFileAsBase64(file);
+          newMedia.push({
+            fileName: file.name,
+            mimeType: file.type,
+            base64Data,
+            preview: `data:${file.type};base64,${base64Data}`,
+          });
+        }
+        continue;
+      }
+
+      // Web / fallback: read as base64
       if (file.size > MAX_FILE_SIZE) {
         console.warn(`File ${file.name} exceeds 10MB limit, skipping`);
         continue;
@@ -163,7 +185,6 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         base64Data,
       };
 
-      // Generate preview for images
       if (file.type.startsWith('image/')) {
         media.preview = `data:${file.type};base64,${base64Data}`;
       }
@@ -171,17 +192,50 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       newMedia.push(media);
     }
 
-    setStagedMedia((prev) => [...prev, ...newMedia]);
-
-    // Reset file input so the same file can be re-selected
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (filePaths.length > 0) {
+      const pathText = filePaths.join('\n');
+      setInput(prev => prev ? `${prev}\n${pathText}` : pathText);
     }
-  }, [stagedMedia]);
+
+    if (newMedia.length > 0) {
+      setStagedMedia((prev) => [...prev, ...newMedia]);
+    }
+  }, [stagedMedia, isElectron]);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    await processFiles(Array.from(files));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [processFiles]);
 
   const removeStagedMedia = useCallback((index: number) => {
     setStagedMedia((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  // Drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  }, [isDragOver]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) await processFiles(files);
+  }, [processFiles]);
 
   const handleSend = useCallback(() => {
     if (!canSend || sending) return;
@@ -333,7 +387,16 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       )}
 
       {/* Input Row */}
-      <div className="relative bg-card rounded-xl shadow-sm border p-1.5 border-border">
+      <div
+        className={cn(
+          "relative bg-card rounded-xl shadow-sm border p-1.5 transition-colors",
+          isDragOver ? 'border-primary/50 bg-primary/5' : 'border-border',
+        )}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {/* Media preview row */}
         {stagedMedia.length > 0 && (
           <div className="flex gap-2 p-2 pb-0 flex-wrap">
@@ -386,7 +449,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
-              placeholder={disabled ? '未连接' : '输入消息... (输入 / 选择 Skill)'}
+              placeholder={disabled ? '未连接' : '输入消息... (输入 / 选择 Skill，可拖入文件)'}
               disabled={disabled}
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}

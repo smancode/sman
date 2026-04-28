@@ -18,8 +18,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.121",
-    "@anthropic-ai/claude-code": "2.1.121",
+    "@anthropic-ai/claude-agent-sdk": "0.2.110",
+    "@anthropic-ai/claude-code": "2.1.110",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@larksuiteoapi/node-sdk": "^1.60.0",
     "@radix-ui/react-collapsible": "^1.1.12",
