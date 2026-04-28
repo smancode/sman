@@ -470,7 +470,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>上传图片或 PDF</p>
+              <p>上传文件</p>
             </TooltipContent>
           </Tooltip>
 
