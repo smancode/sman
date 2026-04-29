@@ -1146,6 +1146,9 @@ export class ClaudeSessionManager {
     let allToolUses: Array<{ id: string; name: string; input: string }> = [];
     let currentToolUse: { id: string; name: string; input: string } | null = null;
     let stallAbortReason: string | undefined;
+    // Track whether this abort was user-initiated (stop button) vs system-initiated (stall/error).
+    // User aborts preserve the V2 session so the user can "继续" without losing context.
+    let userInitiatedAbort = false;
 
     try {
       this.log.info(`[sendMessage] ${sessionId}: getting/creating V2 session...`);
@@ -1275,9 +1278,26 @@ export class ClaudeSessionManager {
       let deltaCount = 0;
       const queryGen = v2Session.stream();
       this.activeQueries.set(sessionId, queryGen);
+      let abortDrainStart = 0; // timestamp when we started draining after user abort
       for await (const sdkMsg of queryGen) {
         lastActivityAt = Date.now();
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted) {
+          // User abort: continue reading until we get a result from interrupt(),
+          // so the CLI gracefully ends the current turn and the V2 session stays clean.
+          // System abort: break immediately — the session will be closed anyway.
+          const controller = this.activeStreams.get(sessionId);
+          const isUserAbort = stallAbortReason === 'user' || (controller as any)?._abortReason === 'user';
+          if (isUserAbort && sdkMsg.type !== 'result') {
+            if (!abortDrainStart) abortDrainStart = Date.now();
+            // Give up after 10s — CLI is truly stuck, will be cleaned up later
+            if (Date.now() - abortDrainStart > 10_000) {
+              this.log.warn(`Interrupt drain timeout for ${sessionId}, forcing break`);
+              break;
+            }
+            continue;
+          }
+          break;
+        }
 
         if (!firstEventReceived) {
           firstEventReceived = true;
@@ -1668,11 +1688,23 @@ export class ClaudeSessionManager {
       // Stream loop exited normally (break) — check if it was due to abort
       if (abortController.signal.aborted) {
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
-        // Close V2 session immediately — aborting mid-turn leaves it in a dirty state.
-        // Next sendMessage will create a fresh V2 session.
-        this.closeV2Session(sessionId);
-        this.log.info(`V2 session closed after abort for ${sessionId}`);
         const reason = stallAbortReason || '';
+
+        // Check if this was a user-initiated abort (stop button).
+        // User aborts preserve the V2 session so the user can send "继续" without losing context.
+        const controller = this.activeStreams.get(sessionId);
+        userInitiatedAbort = reason === 'user' || (controller as any)?._abortReason === 'user';
+
+        if (userInitiatedAbort) {
+          // Keep V2 session alive — the CLI's interrupt() will gracefully end the current turn,
+          // and the user's next message will continue in the same session without resume.
+          this.log.info(`User abort for ${sessionId}, keeping V2 session alive`);
+        } else {
+          // System abort (stall, process dead, etc.) — close V2 session, it may be in a bad state.
+          this.closeV2Session(sessionId);
+          this.log.info(`System abort for ${sessionId}, V2 session closed (reason: ${reason})`);
+        }
+
         wsSend(JSON.stringify({
           type: 'chat.aborted',
           sessionId,
@@ -1685,9 +1717,18 @@ export class ClaudeSessionManager {
         // Save partial assistant content so the user doesn't lose what was already streamed
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
 
-        // Auto-retry for recoverable errors (stall, process_dead, etc.) — max 2 retries
         const reason = stallAbortReason || '';
-        if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(reason)) {
+        // Check if user-initiated abort
+        const controller = this.activeStreams.get(sessionId);
+        userInitiatedAbort = reason === 'user' || (controller as any)?._abortReason === 'user';
+
+        // User abort: keep V2 session alive for "继续"
+        if (userInitiatedAbort) {
+          this.log.info(`User abort (catch) for ${sessionId}, keeping V2 session alive`);
+          wsSend(JSON.stringify({ type: 'chat.aborted', sessionId }));
+        }
+        // Auto-retry for recoverable system errors (stall, process_dead, etc.) — max 2 retries
+        else if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(reason)) {
           this.log.info(`Auto-retrying session ${sessionId} after ${reason} (attempt ${_retryCount + 1})`);
           // Clean up the failed V2 session so a fresh one is created
           this.closeV2Session(sessionId);
@@ -1708,15 +1749,16 @@ export class ClaudeSessionManager {
           // Retry with "继续" to pick up where we left off
           return this.sendMessage(sessionId, '继续刚才的工作，不要重复已完成的部分', wsSend, undefined, _retryCount + 1);
         }
-
-        // Close V2 session — aborting mid-turn leaves it in a dirty state
-        this.closeV2Session(sessionId);
-        this.log.info(`V2 session closed after abort (catch) for ${sessionId}`);
-        wsSend(JSON.stringify({
-          type: 'chat.aborted',
-          sessionId,
-          ...(reason ? { reason } : {}),
-        }));
+        // System abort: close V2 session
+        else {
+          this.closeV2Session(sessionId);
+          this.log.info(`System abort (catch) for ${sessionId}, V2 session closed (reason: ${reason})`);
+          wsSend(JSON.stringify({
+            type: 'chat.aborted',
+            sessionId,
+            ...(reason ? { reason } : {}),
+          }));
+        }
       } else {
         const { errorCode, userMessage } = this.classifyError(err);
         const rawMessage = err instanceof Error ? err.message : String(err);

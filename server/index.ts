@@ -672,7 +672,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'chat.abort': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
-          sessionManager.abort(msg.sessionId);
+          sessionManager.abort(msg.sessionId, 'user');
           // chat.aborted is sent by sendMessage's catch block after abort completes
           break;
         }

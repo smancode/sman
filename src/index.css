@@ -281,11 +281,10 @@
 }
 
 .ai-avatar {
-  background-color: hsl(var(--muted));
 }
 
-.dark .ai-avatar {
-  background-color: hsl(30 8% 38%);
+.dark .ai-avatar img {
+  filter: invert(1);
 }
 
 .prose table {
@@ -463,10 +462,12 @@
   background: transparent !important;
 }
 
-/* Force line breaks in inline code within prose */
+/* Inline code within prose */
 .prose code {
-  white-space: pre-wrap !important;
-  word-break: break-all !important;
+  background-color: hsl(var(--muted) / 0.5);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.3em;
+  font-size: 0.875em;
 }
 
 /* ── Streamdown code block overrides ── */
