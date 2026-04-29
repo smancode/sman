@@ -168,9 +168,11 @@ export interface ProjectScannerOptions {
   hasActiveStreams: () => boolean;
 }
 
+/** Remove only incomplete scan output (references/ dir), keep existing SKILL.md intact */
 function deleteScannerDir(workspace: string, scannerType: ScannerType): void {
   const dir = path.join(workspace, '.claude', 'skills', `project-${scannerType}`);
-  if (fs.existsSync(dir)) { fs.rmSync(dir, { recursive: true, force: true }); }
+  const refsDir = path.join(dir, 'references');
+  if (fs.existsSync(refsDir)) { fs.rmSync(refsDir, { recursive: true, force: true }); }
 }
 
 export class ProjectScanner {
@@ -321,11 +323,11 @@ export class ProjectScanner {
         }
       } catch { needsRescan = true; }
       if (needsRescan) {
-        // Delete old skill files to force full rescan
+        // Delete only references/ to force rescan, keep existing SKILL.md as fallback
         const skillsDir = path.join(entry.path, '.claude', 'skills');
         for (const type of SCANNER_TYPES) {
-          const skillDir = path.join(skillsDir, `project-${type}`);
-          if (fs.existsSync(skillDir)) fs.rmSync(skillDir, { recursive: true, force: true });
+          const refsDir = path.join(skillsDir, `project-${type}`, 'references');
+          if (fs.existsSync(refsDir)) fs.rmSync(refsDir, { recursive: true, force: true });
         }
         await this.scanWorkspace(entry.path);
       }

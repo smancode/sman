@@ -311,8 +311,10 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 1. 如果 **≤ 20 个**：正常结束
 2. 如果 **> 20 个**：按以下优先级淘汰，直到 ≤ 20：
    - 优先淘汰内容为空或只有占位符的 skill
-   - 然后淘汰 skill-auto-updater 自动生成的低价值 skill（如知识点只有 1-2 条且不重要的）
-   - **绝不删除**用户手动创建的 skill（没有 `_scanned` 或 `skill-auto-updater` 标记的）
+   - 然后淘汰低价值的非核心 skill
+   - **绝不删除**以下 skill（无论任何情况）：
+     - 用户手动创建的 skill（没有 `_scanned` 或 `skill-auto-updater` 标记的）
+     - 核心 skill：`project-structure`、`project-apis`、`project-external-calls`、`database-schema`、`knowledge-business`、`knowledge-conventions`、`knowledge-technical`
 
 ### 四、记录结果
 
