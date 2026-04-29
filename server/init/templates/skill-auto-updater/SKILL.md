@@ -1,7 +1,7 @@
 ---
 name: skill-auto-updater
 description: |
-  每30分钟自动检查并更新项目 skills。包括能力匹配、项目知识扫描和团队知识辩证聚合。
+  每2小时自动检查并更新项目 skills。包括首次全量扫描、增量更新和团队知识辩证聚合。
   默认关闭，需要在 Sman 设置中启用。
 ---
 
@@ -12,9 +12,9 @@ description: |
 ## 目标
 
 保持项目的 `.claude/skills/` 与项目当前状态同步：
-1. 更新/补充通用能力 skills（capability skills）
-2. 重新生成项目知识 skills（project-structure、project-apis、project-external-calls）
-3. 辩证聚合团队知识 skills（knowledge-business、knowledge-conventions、knowledge-technical）
+1. **首次全量扫描** — 新项目首次运行时，并行扫描生成完整知识体系
+2. **增量更新** — 后续运行只更新变更部分
+3. **辩证聚合** — 团队知识去伪存真
 
 ## 核心原则
 
@@ -23,7 +23,149 @@ description: |
 - **总量控制**：`.claude/skills/` 下不超过 20 个 skill，超过时优先淘汰低价值
 - **已有优先**：已有 skill 能覆盖的内容，只更新不新增
 
-## 执行步骤
+## 模式判断
+
+```
+读取 .sman/INIT.md
+  → project-structure SKILL.md 的 _scanned.commitHash 为 null？
+    → 是：首次全量扫描模式（Phase 0-5）
+    → 否：增量更新模式（Step 一-四）
+```
+
+---
+
+## 首次全量扫描模式
+
+用于新项目/新人入职，一次性生成完整知识体系。
+
+### Phase 0: 项目识别
+
+1. 读取 `CLAUDE.md`（如存在）提取项目基本信息
+2. 扫描项目根目录结构（构建文件、配置文件、源码目录）
+3. 识别技术栈特征：
+
+| 特征文件 | 推断技术栈 |
+|----------|-----------|
+| `pom.xml` / `build.gradle` / `build.gradle.kts` | Java + Maven/Gradle |
+| `package.json` | Node.js / 前端 |
+| `go.mod` | Go |
+| `requirements.txt` / `pyproject.toml` | Python |
+| `Cargo.toml` | Rust |
+| `*.sln` / `*.csproj` | .NET |
+
+4. 识别架构特征：
+
+| 特征 | 推断架构 |
+|------|----------|
+| Controller/Service/DAO 分层 | 经典三层/MVC |
+| Handler + Proto + Caller | 消息驱动/RPC |
+| graphql/ | GraphQL API |
+| serverless.yml / template.yaml | Serverless |
+| Dockerfile / docker-compose | 容器化部署 |
+
+### Phase 1: 并行扫描（3 个 Agent）
+
+**Agent A: 编码规范扫描** → `knowledge-conventions`
+
+| 扫描项 | Java | Node.js | Go | Python |
+|--------|------|---------|-----|--------|
+| 枚举/常量 | enums/ + 常量类 | constants/ + enums/ | const 定义 | constants/ |
+| 命名规范 | 包/类/方法命名 | 文件/函数命名 | 包/函数命名 | 模块/函数命名 |
+| 配置管理 | application.yml + Spring 配置 | .env + config/ | config.yaml | settings.py |
+| SQL 规范 | MyBatis XML / JPA | ORM / raw SQL | sqlc / GORM | SQLAlchemy / raw |
+| 反模式 | magic number、硬编码 | magic string、any 类型 | 硬编码 error | 魔法值 |
+
+**Agent B: 技术横切面扫描** → `knowledge-technical`
+
+| 扫描项 | 通用关注点 |
+|--------|-----------|
+| 事务/一致性 | 事务管理器、传播行为、隔离级别 |
+| 缓存 | 缓存框架、Key 规范、TTL 策略 |
+| 通信 | HTTP/RPC/MQ 通信框架、超时配置、重试策略 |
+| 并发控制 | 锁机制（Redis/DB/分布式）、并发安全 |
+| 线程/协程 | 线程池配置、异步框架、调度机制 |
+| 安全 | 认证鉴权、加密、审计日志 |
+
+**Agent C: 业务链路扫描** → `knowledge-business`
+
+1. 找到所有入口点（Controller/Handler/RPC Service/消息消费者）
+2. 按业务域分组，统计 Handler 数量
+3. 选取 Top 3-5 高频业务域，追踪完整链路：入口 → Service → 外部调用 → 数据访问
+4. 提取跨域公共机制（如记账、冻结、状态机）
+
+### Phase 2: 数据库扫描 → `database-schema`
+
+按数据访问层自适应扫描：
+
+| 技术栈 | 扫描方式 |
+|--------|---------|
+| MyBatis | Entity 类 + Mapper XML |
+| JPA/Hibernate | Entity 类 + Repository |
+| Prisma | schema.prisma |
+| SQLAlchemy | models.py |
+| GORM | model 结构体 |
+| 原生 SQL | migration 文件 / SQL 脚本 |
+
+提取内容：
+- 核心表结构（Top 15-20 表）
+- 表间关联关系（通过字段名推测）
+- 索引策略
+- 分区/分表策略
+
+无数据库的项目（纯前端、CLI 工具等）跳过本阶段，不生成 database-schema skill。
+
+### Phase 3: Project Knowledge 扫描
+
+执行下方「二、Project Knowledge Skills 更新」的全部内容，生成：
+- `project-structure`
+- `project-apis`
+- `project-external-calls`
+
+### Phase 4: 规则提取
+
+从扫描结果中提取关键规则，写入 `.claude/rules/`（无目录先创建）：
+
+- `coding-standards.md` — 编码规范（5-15 条，每条 1-2 行）
+- `architecture-rules.md` — 架构决策（如有）
+
+提取原则：
+- 只提取项目特定的、非通用的规范
+- 每条规则 1-2 行，不啰嗦
+- 用户明确说的 > 代码隐含的
+
+### Phase 5: 验证与报告
+
+1. 逐个 Skill 检查：SKILL.md 行数 ≤ 80，references/ 文件内容完整
+2. 更新 `.sman/INIT.md` 时间戳，记录首次扫描完成
+3. 输出扫描报告：
+
+```markdown
+## 项目初始化报告
+
+### 项目基本信息
+- 技术栈：xxx
+- 架构模式：xxx
+- 入口点数量：xxx
+- 外部依赖数量：xxx
+
+### Skill 生成情况
+| Skill | 状态 | 摘要行数 | references 文件数 |
+|-------|------|----------|------------------|
+
+### 关键发现
+| 发现 | 影响 |
+|------|------|
+
+### 未覆盖（后续补充）
+| 内容 | 建议 |
+|------|------|
+```
+
+---
+
+## 增量更新模式
+
+后续运行时只更新变更部分。
 
 ### 一、Capability Skills 更新
 
@@ -45,8 +187,7 @@ description: |
   - Module list（表格：name | path | purpose）
   - How to build and run
 
-- **references/{name}.md**（每个 < 100 行）— 按模块：
-  - Purpose、Key files、Dependencies
+- **references/{name}.md**（每个 < 100 行）— 按模块：Purpose、Key files、Dependencies
 
 #### project-apis
 
@@ -177,6 +318,51 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 
 更新 `.sman/INIT.md` 时间戳和匹配结果，记录本次变更内容。
 
+---
+
+## Skill 文件结构规范
+
+```
+.claude/skills/{skill-name}/
+├── SKILL.md              # 摘要（≤80行）+ references 索引
+└── references/           # 详细内容
+    ├── xxx.md
+    └── yyy.md
+```
+
+### SKILL.md 格式
+
+```markdown
+---
+name: {skill-name}
+description: "一句话描述。TRIGGER: 关键词1/关键词2"
+---
+
+# 标题
+
+> 一句话概要
+
+## 概要
+
+| 章节 | 要点 | 详见 |
+|------|------|------|
+| xxx | 一句话摘要 | references/xxx.md |
+
+## 速查（最常用的 5-10 行关键信息）
+```
+
+### Skill 名称清单
+
+| Skill 名称 | 内容 | 首次必选 | 增量必选 |
+|------------|------|----------|----------|
+| project-structure | 目录结构、技术栈、构建命令 | ✅ | ✅ |
+| project-apis | 入口点清单 | ✅ | ✅ |
+| project-external-calls | 外部依赖清单 | ✅ | ✅ |
+| knowledge-conventions | 编码规范 | ✅ | ✅ |
+| knowledge-technical | 技术横切面 | ✅ | ✅ |
+| knowledge-business | 业务链路 | ✅ | ✅ |
+| database-schema | 数据库全景 | 有数据库时 ✅ | 有变更时 ✅ |
+
 ## Safety Rules
 
 1. 不读敏感文件：.env, .env.*, credentials.*, *.key, *.pem。只记录它们的存在
@@ -194,3 +380,5 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 - 如果 `.sman/INIT.md` 不存在，跳过 capability 更新，但仍然执行 project knowledge 扫描
 - 如果没有显著变化且 project skills 的 commit hash 未变，跳过本次执行
 - 不要删除用户手动添加的 skills，只更新和补充
+- 首次全量扫描的 Phase 1 应并行执行 3 个 Agent，提升效率
+- 首次扫描优先级：规范 > 技术横切面 > 业务链路 > 数据库

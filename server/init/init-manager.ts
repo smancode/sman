@@ -123,6 +123,9 @@ export class InitManager {
     ws: WebSocket,
   ): Promise<void> {
     try {
+      // Ensure workspace directories exist
+      this.ensureWorkspaceDirs(workspace);
+
       // LLM unavailable → skip init entirely, no card, no pretending
       const llmConfig = this.llmConfig();
       if (!llmConfig) {
@@ -241,7 +244,23 @@ export class InitManager {
     'knowledge-business',
     'knowledge-conventions',
     'knowledge-technical',
+    'database-schema',
   ];
+
+  /** Ensure all workspace directories exist */
+  private ensureWorkspaceDirs(workspace: string): void {
+    const dirs = [
+      path.join(workspace, '.claude'),
+      path.join(workspace, '.claude', 'skills'),
+      path.join(workspace, '.claude', 'rules'),
+      path.join(workspace, '.sman'),
+      path.join(workspace, '.sman', 'knowledge'),
+      path.join(workspace, '.sman', 'paths'),
+    ];
+    for (const dir of dirs) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
 
   private injectMetaSkills(workspace: string): void {
     const templatesDir = TEMPLATES_DIR;
@@ -271,22 +290,14 @@ export class InitManager {
 
       fs.mkdirSync(targetDir, { recursive: true });
       for (const file of fs.readdirSync(templateDir)) {
-        // skill-auto-updater: preserve user's crontab.md enabled state during template upgrade
+        // skill-auto-updater: preserve user's crontab.md fields during template upgrade
         if (skillName === SKILL_AUTO_UPDATER && file === 'crontab.md') {
           const targetCrontab = path.join(targetDir, file);
           if (fs.existsSync(targetCrontab)) {
             const existingContent = fs.readFileSync(targetCrontab, 'utf-8');
-            const existingEnabled = parseEnabledFromFrontmatter(existingContent);
             const templateContent = fs.readFileSync(path.join(templateDir, file), 'utf-8');
-            // Copy template but preserve user's enabled value
-            if (existingEnabled !== undefined) {
-              const finalContent = templateContent.replace(
-                /enabled:\s*(true|false)/,
-                `enabled: ${existingEnabled}`,
-              );
-              fs.writeFileSync(targetCrontab, finalContent);
-              continue;
-            }
+            fs.writeFileSync(targetCrontab, mergeCrontabWithTemplate(templateContent, existingContent));
+            continue;
           }
         }
         fs.copyFileSync(
@@ -361,8 +372,23 @@ export class InitManager {
   }
 }
 
-/** Extract enabled value from crontab.md YAML frontmatter */
-function parseEnabledFromFrontmatter(content: string): boolean | undefined {
-  const match = content.match(/^---\n[\s\S]*?enabled:\s*(true|false)[\s\S]*?\n---/m);
-  return match ? match[1] === 'true' : undefined;
+/** Extract specific fields from crontab.md YAML frontmatter */
+function parseFrontmatterField(content: string, field: string): string | undefined {
+  const match = content.match(new RegExp(`^---\\n[\\s\\S]*?${field}:\\s*(.+)[\\s\\S]*?\\n---`, 'm'));
+  return match?.[1]?.trim();
+}
+
+/** Preserve user-modified crontab fields (enabled, schedule) during template upgrade */
+function mergeCrontabWithTemplate(templateContent: string, existingContent: string): string {
+  let result = templateContent;
+  for (const field of ['enabled', 'schedule']) {
+    const value = parseFrontmatterField(existingContent, field);
+    if (value !== undefined) {
+      result = result.replace(
+        new RegExp(`(${field}:\\s*).+`, 'm'),
+        `$1${value}`,
+      );
+    }
+  }
+  return result;
 }

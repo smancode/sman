@@ -1,7 +1,7 @@
 ---
-schedule: "*/30 * * * *"
+schedule: "0 */2 * * *"
 enabled: false
-description: 每30分钟自动更新项目 skills（需5分钟空闲窗口）
+description: 每2小时自动更新项目 skills（需5分钟空闲窗口）
 ---
 
 默认关闭。在 Sman 设置页面 -> Cron 任务中启用。

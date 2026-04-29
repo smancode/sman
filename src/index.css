@@ -464,10 +464,8 @@
 
 /* Inline code within prose */
 .prose code {
-  background-color: hsl(var(--muted) / 0.5);
-  border-radius: 0.25rem;
-  padding: 0.1em 0.3em;
-  font-size: 0.875em;
+  background: transparent;
+  font-weight: 500;
 }
 
 /* ── Streamdown code block overrides ── */
