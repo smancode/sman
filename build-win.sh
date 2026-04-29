@@ -33,8 +33,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # ── 自动设置日期版本号 ──
-# 格式: YY.M.DD （如 26.4.21）
-DATE_VERSION=$(date '+%y.%-m.%-d')
+# 格式: YY.MMDD.HH （如 26.429.15, 26.1029.15）
+# 不用前导零避免 semver 吞零，月份本身可区分（429=4月29, 1029=10月29）
+DATE_VERSION=$(date '+%y.%m%d.%H')
 info "设置版本号: ${DATE_VERSION}"
 node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${DATE_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 VERSION="${DATE_VERSION}"
