@@ -145,33 +145,39 @@ describe('detectCapabilities', () => {
         pdf_input: { supported: true },
       },
     });
+    // Layer 3: probe — model describes the red image correctly
+    mockFetchResponse(200, { content: [{ type: 'text', text: 'red' }] });
 
     const result = await detectCapabilities('sk-test', 'claude-sonnet-4-6');
     expect(result.success).toBe(true);
     expect(result.capabilities).toBeDefined();
-    expect(result.capabilities!.source).toBe('api');
+    expect(result.capabilities!.source).toBe('probe');
     expect(result.capabilities!.image).toBe(true);
   });
 
   it('should fall back to mapping table when API fails', async () => {
     // Layer 1: queryModelCapabilities returns null (404)
     mockFetchResponse(404, { error: 'not found' });
+    // Layer 3: probe — model cannot handle image
+    mockFetchResponse(200, { content: [{ type: 'text', text: 'I cannot see images' }] });
 
     const result = await detectCapabilities('sk-test', 'deepseek-chat');
     expect(result.success).toBe(true);
     expect(result.capabilities).toBeDefined();
-    expect(result.capabilities!.source).toBe('mapping');
+    expect(result.capabilities!.source).toBe('probe');
     expect(result.capabilities!.image).toBe(false);
   });
 
   it('should fall back to fuzzy matching for llava', async () => {
     // Layer 1 fails
     mockFetchResponse(404, { error: 'not found' });
+    // Layer 3: probe — vision model describes the red image
+    mockFetchResponse(200, { content: [{ type: 'text', text: 'red' }] });
 
     const result = await detectCapabilities('sk-test', 'llava:13b');
     expect(result.success).toBe(true);
     expect(result.capabilities).toBeDefined();
-    expect(result.capabilities!.source).toBe('mapping');
+    expect(result.capabilities!.source).toBe('probe');
     expect(result.capabilities!.image).toBe(true);
   });
 
