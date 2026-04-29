@@ -20,7 +20,8 @@ description: |
 
 - **可靠优先**：knowledge skill 是开发者直接依赖的知识库，每条知识必须经得起验证
 - **宁缺毋滥**：只有真正对项目长期有价值的知识才值得变成 skill
-- **总量控制**：`.claude/skills/` 下不超过 20 个 skill，超过时优先淘汰低价值
+- **已有优先**：已有 skill 能覆盖的内容，只更新不新增
+- **绝不删除**：不删除用户手动创建的 skill，不删除核心 skill（project-structure、project-apis、project-external-calls、database-schema、knowledge-business、knowledge-conventions、knowledge-technical）
 - **已有优先**：已有 skill 能覆盖的内容，只更新不新增
 
 ## 模式判断
@@ -303,18 +304,6 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 - 所有条目验证失败 → 不生成 skill，源文件照常清理
 - 验证超过 30 条 → 只处理最新 30 条，剩余留到下一轮
 - 不删除用户手动创建的 skill
-
-#### 3.7 Skill 数量控制
-
-执行完所有阶段后，检查 `.claude/skills/` 下的 skill 总数：
-
-1. 如果 **≤ 20 个**：正常结束
-2. 如果 **> 20 个**：按以下优先级淘汰，直到 ≤ 20：
-   - 优先淘汰内容为空或只有占位符的 skill
-   - 然后淘汰低价值的非核心 skill
-   - **绝不删除**以下 skill（无论任何情况）：
-     - 用户手动创建的 skill（没有 `_scanned` 或 `skill-auto-updater` 标记的）
-     - 核心 skill：`project-structure`、`project-apis`、`project-external-calls`、`database-schema`、`knowledge-business`、`knowledge-conventions`、`knowledge-technical`
 
 ### 四、记录结果
 
