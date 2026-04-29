@@ -346,6 +346,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       });
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        // Only handle errors for the session being deleted
+        if (String(data.sessionId) !== sessionId) return;
         unsub();
         unsubErr();
         reject(new Error(String(data.error)));
@@ -397,7 +399,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId, messages, contextUsage } = get();
     if (currentSessionId) {
       if (messages.length > 0) {
-        sessionCache.set(currentSessionId, messages);
+        // If current session is streaming, merge streaming content into cached messages
+        const isStreaming = sendingSessions.has(currentSessionId);
+        if (isStreaming) {
+          const blocks = getStreamingBlocks(currentSessionId);
+          const streamText = blocks
+            .filter((b): b is StreamingTextBlock | StreamingTextLiveBlock => b.type === 'text' || b.type === 'text_live')
+            .map(b => b.content)
+            .join('');
+          if (streamText) {
+            const withStream = [...messages, {
+              id: 'streaming-placeholder',
+              sessionId: currentSessionId,
+              role: 'assistant' as const,
+              content: `[进行中] ${streamText}`,
+              createdAt: new Date().toISOString(),
+              resolvedContent: streamText,
+            }];
+            sessionCache.set(currentSessionId, withStream);
+          } else {
+            sessionCache.set(currentSessionId, messages);
+          }
+        } else {
+          sessionCache.set(currentSessionId, messages);
+        }
       }
       if (contextUsage) {
         contextUsageCache.set(currentSessionId, contextUsage);
@@ -434,8 +459,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       loading: !cached,
     });
 
-    // Always sync from backend
-    get().loadHistory();
+    // Skip loadHistory if target session is actively streaming —
+    // server hasn't persisted the streaming message yet, loadHistory would
+    // overwrite messages with stale data causing content to disappear
+    if (!isTargetSending) {
+      get().loadHistory();
+    }
   },
 
   loadHistory: async () => {
