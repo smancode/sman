@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  * Ported from ClawX - removed Electron IPC dependencies.
  */
-import { useState, useCallback, useEffect, useMemo, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -400,15 +400,40 @@ function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
   const codePlugin = useCodePlugin();
   const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
+  const [summary, setSummary] = useState('');
+  const prevLenRef = useRef(0);
+
+  // Update summary — only recalculate when content actually grows
+  useEffect(() => {
+    const update = () => {
+      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length === 0) { setSummary(''); return; }
+      // Show last meaningful line — gives a sense of progression
+      const lastLine = lines[lines.length - 1];
+      setSummary(lastLine.length > 120 ? '...' + lastLine.slice(-117) : lastLine);
+      prevLenRef.current = content.length;
+    };
+    update();
+    // While content is still growing, poll every 200ms
+    const timer = setInterval(() => {
+      if (content.length !== prevLenRef.current) update();
+    }, 200);
+    return () => clearInterval(timer);
+  }, [content]);
+
+  if (!content.trim()) return null;
 
   return (
-    <div className="w-full text-[14px]">
+    <div className="w-full text-[12px] text-muted-foreground">
       <button
-        className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full px-1 py-0.5 text-left hover:text-foreground transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">思考</span>
+        {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        <span className="font-medium shrink-0">思考</span>
+        {!expanded && summary && (
+          <span className="truncate min-w-0 flex-1 opacity-60">{summary}</span>
+        )}
       </button>
       {expanded && (
         <div className="text-muted-foreground" ref={collapseRef}>

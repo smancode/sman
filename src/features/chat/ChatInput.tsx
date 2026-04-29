@@ -83,7 +83,6 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const autoConfirm = useChatStore((s) => s.autoConfirm);
   const toggleAutoConfirm = useChatStore((s) => s.toggleAutoConfirm);
-  const messages = useChatStore((s) => s.messages);
 
   // Reset aborting flag when sending finishes
   useEffect(() => {
@@ -92,12 +91,16 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   // Save/restore input on session switch
   const prevSessionIdRef = useRef(currentSessionId);
+  const inputRef = useRef(input);
+  inputRef.current = input;
+  const stagedMediaRef = useRef(stagedMedia);
+  stagedMediaRef.current = stagedMedia;
   useEffect(() => {
     const prevId = prevSessionIdRef.current;
     if (prevId === currentSessionId) return;
 
     if (prevId) {
-      inputCache.set(prevId, { input, stagedMedia });
+      inputCache.set(prevId, { input: inputRef.current, stagedMedia: stagedMediaRef.current });
     }
 
     const cached = currentSessionId ? inputCache.get(currentSessionId) : undefined;
@@ -105,7 +108,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     setStagedMedia(cached?.stagedMedia ?? []);
 
     prevSessionIdRef.current = currentSessionId;
-  }); // run every render to detect session changes
+  }, [currentSessionId]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -195,6 +198,10 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (!canSend || sending) return;
     const textToSend = input.trim();
 
+    // Pre-heat session & refresh git branch on send, not on typing
+    useChatStore.getState().preheatSession();
+    (window as any).__sman_gitBranchRefresh?.();
+
     // Split into path-based (Electron local files) and base64-based (web uploads)
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
@@ -230,7 +237,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
         if (e.key === 'ArrowUp' && cursorAtStart) {
           e.preventDefault();
-          const userMessages = messages.filter(m => m.role === 'user' && m.content.trim());
+          const userMessages = useChatStore.getState().messages.filter(m => m.role === 'user' && m.content.trim());
           if (userMessages.length === 0) return;
 
           if (historyIndexRef.current === -1) {
@@ -247,7 +254,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
           e.preventDefault();
           if (historyIndexRef.current === -1) return;
 
-          const userMessages = messages.filter(m => m.role === 'user' && m.content.trim());
+          const userMessages = useChatStore.getState().messages.filter(m => m.role === 'user' && m.content.trim());
           const newIndex = historyIndexRef.current - 1;
           historyIndexRef.current = newIndex;
 
@@ -270,18 +277,12 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         handleSend();
       }
     },
-    [handleSend, showSkillPicker, messages, input],
+    [handleSend, showSkillPicker, input],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    const wasEmpty = input.length === 0;
     setInput(value);
-
-    if (wasEmpty && value.length > 0 && currentSessionId) {
-      useChatStore.getState().preheatSession();
-      (window as any).__sman_gitBranchRefresh?.();
-    }
 
     const cursorPosition = e.target.selectionStart;
     const charBeforeCursor = value[cursorPosition - 1];
