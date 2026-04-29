@@ -1133,6 +1133,12 @@ export class ClaudeSessionManager {
 
     let stallChecker: ReturnType<typeof setInterval> | null = null;
 
+    // Notify frontend immediately — let UI show "..." animation before heavy setup
+    wsSend(JSON.stringify({
+      type: 'chat.start',
+      sessionId,
+    }));
+
     // If preheat is in progress, wait for it to finish so we don't create a duplicate V2 session
     const preheatPromise = this.preheatPromises.get(sessionId);
     if (preheatPromise) {
@@ -1154,11 +1160,6 @@ export class ClaudeSessionManager {
       this.log.info(`[sendMessage] ${sessionId}: getting/creating V2 session...`);
       const v2Session = await this.getOrCreateV2Session(sessionId);
       this.log.info(`[sendMessage] ${sessionId}: V2 session ready, sending content (${content.length} chars)...`);
-
-      wsSend(JSON.stringify({
-        type: 'chat.start',
-        sessionId,
-      }));
 
       // Inject user profile + Sman context into content for Claude, but don't store it
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';

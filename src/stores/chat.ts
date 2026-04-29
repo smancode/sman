@@ -608,6 +608,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       contextWarning: null,
     });
 
+    // Yield to React so it can render the user message and "..." indicator immediately,
+    // before we do the heavy work of registering stream handlers and sending WS.
+    await new Promise<void>(r => setTimeout(r, 0));
+
     // Update label from first message if not set
     const session = sessions.find(s => s.key === currentSessionId);
     if (!session?.label) {
