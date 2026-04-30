@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil,
-  Clock, FileText,
+  Clock, FileText, FileCode,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -108,7 +108,7 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
   executing: boolean; executionStream: string; executionCompleted: boolean; workspace: string;
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
-  const hasResult = !!step.executionResult || executionCompleted;
+  const hasResult = executionCompleted || !!executionStream;
 
   useEffect(() => {
     if (executing && streamRef.current) {
@@ -152,7 +152,7 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                     <span className="text-muted-foreground animate-pulse">等待响应...</span>
                   ) : (
                     <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
-                      {step.executionResult || executionStream || ''}
+                      {executionStream || ''}
                     </Streamdown>
                   )}
                 </div>
@@ -189,7 +189,7 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
         {step.name && <p className="text-sm font-medium">{step.name}</p>}
         <p className="text-sm leading-relaxed text-muted-foreground">{step.userInput}</p>
 
-        {(executing || step.executionResult) && (
+        {(executing || executionStream) && (
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
             <div className="text-xs text-muted-foreground mb-1.5 font-medium">
               {executing ? (
@@ -202,7 +202,7 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
                 <span className="text-muted-foreground animate-pulse">等待响应...</span>
               ) : (
                 <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
-                  {step.executionResult || executionStream || ''}
+                  {executionStream || ''}
                 </Streamdown>
               )}
             </div>
@@ -321,22 +321,16 @@ function PathEditor({ path, onSave, onCancel }: {
 
   const handleExecute = useCallback(async (i: number) => {
     const s = steps[i]; if (!s?.userInput.trim()) return;
-    updateStep(i, { ...s, executionResult: undefined });
     try {
-      const result = await executeStep(path.id, path.workspace, i, s, steps.slice(0, i));
-      updateStep(i, { ...s, executionResult: result });
+      await executeStep(path.id, path.workspace, i, s, steps.slice(0, i));
     } catch {}
-  }, [steps, path, executeStep, updateStep]);
+  }, [steps, path, executeStep]);
 
   const handleSave = async () => {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
     try {
-      const stepsToSave = steps.map((s, i) => {
-        const execResult = stepExecutionStatus[i] === 'completed' ? (stepExecutionStream[i] || s.executionResult) : s.executionResult;
-        return { ...s, executionResult: execResult };
-      });
-      await onSave(name.trim(), stepsToSave, path.id, path.workspace, cronExpression.trim());
+      await onSave(name.trim(), steps, path.id, path.workspace, cronExpression.trim());
     } finally { setSaving(false); }
   };
 
@@ -394,7 +388,11 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
   const fetchReport = useSmartPathStore((s) => s.fetchReport);
   const currentReport = useSmartPathStore((s) => s.currentReport);
+  const references = useSmartPathStore((s) => s.references);
+  const currentReference = useSmartPathStore((s) => s.currentReference);
+  const fetchReference = useSmartPathStore((s) => s.fetchReference);
   const [viewingReport, setViewingReport] = useState<string | null>(null);
+  const [viewingRef, setViewingRef] = useState<string | null>(null);
 
   const handleViewReport = async (fileName: string) => {
     if (viewingReport === fileName) {
@@ -403,6 +401,15 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
     }
     setViewingReport(fileName);
     await fetchReport(path.id, path.workspace, fileName);
+  };
+
+  const handleViewRef = async (fileName: string) => {
+    if (viewingRef === fileName) {
+      setViewingRef(null);
+      return;
+    }
+    setViewingRef(fileName);
+    await fetchReference(path.id, path.workspace, fileName);
   };
 
   return (
@@ -441,6 +448,50 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
               executing={stepExecutionStatus[i] === 'running'} />
           ))}</div>}
       </div>
+
+      {/* 可复用资源 */}
+      {references.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">可复用资源</Label>
+          <div className="space-y-1.5">
+            {references.map((ref) => (
+              <div key={ref.fileName}>
+                <button
+                  onClick={() => handleViewRef(ref.fileName)}
+                  className={cn(
+                    'flex items-center justify-between w-full rounded-md px-3 py-2 border text-sm text-left transition-colors',
+                    viewingRef === ref.fileName ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted',
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    {ref.fileName.endsWith('.md') ? <FileText className="h-4 w-4 text-muted-foreground" />
+                      : <FileCode className="h-4 w-4 text-muted-foreground" />}
+                    <span>{ref.fileName}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{new Date(ref.updatedAt).toLocaleString()}</span>
+                </button>
+                {viewingRef === ref.fileName && currentReference && (
+                  <div className="mt-1.5">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">{ref.fileName}</span>
+                          <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>关闭</Button>
+                        </div>
+                        <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
+                          <Streamdown mode="static" controls={{ code: true, table: true }}>
+                            {currentReference}
+                          </Streamdown>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 执行报告列表 */}
       {reports.length > 0 && (
@@ -525,6 +576,7 @@ export function SmartPathPage() {
   const deletePath = useSmartPathStore((s) => s.deletePath);
   const runPath = useSmartPathStore((s) => s.runPath);
   const fetchRuns = useSmartPathStore((s) => s.fetchRuns);
+  const fetchReferences = useSmartPathStore((s) => s.fetchReferences);
   const setCurrentPath = useSmartPathStore((s) => s.setCurrentPath);
   const clearError = useSmartPathStore((s) => s.clearError);
   const clearStepExecutionState = useSmartPathStore((s) => s.clearStepExecutionState);
@@ -543,7 +595,10 @@ export function SmartPathPage() {
   }, [wsStatus, fetchPaths, fetchWorkspaces]);
 
   useEffect(() => {
-    if (currentPath) fetchRuns(currentPath.id, currentPath.workspace);
+    if (currentPath) {
+      fetchRuns(currentPath.id, currentPath.workspace);
+      fetchReferences(currentPath.id, currentPath.workspace);
+    }
   }, [currentPath?.id]);
 
   useEffect(() => { setEditing(false); }, [currentPath?.id]);

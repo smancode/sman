@@ -2,14 +2,14 @@
  * SmartPathStore — 地球路径存储
  *
  * 所有方法都通过 workspace 参数定位文件，不依赖 basePath 遍历。
- * 文件存储在 {workspace}/.sman/paths/{id}.md
+ * 新存储结构：{workspace}/.sman/paths/{pathId}/path.md + runs/ + reports/ + references/
  */
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import matter from 'gray-matter';
 import { createLogger, type Logger } from './utils/logger.js';
-import type { SmartPath, SmartPathStep, SmartPathRun } from './types.js';
+import type { SmartPath, SmartPathStep, SmartPathRun, SmartPathReference } from './types.js';
 
 /** 生成 8 位随机 ID（大小写字母+数字） */
 function generateId(): string {
@@ -36,21 +36,44 @@ export class SmartPathStore {
     return d;
   }
 
-  /** {workspace}/.sman/paths/{id}.md */
-  private file(ws: string, id: string): string {
+  /** {workspace}/.sman/paths/{pathId}/ — 路径根目录 */
+  private pathDir(ws: string, id: string): string {
+    return path.join(this.dir(ws), id);
+  }
+
+  /** {workspace}/.sman/paths/{pathId}/path.md — 新位置 */
+  private pathFile(ws: string, id: string): string {
+    return path.join(this.pathDir(ws, id), 'path.md');
+  }
+
+  /** {workspace}/.sman/paths/{id}.md — 旧位置（用于迁移） */
+  private legacyFile(ws: string, id: string): string {
     return path.join(this.dir(ws), `${id}.md`);
   }
 
   /** {workspace}/.sman/paths/{pathId}/runs/ */
   private runsDir(ws: string, pathId: string): string {
-    const d = path.join(this.dir(ws), pathId, 'runs');
+    const d = path.join(this.pathDir(ws, pathId), 'runs');
+    fs.mkdirSync(d, { recursive: true });
+    return d;
+  }
+
+  /** {workspace}/.sman/paths/{pathId}/reports/ */
+  private reportsDir(ws: string, pathId: string): string {
+    const d = path.join(this.pathDir(ws, pathId), 'reports');
+    fs.mkdirSync(d, { recursive: true });
+    return d;
+  }
+
+  /** {workspace}/.sman/paths/{pathId}/references/ */
+  private referencesDir(ws: string, pathId: string): string {
+    const d = path.join(this.pathDir(ws, pathId), 'references');
     fs.mkdirSync(d, { recursive: true });
     return d;
   }
 
   /**
    * 生成路径 ID: {业务系统名}-{路径名}-{8位随机字符}
-   * 业务系统名取 workspace basename，路径名做 sanitize
    */
   generatePathId(workspace: string, name: string): string {
     const project = path.basename(workspace).replace(/[^a-zA-Z0-9一-龥-_]/g, '');
@@ -59,13 +82,50 @@ export class SmartPathStore {
     return `${project}-${safeName}-${suffix}`;
   }
 
+  // ── 迁移 ──
+
+  /** 惰性迁移：旧 {id}.md → 新 {id}/path.md */
+  private migrateIfNeeded(ws: string, id: string): void {
+    const newPath = this.pathFile(ws, id);
+    const oldPath = this.legacyFile(ws, id);
+
+    if (fs.existsSync(newPath)) return;
+    if (!fs.existsSync(oldPath)) return;
+
+    const raw = fs.readFileSync(oldPath, 'utf-8');
+    const { data, content } = matter(raw);
+
+    // 剥离 executionResult（设计时和运行时解耦）
+    if (data.steps && Array.isArray(data.steps)) {
+      data.steps = data.steps.map((s: Record<string, unknown>) => {
+        const { executionResult, ...designOnly } = s;
+        return designOnly;
+      });
+    }
+
+    fs.mkdirSync(path.dirname(newPath), { recursive: true });
+    fs.writeFileSync(newPath, matter.stringify(content, data), 'utf-8');
+
+    // 确保 references 目录存在
+    this.referencesDir(ws, id);
+
+    // 初始化 run.md
+    const runMd = path.join(this.referencesDir(ws, id), 'run.md');
+    if (!fs.existsSync(runMd)) {
+      fs.writeFileSync(runMd, '# 复用指南\n\n> 首次执行后将自动维护此文件\n', 'utf-8');
+    }
+
+    fs.unlinkSync(oldPath);
+    this.log.info(`Migrated path ${id} to new structure`);
+  }
+
   // ── 文件读写 ──
 
   private read(filePath: string): SmartPath {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const { data } = matter(raw);
     return {
-      id: path.basename(filePath, '.md'),
+      id: path.basename(path.dirname(filePath)),
       name: data.name || '',
       description: data.description || '',
       workspace: data.workspace || '',
@@ -82,49 +142,62 @@ export class SmartPathStore {
     if (!p.workspace) throw new Error('Workspace is required');
     const steps = (() => { try { return JSON.parse(p.steps); } catch { return []; } })();
     const content = matter.stringify(
-      `# ${p.name}\n\n${(p as any).description || ''}\n`,
+      `# ${p.name}\n\n${p.description || ''}\n`,
       {
         name: p.name,
-        description: (p as any).description || '',
+        description: p.description || '',
         workspace: p.workspace,
         created_at: p.createdAt,
         updated_at: p.updatedAt || p.createdAt,
         status: p.status,
-        cron_expression: (p as any).cronExpression || '',
+        cron_expression: p.cronExpression || '',
         steps,
       },
     );
-    const filePath = this.file(p.workspace, p.id);
+    const filePath = this.pathFile(p.workspace, p.id);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, 'utf-8');
     this.log.info(`Saved: ${filePath}`);
   }
 
   // ── CRUD ──
 
-  /** 列出指定 workspace 下的所有路径 */
   list(ws: string): SmartPath[] {
     const d = this.dir(ws);
     if (!fs.existsSync(d)) return [];
-    return fs.readdirSync(d)
-      .filter(f => f.endsWith('.md'))
-      .map(f => { try { return this.read(path.join(d, f)); } catch { return null; } })
-      .filter((p): p is SmartPath => p !== null)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    const results: SmartPath[] = [];
+    const entries = fs.readdirSync(d);
+
+    for (const entry of entries) {
+      if (entry.endsWith('.md')) {
+        // 旧结构: {id}.md
+        const id = path.basename(entry, '.md');
+        this.migrateIfNeeded(ws, id);
+        try { results.push(this.read(this.pathFile(ws, id))); } catch { /* skip */ }
+      } else if (fs.statSync(path.join(d, entry)).isDirectory()) {
+        // 新结构: {id}/path.md
+        const subPath = path.join(d, entry, 'path.md');
+        if (fs.existsSync(subPath)) {
+          try { results.push(this.read(subPath)); } catch { /* skip */ }
+        }
+      }
+    }
+
+    return results.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  /** 列出多个 workspace 下的所有路径 */
   listAll(workspaces: string[]): SmartPath[] {
     return workspaces.flatMap(ws => this.list(ws))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  /** 获取单个路径，workspace 必传 */
   get(id: string, ws: string): SmartPath | undefined {
-    const f = this.file(ws, id);
+    this.migrateIfNeeded(ws, id);
+    const f = this.pathFile(ws, id);
     return fs.existsSync(f) ? this.read(f) : undefined;
   }
 
-  /** 创建路径 */
   create(input: { name: string; workspace: string; steps: string }): SmartPath {
     if (!input.name?.trim()) throw new Error('Missing name');
     if (!input.workspace?.trim()) throw new Error('Missing workspace');
@@ -141,40 +214,35 @@ export class SmartPathStore {
       updatedAt: now,
     };
     this.write(p);
+    // 确保 references 目录存在
+    this.referencesDir(input.workspace, id);
     return p;
   }
 
-  /** 更新路径（名称变更时同步迁移文件） */
   update(id: string, ws: string, updates: Partial<SmartPath>): SmartPath {
     const existing = this.get(id, ws);
     if (!existing) throw new Error(`Path not found: ${id}`);
     const merged = { ...existing, ...updates, updatedAt: new Date().toISOString() };
 
-    // 如果名称变更了，需要迁移文件
+    // 名称变更 → 迁移整个目录
     if (updates.name && updates.name !== existing.name) {
-      const oldFile = this.file(ws, id);
       const newId = this.generatePathId(ws, updates.name);
       merged.id = newId;
-      // 写新文件
-      this.write(merged);
-      // 迁移 runs 目录
-      const oldRunsDir = path.join(this.dir(ws), id, 'runs');
-      const newRunsDir = path.join(this.dir(ws), newId, 'runs');
-      if (fs.existsSync(oldRunsDir)) {
-        fs.mkdirSync(path.dirname(newRunsDir), { recursive: true });
-        fs.renameSync(oldRunsDir, newRunsDir);
+
+      const oldDir = this.pathDir(ws, id);
+      const newDir = this.pathDir(ws, newId);
+      if (fs.existsSync(oldDir)) {
+        fs.mkdirSync(path.dirname(newDir), { recursive: true });
+        fs.renameSync(oldDir, newDir);
       }
-      // 迁移 reports 目录
-      const oldReportsDir = path.join(this.dir(ws), id, 'reports');
-      const newReportsDir = path.join(this.dir(ws), newId, 'reports');
-      if (fs.existsSync(oldReportsDir)) {
-        fs.mkdirSync(path.dirname(newReportsDir), { recursive: true });
-        fs.renameSync(oldReportsDir, newReportsDir);
-      }
-      // 删旧文件和旧目录
-      const oldDir = path.join(this.dir(ws), id);
+
+      // 重命名目录内的 path.md 内容
+      this.write({ ...merged, id: newId });
+
+      // 清理旧平铺文件
+      const oldFile = this.legacyFile(ws, id);
       if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      if (fs.existsSync(oldDir) && fs.readdirSync(oldDir).length === 0) fs.rmdirSync(oldDir);
+
       return merged;
     }
 
@@ -182,14 +250,19 @@ export class SmartPathStore {
     return merged;
   }
 
-  /** 删除路径 */
   del(id: string, ws: string): void {
-    const f = this.file(ws, id);
-    if (!fs.existsSync(f)) throw new Error(`Path not found: ${id}`);
-    fs.unlinkSync(f);
-    // 清理子目录（runs, reports）
-    const subDir = path.join(this.dir(ws), id);
+    const subDir = this.pathDir(ws, id);
+    const legacyF = this.legacyFile(ws, id);
+    if (!fs.existsSync(subDir) && !fs.existsSync(legacyF)) {
+      throw new Error(`Path not found: ${id}`);
+    }
+
+    // 删除整个 {id}/ 目录
     if (fs.existsSync(subDir)) fs.rmSync(subDir, { recursive: true });
+
+    // 清理旧平铺文件
+    if (fs.existsSync(legacyF)) fs.unlinkSync(legacyF);
+
     this.log.info(`Deleted: ${id}`);
   }
 
@@ -229,15 +302,7 @@ export class SmartPathStore {
 
   // ── Reports ──
 
-  /** {workspace}/.sman/paths/{pathId}/reports/ */
-  private reportsDir(ws: string, pathId: string): string {
-    const d = path.join(this.dir(ws), pathId, 'reports');
-    fs.mkdirSync(d, { recursive: true });
-    return d;
-  }
-
-  /** 生成执行报告 MD 文件 */
-  createReport(ws: string, pathId: string, pathName: string, steps: SmartPathStep[], runId: string, status: string, startedAt: string, finishedAt?: string): string {
+  createReport(ws: string, pathId: string, pathName: string, steps: SmartPathStep[], stepResults: string[], runId: string, status: string, startedAt: string, finishedAt?: string): string {
     const lines: string[] = [];
     lines.push(`# 执行报告：${pathName}`);
     lines.push('');
@@ -257,10 +322,11 @@ export class SmartPathStore {
       lines.push('');
       lines.push(`**输入**：${s.userInput}`);
       lines.push('');
-      if (s.executionResult) {
+      const result = stepResults[i];
+      if (result) {
         lines.push('**执行结果**：');
         lines.push('');
-        lines.push(s.executionResult);
+        lines.push(result);
         lines.push('');
       }
       lines.push('---');
@@ -275,14 +341,12 @@ export class SmartPathStore {
     return reportPath;
   }
 
-  /** 获取报告内容 */
   getReport(ws: string, pathId: string, reportFileName: string): string | null {
     const f = path.join(this.reportsDir(ws, pathId), reportFileName);
     if (!fs.existsSync(f)) return null;
     return fs.readFileSync(f, 'utf-8');
   }
 
-  /** 列出所有报告 */
   listReports(pathId: string, ws: string): Array<{ fileName: string; createdAt: string }> {
     const rd = this.reportsDir(ws, pathId);
     if (!fs.existsSync(rd)) return [];
@@ -293,5 +357,39 @@ export class SmartPathStore {
         createdAt: fs.statSync(path.join(rd, f)).mtime.toISOString(),
       }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  // ── References ──
+
+  listReferences(ws: string, pathId: string): SmartPathReference[] {
+    const rd = this.referencesDir(ws, pathId);
+    if (!fs.existsSync(rd)) return [];
+    return fs.readdirSync(rd)
+      .filter(f => !f.startsWith('.'))
+      .map(f => ({
+        fileName: f,
+        updatedAt: fs.statSync(path.join(rd, f)).mtime.toISOString(),
+      }))
+      .sort((a, b) => a.fileName.localeCompare(b.fileName));
+  }
+
+  getReference(ws: string, pathId: string, fileName: string): string | null {
+    const f = path.join(this.referencesDir(ws, pathId), fileName);
+    if (!fs.existsSync(f)) return null;
+    return fs.readFileSync(f, 'utf-8');
+  }
+
+  saveReference(ws: string, pathId: string, fileName: string, content: string): void {
+    const f = path.join(this.referencesDir(ws, pathId), fileName);
+    fs.writeFileSync(f, content, 'utf-8');
+    this.log.info(`Reference saved: ${f}`);
+  }
+
+  getRunGuide(ws: string, pathId: string): string | null {
+    return this.getReference(ws, pathId, 'run.md');
+  }
+
+  updateRunGuide(ws: string, pathId: string, content: string): void {
+    this.saveReference(ws, pathId, 'run.md', content);
   }
 }

@@ -29,11 +29,13 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | 飞书 | 飞书 SDK 事件监听 | `server/chatbot/feishu-bot-connection.ts` |
 | 微信 | 微信 Bot 连接 | `server/chatbot/weixin-bot-connection.ts` |
 
-## 使用流程
+## 核心功能（侧边栏入口）
 
-1. **新建会话** → 点击"新建会话"按钮 → 选择项目目录 → 开始对话
-2. **会话管理** → 按目录分组显示 → 点击切换会话
-3. **企业微信/飞书/微信** → 直接在 Bot 对话中发消息，用 `//cd <项目名>` 切换工作目录
+1. **新建会话** → 选择项目目录 → 开始对话 → 按目录分组显示会话
+2. **协作星图** → 多 Agent 协作网络（仪表盘 + 像素世界）
+3. **定时任务** → Cron 表达式驱动的自动化任务
+4. **地球路径** → 多步骤自动化工作流（逐步骤执行，前一步结果作为下一步上下文）
+5. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
 
 **设计理念**：越简单越好，不要让用户看不懂。
 
@@ -106,13 +108,16 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── stardom-session.ts      # 协作会话管理（Claude Agent SDK 集成）
 │   │   ├── types.ts                # 桥接层类型
 │   │   └── index.ts                # 导出
+│   ├── smart-path-store.ts     # 地球路径存储（文件存储：{workspace}/.sman/paths/{id}.md）
+│   ├── smart-path-engine.ts    # 地球路径执行引擎（逐步骤执行，纯内存临时会话）
+│   └── smart-path-scheduler.ts # 地球路径定时调度（cron 表达式驱动自动执行）
 │   └── utils/
 │       ├── logger.ts              # 日志工具
 │       └── content-blocks.ts      # 消息内容块构建（文本、图片、媒体）
 ├── src/                     # React 前端
 │   ├── app/
 │   │   ├── App.tsx          # 顶层应用组件
-│   │   └── routes.tsx       # 路由定义 (/chat, /settings, /cron-tasks, /batch-tasks, /stardom)
+│   │   └── routes.tsx       # 路由定义 (/chat, /settings, /cron-tasks, /batch-tasks, /smart-paths, /stardom)
 │   ├── features/
 │   │   ├── chat/            # 聊天功能
 │   │   │   ├── index.tsx          # 聊天页面主组件
@@ -136,6 +141,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   │   └── BackendSettings.tsx    # 后端服务 URL 配置
 │   │   ├── cron-tasks/      # Cron 任务页面
 │   │   ├── batch-tasks/     # 批量任务页面
+│   │   ├── smart-paths/     # 地球路径页面（多步骤自动化工作流）
 │   │   └── stardom/          # 星域页面（仪表盘 + 像素世界）
 │   ├── components/          # 通用组件
 │   │   ├── SessionTree.tsx         # 会话树（按目录分组、内置目录选择器）
@@ -150,6 +156,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── stardom.ts        # 星域状态（连接、任务、Agent 列表、世界坐标）
 │   │   ├── cron.ts          # Cron 任务状态
 │   │   ├── batch.ts         # 批量任务状态
+│   │   ├── smart-path.ts    # 地球路径状态（路径 CRUD、步骤执行、流式进度）
 │   │   └── ws-connection.ts # WebSocket 连接状态
 │   ├── lib/                 # 工具库
 │   │   ├── ws-client.ts     # WebSocket 客户端（自动重连、认证）
@@ -264,6 +271,15 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   ├── business-{username}.md    # 业务知识（需求、规则、流程）
 │   ├── conventions-{username}.md # 开发规范（命名、架构决策）
 │   └── technical-{username}.md   # 技术知识（API、schema、集成）
+└── paths/               # 地球路径（文件存储，非 SQLite）
+    └── {pathId}/
+        ├── path.md      # 路径定义（frontmatter: name, workspace, steps, status, cron_expression）
+        ├── runs/        # 执行记录（JSON: status, stepResults, startedAt, finishedAt）
+        ├── reports/     # 执行报告（Markdown: 每步骤输入+结果）
+        └── references/  # 复用资源库
+            ├── run.md   # 复用指南（每次执行完自动维护）
+            ├── *.sh     # 执行生成的脚本
+            └── *.md     # 执行生成的知识文档
 ```
 
 ## Skills 机制
@@ -342,6 +358,11 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `server/stardom/stardom-store.ts` | 星域本地存储（SQLite） |
 | `server/stardom/stardom-mcp.ts` | 星域 MCP 工具（stardom_search, stardom_collaborate） |
 | `stardom/src/capability-store.ts` | 星域通用能力包存储 |
+| `server/smart-path-store.ts` | 地球路径存储（文件系统：路径定义 MD + runs JSON + reports MD） |
+| `server/smart-path-engine.ts` | 地球路径执行引擎（逐步骤执行，纯内存临时会话） |
+| `server/smart-path-scheduler.ts` | 地球路径定时调度（cron 表达式驱动） |
+| `src/features/smart-paths/index.tsx` | 地球路径页面组件 |
+| `src/stores/smart-path.ts` | 地球路径 Zustand 状态管理 |
 
 ## WebSocket API
 
@@ -402,6 +423,21 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `stardom.world.move` | 发送 Agent 世界坐标更新 |
 | `stardom.notify` | 收到协作请求通知 |
 | `stardom.task.chat.delta` | 协作对话增量消息 |
+
+### 地球路径
+
+| 类型 | 说明 |
+|------|------|
+| `smartpath.list` | 列出指定 workspace 下的所有路径，参数: `{ workspaces: string[] }` |
+| `smartpath.create` | 创建路径，参数: `{ name, workspace, steps }` |
+| `smartpath.update` | 更新路径（名称变更时自动迁移文件和 runs），参数: `{ pathId, workspace, ...updates }` |
+| `smartpath.delete` | 删除路径（含 runs/reports 子目录），参数: `{ pathId, workspace }` |
+| `smartpath.run` | 执行路径（逐步骤，每步纯内存临时会话，流式推送进度） |
+| `smartpath.runs` | 获取路径的执行记录和报告列表，参数: `{ pathId, workspace }` |
+| `smartpath.report` | 获取执行报告内容，参数: `{ pathId, workspace, fileName }` |
+| `smartpath.references` | 获取路径的复用资源列表，参数: `{ pathId, workspace }` |
+| `smartpath.reference.read` | 获取复用资源文件内容，参数: `{ pathId, workspace, fileName }` |
+| `smartpath.generateStep` | AI 生成步骤方案或执行单个步骤，参数: `{ userInput, workspace, previousSteps, execute?, pathId?, stepIndex? }` |
 
 ## Chatbot 命令（企业微信/飞书/微信）
 
@@ -521,7 +557,9 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 14. **会话初始化**: 新建会话自动扫描项目 → 注入 Skills → 匹配 Capabilities → 执行初始化对话
 15. **消息隔离**: 多会话并行不串 — 后端 Map 全部以 sessionId 为 key，前端 handler 过滤 sessionId，streamingBlocksMap 按 sessionId 独立存储
 16. **知识提取**: 每 10 分钟空闲时从对话提取业务知识/开发规范/技术知识 → 存入 `{workspace}/.sman/knowledge/{category}-{username}.md`（每人独立文件，push 到 git 共享）→ skill-auto-updater 聚合所有用户文件生成 `knowledge-business/conventions/technical` 三个 skill。用 hash 标记去重，支持增量提取（记录 `last_extracted_message_id`）
-17. **UI 响应性优先（动画先表演，后台再做事）**: 所有用户交互（打字、点击、回车）必须立即得到 UI 反馈，不允许任何同步阻塞导致掉帧或卡顿。具体规则：
+17. **地球路径存储**: 文件存储（非 SQLite），路径定义存在 `{workspace}/.sman/paths/{pathId}/path.md`（frontmatter 格式，只含设计时信息不含 executionResult），执行记录在 `{pathId}/runs/{runId}.json`，报告在 `{pathId}/reports/report-{timestamp}.md`，复用资源在 `{pathId}/references/`。路径 ID 格式：`{项目名}-{路径名}-{8位随机字符}`
+18. **地球路径执行**: 逐步骤执行，每步创建纯内存临时会话（不写 SQLite、不污染主会话列表），前一步结果作为下一步输入上下文。支持 cron 表达式定时自动执行。执行时自动注入 `references/` 中的复用资源，步骤输出中 `[REFERENCE:filename.ext]` 标注的文件会被自动保存到 references。每次执行完自动维护 `references/run.md` 复用指南
+19. **UI 响应性优先（动画先表演，后台再做事）**: 所有用户交互（打字、点击、回车）必须立即得到 UI 反馈，不允许任何同步阻塞导致掉帧或卡顿。具体规则：
     - **输入框打字零联动**: `handleInputChange` 里不做任何资源操作（不发 WS、不调 IPC、不触发 store 副作用）。`preheatSession` 和 `gitBranchRefresh` 等操作推迟到用户点击发送时异步执行
     - **发送不卡 UI**: `handleSend` 里先同步清空输入框（`setInput('')`），再用 `setTimeout(0)` 把 `onSend` 推到下一帧。store 的 `sendMessage` 在 `set({ sending: true })` 后也必须 `await setTimeout(0)` 让 React 先渲染用户消息和动画，再注册 stream handlers 和发 WS
     - **后端立即确认**: 后端 `sendMessage` 收到请求后立刻发 `chat.start`，不要等 preheat 或 `getOrCreateV2Session` 完成后再发

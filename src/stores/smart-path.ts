@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathStep } from '@/types/settings';
+import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathStep, SmartPathReference } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -38,6 +38,10 @@ interface SmartPathState {
   stepExecutionStream: Record<number, string>;
   stepExecutionStatus: Record<number, StepExecStatus>;
 
+  // References
+  references: SmartPathReference[];
+  currentReference: string | null;
+
   fetchPaths: (workspaces: string[]) => Promise<void>;
   createPath: (input: { name: string; workspace: string; steps: string }) => Promise<SmartPath>;
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
@@ -50,6 +54,8 @@ interface SmartPathState {
   clearStepExecutionState: () => void;
   setCurrentPath: (path: SmartPath | null) => void;
   clearError: () => void;
+  fetchReferences: (pathId: string, workspace: string) => Promise<void>;
+  fetchReference: (pathId: string, workspace: string, fileName: string) => Promise<void>;
 }
 
 export const useSmartPathStore = create<SmartPathState>((set) => ({
@@ -64,6 +70,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   stepExecutionStream: {},
   stepExecutionStatus: {},
+
+  references: [],
+  currentReference: null,
 
   fetchPaths: async (workspaces) => {
     const client = getWsClient();
@@ -174,7 +183,8 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       if (data.pathId === pathId) {
         unsubStepProgress(); unsubStepResult(); unsubProgress(); unsubComplete(); unsubFailed();
         const p = data.path as SmartPath;
-        set((s) => ({ running: false, paths: s.paths.map((x) => x.id === pathId ? { ...x, ...p } : x) }));
+        const refs = (data.references as SmartPathReference[]) || [];
+        set((s) => ({ running: false, paths: s.paths.map((x) => x.id === pathId ? { ...x, ...p } : x), references: refs }));
       }
     });
     const unsubFailed = wrapHandler(client, 'smartpath.failed', (data) => {
@@ -267,36 +277,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         const payload = data.payload as Record<string, unknown> | undefined;
         const resultStr = String(payload?.result || '');
         unsubProgress(); unsubComplete(); unsubFailed();
-        set((s) => {
-          const updatedPaths = s.paths.map((p) => {
-            if (p.id !== pathId) return p;
-            try {
-              const pathSteps: SmartPathStep[] = JSON.parse(p.steps);
-              if (pathSteps[stepIndex]) {
-                pathSteps[stepIndex] = { ...pathSteps[stepIndex], executionResult: resultStr };
-                return { ...p, steps: JSON.stringify(pathSteps) };
-              }
-            } catch {}
-            return p;
-          });
-          const updatedCurrentPath = s.currentPath?.id === pathId
-            ? (() => {
-                try {
-                  const pathSteps: SmartPathStep[] = JSON.parse(s.currentPath!.steps);
-                  if (pathSteps[stepIndex]) {
-                    pathSteps[stepIndex] = { ...pathSteps[stepIndex], executionResult: resultStr };
-                    return { ...s.currentPath!, steps: JSON.stringify(pathSteps) };
-                  }
-                } catch {}
-                return s.currentPath;
-              })()
-            : s.currentPath;
-          return {
-            stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'completed' },
-            paths: updatedPaths,
-            currentPath: updatedCurrentPath,
-          };
-        });
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'completed' },
+        }));
         resolve(resultStr);
       });
       const unsubFailed = wrapHandler(client, 'chat.error', (data) => {
@@ -322,6 +305,32 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   clearStepExecutionState: () => set({ stepExecutionStream: {}, stepExecutionStatus: {} }),
 
-  setCurrentPath: (path) => set({ currentPath: path, runs: [], reports: [], currentReport: null, stepExecutionStream: {}, stepExecutionStatus: {} }),
+  setCurrentPath: (path) => set({ currentPath: path, runs: [], reports: [], currentReport: null, stepExecutionStream: {}, stepExecutionStatus: {}, references: [], currentReference: null }),
   clearError: () => set({ error: null }),
+
+  fetchReferences: async (pathId, workspace) => {
+    const client = getWsClient();
+    if (!client) return;
+    return new Promise<void>((resolve) => {
+      const unsub = wrapHandler(client, 'smartpath.references', (data) => {
+        unsub();
+        set({ references: (data.references as SmartPathReference[]) || [] });
+        resolve();
+      });
+      client.send({ type: 'smartpath.references', pathId, workspace });
+    });
+  },
+
+  fetchReference: async (pathId, workspace, fileName) => {
+    const client = getWsClient();
+    if (!client) return;
+    return new Promise<void>((resolve) => {
+      const unsub = wrapHandler(client, 'smartpath.reference.content', (data) => {
+        unsub();
+        set({ currentReference: (data.content as string) || null });
+        resolve();
+      });
+      client.send({ type: 'smartpath.reference.read', pathId, workspace, fileName });
+    });
+  },
 }));

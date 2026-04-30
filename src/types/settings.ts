@@ -175,7 +175,6 @@ export interface SmartPathStep {
   name?: string;
   userInput: string;
   generatedContent?: string;
-  executionResult?: string;
 }
 
 export interface SmartPath {
@@ -198,4 +197,9 @@ export interface SmartPathRun {
   finishedAt?: string;
   errorMessage?: string;
   reportFileName?: string;
+}
+
+export interface SmartPathReference {
+  fileName: string;
+  updatedAt: string;
 }

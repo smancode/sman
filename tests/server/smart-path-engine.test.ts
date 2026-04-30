@@ -12,6 +12,7 @@ describe('SmartPathEngine', () => {
   let dbPath: string;
   let mockSessionManager: {
     createEphemeralSessionWithId: ReturnType<typeof vi.fn>;
+    createEphemeralSession: ReturnType<typeof vi.fn>;
     sendMessageForCron: ReturnType<typeof vi.fn>;
     sendMessageForStep: ReturnType<typeof vi.fn>;
     getHistory: ReturnType<typeof vi.fn>;
@@ -26,6 +27,7 @@ describe('SmartPathEngine', () => {
     store = new SmartPathStore();
     mockSessionManager = {
       createEphemeralSessionWithId: vi.fn(),
+      createEphemeralSession: vi.fn().mockReturnValue('ephemeral-id'),
       sendMessageForCron: vi.fn().mockResolvedValue(undefined),
       sendMessageForStep: vi.fn().mockResolvedValue('step result'),
       getHistory: vi.fn().mockReturnValue([
@@ -58,7 +60,8 @@ describe('SmartPathEngine', () => {
     const runs = store.listRuns(p.id, workspace);
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('completed');
-    expect(mockSessionManager.sendMessageForStep).toHaveBeenCalledTimes(2);
+    // 2 step executions + 1 updateRunGuide call = 3
+    expect(mockSessionManager.sendMessageForStep).toHaveBeenCalledTimes(3);
   });
 
   it('should collect result from session history', async () => {

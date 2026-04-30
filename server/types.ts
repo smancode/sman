@@ -152,6 +152,10 @@ export interface SmartPathStep {
   name?: string;
   userInput: string;
   generatedContent?: string;
+}
+
+/** Runtime step with execution result — used in Run records and reports, NOT in path.md */
+export interface SmartPathStepResult extends SmartPathStep {
   executionResult?: string;
 }
 
@@ -176,4 +180,9 @@ export interface SmartPathRun {
   finishedAt?: string;
   errorMessage?: string;
   reportFileName?: string;
+}
+
+export interface SmartPathReference {
+  fileName: string;
+  updatedAt: string;
 }

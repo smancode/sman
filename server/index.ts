@@ -1173,7 +1173,8 @@ wss.on('connection', (ws: WebSocket) => {
               },
             ).then(() => {
               const p = smartPathStore.get(runPathId, runWorkspace);
-              broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: p }));
+              const refs = smartPathStore.listReferences(runWorkspace, runPathId);
+              broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: p, references: refs }));
             }).catch((err) => {
               broadcast(JSON.stringify({ type: 'smartpath.failed', pathId: runPathId, error: err instanceof Error ? err.message : String(err) }));
             });
@@ -1200,6 +1201,20 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'smartpath.references': {
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          const refs = smartPathStore.listReferences(msg.workspace as string, msg.pathId as string);
+          ws.send(JSON.stringify({ type: 'smartpath.references', pathId: msg.pathId, references: refs }));
+          break;
+        }
+
+        case 'smartpath.reference.read': {
+          if (!msg.pathId || !msg.workspace || !msg.fileName) throw new Error('Missing pathId, workspace or fileName');
+          const content = smartPathStore.getReference(msg.workspace as string, msg.pathId as string, msg.fileName as string);
+          ws.send(JSON.stringify({ type: 'smartpath.reference.content', pathId: msg.pathId, fileName: msg.fileName, content }));
+          break;
+        }
+
         case 'smartpath.generateStep': {
           const userInput = msg.userInput as string;
           const workspace = msg.workspace as string;
@@ -1213,11 +1228,12 @@ wss.on('connection', (ws: WebSocket) => {
               // 流式执行模式 — 纯内存临时会话，不写 SQLite，不污染主会话列表
               const tempSessionId = sessionManager.createEphemeralSession(workspace);
               const abort = new AbortController();
-              const prompt = buildStepExecutionPrompt(userInput, previousSteps);
+              const pId = msg.pathId as string | undefined;
+              const refsContext = buildWsReferencesContext(smartPathStore, workspace, pId);
+              const prompt = buildStepExecutionPrompt(userInput, previousSteps, refsContext);
               const stepSystemPrompt = buildStepSystemPrompt();
 
               const stepIdx = msg.stepIndex as number | undefined;
-              const pId = msg.pathId as string | undefined;
               let result = '';
               try {
                 result = await sessionManager.sendMessageForStep(
@@ -1229,6 +1245,13 @@ wss.on('connection', (ws: WebSocket) => {
                   },
                   stepSystemPrompt,
                 );
+
+                // 提取并保存 reference 文件
+                const refRegex = /\[REFERENCE:([^\]]+)\]\s*\n```\s*\n([\s\S]*?)```/g;
+                let refMatch;
+                while ((refMatch = refRegex.exec(result)) !== null) {
+                  if (pId) smartPathStore.saveReference(workspace, pId, refMatch[1].trim(), refMatch[2].trim());
+                }
               } finally {
                 // 清理内存中的临时会话和 V2 进程
                 sessionManager.closeV2Session(tempSessionId);
@@ -1459,14 +1482,18 @@ initStardomBridge({
 // When imported by Electron, electron/main.ts calls startServer()
 /**
  * 构建步骤执行提示词
- * 第一步：本步骤输入：「xxx」
- * 后续步：上个步骤执行结果：「xxx」\n本步骤输入：「xxx」
  */
 function buildStepExecutionPrompt(
   userInput: string,
   previousSteps: Array<{ userInput: string; generatedContent?: string; executionResult?: string }>,
+  referencesContext?: string,
 ): string {
   const parts: string[] = [];
+  if (referencesContext) {
+    parts.push('[可复用资源 — 优先使用这些资源，不要重新生成]');
+    parts.push(referencesContext);
+    parts.push('');
+  }
   const last = previousSteps.length > 0 ? previousSteps[previousSteps.length - 1] : null;
   if (last?.executionResult) {
     parts.push(`上个步骤执行结果：「${last.executionResult}」`);
@@ -1475,9 +1502,31 @@ function buildStepExecutionPrompt(
   return parts.join('\n');
 }
 
+/** 构建 references 上下文（WS handler 用） */
+function buildWsReferencesContext(store: SmartPathStore, workspace: string, pathId: string | undefined): string {
+  if (!pathId) return '';
+  const runGuide = store.getRunGuide(workspace, pathId);
+  const refs = store.listReferences(workspace, pathId).filter(r => r.fileName !== 'run.md');
+  if (!runGuide && refs.length === 0) return '';
+  const parts: string[] = [];
+  if (runGuide) {
+    parts.push('## 复用指南 (run.md)');
+    parts.push(runGuide);
+    parts.push('');
+  }
+  for (const ref of refs) {
+    const content = store.getReference(workspace, pathId, ref.fileName);
+    if (content) {
+      parts.push(`## ${ref.fileName}`);
+      parts.push(content.length > 2000 ? content.slice(0, 2000) + '\n...(truncated)' : content);
+      parts.push('');
+    }
+  }
+  return parts.join('\n');
+}
+
 /**
  * 步骤执行的精简 system prompt
- * 禁止 dev-workflow、禁止询问用户、直接给出结果
  */
 function buildStepSystemPrompt(): string {
   return [
@@ -1489,6 +1538,12 @@ function buildStepSystemPrompt(): string {
     '3. 能使用现有 skill/tool 直接完成就使用，不能的直接实现。',
     '4. 输出要简洁：执行了什么 + 结果。不要冗长解释。',
     '5. 最后用一行明确总结结果（以「执行结果：」开头）。',
+    '6. 如果执行过程中生成了可复用的脚本或文档，在结果末尾用以下格式标注：',
+    '   [REFERENCE:filename.ext]',
+    '   ```',
+    '   文件内容',
+    '   ```',
+    '   可以标注多个文件。这些文件会被保存到复用资源库，下次执行时可以直接复用。',
   ].join('\n');
 }
 
