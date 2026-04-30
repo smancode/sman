@@ -30,8 +30,8 @@ function withEngineCheck(
   return async (args: any, extra: any) => {
     if (!service.getActiveEngineType()) {
       return errorResult(
-        '浏览器不可用。Chrome 自动启动失败，请确认已安装 Google Chrome。\n'
-        + '提示：如果需要访问内网系统（ITSM/OA等），请用以下命令启动 Chrome 后重试：\n'
+        '浏览器不可用。请确认已安装 Google Chrome。\n'
+        + '如果 Chrome 已经打开但无法连接，请关闭后重试，或用以下命令启动 Chrome：\n'
         + '  Windows: chrome.exe --remote-debugging-port=9222\n'
         + '  macOS: /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222',
       );
@@ -91,7 +91,8 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
 
   const navigateTool = tool(
     'web_access_navigate',
-    'Navigate to a URL in the browser. Reuses existing tab for the session if one exists.',
+    'Navigate to a URL in the browser. Reuses existing tab for the session if one exists. '
+    + 'Returns page title, URL, and compact accessibility tree of the loaded page.',
     {
       session_id: z.string().describe('Session ID for tab isolation'),
       url: z.string().describe('URL to navigate to'),
@@ -102,6 +103,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         tabId,
         title: snapshot.title,
         url: snapshot.url,
+        accessibilityTree: snapshot.accessibilityTree,
         isLoginPage: snapshot.isLoginPage,
       };
       if (snapshot.isLoginPage && snapshot.loginUrl) {
@@ -114,7 +116,10 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
 
   const snapshotTool = tool(
     'web_access_snapshot',
-    'Get an accessibility snapshot of the current page. Returns text content, buttons, links, etc.',
+    'Get a compact accessibility tree of the current page. '
+    + 'Returns structured semantic nodes: headings, buttons, links, inputs, tables, etc. '
+    + 'Each line shows [role] "name" and key attributes (level, checked, type, url). '
+    + 'Use this to understand page layout and find elements to interact with.',
     {
       tab_id: z.string().describe('Tab ID to snapshot'),
     },

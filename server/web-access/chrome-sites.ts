@@ -10,7 +10,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createLogger } from '../utils/logger.js';
-import { CdpEngine } from './cdp-engine.js';
 
 const log = createLogger('ChromeSites');
 
@@ -81,6 +80,20 @@ function readBookmarks(profileDir: string, results: Map<string, string>, max: nu
 // --- History ---
 
 /**
+ * Copy a file that may be locked by another process (Chrome).
+ * On Windows, uses PowerShell Copy-Item which can read locked files.
+ */
+function copyFileLocked(srcPath: string, destPath: string): void {
+  if (os.platform() === 'win32') {
+    const { execFileSync } = require('node:child_process');
+    const psCmd = `Copy-Item -LiteralPath '${srcPath.replace(/'/g, "''")}' -Destination '${destPath.replace(/'/g, "''")}' -Force`;
+    execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { timeout: 5000 });
+  } else {
+    fs.copyFileSync(srcPath, destPath);
+  }
+}
+
+/**
  * Query Chrome History SQLite for a single profile.
  * Copies to a temp file because Chrome locks the original.
  */
@@ -90,7 +103,7 @@ function queryHistoryDb(profileDir: string, max: number): Array<{ title: string;
 
   const tmpPath = path.join(os.tmpdir(), `sman-chrome-history-${Date.now()}.db`);
   try {
-    CdpEngine.copyFileLocked(historyPath, tmpPath);
+    copyFileLocked(historyPath, tmpPath);
   } catch { return []; }
 
   try {

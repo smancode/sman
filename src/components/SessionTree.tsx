@@ -98,22 +98,22 @@ const SessionItem = memo(function SessionItem({
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (deleting) return;
     setDeleting(true);
     try {
-      await onDelete();
+      onDelete();
     } catch (err) {
       console.error('[SessionItem] Failed to delete session:', err);
       setDeleting(false);
     }
   };
 
-  const handleDuplicate = async (e: React.MouseEvent) => {
+  const handleDuplicate = (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await onDuplicate();
+      onDuplicate();
     } catch (err) {
       console.error('[SessionItem] Failed to duplicate session:', err);
     }
@@ -335,13 +335,12 @@ export function SessionTree() {
     navigate('/chat');
   };
 
-  const handleSessionDelete = async (sessionId: string) => {
-    try {
-      await deleteSession(sessionId);
-      await loadSessions();
-    } catch (err) {
+  const handleSessionDelete = (sessionId: string) => {
+    // deleteSession already updates local state optimistically in its session.deleted handler
+    deleteSession(sessionId).catch((err) => {
       console.error('[SessionTree] Failed to delete session:', err);
-    }
+      loadSessions(); // sync back on failure
+    });
   };
 
   const handleSessionDuplicate = async (sessionId: string) => {
@@ -351,11 +350,11 @@ export function SessionTree() {
       return;
     }
     try {
-      // Create new session with the same workspace
+      // Create and switch immediately — loadSessions runs in background
       const newSessionId = await createSessionWithWorkspace(session.workspace);
-      await loadSessions();
       switchSession(newSessionId);
       navigate('/chat');
+      loadSessions(); // non-blocking background sync
     } catch (err) {
       console.error('[SessionTree] Failed to duplicate session:', err);
       alert(`复制会话失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -370,9 +369,9 @@ export function SessionTree() {
     setShowDirSelector(false);
     try {
       const sessionId = await createSessionWithWorkspace(workspace);
-      await loadSessions();
       switchSession(sessionId);
       navigate('/chat');
+      loadSessions(); // non-blocking background sync
     } catch (err) {
       console.error('[SessionTree] Failed to create session:', err);
       alert(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);

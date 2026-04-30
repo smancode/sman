@@ -322,38 +322,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
 
-    return new Promise<void>((resolve, reject) => {
-      const unsub = wrapHandler(client, 'session.deleted', (data) => {
-        if (String(data.sessionId) === sessionId) {
-          unsub();
-          unsubErr();
-          // Invalidate cache
-          sessionCache.invalidate(sessionId);
-          // Remove from local state and switch session if needed
-          const state = get();
-          const remaining = state.sessions.filter(s => s.key !== sessionId);
-          const switchingToDeleted = state.currentSessionId === sessionId;
-          const newId = switchingToDeleted
-            ? (remaining.length > 0 ? remaining[0].key : '')
-            : state.currentSessionId;
-          set({ sessions: remaining, currentSessionId: newId });
-          if (switchingToDeleted) {
-            // Deleted the active session — load the replacement session's messages
-            sessionCache.invalidate(newId);
-            get().loadHistory();
-          }
-          resolve();
-        }
-      });
-      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
-        // Only handle errors for the session being deleted
-        if (String(data.sessionId) !== sessionId) return;
-        unsub();
-        unsubErr();
-        reject(new Error(String(data.error)));
-      });
-      client.send({ type: 'session.delete', sessionId });
-    });
+    // Optimistic: remove from local state immediately for instant UI feedback
+    sessionCache.invalidate(sessionId);
+    const state = get();
+    const remaining = state.sessions.filter(s => s.key !== sessionId);
+    const switchingToDeleted = state.currentSessionId === sessionId;
+    const newId = switchingToDeleted
+      ? (remaining.length > 0 ? remaining[0].key : '')
+      : state.currentSessionId;
+    set({ sessions: remaining, currentSessionId: newId });
+    if (switchingToDeleted) {
+      sessionCache.invalidate(newId);
+      get().loadHistory();
+    }
+
+    // Fire-and-forget WS — backend will also send session.deleted but we already updated
+    client.send({ type: 'session.delete', sessionId });
   },
 
   loadSessions: async () => {

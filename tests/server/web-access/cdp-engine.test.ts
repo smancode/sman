@@ -3,9 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { BrowserTimeoutError, BrowserConnectionError } from '../../../server/web-access/browser-engine.js';
 import { CdpEngine } from '../../../server/web-access/cdp-engine.js';
+import type { AxNode } from '../../../server/web-access/browser-engine.js';
 
 const TAB_ID = 'tab-123';
 const SESSION_ID = 'session-1';
+
+/** Minimal AX tree: WebArea root with no children */
+const EMPTY_AX_NODES: AxNode[] = [
+  { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: [] },
+];
 
 function makeTabContext(id = TAB_ID) {
   return { tabId: id, url: '', title: '', createdAt: Date.now(), lastUsedAt: Date.now() };
@@ -66,11 +72,12 @@ describe('CdpEngine', () => {
       vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
         if (method === 'Page.navigate') return { result: { frameId: 'frame-1' } };
         if (method === 'Page.enable') return { result: {} };
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
         if (params?.expression?.includes('readyState')) {
           return { result: { result: { value: 'complete' } } };
         }
         if (params?.expression?.includes('document.title')) {
-          return { result: { result: { value: '{"title":"PROJ-123 - Jira","url":"https://jira.example.com/browse/PROJ-123","body":"content"}' } } };
+          return { result: { result: { value: '{"title":"PROJ-123 - Jira","url":"https://jira.example.com/browse/PROJ-123"}' } } };
         }
         return { result: {} };
       });
@@ -84,12 +91,13 @@ describe('CdpEngine', () => {
   describe('click', () => {
     it('should click element using JS click first', async () => {
       const engine = setupEngineWithTab();
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
         if (params?.expression?.includes('click')) {
           return { result: { result: { value: { clicked: true, tag: 'BUTTON' } } } };
         }
         if (params?.expression?.includes('document.title')) {
-          return { result: { result: { value: '{"title":"Create Issue","url":"https://jira.example.com/create","body":"form"}' } } };
+          return { result: { result: { value: '{"title":"Create Issue","url":"https://jira.example.com/create"}' } } };
         }
         return { result: {} };
       });
@@ -102,12 +110,13 @@ describe('CdpEngine', () => {
   describe('fill', () => {
     it('should set input value and dispatch events', async () => {
       const engine = setupEngineWithTab();
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
         if (params?.expression?.includes('#summary')) {
           return { result: { result: { value: { filled: true } } } };
         }
         if (params?.expression?.includes('document.title')) {
-          return { result: { result: { value: '{"title":"Create Issue","url":"https://jira.example.com/create","body":"form"}' } } };
+          return { result: { result: { value: '{"title":"Create Issue","url":"https://jira.example.com/create"}' } } };
         }
         return { result: {} };
       });
@@ -192,14 +201,36 @@ describe('CdpEngine', () => {
       expect(result.isLoginPage).toBe(true);
     });
 
-    it('should detect login page from password field in form', () => {
+    it('should detect login page from AX nodes with password textbox', () => {
       const engine = new CdpEngine();
+      const axNodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['form1'] },
+        { nodeId: 'form1', role: { type: 'role', value: 'form' }, name: { type: 'string', value: 'Login' }, childIds: ['user', 'pass'] },
+        { nodeId: 'user', role: { type: 'role', value: 'textbox' }, name: { type: 'string', value: 'Username' }, properties: [{ name: 'inputType', value: { type: 'string', value: 'text' } }] },
+        { nodeId: 'pass', role: { type: 'role', value: 'textbox' }, name: { type: 'string', value: 'Password' }, properties: [{ name: 'inputType', value: { type: 'string', value: 'password' } }] },
+      ];
       const result = (engine as any).detectLoginPage({
         title: 'Welcome',
         url: 'https://jira.example.com/welcome',
-        accessibilityTree: 'Please enter your credentials. Password field. Form submit.',
+        accessibilityTree: '',
+        axNodes,
       });
       expect(result.isLoginPage).toBe(true);
+    });
+
+    it('should not flag page with password mention in text as login (AX nodes available)', () => {
+      const engine = new CdpEngine();
+      const axNodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['heading'] },
+        { nodeId: 'heading', role: { type: 'role', value: 'heading' }, name: { type: 'string', value: 'Reset your password' }, childIds: [] },
+      ];
+      const result = (engine as any).detectLoginPage({
+        title: 'PROJ-123 - Jira',
+        url: 'https://jira.example.com/browse/PROJ-123',
+        accessibilityTree: '[heading] "Reset your password"',
+        axNodes,
+      });
+      expect(result.isLoginPage).toBe(false);
     });
 
     it('should not flag normal pages as login', () => {
@@ -207,7 +238,7 @@ describe('CdpEngine', () => {
       const result = (engine as any).detectLoginPage({
         title: 'PROJ-123 - Jira',
         url: 'https://jira.example.com/browse/PROJ-123',
-        accessibilityTree: '<h1>PROJ-123: Fix login bug</h1>',
+        accessibilityTree: '[heading] "PROJ-123: Fix login bug"',
       });
       expect(result.isLoginPage).toBe(false);
     });
@@ -387,12 +418,13 @@ describe('CdpEngine', () => {
       const engine = setupEngineWithTab();
 
       const domStableSpy = vi.spyOn(engine as any, 'waitForDomStable').mockResolvedValue(undefined);
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
         if (params?.expression?.includes('click')) {
           return { result: { result: { value: { clicked: true, tag: 'BUTTON' } } } };
         }
         if (params?.expression?.includes('document.title')) {
-          return { result: { result: { value: '{"title":"After Click","url":"https://example.com/after","body":"result"}' } } };
+          return { result: { result: { value: '{"title":"After Click","url":"https://example.com/after"}' } } };
         }
         return { result: {} };
       });
@@ -407,12 +439,13 @@ describe('CdpEngine', () => {
       const engine = setupEngineWithTab();
 
       const domStableSpy = vi.spyOn(engine as any, 'waitForDomStable').mockResolvedValue(undefined);
-      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (_method: string, params: any) => {
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
         if (params?.expression?.includes('#input')) {
           return { result: { result: { value: { filled: true } } } };
         }
         if (params?.expression?.includes('document.title')) {
-          return { result: { result: { value: '{"title":"Filled","url":"https://example.com","body":""}' } } };
+          return { result: { result: { value: '{"title":"Filled","url":"https://example.com"}' } } };
         }
         return { result: {} };
       });
@@ -421,6 +454,65 @@ describe('CdpEngine', () => {
       expect(domStableSpy).toHaveBeenCalledWith(TAB_ID, expect.objectContaining({
         timeoutMs: 5000,
       }));
+    });
+  });
+
+  describe('serializeAxTree', () => {
+    it('should serialize a simple page with heading and button', () => {
+      const nodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['h1', 'btn'] },
+        { nodeId: 'h1', role: { type: 'role', value: 'heading' }, name: { type: 'string', value: 'Hello' }, properties: [{ name: 'level', value: { type: 'integer', value: 1 } }], childIds: [] },
+        { nodeId: 'btn', role: { type: 'role', value: 'button' }, name: { type: 'string', value: 'Submit' }, childIds: [] },
+      ];
+      const result = CdpEngine.serializeAxTree(nodes);
+      expect(result).toContain('[heading] "Hello" [level=1]');
+      expect(result).toContain('[button] "Submit"');
+    });
+
+    it('should skip generic and StaticText nodes', () => {
+      const nodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['div1'] },
+        { nodeId: 'div1', role: { type: 'role', value: 'generic' }, name: { type: 'string', value: '' }, childIds: ['text1', 'link1'] },
+        { nodeId: 'text1', role: { type: 'role', value: 'StaticText' }, name: { type: 'string', value: 'Click here' }, childIds: [] },
+        { nodeId: 'link1', role: { type: 'role', value: 'link' }, name: { type: 'string', value: 'Click here' }, properties: [{ name: 'url', value: { type: 'string', value: 'https://example.com' } }], childIds: [] },
+      ];
+      const result = CdpEngine.serializeAxTree(nodes);
+      expect(result).not.toContain('generic');
+      expect(result).not.toContain('StaticText');
+      expect(result).toContain('[link] "Click here" [url="https://example.com"]');
+    });
+
+    it('should show textbox with inputType property', () => {
+      const nodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['search'] },
+        { nodeId: 'search', role: { type: 'role', value: 'textbox' }, name: { type: 'string', value: 'Search' }, properties: [{ name: 'inputType', value: { type: 'string', value: 'search' } }], childIds: [] },
+      ];
+      const result = CdpEngine.serializeAxTree(nodes);
+      expect(result).toContain('[textbox] "Search" [type=search]');
+    });
+
+    it('should respect maxNodes limit', () => {
+      const children: string[] = [];
+      for (let i = 0; i < 250; i++) children.push(`btn${i}`);
+      const nodes: AxNode[] = [
+        { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: children },
+        ...children.map((id) => ({
+          nodeId: id,
+          role: { type: 'role' as const, value: 'button' },
+          name: { type: 'string' as const, value: `Button ${id}` },
+          childIds: [] as string[],
+        })),
+      ];
+      const result = CdpEngine.serializeAxTree(nodes, 5);
+      expect(result).toContain('more nodes omitted');
+    });
+
+    it('should return empty string when no root found', () => {
+      const nodes: AxNode[] = [
+        { nodeId: 'n1', role: { type: 'role', value: 'button' }, name: { type: 'string', value: 'Click' }, childIds: [] },
+      ];
+      const result = CdpEngine.serializeAxTree(nodes);
+      expect(result).toBe('');
     });
   });
 });

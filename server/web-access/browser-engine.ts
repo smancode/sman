@@ -42,12 +42,25 @@ export type WaitCondition =
   | { type: 'navigation'; timeoutMs?: number }
   | { type: 'idle'; idleMs?: number };
 
+/** CDP Accessibility.getFullAXTree 返回的原始节点 */
+export interface AxNode {
+  nodeId: string;
+  role: { type: string; value?: string };
+  name: { type: string; value?: string };
+  value?: { type: string; value?: string };
+  properties?: Array<{ name: string; value: { type: string; value?: any } }>;
+  childIds?: string[];
+  backendDOMNodeId?: number;
+}
+
 /** 操作结果中的页面快照 */
 export interface PageSnapshot {
   title: string;
   url: string;
-  /** 可访问性树的文本内容 */
+  /** 紧凑序列化的可访问性树（语义节点 + 属性） */
   accessibilityTree: string;
+  /** 原始 AX 节点（用于 login detection 等精确检查） */
+  axNodes?: AxNode[];
   /** 是否检测到登录页 */
   isLoginPage: boolean;
   /** 如果是登录页，登录 URL */

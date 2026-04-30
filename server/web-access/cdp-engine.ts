@@ -10,8 +10,8 @@ import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
 import http from 'node:http';
-import { type ChildProcess, spawn, execFileSync } from 'node:child_process';
-import type { BrowserEngine, TabContext, PageSnapshot, WaitCondition } from './browser-engine.js';
+import { type ChildProcess, spawn } from 'node:child_process';
+import type { BrowserEngine, TabContext, PageSnapshot, WaitCondition, AxNode } from './browser-engine.js';
 import { BrowserTimeoutError, BrowserConnectionError, LoginRequiredError } from './browser-engine.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -27,7 +27,6 @@ type WebSocketLike = {
 
 const OPEN_STATE = 1;
 const log = createLogger('CdpEngine');
-const SMAN_CHROME_PROFILE_DIR = path.join(os.homedir(), '.sman', 'chrome-profile');
 
 interface CdpEngineOptions {
   defaultTimeoutMs?: number;
@@ -173,105 +172,7 @@ export class CdpEngine implements BrowserEngine {
 
   // --- Chrome auto-launch ---
 
-  /**
-   * Copy a file that may be locked by another process (Chrome).
-   * On Windows, uses PowerShell Copy-Item which can read locked files.
-   * On macOS/Linux, uses fs.copyFileSync (Unix doesn't lock open files).
-   */
-  static copyFileLocked(srcPath: string, destPath: string): void {
-    if (os.platform() === 'win32') {
-      // PowerShell Copy-Item can read files locked by Chrome (Win32 CopyFile API)
-      const psCmd = `Copy-Item -LiteralPath '${srcPath.replace(/'/g, "''")}' -Destination '${destPath.replace(/'/g, "''")}' -Force`;
-      execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { timeout: 5000 });
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-
-  /** Copy essential Chrome profile data (cookies, bookmarks, etc.) to ~/.sman/chrome-profile/ */
-  private async copyChromeProfile(): Promise<void> {
-    const srcUserDataDir = CdpEngine.getChromeUserDataDir();
-    if (!srcUserDataDir || !fs.existsSync(srcUserDataDir)) {
-      log.warn('No Chrome user data dir found, launching with empty profile');
-      return;
-    }
-
-    const destDir = SMAN_CHROME_PROFILE_DIR;
-
-    // Remove old profile copy
-    if (fs.existsSync(destDir)) {
-      try {
-        fs.rmSync(destDir, { recursive: true, force: true });
-      } catch {
-        log.warn('Failed to remove old chrome profile, continuing');
-      }
-    }
-
-    fs.mkdirSync(destDir, { recursive: true });
-
-    log.info(`Copying Chrome profile data from ${srcUserDataDir}`);
-
-    try {
-      const platform = os.platform();
-
-      // Essential files/dirs that carry cookies, bookmarks, login sessions
-      // These are relative to the Chrome user-data-dir
-      const essentials = [
-        // Default profile
-        'Default/Cookies',
-        'Default/Cookies-journal',
-        'Default/Login Data',
-        'Default/Login Data-journal',
-        'Default/Web Data',
-        'Default/Web Data-journal',
-        'Default/Bookmarks',
-        'Default/Favicons',
-        'Default/Favicons-journal',
-        'Default/Preferences',
-        'Default/Secure Preferences',
-        'Default/History',
-        'Default/History-journal',
-        'Default/Network',
-        // Additional profiles
-        'Profile 1/Cookies',
-        'Profile 1/Cookies-journal',
-        'Profile 1/Login Data',
-        'Profile 1/Login Data-journal',
-        'Profile 1/Web Data',
-        'Profile 1/Web Data-journal',
-        'Profile 1/Bookmarks',
-        'Profile 1/Favicons',
-        'Profile 1/Favicons-journal',
-        'Profile 1/Preferences',
-        'Profile 1/Secure Preferences',
-        'Profile 1/History',
-        'Profile 1/History-journal',
-        'Profile 1/Network',
-        // Global files
-        'Local State',
-      ];
-
-      for (const relPath of essentials) {
-        const srcPath = path.join(srcUserDataDir, relPath);
-        const destPath = path.join(destDir, relPath);
-        try {
-          if (!fs.existsSync(srcPath)) continue;
-          // Ensure parent directory exists
-          fs.mkdirSync(path.dirname(destPath), { recursive: true });
-          CdpEngine.copyFileLocked(srcPath, destPath);
-        } catch (e: any) {
-          // File may be locked by Chrome, best effort
-          log.warn(`Failed to copy ${relPath}: ${e.message}`);
-        }
-      }
-
-      log.info('Chrome profile data copy complete');
-    } catch (e: any) {
-      log.warn(`Chrome profile copy failed: ${e.message}, launching with partial/empty profile`);
-    }
-  }
-
-  /** Launch Chrome with copied profile and return debug port */
+  /** Launch Chrome with user's original profile (direct cookies/session sharing) */
   private async launchChrome(): Promise<{ port: number; wsUrl: string | null }> {
     const chromePath = CdpEngine.findChromeExecutable();
     if (!chromePath) {
@@ -280,32 +181,25 @@ export class CdpEngine implements BrowserEngine {
       );
     }
 
-    // Copy user profile fresh each time
-    await this.copyChromeProfile();
-
-    // Ensure profile directory exists (even if copy failed)
-    if (!fs.existsSync(SMAN_CHROME_PROFILE_DIR)) {
-      fs.mkdirSync(SMAN_CHROME_PROFILE_DIR, { recursive: true });
+    const userDataDir = CdpEngine.getChromeUserDataDir();
+    if (!userDataDir) {
+      throw new BrowserConnectionError(
+        'Chrome user data directory not found.',
+      );
     }
 
+    const port = 9333;
     const args = [
-      `--user-data-dir=${SMAN_CHROME_PROFILE_DIR}`,
-      '--remote-debugging-port=9333',
+      `--user-data-dir=${userDataDir}`,
+      `--remote-debugging-port=${port}`,
       '--no-first-run',
       '--no-default-browser-check',
-      '--disable-sync',
-      '--disable-background-networking',
-      '--disable-component-update',
-      '--disable-features=Translate,MediaRouter',
-      '--hide-crash-restore-bubble',
-      '--password-store=basic',
       '--disable-popup-blocking',
-      '--disable-gpu',
       '--window-size=1024,768',
       'about:blank',
     ];
 
-    log.info(`Launching Chrome: ${chromePath}`);
+    log.info(`Launching Chrome with user profile: ${chromePath}`);
 
     const child = spawn(chromePath, args, {
       detached: false,
@@ -322,7 +216,7 @@ export class CdpEngine implements BrowserEngine {
       this.chromePid = null;
     });
 
-    return this.waitForCdpReady(9333);
+    return this.waitForCdpReady(port);
   }
 
   /** Full WebSocket URL for CDP browser connection */
@@ -487,7 +381,7 @@ export class CdpEngine implements BrowserEngine {
     if (this.ws && this.ws.readyState === OPEN_STATE) return this.ws;
 
     if (!this.chromePort) {
-      // 1. Try to discover already-running Chrome (user logged in with SSO cookies)
+      // 1. Try to discover already-running Chrome with remote debugging
       const discovered = await this.discoverChromePort();
       if (discovered) {
         log.info(`Discovered running Chrome on port ${discovered.port}, connecting...`);
@@ -496,17 +390,17 @@ export class CdpEngine implements BrowserEngine {
         try {
           await this.connectToChrome();
           if (this.ws && this.ws.readyState === OPEN_STATE) {
-            log.info('Connected to running Chrome (reusing login session)');
+            log.info('Connected to running Chrome');
             return this.ws;
           }
         } catch (e: any) {
-          log.warn(`Failed to connect to discovered Chrome: ${e.message}, falling back to headless`);
+          log.warn(`Failed to connect to discovered Chrome: ${e.message}`);
           this.chromePort = null;
           this.chromeWsPath = null;
         }
       }
 
-      // 2. Fallback: launch headless Chrome with copied profile
+      // 2. Launch Chrome with user's original profile (cookies/sessions directly available)
       if (!this.chromePort) {
         if (!this.launchingPromise) {
           this.launchingPromise = (async () => {
@@ -720,21 +614,150 @@ export class CdpEngine implements BrowserEngine {
 
   // --- Snapshot helpers ---
 
-  private async takeSnapshot(targetId: string): Promise<PageSnapshot> {
-    const sessionId = await this.ensureSession(targetId);
-    const evalExpr = `JSON.stringify({title: document.title, url: location.href, body: document.body?.innerText?.slice(0, 5000) || ''})`;
-    const resp = await this.sendCDP('Runtime.evaluate', {
-      expression: evalExpr,
-      returnByValue: true,
-    }, sessionId);
+  /** AX roles that carry no semantic value and should be pruned */
+  private static readonly SKIP_ROLES = new Set([
+    'generic', 'StaticText', 'whitespace', 'presentation', 'none',
+    'inlineTextBox', 'layoutTable', 'layoutTableCell', 'layoutTableRow',
+    'layoutGrid', 'layoutGridCell',
+  ]);
 
-    const raw = resp.result?.result?.value;
-    const parsed = raw ? JSON.parse(raw) : { title: '', url: '', body: '' };
+  /** AX roles that are interactive — always shown even without name */
+  private static readonly INTERACTIVE_ROLES = new Set([
+    'button', 'link', 'textbox', 'combobox', 'checkbox',
+    'radio', 'slider', 'switch', 'menuitem', 'tab',
+    'treeitem', 'option', 'searchbox', 'spinbutton',
+    'menuitemcheckbox', 'menuitemradio',
+  ]);
+
+  /** Fetch accessibility tree via CDP */
+  private async fetchAxTree(sessionId: string): Promise<AxNode[]> {
+    const resp = await this.sendCDP('Accessibility.getFullAXTree', {}, sessionId);
+    return resp.result?.nodes || [];
+  }
+
+  /**
+   * Serialize AX nodes into a compact indented string.
+   * Each line: [role] "name" = "value" [key=value, ...]
+   */
+  static serializeAxTree(nodes: AxNode[], maxNodes = 200, maxDepth = 12): string {
+    const nodeMap = new Map<string, AxNode>();
+    for (const n of nodes) nodeMap.set(n.nodeId, n);
+
+    const rootNode = nodes.find(n => {
+      const role = n.role?.value || '';
+      return role === 'RootWebArea' || role === 'WebArea';
+    });
+    if (!rootNode) return '';
+
+    const lines: string[] = [];
+    let count = 0;
+
+    function getProp(node: AxNode, propName: string): any {
+      return node.properties?.find(p => p.name === propName)?.value?.value;
+    }
+
+    function shouldInclude(node: AxNode): boolean {
+      const role = node.role?.value || '';
+      if (CdpEngine.SKIP_ROLES.has(role)) return false;
+      if (CdpEngine.INTERACTIVE_ROLES.has(role)) return true;
+      // Semantic landmarks and structural roles
+      const semanticRoles = new Set([
+        'heading', 'navigation', 'main', 'complementary', 'banner',
+        'contentinfo', 'region', 'dialog', 'alertdialog', 'alert',
+        'table', 'grid', 'tree', 'list', 'listitem', 'form',
+        'article', 'section', 'group', 'img', 'image',
+        'progressIndicator', 'meter', 'status', 'log', 'marquee',
+        'timer', 'tooltip', 'document', 'definition', 'term',
+        'note', 'separator', 'scrollbar',
+      ]);
+      if (semanticRoles.has(role)) return true;
+      // Include nodes with meaningful name or value
+      if (node.name?.value?.trim()) return true;
+      if (node.value?.value) return true;
+      return false;
+    }
+
+    function formatNode(node: AxNode): string {
+      const role = node.role?.value || '?';
+      const name = node.name?.value || '';
+      const value = node.value?.value || '';
+      let line = `[${role}]`;
+      if (name) line += ` "${name}"`;
+      if (value && value !== name) line += ` = "${value}"`;
+
+      const extras: string[] = [];
+      const level = getProp(node, 'level');
+      if (level) extras.push(`level=${level}`);
+      const checked = getProp(node, 'checked');
+      if (checked !== undefined) extras.push(`checked=${checked}`);
+      const expanded = getProp(node, 'expanded');
+      if (expanded !== undefined) extras.push(`expanded=${expanded}`);
+      const required = getProp(node, 'required');
+      if (required) extras.push('required');
+      const inputType = getProp(node, 'inputType');
+      if (inputType && inputType !== 'text') extras.push(`type=${inputType}`);
+      const url = getProp(node, 'url');
+      if (url) extras.push(`url="${url}"`);
+      const disabled = getProp(node, 'disabled');
+      if (disabled) extras.push('disabled');
+      const selected = getProp(node, 'selected');
+      if (selected) extras.push('selected');
+      const placeholder = getProp(node, 'placeholder');
+      if (placeholder) extras.push(`placeholder="${placeholder}"`);
+
+      if (extras.length) line += ` [${extras.join(', ')}]`;
+      return line;
+    }
+
+    function walk(nodeId: string, depth: number): void {
+      if (count >= maxNodes || depth > maxDepth) return;
+      const node = nodeMap.get(nodeId);
+      if (!node) return;
+
+      const included = shouldInclude(node);
+      if (included) {
+        lines.push('  '.repeat(depth) + formatNode(node));
+        count++;
+      }
+
+      if (node.childIds) {
+        for (const childId of node.childIds) {
+          walk(childId, included ? depth + 1 : depth);
+        }
+      }
+    }
+
+    walk(rootNode.nodeId, 0);
+
+    if (count >= maxNodes) {
+      lines.push(`... (${nodes.length - maxNodes} more nodes omitted)`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /** Full snapshot with AX tree — used by snapshot() and navigate() */
+  private async takeFullSnapshot(targetId: string): Promise<PageSnapshot> {
+    const sessionId = await this.ensureSession(targetId);
+
+    const [pageInfoResp, axNodes] = await Promise.all([
+      this.sendCDP('Runtime.evaluate', {
+        expression: `JSON.stringify({title: document.title, url: location.href})`,
+        returnByValue: true,
+      }, sessionId),
+      this.fetchAxTree(sessionId).catch(() => [] as AxNode[]),
+    ]);
+
+    const raw = pageInfoResp.result?.result?.value;
+    const parsed = raw ? JSON.parse(raw) : { title: '', url: '' };
+
+    const serialized = CdpEngine.serializeAxTree(axNodes);
 
     const snapshot: PageSnapshot = {
       title: parsed.title || '',
       url: parsed.url || '',
-      accessibilityTree: parsed.body || '',
+      accessibilityTree: serialized,
+      axNodes: axNodes.length > 0 ? axNodes : undefined,
       isLoginPage: false,
     };
 
@@ -742,22 +765,50 @@ export class CdpEngine implements BrowserEngine {
     snapshot.isLoginPage = detected.isLoginPage;
     snapshot.loginUrl = detected.loginUrl;
 
-    // Update tab context
+    this.updateTabContext(targetId, snapshot);
+    return snapshot;
+  }
+
+  /** Lightweight snapshot — only title/url, no AX tree */
+  private async takeLightSnapshot(targetId: string): Promise<PageSnapshot> {
+    const sessionId = await this.ensureSession(targetId);
+    const resp = await this.sendCDP('Runtime.evaluate', {
+      expression: `JSON.stringify({title: document.title, url: location.href})`,
+      returnByValue: true,
+    }, sessionId);
+
+    const raw = resp.result?.result?.value;
+    const parsed = raw ? JSON.parse(raw) : { title: '', url: '' };
+
+    const snapshot: PageSnapshot = {
+      title: parsed.title || '',
+      url: parsed.url || '',
+      accessibilityTree: '',
+      isLoginPage: false,
+    };
+
+    const detected = this.detectLoginPage(snapshot);
+    snapshot.isLoginPage = detected.isLoginPage;
+    snapshot.loginUrl = detected.loginUrl;
+
+    this.updateTabContext(targetId, snapshot);
+    return snapshot;
+  }
+
+  /** Update tab context metadata */
+  private updateTabContext(targetId: string, snapshot: PageSnapshot): void {
     const tab = this.tabs.get(targetId);
     if (tab) {
       tab.url = snapshot.url;
       tab.title = snapshot.title;
       tab.lastUsedAt = Date.now();
     }
-
-    return snapshot;
   }
 
   /** Detect login page from snapshot content */
-  detectLoginPage(snapshot: { title: string; url: string; accessibilityTree: string }): { isLoginPage: boolean; loginUrl?: string } {
+  detectLoginPage(snapshot: { title: string; url: string; accessibilityTree: string; axNodes?: AxNode[] }): { isLoginPage: boolean; loginUrl?: string } {
     const lowerTitle = snapshot.title.toLowerCase();
     const lowerUrl = snapshot.url.toLowerCase();
-    const lowerTree = snapshot.accessibilityTree.toLowerCase();
 
     // URL patterns
     const loginUrlPatterns = ['/login', '/signin', '/auth', '/sso', '/oauth'];
@@ -771,9 +822,25 @@ export class CdpEngine implements BrowserEngine {
       return { isLoginPage: true, loginUrl: snapshot.url };
     }
 
-    // Content patterns — password field in form
-    if (lowerTree.includes('password') && lowerTree.includes('form')) {
+    // Accessibility tree text patterns (fallback when no axNodes)
+    const lowerTree = snapshot.accessibilityTree.toLowerCase();
+    const treePasswordPatterns = ['password field', 'password input', 'type="password"'];
+    if (treePasswordPatterns.some(p => lowerTree.includes(p)) && lowerTree.includes('form')) {
       return { isLoginPage: true, loginUrl: snapshot.url };
+    }
+
+    // AX node analysis (precise: checks actual password input fields)
+    if (snapshot.axNodes?.length) {
+      const hasPasswordField = snapshot.axNodes.some(n => {
+        const role = n.role?.value || '';
+        const name = (n.name?.value || '').toLowerCase();
+        const inputType = n.properties?.find(p => p.name === 'inputType')?.value?.value;
+        return role === 'textbox' && (inputType === 'password' || name.includes('password'));
+      });
+      const hasForm = snapshot.axNodes.some(n => n.role?.value === 'form');
+      if (hasPasswordField && hasForm) {
+        return { isLoginPage: true, loginUrl: snapshot.url };
+      }
     }
 
     return { isLoginPage: false };
@@ -782,8 +849,7 @@ export class CdpEngine implements BrowserEngine {
   // --- BrowserEngine interface ---
 
   async isAvailable(): Promise<boolean> {
-    // We can always launch Chrome ourselves
-    return true;
+    return !!CdpEngine.findChromeExecutable();
   }
 
   async newTab(url: string, _sessionId?: string): Promise<TabContext> {
@@ -815,11 +881,11 @@ export class CdpEngine implements BrowserEngine {
     const sessionId = await this.ensureSession(tabId);
     await this.sendCDP('Page.navigate', { url }, sessionId);
     await this.waitForLoad(sessionId, tabId);
-    return this.takeSnapshot(tabId);
+    return this.takeFullSnapshot(tabId);
   }
 
   async snapshot(tabId: string): Promise<PageSnapshot> {
-    return this.takeSnapshot(tabId);
+    return this.takeFullSnapshot(tabId);
   }
 
   async screenshot(tabId: string): Promise<Buffer> {
@@ -843,7 +909,7 @@ export class CdpEngine implements BrowserEngine {
       throw new Error(resp.result.result.value.error);
     }
     await this.waitForDomStable(tabId, CdpEngine.ACTION_STABLE_OPTS).catch(() => { /* non-fatal */ });
-    return this.takeSnapshot(tabId);
+    return this.takeFullSnapshot(tabId);
   }
 
   async click(tabId: string, selector: string): Promise<PageSnapshot> {
