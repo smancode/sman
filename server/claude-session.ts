@@ -982,26 +982,27 @@ export class ClaudeSessionManager {
   }
 
   createSession(workspace: string): string {
-    if (!fs.existsSync(workspace)) {
-      throw new Error(`Workspace does not exist: ${workspace}`);
+    const resolved = path.resolve(workspace);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`Workspace does not exist: ${resolved}`);
     }
 
     const id = crypto.randomUUID();
     this.store.createSession({
       id,
-      systemId: workspace,
-      workspace,
+      systemId: resolved,
+      workspace: resolved,
     });
 
     const session: ActiveSession = {
       id,
-      workspace,
+      workspace: resolved,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
     };
 
     this.sessions.set(id, session);
-    this.log.info(`Session created: ${id} for workspace ${workspace}`);
+    this.log.info(`Session created: ${id} for workspace ${resolved}`);
     return id;
   }
 
@@ -1046,8 +1047,9 @@ export class ClaudeSessionManager {
   }
 
   createSessionWithId(workspace: string, sessionId: string, isCron = true, isScanner = false): string {
-    if (!fs.existsSync(workspace)) {
-      throw new Error(`Workspace does not exist: ${workspace}`);
+    const resolved = path.resolve(workspace);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`Workspace does not exist: ${resolved}`);
     }
 
     const existing = this.sessions.get(sessionId);
@@ -1057,14 +1059,14 @@ export class ClaudeSessionManager {
 
     this.store.createSession({
       id: sessionId,
-      systemId: workspace,
-      workspace,
+      systemId: resolved,
+      workspace: resolved,
       isCron,
     });
 
     const session: ActiveSession = {
       id: sessionId,
-      workspace,
+      workspace: resolved,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
       ...(isScanner ? { isScanner: true } : {}),

@@ -581,8 +581,9 @@ wss.on('connection', (ws: WebSocket) => {
       switch (msg.type) {
         case 'session.create': {
           if (!msg.workspace) throw new Error('Missing workspace');
-          const sessionId = sessionManager.createSession(msg.workspace);
-          ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: msg.workspace }));
+          const resolvedWorkspace = path.resolve(msg.workspace);
+          const sessionId = sessionManager.createSession(resolvedWorkspace);
+          ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: resolvedWorkspace }));
 
           // Auto-initialize workspace (async, non-blocking)
           initManager.handleSessionCreate(msg.workspace, sessionId, ws).catch((err: any) => {
