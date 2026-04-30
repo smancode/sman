@@ -521,3 +521,9 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 14. **会话初始化**: 新建会话自动扫描项目 → 注入 Skills → 匹配 Capabilities → 执行初始化对话
 15. **消息隔离**: 多会话并行不串 — 后端 Map 全部以 sessionId 为 key，前端 handler 过滤 sessionId，streamingBlocksMap 按 sessionId 独立存储
 16. **知识提取**: 每 10 分钟空闲时从对话提取业务知识/开发规范/技术知识 → 存入 `{workspace}/.sman/knowledge/{category}-{username}.md`（每人独立文件，push 到 git 共享）→ skill-auto-updater 聚合所有用户文件生成 `knowledge-business/conventions/technical` 三个 skill。用 hash 标记去重，支持增量提取（记录 `last_extracted_message_id`）
+17. **UI 响应性优先（动画先表演，后台再做事）**: 所有用户交互（打字、点击、回车）必须立即得到 UI 反馈，不允许任何同步阻塞导致掉帧或卡顿。具体规则：
+    - **输入框打字零联动**: `handleInputChange` 里不做任何资源操作（不发 WS、不调 IPC、不触发 store 副作用）。`preheatSession` 和 `gitBranchRefresh` 等操作推迟到用户点击发送时异步执行
+    - **发送不卡 UI**: `handleSend` 里先同步清空输入框（`setInput('')`），再用 `setTimeout(0)` 把 `onSend` 推到下一帧。store 的 `sendMessage` 在 `set({ sending: true })` 后也必须 `await setTimeout(0)` 让 React 先渲染用户消息和动画，再注册 stream handlers 和发 WS
+    - **后端立即确认**: 后端 `sendMessage` 收到请求后立刻发 `chat.start`，不要等 preheat 或 `getOrCreateV2Session` 完成后再发
+    - **避免不必要的 re-render**: ChatInput 不要订阅 `messages` 数组（流式输出时每 50ms 变化），改为在 keyDown handler 里 `useChatStore.getState()` 按需读取。`useEffect` 必须有正确的 deps 数组，用 ref 追踪最新值避免每次渲染都执行
+    - **思考块折叠时展示进度**: ThinkingBlock 折叠状态必须显示内容摘要（最后有意义的行），200ms 轮询更新，不能看起来像卡死

@@ -198,10 +198,6 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (!canSend || sending) return;
     const textToSend = input.trim();
 
-    // Pre-heat session & refresh git branch on send, not on typing
-    useChatStore.getState().preheatSession();
-    (window as any).__sman_gitBranchRefresh?.();
-
     // Split into path-based (Electron local files) and base64-based (web uploads)
     const pathMedia = stagedMedia.filter(m => m.filePath);
     const base64Media = stagedMedia.filter(m => !m.filePath);
@@ -213,6 +209,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       finalText += ` [用户文件路径:[${paths.join(',')}]]`;
     }
 
+    // Clear input immediately — this renders in the current frame
     setInput('');
     setStagedMedia([]);
     historyIndexRef.current = -1;
@@ -221,7 +218,10 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(finalText, undefined, null, base64Media.length > 0 ? base64Media : undefined);
+
+    // Defer the actual send to the next frame so React can render the cleared input first
+    const capturedMedia = base64Media.length > 0 ? base64Media : undefined;
+    setTimeout(() => onSend(finalText, undefined, null, capturedMedia), 0);
   }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(

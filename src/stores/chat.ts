@@ -641,6 +641,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // before we do the heavy work of registering stream handlers and sending WS.
     await new Promise<void>(r => setTimeout(r, 0));
 
+    // Pre-heat session & refresh git branch (deferred from ChatInput to avoid blocking typing)
+    get().preheatSession();
+    (window as any).__sman_gitBranchRefresh?.();
+
     // Update label from first message if not set
     const session = sessions.find(s => s.key === currentSessionId);
     if (!session?.label) {
