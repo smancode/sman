@@ -715,9 +715,11 @@ export class ClaudeSessionManager {
   }
 
   /**
-   * Get or create a V2 session for the given session ID
+   * Get or create a V2 session for the given session ID.
+   * Returns { session, isFresh } where isFresh=true means a new session was created
+   * (resume failed or first creation), so caller should inject conversation history.
    */
-  private async getOrCreateV2Session(sessionId: string): Promise<SDKSession> {
+  private async getOrCreateV2Session(sessionId: string): Promise<{ session: SDKSession; isFresh: boolean }> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -730,7 +732,7 @@ export class ClaudeSessionManager {
         try {
           process.kill(pid, 0); // Signal 0 = check if alive
           existing.lastUsedAt = Date.now();
-          return existing.session;
+          return { session: existing.session, isFresh: false };
         } catch {
           this.log.info(`V2 session process dead (PID: ${pid}), recreating...`);
           this.closeV2Session(sessionId);
@@ -738,7 +740,7 @@ export class ClaudeSessionManager {
       } else {
         // No pid info, try to use anyway
         existing.lastUsedAt = Date.now();
-        return existing.session;
+        return { session: existing.session, isFresh: false };
       }
     }
 
@@ -755,7 +757,7 @@ export class ClaudeSessionManager {
       const existingAfter = this.v2Sessions.get(sessionId);
       if (existingAfter) {
         existingAfter.lastUsedAt = Date.now();
-        return existingAfter.session;
+        return { session: existingAfter.session, isFresh: false };
       }
 
       // Create new V2 session
@@ -828,16 +830,31 @@ export class ClaudeSessionManager {
         }
       }
 
+      // Wrap session creation with timeout — CLI may hang during init (plugin loading, MCP connect, etc.)
+      const createTimeout = ClaudeSessionManager.SESSION_CREATE_TIMEOUT_MS;
+      const createWithTimeout = () => Promise.race([
+        unstable_v2_createSession(options as any),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`创建会话超时（${createTimeout / 1000}s），CLI 初始化可能卡住`)), createTimeout)
+        ),
+      ]);
+
       let v2Session: SDKSession;
       try {
-        // Wrap session creation with timeout — CLI may hang during init (plugin loading, MCP connect, etc.)
-        const createTimeout = ClaudeSessionManager.SESSION_CREATE_TIMEOUT_MS;
-        v2Session = await Promise.race([
-          unstable_v2_createSession(options as any),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`创建会话超时（${createTimeout / 1000}s），CLI 初始化可能卡住`)), createTimeout)
-          ),
-        ]);
+        v2Session = await createWithTimeout();
+      } catch (err) {
+        const errMsg = String(err);
+        // Resume failed: conversation data lost (idle timeout killed the process).
+        // Fall back to fresh session — don't lose the user's conversation history.
+        if (options.resume && /conversation.*not found|No conversation found/i.test(errMsg)) {
+          this.log.warn(`Resume failed for ${sessionId}: ${errMsg}. Creating fresh session...`);
+          this.sdkSessionIds.delete(sessionId);
+          try { this.store.updateSdkSessionId(sessionId, ''); } catch { /* ignore */ }
+          delete options.resume;
+          v2Session = await createWithTimeout();
+        } else {
+          throw err;
+        }
       } finally {
         if (prevCwd !== session.workspace) {
           try { process.chdir(prevCwd); } catch { /* ignore */ }
@@ -857,7 +874,7 @@ export class ClaudeSessionManager {
       const pid = (v2Session as any).pid;
       this.log.info(`V2 session created for ${sessionId}, PID: ${pid ?? 'unknown'}`);
 
-      return v2Session;
+      return { session: v2Session, isFresh: true };
     } finally {
       resolveChain();
     }
@@ -1117,6 +1134,21 @@ export class ClaudeSessionManager {
           } as import('./session-store.js').ContentBlock);
         }
       }
+      // Persist base64 images so they survive session switches
+      if (media && media.length > 0) {
+        for (const m of media) {
+          if (m.mimeType.startsWith('image/')) {
+            userContentBlocks.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: m.mimeType,
+                data: m.base64Data,
+              },
+            } as import('./session-store.js').ContentBlock);
+          }
+        }
+      }
       this.store.addMessage(sessionId, {
         role: 'user',
         content,
@@ -1160,8 +1192,8 @@ export class ClaudeSessionManager {
 
     try {
       this.log.info(`[sendMessage] ${sessionId}: getting/creating V2 session...`);
-      const v2Session = await this.getOrCreateV2Session(sessionId);
-      this.log.info(`[sendMessage] ${sessionId}: V2 session ready, sending content (${content.length} chars)...`);
+      const { session: v2Session, isFresh } = await this.getOrCreateV2Session(sessionId);
+      this.log.info(`[sendMessage] ${sessionId}: V2 session ready, isFresh=${isFresh}, sending content (${content.length} chars)...`);
 
       // Inject user profile + Sman context into content for Claude, but don't store it
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
@@ -1172,8 +1204,6 @@ export class ClaudeSessionManager {
         ? `${smanContext}\n${profilePrefix}`
         : smanContext;
       const capabilities = this.config?.llm?.capabilities;
-
-      this.log.info(`[sendMessage] SEND CONTENT: ${content.substring(0, 500)}`);
 
       // Build content for send(): string or SDKUserMessage
       const builtContent = buildContentBlocks(content, media, capabilities);
@@ -1195,18 +1225,41 @@ export class ClaudeSessionManager {
         }
       };
 
-      if (typeof builtContent === 'string') {
-        const contentWithPrefix = `${messagePrefix}\n\n${builtContent}`;
-        await sendWithTimeout(contentWithPrefix);
+      if (isFresh) {
+        // Fresh session (resume failed or first creation): inject recent conversation history
+        // so Claude has context without relying on CLI's internal resume mechanism.
+        const history = this.getHistory(sessionId);
+        const recentTurns = this.buildHistoryContext(history, 3);
+        const fullPrefix = recentTurns
+          ? `${messagePrefix}\n\n${recentTurns}`
+          : messagePrefix;
+
+        if (typeof builtContent === 'string') {
+          const contentWithPrefix = `${fullPrefix}\n\n${builtContent}`;
+          await sendWithTimeout(contentWithPrefix);
+        } else {
+          const blocks = [{ type: 'text', text: fullPrefix }, ...builtContent];
+          await sendWithTimeout({
+            type: 'user',
+            message: { role: 'user', content: blocks },
+            parent_tool_use_id: null,
+            session_id: sessionId,
+          });
+        }
       } else {
-        // Content blocks array → construct SDKUserMessage
-        const blocks = [{ type: 'text', text: messagePrefix }, ...builtContent];
-        await sendWithTimeout({
-          type: 'user',
-          message: { role: 'user', content: blocks },
-          parent_tool_use_id: null,
-          session_id: sessionId,
-        });
+        // Existing session: normal send
+        if (typeof builtContent === 'string') {
+          const contentWithPrefix = `${messagePrefix}\n\n${builtContent}`;
+          await sendWithTimeout(contentWithPrefix);
+        } else {
+          const blocks = [{ type: 'text', text: messagePrefix }, ...builtContent];
+          await sendWithTimeout({
+            type: 'user',
+            message: { role: 'user', content: blocks },
+            parent_tool_use_id: null,
+            session_id: sessionId,
+          });
+        }
       }
       this.log.info(`[sendMessage] ${sessionId}: send() completed, starting stream...`);
 
@@ -1919,7 +1972,7 @@ export class ClaudeSessionManager {
     stallChecker.unref();
 
     try {
-      const v2Session = await this.getOrCreateV2Session(sessionId);
+      const { session: v2Session } = await this.getOrCreateV2Session(sessionId);
 
       await v2Session.send(content);
 
@@ -2085,7 +2138,7 @@ export class ClaudeSessionManager {
     stallChecker.unref();
 
     try {
-      const v2Session = await this.getOrCreateV2Session(sessionId);
+      const { session: v2Session } = await this.getOrCreateV2Session(sessionId);
 
       // Inject user profile + Sman context into content for Claude
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
@@ -2282,7 +2335,7 @@ export class ClaudeSessionManager {
     stallChecker.unref();
 
     try {
-      const v2Session = await this.getOrCreateV2Session(sessionId);
+      const { session: v2Session } = await this.getOrCreateV2Session(sessionId);
       const workspace = session.workspace;
 
       // 步骤执行不注入完整的 buildSmanContext（避免 dev-workflow 等复杂流程）
@@ -2502,6 +2555,38 @@ export class ClaudeSessionManager {
       ...msg,
       timestamp: new Date(msg.createdAt + 'Z').getTime(),
     }));
+  }
+
+  /**
+   * Build a text context from recent conversation turns for fresh V2 sessions.
+   * Each turn = user message + assistant reply. Returns empty string if no history.
+   */
+  private buildHistoryContext(history: Array<Message & { timestamp: number }>, turns: number): string {
+    if (history.length === 0) return '';
+    // Group messages into turns (user + assistant pairs)
+    const turnsList: Array<{ user: string; assistant: string }> = [];
+    let currentUser = '';
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        currentUser = msg.content;
+      } else if (msg.role === 'assistant' && currentUser) {
+        turnsList.push({ user: currentUser, assistant: msg.content });
+        currentUser = '';
+      }
+    }
+    if (turnsList.length === 0) return '';
+    // Take last N turns
+    const recent = turnsList.slice(-turns);
+    const lines: string[] = ['[历史对话上下文 - 继续之前的讨论]', ''];
+    for (let i = 0; i < recent.length; i++) {
+      const t = recent[i];
+      lines.push(`--- 第 ${i + 1} 轮 ---`);
+      lines.push(`用户: ${t.user}`);
+      lines.push(`助手: ${t.assistant}`);
+      lines.push('');
+    }
+    lines.push('[继续当前对话]');
+    return lines.join('\n');
   }
 
   updateSessionLabel(sessionId: string, label: string): void {

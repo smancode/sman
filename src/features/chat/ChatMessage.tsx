@@ -161,7 +161,7 @@ export const ChatMessage = memo(function ChatMessage({
               if (isImage && images.length > 0) return null;
               if (isImage) {
                 return file.preview ? (
-                  <ImageThumbnail
+                  <ImagePreviewCard
                     key={`local-${i}`}
                     src={file.preview}
                     fileName={file.fileName}

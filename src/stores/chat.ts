@@ -476,21 +476,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             // Reconstruct _attachedFiles for user messages
             if (role === 'user') {
+              attachedFiles = [];
               // From persisted contentBlocks (attached_file type)
               if (blocks) {
                 const fileBlocks = blocks.filter((b: any) => b.type === 'attached_file');
-                if (fileBlocks.length > 0) {
-                  attachedFiles = fileBlocks.map((b: any) => ({
-                    fileName: b.fileName || 'file',
+                for (const b of fileBlocks) {
+                  attachedFiles.push({
+                    fileName: (b as any).fileName || 'file',
                     mimeType: 'application/octet-stream',
                     fileSize: 0,
                     preview: null,
-                    filePath: b.filePath,
-                  }));
+                    filePath: (b as any).filePath,
+                  });
+                }
+                // From persisted image blocks (base64 images)
+                const imageBlocks = blocks.filter((b: any) => b.type === 'image' && b.source?.data);
+                for (const b of imageBlocks) {
+                  const src = (b as any).source;
+                  const mime = src?.media_type || 'image/png';
+                  const data = src?.data as string;
+                  attachedFiles.push({
+                    fileName: 'image',
+                    mimeType: mime,
+                    fileSize: Math.round((data.length * 3) / 4),
+                    preview: `data:${mime};base64,${data}`,
+                  });
                 }
               }
               // Fallback: extract from text [用户文件路径:[path1,path2]]
-              if (!attachedFiles) {
+              if (attachedFiles.length === 0) {
                 const pathMatch = content.match(/\[用户文件路径:\[([^\]]+)\]\]/);
                 if (pathMatch) {
                   attachedFiles = pathMatch[1].split(',').map(fp => ({
@@ -502,6 +516,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }));
                 }
               }
+              if (attachedFiles.length === 0) attachedFiles = undefined;
             }
 
             return {
@@ -589,6 +604,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           fileSize: 0,
           preview: null,
           filePath: fp,
+        });
+      }
+    }
+
+    // Add base64 media (pasted images / web uploads) to attachedFiles for UI display
+    if (media && media.length > 0) {
+      for (const m of media) {
+        const isImage = m.mimeType.startsWith('image/');
+        attachedFiles.push({
+          fileName: m.fileName || 'file',
+          mimeType: m.mimeType,
+          fileSize: Math.round((m.base64Data.length * 3) / 4), // approximate base64 size
+          preview: isImage ? `data:${m.mimeType};base64,${m.base64Data}` : null,
         });
       }
     }
@@ -1168,6 +1196,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Send message — file paths are already embedded in content text
       const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed, autoConfirm: get().autoConfirm };
+      if (media && media.length > 0) {
+        msg.media = media;
+      }
       client.send(msg);
     } catch (err) {
       set({ error: { message: String(err), errorCode: 'unknown' }, sending: false });

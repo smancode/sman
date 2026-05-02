@@ -194,6 +194,14 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (files.length > 0) await processFiles(files);
   }, [processFiles]);
 
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length > 0) {
+      e.preventDefault();
+      await processFiles(files);
+    }
+  }, [processFiles]);
+
   const handleSend = useCallback(() => {
     if (!canSend || sending) return;
     const textToSend = input.trim();
@@ -353,23 +361,45 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onPaste={handlePaste}
       >
         {/* File attachments preview row */}
         {stagedMedia.length > 0 && (
           <div className="flex gap-1.5 p-2 pb-0 flex-wrap">
-            {stagedMedia.map((media, idx) => (
-              <div key={idx} className="group relative flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-sm max-w-[200px]">
-                <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate">{media.fileName}</span>
-                <button
-                  type="button"
-                  onClick={() => removeStagedMedia(idx)}
-                  className="shrink-0 h-4 w-4 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+            {stagedMedia.map((media, idx) => {
+              const isImage = media.mimeType.startsWith('image/');
+              if (isImage && media.base64Data) {
+                return (
+                  <div key={idx} className="group relative w-20 h-20 rounded-lg border overflow-hidden border-border bg-muted/50">
+                    <img
+                      src={`data:${media.mimeType};base64,${media.base64Data}`}
+                      alt={media.fileName}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeStagedMedia(idx)}
+                      className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/50 hover:bg-destructive text-white transition-colors flex items-center justify-center"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div key={idx} className="group relative flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 text-sm max-w-[200px]">
+                  <FileUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{media.fileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeStagedMedia(idx)}
+                    className="shrink-0 h-4 w-4 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors flex items-center justify-center"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
