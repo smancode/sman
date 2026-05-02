@@ -176,7 +176,7 @@ export class ClaudeSessionManager {
     this.log.info(`AUTO mode ${enabled ? 'enabled' : 'disabled'} for session ${sessionId}`);
   }
 
-  private static readonly SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  private static readonly SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
   private static readonly STREAM_STALL_MS = 2 * 60 * 1000; // 2 minutes no data = stalled
   private static readonly SEND_TIMEOUT_MS = 120 * 1000; // 2 minutes timeout for v2Session.send()

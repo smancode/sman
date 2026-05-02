@@ -7,8 +7,22 @@ let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
 let serverStopping = false;
 
-// Windows VDI / GPU compatibility: disable hardware acceleration to prevent white screen
-if (process.platform === 'win32') {
+// Windows GPU compatibility: only disable hardware acceleration in remote/VDI sessions
+// where GPU drivers are known to cause white-screen issues. Local Windows machines
+// should use GPU acceleration for smooth rendering.
+function isRemoteSession(): boolean {
+  if (process.platform !== 'win32') return false;
+  // Detect RDP / Citrix / VDI sessions
+  return (
+    process.env.SESSIONNAME === 'RDP-Tcp' ||
+    !!process.env.CITRIX_SESSION_ID ||
+    process.env.QTILE_WM === 'xrdp' ||
+    (process.env.COMPUTERNAME && process.env.CLIENTNAME && process.env.COMPUTERNAME !== process.env.CLIENTNAME)
+  );
+}
+
+if (isRemoteSession()) {
+  console.log('[Electron] Remote session detected, disabling GPU acceleration');
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
 }
@@ -28,7 +42,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Sman',
     titleBarStyle: 'hidden',
-    ...(process.platform === 'win32' ? { frame: false, transparent: true } : {}),
+    ...(process.platform === 'win32' ? { frame: false } : {}),
     show: false,
     icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {

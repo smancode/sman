@@ -138,9 +138,28 @@ cronScheduler.setSessionStore(store);
 const clients = new Set<WebSocket>();
 const authenticatedClients = new Set<WebSocket>();
 
+/** Max buffered amount before applying backpressure (256KB) */
+const WS_BACKPRESSURE_THRESHOLD = 256 * 1024;
+
 function broadcast(data: string): void {
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
+      // Backpressure: skip non-critical messages if client is overwhelmed
+      if ((client as any).bufferedAmount > WS_BACKPRESSURE_THRESHOLD) {
+        // Only drop non-critical message types to preserve UX
+        try {
+          const parsed = JSON.parse(data);
+          const droppableTypes = new Set([
+            'chat.delta', 'chat.tool_delta', 'chat.tool_progress',
+            'smartpath.stepExecutionProgress', 'batch.progress',
+          ]);
+          if (droppableTypes.has(parsed.type)) {
+            continue; // Skip this client for this message
+          }
+        } catch {
+          // Not JSON — send anyway (likely shouldn't happen)
+        }
+      }
       client.send(data);
     }
   }

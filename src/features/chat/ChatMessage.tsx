@@ -52,7 +52,8 @@ export const ChatMessage = memo(function ChatMessage({
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
 
-  // Stable RawMessage reference — only recomputed when message object reference changes
+  // Stable RawMessage reference — only recomputed when message content actually changes
+  // Use message.id + content hash as dependency to avoid recompute on parent re-render
   const rawMessage = useMemo((): RawMessage => {
     // Strip file path tags from display — file cards already show the files
     const cleanContent = message.content.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/g, '');
@@ -74,7 +75,8 @@ export const ChatMessage = memo(function ChatMessage({
       content: resolved ?? buildContent(cleanContent, cleanBlocks),
       timestamp: message.timestamp ?? safeTimestamp(message.createdAt),
     };
-  }, [message]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.content, message.contentBlocks?.length, message.resolvedContent, message.timestamp, message.createdAt]);
 
   const text = extractText(rawMessage);
   const hasText = text.trim().length > 0;
@@ -394,6 +396,28 @@ function MessageBubble({
   );
 }
 
+// ── Global ThinkingBlock update scheduler ───────────────────────
+// Single shared timer across all ThinkingBlock instances to avoid
+// linear growth of setInterval timers in long conversations.
+const thinkingSubscribers = new Set<() => void>();
+let thinkingTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureThinkingTimer(): void {
+  if (thinkingTimer) return;
+  thinkingTimer = setInterval(() => {
+    for (const cb of thinkingSubscribers) {
+      try { cb(); } catch { /* ignore */ }
+    }
+  }, 200);
+}
+
+function removeThinkingTimer(): void {
+  if (thinkingSubscribers.size === 0 && thinkingTimer) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
+}
+
 // ── Thinking Block ──────────────────────────────────────────────
 
 function ThinkingBlock({ content }: { content: string }) {
@@ -403,22 +427,24 @@ function ThinkingBlock({ content }: { content: string }) {
   const [summary, setSummary] = useState('');
   const prevLenRef = useRef(0);
 
-  // Update summary — only recalculate when content actually grows
+  // Update summary — subscribe to global timer instead of per-instance interval
   useEffect(() => {
     const update = () => {
+      if (content.length === prevLenRef.current) return;
       const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length === 0) { setSummary(''); return; }
+      if (lines.length === 0) { setSummary(''); prevLenRef.current = content.length; return; }
       // Show last meaningful line — gives a sense of progression
       const lastLine = lines[lines.length - 1];
       setSummary(lastLine.length > 120 ? '...' + lastLine.slice(-117) : lastLine);
       prevLenRef.current = content.length;
     };
-    update();
-    // While content is still growing, poll every 200ms
-    const timer = setInterval(() => {
-      if (content.length !== prevLenRef.current) update();
-    }, 200);
-    return () => clearInterval(timer);
+    update(); // initial
+    thinkingSubscribers.add(update);
+    ensureThinkingTimer();
+    return () => {
+      thinkingSubscribers.delete(update);
+      removeThinkingTimer();
+    };
   }, [content]);
 
   if (!content.trim()) return null;
