@@ -139,7 +139,7 @@ export const ChatMessage = memo(function ChatMessage({
               const src = imageSrc(img);
               if (!src) return null;
               return (
-                <ImageThumbnail
+                <ImagePreviewCard
                   key={`content-${i}`}
                   src={src}
                   fileName="image"
