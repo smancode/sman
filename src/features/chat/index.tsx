@@ -12,15 +12,12 @@ import { InitBanner } from './InitBanner';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
-import { groupMessagesByTurn, getToolDisplayName, formatToolSummary } from './message-utils';
+import { getToolDisplayName, formatToolSummary } from './message-utils';
 
 
-// ── Module-level scroll position cache ──
-// Survives route changes (component unmount/remount) and session switches
-const scrollPositions = new Map<string, { scrollTop: number; turnCount: number }>();
-
-const DEFAULT_TURN_COUNT = 6;
-const LOAD_MORE_TURNS = 4;
+// ── Module-level: 记住每个会话的滚动比例 ──
+// key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
+const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
 
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
@@ -42,112 +39,55 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasActiveSession = !!currentSessionId;
 
-  // ── Turn-based rendering window ──
-  const [renderedTurnCount, setRenderedTurnCount] = useState(DEFAULT_TURN_COUNT);
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const prevHeightRef = useRef(0);
-
-  // Reset turn count on session change
-  const turnResetRef = useRef(currentSessionId);
-  if (currentSessionId !== turnResetRef.current) {
-    turnResetRef.current = currentSessionId;
-    setRenderedTurnCount(DEFAULT_TURN_COUNT);
-  }
-
-  const turns = useMemo(() => groupMessagesByTurn(messages), [messages]);
-  const visibleTurns = turns.slice(Math.max(0, turns.length - renderedTurnCount));
-  const hasOlderTurns = renderedTurnCount < turns.length;
-
-  // Load more turns (scroll delta correction)
-  const loadMore = useCallback(() => {
-    if (!hasOlderTurns) return;
-    prevHeightRef.current = scrollRef.current?.scrollHeight ?? 0;
-    setRenderedTurnCount(prev => Math.min(prev + LOAD_MORE_TURNS, turns.length));
-  }, [hasOlderTurns, turns.length]);
-
-  // IntersectionObserver for auto-loading older turns
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    const root = scrollRef.current;
-    if (!sentinel || !root || !hasOlderTurns) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) loadMore();
-      },
-      { root, rootMargin: '200px 0px 0px 0px' },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasOlderTurns, loadMore]);
-
-  // Fix scroll jump after loading older turns
-  useLayoutEffect(() => {
-    if (prevHeightRef.current > 0 && scrollRef.current) {
-      const delta = scrollRef.current.scrollHeight - prevHeightRef.current;
-      if (delta > 0) scrollRef.current.scrollTop += delta;
-      prevHeightRef.current = 0;
-    }
-  }, [renderedTurnCount]);
-
-  // Track whether user is near bottom (within 150px) for smart auto-scroll
-  const isNearBottomRef = useRef(true);
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    // Continuously save scroll position on every scroll event
-    if (currentSessionId) {
-      scrollPositions.set(currentSessionId, { scrollTop: el.scrollTop, turnCount: renderedTurnCount });
-    }
-  }, [currentSessionId, renderedTurnCount]);
-
-  // Flag: when session changes or component mounts, restore scroll after React renders
-  const pendingRestoreRef = useRef<string | null>(currentSessionId);
   const prevSessionIdRef = useRef(currentSessionId);
+  const restoredRef = useRef(false);
 
-  // Detect session change during render
+  // 离开会话时保存滚动位置，切回来时恢复
   if (currentSessionId !== prevSessionIdRef.current) {
-    // Don't save here — handleScroll already saves on every scroll event
-    pendingRestoreRef.current = currentSessionId;
+    const container = scrollRef.current;
+    // 存旧会话的滚动位置
+    if (prevSessionIdRef.current && container) {
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+      scrollMemory.set(prevSessionIdRef.current, {
+        ratio: container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0,
+        atBottom,
+      });
+    }
+    restoredRef.current = false;
     prevSessionIdRef.current = currentSessionId;
-    isNearBottomRef.current = true;
   }
 
-  // After React commits to DOM, restore scroll position
+  // 恢复滚动位置
   useLayoutEffect(() => {
-    const sid = pendingRestoreRef.current;
-    if (!sid) return;
-    pendingRestoreRef.current = null;
+    if (restoredRef.current) return;
+    const container = scrollRef.current;
+    if (!container || !currentSessionId) return;
+    if (messages.length === 0) return;
 
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const saved = scrollPositions.get(sid);
-    if (saved !== undefined) {
-      setRenderedTurnCount(saved.turnCount);
-      el.scrollTop = saved.scrollTop;
-      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    } else {
-      el.scrollTop = el.scrollHeight;
-      isNearBottomRef.current = true;
+    const saved = scrollMemory.get(currentSessionId);
+    if (!saved) {
+      // 没有保存的位置，首次进入滚到底
+      container.scrollTop = container.scrollHeight;
+      restoredRef.current = true;
+      return;
     }
-  }); // Run after every commit when there's a pending restore
 
-  // Smart auto-scroll: follow content growth when user is near bottom
-  // Triggers on streaming deltas, message additions, and the final chat.done message
+    if (saved.atBottom) {
+      container.scrollTop = container.scrollHeight;
+    } else {
+      container.scrollTop = Math.round(saved.ratio * container.scrollHeight);
+    }
+    restoredRef.current = true;
+  }, [messages, currentSessionId]);
+
+  // 流式输出时自动滚到底部
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (!isNearBottomRef.current) return;
-    if (pendingRestoreRef.current) return;
-
+    const container = scrollRef.current;
+    if (!container || !sending) return;
     requestAnimationFrame(() => {
-      if (isNearBottomRef.current) {
-        el.scrollTop = el.scrollHeight;
-      }
+      container.scrollTop = container.scrollHeight;
     });
-  }, [messages.length, streamingBlocks.length]);
+  }, [messages.length, streamingBlocks.length, sending]);
 
   const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
     const mediaForWs = media?.map(m => ({
@@ -156,7 +96,6 @@ export function Chat() {
       base64Data: m.base64Data,
       fileName: m.fileName,
     }));
-    isNearBottomRef.current = true;
     sendMessage(_text, mediaForWs);
   }, [sendMessage]);
 
@@ -204,34 +143,21 @@ export function Chat() {
     <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
       <InitBanner />
       {/* Messages */}
-      <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'} onScroll={handleScroll}>
+      <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
         <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
             <>
-              {/* Load more sentinel */}
-              {hasOlderTurns && (
-                <div ref={sentinelRef} className="flex justify-center py-2">
-                  <button
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={loadMore}
-                  >
-                    加载更多消息...
-                  </button>
-                </div>
-              )}
-
-              {/* Render only visible turns */}
-              {visibleTurns.map((turn) =>
-                turn.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    message={msg}
-                    showThinking={showThinking}
-                  />
-                ))
-              )}
+              {/* Render all messages */}
+              {messages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  id={`msg-${msg.id}`}
+                  message={msg}
+                  showThinking={showThinking}
+                />
+              ))}
 
               {/* Streaming blocks rendered as sequential segments */}
               {sending && hasStreamingContent && (

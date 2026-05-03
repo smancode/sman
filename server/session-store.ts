@@ -134,6 +134,14 @@ export class SessionStore {
       this.log.info('Migrated: added token usage columns to sessions table');
     }
 
+    // Migration: add is_partial column to messages for streaming progress saves
+    try {
+      this.db.prepare('SELECT is_partial FROM messages LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE messages ADD COLUMN is_partial INTEGER DEFAULT 0');
+      this.log.info('Migrated: added is_partial column to messages table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
@@ -187,6 +195,37 @@ export class SessionStore {
       contentBlocks,
       createdAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Upsert a partial assistant message for streaming progress.
+   * Uses is_partial=1 flag on a regular 'assistant' message.
+   * Called periodically during streaming so refresh doesn't lose in-progress content.
+   */
+  upsertPartialMessage(sessionId: string, content: string, contentBlocks?: unknown[]): void {
+    const contentBlocksJson = contentBlocks ? JSON.stringify(contentBlocks) : null;
+    const existing = this.db.prepare(
+      'SELECT id FROM messages WHERE session_id = ? AND is_partial = 1 ORDER BY id DESC LIMIT 1'
+    ).get(sessionId) as { id: number } | undefined;
+
+    if (existing) {
+      this.db.prepare(
+        'UPDATE messages SET content = ?, content_blocks = ? WHERE id = ?'
+      ).run(content, contentBlocksJson, existing.id);
+    } else {
+      this.db.prepare(
+        'INSERT INTO messages (session_id, role, content, content_blocks, is_partial) VALUES (?, ?, ?, ?, 1)'
+      ).run(sessionId, 'assistant', content, contentBlocksJson);
+    }
+  }
+
+  /**
+   * Remove all partial messages for a session (called when stream completes).
+   */
+  clearPartialMessages(sessionId: string): void {
+    this.db.prepare(
+      'DELETE FROM messages WHERE session_id = ? AND is_partial = 1'
+    ).run(sessionId);
   }
 
   getMessages(sessionId: string, limit = 1000): Message[] {

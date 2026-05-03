@@ -18,6 +18,7 @@ import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 
 interface ChatMessageProps {
+  id?: string;
   message: Message;
   showThinking: boolean;
   isStreaming?: boolean;
@@ -42,6 +43,7 @@ function imageSrc(img: ExtractedImage): string | null {
 }
 
 export const ChatMessage = memo(function ChatMessage({
+  id,
   message,
   showThinking,
   isStreaming = false,
@@ -98,6 +100,7 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <div
+      id={id}
       className={cn(
         'flex gap-3 group chat-message',
         isUser ? 'flex-row-reverse' : 'flex-row',

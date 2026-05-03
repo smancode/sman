@@ -1166,6 +1166,7 @@ export class ClaudeSessionManager {
     this.streamDone.set(sessionId, streamPromise);
 
     let stallChecker: ReturnType<typeof setInterval> | null = null;
+    let partialSaveTimer: ReturnType<typeof setInterval> | null = null;
 
     // Notify frontend immediately — let UI show "..." animation before heavy setup
     wsSend(JSON.stringify({
@@ -1329,6 +1330,31 @@ export class ClaudeSessionManager {
         }
       }, 30_000); // check every 30s
       stallChecker.unref();
+
+      // Periodic partial save: persist in-progress assistant content every 3 seconds.
+      // Ensures page refresh doesn't lose streamed content.
+      partialSaveTimer = setInterval(() => {
+        if (abortController.signal.aborted) {
+          clearInterval(partialSaveTimer!);
+          return;
+        }
+        const partialContent = fullContent.trim();
+        const partialThinking = allThinking.trim();
+        if (!partialContent && !partialThinking && allToolUses.length === 0 && !currentToolUse) return;
+
+        const contentBlocks: Array<{ type: string; thinking?: string; id?: string; name?: string; input?: unknown }> = [];
+        if (partialThinking) contentBlocks.push({ type: 'thinking', thinking: partialThinking });
+        const tools = currentToolUse ? [...allToolUses, currentToolUse] : allToolUses;
+        for (const tu of tools) {
+          try {
+            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: JSON.parse(tu.input) });
+          } catch {
+            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+          }
+        }
+        this.store.upsertPartialMessage(sessionId, partialContent, contentBlocks.length > 0 ? contentBlocks : undefined);
+      }, 3000);
+      partialSaveTimer.unref();
 
       let firstEventReceived = false;
       let deltaCount = 0;
@@ -1575,6 +1601,9 @@ export class ClaudeSessionManager {
             const subagentType = result.subagent_type ?? result.type ?? '';
             this.log.info(`[stream] ${sessionId}: result event received, is_error=${isError}, stop_reason=${stopReason}, subagent_type=${subagentType}, deltas_sent=${deltaCount}, fullContent_len=${fullContent.length}`);
 
+            // Clear partial save timer and remove partial messages before saving final
+            if (partialSaveTimer) { clearInterval(partialSaveTimer); partialSaveTimer = null; }
+            this.store.clearPartialMessages(sessionId);
 
             // Save SDK session ID
             if (result.session_id) {
@@ -1740,9 +1769,12 @@ export class ClaudeSessionManager {
         }
       }
       if (stallChecker) clearInterval(stallChecker);
+      if (partialSaveTimer) { clearInterval(partialSaveTimer); partialSaveTimer = null; }
 
       // Stream loop exited normally (break) — check if it was due to abort
       if (abortController.signal.aborted) {
+        // Clear partial messages before saving final partial message
+        this.store.clearPartialMessages(sessionId);
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
         const reason = stallAbortReason || '';
 
@@ -1769,8 +1801,10 @@ export class ClaudeSessionManager {
       }
     } catch (err: any) {
       if (stallChecker) clearInterval(stallChecker);
+      if (partialSaveTimer) { clearInterval(partialSaveTimer); partialSaveTimer = null; }
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         // Save partial assistant content so the user doesn't lose what was already streamed
+        this.store.clearPartialMessages(sessionId);
         this.savePartialAssistantMessage(sessionId, fullContent, allThinking, allToolUses, currentToolUse);
 
         const reason = stallAbortReason || '';
