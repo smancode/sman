@@ -13,6 +13,7 @@ import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import { getToolDisplayName, formatToolSummary } from './message-utils';
+import { CodeViewerProvider } from '@/features/code-viewer';
 
 
 // ── Module-level: 记住每个会话的滚动比例 ──
@@ -208,6 +209,8 @@ export function Chat() {
           </div>
         </div>
       )}
+
+      <CodeViewerProvider />
     </div>
   );
 }
