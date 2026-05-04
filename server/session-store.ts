@@ -198,6 +198,13 @@ export class SessionStore {
     };
   }
 
+  /** Fix non-canonical workspace paths (e.g. \core → D:\core on Windows) */
+  updateWorkspace(sessionId: string, workspace: string): void {
+    this.db.prepare(
+      'UPDATE sessions SET workspace = ?, system_id = ? WHERE id = ?'
+    ).run(workspace, workspace, sessionId);
+  }
+
   /**
    * Upsert a partial assistant message for streaming progress.
    * Uses is_partial=1 flag on a regular 'assistant' message.

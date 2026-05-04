@@ -21,7 +21,7 @@ function resolveProjectRoot(): string {
 
 import { SessionStore } from './session-store.js';
 import { SkillsRegistry } from './skills-registry.js';
-import { ClaudeSessionManager } from './claude-session.js';
+import { ClaudeSessionManager, normalizeWorkspacePath } from './claude-session.js';
 import { WebAccessService } from './web-access/index.js';
 import { SettingsManager } from './settings-manager.js';
 import { UserProfileManager } from './user-profile.js';
@@ -463,7 +463,7 @@ const server = http.createServer((req, res) => {
     }
 
     try {
-      const normalizedPath = path.normalize(dirPath);
+      const normalizedPath = normalizeWorkspacePath(dirPath);
       const entries = fs.readdirSync(normalizedPath, { withFileTypes: true });
       const result = entries
         .filter(entry => !entry.name.startsWith('.'))
@@ -601,13 +601,13 @@ wss.on('connection', (ws: WebSocket) => {
       switch (msg.type) {
         case 'session.create': {
           if (!msg.workspace) throw new Error('Missing workspace');
-          const resolvedWorkspace = path.resolve(msg.workspace);
-          const sessionId = sessionManager.createSession(resolvedWorkspace);
-          ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: resolvedWorkspace }));
+          const normalizedWorkspace = normalizeWorkspacePath(msg.workspace);
+          const sessionId = sessionManager.createSession(normalizedWorkspace);
+          ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: normalizedWorkspace }));
 
           // Auto-initialize workspace (async, non-blocking)
-          initManager.handleSessionCreate(msg.workspace, sessionId, ws).catch((err: any) => {
-            log.warn(`Workspace init failed for ${msg.workspace}: ${err.message}`);
+          initManager.handleSessionCreate(normalizedWorkspace, sessionId, ws).catch((err: any) => {
+            log.warn(`Workspace init failed for ${normalizedWorkspace}: ${err.message}`);
           });
           break;
         }

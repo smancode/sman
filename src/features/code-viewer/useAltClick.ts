@@ -54,9 +54,14 @@ function extractPathFromText(
       regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\/[^\s"'`<>{}()[\]|;,&]+)/g,
       transform: (m) => m[1],
     },
-    // Relative path with extension (src/foo.ts, ./bar/baz.py)
+    // Relative path with / (extension optional: src/foo.ts, src/foo/bar, ./bar/baz)
     {
-      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\.?\.?\/?[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)+\.[a-zA-Z0-9]{1,12})/g,
+      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\.?\.?\/?[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)+(?:\.[a-zA-Z0-9]{1,12})?)/g,
+      transform: (m) => m[1],
+    },
+    // Single file name with extension (no /): Abc.java, README.md, Makefile
+    {
+      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])([a-zA-Z0-9._-]+\.[a-zA-Z0-9]{1,12})/g,
       transform: (m) => m[1],
     },
   ];

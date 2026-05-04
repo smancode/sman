@@ -179,7 +179,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       _activeLoadId: loadId,
     });
 
-    const unsub = wrapHandler(client, 'code.readFile.result', (msg) => {
+    const unsub = wrapHandler(client, 'code.readFile', (msg) => {
       if (get()._activeLoadId !== loadId) return;
       unsub();
 
@@ -230,7 +230,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     }
 
     return new Promise((resolve, reject) => {
-      const unsub = wrapHandler(client, 'code.listDir.result', (msg) => {
+      const unsub = wrapHandler(client, 'code.listDir', (msg) => {
         unsub();
 
         if (msg.error) {
@@ -261,7 +261,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
     set({ searching: true, searchSymbol: symbol, searchResults: [] });
 
-    const unsub = wrapHandler(client, 'code.searchSymbols.result', (msg) => {
+    const unsub = wrapHandler(client, 'code.searchSymbols', (msg) => {
       unsub();
 
       if (msg.error) {

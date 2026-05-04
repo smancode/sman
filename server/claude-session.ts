@@ -33,6 +33,24 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Normalize workspace path to canonical form.
+ * Uses realpathSync to resolve symlinks and get OS-level canonical casing.
+ * On Windows: resolves UNC paths, drive letter case, 8.3 short names.
+ * On macOS: resolves /var → /private/var, /tmp → /private/tmp.
+ */
+export function normalizeWorkspacePath(workspace: string): string {
+  const resolved = path.resolve(workspace);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Workspace does not exist: ${resolved}`);
+  }
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 // Resolve project root for plugin loading
 // dev mode (tsx): __dirname = .../smanbase/server/
 // prod mode (compiled, non-asar): __dirname = .../smanbase/dist/server/server/
@@ -999,11 +1017,7 @@ export class ClaudeSessionManager {
   }
 
   createSession(workspace: string): string {
-    const resolved = path.resolve(workspace);
-    if (!fs.existsSync(resolved)) {
-      throw new Error(`Workspace does not exist: ${resolved}`);
-    }
-
+    const resolved = normalizeWorkspacePath(workspace);
     const id = crypto.randomUUID();
     this.store.createSession({
       id,
@@ -1064,10 +1078,7 @@ export class ClaudeSessionManager {
   }
 
   createSessionWithId(workspace: string, sessionId: string, isCron = true, isScanner = false): string {
-    const resolved = path.resolve(workspace);
-    if (!fs.existsSync(resolved)) {
-      throw new Error(`Workspace does not exist: ${resolved}`);
-    }
+    const resolved = normalizeWorkspacePath(workspace);
 
     const existing = this.sessions.get(sessionId);
     if (existing) {
@@ -2567,9 +2578,18 @@ export class ClaudeSessionManager {
     return allSessions.map(s => {
       let active = this.sessions.get(s.id);
       if (!active) {
+        // Normalize workspace for legacy sessions with non-canonical paths (e.g. \d\core → D:\core)
+        let ws = s.workspace;
+        try {
+          const normalized = normalizeWorkspacePath(ws);
+          if (normalized !== ws) {
+            this.store.updateWorkspace(s.id, normalized);
+            ws = normalized;
+          }
+        } catch { /* workspace may no longer exist */ }
         active = {
           id: s.id,
-          workspace: s.workspace,
+          workspace: ws,
           label: s.label,
           createdAt: s.createdAt,
           lastActiveAt: s.lastActiveAt,
