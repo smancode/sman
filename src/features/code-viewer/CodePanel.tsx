@@ -16,19 +16,16 @@ import { CodeNavigator } from './CodeNavigator';
 // ── Constants ──────────────────────────────────────────────────────
 
 const THEMES: [string, string] = ['one-light', 'one-dark-pro'];
-const CSS_VAR_PREFIX = '--shiki-';
 
-/** Detect current dark mode */
 function getIsDark(): boolean {
   return document.documentElement.classList.contains('dark');
 }
 
-/** Get the resolved token color for the current theme */
 function getTokenColor(token: ThemedToken, isDark: boolean): string | undefined {
   if (token.htmlStyle) {
     if (isDark) {
-      const darkVar = token.htmlStyle[`${CSS_VAR_PREFIX}dark`];
-      if (darkVar) return darkVar;
+      const dark = token.htmlStyle['--shiki-dark'];
+      if (dark) return dark;
     }
     return token.htmlStyle.color;
   }
@@ -222,7 +219,6 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
                 isHighlighted={highlightLine === i + 1}
                 highlightRef={highlightLine === i + 1 ? highlightLineRef : undefined}
                 onTokenClick={handleTokenClick}
-                lineText={lines[i] ?? ''}
               />
             ))
           ) : (
@@ -290,7 +286,6 @@ interface TokenLineProps {
   isHighlighted: boolean;
   highlightRef?: React.RefObject<HTMLDivElement | null>;
   onTokenClick: (e: React.MouseEvent, tokenContent: string, lineIndex: number) => void;
-  lineText: string;
 }
 
 const TokenLine = memo(function TokenLine({
@@ -300,7 +295,6 @@ const TokenLine = memo(function TokenLine({
   isHighlighted,
   highlightRef,
   onTokenClick,
-  lineText,
 }: TokenLineProps) {
   const lineNum = lineIndex + 1;
 
@@ -324,7 +318,7 @@ const TokenLine = memo(function TokenLine({
 
       {/* Code content */}
       <span
-        className="white-space-pre-wrap break-all flex-1 min-w-0"
+        className="flex-1 min-w-0"
         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
       >
         {tokens.length === 0 ? (
@@ -425,7 +419,7 @@ function useTokenClickHandler(filePath: string, workspace: string) {
       const ext = filePath.includes('.') ? filePath.split('.').pop() : undefined;
       searchSymbols(identifier, ext);
     },
-    [filePath, workspace, loadFile, searchSymbols],
+    [filePath, loadFile, searchSymbols],
   );
 }
 
