@@ -33,6 +33,7 @@ import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
+import { handleListDir, handleReadFile, handleSearchSymbols } from './code-viewer-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
@@ -1368,6 +1369,26 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chatbot.weixin.getStatus': {
           const status = weixinConnection?.getConnectionStatus() ?? 'idle';
           ws.send(JSON.stringify({ type: 'chatbot.weixin.status', status }));
+          break;
+        }
+
+        // ── Code Viewer ──────────────────────────────────────────
+        case 'code.listDir': {
+          if (!msg.workspace) throw new Error('Missing workspace');
+          const result = handleListDir(String(msg.workspace), String(msg.dirPath || '.'));
+          ws.send(JSON.stringify({ type: 'code.listDir', result }));
+          break;
+        }
+        case 'code.readFile': {
+          if (!msg.workspace || !msg.filePath) throw new Error('Missing workspace or filePath');
+          const result = handleReadFile(String(msg.workspace), String(msg.filePath));
+          ws.send(JSON.stringify({ type: 'code.readFile', result }));
+          break;
+        }
+        case 'code.searchSymbols': {
+          if (!msg.workspace || !msg.symbol) throw new Error('Missing workspace or symbol');
+          const result = handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined);
+          ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
           break;
         }
 
