@@ -112,7 +112,7 @@ FRONTEND_PID=$!
 
 echo -e "${YELLOW}Waiting for backend...${NC}"
 for i in $(seq 1 30); do
-  if curl -s http://localhost:5880/api/health > /dev/null 2>&1; then
+  if curl -s --noproxy localhost http://localhost:5880/api/health > /dev/null 2>&1; then
     echo -e "${GREEN}Backend ready.${NC}"
     break
   fi
@@ -125,7 +125,7 @@ done
 
 echo -e "${YELLOW}Waiting for frontend...${NC}"
 for i in $(seq 1 30); do
-  if curl -s http://localhost:5881 > /dev/null 2>&1; then
+  if curl -s --noproxy localhost http://localhost:5881 > /dev/null 2>&1; then
     echo -e "${GREEN}Frontend ready.${NC}"
     break
   fi
@@ -141,17 +141,8 @@ done
 echo -e "${CYAN}[5/5] Starting Electron...${NC}"
 # Clear proxy for Electron — localhost Vite/HMR must not go through proxy
 unset http_proxy HTTP_PROXY https_proxy HTTPS_PROXY ALL_PROXY all_proxy
-npx electron . &
-ELECTRON_PID=$!
+# Electron runs in FOREGROUND so macOS gives it proper GUI focus.
+# Ctrl+C will trigger cleanup trap which kills backend + frontend.
+exec npx electron .
 
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  Sman Electron launched${NC}"
-echo -e "${GREEN}  Frontend: http://localhost:5881${NC}"
-echo -e "${GREEN}  Backend:  http://localhost:5880${NC}"
-echo -e "${GREEN}  Home:     $HOME_DIR${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "Press ${YELLOW}Ctrl+C${NC} to stop all"
-
-wait

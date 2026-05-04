@@ -27,6 +27,11 @@ if (isRemoteSession()) {
   app.commandLine.appendSwitch('disable-gpu');
 }
 
+// Dev mode: bypass system proxy so localhost Vite/HMR always works
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('no-proxy-server');
+}
+
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 5880;
 const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
@@ -83,21 +88,6 @@ function createWindow(): void {
   mainWindow.once('ready-to-show', () => {
     mainWindow!.show();
     mainWindow!.focus();
-  });
-
-  // Toggle DevTools with Cmd+Option+I (macOS) / Ctrl+Shift+I (Windows/Linux)
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'I' && (input.meta || input.control) && input.alt) {
-      mainWindow!.webContents.toggleDevTools();
-    }
-  });
-
-  // Notify renderer of maximize state changes
-  mainWindow.on('maximize', () => {
-    mainWindow?.webContents.send('window:maximizeChanged', true);
-  });
-  mainWindow.on('unmaximize', () => {
-    mainWindow?.webContents.send('window:maximizeChanged', false);
   });
 
   mainWindow.on('closed', () => {
