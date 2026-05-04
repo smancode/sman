@@ -33,6 +33,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   contentBlocks?: ContentBlock[];
+  isPartial?: boolean;
   createdAt: string;
   timestamp?: number;
   resolvedContent?: unknown;
@@ -169,6 +170,9 @@ interface ChatState {
 export const sendingSessions = new Set<string>();
 
 const streamingBlocksMap = new Map<string, StreamingBlock[]>();
+
+// Partial message polling timers (session refresh after page refresh during stream)
+const partialPollTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 // ── Per-session sending state ──
 // Tracks which sessions are currently streaming a response.
@@ -525,6 +529,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               role,
               content,
               contentBlocks: blocks,
+              isPartial: !!m.isPartial,
               createdAt: String(m.createdAt || ''),
               timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
               resolvedContent: resolveContent(content, blocks),
@@ -541,6 +546,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const serverUsage = data.usage as { inputTokens: number; outputTokens: number } | null | undefined;
       const contextUsage = serverUsage && serverUsage.inputTokens > 0 ? serverUsage : null;
       set({ messages: serverMsgs, loading: false, contextUsage });
+
+      // If last message is partial (backend stream still in progress), poll until it's replaced
+      const lastMsg = serverMsgs[serverMsgs.length - 1];
+      if (lastMsg?.role === 'assistant' && lastMsg.isPartial && !partialPollTimers.has(sessionId)) {
+        const timer = setInterval(() => {
+          if (get().currentSessionId !== sessionId) { clearInterval(timer); partialPollTimers.delete(sessionId); return; }
+          // Check if the partial message is still there
+          const msgs = get().messages;
+          const last = msgs[msgs.length - 1];
+          if (!last?.isPartial) { clearInterval(timer); partialPollTimers.delete(sessionId); return; }
+          get().loadHistory();
+        }, 5_000);
+        partialPollTimers.set(sessionId, timer);
+        setTimeout(() => { clearInterval(timer); partialPollTimers.delete(sessionId); }, 600_000);
+      } else if (lastMsg && !lastMsg.isPartial && partialPollTimers.has(sessionId)) {
+        // Partial replaced by complete message — stop polling
+        clearInterval(partialPollTimers.get(sessionId)!);
+        partialPollTimers.delete(sessionId);
+      }
 
       // Auto-label from first user message
       const { sessions } = get();

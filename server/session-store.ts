@@ -17,6 +17,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   contentBlocks?: ContentBlock[];
+  isPartial?: boolean;
   createdAt: string;
 }
 
@@ -230,10 +231,11 @@ export class SessionStore {
 
   getMessages(sessionId: string, limit = 1000): Message[] {
     const rows = this.db.prepare(
-      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, created_at as createdAt FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?'
-    ).all(sessionId, limit) as Array<Omit<Message, 'contentBlocks'> & { contentBlocks: string | null }>;
+      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, is_partial as isPartial, created_at as createdAt FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?'
+    ).all(sessionId, limit) as Array<Omit<Message, 'contentBlocks' | 'isPartial'> & { contentBlocks: string | null; isPartial: number }>;
     return rows.map(row => ({
       ...row,
+      isPartial: row.isPartial === 1 || undefined,
       contentBlocks: row.contentBlocks ? JSON.parse(row.contentBlocks) as ContentBlock[] : undefined,
     }));
   }
@@ -243,10 +245,11 @@ export class SessionStore {
    */
   getMessagesAfterId(sessionId: string, afterId: number, limit = 2000): Message[] {
     const rows = this.db.prepare(
-      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, created_at as createdAt FROM messages WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ?'
-    ).all(sessionId, afterId, limit) as Array<Omit<Message, 'contentBlocks'> & { contentBlocks: string | null }>;
+      'SELECT id, session_id as sessionId, role, content, content_blocks as contentBlocks, is_partial as isPartial, created_at as createdAt FROM messages WHERE session_id = ? AND id > ? ORDER BY id ASC LIMIT ?'
+    ).all(sessionId, afterId, limit) as Array<Omit<Message, 'contentBlocks' | 'isPartial'> & { contentBlocks: string | null; isPartial: number }>;
     return rows.map(row => ({
       ...row,
+      isPartial: row.isPartial === 1 || undefined,
       contentBlocks: row.contentBlocks ? JSON.parse(row.contentBlocks) as ContentBlock[] : undefined,
     }));
   }
