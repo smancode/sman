@@ -645,12 +645,11 @@ export class ClaudeSessionManager {
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
-    // Web search MCP injection strategy:
     // Web search MCP injection — all providers use in-process SDK servers (no npx).
-    // - Explicit provider (searxng/baidu/brave/tavily): always inject
-    // - 'builtin': relies on Claude Code's built-in WebSearch for Anthropic first-party.
-    //   For proxies, auto-detect configured API keys and inject fallback
-    //   (priority: baidu > brave > tavily > SearXNG).
+    // - Explicit provider (searxng/baidu/brave/tavily): inject that provider as MCP tool
+    // - 'builtin': Claude's built-in WebSearch is always available, but we also inject
+    //   a fallback MCP web_search tool so Claude has a working alternative when built-in fails.
+    //   Priority: baidu > brave > tavily > SearXNG
     const ws = this.config.webSearch;
     if (ws?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
@@ -678,20 +677,14 @@ export class ClaudeSessionManager {
         this.log.warn('[search] Tavily provider selected but no API Key configured');
       }
     } else if (ws?.provider === 'builtin' || !ws?.provider) {
-      const isOfficial = isAnthropicFirstParty(this.config.llm.baseUrl);
-      if (isOfficial) {
-        this.log.info('[search] builtin mode + Anthropic first-party — using built-in WebSearch');
+      const fallback = this.detectSearchFallback(ws);
+      if (fallback) {
+        (opts.mcpServers as any)[fallback.name] = fallback.server;
+        this.log.info(`[search] builtin mode — injected ${fallback.name} as fallback search`);
       } else {
-        // Proxy mode: auto-detect available API keys (priority: baidu > brave > tavily > SearXNG)
-        const fallback = this.detectSearchFallback(ws);
-        if (fallback) {
-          (opts.mcpServers as any)[fallback.name] = fallback.server;
-          this.log.info(`[search] builtin mode + proxy — injected ${fallback.name} as fallback search`);
-        } else {
-          this.log.info('[search] builtin mode + proxy — no API key configured, trying SearXNG');
-          const webSearchServer = createWebSearchMcpServer();
-          (opts.mcpServers as any)['web-search'] = webSearchServer;
-        }
+        this.log.info('[search] builtin mode — no API key configured, using SearXNG as fallback');
+        const webSearchServer = createWebSearchMcpServer();
+        (opts.mcpServers as any)['web-search'] = webSearchServer;
       }
     }
 
