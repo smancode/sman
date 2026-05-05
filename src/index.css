@@ -598,3 +598,17 @@
   opacity: 1;
   color: hsl(var(--foreground));
 }
+
+/* CodeMirror editor — JetBrains Mono */
+.cm-editor .cm-content,
+.cm-editor .cm-gutters,
+.cm-editor .cm-line {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace !important;
+}
+
+/* Git diff — JetBrains Mono for code lines */
+.git-diff-content {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}

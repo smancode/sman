@@ -387,7 +387,13 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
 
   // Build extensions
   const extensions = useMemo(() => {
+    const monoFont = '"JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
     const exts: Extension[] = [
+      EditorView.theme({
+        '&': { fontSize: '13px' },
+        '.cm-content': { fontFamily: monoFont },
+        '.cm-gutters': { fontFamily: monoFont },
+      }),
       EditorState.phrases.of({
         'Find': '查找',
         'Replace': '替换',
