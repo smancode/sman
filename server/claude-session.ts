@@ -200,7 +200,7 @@ export class ClaudeSessionManager {
   private static readonly SEND_TIMEOUT_MS = 120 * 1000; // 2 minutes timeout for v2Session.send()
   private static readonly SESSION_CREATE_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for session creation
   private static readonly TOOL_STALL_MS = 10 * 60 * 1000; // 10 minutes hard limit for tool/sub-agent execution
-  private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'bad_request', 'server_error', 'overloaded', 'network_error']);
+  private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'session_expired', 'bad_request', 'server_error', 'overloaded', 'network_error']);
 
   constructor(private store: SessionStore) {
     this.log = createLogger('ClaudeSessionManager');
@@ -1198,6 +1198,7 @@ export class ClaudeSessionManager {
     let allToolUses: Array<{ id: string; name: string; input: string }> = [];
     let currentToolUse: { id: string; name: string; input: string } | null = null;
     let stallAbortReason: string | undefined;
+    let needsSessionExpiredRetry = false;
     // Track whether this abort was user-initiated (stop button) vs system-initiated (stall/error).
     // User aborts preserve the V2 session so the user can "继续" without losing context.
     let userInitiatedAbort = false;
@@ -1717,6 +1718,16 @@ export class ClaudeSessionManager {
               outputTokens: totalOutputTokens,
             });
 
+            // Session expired in SDK result: close V2 session, retry with fresh session + history context
+            if (isError && classified?.errorCode === 'session_expired' && _retryCount < 2) {
+              this.log.info(`SDK session expired for ${sessionId}, closing V2 and retrying with fresh session (attempt ${_retryCount + 1})`);
+              this.closeV2Session(sessionId);
+              this.sdkSessionIds.delete(sessionId);
+              try { this.store.updateSdkSessionId(sessionId, ''); } catch { /* ignore */ }
+              needsSessionExpiredRetry = true;
+              break; // break out of stream loop, fall through to retry
+            }
+
             wsSend(JSON.stringify({
               type: isError ? 'chat.error' : 'chat.done',
               sessionId,
@@ -1781,6 +1792,12 @@ export class ClaudeSessionManager {
       }
       if (stallChecker) clearInterval(stallChecker);
       if (partialSaveTimer) { clearInterval(partialSaveTimer); partialSaveTimer = null; }
+
+      // Session expired retry: close stale session and resend with fresh session + history context
+      if (needsSessionExpiredRetry) {
+        this.log.info(`Retrying ${sessionId} with fresh session after session_expired`);
+        return this.sendMessage(sessionId, content, wsSend, undefined, _retryCount + 1);
+      }
 
       // Stream loop exited normally (break) — check if it was due to abort
       if (abortController.signal.aborted) {
@@ -1869,11 +1886,18 @@ export class ClaudeSessionManager {
         if (_retryCount < 2 && ClaudeSessionManager.AUTO_RETRY_ERRORS.has(errorCode)) {
           this.log.info(`Auto-retrying session ${sessionId} after ${errorCode} (attempt ${_retryCount + 1})`);
           this.closeV2Session(sessionId);
+          // For session_expired: clear stale SDK session ID so next getOrCreateV2Session creates fresh
+          if (errorCode === 'session_expired') {
+            this.sdkSessionIds.delete(sessionId);
+            try { this.store.updateSdkSessionId(sessionId, ''); } catch { /* ignore */ }
+          }
           wsSend(JSON.stringify({
             type: 'chat.delta',
             sessionId,
             deltaType: 'text',
-            content: '\n\n[遇到临时错误，自动重试中...]\n',
+            content: errorCode === 'session_expired'
+              ? '\n\n[会话已过期，正在恢复历史上下文并重试...]\n'
+              : '\n\n[遇到临时错误，自动重试中...]\n',
           }));
           await new Promise(r => setTimeout(r, 2000));
           if (this.activeStreams.has(sessionId)) {
@@ -1881,7 +1905,9 @@ export class ClaudeSessionManager {
             wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
             return;
           }
-          return this.sendMessage(sessionId, '继续刚才的工作，不要重复已完成的部分', wsSend, undefined, _retryCount + 1);
+          // session_expired: retry with original user message (the failed turn never executed)
+          const retryMsg = errorCode === 'session_expired' ? content : '继续刚才的工作，不要重复已完成的部分';
+          return this.sendMessage(sessionId, retryMsg, wsSend, undefined, _retryCount + 1);
         }
 
         wsSend(JSON.stringify({ type: 'chat.error', sessionId, error: userMessage, errorCode, rawError: rawMessage }));
@@ -1916,6 +1942,10 @@ export class ClaudeSessionManager {
     }
     if (/\b403\b/.test(msg) || /forbidden/i.test(msg)) {
       return { errorCode: 'forbidden', userMessage: '无权访问此资源，请检查 API Key 权限' };
+    }
+    // SDK session expired — must be caught before generic "not found"
+    if (/No conversation found/i.test(msg)) {
+      return { errorCode: 'session_expired', userMessage: '会话已过期，正在自动恢复...' };
     }
     if (/\b404\b/.test(msg) || /not found/i.test(msg)) {
       return { errorCode: 'not_found', userMessage: `请求返回 404，资源不存在: ${msg}` };

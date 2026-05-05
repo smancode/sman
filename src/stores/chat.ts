@@ -843,6 +843,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
             const cachedMessages = removeAutoSavedPartial(cached ?? []);
             sessionCache.set(streamSessionId, [...cachedMessages, assistantMsg]);
+            if (get().sending && !sendingSessions.has(get().currentSessionId)) {
+              set({ sending: false });
+            }
           }
         } else {
           // Streaming collected nothing but backend may have saved partial content to SQLite.
@@ -859,6 +862,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
               } : {}),
             });
             get().loadHistory();
+          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
+            set({ sending: false });
           }
         }
       });
@@ -1112,6 +1117,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (get().currentSessionId === streamSessionId) {
             set({ streamingBlocks: [], sending: false, waitingHint: null, ...(usage ? { contextUsage: usage } : {}) });
             get().loadHistory();
+          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
+            // Background session completed — clear visible sending if no other session is streaming
+            set({ sending: false });
           }
         }
       });
@@ -1136,6 +1144,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sending: false,
             waitingHint: null,
           });
+        } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
+          set({ sending: false });
         }
       });
 
@@ -1206,6 +1216,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 },
               });
             }
+          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
+            set({ sending: false });
           }
         }
       }, 30_000);

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Minus, Square, X, Copy, GitBranch } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useGitStore } from '@/stores/git';
+import { useCodeViewerStore } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
 
 declare global {
@@ -75,7 +76,16 @@ export function Titlebar() {
       {/* Workspace path + git branch - centered, only in chat */}
       {inChat && workspace && (
         <span className="flex items-center gap-2 text-[13px] font-mono max-w-[500px] text-foreground/70 dark:text-foreground/80" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <span className="truncate min-w-0">{workspace}</span>
+          <span
+            className="truncate min-w-0 cursor-pointer hover:text-[hsl(var(--foreground))] transition-colors"
+            onClick={() => {
+              const sessionId = useChatStore.getState().currentSessionId;
+              useCodeViewerStore.getState().openViewer(workspace, '', null, sessionId);
+            }}
+            title="点击打开代码浏览器"
+          >
+            {workspace}
+          </span>
           {gitBranch && (
             <>
               <span className="text-foreground/30 shrink-0">·</span>
