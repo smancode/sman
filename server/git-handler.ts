@@ -6,6 +6,14 @@ import { URL } from 'node:url';
 import { validatePath } from './code-viewer-handler.js';
 import type { SmanConfig } from './types.js';
 
+function isDirectory(workspace: string, filePath: string): boolean {
+  try {
+    return fs.statSync(path.resolve(workspace, filePath)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // Lazy-loaded Claude SDK for push (only when needed)
 let _sessionManager: any = null;
 
@@ -127,7 +135,36 @@ export function handleGitStatus(workspace: string): GitStatusResult {
     }
   }
 
-  return { branch, files, ahead, behind, hasUpstream };
+  // Expand untracked directories into individual files
+  const expandedFiles: GitFileStatus[] = [];
+  for (const f of files) {
+    if (f.status === 'untracked' && isDirectory(workspace, f.path)) {
+      expandDirFiles(workspace, f.path, expandedFiles);
+    } else {
+      expandedFiles.push(f);
+    }
+  }
+
+  return { branch, files: expandedFiles, ahead, behind, hasUpstream };
+}
+
+function expandDirFiles(workspace: string, dirPath: string, out: GitFileStatus[]): void {
+  const resolved = path.resolve(workspace, dirPath);
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(resolved, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const rel = dirPath ? `${dirPath}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      expandDirFiles(workspace, rel, out);
+    } else if (entry.isFile()) {
+      out.push({ path: rel, status: 'untracked', staged: false });
+    }
+  }
 }
 
 function parseStatusXY(filePath: string, xy: string): GitFileStatus {

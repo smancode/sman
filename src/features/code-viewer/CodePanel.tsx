@@ -85,7 +85,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
 
   if (loading && !currentFile) {
     return (
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
           <span className="text-[13px]">加载文件中...</span>
@@ -96,7 +96,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
 
   if (error) {
     return (
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-destructive max-w-md px-4 text-center">
           <AlertTriangle className="h-8 w-8 shrink-0" />
           <span className="text-[13px]">{error}</span>
@@ -107,7 +107,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
 
   if (!currentFile) {
     return (
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <FileQuestion className="h-8 w-8 shrink-0" />
           <span className="text-[13px]">点击左侧文件查看内容</span>
