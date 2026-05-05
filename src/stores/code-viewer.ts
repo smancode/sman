@@ -183,16 +183,19 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       if (get()._activeLoadId !== loadId) return;
       unsub();
 
-      if (msg.error) {
-        set({ loading: false, error: msg.error as string });
-        return;
-      }
+      console.log('[code-viewer] code.readFile msg:', JSON.stringify(msg, null, 2));
 
-      const file = msg.file as FileContent | BinaryFileInfo | undefined;
-      if (!file) {
+      const result = msg.result as (FileContent | BinaryFileInfo | { error?: string }) | undefined;
+      console.log('[code-viewer] extracted result:', result);
+      if (!result) {
         set({ loading: false, error: 'No file data received' });
         return;
       }
+      if ('error' in result && result.error) {
+        set({ loading: false, error: result.error });
+        return;
+      }
+      const file = result as FileContent | BinaryFileInfo;
 
       // Update LRU cache
       const newCache = new Map(get().fileCache);
@@ -238,7 +241,12 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
           return;
         }
 
-        const entries = (msg.entries as DirEntry[]) || [];
+        const result = msg.result as { entries?: DirEntry[]; error?: string } | undefined;
+        if (result?.error) {
+          reject(new Error(result.error));
+          return;
+        }
+        const entries = result?.entries || [];
         set({
           dirCache: { ...get().dirCache, [dirPath]: entries },
         });
@@ -269,7 +277,12 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         return;
       }
 
-      const results = (msg.results as SearchMatch[]) || [];
+      const result = msg.result as { matches?: SearchMatch[]; error?: string } | undefined;
+      if (result?.error) {
+        set({ searching: false, error: result.error });
+        return;
+      }
+      const results = result?.matches || [];
       set({ searchResults: results, searching: false });
     });
 

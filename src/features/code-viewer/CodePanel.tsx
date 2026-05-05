@@ -7,7 +7,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ThemedToken } from 'shiki';
-import { Loader2, AlertTriangle, FileQuestion } from 'lucide-react';
+import { Loader2, AlertTriangle, FileQuestion, ChevronUp, ChevronDown } from 'lucide-react';
 import { highlightCode } from '@/lib/shiki-worker-client';
 import { useCodeViewerStore, type FileContent, type BinaryFileInfo } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
@@ -47,7 +47,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
   // Loading state
   if (loading && !currentFile) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
           <span className="text-[13px]">加载文件中...</span>
@@ -59,7 +59,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
   // Error state
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-destructive max-w-md px-4 text-center">
           <AlertTriangle className="h-8 w-8 shrink-0" />
           <span className="text-[13px]">{error}</span>
@@ -71,7 +71,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
   // No file selected
   if (!currentFile) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <FileQuestion className="h-8 w-8 shrink-0" />
           <span className="text-[13px]">点击左侧文件查看内容</span>
@@ -106,7 +106,7 @@ function BinaryPanel({ file }: { file: BinaryFileInfo }) {
   }, [file.size]);
 
   return (
-    <div className="flex-1 flex items-center justify-center">
+    <div className="flex-1 min-h-0 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-muted-foreground text-center">
         <FileQuestion className="h-8 w-8 shrink-0" />
         <span className="text-[13px] font-medium">二进制文件</span>
@@ -133,12 +133,65 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
   const [tokens, setTokens] = useState<ThemedToken[][] | null>(null);
   const [isDark, setIsDark] = useState(getIsDark);
   const [highlightError, setHighlightError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const highlightLineRef = useRef<HTMLDivElement>(null);
+  const matchRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   const filePath = file.path;
   const language = file.language;
   const lines = useMemo(() => file.content.split('\n'), [file.content]);
+
+  // Compute search matches
+  const { matches, totalMatches } = useMemo(() => {
+    if (!searchQuery) return { matches: [] as number[], totalMatches: 0 };
+    const query = searchQuery.toLowerCase();
+    const ms: number[] = [];
+    lines.forEach((line, i) => {
+      if (line.toLowerCase().includes(query)) ms.push(i);
+    });
+    return { matches: ms, totalMatches: ms.length };
+  }, [searchQuery, lines]);
+
+  // Reset match index when search changes
+  useEffect(() => {
+    if (matches.length > 0) {
+      setMatchIndex(0);
+    } else {
+      setMatchIndex(-1);
+    }
+  }, [matches.length]);
+
+  // Scroll to current match
+  useEffect(() => {
+    if (matchIndex >= 0 && matchRefs.current[matchIndex]) {
+      matchRefs.current[matchIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [matchIndex]);
+
+  const handlePrev = useCallback(() => {
+    if (matches.length === 0) return;
+    setMatchIndex((prev) => (prev <= 0 ? matches.length - 1 : prev - 1));
+  }, [matches.length]);
+
+  const handleNext = useCallback(() => {
+    if (matches.length === 0) return;
+    setMatchIndex((prev) => (prev >= matches.length - 1 ? 0 : prev + 1));
+  }, [matches.length]);
+
+  // Keyboard shortcut: F3 / Shift+F3
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (e.shiftKey) handlePrev();
+        else handleNext();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [handlePrev, handleNext]);
 
   // Listen for dark mode changes
   useEffect(() => {
@@ -191,13 +244,23 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
   const handleTokenClick = useTokenClickHandler(filePath, workspace);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 relative">
+    <div className="flex flex-col h-full min-h-0 relative">
       {/* File header */}
       <FileHeader
         filePath={filePath}
         language={language}
         lineCount={file.totalLines}
         truncated={file.truncated}
+      />
+
+      {/* Search bar */}
+      <SearchBar
+        query={searchQuery}
+        onChange={setSearchQuery}
+        onPrev={handlePrev}
+        onNext={handleNext}
+        currentMatch={matchIndex >= 0 ? matchIndex + 1 : 0}
+        totalMatches={totalMatches}
       />
 
       {/* Code area */}
@@ -219,6 +282,10 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
                 isHighlighted={highlightLine === i + 1}
                 highlightRef={highlightLine === i + 1 ? highlightLineRef : undefined}
                 onTokenClick={handleTokenClick}
+                searchQuery={searchQuery}
+                isSearchMatch={matches.includes(i)}
+                isCurrentMatch={matchIndex >= 0 && matches[matchIndex] === i}
+                matchRef={(el) => { matchRefs.current[matches.indexOf(i)] = el; }}
               />
             ))
           ) : (
@@ -230,6 +297,10 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
                 text={line}
                 isHighlighted={highlightLine === i + 1}
                 highlightRef={highlightLine === i + 1 ? highlightLineRef : undefined}
+                searchQuery={searchQuery}
+                isSearchMatch={matches.includes(i)}
+                isCurrentMatch={matchIndex >= 0 && matches[matchIndex] === i}
+                matchRef={(el) => { matchRefs.current[matches.indexOf(i)] = el; }}
               />
             ))
           )}
@@ -277,6 +348,75 @@ const FileHeader = memo(function FileHeader({
   );
 });
 
+// ── SearchBar ──────────────────────────────────────────────────────
+
+interface SearchBarProps {
+  query: string;
+  onChange: (q: string) => void;
+  onPrev: () => void;
+  onNext: () => void;
+  currentMatch: number;
+  totalMatches: number;
+}
+
+const SearchBar = memo(function SearchBar({
+  query,
+  onChange,
+  onPrev,
+  onNext,
+  currentMatch,
+  totalMatches,
+}: SearchBarProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Ctrl+F to focus search
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-1.5 border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
+      <span className="text-[12px] text-muted-foreground shrink-0">查找</span>
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-48 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+        placeholder="输入搜索内容..."
+      />
+      <button
+        onClick={onPrev}
+        disabled={totalMatches === 0}
+        className="flex items-center gap-0.5 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        title="上一个 (Shift+F3)"
+      >
+        <ChevronUp className="h-3 w-3" />
+        上一个
+      </button>
+      <button
+        onClick={onNext}
+        disabled={totalMatches === 0}
+        className="flex items-center gap-0.5 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        title="下一个 (F3)"
+      >
+        <ChevronDown className="h-3 w-3" />
+        下一个
+      </button>
+      <span className="text-[12px] text-muted-foreground shrink-0 min-w-[3rem] text-right">
+        {totalMatches > 0 ? `${currentMatch} / ${totalMatches}` : '0 / 0'}
+      </span>
+    </div>
+  );
+});
+
 // ── TokenLine ──────────────────────────────────────────────────────
 
 interface TokenLineProps {
@@ -286,6 +426,10 @@ interface TokenLineProps {
   isHighlighted: boolean;
   highlightRef?: React.RefObject<HTMLDivElement | null>;
   onTokenClick: (e: React.MouseEvent, tokenContent: string, lineIndex: number) => void;
+  searchQuery: string;
+  isSearchMatch: boolean;
+  isCurrentMatch: boolean;
+  matchRef: (el: HTMLSpanElement | null) => void;
 }
 
 const TokenLine = memo(function TokenLine({
@@ -295,8 +439,104 @@ const TokenLine = memo(function TokenLine({
   isHighlighted,
   highlightRef,
   onTokenClick,
+  searchQuery,
+  isSearchMatch,
+  isCurrentMatch,
+  matchRef,
 }: TokenLineProps) {
   const lineNum = lineIndex + 1;
+
+  const renderTokens = () => {
+    if (tokens.length === 0) return '\n';
+    if (!searchQuery) {
+      return tokens.map((token, ti) => (
+        <span
+          key={ti}
+          style={{ color: getTokenColor(token, isDark) }}
+          className="cursor-text"
+          onClick={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              onTokenClick(e, token.content, lineIndex);
+            }
+          }}
+        >
+          {token.content}
+        </span>
+      ));
+    }
+
+    // Highlight search matches within tokens
+    const parts: React.ReactNode[] = [];
+    let key = 0;
+    const query = searchQuery.toLowerCase();
+
+    for (const token of tokens) {
+      const content = token.content;
+      let remaining = content;
+      let pos = 0;
+
+      while (remaining.length > 0) {
+        const idx = remaining.toLowerCase().indexOf(query);
+        if (idx === -1) {
+          parts.push(
+            <span
+              key={key++}
+              style={{ color: getTokenColor({ ...token, content: remaining }, isDark) }}
+              className="cursor-text"
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  onTokenClick(e, remaining, lineIndex);
+                }
+              }}
+            >
+              {remaining}
+            </span>
+          );
+          break;
+        }
+
+        if (idx > 0) {
+          const before = remaining.slice(0, idx);
+          parts.push(
+            <span
+              key={key++}
+              style={{ color: getTokenColor({ ...token, content: before }, isDark) }}
+              className="cursor-text"
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  onTokenClick(e, before, lineIndex);
+                }
+              }}
+            >
+              {before}
+            </span>
+          );
+        }
+
+        const match = remaining.slice(idx, idx + query.length);
+        const isCurrent = isCurrentMatch && idx === 0; // simplified: first match in line
+        parts.push(
+          <span
+            key={key++}
+            ref={isCurrent ? matchRef : undefined}
+            className={cn(
+              'rounded-sm px-0.5',
+              isCurrent
+                ? 'bg-amber-400/40 text-[hsl(var(--foreground))]'
+                : 'bg-yellow-300/30 text-[hsl(var(--foreground))]'
+            )}
+          >
+            {match}
+          </span>
+        );
+
+        remaining = remaining.slice(idx + query.length);
+        pos += idx + query.length;
+      }
+    }
+
+    return parts;
+  };
 
   return (
     <div
@@ -306,6 +546,7 @@ const TokenLine = memo(function TokenLine({
         isHighlighted && (isDark
           ? 'bg-[rgba(31,111,235,0.15)]'
           : 'bg-[rgba(84,174,255,0.15)]'),
+        isSearchMatch && !isHighlighted && 'bg-yellow-100/30 dark:bg-yellow-900/20',
       )}
     >
       {/* Line number */}
@@ -321,24 +562,7 @@ const TokenLine = memo(function TokenLine({
         className="flex-1 min-w-0"
         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
       >
-        {tokens.length === 0 ? (
-          '\n'
-        ) : (
-          tokens.map((token, ti) => (
-            <span
-              key={ti}
-              style={{ color: getTokenColor(token, isDark) }}
-              className="cursor-text"
-              onClick={(e) => {
-                if (e.ctrlKey || e.metaKey) {
-                  onTokenClick(e, token.content, lineIndex);
-                }
-              }}
-            >
-              {token.content}
-            </span>
-          ))
-        )}
+        {renderTokens()}
       </span>
     </div>
   );
@@ -351,6 +575,10 @@ interface PlainLineProps {
   text: string;
   isHighlighted: boolean;
   highlightRef?: React.RefObject<HTMLDivElement | null>;
+  searchQuery: string;
+  isSearchMatch: boolean;
+  isCurrentMatch: boolean;
+  matchRef: (el: HTMLSpanElement | null) => void;
 }
 
 const PlainLine = memo(function PlainLine({
@@ -358,8 +586,57 @@ const PlainLine = memo(function PlainLine({
   text,
   isHighlighted,
   highlightRef,
+  searchQuery,
+  isSearchMatch,
+  isCurrentMatch,
+  matchRef,
 }: PlainLineProps) {
   const lineNum = lineIndex + 1;
+
+  const renderText = () => {
+    if (!searchQuery) return text;
+
+    const parts: React.ReactNode[] = [];
+    let key = 0;
+    const query = searchQuery.toLowerCase();
+    let remaining = text;
+    let foundCurrent = false;
+
+    while (remaining.length > 0) {
+      const idx = remaining.toLowerCase().indexOf(query);
+      if (idx === -1) {
+        parts.push(<span key={key++}>{remaining}</span>);
+        break;
+      }
+
+      if (idx > 0) {
+        parts.push(<span key={key++}>{remaining.slice(0, idx)}</span>);
+      }
+
+      const match = remaining.slice(idx, idx + query.length);
+      const isCurrent = isCurrentMatch && !foundCurrent;
+      if (isCurrent) foundCurrent = true;
+
+      parts.push(
+        <span
+          key={key++}
+          ref={isCurrent ? matchRef : undefined}
+          className={cn(
+            'rounded-sm px-0.5',
+            isCurrent
+              ? 'bg-amber-400/40 text-[hsl(var(--foreground))]'
+              : 'bg-yellow-300/30 text-[hsl(var(--foreground))]'
+          )}
+        >
+          {match}
+        </span>
+      );
+
+      remaining = remaining.slice(idx + query.length);
+    }
+
+    return parts;
+  };
 
   return (
     <div
@@ -367,6 +644,7 @@ const PlainLine = memo(function PlainLine({
       className={cn(
         'flex hover:bg-[hsl(var(--muted))]/30',
         isHighlighted && 'bg-[rgba(31,111,235,0.15)]',
+        isSearchMatch && !isHighlighted && 'bg-yellow-100/30 dark:bg-yellow-900/20',
       )}
     >
       <span
@@ -379,7 +657,7 @@ const PlainLine = memo(function PlainLine({
         className="flex-1 min-w-0"
         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
       >
-        {text}
+        {renderText()}
       </span>
     </div>
   );

@@ -192,7 +192,11 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
   return (
     <div className="flex flex-col h-full border-r border-[hsl(var(--border))]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[hsl(var(--border))] shrink-0">
+      <div
+        className="flex items-center gap-2 px-3 py-2 border-b border-[hsl(var(--border))] shrink-0"
+        style={{ paddingLeft: 'max(0.75rem, env(safe-area-inset-left))' }}
+      >
+        <div className="w-[52px] shrink-0" /> {/* macOS traffic light spacer */}
         <button
           className="text-[13px] text-muted-foreground hover:text-[hsl(var(--foreground))] transition-colors"
           onClick={onClose}
