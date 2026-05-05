@@ -219,11 +219,31 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
   // Build extensions
   const extensions = useMemo(() => {
     const exts: Extension[] = [
+      EditorState.phrases.of({
+        'Find': '查找',
+        'Replace': '替换',
+        'next': '下一个',
+        'previous': '上一个',
+        'all': '全部',
+        'match case': '区分大小写',
+        'regexp': '正则表达式',
+        'by word': '全词匹配',
+        'replace': '替换',
+        'replace all': '全部替换',
+        'close': '关闭',
+        'current match': '当前匹配',
+        'on line': '行',
+        'replaced match on line $': '已替换第 $ 行的匹配',
+        'replaced $ matches': '已替换 $ 处匹配',
+        'Go to line': '跳转到行',
+        'go': '跳转',
+      }),
       search({ top: true }),
       highlightSelectionMatches(),
       highlightLineField,
       highlightLineDeco,
       EditorView.lineWrapping,
+      EditorState.readOnly.of(!editable),
       keymap.of([
         {
           key: 'Mod-s',
@@ -279,8 +299,7 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
           height="100%"
           theme={isDark ? oneDark : undefined}
           extensions={extensions}
-          editable={editable}
-          onChange={editable ? handleChange : undefined}
+          onChange={handleChange}
           className="h-full text-[13px]"
           basicSetup={{
             lineNumbers: true,

@@ -28,11 +28,16 @@ export function CodeViewerOverlay() {
     }
   }, [open]);
 
-  // Esc to close
+  // Esc to close (but not when CodeMirror search panel is open)
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeViewer();
+      if (e.key === 'Escape') {
+        // Check if CM search panel is open — if so, let CM handle Esc first
+        const searchPanel = document.querySelector('.cm-search');
+        if (searchPanel) return;
+        closeViewer();
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
