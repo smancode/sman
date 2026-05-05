@@ -28,16 +28,20 @@ function looksLikeRelativePath(s: string): boolean {
   // Skip pure numbers or hex
   if (/^[0-9a-f]+$/i.test(s)) return false;
 
-  const hasSlash = s.includes('/');
+  const hasSlash = s.includes('/') || s.includes('\\');
   const extMatch = /\.[a-zA-Z0-9]{1,12}$/.test(s) && !/\.(com|org|net|io|dev)$/i.test(s);
   return hasSlash || extMatch;
 }
 
 /**
- * Check if a string looks like an absolute Unix file path.
+ * Check if a string looks like an absolute file path (Unix or Windows).
  */
 function looksLikeAbsPath(s: string): boolean {
-  return s.startsWith('/') && s.length > 2 && !s.startsWith('//');
+  // Unix: /usr/local/...
+  if (s.startsWith('/') && s.length > 2 && !s.startsWith('//')) return true;
+  // Windows: C:\... or C:/...
+  if (/^[A-Za-z]:[\\\/]/.test(s)) return true;
+  return false;
 }
 
 /**
@@ -49,15 +53,20 @@ function extractPathFromText(
 ): { filePath: string; start: number; end: number } | null {
   // Patterns to try, ordered by specificity
   const patterns: Array<{ regex: RegExp; transform: (m: RegExpMatchArray) => string }> = [
-    // Absolute path
+    // Windows absolute path: C:\... or C:/...
+    {
+      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])([A-Za-z]:[\\\/][^\s"'`<>{}()[\]|;,&]+)/g,
+      transform: (m) => m[1].replace(/\\/g, '/'),
+    },
+    // Unix absolute path
     {
       regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\/[^\s"'`<>{}()[\]|;,&]+)/g,
       transform: (m) => m[1],
     },
-    // Relative path with / (extension optional: src/foo.ts, src/foo/bar, ./bar/baz)
+    // Relative path with / or \ (src/foo.ts, src\bar\baz.ts)
     {
-      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\.?\.?\/?[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)+(?:\.[a-zA-Z0-9]{1,12})?)/g,
-      transform: (m) => m[1],
+      regex: /(?<=^|[\s"'`<>{}()[\]|;,&])(\.?\.?[\\\/]?[a-zA-Z0-9._-]+(?:[\\\/][a-zA-Z0-9._-]+)+(?:\.[a-zA-Z0-9]{1,12})?)/g,
+      transform: (m) => m[1].replace(/\\/g, '/'),
     },
     // Single file name with extension (no /): Abc.java, README.md, Makefile
     {
@@ -75,8 +84,10 @@ function extractPathFromText(
         const idx = match.index ?? 0;
         // For absolute paths, verify they start with the workspace
         if (looksLikeAbsPath(candidate)) {
-          if (candidate.startsWith(workspace)) {
-            const relativePath = candidate.slice(workspace.length).replace(/^\//, '');
+          const normCandidate = candidate.replace(/\\/g, '/');
+          const normWorkspace = workspace.replace(/\\/g, '/');
+          if (normCandidate.startsWith(normWorkspace)) {
+            const relativePath = normCandidate.slice(normWorkspace.length).replace(/^\//, '');
             return { filePath: relativePath, start: idx, end: idx + candidate.length };
           }
           continue;

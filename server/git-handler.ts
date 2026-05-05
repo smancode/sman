@@ -153,9 +153,72 @@ export function handleGitDiff(workspace: string, filePath?: string, staged?: boo
   args += ' --no-color -U3';
 
   const raw = git(workspace, args, 30000);
-  if (!raw) return [];
+  if (raw) return parseDiffOutput(raw);
 
-  return parseDiffOutput(raw);
+  // Fallback for files with no standard diff output (untracked, deleted)
+  if (!filePath) return [];
+  return buildFullFileDiff(workspace, filePath);
+}
+
+/**
+ * Build a synthetic diff for files where `git diff` returns nothing:
+ * - Untracked/added files: show all lines as added (green)
+ * - Deleted files: show all lines as removed (red)
+ */
+function buildFullFileDiff(workspace: string, filePath: string): GitDiffFile[] {
+  const resolved = validatePath(workspace, filePath);
+
+  // Check if file exists on disk (added/untracked) or only in git (deleted)
+  const existsOnDisk = fs.existsSync(resolved);
+
+  if (existsOnDisk) {
+    // Added or untracked file — show entire content as added lines
+    const content = fs.readFileSync(resolved, 'utf-8');
+    if (!content) return [];
+    const lines = content.split('\n');
+    const diffLines: GitDiffLine[] = lines.map((line, i) => ({
+      type: 'added',
+      content: line,
+      oldLineNo: null,
+      newLineNo: i + 1,
+    }));
+    const totalLines = lines.length;
+    return [{
+      path: filePath,
+      hunks: [{
+        header: `@@ -0,0 +1,${totalLines} @@`,
+        oldStart: 0, oldLines: 0,
+        newStart: 1, newLines: totalLines,
+        lines: diffLines,
+      }],
+    }];
+  }
+
+  // Deleted file — show git HEAD content as removed lines
+  let headContent = '';
+  try {
+    headContent = git(workspace, `show HEAD:"${filePath}"`, 10000);
+  } catch {
+    return [];
+  }
+  if (!headContent) return [];
+  const lines = headContent.split('\n');
+  const diffLines: GitDiffLine[] = lines.map((line, i) => ({
+    type: 'removed',
+    content: line,
+    oldLineNo: i + 1,
+    newLineNo: null,
+  }));
+  const totalLines = lines.length;
+  return [{
+    path: filePath,
+    hunks: [{
+      header: `@@ -1,${totalLines} +0,0 @@`,
+      oldStart: 1, oldLines: totalLines,
+      newStart: 0, newLines: 0,
+      lines: diffLines,
+    }],
+  }];
 }
 
 export function handleGitDiffFile(workspace: string, filePath: string): { oldContent: string; newContent: string } {

@@ -332,6 +332,10 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     const { workspace, filePath, currentFile } = get();
     if (!currentFile || !('content' in currentFile)) return;
 
+    // Use the resolved absolute path from the backend (file.path) instead of
+    // the original filePath which may be a short name requiring fuzzy search
+    const resolvedPath = currentFile.path;
+
     set({ saving: true });
 
     const unsub = wrapHandler(client, 'code.saveFile', (msg) => {
@@ -350,7 +354,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     client.send({
       type: 'code.saveFile',
       workspace,
-      filePath,
+      filePath: resolvedPath,
       content: (currentFile as FileContent).content,
     });
   },

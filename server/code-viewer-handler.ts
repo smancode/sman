@@ -3,6 +3,11 @@ import path from 'node:path';
 
 export const MAX_FILE_SIZE = 1_048_576; // 1MB
 
+/** Normalize path separators to forward slashes for cross-platform frontend compatibility */
+function toPosix(p: string): string {
+  return p.split(path.sep).join('/');
+}
+
 const BINARY_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg',
   '.zip', '.tar', '.gz', '.rar', '.7z',
@@ -146,7 +151,7 @@ export function handleListDir(workspace: string, dirPath: string): ListDirResult
     return a.name.localeCompare(b.name);
   });
 
-  return { path: resolved, entries };
+  return { path: toPosix(resolved), entries };
 }
 
 export function handleReadFile(workspace: string, filePath: string): ReadFileResult | BinaryFileResult {
@@ -181,7 +186,7 @@ export function handleReadFile(workspace: string, filePath: string): ReadFileRes
       '.pdf': 'application/pdf', '.zip': 'application/zip',
     };
     return {
-      path: resolved,
+      path: toPosix(resolved),
       type: 'binary',
       mimeType: mimeMap[ext] || 'application/octet-stream',
       size: stat.size,
@@ -193,7 +198,7 @@ export function handleReadFile(workspace: string, filePath: string): ReadFileRes
 
   if (hasNullBytes(buffer)) {
     return {
-      path: resolved,
+      path: toPosix(resolved),
       type: 'binary',
       mimeType: 'application/octet-stream',
       size: stat.size,
@@ -208,7 +213,7 @@ export function handleReadFile(workspace: string, filePath: string): ReadFileRes
   const totalLines = content.split('\n').length;
 
   return {
-    path: resolved,
+    path: toPosix(resolved),
     content,
     language: detectLanguage(resolved),
     totalLines,
@@ -223,13 +228,24 @@ const DEFAULT_SEARCH_EXTENSIONS = new Set([
 ]);
 
 export function handleSaveFile(workspace: string, filePath: string, content: string): { success: true } | { error: string } {
-  const resolved = validatePath(workspace, filePath);
+  let resolved = validatePath(workspace, filePath);
 
   let stat: fs.Stats;
   try {
     stat = fs.statSync(resolved);
   } catch {
-    return { error: 'File not found' };
+    // Try fuzzy find by filename, same as handleReadFile
+    const found = findFileByName(workspace, path.basename(filePath));
+    if (found) {
+      resolved = found;
+      try {
+        stat = fs.statSync(resolved);
+      } catch {
+        return { error: 'File not found' };
+      }
+    } else {
+      return { error: 'File not found' };
+    }
   }
 
   if (!stat.isFile()) {
@@ -280,7 +296,7 @@ export function handleSearchSymbols(
       if (shouldHide(entry.name)) continue;
 
       const fullPath = path.join(dir, entry.name);
-      const relPath = path.join(relativeTo, entry.name);
+      const relPath = toPosix(path.join(relativeTo, entry.name));
 
       if (entry.isDirectory()) {
         walk(fullPath, relPath);
