@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Eye, EyeOff, Save, AlertCircle } from 'lucide-react';
+import { Search, Eye, EyeOff, Save, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,8 @@ export function WebSearchSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateWebSearch, clearError } = useSettingsStore();
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [searxngTesting, setSearxngTesting] = useState(false);
+  const [searxngError, setSearxngError] = useState<string | null>(null);
 
   const ws = settings?.webSearch;
   const provider = ws?.provider ?? 'builtin';
@@ -29,7 +31,27 @@ export function WebSearchSettings({ id }: { id?: string }) {
     }
   };
 
-  const handleProviderChange = (value: string) => {
+  const handleProviderChange = async (value: string) => {
+    if (value === 'searxng') {
+      setSearxngTesting(true);
+      setSearxngError(null);
+      try {
+        const res = await fetch('/api/searxng/test', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) {
+          setSearxngError('连接 SearXNG 服务失败，请检查网络');
+          setSearxngTesting(false);
+          return;
+        }
+      } catch {
+        setSearxngError('连接 SearXNG 服务失败，请检查网络');
+        setSearxngTesting(false);
+        return;
+      }
+      setSearxngTesting(false);
+    } else {
+      setSearxngError(null);
+    }
     updateWebSearch({ provider: value as WebSearchProvider }).catch(() => {});
   };
 
@@ -75,7 +97,34 @@ export function WebSearchSettings({ id }: { id?: string }) {
                 <RadioGroupItem value={option.value} id={option.value} className="mt-0.5" />
                 <div className="flex-1">
                   <div className="font-medium">{option.label}</div>
-                  <div className="text-sm text-muted-foreground">{option.description}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {option.description}
+                    {option.link && (
+                      <button
+                        type="button"
+                        className="ml-1 text-primary hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const w = window as any;
+                          if (w.sman?.openExternal) {
+                            w.sman.openExternal(option.link!);
+                          } else {
+                            window.open(option.link, '_blank', 'noopener,noreferrer');
+                          }
+                        }}
+                      >
+                        了解详情
+                      </button>
+                    )}
+                    {option.value === 'searxng' && searxngTesting && (
+                      <span className="ml-2 text-muted-foreground inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> 测试连通性…
+                      </span>
+                    )}
+                    {option.value === 'searxng' && searxngError && !searxngTesting && (
+                      <span className="ml-2 text-destructive">{searxngError}</span>
+                    )}
+                  </div>
                 </div>
               </Label>
             ))}

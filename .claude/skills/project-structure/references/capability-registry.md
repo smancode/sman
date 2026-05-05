@@ -1,6 +1,6 @@
-# Capability Registry
+# 能力注册表
 
-**Purpose**: Capability discovery, matching, and loading system (on-demand skill injection)
+**Purpose**: 能力发现、匹配和加载系统（按需 Skill 注入）
 
 ## Key Files
 - `server/capabilities/registry.ts` — Registry main logic

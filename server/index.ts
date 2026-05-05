@@ -398,6 +398,38 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Public: test SearXNG connectivity (uses curl which respects proxy env vars)
+  if (req.url === '/api/searxng/test' && req.method === 'POST') {
+    (async () => {
+      const { execFile } = await import('child_process');
+      const instances = [
+        'https://searx.be',
+        'https://search.sapti.me',
+        'https://searxng.ch',
+        'https://search.bus-hit.me',
+        'https://searx.tiekoetter.com',
+      ];
+      const testInstance = (url: string): Promise<boolean> => new Promise((resolve) => {
+        execFile('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '8', url], (err, stdout) => {
+          if (err) { resolve(false); return; }
+          const code = parseInt(stdout.trim(), 10);
+          resolve(code >= 200 && code < 500);
+        });
+      });
+      for (const baseUrl of instances) {
+        const ok = await testInstance(baseUrl);
+        if (ok) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, instance: baseUrl }));
+          return;
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false }));
+    })();
+    return;
+  }
+
   // Public: open URL in system default browser
   if (req.url === '/api/open-external' && req.method === 'POST') {
     let body = '';

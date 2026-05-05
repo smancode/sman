@@ -1,6 +1,6 @@
-# Session Store
+# 会话存储
 
-**Purpose**: SQLite storage for sessions and messages
+**Purpose**: SQLite 会话和消息存储
 
 ## Key Files
 - `server/session-store.ts` — SQLite database operations

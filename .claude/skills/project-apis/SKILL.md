@@ -2,7 +2,7 @@
 name: project-apis
 description: "smanbase API endpoints catalog. Consult when modifying or adding endpoints."
 _scanned:
-  commitHash: "35f8e752359eff2474610cf31f0beaaa40ccbca9"
+  commitHash: "32289f752b24fd9424b2dd1c9e9e34938bf4a806"
   scannedAt: "2026-05-05T00:00:00.000Z"
   branch: "master"
 ---
@@ -171,6 +171,75 @@ _scanned:
 | `auth.verified` | Server→Client | Token verified |
 | `auth.failed` | Server→Client | Token invalid (params: error) |
 
+## Code Viewer
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `code.listDir` | Client→Server | List directory (params: workspace, dirPath?) |
+| `code.listDir` | Server→Client | Directory contents |
+| `code.readFile` | Client→Server | Read file (params: workspace, filePath) |
+| `code.readFile` | Server→Client | File content |
+| `code.searchSymbols` | Client→Server | Search symbols (params: workspace, symbol, fileExt?) |
+| `code.searchSymbols` | Server→Client | Search results |
+| `code.saveFile` | Client→Server | Save file (params: workspace, filePath, content) |
+| `code.saveFile` | Server→Client | Save result |
+| `code.searchFiles` | Client→Server | Search files (params: workspace, query) |
+| `code.searchFiles` | Server→Client | File search results |
+
+## Git
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `git.status` | Client→Server | Get git status (params: workspace) |
+| `git.status` | Server→Client | Git status |
+| `git.diff` | Client→Server | Get diff (params: workspace, filePath?, staged?) |
+| `git.diff` | Server→Client | Diff output |
+| `git.diffFile` | Client→Server | Get single file diff (params: workspace, filePath) |
+| `git.diffFile` | Server→Client | File diff |
+| `git.commit` | Client→Server | Commit (params: workspace, message, files?) |
+| `git.commit` | Server→Client | Commit result |
+| `git.log` | Client→Server | Get commit log (params: workspace, maxCount?) |
+| `git.log` | Server→Client | Commit log |
+| `git.logGraph` | Client→Server | Get graph log (params: workspace, maxCount?) |
+| `git.logGraph` | Server→Client | Graph log |
+| `git.branchList` | Client→Server | List branches (params: workspace) |
+| `git.branchList` | Server→Client | Branch list |
+| `git.checkout` | Client→Server | Checkout branch (params: workspace, branch) |
+| `git.checkout` | Server→Client | Checkout result |
+| `git.fetch` | Client→Server | Fetch from remote (params: workspace) |
+| `git.fetch` | Server→Client | Fetch result |
+| `git.remoteDiff` | Client→Server | Get remote diff (params: workspace) |
+| `git.remoteDiff` | Server→Client | Remote diff |
+| `git.generateCommit` | Client→Server | AI generate commit message (params: workspace, template?) |
+| `git.generateCommit` | Server→Client | Generated commit message |
+| `git.push` | Client→Server | Push to remote (params: workspace) |
+| `git.push` | Server→Client | Push result |
+
+## HTTP Endpoints
+
+### Public (No Auth)
+
+| Path | Method | Description |
+|------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/searxng/test` | POST | Test SearXNG connectivity |
+| `/api/open-external` | POST | Open URL in system browser |
+| `/api/auth/token` | GET | Get auth token (loopback only) |
+
+### Auth Required (Bearer Token)
+
+| Path | Method | Description |
+|------|--------|-------------|
+| `/api/directory/read` | GET | Read directory contents |
+| `/api/directory/home` | GET | Get user home directory |
+
+### Static Files
+
+| Path | Description |
+|------|-------------|
+| `/` | Frontend static files (production) |
+| `/*` | SPA fallback |
+
 ## Error
 
 | Type | Direction | Description |
@@ -183,3 +252,7 @@ _scanned:
 - Broadcast: Some messages (like `session.labelUpdated`) are broadcast to all clients
 - Message isolation: Session-specific messages are not broadcast to avoid cross-session leakage
 - Chatbot status: Connection status changes are broadcast to all clients
+- Backpressure: Streaming messages (`chat.delta`, `batch.progress`) may be dropped when client buffer is full
+- Cron scan: Auto-discovers Skills with `crontab.md` files in workspaces
+- SmartPath steps: Execution creates ephemeral sessions (not persisted to SQLite)
+- WeChat QR: Flow is `qr.request` → `qr.response` → `qr.poll` (loop until `status: connected`)

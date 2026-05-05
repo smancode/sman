@@ -1,15 +1,17 @@
 ---
-name: project-structure
-description: "smanbase directory layout, tech stack, module organization, and build instructions. Consult when you need to understand project structure, find where code lives, or determine how to build/run."
+id: project-structure
+name: 项目结构
+description: smanbase 目录布局、技术栈、模块组织和构建说明
+category: structure
 _scanned:
-  commitHash: "35f8e752359eff2474610cf31f0beaaa40ccbca9"
+  commitHash: "32289f752b24fd9424b2dd1c9e9e34938bf4a806"
   scannedAt: "2026-05-05T00:00:00.000Z"
   branch: "master"
 ---
 
-# Smanbase — Project Structure
+# Smanbase — 项目结构
 
-> Desktop AI platform with Claude integration, multi-bot support (WeCom/Feishu/Weixin), and multi-agent collaboration network (Stardom).
+> 桌面 AI 平台，集成 Claude、多 Bot 支持（企业微信/飞书/微信）和多 Agent 协作网络（星域）。
 
 ## Tech Stack
 **Frontend**: React 19 + TypeScript + TailwindCSS + Radix UI + Zustand + Vite

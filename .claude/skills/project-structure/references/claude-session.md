@@ -1,6 +1,6 @@
-# Claude Session Management
+# Claude 会话管理
 
-**Purpose**: Claude Agent SDK V2 session lifecycle management (create, resume, idle cleanup, streaming, message queuing)
+**Purpose**: Claude Agent SDK V2 会话生命周期管理（创建、恢复、idle 清理、流式推送、消息排队）
 
 ## Key Files
 - `server/claude-session.ts` — Main session manager

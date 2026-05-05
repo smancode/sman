@@ -1,6 +1,6 @@
-# HTTP/WebSocket Server
+# 后端核心模块
 
-**Purpose**: Main backend entry point, all WebSocket handlers and services initialization
+**Purpose**: 后端入口和核心服务，提供 HTTP + WebSocket 服务
 
 ## Key Files
 - `server/index.ts` — Backend entry, WebSocket server setup, all handler registration

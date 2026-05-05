@@ -1,6 +1,6 @@
-# Stardom Bridge Layer
+# 星域桥接层
 
-**Purpose**: Bridge between Sman and Stardom server (connection management, experience extraction, collaboration)
+**Purpose**: Sman 与星域服务器之间的桥接（连接管理、经验提取、协作）
 
 ## Key Files
 - `server/stardom/stardom-bridge.ts` — Main bridge logic
