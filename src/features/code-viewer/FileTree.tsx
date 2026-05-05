@@ -162,6 +162,8 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
   const fileSearchQuery = useCodeViewerStore((s) => s.fileSearchQuery);
   const fileSearchResults = useCodeViewerStore((s) => s.fileSearchResults);
   const fileSearching = useCodeViewerStore((s) => s.fileSearching);
+  const sourceOnly = useCodeViewerStore((s) => s.fileSearchSourceOnly);
+  const setFileSearchSourceOnly = useCodeViewerStore((s) => s.setFileSearchSourceOnly);
 
   const handleChange = useCallback((value: string) => {
     setQuery(value);
@@ -190,6 +192,12 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
+  // Re-search when sourceOnly changes and there's a query
+  useEffect(() => {
+    if (query.trim()) searchFiles(query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceOnly]);
+
   const isSearching = fileSearching;
   const hasResults = fileSearchResults.length > 0;
   const showResults = fileSearchQuery && query.trim();
@@ -211,6 +219,15 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
             <X className="w-3 h-3 text-muted-foreground" />
           </button>
         )}
+        <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none" title="过滤测试、构建等非源码目录">
+          <input
+            type="checkbox"
+            checked={sourceOnly}
+            onChange={(e) => setFileSearchSourceOnly(e.target.checked)}
+            className="w-3 h-3 accent-[hsl(var(--primary))]"
+          />
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">只搜源码</span>
+        </label>
       </div>
       {showResults && (
         <ScrollArea className="max-h-[200px]">

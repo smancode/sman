@@ -32,13 +32,14 @@ export interface LlmProfile {
   capabilities?: DetectedCapabilities;
 }
 
-export type WebSearchProvider = 'builtin' | 'searxng' | 'brave' | 'tavily';
+export type WebSearchProvider = 'builtin' | 'searxng' | 'brave' | 'tavily' | 'baidu';
 
 export interface WebSearchConfig {
   provider: WebSearchProvider;
   braveApiKey: string;
   tavilyApiKey: string;
   bingApiKey: string;
+  baiduApiKey: string;
   maxUsesPerSession: number;
 }
 
@@ -86,6 +87,7 @@ export const WEB_SEARCH_PROVIDER_OPTIONS: {
   { value: 'searxng', label: 'SearXNG', description: '免费，无需 API Key，使用公共 SearXNG 实例' },
   { value: 'brave', label: 'Brave Search', description: 'API Key 搜索引擎', link: 'https://brave.com/search/api/' },
   { value: 'tavily', label: 'Tavily', description: 'AI 原生搜索引擎', link: 'https://tavily.com' },
+  { value: 'baidu', label: '百度搜索', description: '百度 AI 搜索 API', link: 'https://console.bce.baidu.com/ai-search/overview' },
   // Bing Search API 已于 2025-08-11 停用，隐藏选项但保留后端支持以防复活
   // { value: 'bing', label: 'Bing Search', description: 'Azure 认知服务，$7/千次' },
 ];

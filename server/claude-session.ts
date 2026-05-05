@@ -20,6 +20,7 @@ import type { WebAccessService } from './web-access/index.js';
 import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
 import type { CapabilityRegistry } from './capabilities/registry.js';
 import { createWebSearchMcpServer, isAnthropicFirstParty } from './web-search/mcp-server.js';
+import { createBaiduSearchMcpServer } from './web-search/baidu-mcp-server.js';
 
 // Chrome site discovery removed from system prompt — now served on-demand via web_access_find_url MCP tool
 import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js';
@@ -625,15 +626,41 @@ export class ClaudeSessionManager {
     const mcpServers = buildMcpServers(this.config);
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
-    // Web search: 'builtin' relies on Claude Code's built-in WebSearch (server_tool_use).
-    // Many third-party proxies (Kimi, OpenRouter) support this protocol, so we don't
-    // inject fallback tools that would compete with the built-in one.
-    // If the proxy doesn't support server_tool_use, user can switch to Brave/Tavily.
-    // SearXNG MCP is kept as a last-resort option — only injected when explicitly needed.
-    if (this.config.webSearch?.provider === 'searxng') {
+    // Web search MCP injection strategy:
+    // - Explicit provider (searxng/baidu/brave/tavily): always inject
+    // - 'builtin': relies on Claude Code's built-in WebSearch (server_tool_use)
+    //   for Anthropic first-party. For proxies, auto-detect user's configured
+    //   API keys and inject a fallback search MCP server.
+    const ws = this.config.webSearch;
+    if (ws?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
       (opts.mcpServers as any)['web-search'] = webSearchServer;
       this.log.info('[search] SearXNG MCP registered as search provider');
+    } else if (ws?.provider === 'baidu') {
+      const baiduApiKey = ws.baiduApiKey;
+      if (baiduApiKey) {
+        const baiduServer = createBaiduSearchMcpServer(baiduApiKey);
+        (opts.mcpServers as any)['baidu-search'] = baiduServer;
+        this.log.info('[search] Baidu AI Search MCP registered as search provider');
+      } else {
+        this.log.warn('[search] Baidu provider selected but no API Key configured');
+      }
+    } else if (ws?.provider === 'builtin' || !ws?.provider) {
+      const isOfficial = isAnthropicFirstParty(this.config.llm.baseUrl);
+      if (isOfficial) {
+        this.log.info('[search] builtin mode + Anthropic first-party — using built-in WebSearch');
+      } else {
+        // Proxy mode: auto-detect available API keys and inject fallback search
+        const fallback = this.detectSearchFallback(ws);
+        if (fallback) {
+          (opts.mcpServers as any)[fallback.name] = fallback.server;
+          this.log.info(`[search] builtin mode + proxy — injected ${fallback.name} as fallback search`);
+        } else {
+          this.log.info('[search] builtin mode + proxy — no API key configured for fallback, trying SearXNG');
+          const webSearchServer = createWebSearchMcpServer();
+          (opts.mcpServers as any)['web-search'] = webSearchServer;
+        }
+      }
     }
 
     // Inject web-access MCP Server (in-process)

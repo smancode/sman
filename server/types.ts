@@ -61,10 +61,11 @@ export interface SmanConfig {
   savedLlms: LlmProfile[];   // 保存的 LLM 配置列表
   currentLlmProfile: string; // 当前激活的 LLM 配置名称
   webSearch: {
-    provider: 'builtin' | 'searxng' | 'brave' | 'tavily' | 'bing';
+    provider: 'builtin' | 'searxng' | 'brave' | 'tavily' | 'bing' | 'baidu';
     braveApiKey: string;
     tavilyApiKey: string;
     bingApiKey: string;
+    baiduApiKey: string;
     maxUsesPerSession: number;
   };
   chatbot: import('./chatbot/types.js').ChatbotConfig;

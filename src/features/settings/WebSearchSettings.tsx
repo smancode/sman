@@ -18,7 +18,7 @@ export function WebSearchSettings({ id }: { id?: string }) {
 
   const ws = settings?.webSearch;
   const provider = ws?.provider ?? 'builtin';
-  const activeApiKeyField = provider === 'brave' ? ws?.braveApiKey : provider === 'tavily' ? ws?.tavilyApiKey : ws?.bingApiKey;
+  const activeApiKeyField = provider === 'brave' ? ws?.braveApiKey : provider === 'tavily' ? ws?.tavilyApiKey : provider === 'baidu' ? ws?.baiduApiKey : ws?.bingApiKey;
 
   const handleSave = async () => {
     setSaving(true);
@@ -60,6 +60,8 @@ export function WebSearchSettings({ id }: { id?: string }) {
       updateWebSearch({ braveApiKey: value }).catch(() => {});
     } else if (provider === 'tavily') {
       updateWebSearch({ tavilyApiKey: value }).catch(() => {});
+    } else if (provider === 'baidu') {
+      updateWebSearch({ baiduApiKey: value }).catch(() => {});
     }
   };
 
@@ -131,15 +133,15 @@ export function WebSearchSettings({ id }: { id?: string }) {
           </RadioGroup>
         </div>
 
-        {(provider === 'brave' || provider === 'tavily') && (
+        {(provider === 'brave' || provider === 'tavily' || provider === 'baidu') && (
           <div className="space-y-2">
-            <Label>{provider === 'brave' ? 'Brave' : 'Tavily'} API Key</Label>
+            <Label>{provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : '百度'} API Key</Label>
             <div className="relative">
               <Input
                 type={showApiKey ? 'text' : 'password'}
                 value={activeApiKeyField ?? ''}
                 onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={`输入 ${provider === 'brave' ? 'Brave' : 'Tavily'} API Key`}
+                placeholder={`输入 ${provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : '百度'} API Key`}
                 className="pr-10"
               />
               <button

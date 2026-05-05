@@ -19,8 +19,22 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 const HIDDEN_DIRS = new Set([
-  '.git', 'node_modules', 'dist', 'build', '.next', '.sman',
-  '__pycache__', '.venv', '.DS_Store', 'coverage',
+  // VCS
+  '.git', '.svn', '.hg',
+  // Dependencies
+  'node_modules', 'vendor', 'third_party', '.venv', 'venv', 'env',
+  // Build output
+  'dist', 'build', 'out', 'target', 'bin', 'obj', '.next', '.nuxt', '.output',
+  // Cache / temp
+  '__pycache__', '.cache', '.tmp', '.temp', 'tmp', 'temp',
+  // IDE / OS
+  '.idea', '.vscode', '.vs', '.DS_Store', 'Thumbs.db',
+  // Test / coverage
+  'coverage', '.coverage', '.nyc_output', 'htmlcov',
+  // Sman
+  '.sman',
+  // Framework specific
+  'Pods', '.gradle', '.dart_tool', '.flutter-plugins',
 ]);
 
 export function validatePath(workspace: string, filePath: string): string {
@@ -337,7 +351,7 @@ export function handleSearchSymbols(
  * Search for a file by name in the workspace (limited depth, skip hidden dirs).
  * Returns the first match's resolved path, or null.
  */
-function findFileByName(workspace: string, fileName: string, maxDepth: number = 5): string | null {
+function findFileByName(workspace: string, fileName: string, maxDepth: number = 25): string | null {
   const resolvedWorkspace = path.resolve(workspace);
 
   function walk(dir: string, depth: number): string | null {
@@ -376,7 +390,36 @@ export interface FileSearchResult {
   fileName: string;
 }
 
-export function handleSearchFiles(workspace: string, query: string, maxResults = 50): FileSearchResult[] {
+// Extensions considered source code for file search
+const SOURCE_EXTENSIONS = new Set([
+  // Web frontend
+  '.ts', '.tsx', '.js', '.jsx', '.vue', '.svelte', '.astro',
+  // Styles
+  '.css', '.scss', '.less', '.sass',
+  // Markup / data
+  '.html', '.htm', '.xml', '.json', '.yaml', '.yml', '.toml',
+  // Backend
+  '.py', '.rb', '.go', '.rs', '.java', '.kt', '.scala', '.clj',
+  '.cs', '.fs', '.vb',
+  // C/C++
+  '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx',
+  // Other languages
+  '.php', '.swift', '.dart', '.lua', '.r', '.m', '.mm',
+  '.sh', '.bash', '.zsh', '.fish', '.ps1',
+  '.sql', '.graphql', '.proto',
+  // Config / docs
+  '.md', '.mdx', '.txt', '.rst', '.cfg', '.ini', '.env',
+  // Build
+  '.cmake', '.gradle', '.makefile',
+  // WebAssembly
+  '.wat', '.wasm',
+]);
+
+function isSourceFile(fileName: string): boolean {
+  return SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
+}
+
+export function handleSearchFiles(workspace: string, query: string, maxResults = 50, sourceOnly = true): FileSearchResult[] {
   if (!query || query.length < 1) return [];
 
   const normalizedQuery = query.toLowerCase();
@@ -401,7 +444,7 @@ export function handleSearchFiles(workspace: string, query: string, maxResults =
       const relPath = toPosix(path.join(relativeTo, entry.name));
 
       if (entry.isFile()) {
-        // Fuzzy match: query chars must appear in order in filename (case-insensitive)
+        if (sourceOnly && !isSourceFile(entry.name)) continue;
         if (fuzzyMatch(entry.name.toLowerCase(), normalizedQuery)) {
           results.push({ filePath: relPath, fileName: entry.name });
         }

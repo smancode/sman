@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: SmanConfig = {
     braveApiKey: '',
     tavilyApiKey: '',
     bingApiKey: '',
+    baiduApiKey: '',
     maxUsesPerSession: 50,
   },
   chatbot: {

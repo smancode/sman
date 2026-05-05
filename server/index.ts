@@ -33,7 +33,7 @@ import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
-import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols, handleSearchFiles } from './code-viewer-handler.js';
+import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols, handleSearchFiles, validatePath } from './code-viewer-handler.js';
 import { handleGitStatus, handleGitDiff, handleGitDiffFile, handleGitCommit, handleGitLog, handleGitBranchList, handleGitCheckout, handleGitFetch, handleGitRemoteDiff, handleGitGenerateCommit, handleGitLogGraph, handleGitPush, setSessionManagerForPush } from './git-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
@@ -482,6 +482,49 @@ const server = http.createServer((req, res) => {
   if (req.url?.startsWith('/api/') && !verifyHttpAuth(req)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
+    return;
+  }
+
+  // Code image viewer API — serves image files from workspace
+  if (req.url?.startsWith('/api/code/image')) {
+    const urlObj = new URL(req.url, `http://localhost:${PORT}`);
+    const workspace = urlObj.searchParams.get('workspace');
+    const filePath = urlObj.searchParams.get('file');
+
+    if (!workspace || !filePath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing workspace or file parameter' }));
+      return;
+    }
+
+    try {
+      const resolved = validatePath(workspace, filePath);
+      const stat = fs.statSync(resolved);
+      if (!stat.isFile()) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not a file' }));
+        return;
+      }
+
+      const ext = path.extname(resolved).toLowerCase();
+      const mimeMap: Record<string, string> = {
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.bmp': 'image/bmp', '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml', '.webp': 'image/webp',
+      };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+
+      const data = fs.readFileSync(resolved);
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Content-Length': data.length,
+        'Cache-Control': 'no-cache',
+      });
+      res.end(data);
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+    }
     return;
   }
 
@@ -1458,7 +1501,7 @@ wss.on('connection', (ws: WebSocket) => {
             break;
           }
           try {
-            const result = handleSearchFiles(String(msg.workspace), String(msg.query));
+            const result = handleSearchFiles(String(msg.workspace), String(msg.query), 50, msg.sourceOnly !== false);
             ws.send(JSON.stringify({ type: 'code.searchFiles', result }));
           } catch (err) {
             ws.send(JSON.stringify({ type: 'code.searchFiles', result: { error: err instanceof Error ? err.message : String(err) } }));

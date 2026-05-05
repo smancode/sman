@@ -99,6 +99,7 @@ interface CodeViewerState {
   fileSearchQuery: string;
   fileSearchResults: FileSearchResult[];
   fileSearching: boolean;
+  fileSearchSourceOnly: boolean;
 
   // Edit
   editable: boolean;
@@ -118,6 +119,7 @@ interface CodeViewerState {
   clearSearch: () => void;
   searchFiles: (query: string) => void;
   clearFileSearch: () => void;
+  setFileSearchSourceOnly: (sourceOnly: boolean) => void;
   setEditable: (editable: boolean) => void;
   markDirty: () => void;
   saveFile: () => void;
@@ -151,6 +153,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   fileSearchQuery: '',
   fileSearchResults: [],
   fileSearching: false,
+  fileSearchSourceOnly: true,
 
   // Edit
   editable: false,
@@ -173,6 +176,31 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       fileCache: new Map<string, FileCacheEntry>(),
     });
     get().loadFile(filePath);
+
+    // Pre-expand file tree directories along the filePath so the file shows as selected
+    if (filePath && filePath.includes('/')) {
+      const parts = filePath.split('/');
+      // e.g. filePath = "src/features/code-viewer/FileTree.tsx"
+      // Pre-load: "", "src", "src/features", "src/features/code-viewer"
+      const dirsToLoad: string[] = [''];
+      let acc = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        acc = acc ? `${acc}/${parts[i]}` : parts[i];
+        dirsToLoad.push(acc);
+      }
+
+      // Load directories sequentially so each level is cached before the next
+      const loadDirFn = get().loadDir;
+      (async () => {
+        try {
+          for (const dir of dirsToLoad) {
+            await loadDirFn(dir);
+          }
+        } catch {
+          // Silently ignore — tree will still work, just may not auto-expand
+        }
+      })();
+    }
   },
 
   closeViewer() {
@@ -348,7 +376,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     const client = getWsClient();
     if (!client) return;
 
-    const { workspace } = get();
+    const { workspace, fileSearchSourceOnly } = get();
     const trimmed = query.trim();
 
     if (!trimmed) {
@@ -371,11 +399,15 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       set({ fileSearchResults: Array.isArray(result) ? result : [], fileSearching: false });
     });
 
-    client.send({ type: 'code.searchFiles', workspace, query: trimmed });
+    client.send({ type: 'code.searchFiles', workspace, query: trimmed, sourceOnly: fileSearchSourceOnly });
   },
 
   clearFileSearch() {
     set({ fileSearchQuery: '', fileSearchResults: [], fileSearching: false });
+  },
+
+  setFileSearchSourceOnly(sourceOnly: boolean) {
+    set({ fileSearchSourceOnly: sourceOnly });
   },
 
   setEditable(editable: boolean) {
