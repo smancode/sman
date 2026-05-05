@@ -8,6 +8,7 @@ import { useChatStore } from '@/stores/chat';
 import { sessionCache } from '@/lib/session-cache';
 import { cronCache } from '@/lib/cron-cache';
 import { useTheme } from '@/hooks/useTheme';
+import { GitPanel } from '@/features/git/GitPanel';
 
 /**
  * Auto-connect on startup:
@@ -95,6 +96,7 @@ export default function App() {
   return (
     <TooltipProvider>
       <RouterProvider router={router} />
+      <GitPanel />
     </TooltipProvider>
   );
 }

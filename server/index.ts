@@ -34,6 +34,7 @@ import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
 import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols } from './code-viewer-handler.js';
+import { handleGitStatus, handleGitDiff, handleGitDiffFile, handleGitCommit, handleGitLog, handleGitBranchList, handleGitCheckout, handleGitFetch, handleGitRemoteDiff, handleGitGenerateCommit, handleGitLogGraph, handleGitPush, setSessionManagerForPush } from './git-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
@@ -114,6 +115,7 @@ const dbPath = path.join(homeDir, 'sman.db');
 const store = new SessionStore(dbPath);
 const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
+setSessionManagerForPush(sessionManager);
 const settingsManager = new SettingsManager(homeDir);
 
 // User profile manager
@@ -1416,6 +1418,131 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace || !msg.filePath || typeof msg.content !== 'string') throw new Error('Missing workspace, filePath or content');
           const result = handleSaveFile(String(msg.workspace), String(msg.filePath), String(msg.content));
           ws.send(JSON.stringify({ type: 'code.saveFile', result }));
+          break;
+        }
+
+        // ── Git ──────────────────────────────────────────────────
+        case 'git.status': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.status', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitStatus(String(msg.workspace));
+            ws.send(JSON.stringify({ type: 'git.status', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.status', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.diff': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.diff', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitDiff(String(msg.workspace), msg.filePath ? String(msg.filePath) : undefined, !!msg.staged);
+            ws.send(JSON.stringify({ type: 'git.diff', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.diff', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.diffFile': {
+          if (!msg.workspace || !msg.filePath) { ws.send(JSON.stringify({ type: 'git.diffFile', result: { error: 'Missing workspace or filePath' } })); break; }
+          try {
+            const result = handleGitDiffFile(String(msg.workspace), String(msg.filePath));
+            ws.send(JSON.stringify({ type: 'git.diffFile', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.diffFile', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.commit': {
+          if (!msg.workspace || !msg.message) { ws.send(JSON.stringify({ type: 'git.commit', result: { error: 'Missing workspace or message' } })); break; }
+          try {
+            const result = handleGitCommit(String(msg.workspace), String(msg.message), msg.files as string[] | undefined);
+            ws.send(JSON.stringify({ type: 'git.commit', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.commit', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.log': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.log', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitLog(String(msg.workspace), msg.maxCount ? Number(msg.maxCount) : undefined);
+            ws.send(JSON.stringify({ type: 'git.log', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.log', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.logGraph': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.logGraph', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitLogGraph(String(msg.workspace), msg.maxCount ? Number(msg.maxCount) : undefined);
+            ws.send(JSON.stringify({ type: 'git.logGraph', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.logGraph', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.branchList': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.branchList', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitBranchList(String(msg.workspace));
+            ws.send(JSON.stringify({ type: 'git.branchList', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.branchList', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.checkout': {
+          if (!msg.workspace || !msg.branch) { ws.send(JSON.stringify({ type: 'git.checkout', result: { error: 'Missing workspace or branch' } })); break; }
+          try {
+            const result = handleGitCheckout(String(msg.workspace), String(msg.branch));
+            ws.send(JSON.stringify({ type: 'git.checkout', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.checkout', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.fetch': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.fetch', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitFetch(String(msg.workspace));
+            ws.send(JSON.stringify({ type: 'git.fetch', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.fetch', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.remoteDiff': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.remoteDiff', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const result = handleGitRemoteDiff(String(msg.workspace));
+            ws.send(JSON.stringify({ type: 'git.remoteDiff', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.remoteDiff', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.generateCommit': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.generateCommit', result: { error: 'Missing workspace' } })); break; }
+          try {
+            const config = settingsManager.getConfig();
+            handleGitGenerateCommit(String(msg.workspace), config, msg.template ? String(msg.template) : undefined)
+              .then(result => ws.send(JSON.stringify({ type: 'git.generateCommit', result })))
+              .catch(err => ws.send(JSON.stringify({ type: 'git.generateCommit', result: { error: err instanceof Error ? err.message : String(err) } })));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.generateCommit', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.push': {
+          if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.push', result: { error: 'Missing workspace' } })); break; }
+          try {
+            handleGitPush(String(msg.workspace))
+              .then(result => ws.send(JSON.stringify({ type: 'git.push', result })))
+              .catch(err => ws.send(JSON.stringify({ type: 'git.push', result: { error: err instanceof Error ? err.message : String(err) } })));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.push', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
 

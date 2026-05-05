@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Minus, Square, X, Copy, GitBranch } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
+import { useGitStore } from '@/stores/git';
 import { cn } from '@/lib/utils';
 
 declare global {
@@ -78,7 +79,11 @@ export function Titlebar() {
           {gitBranch && (
             <>
               <span className="text-foreground/30 shrink-0">·</span>
-              <span className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded">
+              <span
+                className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded hover:bg-[hsl(var(--muted))] cursor-pointer transition-colors"
+                onClick={() => useGitStore.getState().openPanel()}
+                title="点击打开 Git 管理"
+              >
                 <GitBranch className="w-3 h-3" />
                 <span>{gitBranch}</span>
               </span>

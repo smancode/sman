@@ -18,6 +18,8 @@ describe('ClaudeSessionManager', () => {
     fs.mkdirSync(homeDir, { recursive: true });
     workspace = path.join(homeDir, 'workspace');
     fs.mkdirSync(workspace, { recursive: true });
+    // macOS: /var is a symlink to /private/var, normalize to match server behavior
+    workspace = fs.realpathSync(workspace);
 
     store = new SessionStore(dbPath);
     manager = new ClaudeSessionManager(store);
