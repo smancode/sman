@@ -388,7 +388,7 @@ export function SessionTree() {
       />
 
       {/* New session button */}
-      <div className="p-3 pb-2">
+      <div className="px-3 pb-2 pt-1">
         <Button
           variant="outline"
           size="sm"

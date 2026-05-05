@@ -33,7 +33,7 @@ import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
-import { handleListDir, handleReadFile, handleSearchSymbols } from './code-viewer-handler.js';
+import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols } from './code-viewer-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
@@ -1389,6 +1389,12 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace || !msg.symbol) throw new Error('Missing workspace or symbol');
           const result = handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined);
           ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
+          break;
+        }
+        case 'code.saveFile': {
+          if (!msg.workspace || !msg.filePath || typeof msg.content !== 'string') throw new Error('Missing workspace, filePath or content');
+          const result = handleSaveFile(String(msg.workspace), String(msg.filePath), String(msg.content));
+          ws.send(JSON.stringify({ type: 'code.saveFile', result }));
           break;
         }
 

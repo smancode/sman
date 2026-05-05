@@ -211,6 +211,32 @@ const DEFAULT_SEARCH_EXTENSIONS = new Set([
   '.c', '.cpp', '.h', '.hpp', '.rb', '.php', '.vue', '.svelte',
 ]);
 
+export function handleSaveFile(workspace: string, filePath: string, content: string): { success: true } | { error: string } {
+  const resolved = validatePath(workspace, filePath);
+
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(resolved);
+  } catch {
+    return { error: 'File not found' };
+  }
+
+  if (!stat.isFile()) {
+    return { error: 'Not a file' };
+  }
+
+  if (isBinaryFile(path.basename(resolved))) {
+    return { error: 'Cannot save binary file' };
+  }
+
+  try {
+    fs.writeFileSync(resolved, content, 'utf-8');
+    return { success: true };
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+}
+
 export function handleSearchSymbols(
   workspace: string,
   symbol: string,

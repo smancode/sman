@@ -35,7 +35,7 @@ export function Sidebar() {
     >
       {/* macOS traffic lights 占位 / Windows 标题栏对齐 */}
       {isMac ? (
-        <div className="shrink-0 h-8" />
+        <div className="shrink-0 h-[28px]" />
       ) : window.sman ? (
         <div className="shrink-0 h-3" />
       ) : null}

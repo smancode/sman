@@ -1,36 +1,75 @@
 /**
  * CodePanel — right side of the code viewer overlay.
  *
- * Shows file content with Shiki syntax highlighting, line numbers,
- * highlighted line, and Ctrl+Click navigation.
+ * Uses CodeMirror 6 for viewing, editing, search/replace.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ThemedToken } from 'shiki';
-import { Loader2, AlertTriangle, FileQuestion, ChevronUp, ChevronDown } from 'lucide-react';
-import { highlightCode } from '@/lib/shiki-worker-client';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { python } from '@codemirror/lang-python';
+import { java } from '@codemirror/lang-java';
+import { css } from '@codemirror/lang-css';
+import { html } from '@codemirror/lang-html';
+import { json } from '@codemirror/lang-json';
+import { markdown } from '@codemirror/lang-markdown';
+import { rust } from '@codemirror/lang-rust';
+import { go } from '@codemirror/lang-go';
+import { sql } from '@codemirror/lang-sql';
+import { xml } from '@codemirror/lang-xml';
+import { yaml } from '@codemirror/lang-yaml';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { EditorView, Decoration, keymap } from '@codemirror/view';
+import { EditorState, StateField, StateEffect } from '@codemirror/state';
+import type { Extension } from '@codemirror/state';
+import { search, highlightSelectionMatches } from '@codemirror/search';
+import { Loader2, AlertTriangle, FileQuestion, Pencil, Save, Eye } from 'lucide-react';
 import { useCodeViewerStore, type FileContent, type BinaryFileInfo } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
 import { CodeNavigator } from './CodeNavigator';
 
-// ── Constants ──────────────────────────────────────────────────────
+// ── Language extension mapping ────────────────────────────────────
 
-const THEMES: [string, string] = ['one-light', 'one-dark-pro'];
-
-function getIsDark(): boolean {
-  return document.documentElement.classList.contains('dark');
+function getLanguageExtension(lang: string) {
+  const map: Record<string, () => unknown> = {
+    javascript: () => javascript({ jsx: true, typescript: false }),
+    typescript: () => javascript({ jsx: true, typescript: true }),
+    python: () => python(),
+    java: () => java(),
+    css: () => css(),
+    html: () => html(),
+    json: () => json(),
+    markdown: () => markdown(),
+    rust: () => rust(),
+    go: () => go(),
+    sql: () => sql(),
+    xml: () => xml(),
+    yaml: () => yaml(),
+    vue: () => javascript({ jsx: true }),
+  };
+  return map[lang]?.() ?? undefined;
 }
 
-function getTokenColor(token: ThemedToken, isDark: boolean): string | undefined {
-  if (token.htmlStyle) {
-    if (isDark) {
-      const dark = token.htmlStyle['--shiki-dark'];
-      if (dark) return dark;
+// ── Effects for line highlight ────────────────────────────────────
+
+const setHighlightLine = StateEffect.define<number | null>();
+const highlightLineField = StateField.define<number | null>({
+  create: () => null,
+  update: (val, tr) => {
+    for (const e of tr.effects) {
+      if (e.is(setHighlightLine)) return e.value;
     }
-    return token.htmlStyle.color;
-  }
-  return token.color;
-}
+    return val;
+  },
+});
+
+const highlightLineDeco = EditorView.decorations.compute([highlightLineField], (state) => {
+  const line = state.field(highlightLineField);
+  if (line === null || line < 1 || line > state.doc.lines) return Decoration.none;
+  const lineInfo = state.doc.line(line);
+  const lineDeco = Decoration.line({ class: 'cm-activeLineBackground' });
+  return Decoration.set([lineDeco.range(lineInfo.from)]);
+});
 
 // ── CodePanel (top-level) ──────────────────────────────────────────
 
@@ -44,7 +83,6 @@ export function CodePanel({ workspace }: CodePanelProps) {
   const error = useCodeViewerStore((s) => s.error);
   const lineNumber = useCodeViewerStore((s) => s.lineNumber);
 
-  // Loading state
   if (loading && !currentFile) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -56,7 +94,6 @@ export function CodePanel({ workspace }: CodePanelProps) {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -68,7 +105,6 @@ export function CodePanel({ workspace }: CodePanelProps) {
     );
   }
 
-  // No file selected
   if (!currentFile) {
     return (
       <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -80,12 +116,10 @@ export function CodePanel({ workspace }: CodePanelProps) {
     );
   }
 
-  // Binary file
   if ('type' in currentFile && currentFile.type === 'binary') {
     return <BinaryPanel file={currentFile} />;
   }
 
-  // Text file
   return (
     <CodeContent
       file={currentFile as FileContent}
@@ -109,7 +143,7 @@ function BinaryPanel({ file }: { file: BinaryFileInfo }) {
     <div className="flex-1 min-h-0 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-muted-foreground text-center">
         <FileQuestion className="h-8 w-8 shrink-0" />
-        <span className="text-[13px] font-medium">二进制文件</span>
+        <span className="text-[12px] font-medium">二进制文件</span>
         <span className="text-[12px]">
           {file.fileName} ({sizeStr}, {file.mimeType})
         </span>
@@ -130,73 +164,23 @@ interface CodeContentProps {
 }
 
 function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
-  const [tokens, setTokens] = useState<ThemedToken[][] | null>(null);
-  const [isDark, setIsDark] = useState(getIsDark);
-  const [highlightError, setHighlightError] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [matchIndex, setMatchIndex] = useState(-1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const highlightLineRef = useRef<HTMLDivElement>(null);
-  const matchRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const editable = useCodeViewerStore((s) => s.editable);
+  const dirty = useCodeViewerStore((s) => s.dirty);
+  const saving = useCodeViewerStore((s) => s.saving);
+  const setEditable = useCodeViewerStore((s) => s.setEditable);
+  const markDirty = useCodeViewerStore((s) => s.markDirty);
+  const saveFile = useCodeViewerStore((s) => s.saveFile);
+
+  const cmRef = useRef<ReactCodeMirrorRef>(null);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
   const filePath = file.path;
   const language = file.language;
-  const lines = useMemo(() => file.content.split('\n'), [file.content]);
-
-  // Compute search matches
-  const { matches, totalMatches } = useMemo(() => {
-    if (!searchQuery) return { matches: [] as number[], totalMatches: 0 };
-    const query = searchQuery.toLowerCase();
-    const ms: number[] = [];
-    lines.forEach((line, i) => {
-      if (line.toLowerCase().includes(query)) ms.push(i);
-    });
-    return { matches: ms, totalMatches: ms.length };
-  }, [searchQuery, lines]);
-
-  // Reset match index when search changes
-  useEffect(() => {
-    if (matches.length > 0) {
-      setMatchIndex(0);
-    } else {
-      setMatchIndex(-1);
-    }
-  }, [matches.length]);
-
-  // Scroll to current match
-  useEffect(() => {
-    if (matchIndex >= 0 && matchRefs.current[matchIndex]) {
-      matchRefs.current[matchIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
-  }, [matchIndex]);
-
-  const handlePrev = useCallback(() => {
-    if (matches.length === 0) return;
-    setMatchIndex((prev) => (prev <= 0 ? matches.length - 1 : prev - 1));
-  }, [matches.length]);
-
-  const handleNext = useCallback(() => {
-    if (matches.length === 0) return;
-    setMatchIndex((prev) => (prev >= matches.length - 1 ? 0 : prev + 1));
-  }, [matches.length]);
-
-  // Keyboard shortcut: F3 / Shift+F3
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'F3') {
-        e.preventDefault();
-        if (e.shiftKey) handlePrev();
-        else handleNext();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [handlePrev, handleNext]);
 
   // Listen for dark mode changes
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      setIsDark(getIsDark());
+      setIsDark(document.documentElement.classList.contains('dark'));
     });
     observer.observe(document.documentElement, {
       attributes: true,
@@ -205,106 +189,109 @@ function CodeContent({ file, highlightLine, workspace }: CodeContentProps) {
     return () => observer.disconnect();
   }, []);
 
-  // Highlight code with Shiki worker
+  // Scroll to highlight line
   useEffect(() => {
-    if (!file.content || !language) {
-      setTokens(null);
-      return;
-    }
-
-    setHighlightError(false);
-    let cancelled = false;
-
-    highlightCode(file.content, language, THEMES)
-      .then((result) => {
-        if (!cancelled) {
-          setTokens(result.tokens ?? null);
-        }
-      })
-      .catch((err) => {
-        console.error('[CodePanel] Shiki highlight failed:', err);
-        if (!cancelled) {
-          setHighlightError(true);
-          setTokens(null);
-        }
+    if (!highlightLine || !cmRef.current?.view) return;
+    const view = cmRef.current.view;
+    if (highlightLine <= view.state.doc.lines) {
+      const pos = view.state.doc.line(highlightLine).from;
+      view.dispatch({
+        effects: [
+          EditorView.scrollIntoView(pos, { y: 'center' }),
+          setHighlightLine.of(highlightLine),
+        ],
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [file.content, language]);
-
-  // Scroll highlighted line into view
-  useEffect(() => {
-    if (highlightLine && highlightLineRef.current) {
-      highlightLineRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-  }, [highlightLine, tokens]);
+  }, [highlightLine]);
 
-  const handleTokenClick = useTokenClickHandler(filePath, workspace);
+  // Ctrl+S to save
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editable && dirty) saveFile();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [editable, dirty, saveFile]);
+
+  // Build extensions
+  const extensions = useMemo(() => {
+    const exts: Extension[] = [
+      search({ top: true }),
+      highlightSelectionMatches(),
+      highlightLineField,
+      highlightLineDeco,
+      EditorView.lineWrapping,
+      keymap.of([
+        {
+          key: 'Mod-s',
+          run: () => {
+            if (editable && dirty) saveFile();
+            return true;
+          },
+        },
+      ]),
+    ];
+
+    const langExt = getLanguageExtension(language);
+    if (langExt) exts.push(langExt as Extension);
+
+    return exts;
+  }, [language, editable, dirty, saveFile]);
+
+  const handleChange = useCallback((value: string) => {
+    // Update file content in store so saveFile can read it
+    const currentFile = useCodeViewerStore.getState().currentFile;
+    if (currentFile && 'content' in currentFile) {
+      useCodeViewerStore.setState({
+        currentFile: { ...currentFile, content: value },
+      });
+      markDirty();
+    }
+  }, [markDirty]);
+
+  const handleToggleEdit = useCallback(() => {
+    setEditable(!editable);
+  }, [editable, setEditable]);
 
   return (
     <div className="flex flex-col h-full min-h-0 relative">
-      {/* File header */}
+      {/* File header with edit toggle */}
       <FileHeader
         filePath={filePath}
         language={language}
         lineCount={file.totalLines}
         truncated={file.truncated}
+        editable={editable}
+        dirty={dirty}
+        saving={saving}
+        onToggleEdit={handleToggleEdit}
+        onSave={saveFile}
       />
 
-      {/* Search bar */}
-      <SearchBar
-        query={searchQuery}
-        onChange={setSearchQuery}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        currentMatch={matchIndex >= 0 ? matchIndex + 1 : 0}
-        totalMatches={totalMatches}
-      />
-
-      {/* Code area */}
-      <div ref={containerRef} className="flex-1 min-h-0 overflow-auto">
-        <div
-          className="font-mono text-[13px] leading-[1.65]"
-          style={{
-            color: isDark ? '#abb2bf' : '#383a42',
-            backgroundColor: isDark ? '#282c34' : '#fafafa',
+      {/* CodeMirror editor */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <CodeMirror
+          ref={cmRef}
+          value={file.content}
+          height="100%"
+          theme={isDark ? oneDark : undefined}
+          extensions={extensions}
+          editable={editable}
+          onChange={editable ? handleChange : undefined}
+          className="h-full text-[13px]"
+          basicSetup={{
+            lineNumbers: true,
+            highlightActiveLine: true,
+            bracketMatching: true,
+            closeBrackets: editable,
+            indentOnInput: editable,
+            foldGutter: true,
+            searchKeymap: true,
           }}
-        >
-          {tokens && !highlightError ? (
-            tokens.map((lineTokens, i) => (
-              <TokenLine
-                key={i}
-                lineIndex={i}
-                tokens={lineTokens}
-                isDark={isDark}
-                isHighlighted={highlightLine === i + 1}
-                highlightRef={highlightLine === i + 1 ? highlightLineRef : undefined}
-                onTokenClick={handleTokenClick}
-                searchQuery={searchQuery}
-                isSearchMatch={matches.includes(i)}
-                isCurrentMatch={matchIndex >= 0 && matches[matchIndex] === i}
-                matchRef={(el) => { matchRefs.current[matches.indexOf(i)] = el; }}
-              />
-            ))
-          ) : (
-            // Fallback: plain text rendering (no highlighting or highlight failed)
-            lines.map((line, i) => (
-              <PlainLine
-                key={i}
-                lineIndex={i}
-                text={line}
-                isHighlighted={highlightLine === i + 1}
-                highlightRef={highlightLine === i + 1 ? highlightLineRef : undefined}
-                searchQuery={searchQuery}
-                isSearchMatch={matches.includes(i)}
-                isCurrentMatch={matchIndex >= 0 && matches[matchIndex] === i}
-                matchRef={(el) => { matchRefs.current[matches.indexOf(i)] = el; }}
-              />
-            ))
-          )}
-        </div>
+        />
       </div>
 
       {/* Navigator overlay */}
@@ -320,6 +307,11 @@ interface FileHeaderProps {
   language: string;
   lineCount: number;
   truncated: boolean;
+  editable: boolean;
+  dirty: boolean;
+  saving: boolean;
+  onToggleEdit: () => void;
+  onSave: () => void;
 }
 
 const FileHeader = memo(function FileHeader({
@@ -327,10 +319,15 @@ const FileHeader = memo(function FileHeader({
   language,
   lineCount,
   truncated,
+  editable,
+  dirty,
+  saving,
+  onToggleEdit,
+  onSave,
 }: FileHeaderProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
-      <span className="text-[13px] text-[hsl(var(--foreground))] font-medium truncate">
+      <span className="text-[13px] text-[hsl(var(--foreground))] font-medium truncate flex-1 min-w-0">
         {filePath}
       </span>
       <span className="text-[11px] text-muted-foreground/60 shrink-0">
@@ -344,385 +341,37 @@ const FileHeader = memo(function FileHeader({
           (已截断)
         </span>
       )}
-    </div>
-  );
-});
 
-// ── SearchBar ──────────────────────────────────────────────────────
-
-interface SearchBarProps {
-  query: string;
-  onChange: (q: string) => void;
-  onPrev: () => void;
-  onNext: () => void;
-  currentMatch: number;
-  totalMatches: number;
-}
-
-const SearchBar = memo(function SearchBar({
-  query,
-  onChange,
-  onPrev,
-  onNext,
-  currentMatch,
-  totalMatches,
-}: SearchBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Ctrl+F to focus search
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, []);
-
-  return (
-    <div className="flex items-center gap-2 px-4 py-1.5 border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
-      <span className="text-[12px] text-muted-foreground shrink-0">查找</span>
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-48 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
-        placeholder="输入搜索内容..."
-      />
-      <button
-        onClick={onPrev}
-        disabled={totalMatches === 0}
-        className="flex items-center gap-0.5 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        title="上一个 (Shift+F3)"
-      >
-        <ChevronUp className="h-3 w-3" />
-        上一个
-      </button>
-      <button
-        onClick={onNext}
-        disabled={totalMatches === 0}
-        className="flex items-center gap-0.5 px-2 py-0.5 text-[12px] rounded border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        title="下一个 (F3)"
-      >
-        <ChevronDown className="h-3 w-3" />
-        下一个
-      </button>
-      <span className="text-[12px] text-muted-foreground shrink-0 min-w-[3rem] text-right">
-        {totalMatches > 0 ? `${currentMatch} / ${totalMatches}` : '0 / 0'}
-      </span>
-    </div>
-  );
-});
-
-// ── TokenLine ──────────────────────────────────────────────────────
-
-interface TokenLineProps {
-  lineIndex: number;
-  tokens: ThemedToken[];
-  isDark: boolean;
-  isHighlighted: boolean;
-  highlightRef?: React.RefObject<HTMLDivElement | null>;
-  onTokenClick: (e: React.MouseEvent, tokenContent: string, lineIndex: number) => void;
-  searchQuery: string;
-  isSearchMatch: boolean;
-  isCurrentMatch: boolean;
-  matchRef: (el: HTMLSpanElement | null) => void;
-}
-
-const TokenLine = memo(function TokenLine({
-  lineIndex,
-  tokens,
-  isDark,
-  isHighlighted,
-  highlightRef,
-  onTokenClick,
-  searchQuery,
-  isSearchMatch,
-  isCurrentMatch,
-  matchRef,
-}: TokenLineProps) {
-  const lineNum = lineIndex + 1;
-
-  const renderTokens = () => {
-    if (tokens.length === 0) return '\n';
-    if (!searchQuery) {
-      return tokens.map((token, ti) => (
-        <span
-          key={ti}
-          style={{ color: getTokenColor(token, isDark) }}
-          className="cursor-text"
-          onClick={(e) => {
-            if (e.ctrlKey || e.metaKey) {
-              onTokenClick(e, token.content, lineIndex);
-            }
-          }}
-        >
-          {token.content}
-        </span>
-      ));
-    }
-
-    // Highlight search matches within tokens
-    const parts: React.ReactNode[] = [];
-    let key = 0;
-    const query = searchQuery.toLowerCase();
-
-    for (const token of tokens) {
-      const content = token.content;
-      let remaining = content;
-      let pos = 0;
-
-      while (remaining.length > 0) {
-        const idx = remaining.toLowerCase().indexOf(query);
-        if (idx === -1) {
-          parts.push(
-            <span
-              key={key++}
-              style={{ color: getTokenColor({ ...token, content: remaining }, isDark) }}
-              className="cursor-text"
-              onClick={(e) => {
-                if (e.ctrlKey || e.metaKey) {
-                  onTokenClick(e, remaining, lineIndex);
-                }
-              }}
-            >
-              {remaining}
-            </span>
-          );
-          break;
-        }
-
-        if (idx > 0) {
-          const before = remaining.slice(0, idx);
-          parts.push(
-            <span
-              key={key++}
-              style={{ color: getTokenColor({ ...token, content: before }, isDark) }}
-              className="cursor-text"
-              onClick={(e) => {
-                if (e.ctrlKey || e.metaKey) {
-                  onTokenClick(e, before, lineIndex);
-                }
-              }}
-            >
-              {before}
-            </span>
-          );
-        }
-
-        const match = remaining.slice(idx, idx + query.length);
-        const isCurrent = isCurrentMatch && idx === 0; // simplified: first match in line
-        parts.push(
-          <span
-            key={key++}
-            ref={isCurrent ? matchRef : undefined}
-            className={cn(
-              'rounded-sm px-0.5',
-              isCurrent
-                ? 'bg-amber-400/40 text-[hsl(var(--foreground))]'
-                : 'bg-yellow-300/30 text-[hsl(var(--foreground))]'
-            )}
-          >
-            {match}
-          </span>
-        );
-
-        remaining = remaining.slice(idx + query.length);
-        pos += idx + query.length;
-      }
-    }
-
-    return parts;
-  };
-
-  return (
-    <div
-      ref={highlightRef}
-      className={cn(
-        'flex hover:bg-[hsl(var(--muted))]/30',
-        isHighlighted && (isDark
-          ? 'bg-[rgba(31,111,235,0.15)]'
-          : 'bg-[rgba(84,174,255,0.15)]'),
-        isSearchMatch && !isHighlighted && 'bg-yellow-100/30 dark:bg-yellow-900/20',
-      )}
-    >
-      {/* Line number */}
-      <span
-        className="select-none shrink-0 text-right pr-3 pl-2 text-muted-foreground/50"
-        style={{ width: 48, minWidth: 48 }}
-      >
-        {lineNum}
-      </span>
-
-      {/* Code content */}
-      <span
-        className="flex-1 min-w-0"
-        style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
-      >
-        {renderTokens()}
-      </span>
-    </div>
-  );
-});
-
-// ── PlainLine (fallback without highlighting) ──────────────────────
-
-interface PlainLineProps {
-  lineIndex: number;
-  text: string;
-  isHighlighted: boolean;
-  highlightRef?: React.RefObject<HTMLDivElement | null>;
-  searchQuery: string;
-  isSearchMatch: boolean;
-  isCurrentMatch: boolean;
-  matchRef: (el: HTMLSpanElement | null) => void;
-}
-
-const PlainLine = memo(function PlainLine({
-  lineIndex,
-  text,
-  isHighlighted,
-  highlightRef,
-  searchQuery,
-  isSearchMatch,
-  isCurrentMatch,
-  matchRef,
-}: PlainLineProps) {
-  const lineNum = lineIndex + 1;
-
-  const renderText = () => {
-    if (!searchQuery) return text;
-
-    const parts: React.ReactNode[] = [];
-    let key = 0;
-    const query = searchQuery.toLowerCase();
-    let remaining = text;
-    let foundCurrent = false;
-
-    while (remaining.length > 0) {
-      const idx = remaining.toLowerCase().indexOf(query);
-      if (idx === -1) {
-        parts.push(<span key={key++}>{remaining}</span>);
-        break;
-      }
-
-      if (idx > 0) {
-        parts.push(<span key={key++}>{remaining.slice(0, idx)}</span>);
-      }
-
-      const match = remaining.slice(idx, idx + query.length);
-      const isCurrent = isCurrentMatch && !foundCurrent;
-      if (isCurrent) foundCurrent = true;
-
-      parts.push(
-        <span
-          key={key++}
-          ref={isCurrent ? matchRef : undefined}
+      {/* Edit/Save controls */}
+      <div className="flex items-center gap-1 shrink-0 ml-2">
+        <button
+          onClick={onToggleEdit}
           className={cn(
-            'rounded-sm px-0.5',
-            isCurrent
-              ? 'bg-amber-400/40 text-[hsl(var(--foreground))]'
-              : 'bg-yellow-300/30 text-[hsl(var(--foreground))]'
+            'flex items-center gap-1 px-2 py-1 text-[12px] rounded border transition-colors',
+            editable
+              ? 'border-blue-400 bg-blue-500/10 text-blue-500'
+              : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] text-muted-foreground',
           )}
+          title={editable ? '切换为只读' : '切换为编辑'}
         >
-          {match}
-        </span>
-      );
-
-      remaining = remaining.slice(idx + query.length);
-    }
-
-    return parts;
-  };
-
-  return (
-    <div
-      ref={highlightRef}
-      className={cn(
-        'flex hover:bg-[hsl(var(--muted))]/30',
-        isHighlighted && 'bg-[rgba(31,111,235,0.15)]',
-        isSearchMatch && !isHighlighted && 'bg-yellow-100/30 dark:bg-yellow-900/20',
-      )}
-    >
-      <span
-        className="select-none shrink-0 text-right pr-3 pl-2 text-muted-foreground/50"
-        style={{ width: 48, minWidth: 48 }}
-      >
-        {lineNum}
-      </span>
-      <span
-        className="flex-1 min-w-0"
-        style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
-      >
-        {renderText()}
-      </span>
+          {editable ? <Eye className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+          {editable ? '只读' : '编辑'}
+        </button>
+        {editable && dirty && (
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex items-center gap-1 px-2 py-1 text-[12px] rounded border border-green-400 bg-green-500/10 text-green-500 hover:bg-green-500/20 disabled:opacity-50 transition-colors"
+            title="保存 (Ctrl+S)"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            {saving ? '保存中...' : '保存'}
+          </button>
+        )}
+        {editable && dirty && (
+          <span className="text-[11px] text-amber-500 shrink-0">已修改</span>
+        )}
+      </div>
     </div>
   );
 });
-
-// ── Ctrl+Click navigation hook ─────────────────────────────────────
-
-function useTokenClickHandler(filePath: string, workspace: string) {
-  const loadFile = useCodeViewerStore((s) => s.loadFile);
-  const searchSymbols = useCodeViewerStore((s) => s.searchSymbols);
-
-  return useCallback(
-    (e: React.MouseEvent, tokenContent: string, lineIndex: number) => {
-      // Only trigger on Ctrl+Click or Cmd+Click
-      if (!e.ctrlKey && !e.metaKey) return;
-
-      const identifier = tokenContent.trim();
-      if (!identifier || !/^[a-zA-Z_]\w*$/.test(identifier)) return;
-
-      // Read the full line from the current file to check for import patterns
-      const lines = (useCodeViewerStore.getState().currentFile as FileContent | null)
-        ?.content.split('\n');
-      const lineText = lines?.[lineIndex] ?? '';
-
-      // Check if this is an import line with a relative path
-      const importMatch = lineText.match(/from\s+['"](\.[^'"]+)['"]/);
-      if (importMatch) {
-        const importPath = importMatch[1];
-        const resolvedPath = resolveImportPath(filePath, importPath);
-        if (resolvedPath) {
-          loadFile(resolvedPath);
-          return;
-        }
-      }
-
-      // Otherwise, search for symbol references
-      const ext = filePath.includes('.') ? filePath.split('.').pop() : undefined;
-      searchSymbols(identifier, ext);
-    },
-    [filePath, loadFile, searchSymbols],
-  );
-}
-
-/**
- * Resolve a relative import path against the current file's directory.
- * Returns a normalized relative path or null.
- */
-function resolveImportPath(currentFilePath: string, importPath: string): string | null {
-  if (!importPath.startsWith('.')) return null;
-
-  const dir = currentFilePath.includes('/')
-    ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/'))
-    : '';
-
-  const parts = (dir + '/' + importPath).split('/').filter(Boolean);
-  const resolved: string[] = [];
-
-  for (const part of parts) {
-    if (part === '..') {
-      if (resolved.length === 0) return null;
-      resolved.pop();
-    } else if (part !== '.') {
-      resolved.push(part);
-    }
-  }
-
-  return resolved.join('/');
-}

@@ -90,6 +90,11 @@ interface CodeViewerState {
   searching: boolean;
   searchSymbol: string;
 
+  // Edit
+  editable: boolean;
+  dirty: boolean;
+  saving: boolean;
+
   // Internal: request dedup counter
   _activeLoadId: number;
 
@@ -100,6 +105,9 @@ interface CodeViewerState {
   loadDir: (dirPath: string) => Promise<DirEntry[]>;
   searchSymbols: (symbol: string, fileExt?: string) => void;
   clearSearch: () => void;
+  setEditable: (editable: boolean) => void;
+  markDirty: () => void;
+  saveFile: () => void;
 }
 
 export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
@@ -125,6 +133,11 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   searchResults: [],
   searching: false,
   searchSymbol: '',
+
+  // Edit
+  editable: false,
+  dirty: false,
+  saving: false,
 
   // Internal
   _activeLoadId: 0,
@@ -167,6 +180,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         loading: false,
         error: null,
         filePath,
+        dirty: false,
       });
       return;
     }
@@ -211,6 +225,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         loading: false,
         error: null,
         fileCache: newCache,
+        dirty: false,
       });
     });
 
@@ -299,6 +314,44 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       searchResults: [],
       searching: false,
       searchSymbol: '',
+    });
+  },
+
+  setEditable(editable: boolean) {
+    set({ editable });
+  },
+
+  markDirty() {
+    set({ dirty: true });
+  },
+
+  saveFile() {
+    const client = getWsClient();
+    if (!client) return;
+
+    const { workspace, filePath, currentFile } = get();
+    if (!currentFile || !('content' in currentFile)) return;
+
+    set({ saving: true });
+
+    const unsub = wrapHandler(client, 'code.saveFile', (msg) => {
+      unsub();
+      const result = msg.result as { success?: boolean; error?: string } | undefined;
+      if (result?.error) {
+        set({ saving: false, error: result.error });
+        return;
+      }
+      // Update cache with new content
+      const newCache = new Map(get().fileCache);
+      newCache.set(filePath, { file: currentFile, timestamp: Date.now() });
+      set({ saving: false, dirty: false, fileCache: newCache });
+    });
+
+    client.send({
+      type: 'code.saveFile',
+      workspace,
+      filePath,
+      content: (currentFile as FileContent).content,
     });
   },
 }));
