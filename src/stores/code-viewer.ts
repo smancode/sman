@@ -69,6 +69,9 @@ interface FileCacheEntry {
 
 const MAX_FILE_CACHE = 10;
 
+// In-flight loadDir promises to prevent duplicate requests for the same path
+const _dirInFlight = new Map<string, Promise<DirEntry[]>>();
+
 // ── Store State & Actions ──
 
 interface CodeViewerState {
@@ -165,6 +168,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   _activeFileSearchId: 0,
 
   openViewer(workspace, filePath, lineNumber = null, sessionId = null) {
+    _dirInFlight.clear();
     set({
       open: true,
       workspace,
@@ -302,9 +306,14 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       return Promise.resolve(dirCache[dirPath]);
     }
 
-    return new Promise((resolve, reject) => {
+    // Check in-flight to prevent duplicate WS requests for the same path
+    const inFlight = _dirInFlight.get(dirPath);
+    if (inFlight) return inFlight;
+
+    const promise = new Promise<DirEntry[]>((resolve, reject) => {
       const unsub = wrapHandler(client, 'code.listDir', (msg) => {
         unsub();
+        _dirInFlight.delete(dirPath);
 
         if (msg.error) {
           reject(new Error(msg.error as string));
@@ -329,6 +338,9 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         dirPath,
       });
     });
+
+    _dirInFlight.set(dirPath, promise);
+    return promise;
   },
 
   searchSymbols(symbol: string, fileExt?: string) {

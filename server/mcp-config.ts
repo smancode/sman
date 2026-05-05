@@ -8,9 +8,37 @@
 import type { SmanConfig } from './types.js';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 
-export function buildMcpServers(config: SmanConfig): Record<string, McpServerConfig> {
+export function buildMcpServers(config: SmanConfig, fallback?: boolean): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {};
   const { webSearch } = config;
+
+  // When fallback=true (builtin mode + non-Anthropic proxy),
+  // find the first provider with a configured API key
+  if (fallback) {
+    if (webSearch.baiduApiKey) {
+      // baidu uses in-process SDK server, handled in claude-session.ts
+      return {};
+    }
+    if (webSearch.braveApiKey) {
+      servers['brave-search'] = {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-brave-search'],
+        env: { BRAVE_API_KEY: webSearch.braveApiKey },
+      };
+      return servers;
+    }
+    if (webSearch.tavilyApiKey) {
+      servers['tavily-search'] = {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', 'tavily-mcp@latest'],
+        env: { TAVILY_API_KEY: webSearch.tavilyApiKey },
+      };
+      return servers;
+    }
+    return {};
+  }
 
   switch (webSearch.provider) {
     case 'brave': {
@@ -35,6 +63,9 @@ export function buildMcpServers(config: SmanConfig): Record<string, McpServerCon
       }
       break;
     }
+    case 'baidu':
+      // baidu uses in-process SDK server, handled in claude-session.ts
+      break;
     case 'bing':
       // Bing search removed — not accessible in China
       break;

@@ -10,7 +10,7 @@
  * Based on hello-halo's session-manager.ts pattern.
  */
 
-import { unstable_v2_createSession, type SDKSession, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { unstable_v2_createSession, type SDKSession, type SDKMessage, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SessionStore, Message } from './session-store.js';
 import type { SmanConfig } from './types.js';
@@ -480,6 +480,18 @@ export class ClaudeSessionManager {
     }
   }
 
+  private detectSearchFallback(ws: SmanConfig['webSearch'] | undefined): { name: string; server: McpSdkServerConfigWithInstance } | null {
+    if (!ws) return null;
+
+    // Only handle in-process SDK servers (baidu) as fallback candidate
+    // brave/tavily use stdio MCP servers, handled by buildMcpServers(config, true)
+    if (ws.baiduApiKey) {
+      return { name: 'baidu-search', server: createBaiduSearchMcpServer(ws.baiduApiKey) };
+    }
+
+    return null;
+  }
+
   private buildSessionOptions(workspace: string): Record<string, any> {
     if (!this.config?.llm?.apiKey) {
       throw new Error('缺少 API Key，请在设置中配置');
@@ -630,7 +642,7 @@ export class ClaudeSessionManager {
     // - Explicit provider (searxng/baidu/brave/tavily): always inject
     // - 'builtin': relies on Claude Code's built-in WebSearch (server_tool_use)
     //   for Anthropic first-party. For proxies, auto-detect user's configured
-    //   API keys and inject a fallback search MCP server.
+    //   API keys and inject a fallback search MCP server (priority: baidu > brave > tavily > SearXNG).
     const ws = this.config.webSearch;
     if (ws?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
@@ -651,14 +663,24 @@ export class ClaudeSessionManager {
         this.log.info('[search] builtin mode + Anthropic first-party — using built-in WebSearch');
       } else {
         // Proxy mode: auto-detect available API keys and inject fallback search
-        const fallback = this.detectSearchFallback(ws);
-        if (fallback) {
-          (opts.mcpServers as any)[fallback.name] = fallback.server;
-          this.log.info(`[search] builtin mode + proxy — injected ${fallback.name} as fallback search`);
+        // Priority: baidu (in-process) > brave (stdio) > tavily (stdio) > SearXNG
+        const sdkFallback = this.detectSearchFallback(ws);
+        if (sdkFallback) {
+          (opts.mcpServers as any)[sdkFallback.name] = sdkFallback.server;
+          this.log.info(`[search] builtin mode + proxy — injected ${sdkFallback.name} as fallback search`);
         } else {
-          this.log.info('[search] builtin mode + proxy — no API key configured for fallback, trying SearXNG');
-          const webSearchServer = createWebSearchMcpServer();
-          (opts.mcpServers as any)['web-search'] = webSearchServer;
+          // Check brave/tavily (stdio MCP servers)
+          const stdioFallback = buildMcpServers(this.config, true);
+          if (Object.keys(stdioFallback).length > 0) {
+            Object.assign((opts.mcpServers as any), stdioFallback);
+            const name = Object.keys(stdioFallback)[0];
+            this.log.info(`[search] builtin mode + proxy — injected ${name} as fallback search`);
+          } else {
+            // No API key at all — try SearXNG as last resort
+            this.log.info('[search] builtin mode + proxy — no API key configured, trying SearXNG');
+            const webSearchServer = createWebSearchMcpServer();
+            (opts.mcpServers as any)['web-search'] = webSearchServer;
+          }
         }
       }
     }
