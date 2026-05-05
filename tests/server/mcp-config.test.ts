@@ -11,16 +11,17 @@ describe('MCP Config', () => {
       braveApiKey: '',
       tavilyApiKey: '',
       bingApiKey: '',
+      baiduApiKey: '',
       maxUsesPerSession: 50,
     },
   };
 
-  it('should return empty servers for builtin provider', () => {
+  it('should return empty servers — all providers now use in-process SDK servers', () => {
     const servers = buildMcpServers(baseConfig);
     expect(Object.keys(servers)).toHaveLength(0);
   });
 
-  it('should configure Brave Search MCP server', () => {
+  it('should return empty even for brave provider — handled in-process', () => {
     const config: SmanConfig = {
       ...baseConfig,
       webSearch: {
@@ -31,64 +32,16 @@ describe('MCP Config', () => {
     };
 
     const servers = buildMcpServers(config);
-    expect(servers['brave-search']).toBeDefined();
-    expect(servers['brave-search'].type).toBe('stdio');
-    expect(servers['brave-search'].env?.BRAVE_API_KEY).toBe('brave-key-123');
-  });
-
-  it('should not configure Brave without API key', () => {
-    const config: SmanConfig = {
-      ...baseConfig,
-      webSearch: {
-        ...baseConfig.webSearch,
-        provider: 'brave',
-        braveApiKey: '',
-      },
-    };
-
-    const servers = buildMcpServers(config);
     expect(Object.keys(servers)).toHaveLength(0);
   });
 
-  it('should configure Tavily MCP server', () => {
+  it('should return empty even for tavily provider — handled in-process', () => {
     const config: SmanConfig = {
       ...baseConfig,
       webSearch: {
         ...baseConfig.webSearch,
         provider: 'tavily',
         tavilyApiKey: 'tavily-key-456',
-      },
-    };
-
-    const servers = buildMcpServers(config);
-    expect(servers['tavily-search']).toBeDefined();
-    expect(servers['tavily-search'].type).toBe('stdio');
-    expect(servers['tavily-search'].env?.TAVILY_API_KEY).toBe('tavily-key-456');
-  });
-
-  it('should not configure Bing (removed — not accessible in China)', () => {
-    const config: SmanConfig = {
-      ...baseConfig,
-      webSearch: {
-        ...baseConfig.webSearch,
-        provider: 'bing',
-        bingApiKey: 'bing-key-789',
-      },
-    };
-
-    const servers = buildMcpServers(config);
-    // Bing search was intentionally removed
-    expect(servers['bing-search']).toBeUndefined();
-    expect(Object.keys(servers)).toHaveLength(0);
-  });
-
-  it('should not configure Bing without API key', () => {
-    const config: SmanConfig = {
-      ...baseConfig,
-      webSearch: {
-        ...baseConfig.webSearch,
-        provider: 'bing',
-        bingApiKey: '',
       },
     };
 

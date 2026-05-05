@@ -1,87 +1,19 @@
 /**
  * MCP Server auto-configuration based on settings.
  *
- * Generates MCP server configs for web search providers
- * that can be passed to Claude Agent SDK options.
+ * All search providers now use in-process SDK servers (no npx dependency).
+ * Search MCP servers are injected directly in claude-session.ts via createSdkMcpServer.
  */
 
 import type { SmanConfig } from './types.js';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 
-export function buildMcpServers(config: SmanConfig, fallback?: boolean): Record<string, McpServerConfig> {
-  const servers: Record<string, McpServerConfig> = {};
-  const { webSearch } = config;
-
-  // When fallback=true (builtin mode + non-Anthropic proxy),
-  // find the first provider with a configured API key
-  if (fallback) {
-    if (webSearch.baiduApiKey) {
-      // baidu uses in-process SDK server, handled in claude-session.ts
-      return {};
-    }
-    if (webSearch.braveApiKey) {
-      servers['brave-search'] = {
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-brave-search'],
-        env: { BRAVE_API_KEY: webSearch.braveApiKey },
-      };
-      return servers;
-    }
-    if (webSearch.tavilyApiKey) {
-      servers['tavily-search'] = {
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', 'tavily-mcp@latest'],
-        env: { TAVILY_API_KEY: webSearch.tavilyApiKey },
-      };
-      return servers;
-    }
-    return {};
-  }
-
-  switch (webSearch.provider) {
-    case 'brave': {
-      if (webSearch.braveApiKey) {
-        servers['brave-search'] = {
-          type: 'stdio',
-          command: 'npx',
-          args: ['-y', '@modelcontextprotocol/server-brave-search'],
-          env: { BRAVE_API_KEY: webSearch.braveApiKey },
-        };
-      }
-      break;
-    }
-    case 'tavily': {
-      if (webSearch.tavilyApiKey) {
-        servers['tavily-search'] = {
-          type: 'stdio',
-          command: 'npx',
-          args: ['-y', 'tavily-mcp@latest'],
-          env: { TAVILY_API_KEY: webSearch.tavilyApiKey },
-        };
-      }
-      break;
-    }
-    case 'baidu':
-      // baidu uses in-process SDK server, handled in claude-session.ts
-      break;
-    case 'bing':
-      // Bing search removed — not accessible in China
-      break;
-    case 'builtin':
-    default:
-      // Claude Code has built-in web search, no MCP server needed
-      break;
-  }
-
-  return servers;
+export function buildMcpServers(_config: SmanConfig): Record<string, McpServerConfig> {
+  // All web search providers now use in-process SDK servers.
+  // See claude-session.ts for injection logic.
+  return {};
 }
 
-/**
- * Generate CLAUDE.md template content for a business system profile.
- * This gets stored in the profile's claudeMdTemplate field.
- */
 export function generateClaudeMdTemplate(profile: {
   name: string;
   description: string;

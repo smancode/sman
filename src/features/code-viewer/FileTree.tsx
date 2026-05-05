@@ -22,6 +22,10 @@ interface TreeNodeProps {
   depth: number;
   activeFilePath: string;
   onSelect: (filePath: string) => void;
+  /** If true, this directory should start expanded (used for initial auto-expand) */
+  initialExpanded?: boolean;
+  /** Pre-loaded children for initially expanded dirs (avoids extra WS round-trip) */
+  initialChildren?: DirEntry[];
 }
 
 const TreeNode = memo(function TreeNode({
@@ -31,10 +35,12 @@ const TreeNode = memo(function TreeNode({
   depth,
   activeFilePath,
   onSelect,
+  initialExpanded = false,
+  initialChildren,
 }: TreeNodeProps) {
   const loadDir = useCodeViewerStore((s) => s.loadDir);
-  const [expanded, setExpanded] = useState(false);
-  const [children, setChildren] = useState<DirEntry[]>([]);
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const [children, setChildren] = useState<DirEntry[]>(initialChildren ?? []);
   const [loading, setLoading] = useState(false);
 
   const isActive = type === 'file' && relativePath === activeFilePath;
@@ -70,7 +76,7 @@ const TreeNode = memo(function TreeNode({
       });
   }, [type, expanded, children.length, loadDir, relativePath]);
 
-  // Auto-expand folders that contain the active file
+  // Auto-expand when activeFilePath changes and this dir contains the target file
   useEffect(() => {
     if (type === 'directory' && !expanded && activeFilePath.startsWith(relativePath + '/')) {
       handleToggle();
@@ -85,6 +91,9 @@ const TreeNode = memo(function TreeNode({
       handleToggle();
     }
   }, [type, onSelect, relativePath, handleToggle]);
+
+  // For initially expanded dirs with pre-loaded children, determine which children need expansion
+  const dirCache = useCodeViewerStore((s) => s.dirCache);
 
   return (
     <div>
@@ -134,17 +143,27 @@ const TreeNode = memo(function TreeNode({
       {/* Children */}
       {expanded && children.length > 0 && (
         <div>
-          {children.map((child) => (
-            <TreeNode
-              key={child.name}
-              name={child.name}
-              type={child.type}
-              relativePath={relativePath ? `${relativePath}/${child.name}` : child.name}
-              depth={depth + 1}
-              activeFilePath={activeFilePath}
-              onSelect={onSelect}
-            />
-          ))}
+          {children.map((child) => {
+            const childPath = relativePath ? `${relativePath}/${child.name}` : child.name;
+            // Check if this child dir should be auto-expanded (has cache data and contains active file)
+            const shouldAutoExpand = child.type === 'directory'
+              && activeFilePath.startsWith(childPath + '/')
+              && !!dirCache[childPath];
+
+            return (
+              <TreeNode
+                key={child.name}
+                name={child.name}
+                type={child.type}
+                relativePath={childPath}
+                depth={depth + 1}
+                activeFilePath={activeFilePath}
+                onSelect={onSelect}
+                initialExpanded={shouldAutoExpand}
+                initialChildren={shouldAutoExpand ? dirCache[childPath] : undefined}
+              />
+            );
+          })}
         </div>
       )}
     </div>
@@ -271,21 +290,21 @@ interface FileTreeProps {
 
 export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: FileTreeProps) {
   const loadDir = useCodeViewerStore((s) => s.loadDir);
+  const dirCache = useCodeViewerStore((s) => s.dirCache);
   const [rootEntries, setRootEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const treeId = useRef('file-tree-scroll');
 
   // Scroll active file into view when it changes
   useEffect(() => {
     if (!activeFilePath) return;
-    // Delay to allow auto-expand to complete
+    // Longer delay to allow auto-expand to complete
     const timer = setTimeout(() => {
       const el = document.querySelector('[data-file-active="true"]');
       if (el) {
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
-    }, 150);
+    }, 300);
     return () => clearTimeout(timer);
   }, [activeFilePath]);
 
@@ -353,17 +372,27 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
               <p>空目录</p>
             </div>
           ) : (
-            rootEntries.map((entry) => (
-              <TreeNode
-                key={entry.name}
-                name={entry.name}
-                type={entry.type}
-                relativePath={entry.name}
-                depth={0}
-                activeFilePath={activeFilePath}
-                onSelect={onSelectFile}
-              />
-            ))
+            rootEntries.map((entry) => {
+              const entryPath = entry.name;
+              // Check if this root entry should be auto-expanded
+              const shouldAutoExpand = entry.type === 'directory'
+                && activeFilePath.startsWith(entryPath + '/')
+                && !!dirCache[entryPath];
+
+              return (
+                <TreeNode
+                  key={entry.name}
+                  name={entry.name}
+                  type={entry.type}
+                  relativePath={entryPath}
+                  depth={0}
+                  activeFilePath={activeFilePath}
+                  onSelect={onSelectFile}
+                  initialExpanded={shouldAutoExpand}
+                  initialChildren={shouldAutoExpand ? dirCache[entryPath] : undefined}
+                />
+              );
+            })
           )}
         </div>
       </ScrollArea>

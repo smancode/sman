@@ -19,6 +19,8 @@ import { createWebAccessMcpServer } from './web-access/index.js';
 import type { WebAccessService } from './web-access/index.js';
 import { createCapabilityGatewayMcpServer, cleanupLoadedCapabilities } from './capabilities/gateway-mcp-server.js';
 import type { CapabilityRegistry } from './capabilities/registry.js';
+import { createBraveSearchMcpServer } from './web-search/brave-mcp-server.js';
+import { createTavilySearchMcpServer } from './web-search/tavily-mcp-server.js';
 import { createWebSearchMcpServer, isAnthropicFirstParty } from './web-search/mcp-server.js';
 import { createBaiduSearchMcpServer } from './web-search/baidu-mcp-server.js';
 
@@ -483,10 +485,15 @@ export class ClaudeSessionManager {
   private detectSearchFallback(ws: SmanConfig['webSearch'] | undefined): { name: string; server: McpSdkServerConfigWithInstance } | null {
     if (!ws) return null;
 
-    // Only handle in-process SDK servers (baidu) as fallback candidate
-    // brave/tavily use stdio MCP servers, handled by buildMcpServers(config, true)
+    // Priority: baidu > brave > tavily (prefer domestic providers)
     if (ws.baiduApiKey) {
       return { name: 'baidu-search', server: createBaiduSearchMcpServer(ws.baiduApiKey) };
+    }
+    if (ws.braveApiKey) {
+      return { name: 'brave-search', server: createBraveSearchMcpServer(ws.braveApiKey) };
+    }
+    if (ws.tavilyApiKey) {
+      return { name: 'tavily-search', server: createTavilySearchMcpServer(ws.tavilyApiKey) };
     }
 
     return null;
@@ -639,48 +646,51 @@ export class ClaudeSessionManager {
     opts.mcpServers = Object.keys(mcpServers).length > 0 ? mcpServers : {};
 
     // Web search MCP injection strategy:
+    // Web search MCP injection — all providers use in-process SDK servers (no npx).
     // - Explicit provider (searxng/baidu/brave/tavily): always inject
-    // - 'builtin': relies on Claude Code's built-in WebSearch (server_tool_use)
-    //   for Anthropic first-party. For proxies, auto-detect user's configured
-    //   API keys and inject a fallback search MCP server (priority: baidu > brave > tavily > SearXNG).
+    // - 'builtin': relies on Claude Code's built-in WebSearch for Anthropic first-party.
+    //   For proxies, auto-detect configured API keys and inject fallback
+    //   (priority: baidu > brave > tavily > SearXNG).
     const ws = this.config.webSearch;
     if (ws?.provider === 'searxng') {
       const webSearchServer = createWebSearchMcpServer();
       (opts.mcpServers as any)['web-search'] = webSearchServer;
       this.log.info('[search] SearXNG MCP registered as search provider');
     } else if (ws?.provider === 'baidu') {
-      const baiduApiKey = ws.baiduApiKey;
-      if (baiduApiKey) {
-        const baiduServer = createBaiduSearchMcpServer(baiduApiKey);
-        (opts.mcpServers as any)['baidu-search'] = baiduServer;
+      if (ws.baiduApiKey) {
+        (opts.mcpServers as any)['baidu-search'] = createBaiduSearchMcpServer(ws.baiduApiKey);
         this.log.info('[search] Baidu AI Search MCP registered as search provider');
       } else {
         this.log.warn('[search] Baidu provider selected but no API Key configured');
+      }
+    } else if (ws?.provider === 'brave') {
+      if (ws.braveApiKey) {
+        (opts.mcpServers as any)['brave-search'] = createBraveSearchMcpServer(ws.braveApiKey);
+        this.log.info('[search] Brave Search MCP registered as search provider');
+      } else {
+        this.log.warn('[search] Brave provider selected but no API Key configured');
+      }
+    } else if (ws?.provider === 'tavily') {
+      if (ws.tavilyApiKey) {
+        (opts.mcpServers as any)['tavily-search'] = createTavilySearchMcpServer(ws.tavilyApiKey);
+        this.log.info('[search] Tavily Search MCP registered as search provider');
+      } else {
+        this.log.warn('[search] Tavily provider selected but no API Key configured');
       }
     } else if (ws?.provider === 'builtin' || !ws?.provider) {
       const isOfficial = isAnthropicFirstParty(this.config.llm.baseUrl);
       if (isOfficial) {
         this.log.info('[search] builtin mode + Anthropic first-party — using built-in WebSearch');
       } else {
-        // Proxy mode: auto-detect available API keys and inject fallback search
-        // Priority: baidu (in-process) > brave (stdio) > tavily (stdio) > SearXNG
-        const sdkFallback = this.detectSearchFallback(ws);
-        if (sdkFallback) {
-          (opts.mcpServers as any)[sdkFallback.name] = sdkFallback.server;
-          this.log.info(`[search] builtin mode + proxy — injected ${sdkFallback.name} as fallback search`);
+        // Proxy mode: auto-detect available API keys (priority: baidu > brave > tavily > SearXNG)
+        const fallback = this.detectSearchFallback(ws);
+        if (fallback) {
+          (opts.mcpServers as any)[fallback.name] = fallback.server;
+          this.log.info(`[search] builtin mode + proxy — injected ${fallback.name} as fallback search`);
         } else {
-          // Check brave/tavily (stdio MCP servers)
-          const stdioFallback = buildMcpServers(this.config, true);
-          if (Object.keys(stdioFallback).length > 0) {
-            Object.assign((opts.mcpServers as any), stdioFallback);
-            const name = Object.keys(stdioFallback)[0];
-            this.log.info(`[search] builtin mode + proxy — injected ${name} as fallback search`);
-          } else {
-            // No API key at all — try SearXNG as last resort
-            this.log.info('[search] builtin mode + proxy — no API key configured, trying SearXNG');
-            const webSearchServer = createWebSearchMcpServer();
-            (opts.mcpServers as any)['web-search'] = webSearchServer;
-          }
+          this.log.info('[search] builtin mode + proxy — no API key configured, trying SearXNG');
+          const webSearchServer = createWebSearchMcpServer();
+          (opts.mcpServers as any)['web-search'] = webSearchServer;
         }
       }
     }
