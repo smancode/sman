@@ -55,6 +55,11 @@ export interface SearchMatch {
   context: string;
 }
 
+export interface FileSearchResult {
+  filePath: string;
+  fileName: string;
+}
+
 // ── Internal Types ──
 
 interface FileCacheEntry {
@@ -90,6 +95,11 @@ interface CodeViewerState {
   searching: boolean;
   searchSymbol: string;
 
+  // File search (fuzzy by name)
+  fileSearchQuery: string;
+  fileSearchResults: FileSearchResult[];
+  fileSearching: boolean;
+
   // Edit
   editable: boolean;
   dirty: boolean;
@@ -97,6 +107,7 @@ interface CodeViewerState {
 
   // Internal: request dedup counter
   _activeLoadId: number;
+  _activeFileSearchId: number;
 
   // Actions
   openViewer: (workspace: string, filePath: string, lineNumber?: number | null, sessionId?: string | null) => void;
@@ -105,6 +116,8 @@ interface CodeViewerState {
   loadDir: (dirPath: string) => Promise<DirEntry[]>;
   searchSymbols: (symbol: string, fileExt?: string) => void;
   clearSearch: () => void;
+  searchFiles: (query: string) => void;
+  clearFileSearch: () => void;
   setEditable: (editable: boolean) => void;
   markDirty: () => void;
   saveFile: () => void;
@@ -134,6 +147,11 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   searching: false,
   searchSymbol: '',
 
+  // File search
+  fileSearchQuery: '',
+  fileSearchResults: [],
+  fileSearching: false,
+
   // Edit
   editable: false,
   dirty: false,
@@ -141,6 +159,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
   // Internal
   _activeLoadId: 0,
+  _activeFileSearchId: 0,
 
   openViewer(workspace, filePath, lineNumber = null, sessionId = null) {
     set({
@@ -150,6 +169,8 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       lineNumber,
       sessionId,
       error: null,
+      dirCache: {},
+      fileCache: new Map<string, FileCacheEntry>(),
     });
     get().loadFile(filePath);
   },
@@ -171,6 +192,12 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     if (!client) return;
 
     const { workspace, fileCache } = get();
+
+    // Empty path — just clear the code panel, don't request
+    if (!filePath) {
+      set({ currentFile: null, loading: false, error: null, filePath: '', dirty: false });
+      return;
+    }
 
     // Check cache first
     const cached = fileCache.get(filePath);
@@ -315,6 +342,40 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       searching: false,
       searchSymbol: '',
     });
+  },
+
+  searchFiles(query: string) {
+    const client = getWsClient();
+    if (!client) return;
+
+    const { workspace } = get();
+    const trimmed = query.trim();
+
+    if (!trimmed) {
+      set({ fileSearchQuery: '', fileSearchResults: [], fileSearching: false });
+      return;
+    }
+
+    const searchId = get()._activeFileSearchId + 1;
+    set({ fileSearchQuery: trimmed, fileSearching: true, _activeFileSearchId: searchId });
+
+    const unsub = wrapHandler(client, 'code.searchFiles', (msg) => {
+      if (get()._activeFileSearchId !== searchId) return;
+      unsub();
+
+      const result = msg.result as (FileSearchResult[] | { error?: string }) | undefined;
+      if (result && 'error' in result) {
+        set({ fileSearching: false });
+        return;
+      }
+      set({ fileSearchResults: Array.isArray(result) ? result : [], fileSearching: false });
+    });
+
+    client.send({ type: 'code.searchFiles', workspace, query: trimmed });
+  },
+
+  clearFileSearch() {
+    set({ fileSearchQuery: '', fileSearchResults: [], fileSearching: false });
   },
 
   setEditable(editable: boolean) {

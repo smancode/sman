@@ -1,10 +1,13 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
   File,
   Folder,
   FolderOpen,
+  Search,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCodeViewerStore, type DirEntry } from '@/stores/code-viewer';
@@ -52,7 +55,6 @@ const TreeNode = memo(function TreeNode({
     setLoading(true);
     loadDir(relativePath)
       .then((entries) => {
-        // Directories first, then files, alphabetical within each group
         const sorted = [...entries].sort((a, b) => {
           if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
           return a.name.localeCompare(b.name);
@@ -96,6 +98,7 @@ const TreeNode = memo(function TreeNode({
         style={{ paddingLeft: depth * 16 + 8 }}
         onClick={handleClick}
         title={relativePath}
+        {...(isActive && type === 'file' ? { 'data-file-active': 'true' as any } : {})}
       >
         {/* Chevron or spacer */}
         {type === 'directory' ? (
@@ -148,6 +151,98 @@ const TreeNode = memo(function TreeNode({
   );
 });
 
+// ── FileSearch ──
+
+function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void }) {
+  const [query, setQuery] = useState('');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searchFiles = useCodeViewerStore((s) => s.searchFiles);
+  const clearFileSearch = useCodeViewerStore((s) => s.clearFileSearch);
+  const fileSearchQuery = useCodeViewerStore((s) => s.fileSearchQuery);
+  const fileSearchResults = useCodeViewerStore((s) => s.fileSearchResults);
+  const fileSearching = useCodeViewerStore((s) => s.fileSearching);
+
+  const handleChange = useCallback((value: string) => {
+    setQuery(value);
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (!value.trim()) {
+      clearFileSearch();
+      return;
+    }
+
+    // Debounce 500ms
+    timerRef.current = setTimeout(() => {
+      searchFiles(value);
+    }, 500);
+  }, [searchFiles, clearFileSearch]);
+
+  const handleClear = useCallback(() => {
+    setQuery('');
+    clearFileSearch();
+    inputRef.current?.focus();
+  }, [clearFileSearch]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  const isSearching = fileSearching;
+  const hasResults = fileSearchResults.length > 0;
+  const showResults = fileSearchQuery && query.trim();
+
+  return (
+    <div className="flex flex-col border-b border-[hsl(var(--border))]">
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <Search className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="搜索文件..."
+          className="flex-1 min-w-0 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
+        />
+        {isSearching && <Loader2 className="w-3 h-3 shrink-0 animate-spin text-muted-foreground" />}
+        {query && !isSearching && (
+          <button onClick={handleClear} className="shrink-0 p-0.5 rounded hover:bg-[hsl(var(--muted))] transition-colors">
+            <X className="w-3 h-3 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+      {showResults && (
+        <ScrollArea className="max-h-[200px]">
+          {hasResults ? (
+            fileSearchResults.map((result) => (
+              <button
+                key={result.filePath}
+                onClick={() => {
+                  onSelect(result.filePath);
+                  handleClear();
+                }}
+                className="w-full text-left flex items-center gap-1.5 px-3 py-1 text-[12px] hover:bg-[hsl(var(--muted))] transition-colors"
+                title={result.filePath}
+              >
+                <File className="w-3 h-3 shrink-0 text-muted-foreground" />
+                <span className="truncate flex-1 min-w-0 font-medium">{result.fileName}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground/60 truncate max-w-[100px]">
+                  {result.filePath.replace(/[^/]+$/, '')}
+                </span>
+              </button>
+            ))
+          ) : !isSearching ? (
+            <div className="px-3 py-2 text-[11px] text-muted-foreground text-center">
+              无匹配文件
+            </div>
+          ) : null}
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
 // ── FileTree ──
 
 interface FileTreeProps {
@@ -162,6 +257,20 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
   const [rootEntries, setRootEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const treeId = useRef('file-tree-scroll');
+
+  // Scroll active file into view when it changes
+  useEffect(() => {
+    if (!activeFilePath) return;
+    // Delay to allow auto-expand to complete
+    const timer = setTimeout(() => {
+      const el = document.querySelector('[data-file-active="true"]');
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [activeFilePath]);
 
   // Load root dir on mount or workspace change
   useEffect(() => {
@@ -206,6 +315,9 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
         <span className="text-[13px] text-muted-foreground/60">|</span>
         <span className="text-[13px] font-medium truncate">{workspaceName}</span>
       </div>
+
+      {/* File search */}
+      <FileSearchInput onSelect={onSelectFile} />
 
       {/* Tree content */}
       <ScrollArea className="flex-1 min-h-0">

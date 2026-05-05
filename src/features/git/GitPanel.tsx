@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useGitStore, applyTemplate, type GitFileStatus, type GitDiffHunk, type GitDiffLine, type GitBranch, type GitLogGraphNode } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
+import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 
 // ── Status helpers ─────────────────────────────────────────────────
@@ -370,7 +371,10 @@ const FileItem = memo(function FileItem({ file, isSelected, onClick, isDark }: {
 // ── Diff View ──────────────────────────────────────────────────────
 
 function DiffView({ hunks, isDark, filePath }: { hunks: GitDiffHunk[]; isDark: boolean; filePath: string }) {
-  const workspace = useCodeViewerStore((s) => s.workspace);
+  const workspace = useChatStore((s) => {
+    const session = s.sessions.find(ss => ss.key === s.currentSessionId);
+    return session?.workspace;
+  });
   const openViewer = useCodeViewerStore((s) => s.openViewer);
 
   const handleOpenFile = useCallback(() => {

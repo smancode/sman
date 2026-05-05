@@ -33,7 +33,7 @@ import { BatchEngine } from './batch-engine.js';
 import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
-import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols } from './code-viewer-handler.js';
+import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols, handleSearchFiles } from './code-viewer-handler.js';
 import { handleGitStatus, handleGitDiff, handleGitDiffFile, handleGitCommit, handleGitLog, handleGitBranchList, handleGitCheckout, handleGitFetch, handleGitRemoteDiff, handleGitGenerateCommit, handleGitLogGraph, handleGitPush, setSessionManagerForPush } from './git-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
@@ -1418,6 +1418,19 @@ wss.on('connection', (ws: WebSocket) => {
           if (!msg.workspace || !msg.filePath || typeof msg.content !== 'string') throw new Error('Missing workspace, filePath or content');
           const result = handleSaveFile(String(msg.workspace), String(msg.filePath), String(msg.content));
           ws.send(JSON.stringify({ type: 'code.saveFile', result }));
+          break;
+        }
+        case 'code.searchFiles': {
+          if (!msg.workspace || !msg.query) {
+            ws.send(JSON.stringify({ type: 'code.searchFiles', result: { error: 'Missing workspace or query' } }));
+            break;
+          }
+          try {
+            const result = handleSearchFiles(String(msg.workspace), String(msg.query));
+            ws.send(JSON.stringify({ type: 'code.searchFiles', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'code.searchFiles', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
 

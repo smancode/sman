@@ -371,6 +371,65 @@ function findFileByName(workspace: string, fileName: string, maxDepth: number = 
   return walk(resolvedWorkspace, 0);
 }
 
+export interface FileSearchResult {
+  filePath: string;
+  fileName: string;
+}
+
+export function handleSearchFiles(workspace: string, query: string, maxResults = 50): FileSearchResult[] {
+  if (!query || query.length < 1) return [];
+
+  const normalizedQuery = query.toLowerCase();
+  const results: FileSearchResult[] = [];
+  const resolvedWorkspace = path.resolve(workspace);
+
+  function walk(dir: string, relativeTo: string): void {
+    if (results.length >= maxResults) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= maxResults) return;
+      if (shouldHide(entry.name)) continue;
+
+      const fullPath = path.join(dir, entry.name);
+      const relPath = toPosix(path.join(relativeTo, entry.name));
+
+      if (entry.isFile()) {
+        // Fuzzy match: query chars must appear in order in filename (case-insensitive)
+        if (fuzzyMatch(entry.name.toLowerCase(), normalizedQuery)) {
+          results.push({ filePath: relPath, fileName: entry.name });
+        }
+      } else if (entry.isDirectory()) {
+        walk(fullPath, relPath);
+      }
+    }
+  }
+
+  walk(resolvedWorkspace, '');
+  return results;
+}
+
+/**
+ * Simple fuzzy match: all chars in `query` must appear in `target` in order.
+ * "bc" matches "Abc.java" (b at index 1, c at index 2).
+ */
+function fuzzyMatch(target: string, query: string): boolean {
+  let ti = 0;
+  for (let qi = 0; qi < query.length; qi++) {
+    const ch = query[qi];
+    while (ti < target.length && target[ti] !== ch) ti++;
+    if (ti >= target.length) return false;
+    ti++;
+  }
+  return true;
+}
+
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
