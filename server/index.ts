@@ -1374,21 +1374,42 @@ wss.on('connection', (ws: WebSocket) => {
 
         // ── Code Viewer ──────────────────────────────────────────
         case 'code.listDir': {
-          if (!msg.workspace) throw new Error('Missing workspace');
-          const result = handleListDir(String(msg.workspace), String(msg.dirPath || '.'));
-          ws.send(JSON.stringify({ type: 'code.listDir', result }));
+          if (!msg.workspace) {
+            ws.send(JSON.stringify({ type: 'code.listDir', result: { error: 'Missing workspace' } }));
+            break;
+          }
+          try {
+            const result = handleListDir(String(msg.workspace), String(msg.dirPath || '.'));
+            ws.send(JSON.stringify({ type: 'code.listDir', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'code.listDir', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
         case 'code.readFile': {
-          if (!msg.workspace || !msg.filePath) throw new Error('Missing workspace or filePath');
-          const result = handleReadFile(String(msg.workspace), String(msg.filePath));
-          ws.send(JSON.stringify({ type: 'code.readFile', result }));
+          if (!msg.workspace || !msg.filePath) {
+            ws.send(JSON.stringify({ type: 'code.readFile', result: { error: 'Missing workspace or filePath' } }));
+            break;
+          }
+          try {
+            const result = handleReadFile(String(msg.workspace), String(msg.filePath));
+            ws.send(JSON.stringify({ type: 'code.readFile', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'code.readFile', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
         case 'code.searchSymbols': {
-          if (!msg.workspace || !msg.symbol) throw new Error('Missing workspace or symbol');
-          const result = handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined);
-          ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
+          if (!msg.workspace || !msg.symbol) {
+            ws.send(JSON.stringify({ type: 'code.searchSymbols', result: { error: 'Missing workspace or symbol' } }));
+            break;
+          }
+          try {
+            const result = handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined);
+            ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'code.searchSymbols', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
         case 'code.saveFile': {

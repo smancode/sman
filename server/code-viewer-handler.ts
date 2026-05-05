@@ -150,13 +150,24 @@ export function handleListDir(workspace: string, dirPath: string): ListDirResult
 }
 
 export function handleReadFile(workspace: string, filePath: string): ReadFileResult | BinaryFileResult {
-  const resolved = validatePath(workspace, filePath);
+  let resolved = validatePath(workspace, filePath);
 
+  // If file not found at exact path, try to find it by filename in the workspace
   let stat: fs.Stats;
   try {
     stat = fs.statSync(resolved);
   } catch {
-    throw Object.assign(new Error('File not found'), { code: 'NOT_FOUND' });
+    const found = findFileByName(workspace, path.basename(filePath));
+    if (found) {
+      resolved = found;
+      try {
+        stat = fs.statSync(resolved);
+      } catch {
+        throw Object.assign(new Error('File not found'), { code: 'NOT_FOUND' });
+      }
+    } else {
+      throw Object.assign(new Error('File not found'), { code: 'NOT_FOUND' });
+    }
   }
 
   const fileName = path.basename(resolved);
@@ -304,6 +315,44 @@ export function handleSearchSymbols(
   walk(path.resolve(workspace), '');
 
   return { symbol: cleanSymbol, matches };
+}
+
+/**
+ * Search for a file by name in the workspace (limited depth, skip hidden dirs).
+ * Returns the first match's resolved path, or null.
+ */
+function findFileByName(workspace: string, fileName: string, maxDepth: number = 5): string | null {
+  const resolvedWorkspace = path.resolve(workspace);
+
+  function walk(dir: string, depth: number): string | null {
+    if (depth > maxDepth) return null;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+
+    for (const entry of entries) {
+      if (shouldHide(entry.name)) continue;
+
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isFile() && entry.name === fileName) {
+        return fullPath;
+      }
+
+      if (entry.isDirectory()) {
+        const found = walk(fullPath, depth + 1);
+        if (found) return found;
+      }
+    }
+
+    return null;
+  }
+
+  return walk(resolvedWorkspace, 0);
 }
 
 function escapeRegExp(str: string): string {
