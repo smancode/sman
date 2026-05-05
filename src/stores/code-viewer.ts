@@ -256,10 +256,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       if (get()._activeLoadId !== loadId) return;
       unsub();
 
-      console.log('[code-viewer] code.readFile msg:', JSON.stringify(msg, null, 2));
-
       const result = msg.result as (FileContent | BinaryFileInfo | { error?: string }) | undefined;
-      console.log('[code-viewer] extracted result:', result);
       if (!result) {
         set({ loading: false, error: 'No file data received' });
         return;
@@ -270,9 +267,18 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       }
       const file = result as FileContent | BinaryFileInfo;
 
-      // Update LRU cache
+      // Resolve filePath to a proper relative path using the backend's resolved absolute path
+      const resolvedFilePath = file.path;
+      const normWorkspace = workspace.replace(/\\/g, '/').replace(/\/$/, '');
+      const normResolved = resolvedFilePath.replace(/\\/g, '/');
+      let relativePath = filePath;
+      if (normResolved.startsWith(normWorkspace + '/')) {
+        relativePath = normResolved.slice(normWorkspace.length + 1);
+      }
+
+      // Update LRU cache (key by relative path for consistency)
       const newCache = new Map(get().fileCache);
-      newCache.set(filePath, { file, timestamp: Date.now() });
+      newCache.set(relativePath, { file, timestamp: Date.now() });
       // Evict oldest entries if over limit
       while (newCache.size > MAX_FILE_CACHE) {
         const oldest = [...newCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
@@ -283,6 +289,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         currentFile: file,
         loading: false,
         error: null,
+        filePath: relativePath,
         fileCache: newCache,
         dirty: false,
       });
