@@ -47,7 +47,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Sman',
     titleBarStyle: 'hidden',
-    ...(process.platform === 'win32' ? { frame: false } : {}),
+    ...(process.platform === 'win32' ? { frame: false, transparent: true, backgroundColor: '#00000000' } : {}),
     show: false,
     icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {
@@ -92,6 +92,14 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // Notify renderer when maximize state changes (double-click titlebar, Win+Up, snap, etc.)
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window:maximizeChanged', true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window:maximizeChanged', false);
   });
 }
 

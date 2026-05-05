@@ -18,7 +18,7 @@ export function buildMcpServers(config: SmanConfig): Record<string, McpServerCon
         servers['brave-search'] = {
           type: 'stdio',
           command: 'npx',
-          args: ['-y', '@anthropic-ai/mcp-server-brave'],
+          args: ['-y', '@modelcontextprotocol/server-brave-search'],
           env: { BRAVE_API_KEY: webSearch.braveApiKey },
         };
       }
@@ -29,7 +29,7 @@ export function buildMcpServers(config: SmanConfig): Record<string, McpServerCon
         servers['tavily-search'] = {
           type: 'stdio',
           command: 'npx',
-          args: ['-y', '@anthropic-ai/mcp-server-tavily'],
+          args: ['-y', 'tavily-mcp@latest'],
           env: { TAVILY_API_KEY: webSearch.tavilyApiKey },
         };
       }
