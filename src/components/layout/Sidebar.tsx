@@ -7,6 +7,8 @@ import {
   Clock,
   Sparkles,
   Route,
+  ChevronUp,
+  Pin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,9 @@ export function Sidebar() {
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
   const shouldBlur = !['/chat', '/stardom'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const expanded = pinned || hovering;
   const blurSession = shouldBlur && !dismissed;
 
   // 切换页面时重置 dismissed 状态
@@ -51,84 +56,105 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Footer - 固定在底部 */}
-      <div className="p-2 shrink-0 space-y-0.5">
-        <NavLink
-          to="/stardom"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground',
-                )}
-              >
-                <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              <span>协作星图</span>
-            </>
+      {/* Footer - 固定在底部，悬浮展开 */}
+      <div
+        className="p-2 shrink-0 space-y-0.5"
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+      >
+        {/* 可折叠区域：协作星图、定时任务、地球路径 */}
+        <div
+          className={cn(
+            'overflow-hidden transition-all duration-200',
+            expanded ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0',
           )}
-        </NavLink>
-
-        <NavLink
-          to="/cron-tasks"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-            )
-          }
         >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground',
-                )}
-              >
-                <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              <span>定时任务</span>
-            </>
-          )}
-        </NavLink>
+          <div className="space-y-0.5 mb-0.5">
+            <NavLink
+              to="/stardom"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>协作星图</span>
+                </>
+              )}
+            </NavLink>
 
-        <NavLink
-          to="/smart-paths"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-              'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-              isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <div
-                className={cn(
-                  'flex shrink-0 items-center justify-center',
-                  isActive ? 'text-foreground' : 'text-muted-foreground',
-                )}
-              >
-                <Route className="h-[18px] w-[18px]" strokeWidth={2} />
-              </div>
-              <span>地球路径</span>
-            </>
-          )}
-        </NavLink>
+            <NavLink
+              to="/cron-tasks"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>定时任务</span>
+                </>
+              )}
+            </NavLink>
 
+            <NavLink
+              to="/smart-paths"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Route className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>地球路径</span>
+                </>
+              )}
+            </NavLink>
+          </div>
+        </div>
+
+        {/* 设置行（始终可见） */}
         <div className="flex items-center gap-1">
+          <ChevronUp
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
+              expanded ? 'rotate-180' : '',
+            )}
+          />
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -153,6 +179,22 @@ export function Sidebar() {
               </>
             )}
           </NavLink>
+
+          {/* Pin 按钮：悬浮时显示，点击固定展开 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'h-7 w-7 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-md transition-opacity duration-150',
+              hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            )}
+            onClick={() => setPinned((p) => !p)}
+            title={pinned ? '取消固定' : '固定展开'}
+          >
+            <Pin
+              className={cn('h-3.5 w-3.5', pinned && 'text-foreground rotate-45')}
+            />
+          </Button>
 
           {/* Connection status */}
           <div
