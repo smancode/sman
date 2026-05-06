@@ -35,6 +35,9 @@ export interface ContentBlock {
   input?: unknown
   arguments?: unknown
   content?: unknown
+  summary?: string
+  status?: 'running' | 'completed'
+  elapsedSeconds?: number
 }
 
 /** Session from session.list */

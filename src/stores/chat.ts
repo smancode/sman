@@ -1384,9 +1384,9 @@ function streamingBlocksToContentBlocks(blocks: StreamingBlock[]): ContentBlock[
       case 'tool_use':
         try {
           const input = block.input ? JSON.parse(block.input) : {};
-          result.push({ type: 'tool_use', id: block.id, name: block.name, input });
+          result.push({ type: 'tool_use', id: block.id, name: block.name, input, summary: block.summary, status: block.status, elapsedSeconds: block.elapsedSeconds });
         } catch {
-          result.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input });
+          result.push({ type: 'tool_use', id: block.id, name: block.name, input: block.input, summary: block.summary, status: block.status, elapsedSeconds: block.elapsedSeconds });
         }
         break;
       case 'ask_user':

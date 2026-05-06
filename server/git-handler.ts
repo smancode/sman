@@ -365,14 +365,21 @@ export function handleGitBranchList(workspace: string): GitBranch[] {
 }
 
 export function handleGitCheckout(workspace: string, branch: string): { success: boolean; message: string } {
-  // Don't allow checking out remote branches directly — user should create local tracking branch
-  if (branch.startsWith('remotes/')) {
-    throw new Error('Cannot checkout remote branch directly. Create a local branch first.');
-  }
-  // Sanitize branch name: only allow safe characters
   if (!/^[a-zA-Z0-9\/_.@-]+$/.test(branch)) {
     throw new Error('Invalid branch name');
   }
+
+  if (branch.startsWith('remotes/')) {
+    // Remote branch: extract local name and create tracking branch
+    // remotes/origin/feature_x -> feature_x
+    const withoutRemote = branch.replace(/^remotes\/[^/]+\//, '');
+    if (!withoutRemote || withoutRemote === branch) {
+      throw new Error(`Cannot parse branch name from: ${branch}`);
+    }
+    const result = git(workspace, `checkout -b ${withoutRemote} ${branch}`);
+    return { success: true, message: result || `Checked out ${withoutRemote} tracking ${branch}` };
+  }
+
   const result = git(workspace, `checkout ${branch}`);
   return { success: true, message: result };
 }

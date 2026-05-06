@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import {
   X, GitBranch as GitBranchIcon, FilePlus, FileMinus, FileEdit, FileSearch,
   Loader2, Send, Sparkles, ChevronDown, ChevronRight, ArrowUp, ArrowDown,
-  RefreshCw, Settings2, Check, Upload,
+  RefreshCw, Settings2, Check, Upload, Download, Search,
 } from 'lucide-react';
 import { useGitStore, applyTemplate, type GitFileStatus, type GitDiffHunk, type GitDiffLine, type GitBranch, type GitLogGraphNode } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
@@ -203,12 +203,16 @@ function BranchSelector() {
   const status = useGitStore((s) => s.status);
   const branches = useGitStore((s) => s.branches);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const fetchBranches = useGitStore((s) => s.fetchBranches);
   const checkout = useGitStore((s) => s.checkout);
 
   const handleToggle = useCallback(() => {
-    if (!open) fetchBranches();
+    if (!open) {
+      setSearch('');
+      fetchBranches();
+    }
     setOpen(!open);
   }, [open, fetchBranches]);
 
@@ -218,8 +222,12 @@ function BranchSelector() {
   }, [checkout]);
 
   const isDark = document.documentElement.classList.contains('dark');
-  const localBranches = branches.filter(b => !b.remote);
-  const remoteBranches = branches.filter(b => b.remote);
+
+  const localBranches = branches.filter(b => !b.remote && (!search || b.name.toLowerCase().includes(search.toLowerCase())));
+  const remoteBranches = branches.filter(b => b.remote && (!search || b.name.toLowerCase().includes(search.toLowerCase())));
+
+  // Check which remote branches already have a local counterpart
+  const localNames = new Set(branches.filter(b => !b.remote).map(b => b.name));
 
   return (
     <div className="relative">
@@ -238,52 +246,95 @@ function BranchSelector() {
         <div
           data-git-branch-list
           className={cn(
-            'absolute top-full left-0 mt-1 w-56 rounded-lg shadow-xl border z-50 max-h-80 overflow-y-auto',
+            'absolute top-full left-0 mt-1 w-64 rounded-lg shadow-xl border z-50',
             isDark ? 'bg-[#262c36] border-[#30363d]' : 'bg-white border-gray-200',
           )}
         >
-          {localBranches.length > 0 && (
-            <>
-              <div className="px-3 py-1.5 text-[11px] text-muted-foreground font-medium">本地分支</div>
-              {localBranches.map(b => (
-                <button
-                  key={b.name}
-                  onClick={() => handleCheckout(b.name)}
-                  className={cn(
-                    'w-full text-left flex items-center gap-2 px-3 py-1.5 text-[13px] transition-colors',
-                    b.current
-                      ? isDark ? 'bg-[#1a3a5c] text-blue-400' : 'bg-blue-50 text-blue-600'
-                      : isDark ? 'hover:bg-[#30363d]' : 'hover:bg-gray-50',
-                  )}
-                >
-                  {b.current && <Check className="w-3 h-3 shrink-0" />}
-                  <span className={cn('truncate', !b.current && 'pl-5')}>{b.name}</span>
-                </button>
-              ))}
-            </>
-          )}
-          {remoteBranches.length > 0 && (
-            <>
-              <div className={cn('px-3 py-1.5 text-[11px] text-muted-foreground font-medium border-t', isDark && 'border-[#30363d]')}>
-                远端分支
-              </div>
-              {remoteBranches.map(b => (
-                <div
-                  key={b.name}
-                  className={cn(
-                    'px-3 py-1.5 text-[13px] text-muted-foreground truncate',
-                    isDark ? 'hover:bg-[#30363d]' : 'hover:bg-gray-50',
-                  )}
-                  title={b.name}
-                >
-                  {b.name.replace('remotes/', '')}
+          {/* Search input */}
+          <div className="p-2 border-b" style={isDark ? { borderColor: '#30363d' } : undefined}>
+            <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded text-[13px]',
+              isDark ? 'bg-[#1e2228]' : 'bg-gray-100',
+            )}>
+              <Search className="w-3 h-3 shrink-0 text-muted-foreground" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索分支..."
+                className={cn(
+                  'flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground',
+                  isDark ? 'text-gray-200' : 'text-gray-800',
+                )}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {/* Branch list */}
+          <div className="max-h-72 overflow-y-auto">
+            {localBranches.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 text-[11px] text-muted-foreground font-medium">本地分支</div>
+                {localBranches.map(b => (
+                  <button
+                    key={b.name}
+                    onClick={() => handleCheckout(b.name)}
+                    className={cn(
+                      'w-full text-left flex items-center gap-2 px-3 py-1.5 text-[13px] transition-colors',
+                      b.current
+                        ? isDark ? 'bg-[#1a3a5c] text-blue-400' : 'bg-blue-50 text-blue-600'
+                        : isDark ? 'hover:bg-[#30363d]' : 'hover:bg-gray-50',
+                    )}
+                  >
+                    {b.current && <Check className="w-3 h-3 shrink-0" />}
+                    <span className={cn('truncate', !b.current && 'pl-5')}>{b.name}</span>
+                  </button>
+                ))}
+              </>
+            )}
+            {remoteBranches.length > 0 && (
+              <>
+                <div className={cn('px-3 py-1.5 text-[11px] text-muted-foreground font-medium border-t', isDark && 'border-[#30363d]')}>
+                  远端分支
                 </div>
-              ))}
-            </>
-          )}
-          {branches.length === 0 && (
-            <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">加载中...</div>
-          )}
+                {remoteBranches.map(b => {
+                  const localName = b.name.replace(/^remotes\/[^/]+\//, '');
+                  const hasLocal = localNames.has(localName);
+                  return (
+                    <div
+                      key={b.name}
+                      className={cn(
+                        'group flex items-center px-3 py-1.5 text-[13px] text-muted-foreground transition-colors',
+                        isDark ? 'hover:bg-[#30363d]' : 'hover:bg-gray-50',
+                      )}
+                      title={hasLocal ? `切换到 ${localName}` : `Checkout ${b.name} 到本地`}
+                    >
+                      <span className="truncate flex-1">{b.name.replace('remotes/', '')}</span>
+                      <button
+                        onClick={() => handleCheckout(b.name)}
+                        className={cn(
+                          'shrink-0 ml-1 p-0.5 rounded transition-colors',
+                          isDark
+                            ? 'text-muted-foreground hover:text-blue-400 hover:bg-[#1a3a5c]'
+                            : 'text-muted-foreground hover:text-blue-600 hover:bg-blue-50',
+                          'opacity-0 group-hover:opacity-100',
+                        )}
+                        title={hasLocal ? '切换到此分支' : 'Checkout 到本地'}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            {branches.length === 0 && (
+              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">加载中...</div>
+            )}
+            {branches.length > 0 && localBranches.length === 0 && remoteBranches.length === 0 && (
+              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">无匹配分支</div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -751,8 +802,8 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
           onClick={handleCommit}
           disabled={isBusy}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors',
-            'bg-green-600 text-white hover:bg-green-700',
+            'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md border transition-colors',
+            'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
           )}
           title="Commit 到本地（留空消息则 AI 自动生成 commit message）"
@@ -764,8 +815,8 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
           onClick={handlePush}
           disabled={pushing || (!hasAheadCommits && fileCount === 0)}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors',
-            'bg-blue-600 text-white hover:bg-blue-700',
+            'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md border transition-colors',
+            'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
           )}
           title="智能 Push：自动 git pull 合并远端变更，如有冲突由 AI 解决，然后 git push"

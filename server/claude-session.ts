@@ -1247,8 +1247,8 @@ export class ClaudeSessionManager {
     let fullContent = '';
     let currentThinking = '';
     let allThinking = '';
-    let allToolUses: Array<{ id: string; name: string; input: string }> = [];
-    let currentToolUse: { id: string; name: string; input: string } | null = null;
+    let allToolUses: Array<{ id: string; name: string; input: string; summary?: string; elapsedSeconds?: number }> = [];
+    let currentToolUse: { id: string; name: string; input: string; summary?: string; elapsedSeconds?: number } | null = null;
     let stallAbortReason: string | undefined;
     let needsSessionExpiredRetry = false;
     // Track whether this abort was user-initiated (stop button) vs system-initiated (stall/error).
@@ -1406,14 +1406,14 @@ export class ClaudeSessionManager {
         const partialThinking = allThinking.trim();
         if (!partialContent && !partialThinking && allToolUses.length === 0 && !currentToolUse) return;
 
-        const contentBlocks: Array<{ type: string; thinking?: string; id?: string; name?: string; input?: unknown }> = [];
+        const contentBlocks: Array<{ type: string; thinking?: string; id?: string; name?: string; input?: unknown; summary?: string }> = [];
         if (partialThinking) contentBlocks.push({ type: 'thinking', thinking: partialThinking });
         const tools = currentToolUse ? [...allToolUses, currentToolUse] : allToolUses;
         for (const tu of tools) {
           try {
-            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: JSON.parse(tu.input) });
+            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: JSON.parse(tu.input), summary: tu.summary });
           } catch {
-            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+            contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input, summary: tu.summary });
           }
         }
         this.store.upsertPartialMessage(sessionId, partialContent, contentBlocks.length > 0 ? contentBlocks : undefined);
@@ -1633,13 +1633,24 @@ export class ClaudeSessionManager {
                 usage: sys.usage ?? undefined,
               }));
             } else if (subtype === 'task_notification') {
+              const notifSummary = sys.summary ?? '';
+              const notifToolUseId = sys.tool_use_id ?? '';
+              // Attach summary to matching tool
+              if (notifSummary && notifToolUseId) {
+                const tool = allToolUses.find(t => t.id === notifToolUseId);
+                if (tool) {
+                  tool.summary = tool.summary || notifSummary;
+                } else if (currentToolUse && currentToolUse.id === notifToolUseId) {
+                  currentToolUse.summary = currentToolUse.summary || notifSummary;
+                }
+              }
               wsSend(JSON.stringify({
                 type: 'chat.task_notification',
                 sessionId,
                 taskId: sys.task_id,
-                toolUseId: sys.tool_use_id ?? undefined,
+                toolUseId: notifToolUseId || undefined,
                 status: sys.status, // completed | failed | stopped
-                summary: sys.summary ?? '',
+                summary: notifSummary,
                 usage: sys.usage ?? undefined,
               }));
             }
@@ -1648,11 +1659,23 @@ export class ClaudeSessionManager {
 
           case 'tool_use_summary': {
             const summary = sdkMsg as any;
+            const summaryText = summary.summary ?? '';
+            const precedingIds: string[] = summary.preceding_tool_use_ids ?? [];
+            // Attach summary to the last preceding tool in allToolUses or currentToolUse
+            if (precedingIds.length > 0 && summaryText) {
+              const lastId = precedingIds[precedingIds.length - 1];
+              const tool = allToolUses.find(t => t.id === lastId);
+              if (tool) {
+                tool.summary = summaryText;
+              } else if (currentToolUse && currentToolUse.id === lastId) {
+                currentToolUse.summary = summaryText;
+              }
+            }
             wsSend(JSON.stringify({
               type: 'chat.tool_use_summary',
               sessionId,
-              summary: summary.summary ?? '',
-              precedingToolUseIds: summary.preceding_tool_use_ids ?? [],
+              summary: summaryText,
+              precedingToolUseIds: precedingIds,
             }));
             break;
           }
@@ -1691,6 +1714,9 @@ export class ClaudeSessionManager {
               id?: string;
               name?: string;
               input?: unknown;
+              summary?: string;
+              status?: 'completed';
+              elapsedSeconds?: number;
             }> = [];
             if (allThinking.trim()) {
               contentBlocks.push({ type: 'thinking', thinking: allThinking.trim() });
@@ -1698,9 +1724,9 @@ export class ClaudeSessionManager {
             for (const tu of allToolUses) {
               try {
                 const input = JSON.parse(tu.input);
-                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input });
+                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input, summary: tu.summary, status: 'completed', elapsedSeconds: tu.elapsedSeconds });
               } catch {
-                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+                contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input, summary: tu.summary, status: 'completed', elapsedSeconds: tu.elapsedSeconds });
               }
             }
 
@@ -2589,8 +2615,8 @@ export class ClaudeSessionManager {
     sessionId: string,
     fullContent: string,
     allThinking: string,
-    allToolUses: Array<{ id: string; name: string; input: string }>,
-    currentToolUse: { id: string; name: string; input: string } | null,
+    allToolUses: Array<{ id: string; name: string; input: string; summary?: string; elapsedSeconds?: number }>,
+    currentToolUse: { id: string; name: string; input: string; summary?: string; elapsedSeconds?: number } | null,
   ): void {
     // Flush any in-progress tool use
     if (currentToolUse) {
@@ -2604,6 +2630,9 @@ export class ClaudeSessionManager {
       id?: string;
       name?: string;
       input?: unknown;
+      summary?: string;
+      status?: 'completed';
+      elapsedSeconds?: number;
     }> = [];
 
     if (allThinking.trim()) {
@@ -2612,9 +2641,9 @@ export class ClaudeSessionManager {
     for (const tu of allToolUses) {
       try {
         const input = JSON.parse(tu.input);
-        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input });
+        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input, summary: tu.summary, status: 'completed', elapsedSeconds: tu.elapsedSeconds });
       } catch {
-        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+        contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input, summary: tu.summary, status: 'completed', elapsedSeconds: tu.elapsedSeconds });
       }
     }
 

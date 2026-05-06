@@ -1,6 +1,6 @@
 # Technical — nasakim
 
-> Last extracted: 2026-05-06T06:09:37.196Z
+> Last extracted: 2026-05-06T06:46:50.130Z
 
 ## WebSocket 客户端↔会话双向映射机制
 <!-- hash: b7c8d9 -->
