@@ -20,7 +20,7 @@ export function setSessionManagerForPush(sm: any): void {
 
 function git(workspace: string, args: string, timeout = 10000): string {
   try {
-    return execSync(`git ${args}`, {
+    return execSync(`git --no-pager ${args}`, {
       cwd: workspace,
       encoding: 'utf-8',
       timeout,
