@@ -117,6 +117,11 @@ function createWindow(): void {
 }
 
 function registerIpcHandlers(): void {
+  // Sync IPC for preload — must use on() not handle()
+  ipcMain.on('system:isWindows10', (event) => {
+    event.returnValue = needsCustomFrame;
+  });
+
   ipcMain.handle('dialog:selectDirectory', async () => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -203,6 +208,8 @@ function buildMenu(): void {
         { role: 'zoomOut', label: '缩小' },
         { type: 'separator' },
         { role: 'togglefullscreen', label: '全屏' },
+        { type: 'separator' },
+        { role: 'toggleDevTools', label: '开发者工具' },
       ],
     },
     {

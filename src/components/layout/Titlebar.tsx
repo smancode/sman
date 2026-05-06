@@ -24,7 +24,6 @@ declare global {
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
-  const isWindows = window.sman?.platform === 'win32';
   const needsRoundedCorners = window.sman?.needsRoundedCorners ?? false;
   const workspace = useChatStore((s) => {
     const session = s.sessions.find(ss => ss.key === s.currentSessionId);
