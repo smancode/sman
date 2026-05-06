@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
   X, GitBranch as GitBranchIcon, FilePlus, FileMinus, FileEdit, FileSearch,
   Loader2, Send, Sparkles, ChevronDown, ChevronRight, ArrowUp, ArrowDown,
@@ -554,6 +554,112 @@ function RemoteDiffFile({ file, isDark }: { file: { path: string; hunks: GitDiff
   );
 }
 
+// ── Git Log Graph Renderer ──────────────────────────────────────────
+
+/**
+ * Parse git --graph ASCII output into structured lane data for SVG rendering.
+ * Characters: | * / \ space  (each char = 1 column, 2 chars wide per lane)
+ * Returns per-row: array of { col, type } where type is 'commit' | 'pipe' | 'merge-l' | 'merge-r' | 'fork-l' | 'fork-r'
+ */
+interface GraphSegment {
+  col: number;        // lane index (0-based)
+  char: string;       // raw char: | * / \
+}
+
+function parseGraphLine(line: string): GraphSegment[] {
+  const segs: GraphSegment[] = [];
+  // git graph uses 2-char columns: "| " "* " "|/" "|\\" etc
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '|' || ch === '*' || ch === '/' || ch === '\\') {
+      segs.push({ col: Math.floor(i / 2), char: ch });
+    }
+  }
+  return segs;
+}
+
+const LANE_W = 12;   // px per lane
+const ROW_H = 26;    // px per row
+const DOT_R = 3.5;   // commit dot radius
+
+const BRANCH_COLORS = [
+  '#58a6ff', // blue
+  '#f78166', // orange
+  '#3fb950', // green
+  '#d2a8ff', // purple
+  '#79c0ff', // light blue
+  '#ffa657', // amber
+  '#7ee787', // light green
+  '#ff7b72', // red
+];
+
+function getLaneColor(lane: number): string {
+  return BRANCH_COLORS[lane % BRANCH_COLORS.length];
+}
+
+function GraphSvg({ nodes, isDark }: { nodes: GitLogGraphNode[]; isDark: boolean }) {
+  const maxLanes = Math.max(
+    1,
+    ...nodes.map(n => {
+      const segs = parseGraphLine(n.graphLine);
+      return segs.length > 0 ? Math.max(...segs.map(s => s.col)) + 1 : 1;
+    }),
+  );
+  const svgW = maxLanes * LANE_W + 4;
+  const svgH = nodes.length * ROW_H;
+
+  // Build SVG elements
+  const paths: React.ReactElement[] = [];
+  const dots: React.ReactElement[] = [];
+
+  for (let row = 0; row < nodes.length; row++) {
+    const segs = parseGraphLine(nodes[row].graphLine);
+    const y = row * ROW_H + ROW_H / 2;
+
+    for (const seg of segs) {
+      const cx = seg.col * LANE_W + LANE_W / 2 + 2;
+      const color = getLaneColor(seg.col);
+
+      if (seg.char === '*') {
+        // Commit dot
+        dots.push(
+          <circle key={`d-${row}-${seg.col}`} cx={cx} cy={y} r={DOT_R} fill={color} />,
+        );
+        // Vertical pipe through this row
+        paths.push(
+          <line key={`pv-${row}-${seg.col}`} x1={cx} y1={y - ROW_H / 2} x2={cx} y2={y + ROW_H / 2}
+            stroke={color} strokeWidth={1.5} opacity={0.4} />,
+        );
+      } else if (seg.char === '|') {
+        // Vertical pipe
+        paths.push(
+          <line key={`p-${row}-${seg.col}`} x1={cx} y1={y - ROW_H / 2} x2={cx} y2={y + ROW_H / 2}
+            stroke={color} strokeWidth={1.5} opacity={0.4} />,
+        );
+      } else if (seg.char === '/') {
+        // Merge: line going from bottom-left to top-right
+        paths.push(
+          <line key={`ml-${row}-${seg.col}`} x1={cx} y1={y + ROW_H / 2} x2={cx - LANE_W} y2={y - ROW_H / 2}
+            stroke={color} strokeWidth={1.5} opacity={0.4} />,
+        );
+      } else if (seg.char === '\\') {
+        // Fork: line going from bottom-right to top-left
+        paths.push(
+          <line key={`fr-${row}-${seg.col}`} x1={cx} y1={y + ROW_H / 2} x2={cx + LANE_W} y2={y - ROW_H / 2}
+            stroke={color} strokeWidth={1.5} opacity={0.4} />,
+        );
+      }
+    }
+  }
+
+  return (
+    <svg width={svgW} height={svgH} className="shrink-0" style={{ display: 'block' }}>
+      {paths}
+      {dots}
+    </svg>
+  );
+}
+
 // ── Git Log Tab ────────────────────────────────────────────────────
 
 function GitLogTab() {
@@ -571,12 +677,18 @@ function GitLogTab() {
 
   return (
     <div className={cn(
-      'flex-1 min-h-0 overflow-y-auto font-mono text-[12px]',
+      'flex-1 min-h-0 overflow-y-auto text-[12px]',
       isDark ? 'bg-[#0d1117]' : 'bg-gray-50',
     )}>
-      {logGraph.map((node, i) => (
-        <LogEntry key={i} node={node} currentBranch={status?.branch} isDark={isDark} />
-      ))}
+      {/* SVG graph column */}
+      <div className="flex">
+        <GraphSvg nodes={logGraph} isDark={isDark} />
+        <div className="flex-1 min-w-0">
+          {logGraph.map((node, i) => (
+            <LogEntry key={i} node={node} currentBranch={status?.branch} isDark={isDark} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -587,9 +699,7 @@ function LogEntry({ node, currentBranch, isDark }: { node: GitLogGraphNode; curr
     ? node.refs.split(',').map(r => r.trim()).filter(Boolean)
     : [];
 
-  const isHead = refs.some(r => r.includes('HEAD'));
   const isCurrent = refs.some(r => r === currentBranch || r === `HEAD -> ${currentBranch}`);
-  const isRemote = refs.some(r => r.startsWith('origin/') && !r.includes('HEAD'));
 
   // Format date
   const dateStr = (() => {
@@ -611,20 +721,12 @@ function LogEntry({ node, currentBranch, isDark }: { node: GitLogGraphNode; curr
 
   return (
     <div className={cn(
-      'flex items-start gap-0 px-2 py-0.5 border-b',
+      'flex items-center gap-2 px-2 border-b',
       isCurrent ? isDark ? 'bg-[#1a3a5c]/40' : 'bg-blue-50/50' : '',
       isDark ? 'border-[#21262d] hover:bg-[#161b22]' : 'border-gray-100 hover:bg-white',
-    )}>
-      {/* Graph line */}
-      <span className={cn(
-        'shrink-0 select-none text-[12px] leading-[1.65]',
-        isDark ? 'text-[#58a6ff]' : 'text-blue-400',
-      )} style={{ minWidth: 80 }}>
-        {node.graphLine}
-      </span>
-
+    )} style={{ height: ROW_H }}>
       {/* Commit info */}
-      <div className="flex-1 min-w-0 flex items-center gap-2 py-0.5">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         {/* Short hash */}
         <span className={cn(
           'shrink-0 text-[11px]',

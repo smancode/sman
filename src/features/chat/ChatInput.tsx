@@ -89,12 +89,33 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     if (!sending) abortingRef.current = false;
   }, [sending]);
 
-  // Save/restore input on session switch
+  // Keep refs in sync for use in cleanup/mount effects
   const prevSessionIdRef = useRef(currentSessionId);
   const inputRef = useRef(input);
   inputRef.current = input;
   const stagedMediaRef = useRef(stagedMedia);
   stagedMediaRef.current = stagedMedia;
+
+  // Restore input from cache on mount (e.g. returning from settings)
+  useEffect(() => {
+    if (currentSessionId) {
+      const cached = inputCache.get(currentSessionId);
+      if (cached?.input) setInput(cached.input);
+      if (cached?.stagedMedia?.length) setStagedMedia(cached.stagedMedia);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save input to cache on unmount
+  useEffect(() => {
+    return () => {
+      const sid = prevSessionIdRef.current;
+      if (sid && (inputRef.current || stagedMediaRef.current.length)) {
+        inputCache.set(sid, { input: inputRef.current, stagedMedia: stagedMediaRef.current });
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save/restore input on session switch
   useEffect(() => {
     const prevId = prevSessionIdRef.current;
     if (prevId === currentSessionId) return;
