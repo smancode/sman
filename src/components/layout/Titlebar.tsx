@@ -24,6 +24,7 @@ declare global {
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
+  const isWindows = window.sman?.platform === 'win32';
   const needsRoundedCorners = window.sman?.needsRoundedCorners ?? false;
   const workspace = useChatStore((s) => {
     const session = s.sessions.find(ss => ss.key === s.currentSessionId);
@@ -107,9 +108,8 @@ export function Titlebar() {
       <div className="flex-1" />
 
       {/* macOS: no custom buttons, use native traffic lights */}
-      {/* Windows 11: native buttons from DWM */}
-      {/* Windows 10 (frameless): custom min/max/close buttons */}
-      {needsRoundedCorners && (
+      {/* Windows (frameless): custom min/max/close buttons */}
+      {isWindows && (
         <div
           className="flex h-full"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
