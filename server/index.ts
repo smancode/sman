@@ -660,6 +660,174 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // MCP API: List available tools (skills and paths)
+  if (req.url === '/api/mcp/tools/list' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const workspaces = store.getActiveWorkspaces();
+        const tools: Array<{ id: string; name: string; description: string; type: 'skill' | 'path'; workspace: string }> = [];
+
+        // Collect skills from all workspaces
+        for (const ws of workspaces) {
+          const projectSkills = skillsRegistry.getProjectSkills(ws);
+          for (const skill of projectSkills) {
+            tools.push({
+              id: skill.id,
+              name: skill.name,
+              description: skill.description,
+              type: 'skill',
+              workspace: ws,
+            });
+          }
+        }
+
+        // Collect paths from all workspaces
+        for (const ws of workspaces) {
+          const paths = smartPathStore.listAll([ws]);
+          for (const p of paths) {
+            tools.push({
+              id: p.id,
+              name: p.name,
+              description: p.description || '',
+              type: 'path',
+              workspace: ws,
+            });
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ tools }));
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: errorMessage }));
+      }
+    });
+    return;
+  }
+
+  // MCP API: Invoke a tool (skill or path)
+  if (req.url === '/api/mcp/tools/invoke' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const { workspace, toolType, toolId, parameters } = JSON.parse(body);
+
+        if (!workspace || !toolType || !toolId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing required parameters: workspace, toolType, toolId' }));
+          return;
+        }
+
+        if (toolType === 'path') {
+          // Execute path (non-streaming for now)
+          const path = smartPathStore.get(toolId, workspace);
+          if (!path) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Path not found: ${toolId}` }));
+            return;
+          }
+
+          try {
+            // Run path execution and wait for completion
+            await smartPathEngine.run(
+              toolId,
+              workspace,
+              (stepIndex, delta) => {
+                // Progress callback (ignored for HTTP API)
+              },
+              (stepIndex, result) => {
+                // Step result callback (ignored for HTTP API)
+              },
+              (data) => {
+                // Progress callback (ignored for HTTP API)
+              },
+            );
+
+            const p = smartPathStore.get(toolId, workspace);
+            const refs = smartPathStore.listReferences(workspace, toolId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'success',
+              result: `Path "${p?.name || toolId}" completed successfully`,
+              pathId: toolId,
+              referencesCount: refs.length,
+            }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', error: errorMessage }));
+          }
+
+        } else if (toolType === 'skill') {
+          // Execute skill by creating a temporary session and sending the skill command
+          const skill = skillsRegistry.getSkill(toolId);
+          let skillName = toolId;
+          if (!skill) {
+            // Try project skills
+            const projectSkills = skillsRegistry.getProjectSkills(workspace);
+            const found = projectSkills.find(s => s.id === toolId);
+            if (!found) {
+              res.writeHead(404, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Skill not found: ${toolId}` }));
+              return;
+            }
+            skillName = found.name;
+          } else {
+            skillName = skill.name;
+          }
+
+          // Create ephemeral session and execute skill
+          const tempSessionId = sessionManager.createEphemeralSession(workspace);
+          const abort = new AbortController();
+          let fullResult = '';
+
+          try {
+            await sessionManager.sendMessageForCron(
+              tempSessionId,
+              `/${toolId}`,
+              abort,
+              () => {},
+            );
+
+            // Get the last assistant message as result
+            const messages = store.getMessages(tempSessionId, 1);
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === 'assistant') {
+              fullResult = lastMsg.content;
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'success',
+              result: fullResult.trim(),
+              skillId: toolId,
+              skillName: skillName,
+            }));
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', error: errorMessage }));
+          } finally {
+            sessionManager.closeV2Session(tempSessionId);
+            sessionManager.removeEphemeralSession(tempSessionId);
+          }
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Invalid toolType: ${toolType}. Must be 'skill' or 'path'` }));
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: errorMessage }));
+      }
+    });
+    return;
+  }
+
   // WebSocket upgrade path — let WSS handle it
   if (req.url?.startsWith('/ws')) {
     res.writeHead(426);

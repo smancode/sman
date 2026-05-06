@@ -300,6 +300,14 @@ export class SessionStore {
     return row?.sdk_session_id;
   }
 
+  /** Get distinct active workspaces (excluding deleted and cron sessions) */
+  getActiveWorkspaces(): string[] {
+    const rows = this.db.prepare(
+      'SELECT DISTINCT workspace FROM sessions WHERE deleted_at IS NULL AND (is_cron = 0 OR is_cron IS NULL) ORDER BY workspace'
+    ).all() as Array<{ workspace: string }>;
+    return rows.map(r => r.workspace);
+  }
+
   updateTokenUsage(id: string, inputTokens: number, outputTokens: number): void {
     this.db.prepare('UPDATE sessions SET input_tokens = ?, output_tokens = ? WHERE id = ?').run(inputTokens, outputTokens, id);
   }
