@@ -6,6 +6,7 @@ better-sqlite3 — synchronous SQLite driver, ESM interop
 ## Config Source
 - Database path: hardcoded ~/.sman/sman.db (passed as homeDir + '/sman.db')
 - No dynamic path config; always at ~/.sman/sman.db
+- WAL mode + foreign keys enabled
 
 ## Call Locations
 | File | Purpose |
@@ -15,8 +16,9 @@ better-sqlite3 — synchronous SQLite driver, ESM interop
 | server/batch-store.ts | Batch task + item storage |
 | server/chatbot/chatbot-store.ts | Chatbot user state storage |
 | server/stardom/stardom-store.ts | Stardom agent + task registry |
+| server/knowledge-extractor-store.ts | Knowledge extraction progress |
 | server/web-access/chrome-sites.ts | Chrome bookmark/history DB (read-only) |
 
 ## Purpose
 Local SQLite DB for all persistent state: sessions, messages, cron/batch tasks,
-chatbot sessions, Stardom registry, and Chrome browser data (bookmarks/history read-only).
+chatbot sessions, Stardom registry, knowledge extraction progress, and Chrome browser data (bookmarks/history read-only).

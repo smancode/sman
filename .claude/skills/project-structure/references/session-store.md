@@ -1,32 +1,36 @@
-# 会话存储
+# Session Store (server/session-store.ts)
 
-**Purpose**: SQLite 会话和消息存储
+SQLite-based storage for sessions and messages using `better-sqlite3`.
 
-## Key Files
-- `server/session-store.ts` — SQLite database operations
+## Schema
 
-## Responsibilities
-1. **Session CRUD**
-   - Create session (workspace, label)
-   - Update session (label)
-   - Delete session
-   - List sessions (grouped by workspace)
-   - Get session by ID
+**sessions table**: `id, systemId, workspace, label, isCron, deletedAt, createdAt, lastActiveAt`
+**messages table**: `id, sessionId, role, content, contentBlocks, isPartial, createdAt`
 
-2. **Message Storage**
-   - Append message (user/assistant/tool_use)
-   - List messages (by session_id)
-   - Stream messages (cursor-based)
+## Key Methods
 
-3. **Schema**
-   - `sessions` table: id, workspace, label, created_at, updated_at, sdk_session_id
-   - `messages` table: id, session_id, role, content, created_at, tool_use_id, tool_name
+- `createSession()`: Insert new session row
+- `getSession()`: Retrieve session by ID
+- `listSessions()`: List all non-deleted sessions
+- `deleteSession()`: Soft-delete (sets deletedAt)
+- `updateSessionLabel()`: Update session label
+- `addMessage()`: Insert message row
+- `getMessages()`: Retrieve messages for session
+- `updateLastActive()`: Update lastActiveAt timestamp
 
-## Dependencies
-- better-sqlite3
-- Database path: `~/.sman/sman.db`
+## Content Blocks
 
-## Notes
-- ESM module (uses `path.dirname(fileURLToPath(import.meta.url))` instead of `__dirname`)
-- Prepared statements for performance
-- Transaction support for batch operations
+Messages store `contentBlocks` array for structured content:
+- `text`: Plain text blocks
+- `thinking`: Model thinking blocks
+- `tool_use`: Tool invocation blocks
+- `image`: Image attachments
+- `attached_file`: File attachments
+
+## Database Location
+
+`~/.sman/sman.db` (SQLite file)
+
+## Important
+
+Uses `better-sqlite3` for synchronous queries (safe for single-threaded Node.js).

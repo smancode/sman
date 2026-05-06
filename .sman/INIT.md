@@ -66,3 +66,25 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 - ✅ technical-nasakim.md — 无新条目（已处理完毕）
 
 **下次扫描**：增量更新模式（检查 commit hash 变更）
+
+### 2026-05-06 — 增量更新
+**Commit**: 4db35f24f89dda0c11aa6aad83ba7bb7f8df368a
+**Mode**: 增量更新（自上次扫描 32289f752b24fd9424b2dd1c9e9e34938bf4a806）
+
+**Project Knowledge Skills 更新**：
+- ✅ project-structure — 已更新（commitHash: 32289f75 → 4db35f2）
+- ✅ project-apis — 已更新（commitHash: 32289f75 → 4db35f2）
+- ✅ project-external-calls — 已更新（commitHash: 32289f75 → 4db35f2）
+- ✅ database-schema — 首次扫描（commitHash: null → 4db35f2）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ knowledge-business — 已聚合（新增 4 个知识点，共 10 个）
+- ✅ knowledge-conventions — 已聚合（新增 3 个知识点，共 6 个）
+- ✅ knowledge-technical — 已聚合（新增 4 个知识点，共 15 个）
+
+**知识源文件清理**：
+- ✅ business-nasakim.md — 已清理（4 个条目已处理）
+- ✅ conventions-nasakim.md — 已清理（3 个条目已处理）
+- ✅ technical-nasakim.md — 已清理（4 个条目已处理）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）

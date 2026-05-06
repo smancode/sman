@@ -29,3 +29,5 @@ shared/*.js
 .worktrees/
 *.backup
 settings.json
+
+crontab.lock

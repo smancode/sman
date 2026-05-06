@@ -1,28 +1,35 @@
-# 后端核心模块
+# Server Core (server/index.ts)
 
-**Purpose**: 后端入口和核心服务，提供 HTTP + WebSocket 服务
-
-## Key Files
-- `server/index.ts` — Backend entry, WebSocket server setup, all handler registration
+Main backend entry point for Smanbase. Initializes HTTP server, WebSocket server, and all service handlers.
 
 ## Responsibilities
-1. HTTP & WebSocket server initialization (port 5880)
-2. All WebSocket handler registration (`session.*`, `chat.*`, `settings.*`, `cron.*`, `batch.*`, `stardom.*`, `smartpath.*`)
-3. Service initialization (settings, session store, skills registry, MCP config, cron scheduler, batch engine, etc.)
-4. Auth middleware (Bearer token for `/api/*` routes)
-5. Static file serving (React build output)
 
-## Dependencies
-- Express (HTTP server)
-- ws (WebSocket)
-- All server modules (claude-session, settings-manager, skills-registry, etc.)
+- HTTP server on port 5880 (Express-like routing)
+- WebSocket server for real-time communication
+- Session management via ClaudeSessionManager
+- Route handlers for all WebSocket messages
+- Static file serving (dev mode only)
 
-## API Endpoints
-- `GET /api/*` — Authenticated API routes
-- `WS /ws` — WebSocket connection (desktop client)
-- Static files — Frontend build output
+## Key Routes (WebSocket)
 
-## Notes
-- Uses ESM (`"type": "module"`)
-- Auth boundary: Only `/api/*` requires Bearer auth, static files are public
-- Message isolation: All maps keyed by sessionId to prevent cross-session interference
+**Session Management**: `session.create`, `session.list`, `session.delete`, `session.history`, `session.updateLabel`
+**Chat**: `chat.send`, `chat.abort`, `chat.start`, `chat.delta`, `chat.tool_start`, `chat.done`, `chat.error`
+**Settings**: `settings.get`, `settings.update`, `settings.updateLlm`, `skills.list`
+**Cron**: `cron.create`, `cron.list`, `cron.delete`, `cron.update`
+**Batch**: `batch.create`, `batch.list`, `batch.delete`, `batch.update`
+**Smart Paths**: `smartpath.create`, `smartpath.list`, `smartpath.run`, `smartpath.delete`
+**Code Viewer**: `code.listDir`, `code.readFile`, `code.searchSymbols`, `code.saveFile`, `code.searchFiles`
+**Git**: `git.status`, `git.diff`, `git.commit`, `git.push`, `git.log`, `git.checkout`, `git.fetch`
+**Stardom**: `stardom.connect`, `stardom.disconnect`, `stardom.status`, `stardom.searchAgents`
+**Chatbot**: `chatbot.message` (incoming WeCom/Feishu/Weixin messages)
+
+## Project Root Resolution
+
+Resolves project root dynamically for plugin loading:
+- Dev mode: `__dirname = server/` → parent has `plugins/`
+- Prod mode: `__dirname = dist/server/server/` → great-grandparent
+- Electron ASAR: redirects to `app.asar.unpacked/` for plugins
+
+## Important
+
+All WebSocket handlers use `await streamDone` to ensure message ordering (SDK doesn't support concurrent turns).

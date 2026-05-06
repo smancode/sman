@@ -1,8 +1,11 @@
 ---
+id: project-external-calls
+name: Sman 外部依赖扫描
 description: Sman 外部依赖扫描 - HTTP 服务、数据库、消息队列、CDP 协议等外部服务调用
+category: integration
 _scanned:
-  commitHash: "32289f752b24fd9424b2dd1c9e9e34938bf4a806"
-  scannedAt: "2026-05-05T00:00:00.000Z"
+  commitHash: "4db35f24f89dda0c11aa6aad83ba7bb7f8df368a"
+  scannedAt: "2026-05-06T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -22,6 +25,7 @@ _scanned:
 | **星域服务器** | WebSocket (ws://) | 多 Agent 协作、任务分发、声望系统 | [references/stardom-server.md](references/stardom-server.md) |
 | **Brave Search API** | MCP Server (stdio) | Web 搜索（需 Brave API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
 | **Tavily Search API** | MCP Server (stdio) | AI 原生搜索引擎（需 Tavily API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
+| **Baidu Search API** | MCP Server (stdio) | 中文搜索引擎（需 Baidu API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
 | **Chrome DevTools Protocol** | WebSocket (ws://) | 浏览器自动化、页面快照、DOM 操作 | [references/chrome-cdp.md](references/chrome-cdp.md) |
 
 ## 架构设计原则

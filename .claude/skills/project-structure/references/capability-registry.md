@@ -1,49 +1,47 @@
-# 能力注册表
+# Capability Registry (server/capabilities/registry.ts)
 
-**Purpose**: 能力发现、匹配和加载系统（按需 Skill 注入）
+Dynamic capability loading system for extending SDK with project-specific tools.
 
-## Key Files
-- `server/capabilities/registry.ts` — Registry main logic
-- `server/capabilities/project-scanner.ts` — Project scanning
-- `server/capabilities/gateway-mcp-server.ts` — Gateway MCP (injected to each session)
-- `server/capabilities/experience-learner.ts` — Learn from conversations
+## Capability Sources
 
-## Responsibilities
-1. **Capability Discovery**
-   - Scan project structure (tech stack, frameworks)
-   - Search capabilities by keywords or natural language
-   - Match capabilities to project context
+1. **Project Scanner**: Scans workspace for capability files
+2. **Experience Learner**: Learns from conversation patterns
+3. **Manual Registration**: User explicitly adds capabilities
 
-2. **Capability Loading**
-   - Load capability by ID (inject MCP or instructions)
-   - Run capability directly (for simple commands)
+## Capability Format
 
-3. **Gateway MCP**
-   - Inject `capability_list`, `capability_load`, `capability_run` tools to each session
-   - Capability discovery and execution proxy
-
-4. **Experience Learning**
-   - Extract knowledge from conversations
-   - Update capability usage tracking
-   - Learn new patterns
-
-## Dependencies
-- `server/knowledge-extractor.ts` (knowledge extraction)
-- `server/mcp-config.ts` (MCP server management)
-- Capability storage: `~/.sman/capabilities/`
+Frontmatter in `.md` files:
+```yaml
+id: "my-capability"
+name: "My Capability"
+description: "What it does"
+triggers:
+  - "user mentions X"
+tools:
+  - name: "my_tool"
+    description: "Tool description"
+```
 
 ## Key Methods
-- `searchCapabilities(keywords, natural_language)` — Find matching capabilities
-- `loadCapability(capability_id, session_id)` — Load capability into session
-- `runCapability(capability_id, command)` — Run capability directly
 
-## Capability Types
-- Office skills (Word, Excel, PPT)
-- Frontend slides generator
-- Generic instruction runner
-- Custom project-specific capabilities
+- `searchCapabilities()`: Find capabilities matching query
+- `loadCapability()`: Load capability by ID
+- `registerCapability()`: Add new capability
+- `matchCapabilities()`: Auto-match based on context
 
-## Notes
-- Capabilities are **on-demand** (only loaded when needed)
-- Gateway MCP is **auto-injected** to every session
-- Usage tracking: Records which capabilities are used most
+## Gateway MCP
+
+Exposes capabilities as MCP tools injected into each SDK session:
+- `capability_list`: List available capabilities
+- `capability_load`: Load capability into session
+- `capability_run`: Execute capability directly
+
+## Experience Learning
+
+Analyzes conversations to extract reusable patterns:
+- "User always runs tests before deploy" → Create capability
+- "User frequently checks GPU status" → Create capability
+
+## Important
+
+Capabilities are isolated per-session. Loading capability doesn't affect other sessions.

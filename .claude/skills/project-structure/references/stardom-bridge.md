@@ -1,50 +1,42 @@
-# 星域桥接层
+# Stardom Bridge (server/stardom/stardom-bridge.ts)
 
-**Purpose**: Sman 与星域服务器之间的桥接（连接管理、经验提取、协作）
+Connects Sman to Stardom server for multi-agent collaboration.
 
-## Key Files
-- `server/stardom/stardom-bridge.ts` — Main bridge logic
-- `server/stardom/stardom-client.ts` — WebSocket client
-- `server/stardom/stardom-mcp.ts` — MCP tools (stardom_search, stardom_collaborate)
-- `server/stardom/stardom-session.ts` — Collaboration session management
-- `server/stardom/stardom-store.ts` — Local SQLite storage
+## Architecture
 
-## Responsibilities
-1. **Connection Management**
-   - Auto-connect to Stardom server
-   - Heartbeat & reconnect
-   - Connection status sync to frontend
+```
+Sman Backend ←→ Stardom Bridge ←→ Stardom Server
+```
 
-2. **Message Routing**
-   - Handle incoming Stardom messages (tasks, notifications, chat)
-   - Route messages to appropriate handlers
+## Connection Flow
 
-3. **Experience Extraction**
-   - Extract collaboration experience from conversations
-   - Update learned routes (agent effectiveness)
-   - Maintain pair history (collaboration history)
+1. Bridge connects to Stardom server via WebSocket
+2. Registers as "agent" with capabilities
+3. Sends heartbeat every 30s
+4. Receives collaboration requests
+5. Extracts experience from conversations
 
-4. **Agent Selection**
-   - Search & rank agents (old partners > historical collaboration > experienced > remote)
-   - Reputation scoring
-   - Agent discovery
+## Stardom MCP Tools
 
-5. **MCP Tools**
-   - `stardom_search` — Search for collaborators
-   - `stardom_collaborate` — Request collaboration
+Exposes 2 MCP tools to SDK sessions:
+- `stardom_search_agents`: Find agents by capability
+- `stardom_collaborate`: Invite agents to collaboration
 
-## Dependencies
-- ws (WebSocket client)
-- `stardom-store.ts` (SQLite)
-- Shared types: `shared/stardom-types.ts`
+## Experience Extraction
 
-## Storage
-- `tasks` — Collaboration tasks
-- `learned_routes` — Agent experience (who's good at what)
-- `pair_history` — Collaboration history (who worked with whom)
-- `chat` — Collaboration chat history
+Analyzes conversation to extract reusable patterns:
+- "Built a React component with Tailwind" → Tag as "react", "tailwind"
+- "Fixed a SQL query bug" → Tag as "sql", "debugging"
+- Uploads to Stardom for agent matching
 
-## Notes
-- Three-layer architecture: Frontend → Bridge → Stardom Server
-- Agent evolution: Experience auto-extracted → pair history → search ranking
-- Full-screen mode: `/stardom` route hides sidebar for pixel world
+## Collaboration Session
+
+When agents collaborate:
+1. Stardom creates "room" for collaboration
+2. Invites selected agents
+3. Each agent contributes via MCP
+4. Results aggregated and presented
+
+## Important
+
+Stardom server is optional. Sman works offline without it.

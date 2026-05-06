@@ -1,44 +1,37 @@
-# Claude 会话管理
+# Claude Session Manager (server/claude-session.ts)
 
-**Purpose**: Claude Agent SDK V2 会话生命周期管理（创建、恢复、idle 清理、流式推送、消息排队）
+Manages V2 SDK sessions with lifecycle control, idle timeout, and crash recovery.
 
-## Key Files
-- `server/claude-session.ts` — Main session manager
+## Core Features
 
-## Responsibilities
-1. **Session Lifecycle**
-   - Create new V2 sessions (with SDK session ID persistence)
-   - Resume existing sessions from SQLite (process restart support)
-   - Idle timeout cleanup (default 30 min inactivity)
+**Session Reuse**: Keeps SDK process alive between messages (efficient)
+**Idle Timeout**: 30min inactivity → auto-close process
+**Crash Recovery**: Detects dead processes and recreates
+**Resume Support**: Persists SDK session_id for post-restart recovery
 
-2. **Message Processing**
-   - Send messages to Claude (with preheating/context preparation)
-   - Stream responses (text/thinking/tool_use deltas)
-   - Message queuing (await `streamDone` before next message to prevent interruption)
+## Key Functions
 
-3. **State Management**
-   - Session persistence to SQLite (`session-store.ts`)
-   - Resume capability (SDK session_id stored in DB)
-   - Turn isolation (each turn is independent)
+- `normalizeWorkspacePath(path)`: Resolves symlinks, gets OS-level canonical path
+- `createSession()`: Creates new V2 session with MCP servers
+- `getSession()`: Returns existing session (creates if needed)
+- `closeSession()`: Gracefully closes SDK process
+- `sendMessage()`: Sends user message, streams response
+- `abortTurn()`: Interrupts in-progress turn
 
-4. **Capabilities Integration**
-   - Auto-inject MCP servers (Web Search, Web Access, Gateway)
-   - Auto-inject matched capabilities
-   - Auto-inject user profile
+## MCP Servers Injected
 
-## Dependencies
-- `@anthropic-ai/claude-agent-sdk` v0.2
-- `@anthropic-ai/claude-code` v2.1
-- `session-store.ts` (SQLite)
-- `settings-manager.ts` (LLM config)
-- `skills-registry.ts` (skills loading)
+- Web Search: Brave, Tavily, Baidu, Anthropic builtin
+- Web Access: Chrome DevTools Protocol (9 tools)
+- Capability Gateway: Dynamic capability loading
+- Workspace: File system access within workspace
 
-## Key Methods
-- `getOrCreateV2Session(workspace, sessionId)` — Get or create session
-- `sendMessage(sessionId, content)` — Send message with streaming
-- `resumeSession(sessionId)` — Resume from SDK session_id
+## Project Root Resolution
 
-## Notes
-- SDK does NOT support interrupting turns, hence message queuing
-- Session ID format: `{workspace UUID}-{session UUID}`
-- Idle cleanup: 30 min default (configurable via `CLAUDE_SESSION_IDLE_TIMEOUT`)
+Handles 3 scenarios for plugin path resolution:
+1. Dev mode (`tsx`): direct relative path
+2. Prod mode (compiled): traverse up from `dist/server/server/`
+3. Electron ASAR: redirect to `app.asar.unpacked/plugins/`
+
+## Important
+
+SDK sessions are keyed by `(workspacePath, profileId)` tuple. Different LLM profiles use separate sessions.
