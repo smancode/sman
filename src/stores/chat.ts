@@ -432,22 +432,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Guard: user may have triggered another switch while we awaited IndexedDB
     if (get().currentSessionId !== currentSessionId) return;
 
-    // Determine if the target session has an active stream
+    // Determine if the target session has an active stream in THIS TAB
     const targetBlocks = getStreamingBlocks(sessionId);
     const isTargetSending = sendingSessions.has(sessionId);
 
+    // Check if cached messages contain a stale "[进行中]" placeholder
+    // If so, invalidate cache and force reload from server
+    const hasStaleStreamingPlaceholder = cached?.some(
+      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !isTargetSending
+    );
+    const finalCached = hasStaleStreamingPlaceholder ? null : cached;
+
     set({
       currentSessionId: sessionId,
-      messages: cached ?? [],
+      messages: finalCached ?? [],
       streamingBlocks: targetBlocks,
       error: null,
       contextWarning: null,
       contextUsage: cachedUsage ?? null,
       sending: isTargetSending,
-      loading: !cached,
+      loading: !finalCached,
     });
 
-    // Skip loadHistory if target session is actively streaming —
+    // Skip loadHistory if target session is actively streaming in THIS tab —
     // server hasn't persisted the streaming message yet, loadHistory would
     // overwrite messages with stale data causing content to disappear
     if (!isTargetSending) {
@@ -470,6 +477,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // User already switched away — just update cache, don't touch UI
       if (get().currentSessionId !== sessionId) return;
+
+      // Session is now actively streaming in this tab — don't overwrite streaming content
+      if (sendingSessions.has(sessionId)) {
+        // Just update cache, don't touch UI
+        const serverMsgs: Message[] = Array.isArray(data.messages)
+          ? data.messages.map((m: Record<string, unknown>) => {
+              const content = String(m.content || '');
+              const blocks = m.contentBlocks as ContentBlock[] | undefined;
+              return {
+                id: String(m.id || ''),
+                sessionId: String(m.sessionId || ''),
+                role: String(m.role || 'user') as 'user' | 'assistant',
+                content,
+                contentBlocks: blocks,
+                isPartial: !!m.isPartial,
+                createdAt: String(m.createdAt || ''),
+                timestamp: typeof m.timestamp === 'number' ? m.timestamp : undefined,
+                resolvedContent: resolveContent(content, blocks),
+              };
+            })
+          : [];
+        sessionCache.set(sessionId, serverMsgs);
+        return;
+      }
 
       const serverMsgs: Message[] = Array.isArray(data.messages)
         ? data.messages.map((m: Record<string, unknown>) => {

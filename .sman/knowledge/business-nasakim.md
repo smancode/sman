@@ -1,6 +1,9 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-05T15:18:16.742Z
+> Last extracted: 2026-05-06T03:50:39.404Z
 
-<!-- No knowledge entries yet -->
-<!-- Next extraction will add new entries here -->
+## 会话串扰是零容忍的核心体验问题
+<!-- hash: a1b2c3 -->
+- 用户反馈会话卡顿和串会话（不同用户的会话内容互相渗透）属于最高优先级问题
+- 多标签页同时打开同一会话是必须支持的合法使用场景，不能简单禁用
+<!-- end: a1b2c3 -->

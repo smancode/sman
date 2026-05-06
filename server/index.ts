@@ -141,6 +141,95 @@ cronScheduler.setSessionStore(store);
 const clients = new Set<WebSocket>();
 const authenticatedClients = new Set<WebSocket>();
 
+// ── Client ↔ Session bidirectional mapping ──
+// Tracks which sessions each client has subscribed to (for multi-tab support)
+const clientToSessions = new Map<WebSocket, Set<string>>();
+
+// Tracks which clients are subscribed to each session (for targeted message routing)
+const sessionToClients = new Map<string, Set<WebSocket>>();
+
+/**
+ * Subscribe a client to a session (called when session list is loaded or session is switched)
+ */
+function subscribeClientToSession(ws: WebSocket, sessionId: string): void {
+  // Add to client → sessions mapping
+  if (!clientToSessions.has(ws)) {
+    clientToSessions.set(ws, new Set());
+  }
+  clientToSessions.get(ws)!.add(sessionId);
+
+  // Add to session → clients mapping
+  if (!sessionToClients.has(sessionId)) {
+    sessionToClients.set(sessionId, new Set());
+  }
+  sessionToClients.get(sessionId)!.add(ws);
+}
+
+/**
+ * Unsubscribe a client from a session (called when session is deleted or client disconnects)
+ */
+function unsubscribeClientFromSession(ws: WebSocket, sessionId: string): void {
+  // Remove from client → sessions mapping
+  const sessions = clientToSessions.get(ws);
+  if (sessions) {
+    sessions.delete(sessionId);
+    if (sessions.size === 0) {
+      clientToSessions.delete(ws);
+    }
+  }
+
+  // Remove from session → clients mapping
+  const clients = sessionToClients.get(sessionId);
+  if (clients) {
+    clients.delete(ws);
+    if (clients.size === 0) {
+      sessionToClients.delete(sessionId);
+    }
+  }
+}
+
+/**
+ * Unsubscribe a client from ALL sessions (called when client disconnects)
+ */
+function unsubscribeClientFromAllSessions(ws: WebSocket): void {
+  const sessions = clientToSessions.get(ws);
+  if (sessions) {
+    for (const sessionId of sessions) {
+      const clients = sessionToClients.get(sessionId);
+      if (clients) {
+        clients.delete(ws);
+        if (clients.size === 0) {
+          sessionToClients.delete(sessionId);
+        }
+      }
+    }
+    clientToSessions.delete(ws);
+  }
+}
+
+/**
+ * Get all clients subscribed to a specific session
+ */
+function getSessionClients(sessionId: string): Set<WebSocket> {
+  return sessionToClients.get(sessionId) || new Set();
+}
+
+/**
+ * Send a message to all clients subscribed to a specific session
+ * Returns true if at least one client received the message
+ */
+function sendToSessionClients(sessionId: string, data: string): boolean {
+  const clients = getSessionClients(sessionId);
+  let sent = false;
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(data);
+      sent = true;
+    }
+  }
+  return sent;
+}
+
 /** Max buffered amount before applying backpressure (256KB) */
 const WS_BACKPRESSURE_THRESHOLD = 256 * 1024;
 
@@ -205,7 +294,8 @@ smartPathScheduler.setOnProgress((pathId, data) => {
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
 const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbotStore, (sessionId: string, label: string) => {
-  broadcast(JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
+  // Send only to clients subscribed to this session (not broadcast to all)
+  sendToSessionClients(sessionId, JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
 });
 
 let wecomConnection: WeComBotConnection | null = null;
@@ -682,6 +772,9 @@ wss.on('connection', (ws: WebSocket) => {
           const sessionId = sessionManager.createSession(normalizedWorkspace);
           ws.send(JSON.stringify({ type: 'session.created', sessionId, workspace: normalizedWorkspace }));
 
+          // Auto-subscribe client to the newly created session
+          subscribeClientToSession(ws, sessionId);
+
           // Auto-initialize workspace (async, non-blocking)
           initManager.handleSessionCreate(normalizedWorkspace, sessionId, ws).catch((err: any) => {
             log.warn(`Workspace init failed for ${normalizedWorkspace}: ${err.message}`);
@@ -698,23 +791,37 @@ wss.on('connection', (ws: WebSocket) => {
             lastActiveAt: s.lastActiveAt,
           }));
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
+
+          // Subscribe client to all listed sessions (for multi-tab support)
+          for (const session of sessions) {
+            subscribeClientToSession(ws, session.id);
+          }
+
           break;
         }
 
         case 'session.updateLabel': {
           if (!msg.sessionId || typeof msg.label !== 'string') throw new Error('Missing sessionId or label');
           store.updateLabel(msg.sessionId, msg.label);
-          // Broadcast to all clients so SessionTree updates immediately
-          broadcast(JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
+          // Send only to clients subscribed to this session (not broadcast to all)
+          sendToSessionClients(msg.sessionId, JSON.stringify({ type: 'session.labelUpdated', sessionId: msg.sessionId, label: msg.label }));
           break;
         }
 
         case 'session.delete': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
-          sessionManager.abort(msg.sessionId);
-          sessionManager.clearTokenUsage(msg.sessionId);
-          store.deleteSession(msg.sessionId);
-          ws.send(JSON.stringify({ type: 'session.deleted', sessionId: msg.sessionId }));
+          const sessionId = msg.sessionId;
+          sessionManager.abort(sessionId);
+          sessionManager.clearTokenUsage(sessionId);
+          store.deleteSession(sessionId);
+
+          // Unsubscribe all clients from this deleted session
+          const clients = getSessionClients(sessionId);
+          for (const client of clients) {
+            unsubscribeClientFromSession(client, sessionId);
+          }
+
+          ws.send(JSON.stringify({ type: 'session.deleted', sessionId }));
           break;
         }
 
@@ -747,21 +854,22 @@ wss.on('connection', (ws: WebSocket) => {
           // Capture sessionId for the closure
           const chatSessionId = msg.sessionId;
           const wsSend = (d: string) => {
-            // Try original client first
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(d);
-              return;
-            }
-            // Client disconnected — find any other authenticated client to deliver to.
-            // This avoids broadcasting session-specific messages to all clients.
-            for (const client of authenticatedClients) {
+            // Send to ALL clients subscribed to this session (supports multi-tab)
+            // Only send to clients that have this session in their subscription list
+            const sessionClients = getSessionClients(chatSessionId);
+            let sentCount = 0;
+
+            for (const client of sessionClients) {
               if (client.readyState === WebSocket.OPEN) {
                 client.send(d);
-                return;
+                sentCount++;
               }
             }
-            // No client available — message is lost, but this is acceptable for a disconnected user
-            log.warn(`No active client to deliver message for session ${chatSessionId}`);
+
+            // If no subscribed clients are available, log a warning
+            if (sentCount === 0) {
+              log.warn(`No active subscribed client for session ${chatSessionId}, message dropped`);
+            }
           };
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
           await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0);
@@ -1658,6 +1766,8 @@ wss.on('connection', (ws: WebSocket) => {
     clearTimeout(authTimeout);
     clients.delete(ws);
     authenticatedClients.delete(ws);
+    // Clean up session subscriptions for this client
+    unsubscribeClientFromAllSessions(ws);
     log.info('WebSocket client disconnected');
   });
 });
