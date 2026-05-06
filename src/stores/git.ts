@@ -120,6 +120,8 @@ interface GitState {
 
   log: GitLogEntry[];
   logGraph: GitLogGraphNode[];
+  logSearchResults: GitLogGraphNode[];
+  logSearchLoading: boolean;
   branches: GitBranch[];
   branchesLoading: boolean;
 
@@ -137,6 +139,7 @@ interface GitState {
   commit: (message: string, files?: string[]) => void;
   fetchLog: () => void;
   fetchLogGraph: () => void;
+  searchLog: (query: string) => void;
   fetchBranches: () => void;
   checkout: (branch: string) => void;
   fetchRemote: () => void;
@@ -160,6 +163,8 @@ export const useGitStore = create<GitState>((set, get) => ({
   remoteDiffLoading: false,
   log: [],
   logGraph: [],
+  logSearchResults: [],
+  logSearchLoading: false,
   branches: [],
   branchesLoading: false,
   committing: false,
@@ -279,6 +284,30 @@ export const useGitStore = create<GitState>((set, get) => ({
     });
 
     client.send({ type: 'git.logGraph', workspace });
+  },
+
+  searchLog(query: string) {
+    const client = getWsClient();
+    const workspace = getWorkspace();
+    if (!client || !workspace) return;
+
+    if (!query.trim()) {
+      set({ logSearchResults: [], logSearchLoading: false });
+      return;
+    }
+
+    set({ logSearchLoading: true });
+
+    const unsub = wrapHandler(client, 'git.logSearch', (msg) => {
+      unsub();
+      const result = msg.result as (GitLogGraphNode[] & { error?: string }) | undefined;
+      set({
+        logSearchResults: Array.isArray(result) ? result : [],
+        logSearchLoading: false,
+      });
+    });
+
+    client.send({ type: 'git.logSearch', workspace, query });
   },
 
   fetchBranches() {

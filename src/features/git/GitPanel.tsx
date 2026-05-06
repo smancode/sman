@@ -666,41 +666,44 @@ const LOG_PAGE_SIZE = 40;
 
 function GitLogTab() {
   const logGraph = useGitStore((s) => s.logGraph);
+  const logSearchResults = useGitStore((s) => s.logSearchResults);
+  const logSearchLoading = useGitStore((s) => s.logSearchLoading);
+  const searchLog = useGitStore((s) => s.searchLog);
   const status = useGitStore((s) => s.status);
   const isDark = document.documentElement.classList.contains('dark');
   const [search, setSearch] = useState('');
   const [visibleCount, setVisibleCount] = useState(LOG_PAGE_SIZE);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const searchTimerRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Filter by search
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return logGraph;
-    const q = search.toLowerCase();
-    return logGraph.filter(n =>
-      n.message.toLowerCase().includes(q) ||
-      n.shortHash.toLowerCase().includes(q) ||
-      n.hash.toLowerCase().includes(q) ||
-      n.author.toLowerCase().includes(q),
-    );
-  }, [logGraph, search]);
+  // Debounced search — call backend git log search
+  React.useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!search.trim()) return;
+    searchTimerRef.current = setTimeout(() => {
+      searchLog(search.trim());
+    }, 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [search, searchLog]);
 
-  // Visible slice (incremental loading)
-  const visible = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
+  const isSearching = search.trim().length > 0;
+  const searchResults = logSearchResults;
 
-  // Reset visible count when search changes
+  // Non-search: incremental loading from loaded logGraph
+  const visible = logGraph.slice(0, visibleCount);
+  const hasMore = !isSearching && visibleCount < logGraph.length;
+
   React.useEffect(() => {
     setVisibleCount(LOG_PAGE_SIZE);
-  }, [search]);
+  }, [logGraph]);
 
-  // Infinite scroll
   const handleScroll = React.useCallback(() => {
     const el = scrollRef.current;
-    if (!el || !hasMore) return;
+    if (!el || isSearching || !hasMore) return;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      setVisibleCount(c => Math.min(c + LOG_PAGE_SIZE, filtered.length));
+      setVisibleCount(c => Math.min(c + LOG_PAGE_SIZE, logGraph.length));
     }
-  }, [hasMore, filtered.length]);
+  }, [hasMore, isSearching, logGraph.length]);
 
   if (logGraph.length === 0) {
     return (
@@ -717,7 +720,7 @@ function GitLogTab() {
         <div className={cn('flex items-center gap-1.5 px-2 py-1 rounded text-[12px]',
           isDark ? 'bg-[#161b22]' : 'bg-gray-100',
         )}>
-          <Search className="w-3 h-3 shrink-0 text-muted-foreground" />
+          {logSearchLoading ? <Loader2 className="w-3 h-3 shrink-0 animate-spin text-muted-foreground" /> : <Search className="w-3 h-3 shrink-0 text-muted-foreground" />}
           <input
             type="text"
             value={search}
@@ -729,7 +732,7 @@ function GitLogTab() {
             )}
           />
           {search && (
-            <button onClick={() => setSearch('')} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => { setSearch(''); }} className="text-muted-foreground hover:text-foreground">
               <X className="w-3 h-3" />
             </button>
           )}
@@ -745,24 +748,34 @@ function GitLogTab() {
           isDark ? 'bg-[#0d1117]' : 'bg-gray-50',
         )}
       >
-        <div className="flex">
-          <GraphSvg nodes={visible} isDark={isDark} />
+        {isSearching ? (
+          // Search results: flat list (no graph SVG)
           <div className="flex-1 min-w-0">
-            {visible.map((node, i) => (
+            {searchResults.map((node, i) => (
               <LogEntry key={`${node.hash}-${i}`} node={node} currentBranch={status?.branch} isDark={isDark} />
             ))}
-            {hasMore && (
-              <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
-                向下滚动加载更多...
-              </div>
-            )}
-            {filtered.length === 0 && search && (
+            {searchResults.length === 0 && !logSearchLoading && (
               <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
                 无匹配结果
               </div>
             )}
           </div>
-        </div>
+        ) : (
+          // Normal view: graph SVG + commit info
+          <div className="flex">
+            <GraphSvg nodes={visible} isDark={isDark} />
+            <div className="flex-1 min-w-0">
+              {visible.map((node, i) => (
+                <LogEntry key={`${node.hash}-${i}`} node={node} currentBranch={status?.branch} isDark={isDark} />
+              ))}
+              {hasMore && (
+                <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
+                  向下滚动加载更多...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

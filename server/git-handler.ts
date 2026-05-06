@@ -350,6 +350,58 @@ export function handleGitLogGraph(workspace: string, maxCount = 200): GitLogGrap
   return result;
 }
 
+export function handleGitLogSearch(workspace: string, query: string, maxCount = 50): GitLogGraphNode[] {
+  if (!query || !query.trim()) return [];
+
+  const q = query.trim();
+  const format = '%H%x01%h%x01%s%x01%an%x01%aI%x01%D';
+  const args: string[] = ['log', '--all', '--decorate', `--max-count=${maxCount}`, `--pretty=format:${format}`];
+
+  // Split query into terms for multi-field matching
+  // If query looks like a hash (hex chars), search by hash prefix
+  if (/^[0-9a-f]{4,}$/i.test(q)) {
+    args.push(q);
+  } else {
+    // Search message (--grep) OR author (--author) — use --grep for message, we filter author on our side
+    // git doesn't support OR across --grep and --author easily, so we use --grep for message
+    // and do a broader search then filter. Simpler: just use --grep for message, add --author too.
+    // Actually: --all-match with both would be AND. We want OR.
+    // Strategy: search with --grep (case-insensitive), results include author match filtered client-side
+    args.push(`--grep=${q}`, '-i');
+  }
+
+  const raw = git(workspace, args.join(' '));
+  if (!raw) return [];
+
+  const lines = raw.split('\n');
+  const result: GitLogGraphNode[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const fields = line.split('\x01');
+    if (fields.length < 5) continue;
+
+    const hash = fields[0];
+    const shortHash = fields[1];
+    const message = fields[2];
+    const author = fields[3];
+    const date = fields[4];
+    const refs = fields[5] || '';
+
+    // If not hash search, also accept author matches
+    if (!/^[0-9a-f]{4,}$/i.test(q)) {
+      const ql = q.toLowerCase();
+      if (!message.toLowerCase().includes(ql) && !author.toLowerCase().includes(ql) && !shortHash.toLowerCase().startsWith(ql)) {
+        continue;
+      }
+    }
+
+    result.push({ graphLine: '', hash, shortHash, message, author, date, refs });
+  }
+
+  return result;
+}
+
 export function handleGitBranchList(workspace: string): GitBranch[] {
   const raw = git(workspace, 'branch -a --no-color');
   return raw.split('\n')

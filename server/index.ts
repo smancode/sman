@@ -34,7 +34,7 @@ import { SmartPathStore } from './smart-path-store.js';
 import { SmartPathEngine } from './smart-path-engine.js';
 import { SmartPathScheduler } from './smart-path-scheduler.js';
 import { handleListDir, handleReadFile, handleSaveFile, handleSearchSymbols, handleSearchFiles, validatePath } from './code-viewer-handler.js';
-import { handleGitStatus, handleGitDiff, handleGitDiffFile, handleGitCommit, handleGitLog, handleGitBranchList, handleGitCheckout, handleGitFetch, handleGitRemoteDiff, handleGitGenerateCommit, handleGitLogGraph, handleGitPush, setSessionManagerForPush } from './git-handler.js';
+import { handleGitStatus, handleGitDiff, handleGitDiffFile, handleGitCommit, handleGitLog, handleGitBranchList, handleGitCheckout, handleGitFetch, handleGitRemoteDiff, handleGitGenerateCommit, handleGitLogGraph, handleGitLogSearch, handleGitPush, setSessionManagerForPush } from './git-handler.js';
 
 import { ChatbotStore } from './chatbot/chatbot-store.js';
 import { ChatbotSessionManager } from './chatbot/chatbot-session-manager.js';
@@ -1690,6 +1690,16 @@ wss.on('connection', (ws: WebSocket) => {
             ws.send(JSON.stringify({ type: 'git.logGraph', result }));
           } catch (err) {
             ws.send(JSON.stringify({ type: 'git.logGraph', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
+          break;
+        }
+        case 'git.logSearch': {
+          if (!msg.workspace || !msg.query) { ws.send(JSON.stringify({ type: 'git.logSearch', result: [] })); break; }
+          try {
+            const result = handleGitLogSearch(String(msg.workspace), String(msg.query));
+            ws.send(JSON.stringify({ type: 'git.logSearch', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'git.logSearch', result: { error: err instanceof Error ? err.message : String(err) } }));
           }
           break;
         }
