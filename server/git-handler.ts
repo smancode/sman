@@ -402,6 +402,23 @@ export function handleGitLogSearch(workspace: string, query: string, maxCount = 
   return result;
 }
 
+export function handleGitAheadCommits(workspace: string): { hash: string; shortHash: string; message: string; author: string; date: string }[] {
+  const format = '%H%x01%h%x01%s%x01%an%x01%aI';
+  const raw = git(workspace, `log --pretty=format:"${format}" @{upstream}..HEAD`, 10000);
+  if (!raw) return [];
+
+  return raw.split('\n').filter(Boolean).map(line => {
+    const fields = line.split('\x01');
+    return {
+      hash: fields[0] || '',
+      shortHash: fields[1] || '',
+      message: fields[2] || '',
+      author: fields[3] || '',
+      date: fields[4] || '',
+    };
+  });
+}
+
 export function handleGitBranchList(workspace: string): GitBranch[] {
   const raw = git(workspace, 'branch -a --no-color');
   return raw.split('\n')

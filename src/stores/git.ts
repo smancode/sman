@@ -122,6 +122,7 @@ interface GitState {
   logGraph: GitLogGraphNode[];
   logSearchResults: GitLogGraphNode[];
   logSearchLoading: boolean;
+  aheadCommits: { hash: string; shortHash: string; message: string; author: string; date: string }[];
   branches: GitBranch[];
   branchesLoading: boolean;
 
@@ -140,6 +141,7 @@ interface GitState {
   fetchLog: () => void;
   fetchLogGraph: () => void;
   searchLog: (query: string) => void;
+  fetchAheadCommits: () => void;
   fetchBranches: () => void;
   checkout: (branch: string) => void;
   fetchRemote: () => void;
@@ -165,6 +167,7 @@ export const useGitStore = create<GitState>((set, get) => ({
   logGraph: [],
   logSearchResults: [],
   logSearchLoading: false,
+  aheadCommits: [],
   branches: [],
   branchesLoading: false,
   committing: false,
@@ -308,6 +311,21 @@ export const useGitStore = create<GitState>((set, get) => ({
     });
 
     client.send({ type: 'git.logSearch', workspace, query });
+  },
+
+  fetchAheadCommits() {
+    const client = getWsClient();
+    const workspace = getWorkspace();
+    if (!client || !workspace) return;
+
+    const unsub = wrapHandler(client, 'git.aheadCommits', (msg) => {
+      unsub();
+      const result = msg.result as ({ hash: string; shortHash: string; message: string; author: string; date: string }[] & { error?: string }) | undefined;
+      if (result?.error) return;
+      set({ aheadCommits: Array.isArray(result) ? result : [] });
+    });
+
+    client.send({ type: 'git.aheadCommits', workspace });
   },
 
   fetchBranches() {

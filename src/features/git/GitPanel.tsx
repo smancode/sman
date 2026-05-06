@@ -159,7 +159,11 @@ function PanelContent() {
       {/* Content */}
       {diffTab === 'local' && status && (
         <div className="flex-1 min-h-0 flex flex-col">
-          <FileList files={status.files} />
+          {status.files.length > 0 ? (
+            <FileList files={status.files} />
+          ) : (
+            <AheadCommitsView ahead={status.ahead} />
+          )}
           <CommitSection fileCount={status.files.length} files={status.files} />
         </div>
       )}
@@ -337,6 +341,79 @@ function BranchSelector() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Ahead Commits (pending push) ───────────────────────────────────
+
+function AheadCommitsView({ ahead }: { ahead: number }) {
+  const aheadCommits = useGitStore((s) => s.aheadCommits);
+  const fetchAheadCommits = useGitStore((s) => s.fetchAheadCommits);
+  const isDark = document.documentElement.classList.contains('dark');
+
+  React.useEffect(() => {
+    if (ahead > 0) fetchAheadCommits();
+  }, [ahead, fetchAheadCommits]);
+
+  if (ahead === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
+        工作区干净，无变更
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className={cn(
+        'px-4 py-2 text-[12px] font-medium flex items-center gap-2 border-b',
+        isDark ? 'border-[#21262d] text-amber-400/80' : 'border-gray-100 text-amber-600',
+      )}>
+        <ArrowUp className="w-3 h-3" />
+        待 Push ({ahead} 个提交)
+      </div>
+      {aheadCommits.map((c, i) => {
+        const dateStr = (() => {
+          try {
+            const d = new Date(c.date);
+            const now = new Date();
+            const diffMs = now.getTime() - d.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            if (diffMins < 60) return `${diffMins}分钟前`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours}小时前`;
+            const diffDays = Math.floor(diffHours / 24);
+            if (diffDays < 30) return `${diffDays}天前`;
+            return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+          } catch {
+            return c.date;
+          }
+        })();
+
+        return (
+          <div key={c.hash} className={cn(
+            'flex items-center gap-2 px-4 py-1.5 text-[12px] border-b',
+            isDark ? 'border-[#21262d] hover:bg-[#161b22]' : 'border-gray-50 hover:bg-white',
+          )}>
+            <span className={cn(
+              'shrink-0 text-[11px] font-mono',
+              isDark ? 'text-[#8b949e]' : 'text-gray-400',
+            )}>
+              {c.shortHash}
+            </span>
+            <span className={cn(
+              'flex-1 min-w-0 truncate',
+              isDark ? 'text-[#c9d1d9]' : 'text-gray-700',
+            )}>
+              {c.message}
+            </span>
+            <span className="shrink-0 text-[11px] text-muted-foreground/60">
+              {c.author} · {dateStr}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
