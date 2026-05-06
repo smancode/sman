@@ -61,6 +61,7 @@
     "gray-matter": "^4.0.3",
     "lucide-react": "^1.0.1",
     "node-cron": "^4.2.1",
+    "phaser": "^4.1.0",
     "qrcode": "^1.5.4",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.2",

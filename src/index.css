@@ -209,6 +209,14 @@
 .bz-glow-text { text-shadow: 0 0 8px currentColor; }
 .bz-glow-border { box-shadow: 0 0 0 1px var(--bz-border-glow), 0 0 15px -3px rgba(14, 165, 233, 0.2); }
 
+/* Phaser canvas — fill container, no overflow */
+.stardom-theme canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

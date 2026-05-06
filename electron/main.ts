@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron';
+import os from 'os';
 import path from 'path';
 import http from 'http';
 import { execSync } from 'child_process';
@@ -6,6 +7,18 @@ import { execSync } from 'child_process';
 let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
 let serverStopping = false;
+
+// Detect if running on Windows 10 (needs custom frameless window for rounded corners).
+// Windows 11 and macOS have native rounded corners — no custom frame needed.
+function isWindows10(): boolean {
+  if (process.platform !== 'win32') return false;
+  const ver = os.release().split('.').map(Number);
+  // Windows 10: major 10, build < 22000
+  // Windows 11: major 10, build >= 22000
+  return ver[0] === 10 && (ver[2] ?? 0) < 22000;
+}
+
+const needsCustomFrame = isWindows10();
 
 // Windows GPU compatibility: only disable hardware acceleration in remote/VDI sessions
 // where GPU drivers are known to cause white-screen issues. Local Windows machines
@@ -47,7 +60,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Sman',
     titleBarStyle: 'hidden',
-    ...(process.platform === 'win32' ? { frame: false, transparent: true, backgroundColor: '#00000000' } : {}),
+    ...(needsCustomFrame ? { frame: false, transparent: true, backgroundColor: '#00000000' } : {}),
     show: false,
     icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {

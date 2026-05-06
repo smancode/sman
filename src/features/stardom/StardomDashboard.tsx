@@ -9,7 +9,7 @@ import { ActivityFeed } from './components/ActivityFeed';
 import { ControlPanel } from './components/ControlPanel';
 import { ResourceBar } from './components/ResourceBar';
 import { QuickBar } from './components/QuickBar';
-import { NetworkSandbox } from './components/NetworkSandbox';
+import { PhaserGame } from './phaser/PhaserGame';
 import { CapabilityTree } from './components/CapabilityTree';
 import { TaskNotify } from './TaskNotify';
 import { OnboardingGuide } from './OnboardingGuide';
@@ -21,7 +21,7 @@ type ViewMode = 'immersive' | 'professional';
 type SubView = 'main' | 'evolution';
 
 export function StardomDashboard() {
-  const { fetchTasks, fetchOnlineAgents, fetchLeaderboard, fetchCapabilities, loading, connection, tasks, onlineAgents } = useStardomStore();
+  const { fetchTasks, fetchOnlineAgents, fetchLeaderboard, fetchCapabilities, loading, connection } = useStardomStore();
   const [viewMode, setViewMode] = useState<ViewMode>('immersive');
   const [subView, setSubView] = useState<SubView>('main');
 
@@ -98,8 +98,8 @@ export function StardomDashboard() {
           <CapabilityTree />
         ) : viewMode === 'immersive' ? (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="h-1/2 min-h-[200px] relative">
-              <NetworkSandbox />
+            <div className="h-1/2 min-h-[200px] relative" style={{ background: '#0a0e17' }}>
+              <PhaserGame />
             </div>
             <div className="h-1/2 border-t" style={{ borderColor: 'var(--bz-border)' }}>
               <ActivityFeed />

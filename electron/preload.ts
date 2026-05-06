@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import os from 'os';
+
+const isWindows10 = (() => {
+  if (process.platform !== 'win32') return false;
+  const parts = os.release().split('.').map(Number);
+  // Windows 10: major 10, build < 22000; Windows 11: build >= 22000
+  return parts[0] === 10 && (parts[2] ?? 0) < 22000;
+})();
 
 contextBridge.exposeInMainWorld('sman', {
   platform: process.platform,
+  needsRoundedCorners: isWindows10,
   versions: {
     node: process.versions.node,
     chrome: process.versions.chrome,

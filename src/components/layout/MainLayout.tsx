@@ -25,7 +25,7 @@ export function MainLayout() {
   const inChat = location.pathname === '/chat';
   const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
-  const isWindows = window.sman?.platform === 'win32';
+  const needsRoundedCorners = window.sman?.needsRoundedCorners ?? false;
   const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom'].includes(location.pathname);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function MainLayout() {
   return (
     <div className={cn(
       'flex flex-col h-screen overflow-hidden relative bg-background',
-      isWindows && !isMaximized && 'rounded-lg',
+      needsRoundedCorners && !isMaximized && 'rounded-lg',
     )}>
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
