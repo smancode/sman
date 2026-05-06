@@ -639,7 +639,7 @@ export class CdpEngine implements BrowserEngine {
    * Serialize AX nodes into a compact indented string.
    * Each line: [role] "name" = "value" [key=value, ...]
    */
-  static serializeAxTree(nodes: AxNode[], maxNodes = 200, maxDepth = 12): string {
+  static serializeAxTree(nodes: AxNode[], maxNodes = 150, maxDepth = 10): string {
     const nodeMap = new Map<string, AxNode>();
     for (const n of nodes) nodeMap.set(n.nodeId, n);
 
@@ -730,10 +730,16 @@ export class CdpEngine implements BrowserEngine {
     walk(rootNode.nodeId, 0);
 
     if (count >= maxNodes) {
-      lines.push(`... (${nodes.length - maxNodes} more nodes omitted)`);
+      lines.push(`... (${nodes.length - count} more nodes omitted)`);
     }
 
-    return lines.join('\n');
+    const result = lines.join('\n');
+    // Hard limit: truncate if serialized string exceeds 8KB
+    const MAX_CHARS = 8000;
+    if (result.length > MAX_CHARS) {
+      return result.slice(0, MAX_CHARS) + '\n... (truncated to fit context window)';
+    }
+    return result;
   }
 
   /** Full snapshot with AX tree — used by snapshot() and navigate() */
@@ -891,8 +897,15 @@ export class CdpEngine implements BrowserEngine {
   async screenshot(tabId: string): Promise<Buffer> {
     await this.ensureConnected();
     const sessionId = await this.ensureSession(tabId);
+    // Use viewport dimensions for adaptive quality
+    const layoutResp = await this.sendCDP('Page.getLayoutMetrics', {}, sessionId).catch(() => null);
+    const viewportWidth = (layoutResp?.result?.cssVisualViewport)?.clientWidth ?? 1920;
+    // Scale down large viewports to reduce image size
+    const scale = viewportWidth > 1200 ? 0.5 : 0.75;
     const resp = await this.sendCDP('Page.captureScreenshot', {
-      format: 'png',
+      format: 'jpeg',
+      quality: 60,
+      scale: scale,
     }, sessionId);
     return Buffer.from(resp.result.data, 'base64');
   }
@@ -912,6 +925,21 @@ export class CdpEngine implements BrowserEngine {
     return this.takeFullSnapshot(tabId);
   }
 
+  /** Execute JS then take a lightweight snapshot (title/url only, no AX tree). */
+  private async execAndLightSnapshot(tabId: string, expression: string, awaitPromise = true): Promise<PageSnapshot> {
+    const sessionId = await this.ensureSession(tabId);
+    const resp = await this.sendCDP('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise,
+    }, sessionId);
+    if (resp.result?.result?.value?.error) {
+      throw new Error(resp.result.result.value.error);
+    }
+    await this.waitForDomStable(tabId, CdpEngine.ACTION_STABLE_OPTS).catch(() => { /* non-fatal */ });
+    return this.takeLightSnapshot(tabId);
+  }
+
   async click(tabId: string, selector: string): Promise<PageSnapshot> {
     await this.ensureConnected();
     const selectorJson = JSON.stringify(selector);
@@ -922,7 +950,7 @@ export class CdpEngine implements BrowserEngine {
       el.click();
       return { clicked: true, tag: el.tagName };
     })()`;
-    return this.execAndSnapshot(tabId, js);
+    return this.execAndLightSnapshot(tabId, js);
   }
 
   async fill(tabId: string, selector: string, value: string): Promise<PageSnapshot> {
@@ -938,7 +966,7 @@ export class CdpEngine implements BrowserEngine {
       el.dispatchEvent(new Event('change', { bubbles: true }));
       return { filled: true };
     })()`;
-    return this.execAndSnapshot(tabId, js);
+    return this.execAndLightSnapshot(tabId, js);
   }
 
   async pressKey(tabId: string, key: string): Promise<PageSnapshot> {
@@ -950,7 +978,7 @@ export class CdpEngine implements BrowserEngine {
       document.activeElement.dispatchEvent(new KeyboardEvent('keyup', { key: ${keyJson}, bubbles: true }));
       return true;
     })()`;
-    return this.execAndSnapshot(tabId, js);
+    return this.execAndLightSnapshot(tabId, js);
   }
 
   async evaluate(tabId: string, expression: string): Promise<{ success: boolean; result?: unknown; error?: string }> {

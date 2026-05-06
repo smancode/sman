@@ -60,13 +60,13 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
     },
     async (args: any) => {
       const experiences = loadExperiences();
-      const history = readAllHistory(200);
+      const history = readAllHistory(50);
 
       return textResult(JSON.stringify({
         query: args.query,
         experiences: experiences.entries,
         chromeHistory: history,
-      }, null, 2));
+      }));
     },
   );
 
@@ -110,7 +110,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         result.loginUrl = snapshot.loginUrl;
         result.message = '检测到登录页面。如果 Chrome 是用 --remote-debugging-port=9222 启动的，请在那个 Chrome 窗口中手动登录，登录完成后告诉我，我会继续操作。';
       }
-      return textResult(JSON.stringify(result, null, 2));
+      return textResult(JSON.stringify(result));
     }),
   );
 
@@ -130,7 +130,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         url: snapshot.url,
         accessibilityTree: snapshot.accessibilityTree,
         isLoginPage: snapshot.isLoginPage,
-      }, null, 2));
+      }));
     }),
   );
 
@@ -144,7 +144,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
       const buffer = await service.screenshot(args.tab_id);
       return {
         content: [
-          { type: 'image', data: buffer.toString('base64'), mimeType: 'image/png' },
+          { type: 'image', data: buffer.toString('base64'), mimeType: 'image/jpeg' },
         ],
       };
     }),
@@ -163,7 +163,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         title: snapshot.title,
         url: snapshot.url,
         isLoginPage: snapshot.isLoginPage,
-      }, null, 2));
+      }));
     }),
   );
 
@@ -181,7 +181,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         title: snapshot.title,
         url: snapshot.url,
         isLoginPage: snapshot.isLoginPage,
-      }, null, 2));
+      }));
     }),
   );
 
@@ -198,7 +198,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
         title: snapshot.title,
         url: snapshot.url,
         isLoginPage: snapshot.isLoginPage,
-      }, null, 2));
+      }));
     }),
   );
 
@@ -211,7 +211,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
     },
     withEngineCheck(service, async (args: any) => {
       const result = await service.evaluate(args.tab_id, args.expression);
-      return textResult(JSON.stringify(result, null, 2));
+      return textResult(JSON.stringify(result));
     }),
   );
 
@@ -221,7 +221,7 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
     {},
     withEngineCheck(service, async () => {
       const tabs = await service.listTabs();
-      return textResult(JSON.stringify(tabs, null, 2));
+      return textResult(JSON.stringify(tabs));
     }),
   );
 
