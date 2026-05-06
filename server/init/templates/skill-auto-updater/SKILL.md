@@ -105,7 +105,10 @@ description: |
 | Prisma | schema.prisma |
 | SQLAlchemy | models.py |
 | GORM | model 结构体 |
-| 原生 SQL | migration 文件 / SQL 脚本 |
+| better-sqlite3 / sqlite3 | TypeScript/JavaScript 中的 `CREATE TABLE` 语句（`*-store.ts`、`*-repository.ts` 等文件） |
+| 原生 SQL | migration 文件 / SQL 脚本 / 代码内嵌 SQL |
+
+> **注意**：很多项目不使用 ORM，而是在代码中直接写 SQL（如 better-sqlite3 的 `db.exec(CREATE TABLE ...)`）。必须 grep `CREATE TABLE` 关键词定位所有建表语句，不能只找 migration 文件。找不到 migration 文件不代表没有数据库。
 
 提取内容：
 - 核心表结构（Top 15-20 表）
@@ -176,7 +179,7 @@ description: |
 
 ### 二、Project Knowledge Skills 更新
 
-检查以下 3 个 skill 的 `_scanned.commitHash` 是否与当前 `git rev-parse HEAD` 一致。不一致或尚未扫描时，执行对应扫描并覆写 SKILL.md 和 references/。
+检查以下 4 个 skill 的 `_scanned.commitHash` 是否与当前 `git rev-parse HEAD` 一致。不一致或尚未扫描时，执行对应扫描并覆写 SKILL.md 和 references/。
 
 #### project-structure
 
@@ -208,6 +211,19 @@ description: |
 
 - **references/{name}.md**（每个 < 100 行）— 每个外部服务：
   - Call method、Config source（env var 名，不写实际值）、Call locations、Purpose
+
+#### database-schema
+
+扫描数据库结构，生成 `.claude/skills/database-schema/` 下的文件：
+
+- **SKILL.md**：Database overview（Engine | Table count | Key relationships），核心表清单（Table | Columns | Purpose | Reference File）
+
+- **references/{table-name}.md**（每个 < 100 行）— 每张核心表：
+  - CREATE TABLE DDL、Column detail（Name | Type | Nullable | Description）、Indexes、Foreign keys、Source file location
+
+扫描方法：根据项目技术栈自适应（同首次全量扫描 Phase 2 的扫描方式表）。必须先 grep `CREATE TABLE`、`@Table`、`@Entity` 等关键词确认项目有数据库，找不到不代表没有数据库——也可能是代码内嵌 SQL。
+
+无数据库的项目跳过此 skill，不生成空文件。
 
 ### 三、Team Knowledge Skills 辩证聚合
 
@@ -352,7 +368,7 @@ description: "一句话描述。TRIGGER: 关键词1/关键词2"
 | knowledge-conventions | 编码规范 | ✅ | ✅ |
 | knowledge-technical | 技术横切面 | ✅ | ✅ |
 | knowledge-business | 业务链路 | ✅ | ✅ |
-| database-schema | 数据库全景 | 有数据库时 ✅ | 有变更时 ✅ |
+| database-schema | 数据库全景 | 有数据库时 ✅ | ✅ |
 
 ## Safety Rules
 
