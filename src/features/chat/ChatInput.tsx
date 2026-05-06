@@ -217,7 +217,33 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       finalText += ` [用户文件路径:[${paths.join(',')}]]`;
     }
 
-    // Clear input immediately — this renders in the current frame
+    // Build attachedFiles for UI display (synchronous)
+    const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];
+    for (const fp of pathMedia) {
+      attachedFiles.push({
+        fileName: fp.fileName || fp.filePath!.split(/[/\\]/).pop() || 'file',
+        mimeType: fp.mimeType,
+        fileSize: 0,
+        preview: null,
+        filePath: fp.filePath,
+      });
+    }
+    for (const m of base64Media) {
+      const isImage = m.mimeType.startsWith('image/');
+      attachedFiles.push({
+        fileName: m.fileName,
+        mimeType: m.mimeType,
+        fileSize: Math.round((m.base64Data.length * 3) / 4),
+        preview: isImage ? `data:${m.mimeType};base64,${m.base64Data}` : null,
+      });
+    }
+
+    // Push user message into store synchronously — renders in the SAME frame as clearing input
+    if (currentSessionId) {
+      useChatStore.getState().pushUserMessage(finalText, attachedFiles.length > 0 ? attachedFiles : undefined);
+    }
+
+    // Clear input — same frame as user message appears
     setInput('');
     setStagedMedia([]);
     historyIndexRef.current = -1;
@@ -227,7 +253,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       textareaRef.current.style.height = 'auto';
     }
 
-    // Defer the actual send to the next frame so React can render the cleared input first
+    // Defer WS send to next frame — user message already visible
     const capturedMedia = base64Media.length > 0 ? base64Media : undefined;
     setTimeout(() => onSend(finalText, undefined, null, capturedMedia), 0);
   }, [input, canSend, onSend, stagedMedia, currentSessionId]);

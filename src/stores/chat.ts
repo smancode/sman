@@ -153,6 +153,8 @@ interface ChatState {
   switchSession: (sessionId: string) => void;
   loadHistory: () => Promise<void>;
   sendMessage: (content: string, media?: Array<{ type: string; mimeType: string; base64Data: string; fileName?: string }>) => Promise<void>;
+  /** Synchronously push user message + start sending state — called from ChatInput for instant UI */
+  pushUserMessage: (content: string, attachedFiles?: Message['_attachedFiles']) => void;
   preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
@@ -629,6 +631,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     client.send({ type: 'session.updateLabel', sessionId, label });
   },
 
+  pushUserMessage: (content: string, attachedFiles?: Message['_attachedFiles']) => {
+    const { currentSessionId, messages } = get();
+    if (!currentSessionId) return;
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      sessionId: currentSessionId,
+      role: 'user',
+      content,
+      createdAt: new Date().toISOString(),
+      _attachedFiles: attachedFiles,
+    };
+    // Reset streaming state for this session
+    setStreamingBlocks(currentSessionId, []);
+    sendingSessions.add(currentSessionId);
+    set({
+      messages: [...messages, userMsg],
+      sending: true,
+      streamingBlocks: [],
+      error: null,
+      contextWarning: null,
+    });
+  },
+
   preheatSession: () => {
     const client = getWsClient();
     const { currentSessionId, sending } = get();
@@ -643,72 +668,74 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const trimmed = content.trim();
     if (!trimmed && (!media || media.length === 0)) return;
 
-    const { currentSessionId, sessions, messages } = get();
+    const { currentSessionId, sessions } = get();
     if (!currentSessionId) return;
 
     // Cannot send while a response is in progress for THIS session
     if (sendingSessions.has(currentSessionId)) return;
 
-    // Extract file paths from text for UI display (format: [用户文件路径:[path1,path2]])
-    const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];
-    const pathMatch = trimmed.match(/\[用户文件路径:\[([^\]]+)\]\]/);
-    if (pathMatch) {
-      const paths = pathMatch[1].split(',');
-      for (const fp of paths) {
-        attachedFiles.push({
-          fileName: fp.split(/[/\\]/).pop() || 'file',
-          mimeType: 'application/octet-stream',
-          fileSize: 0,
-          preview: null,
-          filePath: fp,
-        });
+    // If pushUserMessage was NOT called (e.g. from chatbot), do the full setup here
+    const alreadyPushed = get().sending && sendingSessions.has(currentSessionId);
+    if (!alreadyPushed) {
+      // Extract file paths from text for UI display (format: [用户文件路径:[path1,path2]])
+      const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];
+      const pathMatch = trimmed.match(/\[用户文件路径:\[([^\]]+)\]\]/);
+      if (pathMatch) {
+        const paths = pathMatch[1].split(',');
+        for (const fp of paths) {
+          attachedFiles.push({
+            fileName: fp.split(/[/\\]/).pop() || 'file',
+            mimeType: 'application/octet-stream',
+            fileSize: 0,
+            preview: null,
+            filePath: fp,
+          });
+        }
       }
-    }
 
-    // Add base64 media (pasted images / web uploads) to attachedFiles for UI display
-    if (media && media.length > 0) {
-      for (const m of media) {
-        const isImage = m.mimeType.startsWith('image/');
-        attachedFiles.push({
-          fileName: m.fileName || 'file',
-          mimeType: m.mimeType,
-          fileSize: Math.round((m.base64Data.length * 3) / 4), // approximate base64 size
-          preview: isImage ? `data:${m.mimeType};base64,${m.base64Data}` : null,
-        });
+      // Add base64 media (pasted images / web uploads) to attachedFiles for UI display
+      if (media && media.length > 0) {
+        for (const m of media) {
+          const isImage = m.mimeType.startsWith('image/');
+          attachedFiles.push({
+            fileName: m.fileName || 'file',
+            mimeType: m.mimeType,
+            fileSize: Math.round((m.base64Data.length * 3) / 4), // approximate base64 size
+            preview: isImage ? `data:${m.mimeType};base64,${m.base64Data}` : null,
+          });
+        }
       }
+
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        sessionId: currentSessionId,
+        role: 'user',
+        content: trimmed,
+        createdAt: new Date().toISOString(),
+        _attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
+      };
+
+      // Reset per-session streaming state
+      setStreamingBlocks(currentSessionId, []);
+      sendingSessions.add(currentSessionId);
+
+      set({
+        messages: [...get().messages, userMsg],
+        sending: true,
+        streamingBlocks: [],
+        error: null,
+        contextWarning: null,
+      });
+
+      // Yield to React so it can render the user message before heavy work
+      await new Promise<void>(r => setTimeout(r, 0));
     }
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      sessionId: currentSessionId,
-      role: 'user',
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-      _attachedFiles: attachedFiles.length > 0 ? attachedFiles : undefined,
-    };
-
-    // Reset per-session streaming state
-    setStreamingBlocks(currentSessionId, []);
-    sendingSessions.add(currentSessionId);
 
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
     const streamSessionId = currentSessionId;
 
     // Capture generation to ignore stale aborted/done events from previous streams
     const myGeneration = ++streamGeneration;
-
-    // Update UI: show user message and start sending indicator
-    set({
-      messages: [...messages, userMsg],
-      sending: true,
-      streamingBlocks: [],
-      error: null,
-      contextWarning: null,
-    });
-
-    // Yield to React so it can render the user message and "..." indicator immediately,
-    // before we do the heavy work of registering stream handlers and sending WS.
-    await new Promise<void>(r => setTimeout(r, 0));
 
     // Pre-heat session & refresh git branch (deferred from ChatInput to avoid blocking typing)
     get().preheatSession();
@@ -719,7 +746,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!session?.label) {
       // Strip file path tags for label display
       const labelContent = trimmed.replace(/\s*\[用户文件路径:\[[^\]]+\]\]/, '').trim();
-      const labelText = labelContent || (attachedFiles.length > 0 ? `[${attachedFiles[0].fileName}]` : '');
+      const lastMsg = get().messages[get().messages.length - 1];
+      const hasFiles = lastMsg?._attachedFiles && lastMsg._attachedFiles.length > 0;
+      const labelText = labelContent || (hasFiles ? `[${lastMsg._attachedFiles![0].fileName}]` : '');
       if (labelText) {
         const truncated = labelText.length > 20 ? `${labelText.slice(0, 20)}...` : labelText;
         get().updateSessionLabel(currentSessionId, truncated);
