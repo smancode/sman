@@ -238,6 +238,7 @@ export class InitManager {
 
   private static readonly META_SKILLS = [
     SKILL_AUTO_UPDATER,
+    'clarify-requirements',
     'project-structure',
     'project-apis',
     'project-external-calls',

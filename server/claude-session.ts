@@ -342,6 +342,14 @@ export class ClaudeSessionManager {
     lines.push('1. 交付前自检：编译通过？测试通过？不自检就是玩具');
     lines.push('2. 项目依赖复杂导致无法编译时，直接告诉用户，不要卡死重试');
     lines.push('3. 上下文过长时，主动建议用户开启新会话。不要硬撑。');
+    lines.push('');
+    lines.push('## 需求澄清（对话自省）');
+    lines.push('当发现用户多次纠正你的理解时（用户说"不对"/"不是这样"/"应该是..."），说明理解有偏差，需要停下来对齐：');
+    lines.push('1. 停止当前正在做的任务');
+    lines.push('2. 调用 superpowers:clarify-requirements skill');
+    lines.push('3. 用 3-5 个简短问句快速澄清需求');
+    lines.push('4. 输出结构化的需求确认表');
+    lines.push('5. 等待用户确认后继续（AUTO 模式下：如果理解清晰则自问自答，仍然不确定则停下来问用户）');
 
     return lines.join('\n');
   }
