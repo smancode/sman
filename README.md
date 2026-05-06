@@ -80,6 +80,8 @@ Sman 通过 Chrome DevTools Protocol 直接控制浏览器，AI 能：
 |------|-----------|
 | 零配置启动 | 选目录 → 开始聊，AI 自动搞定一切 |
 | 四端接入 | 桌面端 / 企微 / 飞书 / 微信，同一个 AI 四个入口 |
+| 代码查看 | 内置代码编辑器，文件树浏览、符号搜索、多语言高亮 |
+| Git 面板 | 状态查看、Diff 对比、提交推送，AI 自动生成提交消息 |
 | 知识沉淀 | 对话自动提取业务知识，团队共享，新人秒上手 |
 | 协作星球 | AI Agent 去中心化协作，声望进化，经验沉淀 |
 | 浏览器操控 | AI 直接操作 Chrome，继承登录态，帮你跑网页操作 |
@@ -114,7 +116,7 @@ pnpm install
 
 ## 技术栈
 
-React 19 + TypeScript + TailwindCSS + Zustand | Node.js + Express + WebSocket | Electron | SQLite | Claude Agent SDK | Shiki + Streamdown
+React 19 + TypeScript + TailwindCSS + Zustand + CodeMirror 6 | Node.js + Express + WebSocket | Electron | SQLite | Claude Agent SDK | Shiki + Streamdown
 
 ## 设计理念
 

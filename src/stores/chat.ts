@@ -632,8 +632,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   pushUserMessage: (content: string, attachedFiles?: Message['_attachedFiles']) => {
-    const { currentSessionId, messages } = get();
+    const { currentSessionId } = get();
     if (!currentSessionId) return;
+    // Set sending=true IMMEDIATELY so typing indicator animates in the current frame.
+    // Defer the user message to next frame so animation starts before heavy render.
+    setStreamingBlocks(currentSessionId, []);
+    sendingSessions.add(currentSessionId);
+    set({
+      sending: true,
+      streamingBlocks: [],
+      error: null,
+      contextWarning: null,
+    });
     const userMsg: Message = {
       id: crypto.randomUUID(),
       sessionId: currentSessionId,
@@ -642,16 +652,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
       _attachedFiles: attachedFiles,
     };
-    // Reset streaming state for this session
-    setStreamingBlocks(currentSessionId, []);
-    sendingSessions.add(currentSessionId);
-    set({
-      messages: [...messages, userMsg],
-      sending: true,
-      streamingBlocks: [],
-      error: null,
-      contextWarning: null,
-    });
+    setTimeout(() => {
+      if (get().currentSessionId !== currentSessionId) return;
+      set({ messages: [...get().messages, userMsg] });
+    }, 0);
   },
 
   preheatSession: () => {
@@ -671,11 +675,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { currentSessionId, sessions } = get();
     if (!currentSessionId) return;
 
-    // Cannot send while a response is in progress for THIS session
-    if (sendingSessions.has(currentSessionId)) return;
-
-    // If pushUserMessage was NOT called (e.g. from chatbot), do the full setup here
-    const alreadyPushed = get().sending && sendingSessions.has(currentSessionId);
+    // If pushUserMessage already set up sending state, skip UI setup.
+    // Otherwise (chatbot path), do full setup here.
+    const alreadyPushed = sendingSessions.has(currentSessionId);
     if (!alreadyPushed) {
       // Extract file paths from text for UI display (format: [用户文件路径:[path1,path2]])
       const attachedFiles: Array<{ fileName: string; mimeType: string; fileSize: number; preview: string | null; filePath?: string }> = [];

@@ -1,10 +1,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import https from 'node:https';
-import { URL } from 'node:url';
 import { validatePath } from './code-viewer-handler.js';
-import type { SmanConfig } from './types.js';
 
 function isDirectory(workspace: string, filePath: string): boolean {
   try {
@@ -496,21 +493,16 @@ export function handleGitRemoteDiff(workspace: string): GitDiffFile[] {
 
 export async function handleGitGenerateCommit(
   workspace: string,
-  config: SmanConfig,
   template?: string,
 ): Promise<{ message: string }> {
+  if (!_sessionManager) {
+    throw new Error('Session manager not initialized');
+  }
+
   const diffSummary = buildDiffSummary(workspace);
   if (!diffSummary) {
     return { message: template || 'chore: update files' };
   }
-
-  const apiKey = config.llm.apiKey;
-  if (!apiKey) {
-    throw new Error('未配置 API Key，无法使用 AI 生成');
-  }
-
-  const baseUrl = (config.llm.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
-  const model = config.llm.model || 'claude-sonnet-4-6';
 
   const systemPrompt = `You are a commit message generator. Generate a concise, professional git commit message based on the code changes.
 
@@ -527,53 +519,23 @@ Rules:
     ? `Template:\n${template}\n\nChanges:\n${diffSummary}`
     : `Changes:\n${diffSummary}`;
 
-  // All providers are Anthropic-compatible (same API format, different baseUrl)
-  // Must concatenate (not new URL) to preserve path prefix like /coding/
-  const url = new URL(`${baseUrl}/v1/messages`);
-  const body = JSON.stringify({
-    model, max_tokens: 256,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
+  const tempSessionId = _sessionManager.createEphemeralSession(workspace);
+  const abort = new AbortController();
 
-  const data = await httpRequest(url, body, {
-    'Content-Type': 'application/json',
-    'x-api-key': apiKey,
-    'anthropic-version': '2023-06-01',
-  });
-
-  const json = JSON.parse(data);
-  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
-  return { message: (json.content?.[0]?.text || '').trim() };
-}
-
-function httpRequest(url: URL, body: string, headers: Record<string, string>): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        port: url.port || 443,
-        path: url.pathname + url.search,
-        method: 'POST',
-        headers: { ...headers, 'Content-Length': Buffer.byteLength(body) },
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(`API ${res.statusCode}: ${data.slice(0, 300)}`));
-            return;
-          }
-          resolve(data);
-        });
-      },
+  try {
+    const result = await _sessionManager.sendMessageForStep(
+      tempSessionId,
+      userPrompt,
+      abort,
+      () => {},
+      systemPrompt,
     );
-    req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('API request timeout')); });
-    req.write(body);
-    req.end();
-  });
+
+    return { message: (result || '').trim() || template || 'chore: update files' };
+  } finally {
+    _sessionManager.closeV2Session(tempSessionId);
+    _sessionManager.removeEphemeralSession(tempSessionId);
+  }
 }
 
 function buildDiffSummary(workspace: string): string {
