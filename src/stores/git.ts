@@ -199,6 +199,9 @@ export const useGitStore = create<GitState>((set, get) => ({
         return;
       }
       set({ status: result as GitStatusResult, loading: false, error: null });
+      if ((result as GitStatusResult).ahead > 0) {
+        get().fetchAheadCommits();
+      }
     });
 
     client.send({ type: 'git.status', workspace });

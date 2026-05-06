@@ -161,9 +161,13 @@ function PanelContent() {
         <div className="flex-1 min-h-0 flex flex-col">
           {status.files.length > 0 ? (
             <FileList files={status.files} />
-          ) : (
-            <AheadCommitsView ahead={status.ahead} />
-          )}
+          ) : status.ahead === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
+              工作区干净，无变更
+            </div>
+          ) : null}
+          {status.ahead > 0 && <AheadCommitsView ahead={status.ahead} />}
+          {status.ahead > 0 && <div className="shrink-0 h-2" />}
           <CommitSection fileCount={status.files.length} files={status.files} />
         </div>
       )}
@@ -353,27 +357,22 @@ function AheadCommitsView({ ahead }: { ahead: number }) {
   const isDark = document.documentElement.classList.contains('dark');
 
   React.useEffect(() => {
-    if (ahead > 0) fetchAheadCommits();
-  }, [ahead, fetchAheadCommits]);
-
-  if (ahead === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
-        工作区干净，无变更
-      </div>
-    );
-  }
+    fetchAheadCommits();
+  }, [fetchAheadCommits]);
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
+    <div className={cn(
+      'shrink-0 overflow-y-auto max-h-[50%] mt-auto',
+      isDark ? 'bg-[#0d1117]' : 'bg-gray-50',
+    )}>
       <div className={cn(
-        'px-4 py-2 text-[12px] font-medium flex items-center gap-2 border-b',
-        isDark ? 'border-[#21262d] text-amber-400/80' : 'border-gray-100 text-amber-600',
+        'px-4 py-1.5 text-[12px] font-medium flex items-center gap-2',
+        isDark ? 'text-amber-400/80' : 'text-amber-600',
       )}>
         <ArrowUp className="w-3 h-3" />
-        待 Push ({ahead} 个提交)
+        Outgoing Changes ({ahead})
       </div>
-      {aheadCommits.map((c, i) => {
+      {aheadCommits.map((c) => {
         const dateStr = (() => {
           try {
             const d = new Date(c.date);
@@ -393,8 +392,8 @@ function AheadCommitsView({ ahead }: { ahead: number }) {
 
         return (
           <div key={c.hash} className={cn(
-            'flex items-center gap-2 px-4 py-1.5 text-[12px] border-b',
-            isDark ? 'border-[#21262d] hover:bg-[#161b22]' : 'border-gray-50 hover:bg-white',
+            'flex items-center gap-2 px-4 py-1 text-[12px]',
+            isDark ? 'hover:bg-[#161b22]' : 'hover:bg-white',
           )}>
             <span className={cn(
               'shrink-0 text-[11px] font-mono',

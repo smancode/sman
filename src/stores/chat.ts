@@ -632,18 +632,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   pushUserMessage: (content: string, attachedFiles?: Message['_attachedFiles']) => {
-    const { currentSessionId } = get();
+    const { currentSessionId, messages } = get();
     if (!currentSessionId) return;
-    // Set sending=true IMMEDIATELY so typing indicator animates in the current frame.
-    // Defer the user message to next frame so animation starts before heavy render.
     setStreamingBlocks(currentSessionId, []);
     sendingSessions.add(currentSessionId);
-    set({
-      sending: true,
-      streamingBlocks: [],
-      error: null,
-      contextWarning: null,
-    });
     const userMsg: Message = {
       id: crypto.randomUUID(),
       sessionId: currentSessionId,
@@ -652,10 +644,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
       _attachedFiles: attachedFiles,
     };
-    setTimeout(() => {
-      if (get().currentSessionId !== currentSessionId) return;
-      set({ messages: [...get().messages, userMsg] });
-    }, 0);
+    set({
+      messages: [...messages, userMsg],
+      sending: true,
+      streamingBlocks: [],
+      error: null,
+      contextWarning: null,
+    });
   },
 
   preheatSession: () => {
