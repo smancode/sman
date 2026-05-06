@@ -141,19 +141,19 @@ export class SmartPathStore {
     if (!p.name?.trim()) throw new Error('Plan name is required');
     if (!p.workspace) throw new Error('Workspace is required');
     const steps = (() => { try { return JSON.parse(p.steps); } catch { return []; } })();
-    const content = matter.stringify(
-      `# ${p.name}\n\n${p.description || ''}\n`,
-      {
-        name: p.name,
-        description: p.description || '',
-        workspace: p.workspace,
-        created_at: p.createdAt,
-        updated_at: p.updatedAt || p.createdAt,
-        status: p.status,
-        cron_expression: p.cronExpression || '',
-        steps,
-      },
-    );
+    // 使用类似 SKILL.md 的 YAML front matter 格式
+    const frontmatter = {
+      name: p.name,
+      description: p.description || '',
+      workspace: p.workspace,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt || p.createdAt,
+      status: p.status,
+      cron_expression: p.cronExpression || '',
+      steps,
+    };
+    const contentBody = `# ${p.name}\n\n${p.description || ''}\n`;
+    const content = matter.stringify(contentBody, frontmatter);
     const filePath = this.pathFile(p.workspace, p.id);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, 'utf-8');

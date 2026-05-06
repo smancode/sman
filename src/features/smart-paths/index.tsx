@@ -218,17 +218,19 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
 function CreateDialog({ open, onOpenChange, workspaceOptions, onSubmit }: {
   open: boolean; onOpenChange: (o: boolean) => void;
   workspaceOptions: { value: string; label: string }[];
-  onSubmit: (name: string, workspace: string) => void;
+  onSubmit: (name: string, description: string, workspace: string) => void;
 }) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [workspace, setWorkspace] = useState('');
-  useEffect(() => { if (open) { setName(''); setWorkspace(''); } }, [open]);
+  useEffect(() => { if (open) { setName(''); setDescription(''); setWorkspace(''); } }, [open]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>新建路径</DialogTitle><DialogDescription>给路径起个名字并选择工作目录</DialogDescription></DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2"><Label>名称</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：每日数据报告" /></div>
+          <div className="space-y-2"><Label>功能描述</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述这个路径的作用..." className="min-h-[80px] resize-none" /></div>
           <div className="space-y-2"><Label>工作目录</Label>
             <Select value={workspace} onValueChange={setWorkspace}>
               <SelectTrigger><SelectValue placeholder="选择业务系统" /></SelectTrigger>
@@ -238,7 +240,7 @@ function CreateDialog({ open, onOpenChange, workspaceOptions, onSubmit }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={() => { if (name.trim() && workspace) onSubmit(name.trim(), workspace); }} disabled={!name.trim() || !workspace}>创建</Button>
+          <Button onClick={() => { if (name.trim() && workspace) onSubmit(name.trim(), description.trim(), workspace); }} disabled={!name.trim() || !workspace}>创建</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -303,10 +305,11 @@ function ReportViewer({ content, onClose }: { content: string; onClose: () => vo
 
 function PathEditor({ path, onSave, onCancel }: {
   path: SmartPath;
-  onSave: (name: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => Promise<void>;
+  onSave: (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(path.name);
+  const [description, setDescription] = useState(path.description || '');
   const [steps, setSteps] = useState<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } });
   const [cronExpression, setCronExpression] = useState(path.cronExpression || '');
   const [saving, setSaving] = useState(false);
@@ -330,7 +333,7 @@ function PathEditor({ path, onSave, onCancel }: {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
     try {
-      await onSave(name.trim(), steps, path.id, path.workspace, cronExpression.trim());
+      await onSave(name.trim(), description.trim(), steps, path.id, path.workspace, cronExpression.trim());
     } finally { setSaving(false); }
   };
 
@@ -340,6 +343,11 @@ function PathEditor({ path, onSave, onCancel }: {
         <Route className="h-5 w-5 text-primary" />
         <Input value={name} onChange={(e) => setName(e.target.value)}
           className="h-8 text-lg font-semibold border-0 p-0 shadow-none focus-visible:ring-0" />
+      </div>
+      <div className="space-y-2">
+        <Label>功能描述</Label>
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)}
+          placeholder="描述这个路径的作用..." className="min-h-[80px] resize-none" />
       </div>
       <div className="space-y-2">
         <Label className="text-sm font-medium">定时执行</Label>
@@ -417,6 +425,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">{path.name}</h2>
+          {path.description && <p className="text-sm text-muted-foreground">{path.description}</p>}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderOpen className="h-3.5 w-3.5" /><span>{path.workspace.split(/[/\\]/).pop()}</span>
             <Badge variant={sc?.variant || 'outline'} className="text-[10px]">{sc?.label || path.status}</Badge>
@@ -605,15 +614,15 @@ export function SmartPathPage() {
 
   const workspaceOptions = useMemo(() => workspaces.map((ws) => ({ value: ws, label: ws.split(/[/\\]/).pop() || ws })), [workspaces]);
 
-  const handleCreate = async (name: string, workspace: string) => {
+  const handleCreate = async (name: string, description: string, workspace: string) => {
     setCreateOpen(false);
-    const p = await createPath({ name, workspace, steps: '[]' });
+    const p = await createPath({ name, description, workspace, steps: '[]' });
     setCurrentPath(p);
     setEditing(true);
   };
 
-  const handleSave = async (name: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => {
-    await updatePath(pathId, workspace, { name, steps: JSON.stringify(steps), status: 'ready', cronExpression });
+  const handleSave = async (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => {
+    await updatePath(pathId, workspace, { name, description, steps: JSON.stringify(steps), status: 'ready', cronExpression });
     setEditing(false);
   };
 

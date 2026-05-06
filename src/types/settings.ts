@@ -183,6 +183,7 @@ export interface SmartPathStep {
 export interface SmartPath {
   id: string;
   name: string;
+  description?: string;
   workspace: string;
   steps: string; // JSON string of SmartPathStep[]
   status: SmartPathStatus;
