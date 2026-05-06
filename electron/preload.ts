@@ -2,7 +2,6 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('sman', {
   platform: process.platform,
-  needsRoundedCorners: ipcRenderer.sendSync('system:isWindows10'),
   versions: {
     node: process.versions.node,
     chrome: process.versions.chrome,
