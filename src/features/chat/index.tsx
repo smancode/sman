@@ -302,6 +302,26 @@ function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming:
   );
 }
 
+// ── Global streaming ThinkingBlock update scheduler ──
+const streamThinkingSubscribers = new Set<() => void>();
+let streamThinkingTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureStreamThinkingTimer(): void {
+  if (streamThinkingTimer) return;
+  streamThinkingTimer = setInterval(() => {
+    for (const cb of streamThinkingSubscribers) {
+      try { cb(); } catch { /* ignore */ }
+    }
+  }, 200);
+}
+
+function removeStreamThinkingTimer(): void {
+  if (streamThinkingSubscribers.size === 0 && streamThinkingTimer) {
+    clearInterval(streamThinkingTimer);
+    streamThinkingTimer = null;
+  }
+}
+
 // ── Streaming thinking block ──
 
 function ThinkingBlock({ content }: { content: string }) {
@@ -309,21 +329,26 @@ function ThinkingBlock({ content }: { content: string }) {
   const codePlugin = useCodePlugin();
   const [summary, setSummary] = useState('');
   const prevLenRef = useRef(0);
+  const contentRef = useRef(content);
+  contentRef.current = content;
 
   useEffect(() => {
     const update = () => {
-      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length === 0) { setSummary(''); return; }
+      const c = contentRef.current;
+      const lines = c.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length === 0) { setSummary(''); prevLenRef.current = c.length; return; }
       const lastLine = lines[lines.length - 1];
       setSummary(lastLine.length > 120 ? '...' + lastLine.slice(-117) : lastLine);
-      prevLenRef.current = content.length;
+      prevLenRef.current = c.length;
     };
     update();
-    const timer = setInterval(() => {
-      if (content.length !== prevLenRef.current) update();
-    }, 200);
-    return () => clearInterval(timer);
-  }, [content]);
+    streamThinkingSubscribers.add(update);
+    ensureStreamThinkingTimer();
+    return () => {
+      streamThinkingSubscribers.delete(update);
+      removeStreamThinkingTimer();
+    };
+  }, []);
 
   if (!content.trim()) return null;
 

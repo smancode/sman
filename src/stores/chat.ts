@@ -226,12 +226,9 @@ function findLiveTextIndex(blocks: StreamingBlock[]): number {
 function appendLiveText(blocks: StreamingBlock[], text: string): StreamingBlock[] {
   const idx = findLiveTextIndex(blocks);
   if (idx >= 0) {
-    const block = blocks[idx] as StreamingTextLiveBlock;
-    return [
-      ...blocks.slice(0, idx),
-      { ...block, content: block.content + text },
-      ...blocks.slice(idx + 1),
-    ];
+    // Mutate in-place — live text is always the last active block during streaming
+    (blocks[idx] as StreamingTextLiveBlock).content += text;
+    return blocks;
   }
   return [...blocks, { type: 'text_live' as const, content: text }];
 }
@@ -241,12 +238,9 @@ function appendThinking(blocks: StreamingBlock[], text: string): StreamingBlock[
   // Find existing thinking block anywhere in the array
   const idx = blocks.findIndex(b => b.type === 'thinking');
   if (idx >= 0) {
-    const block = blocks[idx] as StreamingThinkingBlock;
-    return [
-      ...blocks.slice(0, idx),
-      { ...block, content: block.content + text },
-      ...blocks.slice(idx + 1),
-    ];
+    // Mutate in-place — updateBlocks handles reference refresh
+    (blocks[idx] as StreamingThinkingBlock).content += text;
+    return blocks;
   }
   return [...blocks, { type: 'thinking' as const, content: text }];
 }
@@ -417,40 +411,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    // Read target session: memory first, then IndexedDB
-    let cached = sessionCache.get(sessionId) as Message[] | null;
+    // Switch UI immediately — set currentSessionId first so the sidebar highlights instantly
+    const quickCached = sessionCache.get(sessionId) as Message[] | null;
+    const targetBlocks = getStreamingBlocks(sessionId);
+    const isTargetSending = sendingSessions.has(sessionId);
+
+    const hasStaleStreamingPlaceholder = quickCached?.some(
+      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !isTargetSending
+    );
+    const initCached = hasStaleStreamingPlaceholder ? null : quickCached;
+
+    set({
+      currentSessionId: sessionId,
+      messages: initCached ?? [],
+      streamingBlocks: targetBlocks,
+      error: null,
+      contextWarning: null,
+      contextUsage: null,
+      sending: isTargetSending,
+      loading: !initCached,
+    });
+
+    // Now load from IndexedDB / server asynchronously
+    let cached = quickCached;
     if (!cached) {
       cached = (await sessionCache.getAsync(sessionId)) as Message[] | null;
     }
-
-    // Read target session context usage
     let cachedUsage = contextUsageCache.get(sessionId);
     if (!cachedUsage) {
       cachedUsage = await contextUsageCache.getAsync(sessionId);
     }
 
-    // Guard: user may have triggered another switch while we awaited IndexedDB
-    if (get().currentSessionId !== currentSessionId) return;
+    // Guard: user switched away while we awaited IndexedDB
+    if (get().currentSessionId !== sessionId) return;
 
-    // Determine if the target session has an active stream in THIS TAB
-    const targetBlocks = getStreamingBlocks(sessionId);
-    const isTargetSending = sendingSessions.has(sessionId);
-
-    // Check if cached messages contain a stale "[进行中]" placeholder
-    // If so, invalidate cache and force reload from server
-    const hasStaleStreamingPlaceholder = cached?.some(
-      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !isTargetSending
+    const hasStalePlaceholder = cached?.some(
+      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !sendingSessions.has(sessionId)
     );
-    const finalCached = hasStaleStreamingPlaceholder ? null : cached;
+    const finalCached = hasStalePlaceholder ? null : cached;
 
     set({
-      currentSessionId: sessionId,
       messages: finalCached ?? [],
-      streamingBlocks: targetBlocks,
-      error: null,
-      contextWarning: null,
       contextUsage: cachedUsage ?? null,
-      sending: isTargetSending,
       loading: !finalCached,
     });
 
@@ -770,7 +772,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Helper: update streamingBlocks in the per-session map AND sync to store if currently visible
       const updateBlocks = (updater: (blocks: StreamingBlock[]) => StreamingBlock[]) => {
         const current = getStreamingBlocks(streamSessionId);
-        const next = updater(current);
+        const result = updater(current);
+        // Ensure new array reference for Zustand change detection
+        const next = Array.isArray(result) && result === current ? [...result] : result;
         setStreamingBlocks(streamSessionId, next);
         // Only update the store's streamingBlocks if this session is currently displayed
         if (get().currentSessionId === streamSessionId) {

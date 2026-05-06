@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { router } from './routes';
@@ -9,6 +9,23 @@ import { sessionCache } from '@/lib/session-cache';
 import { cronCache } from '@/lib/cron-cache';
 import { useTheme } from '@/hooks/useTheme';
 import { GitPanel } from '@/features/git/GitPanel';
+
+function ConnectingOverlay({ status }: { status: string }) {
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    const timer = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500);
+    return () => clearInterval(timer);
+  }, []);
+  const label = status === 'connecting' ? '正在连接后端' : '正在等待后端启动';
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span className="text-sm">{label}{dots}</span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Auto-connect on startup:
@@ -75,10 +92,12 @@ export default function App() {
 
   useEffect(() => {
     if (status !== 'connected') return;
-    // Warm memory cache from IndexedDB before loading sessions
-    sessionCache.loadAll().then(() => {
-      cronCache.loadAll();
-      fetchSettings();
+    // Run all init tasks in parallel — no need to serialize
+    Promise.all([
+      sessionCache.loadAll(),
+      cronCache.loadAll(),
+      fetchSettings(),
+    ]).then(() => {
       loadSessions();
     });
   }, [status, fetchSettings, loadSessions]);
@@ -95,6 +114,7 @@ export default function App() {
 
   return (
     <TooltipProvider>
+      {status !== 'connected' && <ConnectingOverlay status={status} />}
       <RouterProvider router={router} />
       <GitPanel />
     </TooltipProvider>

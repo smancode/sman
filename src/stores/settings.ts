@@ -91,6 +91,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
 
+    // Optimistic update — apply locally immediately
+    const prev = get().settings;
+    const optimistic = { ...prev, llm: { ...prev?.llm, ...updates } } as SmanSettings;
+    set({ settings: optimistic });
+
     return new Promise<void>((resolve, reject) => {
       const unsub = wrapHandler(client, 'settings.updated', (data) => {
         unsub();
@@ -101,7 +106,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         unsub();
         unsubErr();
-        set({ error: String(data.error) });
+        set({ settings: prev, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', llm: updates });
@@ -112,6 +117,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
 
+    const prev = get().settings;
+    const optimistic = { ...prev, webSearch: { ...prev?.webSearch, ...updates } } as SmanSettings;
+    set({ settings: optimistic });
+
     return new Promise<void>((resolve, reject) => {
       const unsub = wrapHandler(client, 'settings.updated', (data) => {
         unsub();
@@ -122,7 +131,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         unsub();
         unsubErr();
-        set({ error: String(data.error) });
+        set({ settings: prev, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', webSearch: updates });
@@ -133,6 +142,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
 
+    const prev = get().settings;
+    const optimistic = { ...prev, chatbot: { ...prev?.chatbot, ...updates } } as SmanSettings;
+    set({ settings: optimistic });
+
     return new Promise<void>((resolve, reject) => {
       const unsub = wrapHandler(client, 'settings.updated', (data) => {
         unsub();
@@ -143,7 +156,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         unsub();
         unsubErr();
-        set({ error: String(data.error) });
+        set({ settings: prev, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', chatbot: updates });

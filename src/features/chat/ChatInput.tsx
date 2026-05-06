@@ -203,7 +203,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
   }, [processFiles]);
 
   const handleSend = useCallback(() => {
-    if (!canSend || sending) return;
+    if (!canSend || useChatStore.getState().sending) return;
     const textToSend = input.trim();
 
     // Split into path-based (Electron local files) and base64-based (web uploads)
@@ -230,7 +230,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     // Defer the actual send to the next frame so React can render the cleared input first
     const capturedMedia = base64Media.length > 0 ? base64Media : undefined;
     setTimeout(() => onSend(finalText, undefined, null, capturedMedia), 0);
-  }, [input, canSend, sending, onSend, stagedMedia, currentSessionId]);
+  }, [input, canSend, onSend, stagedMedia, currentSessionId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
