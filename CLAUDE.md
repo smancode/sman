@@ -73,6 +73,11 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── weixin-types.ts             # 微信类型定义
 │   │   ├── wecom-media.ts              # 企业微信媒体文件处理
 │   │   └── types.ts                    # Chatbot 类型定义
+│   ├── web-search/          # Web Search 子模块（MCP Server 封装）
+│   │   ├── mcp-server.ts       # Web Search MCP Server 基类
+│   │   ├── baidu-mcp-server.ts # 百度搜索 MCP
+│   │   ├── brave-mcp-server.ts # Brave 搜索 MCP
+│   │   └── tavily-mcp-server.ts # Tavily 搜索 MCP
 │   ├── web-access/          # Web Access 子模块（浏览器自动化）
 │   │   ├── web-access-service.ts  # Web Access 服务层
 │   │   ├── cdp-engine.ts          # Chrome DevTools Protocol 引擎（DOM 稳定性检测、页面快照）
@@ -110,7 +115,9 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   └── index.ts                # 导出
 │   ├── smart-path-store.ts     # 地球路径存储（文件存储：{workspace}/.sman/paths/{id}.md）
 │   ├── smart-path-engine.ts    # 地球路径执行引擎（逐步骤执行，纯内存临时会话）
-│   └── smart-path-scheduler.ts # 地球路径定时调度（cron 表达式驱动自动执行）
+│   ├── smart-path-scheduler.ts # 地球路径定时调度（cron 表达式驱动自动执行）
+│   ├── code-viewer-handler.ts  # 代码查看器处理（文件列表、读取、搜索、保存）
+│   ├── git-handler.ts          # Git 操作处理（status、diff、commit、push、log）
 │   └── utils/
 │       ├── logger.ts              # 日志工具
 │       └── content-blocks.ts      # 消息内容块构建（文本、图片、媒体）
@@ -133,12 +140,19 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── settings/        # 设置页面
 │   │   │   ├── index.tsx          # 设置页面主入口（Tab 面板）
 │   │   │   ├── LLMSettings.tsx    # LLM 配置（API Key, Model, BaseURL）
-│   │   │   ├── WebSearchSettings.tsx  # Web 搜索提供商配置（Brave/Tavily/Bing）
+│   │   │   ├── WebSearchSettings.tsx  # Web 搜索提供商配置（Brave/Tavily/Bing/Baidu）
 │   │   │   ├── ChatbotSettings.tsx    # Chatbot 配置（企业微信/飞书/微信 Bot）
 │   │   │   ├── UserProfileSettings.tsx # 用户画像配置
 │   │   │   ├── CronTaskSettings.tsx   # Cron 任务管理
 │   │   │   ├── BatchTaskSettings.tsx  # 批量任务管理
 │   │   │   └── BackendSettings.tsx    # 后端服务 URL 配置
+│   │   ├── code-viewer/     # 代码查看器（集成在聊天界面右侧）
+│   │   │   ├── CodePanel.tsx          # 代码面板（CodeMirror 编辑器）
+│   │   │   ├── FileTree.tsx           # 文件树（带过滤、隐藏、展开）
+│   │   │   ├── CodeNavigator.tsx      # 代码导航（符号搜索）
+│   │   │   └── useAltClick.ts         # Alt+点击跳转定义
+│   │   ├── git/             # Git 面板（集成在聊天界面右侧）
+│   │   │   └── GitPanel.tsx           # Git 操作面板（status、diff、commit、push）
 │   │   ├── cron-tasks/      # Cron 任务页面
 │   │   ├── batch-tasks/     # 批量任务页面
 │   │   ├── smart-paths/     # 地球路径页面（多步骤自动化工作流）
@@ -157,6 +171,8 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 │   │   ├── cron.ts          # Cron 任务状态
 │   │   ├── batch.ts         # 批量任务状态
 │   │   ├── smart-path.ts    # 地球路径状态（路径 CRUD、步骤执行、流式进度）
+│   │   ├── code-viewer.ts   # 代码查看器状态（文件树、当前文件、搜索结果）
+│   │   ├── git.ts           # Git 状态（仓库状态、分支、diff、log）
 │   │   └── ws-connection.ts # WebSocket 连接状态
 │   ├── lib/                 # 工具库
 │   │   ├── ws-client.ts     # WebSocket 客户端（自动重连、认证）
@@ -337,6 +353,8 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `server/knowledge-extractor.ts` | 知识提取器（从对话提取业务/规范/技术知识到 `.sman/knowledge/`） |
 | `server/knowledge-extractor-store.ts` | 知识提取进度 SQLite 存储 |
 | `server/model-capabilities.ts` | 模型能力检测 |
+| `server/code-viewer-handler.ts` | 代码查看器处理（文件列表、读取、搜索、保存、符号跳转） |
+| `server/git-handler.ts` | Git 操作处理（status、diff、commit、push、log、分支切换） |
 | `server/chatbot/chatbot-session-manager.ts` | Chatbot 消息路由（命令解析 → Claude 查询） |
 | `server/chatbot/wecom-bot-connection.ts` | 企业微信 Bot WebSocket（心跳、重连、流式消息节流） |
 | `server/chatbot/feishu-bot-connection.ts` | 飞书 Bot 连接 |
@@ -347,10 +365,14 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `server/session-store.ts` | SQLite 会话和消息存储 |
 | `electron/main.ts` | Electron 主进程（窗口、后端启动、GPU 兼容） |
 | `src/features/chat/` | 聊天功能组件 |
+| `src/features/code-viewer/` | 代码查看器组件（CodePanel、FileTree、CodeNavigator） |
+| `src/features/git/` | Git 组件（GitPanel） |
 | `src/features/stardom/StardomPage.tsx` | 星域页面（仪表盘 + 像素世界双视图） |
 | `src/features/stardom/world/` | 像素世界渲染引擎（Canvas、交互、精灵） |
 | `src/features/settings/` | 设置页面组件 |
 | `src/stores/chat.ts` | 聊天状态管理（流式渲染、消息排队） |
+| `src/stores/code-viewer.ts` | 代码查看器状态管理（文件树、当前文件、搜索） |
+| `src/stores/git.ts` | Git 状态管理（仓库状态、分支、diff） |
 | `src/stores/stardom.ts` | 星域状态管理 |
 | `src/components/SessionTree.tsx` | 会话树 + 目录选择器 |
 | `src/lib/session-cache.ts` | 会话消息缓存层 |
@@ -439,6 +461,33 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `smartpath.reference.read` | 获取复用资源文件内容，参数: `{ pathId, workspace, fileName }` |
 | `smartpath.generateStep` | AI 生成步骤方案或执行单个步骤，参数: `{ userInput, workspace, previousSteps, execute?, pathId?, stepIndex? }` |
 
+### 代码查看器
+
+| 类型 | 说明 |
+|------|------|
+| `code.listDir` | 列出目录内容，参数: `{ workspace, path }` |
+| `code.readFile` | 读取文件内容，参数: `{ workspace, filePath }` |
+| `code.searchSymbols` | 搜索符号（类/函数/变量），参数: `{ workspace, filePath, query }` |
+| `code.saveFile` | 保存文件，参数: `{ workspace, filePath, content }` |
+| `code.searchFiles` | 搜索文件（按名称或内容），参数: `{ workspace, query, searchIn }` |
+
+### Git 操作
+
+| 类型 | 说明 |
+|------|------|
+| `git.status` | 获取 Git 状态，参数: `{ workspace }` |
+| `git.diff` | 获取工作区 diff，参数: `{ workspace, path?, staged? }` |
+| `git.diffFile` | 获取单个文件 diff，参数: `{ workspace, path }` |
+| `git.commit` | 提交更改，参数: `{ workspace, message }` |
+| `git.log` | 获取提交历史，参数: `{ workspace, limit?, path? }` |
+| `git.logGraph` | 获取图形化提交历史，参数: `{ workspace, limit? }` |
+| `git.branchList` | 列出分支，参数: `{ workspace }` |
+| `git.checkout` | 切换分支，参数: `{ workspace, branch }` |
+| `git.fetch` | 拉取远程更新，参数: `{ workspace, remote? }` |
+| `git.remoteDiff` | 获取远程 diff，参数: `{ workspace, branch? }` |
+| `git.generateCommit` | AI 生成提交消息，参数: `{ workspace, diff }` |
+| `git.push` | 推送到远程，参数: `{ workspace, branch?, force? }` |
+
 ## Chatbot 命令（企业微信/飞书/微信）
 
 | 命令 | 别名 | 说明 |
@@ -473,6 +522,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 | `brave` | `brave-search` | Brave Search API |
 | `tavily` | `tavily-search` | Tavily Search API |
 | `bing` | `bing-search` | Bing Search API |
+| `baidu` | `baidu-search` | 百度搜索 API |
 
 ## 构建和运行
 
@@ -531,13 +581,14 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 
 ## 技术栈
 
-- **前端**: React 19 + TypeScript + TailwindCSS + Radix UI + Zustand
+- **前端**: React 19 + TypeScript + TailwindCSS + Radix UI + Zustand + CodeMirror 6
 - **后端**: Node.js + TypeScript + Express + WebSocket (ws)
 - **桌面**: Electron + electron-vite
 - **数据库**: SQLite (better-sqlite3)
-- **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` v0.2 + `@anthropic-ai/claude-code` v2.1)
+- **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` v0.2.110 + `@anthropic-ai/claude-code` v2.1.110)
 - **渲染**: Shiki + Streamdown
 - **Schema 校验**: Zod
+- **代码编辑**: CodeMirror 6（支持多语言语法高亮、符号搜索、快捷键）
 
 ## 注意事项
 
@@ -559,9 +610,12 @@ pnpm electron:build # 一键构建+打包 (build + build:electron + electron-bui
 16. **知识提取**: 每 10 分钟空闲时从对话提取业务知识/开发规范/技术知识 → 存入 `{workspace}/.sman/knowledge/{category}-{username}.md`（每人独立文件，push 到 git 共享）→ skill-auto-updater 聚合所有用户文件生成 `knowledge-business/conventions/technical` 三个 skill。用 hash 标记去重，支持增量提取（记录 `last_extracted_message_id`）
 17. **地球路径存储**: 文件存储（非 SQLite），路径定义存在 `{workspace}/.sman/paths/{pathId}/path.md`（frontmatter 格式，只含设计时信息不含 executionResult），执行记录在 `{pathId}/runs/{runId}.json`，报告在 `{pathId}/reports/report-{timestamp}.md`，复用资源在 `{pathId}/references/`。路径 ID 格式：`{项目名}-{路径名}-{8位随机字符}`
 18. **地球路径执行**: 逐步骤执行，每步创建纯内存临时会话（不写 SQLite、不污染主会话列表），前一步结果作为下一步输入上下文。支持 cron 表达式定时自动执行。执行时自动注入 `references/` 中的复用资源，步骤输出中 `[REFERENCE:filename.ext]` 标注的文件会被自动保存到 references。每次执行完自动维护 `references/run.md` 复用指南
-19. **UI 响应性优先（动画先表演，后台再做事）**: 所有用户交互（打字、点击、回车）必须立即得到 UI 反馈，不允许任何同步阻塞导致掉帧或卡顿。具体规则：
+19. **代码查看器**: 集成在聊天界面右侧，支持文件树浏览（自动隐藏 .git/node_modules 等目录）、文件读取（最大 1MB）、符号搜索（类/函数/变量定义）、文件保存、全局搜索（文件名/内容）。使用 CodeMirror 6 提供多语言语法高亮和编辑能力
+20. **Git 操作面板**: 集成在聊天界面右侧，支持查看仓库状态、分支切换、diff 查看、提交、推送、拉取、提交历史（图形化 log）。支持 AI 生成提交消息（基于 diff 分析）
+21. **UI 响应性优先（动画先表演，后台再做事）**: 所有用户交互（打字、点击、回车）必须立即得到 UI 反馈，不允许任何同步阻塞导致掉帧或卡顿。具体规则：
     - **输入框打字零联动**: `handleInputChange` 里不做任何资源操作（不发 WS、不调 IPC、不触发 store 副作用）。`preheatSession` 和 `gitBranchRefresh` 等操作推迟到用户点击发送时异步执行
     - **发送不卡 UI**: `handleSend` 里先同步清空输入框（`setInput('')`），再用 `setTimeout(0)` 把 `onSend` 推到下一帧。store 的 `sendMessage` 在 `set({ sending: true })` 后也必须 `await setTimeout(0)` 让 React 先渲染用户消息和动画，再注册 stream handlers 和发 WS
     - **后端立即确认**: 后端 `sendMessage` 收到请求后立刻发 `chat.start`，不要等 preheat 或 `getOrCreateV2Session` 完成后再发
     - **避免不必要的 re-render**: ChatInput 不要订阅 `messages` 数组（流式输出时每 50ms 变化），改为在 keyDown handler 里 `useChatStore.getState()` 按需读取。`useEffect` 必须有正确的 deps 数组，用 ref 追踪最新值避免每次渲染都执行
     - **思考块折叠时展示进度**: ThinkingBlock 折叠状态必须显示内容摘要（最后有意义的行），200ms 轮询更新，不能看起来像卡死
+

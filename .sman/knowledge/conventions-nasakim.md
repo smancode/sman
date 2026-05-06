@@ -1,6 +1,6 @@
 # Conventions — nasakim
 
-> Last extracted: 2026-05-06T03:50:39.404Z
+> Last extracted: 2026-05-06T06:09:37.196Z
 
 ## 消息推送必须基于会话订阅精确路由
 <!-- hash: d4e5f6 -->
