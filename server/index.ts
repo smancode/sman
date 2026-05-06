@@ -1926,7 +1926,8 @@ wss.on('connection', (ws: WebSocket) => {
         case 'git.generateCommit': {
           if (!msg.workspace) { ws.send(JSON.stringify({ type: 'git.generateCommit', result: { error: 'Missing workspace' } })); break; }
           try {
-            handleGitGenerateCommit(String(msg.workspace), msg.template ? String(msg.template) : undefined)
+            const files = Array.isArray(msg.files) ? msg.files.map(String) : undefined;
+            handleGitGenerateCommit(String(msg.workspace), msg.template ? String(msg.template) : undefined, files)
               .then(result => ws.send(JSON.stringify({ type: 'git.generateCommit', result })))
               .catch(err => ws.send(JSON.stringify({ type: 'git.generateCommit', result: { error: err instanceof Error ? err.message : String(err) } })));
           } catch (err) {

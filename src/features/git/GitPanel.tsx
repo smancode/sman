@@ -2,7 +2,7 @@ import React, { memo, useCallback, useEffect, useState } from 'react';
 import {
   X, GitBranch as GitBranchIcon, FilePlus, FileMinus, FileEdit, FileSearch,
   Loader2, Send, Sparkles, ChevronDown, ChevronRight, ArrowUp, ArrowDown,
-  RefreshCw, Settings2, Check, Upload, Download, Search,
+  RefreshCw, Settings2, Check, Upload, Download, Search, Square, CheckSquare,
 } from 'lucide-react';
 import { useGitStore, applyTemplate, type GitFileStatus, type GitDiffHunk, type GitDiffLine, type GitBranch, type GitLogGraphNode } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
@@ -424,6 +424,9 @@ function FileList({ files }: { files: GitFileStatus[] }) {
   const diffFiles = useGitStore((s) => s.diffFiles);
   const diffLoading = useGitStore((s) => s.diffLoading);
   const selectFile = useGitStore((s) => s.selectFile);
+  const stagedFiles = useGitStore((s) => s.stagedFiles);
+  const toggleStagedFile = useGitStore((s) => s.toggleStagedFile);
+  const toggleAllStaged = useGitStore((s) => s.toggleAllStaged);
   const isDark = document.documentElement.classList.contains('dark');
 
   if (files.length === 0) {
@@ -433,6 +436,9 @@ function FileList({ files }: { files: GitFileStatus[] }) {
       </div>
     );
   }
+
+  const allPaths = files.map(f => f.path);
+  const allSelected = allPaths.length > 0 && allPaths.every(p => stagedFiles.has(p));
 
   const groups: Record<string, GitFileStatus[]> = {};
   for (const f of files) {
@@ -447,17 +453,41 @@ function FileList({ files }: { files: GitFileStatus[] }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* Select all header */}
+      <div className={cn(
+        'sticky top-0 flex items-center gap-2 px-4 py-1.5 text-[12px] font-medium text-muted-foreground z-10',
+        isDark ? 'bg-[#1c2128]' : 'bg-white',
+      )}>
+        <button
+          onClick={() => toggleAllStaged(allPaths)}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {allSelected
+            ? <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+            : <Square className="w-3.5 h-3.5" />
+          }
+        </button>
+        变更文件 ({files.length})
+      </div>
+
       {Object.entries(groups).map(([groupKey, groupFiles]) => (
         <div key={groupKey}>
           <div className={cn(
-            'sticky top-0 px-4 py-1.5 text-[12px] font-medium text-muted-foreground',
+            'sticky top-[30px] px-4 py-1 pl-9 text-[11px] text-muted-foreground/70',
             isDark ? 'bg-[#1c2128]' : 'bg-white',
           )}>
             {groupLabels[groupKey]} ({groupFiles.length})
           </div>
           {groupFiles.map((file) => (
             <div key={file.path}>
-              <FileItem file={file} isSelected={selectedFile === file.path} onClick={() => selectFile(file.path)} isDark={isDark} />
+              <FileItem
+                file={file}
+                isSelected={selectedFile === file.path}
+                isStaged={stagedFiles.has(file.path)}
+                onClick={() => selectFile(file.path)}
+                onToggleStaged={() => toggleStagedFile(file.path)}
+                isDark={isDark}
+              />
               {selectedFile === file.path && diffFiles.length > 0 && (
                 <DiffView hunks={diffFiles[0].hunks} isDark={isDark} filePath={file.path} />
               )}
@@ -476,22 +506,31 @@ function FileList({ files }: { files: GitFileStatus[] }) {
 
 // ── File Item ──────────────────────────────────────────────────────
 
-const FileItem = memo(function FileItem({ file, isSelected, onClick, isDark }: {
-  file: GitFileStatus; isSelected: boolean; onClick: () => void; isDark: boolean;
+const FileItem = memo(function FileItem({ file, isSelected, isStaged, onClick, onToggleStaged, isDark }: {
+  file: GitFileStatus; isSelected: boolean; isStaged: boolean; onClick: () => void; onToggleStaged: () => void; isDark: boolean;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <div
       className={cn(
-        'w-full text-left flex items-center gap-2 px-4 py-1.5 text-[13px] transition-colors',
+        'flex items-center gap-1 px-3 py-1.5 text-[13px] transition-colors cursor-pointer',
         isSelected ? isDark ? 'bg-[#1a3a5c]' : 'bg-blue-50' : isDark ? 'hover:bg-[#262c36]' : 'hover:bg-gray-50',
       )}
+      onClick={onClick}
     >
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleStaged(); }}
+        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {isStaged
+          ? <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+          : <Square className="w-3.5 h-3.5" />
+        }
+      </button>
       {statusIcon(file.status)}
       <span className="flex-1 min-w-0 truncate font-mono text-[12px]">{file.path}</span>
       {statusLabel(file.status)}
       {isSelected ? <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 shrink-0 text-muted-foreground" />}
-    </button>
+    </div>
   );
 });
 
@@ -956,6 +995,7 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
   const generating = useGitStore((s) => s.generating);
   const pushing = useGitStore((s) => s.pushing);
   const status = useGitStore((s) => s.status);
+  const stagedFiles = useGitStore((s) => s.stagedFiles);
   const commit = useGitStore((s) => s.commit);
   const commitTemplate = useGitStore((s) => s.commitTemplate);
   const setCommitTemplate = useGitStore((s) => s.setCommitTemplate);
@@ -964,12 +1004,13 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
   const isDark = document.documentElement.classList.contains('dark');
 
   const hasAheadCommits = (status?.ahead ?? 0) > 0;
+  const stagedArray = files.filter(f => stagedFiles.has(f.path)).map(f => f.path);
 
   const handleCommit = useCallback(() => {
-    if (committing || fileCount === 0) return;
+    if (committing || stagedArray.length === 0) return;
 
     if (message.trim()) {
-      commit(message.trim());
+      commit(message.trim(), stagedArray);
       setMessage('');
       return;
     }
@@ -977,10 +1018,10 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
     // Empty message → AI generate then commit
     if (generating) return;
     generateCommit((generated) => {
-      commit(generated);
+      commit(generated, stagedArray);
       setMessage('');
-    });
-  }, [message, committing, committing, fileCount, generating, commit, generateCommit]);
+    }, stagedArray);
+  }, [message, committing, stagedArray, generating, commit, generateCommit]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -990,16 +1031,16 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
   }, [handleCommit]);
 
   const handleAutoGenerate = useCallback(() => {
-    if (generating) return;
-    generateCommit((generated) => setMessage(generated));
-  }, [generating, generateCommit]);
+    if (generating || stagedArray.length === 0) return;
+    generateCommit((generated) => setMessage(generated), stagedArray);
+  }, [generating, generateCommit, stagedArray]);
 
   const handlePush = useCallback(() => {
     if (pushing) return;
     push();
   }, [pushing, push]);
 
-  const isBusy = committing || generating || pushing || fileCount === 0;
+  const isBusy = committing || generating || pushing || stagedArray.length === 0;
 
   return (
     <div className={cn('border-t px-4 py-3 shrink-0', isDark ? 'border-[#30363d]' : 'border-gray-200')}>
@@ -1040,7 +1081,7 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoGenerate}
-          disabled={generating || fileCount === 0}
+          disabled={generating || stagedArray.length === 0}
           className={cn(
             'flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-md border transition-colors',
             generating

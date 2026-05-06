@@ -570,12 +570,13 @@ export function handleGitRemoteDiff(workspace: string): GitDiffFile[] {
 export async function handleGitGenerateCommit(
   workspace: string,
   template?: string,
+  files?: string[],
 ): Promise<{ message: string }> {
   if (!_sessionManager) {
     throw new Error('Session manager not initialized');
   }
 
-  const diffSummary = buildDiffSummary(workspace);
+  const diffSummary = buildDiffSummary(workspace, files);
   if (!diffSummary) {
     return { message: template || 'chore: update files' };
   }
@@ -614,17 +615,21 @@ Rules:
   }
 }
 
-function buildDiffSummary(workspace: string): string {
+function buildDiffSummary(workspace: string, files?: string[]): string {
   try {
     // Get file status summary
     const status = handleGitStatus(workspace);
     if (status.files.length === 0) return '';
 
+    const fileSet = files && files.length > 0 ? new Set(files) : null;
+    const targetFiles = fileSet ? status.files.filter(f => fileSet.has(f.path)) : status.files;
+    if (targetFiles.length === 0) return '';
+
     const parts: string[] = [];
 
     // File changes summary
     const byStatus: Record<string, string[]> = {};
-    for (const f of status.files) {
+    for (const f of targetFiles) {
       if (!byStatus[f.status]) byStatus[f.status] = [];
       byStatus[f.status].push(f.path);
     }
@@ -632,17 +637,28 @@ function buildDiffSummary(workspace: string): string {
       parts.push(`${s}: ${paths.join(', ')}`);
     }
 
-    // Get actual diff content (limited)
-    const diffRaw = git(workspace, 'diff --stat --no-color', 10000);
-    if (diffRaw) {
-      parts.push('\nDiff stats:\n' + diffRaw);
-    }
+    // Get actual diff content (limited) — only for selected files
+    const diffPaths = fileSet ? [...fileSet] : undefined;
 
-    // Get actual diff (limited to first 3000 chars for prompt efficiency)
-    const diffContent = git(workspace, 'diff --no-color -U1', 15000);
-    if (diffContent) {
-      const truncated = diffContent.length > 3000 ? diffContent.slice(0, 3000) + '\n... (truncated)' : diffContent;
-      parts.push('\nDiff content:\n' + truncated);
+    if (diffPaths) {
+      for (const p of diffPaths) {
+        const diffContent = git(workspace, `diff --no-color -U1 -- "${p}"`, 15000);
+        if (diffContent) {
+          const truncated = diffContent.length > 2000 ? diffContent.slice(0, 2000) + '\n... (truncated)' : diffContent;
+          parts.push(`\n${p}:\n${truncated}`);
+        }
+      }
+    } else {
+      const diffRaw = git(workspace, 'diff --stat --no-color', 10000);
+      if (diffRaw) {
+        parts.push('\nDiff stats:\n' + diffRaw);
+      }
+
+      const diffContent = git(workspace, 'diff --no-color -U1', 15000);
+      if (diffContent) {
+        const truncated = diffContent.length > 3000 ? diffContent.slice(0, 3000) + '\n... (truncated)' : diffContent;
+        parts.push('\nDiff content:\n' + truncated);
+      }
     }
 
     return parts.join('\n');

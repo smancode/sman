@@ -130,6 +130,7 @@ interface GitState {
   commitTemplate: string;
   generating: boolean;
   pushing: boolean;
+  stagedFiles: Set<string>;
 
   // Actions
   openPanel: () => void;
@@ -137,6 +138,8 @@ interface GitState {
   fetchStatus: () => void;
   fetchDiff: (filePath?: string) => void;
   selectFile: (filePath: string | null) => void;
+  toggleStagedFile: (filePath: string) => void;
+  toggleAllStaged: (files: string[]) => void;
   commit: (message: string, files?: string[]) => void;
   fetchLog: () => void;
   fetchLogGraph: () => void;
@@ -148,7 +151,7 @@ interface GitState {
   fetchRemoteDiff: () => void;
   setDiffTab: (tab: DiffTab) => void;
   setCommitTemplate: (template: string) => void;
-  generateCommit: (onGenerated: (message: string) => void) => void;
+  generateCommit: (onGenerated: (message: string) => void, files?: string[]) => void;
   push: () => void;
 }
 
@@ -174,6 +177,7 @@ export const useGitStore = create<GitState>((set, get) => ({
   commitTemplate: loadCommitTemplate(),
   generating: false,
   pushing: false,
+  stagedFiles: new Set(),
 
   openPanel() {
     set({ open: true, diffTab: 'local' });
@@ -198,7 +202,13 @@ export const useGitStore = create<GitState>((set, get) => ({
         set({ loading: false, error: result.error });
         return;
       }
-      set({ status: result as GitStatusResult, loading: false, error: null });
+      const statusResult = result as GitStatusResult;
+      set({
+        status: statusResult,
+        loading: false,
+        error: null,
+        stagedFiles: new Set(statusResult.files.map(f => f.path)),
+      });
       if ((result as GitStatusResult).ahead > 0) {
         get().fetchAheadCommits();
       }
@@ -234,6 +244,26 @@ export const useGitStore = create<GitState>((set, get) => ({
       return;
     }
     get().fetchDiff(filePath ?? undefined);
+  },
+
+  toggleStagedFile(filePath: string) {
+    const staged = new Set(get().stagedFiles);
+    if (staged.has(filePath)) {
+      staged.delete(filePath);
+    } else {
+      staged.add(filePath);
+    }
+    set({ stagedFiles: staged });
+  },
+
+  toggleAllStaged(files: string[]) {
+    const current = get().stagedFiles;
+    const allSelected = files.every(f => current.has(f));
+    if (allSelected) {
+      set({ stagedFiles: new Set() });
+    } else {
+      set({ stagedFiles: new Set(files) });
+    }
   },
 
   commit(message: string, files?: string[]) {
@@ -431,7 +461,7 @@ export const useGitStore = create<GitState>((set, get) => ({
     saveCommitTemplate(template);
   },
 
-  generateCommit(onGenerated: (message: string) => void) {
+  generateCommit(onGenerated: (message: string) => void, files?: string[]) {
     const client = getWsClient();
     const workspace = getWorkspace();
     if (!client || !workspace) return;
@@ -452,7 +482,7 @@ export const useGitStore = create<GitState>((set, get) => ({
       }
     });
 
-    client.send({ type: 'git.generateCommit', workspace, template });
+    client.send({ type: 'git.generateCommit', workspace, template, files });
   },
 
   push() {
