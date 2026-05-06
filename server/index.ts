@@ -666,11 +666,13 @@ const server = http.createServer((req, res) => {
     req.on('data', chunk => { body += chunk.toString(); });
     req.on('end', () => {
       try {
-        const workspaces = store.getActiveWorkspaces();
+        const parsed = JSON.parse(body || '{}');
+        const requested = Array.isArray(parsed.workspaces) && parsed.workspaces.length > 0
+          ? parsed.workspaces
+          : store.getActiveWorkspaces();
         const tools: Array<{ id: string; name: string; description: string; type: 'skill' | 'path'; workspace: string }> = [];
 
-        // Collect skills from all workspaces
-        for (const ws of workspaces) {
+        for (const ws of requested) {
           const projectSkills = skillsRegistry.getProjectSkills(ws);
           for (const skill of projectSkills) {
             tools.push({
@@ -683,8 +685,7 @@ const server = http.createServer((req, res) => {
           }
         }
 
-        // Collect paths from all workspaces
-        for (const ws of workspaces) {
+        for (const ws of requested) {
           const paths = smartPathStore.listAll([ws]);
           for (const p of paths) {
             tools.push({
@@ -786,9 +787,10 @@ const server = http.createServer((req, res) => {
           let fullResult = '';
 
           try {
+            const prompt = parameters ? `/${toolId} ${parameters}` : `/${toolId}`;
             await sessionManager.sendMessageForCron(
               tempSessionId,
-              `/${toolId}`,
+              prompt,
               abort,
               () => {},
             );
