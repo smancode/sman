@@ -313,7 +313,7 @@ export function handleGitLog(workspace: string, maxCount = 20): GitLogEntry[] {
     .filter(Boolean) as GitLogEntry[];
 }
 
-export function handleGitLogGraph(workspace: string, maxCount = 40): GitLogGraphNode[] {
+export function handleGitLogGraph(workspace: string, maxCount = 200): GitLogGraphNode[] {
   // Use --graph with custom format to get both graph prefix and commit data
   // %x00 (NUL) separates graph prefix from commit data, %x01 separates fields
   const format = '%x00%H%x01%h%x01%s%x01%an%x01%aI%x01%D';
