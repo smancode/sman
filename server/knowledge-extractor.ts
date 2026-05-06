@@ -90,6 +90,16 @@ export class KnowledgeExtractor {
   }
 
   /**
+   * Called when a session is about to be deleted. Forces extraction of this
+   * session's messages before they become "deleted" in the next idle cycle.
+   */
+  recordDeletion(workspace: string, sessionId: string): void {
+    this.dirtyWorkspaces.add(workspace);
+    // Force a flush since deleted sessions are high-value signals
+    this.tryFlush();
+  }
+
+  /**
    * Attempt to flush all dirty workspaces. Waits for idle, then extracts
    * knowledge from all sessions with new messages.
    */
@@ -119,6 +129,7 @@ export class KnowledgeExtractor {
   /**
    * Extract knowledge from all sessions in a workspace that have
    * messages beyond the last extraction point.
+   * Includes deleted sessions — they contain valuable "negative signal".
    */
   private async extractForWorkspace(workspace: string): Promise<void> {
     if (!this.config?.llm?.apiKey) {
@@ -126,11 +137,11 @@ export class KnowledgeExtractor {
       return;
     }
 
-    const sessions = this.store.getSessionsByWorkspace(workspace);
+    const sessions = this.store.getSessionsByWorkspace(workspace, true);
     if (sessions.length === 0) return;
 
     // Collect new messages from all sessions, respecting extraction progress
-    let allNewMessages: Array<{ sessionId: string; role: string; content: string }> = [];
+    let allNewMessages: Array<{ sessionId: string; role: string; content: string; deleted?: boolean }> = [];
     const progressUpdates: Array<{ sessionId: string; lastId: number }> = [];
 
     for (const session of sessions) {
@@ -144,11 +155,13 @@ export class KnowledgeExtractor {
 
       if (messages.length === 0) continue;
 
+      const isDeleted = !!session.deletedAt;
       for (const msg of messages) {
         allNewMessages.push({
           sessionId: session.id,
           role: msg.role,
           content: this.truncateContent(msg.content),
+          deleted: isDeleted,
         });
       }
       progressUpdates.push({
@@ -218,8 +231,8 @@ export class KnowledgeExtractor {
   }
 
   private truncateMessages(
-    messages: Array<{ sessionId: string; role: string; content: string }>,
-  ): Array<{ sessionId: string; role: string; content: string }> {
+    messages: Array<{ sessionId: string; role: string; content: string; deleted?: boolean }>,
+  ): Array<{ sessionId: string; role: string; content: string; deleted?: boolean }> {
     let totalChars = 0;
     const result: typeof messages = [];
     // Take from the end (most recent) to stay within budget
@@ -236,7 +249,7 @@ export class KnowledgeExtractor {
    * Each knowledge entry is wrapped in hash markers for deduplication.
    */
   private async callLLMForExtraction(
-    messages: Array<{ sessionId: string; role: string; content: string }>,
+    messages: Array<{ sessionId: string; role: string; content: string; deleted?: boolean }>,
     existingKnowledge: Record<string, string>,
   ): Promise<Record<string, string> | null> {
     const config = this.config!;
@@ -259,12 +272,25 @@ ${currentISOTime}
 - 已有条目如果对话中证实已过时或被推翻，就删除
 - 文件始终是当前最新的、准确的知识快照
 
+## ⚠️ 已删除会话的特殊价值
+
+对话中标记了 \`[🗑️ 用户已删除此会话]\` 的是用户主动删除的会话。删除原因可能是：
+- 不满意（方案不对、方向错了）
+- 内容重复或太多了
+- 其他原因
+
+你需要自己判断删除原因。如果对话内容有独特价值但用户删了，可能是方案不满意；如果内容重复则无需额外关注。重点提取：
+- 如果能推断出"用户偏好 X 而非 Y"，记录下来
+- 被否定的方案记为"已排除"，避免未来重蹈覆辙
+- 如果只是重复内容，正常提取知识即可
+
 ## 质量门槛
 
 只记录项目特有的、非显而易见的、对未来开发有指导意义的知识：
 - ✅ 业务规则和决策（为什么要这样做）
 - ✅ 踩过的坑和非 trivial 的解决方案
 - ✅ 团队共识和非显而易见的约束
+- ✅ 用户明确否定或不满意的方案（任何会话中都有可能，不限于已删除会话）
 
 禁止记录：
 - ❌ 通用技术知识、框架用法、工具常识
@@ -310,9 +336,10 @@ ${currentISOTime}
 - 新条目用新 hash；更新旧条目时换新 hash
 - 每条知识不超过 5 行，文件不超过 100 行（超出时合并或删最不重要的）`;
 
-    const conversationText = messages.map((m, i) =>
-      `[${m.role}] ${m.content}`
-    ).join('\n\n');
+    const conversationText = messages.map(m => {
+      const prefix = m.deleted ? `[🗑️ 用户已删除此会话] ` : '';
+      return `${prefix}[${m.role}] ${m.content}`;
+    }).join('\n\n');
 
     // Build existing knowledge context
     const existingParts: string[] = [];

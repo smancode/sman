@@ -811,6 +811,21 @@ wss.on('connection', (ws: WebSocket) => {
         case 'session.delete': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           const sessionId = msg.sessionId;
+
+          // Extract knowledge and profile before marking as deleted
+          const workspace = store.getSessionWorkspace(sessionId);
+          const history = store.getMessages(sessionId, 4);
+          if (workspace) {
+            knowledgeExtractor.recordDeletion(workspace, sessionId);
+          }
+          if (history.length >= 2) {
+            const lastUser = [...history].reverse().find(m => m.role === 'user');
+            const lastAssistant = [...history].reverse().find(m => m.role === 'assistant');
+            if (lastUser && lastAssistant) {
+              userProfileManager.recordDeletion(lastUser.content, lastAssistant.content);
+            }
+          }
+
           sessionManager.abort(sessionId);
           sessionManager.clearTokenUsage(sessionId);
           store.deleteSession(sessionId);

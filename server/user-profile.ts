@@ -108,6 +108,22 @@ export class UserProfileManager {
   }
 
   /**
+   * Record a deleted session as a preference signal.
+   * User deleted = dissatisfaction = valuable preference data.
+   */
+  recordDeletion(userMsg: string, assistantMsg: string): void {
+    if (!assistantMsg.trim()) return;
+
+    this.pendingConversations.push({
+      user: `[🗑️ 用户删除了此对话] ${this.truncateInput(userMsg, UserProfileManager.MAX_USER_MSG_LENGTH)}`,
+      assistant: this.truncateInput(assistantMsg, UserProfileManager.MAX_ASSISTANT_MSG_LENGTH),
+    });
+
+    // Force flush on deletion — high-value signal
+    this.tryFlush();
+  }
+
+  /**
    * Wait for all sessions to be idle, then flush pending conversations to LLM.
    * Safe to call anytime — won't run if already queued.
    */
@@ -158,6 +174,12 @@ export class UserProfileManager {
     const baseUrl = config.llm.baseUrl || 'https://api.anthropic.com';
 
     const systemPrompt = `根据对话更新用户画像。严格输出 Markdown，不超过 60 行 1500 字符。
+
+## ⚠️ 已删除对话的特殊处理
+对话标记了 [🗑️ 用户删除了此对话] 表示用户主动删除了该对话。删除不一定是不满意，也可能是整理、重复等。你需要自己判断：
+- 如果对话中有独特价值但用户删了 → 可能是不满意，尝试推断偏好
+- 如果是重复内容 → 正常处理即可
+- 重点：可推断出的偏好和厌恶
 
 ## 必须遵守的格式
 只有四个 ## 段落，不要增加新的：

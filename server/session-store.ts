@@ -7,6 +7,7 @@ export interface Session {
   workspace: string;
   label?: string;
   isCron?: boolean;
+  deletedAt?: string | null;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -262,12 +263,20 @@ export class SessionStore {
   }
 
   /**
-   * Get all non-deleted sessions for a workspace.
+   * Get sessions for a workspace. By default excludes soft-deleted and cron sessions.
+   * Set includeDeleted=true to also include deleted sessions (for knowledge extraction).
    */
-  getSessionsByWorkspace(workspace: string): Session[] {
-    return this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE workspace = ? AND deleted_at IS NULL AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC'
-    ).all(workspace) as Session[];
+  getSessionsByWorkspace(workspace: string, includeDeleted = false): Session[] {
+    const sql = includeDeleted
+      ? 'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, deleted_at as deletedAt, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE workspace = ? AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC'
+      : 'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE workspace = ? AND deleted_at IS NULL AND (is_cron = 0 OR is_cron IS NULL) ORDER BY last_active_at DESC';
+    return this.db.prepare(sql).all(workspace) as Session[];
+  }
+
+  /** Get a single session's workspace path. */
+  getSessionWorkspace(sessionId: string): string | undefined {
+    const row = this.db.prepare('SELECT workspace FROM sessions WHERE id = ?').get(sessionId) as { workspace: string } | undefined;
+    return row?.workspace;
   }
 
   deleteSession(id: string): void {
