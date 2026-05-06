@@ -54,6 +54,16 @@ export function Sidebar() {
             onClick={() => setDismissed(true)}
           />
         )}
+        {/* 展开菜单时底部的渐隐遮罩 */}
+        <div
+          className={cn(
+            'absolute bottom-0 left-0 right-0 h-24 z-20 pointer-events-none transition-opacity duration-200',
+            expanded ? 'opacity-100' : 'opacity-0',
+          )}
+          style={{
+            background: `linear-gradient(to top, hsl(var(--sidebar-bg)) 0%, transparent 100%)`,
+          }}
+        />
       </div>
 
       {/* Footer - 固定在底部，悬浮展开 */}
