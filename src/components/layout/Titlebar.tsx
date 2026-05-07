@@ -17,6 +17,15 @@ declare global {
       windowIsMaximized: () => Promise<boolean>;
       onMaximizeChanged: (callback: (maximized: boolean) => void) => () => void;
       getGitBranch: (dirPath: string) => Promise<string | null>;
+      updater?: {
+        check: () => Promise<{ status: string; version?: string; message?: string }>;
+        install: () => Promise<void>;
+        setFeedURL: (url: string) => Promise<void>;
+        onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => () => void;
+        onUpdateNotAvailable: (callback: () => void) => () => void;
+        onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+        onUpdateError: (callback: (info: { message: string }) => void) => () => void;
+      };
     };
   }
 }
