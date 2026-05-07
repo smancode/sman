@@ -57,6 +57,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cron-parser": "^5.5.0",
+    "electron-updater": "^6.8.3",
     "express": "^4.21.0",
     "gray-matter": "^4.0.3",
     "lucide-react": "^1.0.1",
@@ -113,6 +114,10 @@
   "build": {
     "appId": "com.smanbase.app",
     "productName": "Sman",
+    "publish": {
+      "provider": "generic",
+      "url": "https://update.example.com/sman"
+    },
     "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
