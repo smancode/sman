@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star, Languages } from 'lucide-react';
+import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star, Languages, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -8,6 +8,7 @@ import { WebSearchSettings } from './WebSearchSettings';
 import { ChatbotSettings } from './ChatbotSettings';
 import { BackendSettings } from './BackendSettings';
 import { LanguageSettings } from './LanguageSettings';
+import { UpdateSettings } from './UpdateSettings';
 import { StardomSettings } from '@/features/stardom/StardomSettings';
 import { useSettingsStore } from '@/stores/settings';
 import { t, useLocale } from '@/locales';
@@ -103,6 +104,7 @@ const SECTIONS = [
   { id: 'websearch', label: '网络搜索配置', icon: Search },
   { id: 'stardom', label: '星域配置', icon: Store },
   { id: 'language', label: '语言设置', icon: Languages },
+  { id: 'update', label: '检查更新', icon: Download },
   { id: 'community', label: '加入社群', icon: Users },
 ] as const;
 
@@ -184,6 +186,7 @@ export function Settings() {
               websearch: t('settings.webSearch.title'),
               stardom: t('settings.stardom.title'),
               language: t('settings.language.title'),
+              update: t('settings.sections.update'),
               community: t('settings.about.community'),
             };
             return (
@@ -221,6 +224,9 @@ export function Settings() {
 
           {/* 语言设置 */}
           <LanguageSettings id="settings-language" />
+
+          {/* 检查更新 */}
+          <UpdateSettings id="settings-update" />
 
           {/* 加入社群 */}
           <Card id="settings-community">
