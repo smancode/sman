@@ -91,6 +91,6 @@ export function useLocale() {
 }
 
 export const LANGUAGE_HINTS: Record<string, string> = {
-  'zh-CN': '[请用中文回复]',
-  'en-US': '[Please respond in English]',
+  'zh-CN': '[IMPORTANT: You MUST respond in Simplified Chinese (简体中文). Do not use English unless the user explicitly asks for it.]',
+  'en-US': '[IMPORTANT: You MUST respond in English. Do not use Chinese or any other language unless the user explicitly asks for it.]',
 };

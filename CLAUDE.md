@@ -147,12 +147,59 @@ pnpm test:watch    # 监视模式
 
 ### 多语言 (i18n) 强制规范
 
-Sman 是多语言项目（中文/英文），**所有用户可见文本禁止硬编码**：
+Sman 是多语言项目（中文/英文），**所有用户可见文本禁止硬编码**。
+
+#### 基本规则
+
 - 使用 `import { t } from '@/locales'` 的 `t('key')` 函数获取翻译文本
 - 翻译 key 定义在 `src/locales/zh-CN.json` 和 `src/locales/en-US.json`
 - **禁止**在 JSX 中直接写中文字符串（如 `>确定<`、`placeholder="请输入"`）
-- **禁止**在模块顶层调用 `t()`（如常量数组中的 label），应改为 `labelKey` 模式在组件内调用 `t(labelKey)`
 - 注释中的中文不受限制
+
+#### 错误示例（不要这样）
+
+```tsx
+// ❌ 直接硬编码中文
+<button>确定</button>
+<input placeholder="请输入用户名" />
+
+// ❌ 在模块顶层调用 t()（会导致 t() 返回固定语言）
+const MENU_ITEMS = [
+  { label: t('menu.new'), key: 'new' },
+  { label: t('menu.open'), key: 'open' }
+];
+```
+
+#### 正确示例
+
+```tsx
+// ✅ 使用 t() 函数
+import { t } from '@/locales';
+
+<button>{t('common.confirm')}</button>
+<input placeholder={t('auth.usernamePlaceholder')} />
+
+// ✅ 常量数组用 labelKey 模式
+const MENU_ITEMS = [
+  { labelKey: 'menu.new', key: 'new' },
+  { labelKey: 'menu.open', key: 'open' }
+];
+
+// 在组件内映射
+{MENU_ITEMS.map(item => (
+  <MenuItem key={item.key}>{t(item.labelKey)}</MenuItem>
+))}
+```
+
+#### 特殊场景处理
+
+| 场景 | 方案 |
+|-----|------|
+| 常量数组中的 label | 用 `labelKey` 存储 key，组件内调用 `t(labelKey)` |
+| 动态拼接文本 | 翻译文件中用完整句子，用参数插值（如 `t('file.count', { count: 5 })`） |
+| 第三方库 props | 检查是否支持 i18n，不支持则用 `aria-label` 等可访问性属性 |
+| 表单校验错误 | 错误消息定义在翻译文件中，校验函数返回错误 key |
+| 日志/调试信息 | 可硬编码（开发者可见，非用户界面） |
 
 ### 文件行数限制
 

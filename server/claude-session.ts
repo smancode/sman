@@ -320,7 +320,8 @@ export class ClaudeSessionManager {
 
     // ── 段 3：身份和行为要求 ──
     lines.push('');
-    lines.push(`[Sman 身份 - 你是 Sman 智能业务系统助手，始终中文回复。用户画像身份优先。Project: ${projectName}。你的 session_id: ${sessionId ?? 'unknown'}。扩展能力按需挂载: capability_list 发现 → capability_load 激活。]`);
+    const lang = this.config?.language === 'en-US' ? 'English' : '简体中文';
+    lines.push(`[Sman Identity - You are Sman intelligent business assistant. Always respond in ${lang}. User profile identity takes priority. Project: ${projectName}. Your session_id: ${sessionId ?? 'unknown'}. Extended capabilities on demand: capability_list discover → capability_load activate.]`);
     lines.push('[Sman 行为要求]');
     lines.push('');
     lines.push('## 进度告知（最重要！）');
