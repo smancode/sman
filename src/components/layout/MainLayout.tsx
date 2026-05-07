@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Titlebar } from './Titlebar';
+import { UpdateBanner } from '@/components/UpdateBanner';
 import { useChatStore } from '@/stores/chat';
+import { useUpdateStore } from '@/stores/update';
 import { cn } from '@/lib/utils';
 
 // 浅色主题流动色块配色
@@ -44,6 +46,12 @@ export function MainLayout() {
     return unsubscribe;
   }, []);
 
+  // Initialize auto-updater IPC listeners
+  useEffect(() => {
+    const cleanup = useUpdateStore.getState().initListeners();
+    return cleanup;
+  }, []);
+
   return (
     <div className={cn(
       'flex flex-col h-screen overflow-hidden relative bg-background',
@@ -68,6 +76,7 @@ export function MainLayout() {
         {/* 右侧区域：Titlebar + 主内容 */}
         <div className={cn('flex flex-col flex-1 overflow-hidden', !hideSidebar && 'ml-64')}>
           <Titlebar />
+          <UpdateBanner />
           <main className="flex-1 overflow-y-auto bg-transparent">
             <Outlet />
           </main>
