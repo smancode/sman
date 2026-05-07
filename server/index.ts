@@ -1522,7 +1522,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'smartpath.create': {
           if (!msg.name || !msg.workspace || msg.steps === undefined) throw new Error('Missing required: name, workspace, steps');
-          const p = smartPathStore.create({ name: msg.name as string, workspace: msg.workspace as string, steps: msg.steps as string });
+          const p = smartPathStore.create({ name: msg.name as string, description: msg.description as string | undefined, workspace: msg.workspace as string, steps: msg.steps as string });
           ws.send(JSON.stringify({ type: 'smartpath.created', path: p }));
           break;
         }

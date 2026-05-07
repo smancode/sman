@@ -43,7 +43,7 @@ interface SmartPathState {
   currentReference: string | null;
 
   fetchPaths: (workspaces: string[]) => Promise<void>;
-  createPath: (input: { name: string; workspace: string; steps: string }) => Promise<SmartPath>;
+  createPath: (input: { name: string; description?: string; workspace: string; steps: string }) => Promise<SmartPath>;
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
   deletePath: (pathId: string, workspace: string) => Promise<void>;
   runPath: (pathId: string, workspace: string) => Promise<void>;

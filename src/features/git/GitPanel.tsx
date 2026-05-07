@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   X, GitBranch as GitBranchIcon, FilePlus, FileMinus, FileEdit, FileSearch,
   Loader2, Send, Sparkles, ChevronDown, ChevronRight, ArrowUp, ArrowDown,
@@ -988,7 +988,7 @@ function LogEntry({ node, currentBranch, isDark }: { node: GitLogGraphNode; curr
 
 // ── Commit Section ─────────────────────────────────────────────────
 
-function CommitSection({ fileCount, files }: { fileCount: number; files: GitFileStatus[] }) {
+const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCount: number; files: GitFileStatus[] }) {
   const [message, setMessage] = useState('');
   const [showTemplate, setShowTemplate] = useState(false);
   const committing = useGitStore((s) => s.committing);
@@ -1004,7 +1004,7 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
   const isDark = document.documentElement.classList.contains('dark');
 
   const hasAheadCommits = (status?.ahead ?? 0) > 0;
-  const stagedArray = files.filter(f => stagedFiles.has(f.path)).map(f => f.path);
+  const stagedArray = useMemo(() => files.filter(f => stagedFiles.has(f.path)).map(f => f.path), [files, stagedFiles]);
 
   const handleCommit = useCallback(() => {
     if (committing || stagedArray.length === 0) return;
@@ -1134,4 +1134,4 @@ function CommitSection({ fileCount, files }: { fileCount: number; files: GitFile
       </div>
     </div>
   );
-}
+});

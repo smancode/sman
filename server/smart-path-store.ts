@@ -198,7 +198,7 @@ export class SmartPathStore {
     return fs.existsSync(f) ? this.read(f) : undefined;
   }
 
-  create(input: { name: string; workspace: string; steps: string }): SmartPath {
+  create(input: { name: string; description?: string; workspace: string; steps: string }): SmartPath {
     if (!input.name?.trim()) throw new Error('Missing name');
     if (!input.workspace?.trim()) throw new Error('Missing workspace');
     if (input.steps === undefined || input.steps === null) throw new Error('Missing steps');
@@ -207,6 +207,7 @@ export class SmartPathStore {
     const p: SmartPath = {
       id,
       name: input.name,
+      description: input.description ?? '',
       workspace: input.workspace,
       steps: input.steps,
       status: 'draft',
