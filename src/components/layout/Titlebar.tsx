@@ -5,7 +5,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGitStore } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
-import { t } from '@/locales';
+import { t, useLocale } from '@/locales';
 
 declare global {
   interface Window {
@@ -22,6 +22,7 @@ declare global {
 }
 
 export function Titlebar() {
+  useLocale();
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
   const isWindows = window.sman?.platform === 'win32';

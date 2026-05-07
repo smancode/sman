@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import { getToolDisplayName, formatToolSummary } from './message-utils';
 import { CodeViewerProvider } from '@/features/code-viewer';
-import { t } from '@/locales';
+import { t, useLocale } from '@/locales';
 
 
 // ── Module-level: 记住每个会话的滚动比例 ──
@@ -71,6 +71,7 @@ const LazyMessage = memo(function LazyMessage({
 });
 
 export function Chat() {
+  useLocale();
   const connectionStatus = useWsConnection((s) => s.status);
   const isConnected = connectionStatus === 'connected';
 

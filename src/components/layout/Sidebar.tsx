@@ -15,9 +15,10 @@ import { Button } from '@/components/ui/button';
 import { SessionTree } from '@/components/SessionTree';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useTheme } from '@/hooks/useTheme';
-import { t } from '@/locales';
+import { t, useLocale } from '@/locales';
 
 export function Sidebar() {
+  useLocale();
   const { theme, toggleTheme } = useTheme();
   const connectionStatus = useWsConnection((s) => s.status);
   const location = useLocation();

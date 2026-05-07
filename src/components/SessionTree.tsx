@@ -16,7 +16,7 @@ import { useChatStore } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
 import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
-import { t } from '@/locales';
+import { t, useLocale } from '@/locales';
 import type { ChatSession } from '@/types/chat';
 
 // Simple local state for expanded systems (no need for a store)
@@ -249,6 +249,7 @@ const SystemGroup = memo(function SystemGroup({
 });
 
 export function SessionTree() {
+  useLocale();
   const navigate = useNavigate();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showDirSelector, setShowDirSelector] = useState(false);

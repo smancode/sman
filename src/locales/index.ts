@@ -1,6 +1,7 @@
 /**
  *极简 i18n 工具
- *使用 Zustand 管理 locale 状态，语言切换时自动触发 React re-render
+ *使用 Zustand 管理 locale 状态
+ *组件内调用 useLocale() 订阅 locale 变化，语言切换时该组件 re-render
  */
 
 import { create } from 'zustand';
@@ -24,7 +25,22 @@ function getInitialLocale(): string {
   const cached = localStorage.getItem(LOCALE_CACHE_KEY);
   if (cached && translations[cached]) return cached;
 
-  // 首次使用：从浏览器语言检测
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/language', false);
+    xhr.timeout = 2000;
+    xhr.send();
+    if (xhr.status === 200) {
+      const { language } = JSON.parse(xhr.responseText);
+      if (language && translations[language]) {
+        localStorage.setItem(LOCALE_CACHE_KEY, language);
+        return language;
+      }
+    }
+  } catch {
+    // backend not ready yet
+  }
+
   const browserLang = navigator.language || '';
   if (browserLang.toLowerCase().startsWith('zh')) return 'zh-CN';
   return 'en-US';
@@ -34,9 +50,6 @@ const useLocaleStore = create<LocaleState>(() => ({
   locale: getInitialLocale(),
 }));
 
-/**
- *设置当前语言，同时更新 Zustand store 触发 React re-render
- */
 export function setLocale(locale: string) {
   if (!translations[locale]) {
     console.warn(`[i18n] Unsupported locale: ${locale}, falling back to zh-CN`);
@@ -49,49 +62,34 @@ export function setLocale(locale: string) {
   console.log(`[i18n] Language switched to: ${locale}`);
 }
 
-/**
- *翻译函数
- *@param key - 翻译键，如 'menu.settings'
- *@returns 翻译后的文本
- */
 export function t(key: string): string {
   const currentLocale = useLocaleStore.getState().locale;
 
-  // 1. 尝试当前语言
   const dict = translations[currentLocale];
   if (dict?.[key]?.text) {
     return dict[key].text;
   }
 
-  // 2. 降级到中文
   if (translations['zh-CN']?.[key]?.text) {
-    console.warn(`[i18n] Missing "${key}" in ${currentLocale}, using zh-CN`);
     return translations['zh-CN'][key].text;
   }
 
-  // 3. 返回 key（避免空白）
   console.error(`[i18n] Missing key: "${key}"`);
   return key;
 }
 
-/**
- *获取当前语言
- */
 export function getCurrentLocale(): string {
   return useLocaleStore.getState().locale;
 }
 
 /**
  *React Hook: 订阅 locale 变化，触发组件 re-render
+ *所有使用 t() 渲染文本的组件都需要调用此 hook
  */
 export function useLocale() {
   return useLocaleStore((s) => s.locale);
 }
 
-/**
- *语言提示词（用于 user message）
- *在发送消息前自动注入，告诉 LLM 用什么语言回复
- */
 export const LANGUAGE_HINTS: Record<string, string> = {
   'zh-CN': '[请用中文回复]',
   'en-US': '[Please respond in English]',

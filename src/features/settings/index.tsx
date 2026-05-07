@@ -107,9 +107,9 @@ const SECTIONS = [
 ] as const;
 
 export function Settings() {
+  useLocale();
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const navigate = useNavigate();
-  useLocale(); // subscribe to locale changes for re-render
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState('llm');
   const isScrollingRef = useRef(false);

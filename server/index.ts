@@ -488,6 +488,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Public: get language setting (no auth, for pre-render i18n init)
+  if (req.url === '/api/language') {
+    const language = settingsManager.getConfig().language || 'zh-CN';
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ language }));
+    return;
+  }
+
   // Public: test SearXNG connectivity (uses curl which respects proxy env vars)
   if (req.url === '/api/searxng/test' && req.method === 'POST') {
     (async () => {
