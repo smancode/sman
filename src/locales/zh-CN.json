@@ -2622,5 +2622,65 @@
   "titlebar.git": {
     "text": "点击打开 Git 管理",
     "context": "Git管理提示"
+  },
+  "tool.Agent": {
+    "text": "派出助手",
+    "context": "Agent工具"
+  },
+  "tool.Read": {
+    "text": "读取文件",
+    "context": "Read工具"
+  },
+  "tool.Write": {
+    "text": "写入文件",
+    "context": "Write工具"
+  },
+  "tool.Edit": {
+    "text": "编辑文件",
+    "context": "Edit工具"
+  },
+  "tool.Bash": {
+    "text": "执行命令",
+    "context": "Bash工具"
+  },
+  "tool.Grep": {
+    "text": "搜索内容",
+    "context": "Grep工具"
+  },
+  "tool.Glob": {
+    "text": "查找文件",
+    "context": "Glob工具"
+  },
+  "tool.WebSearch": {
+    "text": "搜索网络",
+    "context": "WebSearch工具"
+  },
+  "tool.WebFetch": {
+    "text": "获取网页",
+    "context": "WebFetch工具"
+  },
+  "tool.LSP": {
+    "text": "代码分析",
+    "context": "LSP工具"
+  },
+  "tool.ListMcpResourcesTool": {
+    "text": "查询资源",
+    "context": "MCP资源工具"
+  },
+  "tool.TaskCreate": {
+    "text": "创建任务",
+    "context": "创建任务工具"
+  },
+  "tool.TaskUpdate": {
+    "text": "更新任务",
+    "context": "更新任务工具"
+  },
+  "tool.TaskList": {
+    "text": "查看任务",
+    "context": "查看任务工具"
+  },
+  "tool.AskUserQuestion": {
+    "text": "询问用户",
+    "context": "询问用户工具"
   }
 }

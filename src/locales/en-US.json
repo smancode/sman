@@ -2622,5 +2622,65 @@
   "titlebar.git": {
     "text": "Click to open Git panel",
     "context": "Git panel tooltip"
+  },
+  "tool.Agent": {
+    "text": "Dispatch Agent",
+    "context": "Agent tool"
+  },
+  "tool.Read": {
+    "text": "Read File",
+    "context": "Read tool"
+  },
+  "tool.Write": {
+    "text": "Write File",
+    "context": "Write tool"
+  },
+  "tool.Edit": {
+    "text": "Edit File",
+    "context": "Edit tool"
+  },
+  "tool.Bash": {
+    "text": "Run Command",
+    "context": "Bash tool"
+  },
+  "tool.Grep": {
+    "text": "Search Content",
+    "context": "Grep tool"
+  },
+  "tool.Glob": {
+    "text": "Find Files",
+    "context": "Glob tool"
+  },
+  "tool.WebSearch": {
+    "text": "Web Search",
+    "context": "WebSearch tool"
+  },
+  "tool.WebFetch": {
+    "text": "Fetch Page",
+    "context": "WebFetch tool"
+  },
+  "tool.LSP": {
+    "text": "Code Analysis",
+    "context": "LSP tool"
+  },
+  "tool.ListMcpResourcesTool": {
+    "text": "Query Resources",
+    "context": "MCP resource tool"
+  },
+  "tool.TaskCreate": {
+    "text": "Create Task",
+    "context": "TaskCreate tool"
+  },
+  "tool.TaskUpdate": {
+    "text": "Update Task",
+    "context": "TaskUpdate tool"
+  },
+  "tool.TaskList": {
+    "text": "List Tasks",
+    "context": "TaskList tool"
+  },
+  "tool.AskUserQuestion": {
+    "text": "Ask User",
+    "context": "AskUser tool"
   }
 }

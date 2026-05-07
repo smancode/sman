@@ -5,6 +5,7 @@
  */
 import type { RawMessage, ContentBlock } from '@/types/chat';
 import type { Message } from '@/stores/chat';
+import { t, getCurrentLocale } from '@/locales';
 
 /**
  * Build displayable content from a plain text string and optional content blocks.
@@ -289,29 +290,30 @@ export function isInternalNotification(message: RawMessage | unknown): boolean {
 
 // ── Tool display helpers ──
 
-/** Tool name → Chinese description (keep original English name visible) */
-const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  Agent: '派出助手',
-  Read: '读取文件',
-  Write: '写入文件',
-  Edit: '编辑文件',
-  Bash: '执行命令',
-  Grep: '搜索内容',
-  Glob: '查找文件',
-  WebSearch: '搜索网络',
-  WebFetch: '获取网页',
-  LSP: '代码分析',
-  ListMcpResourcesTool: '查询资源',
-  TaskCreate: '创建任务',
-  TaskUpdate: '更新任务',
-  TaskList: '查看任务',
-  AskUserQuestion: '询问用户',
+/** Tool name → i18n key */
+const TOOL_DISPLAY_KEYS: Record<string, string> = {
+  Agent: 'tool.Agent',
+  Read: 'tool.Read',
+  Write: 'tool.Write',
+  Edit: 'tool.Edit',
+  Bash: 'tool.Bash',
+  Grep: 'tool.Grep',
+  Glob: 'tool.Glob',
+  WebSearch: 'tool.WebSearch',
+  WebFetch: 'tool.WebFetch',
+  LSP: 'tool.LSP',
+  ListMcpResourcesTool: 'tool.ListMcpResourcesTool',
+  TaskCreate: 'tool.TaskCreate',
+  TaskUpdate: 'tool.TaskUpdate',
+  TaskList: 'tool.TaskList',
+  AskUserQuestion: 'tool.AskUserQuestion',
 };
 
-/** Get display name like "Read - 读取文件" */
+/** Get display name: "Read - 读取文件" (中文) or just "Read" (英文) */
 export function getToolDisplayName(name: string): string {
-  const desc = TOOL_DISPLAY_NAMES[name];
-  return desc ? `${name} - ${desc}` : name;
+  if (getCurrentLocale() === 'en-US') return name;
+  const key = TOOL_DISPLAY_KEYS[name];
+  return key ? `${name} - ${t(key)}` : name;
 }
 
 /** Format tool input JSON into a readable one-line summary */
