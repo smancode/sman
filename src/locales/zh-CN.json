@@ -2682,5 +2682,9 @@
   "tool.AskUserQuestion": {
     "text": "询问用户",
     "context": "询问用户工具"
+  },
+  "chat.input.hint": {
+    "text": "(输入 / 选择【命令/Skill/路径】，可拖入文件)",
+    "context": "输入框扩展提示"
   }
 }

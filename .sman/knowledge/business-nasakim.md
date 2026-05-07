@@ -1,6 +1,6 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-07T07:41:03.881Z
+> Last extracted: 2026-05-07T10:00:14.933Z
 
 ## Smart Path 的 path.md 元数据要求
 <!-- hash: a1b2c3 -->
@@ -56,7 +56,6 @@
 <!-- hash: 8f3c1a -->
 - 项目从设计之初就深度依赖 Claude SDK（session 管理、MCP 框架、工具调用、流式输出等 13 个文件 28+ 处 import）
 - 切换到其他 coding 工具（Cursor/Copilot）成本极高（重写 50-80%），因后端协议不开放
-- 自研 coding 工具 需重写约 50%：session 管理、MCP 协议、工具调用均需重建
 - 结论：当前阶段继续基于 Claude SDK 是最务实选择，多模型支持可通过 `ANTHROPIC_BASE_URL` 实现
 <!-- end: 8f3c1a -->
 
@@ -67,7 +66,9 @@
 - LLM prompt 中的语言要求也需动态跟随用户选择，而非硬编码"始终中文回复"
 <!-- end: 4k7m2p -->
 
-## 国际化实现文档已归档至 docs
-<!-- hash: 7m4n8q -->
-- `docs/i18n-implementation.md` 记录了国际化实现的全貌，含技术架构、文件组织、已完成/未完成组件清单、问题与解决方案
-<!-- end: 7m4n8q -->
+## 多语言支持的用户可见说明
+<!-- hash: 6h3j9r -->
+- README.md 已增加"多语言支持"章节和核心能力表格中的条目，说明 zh-CN/en-US 双语及自动切换机制
+- 桌面端跟随 OS 语言（需重启），浏览器端跟随浏览器语言，聊天界面会话级自动检测
+- 开发者注意事项：引用 CLAUDE.md 多语言规范，所有 UI 文本禁止硬编码
+<!-- end: 6h3j9r -->

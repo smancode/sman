@@ -2682,5 +2682,9 @@
   "tool.AskUserQuestion": {
     "text": "Ask User",
     "context": "AskUser tool"
+  },
+  "chat.input.hint": {
+    "text": "(Type / to select 【command/Skill/path】, drag files here)",
+    "context": "Input extended hint"
   }
 }

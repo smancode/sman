@@ -489,7 +489,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
-              placeholder={disabled ? t('chat.input.placeholder') : `${t('chat.input.placeholder')} (输入 / 选择【命令/Skill/路径】，可拖入文件)`}
+              placeholder={disabled ? t('chat.input.placeholder') : `${t('chat.input.placeholder')} ${t('chat.input.hint')}`}
               disabled={disabled}
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}

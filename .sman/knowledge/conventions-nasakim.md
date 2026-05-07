@@ -1,6 +1,6 @@
 # Conventions — nasakim
 
-> Last extracted: 2026-05-07T07:41:03.881Z
+> Last extracted: 2026-05-07T10:00:14.933Z
 
 ## Markdown 文件元数据统一使用 YAML front matter
 <!-- hash: d4e5f6 -->
@@ -34,3 +34,11 @@
 - Git 页面、CodeViewer（代码查看器）等非设置页面也需纳入国际化范围，不能遗漏
 - 批量修改 JSON 翻译文件时极易损坏格式（多余逗号、引号缺失），应使用程序化方式操作或修改后立即验证
 <!-- end: f1a2b3 -->
+
+## 多语言硬编码禁止规则（CLAUDE.md 强化版）
+<!-- hash: 3t5v8y -->
+- 所有用户界面文本禁止硬编码，必须通过 `t()` 函数；日志/调试信息可硬编码
+- 常量数组方案：用 `labelKey` 存 i18n key，组件内 `t(labelKey)` 渲染
+- 动态拼接方案：翻译文件写完整句子 + 参数插值，禁止拼接片段
+- 模块顶层禁止调用 `t()`（初始化时 locale 未确定）
+<!-- end: 3t5v8y -->
