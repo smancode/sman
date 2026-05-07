@@ -15,6 +15,7 @@ import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
 import type { CronTask, CronRun } from '@/types/settings';
+import { t } from '@/locales';
 
 function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleString('zh-CN', {
@@ -26,12 +27,12 @@ function formatTime(isoString: string): string {
 }
 
 function RunStatusBadge({ run }: { run?: CronRun }) {
-  if (!run) return <span className="text-muted-foreground text-xs">无记录</span>;
+  if (!run) return <span className="text-muted-foreground text-xs">{t('cron.noRecord')}</span>;
 
   const statusConfig = {
-    running: { icon: Loader2, text: '执行中', className: 'text-yellow-600' },
-    success: { icon: CheckCircle, text: '成功', className: 'text-green-600' },
-    failed: { icon: XCircle, text: '失败', className: 'text-red-600' },
+    running: { icon: Loader2, text: t('cron.status.running'), className: 'text-yellow-600' },
+    success: { icon: CheckCircle, text: t('cron.status.success'), className: 'text-green-600' },
+    failed: { icon: XCircle, text: t('cron.status.failed'), className: 'text-red-600' },
   };
 
   const config = statusConfig[run.status];
@@ -70,7 +71,7 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
           <span className="text-muted-foreground">/</span>
           <span className="text-muted-foreground truncate">{task.skillName}</span>
           {task.source === 'scan' && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">自动配置</span>
+            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{t('cron.autoConfig')}</span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
@@ -78,7 +79,7 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
           <code className="text-xs bg-muted px-1 rounded">{task.cronExpression}</code>
           {task.enabled && task.nextRunAt && (
             <span className="ml-1">
-              · 下次执行：<span className="text-foreground">{formatTime(task.nextRunAt)}</span>
+              {t('cron.nextExec')}<span className="text-foreground">{formatTime(task.nextRunAt)}</span>
             </span>
           )}
         </div>
@@ -92,7 +93,7 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
           variant="ghost"
           size="icon"
           onClick={onExecute}
-          title="立即执行"
+          title={t('cron.executeNow')}
           className="h-8 w-8"
         >
           <Play className="h-4 w-4" />
@@ -104,7 +105,7 @@ function TaskItem({ task, onDelete, onToggle, onExecute, onEdit }: TaskItemProps
           variant="ghost"
           size="icon"
           onClick={onEdit}
-          title="编辑"
+          title={t('cron.editTitle')}
           className="h-8 w-8"
         >
           <Pencil className="h-4 w-4" />
@@ -210,7 +211,7 @@ export function CronTaskSettings() {
   };
 
   const handleDelete = async (taskId: string) => {
-    if (!confirm('确定要删除这个定时任务吗？')) return;
+    if (!confirm(t('cron.confirmDeleteMsg'))) return;
 
     try {
       await deleteTask(taskId);
@@ -231,10 +232,10 @@ export function CronTaskSettings() {
     try {
       const result = await scanCronTasks();
       const parts: string[] = [];
-      if (result.created > 0) parts.push(`新建 ${result.created}`);
-      if (result.updated > 0) parts.push(`更新 ${result.updated}`);
-      if (result.disabled > 0) parts.push(`禁用 ${result.disabled}`);
-      setScanResult(parts.length > 0 ? parts.join('，') : '无变更');
+      if (result.created > 0) parts.push(`${t('cron.scan.created')} ${result.created}`);
+      if (result.updated > 0) parts.push(`${t('cron.scan.updated')} ${result.updated}`);
+      if (result.disabled > 0) parts.push(`${t('cron.scan.disabled')} ${result.disabled}`);
+      setScanResult(parts.length > 0 ? parts.join(', ') : t('cron.scan.noChange'));
       setTimeout(() => setScanResult(null), 5000);
     } catch (err) {
       console.error('Failed to scan:', err);
@@ -254,9 +255,9 @@ export function CronTaskSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">定时任务</h3>
+          <h3 className="text-lg font-medium">{t('cron.pageTitle')}</h3>
           <p className="text-sm text-muted-foreground">
-            配置定时执行 Skill 的任务（标准 cron 表达式）
+            {t('cron.pageDesc')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -266,18 +267,18 @@ export function CronTaskSettings() {
             disabled={scanning}
           >
             <RefreshCw className={cn('h-4 w-4 mr-2', scanning && 'animate-spin')} />
-            {scanning ? '扫描中...' : '自动拉取'}
+            {scanning ? t('cron.scan.scanning') : t('cron.scan.autoFetch')}
           </Button>
           <Button onClick={() => { setEditingTask(null); setShowForm(!showForm); }}>
             <Plus className="h-4 w-4 mr-2" />
-            新建任务
+            {t('cron.newTask')}
           </Button>
         </div>
       </div>
 
       {scanResult && (
         <div className="p-3 rounded-lg bg-green-500/10 text-green-600 text-sm">
-          扫描完成：{scanResult}
+          {t('cron.scan.complete')}{scanResult}
         </div>
       )}
 
@@ -285,7 +286,7 @@ export function CronTaskSettings() {
         <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center justify-between">
           <span>{error}</span>
           <Button variant="ghost" size="sm" onClick={clearError}>
-            关闭
+            {t('cron.close')}
           </Button>
         </div>
       )}
@@ -294,10 +295,10 @@ export function CronTaskSettings() {
         <div className="p-4 rounded-lg border bg-muted/50 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>业务系统</Label>
+              <Label>{t('cron.businessSystem')}</Label>
               <Select value={selectedWorkspace} onValueChange={setSelectedWorkspace}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择业务系统" />
+                  <SelectValue placeholder={t('cron.selectBusinessSystem')} />
                 </SelectTrigger>
                 <SelectContent>
                   {workspaces.map((ws) => (
@@ -317,14 +318,14 @@ export function CronTaskSettings() {
                 disabled={!selectedWorkspace}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择 Skill" />
+                  <SelectValue placeholder={t('cron.selectSkill')} />
                 </SelectTrigger>
                 <SelectContent>
                   {skills.map((skill) => (
                     <SelectItem key={skill.name} value={skill.name}>
                       {skill.name}
                       {!skill.hasCrontab && (
-                        <span className="text-muted-foreground ml-1">(无 crontab.md)</span>
+                        <span className="text-muted-foreground ml-1">{t('cron.noCrontab')}</span>
                       )}
                     </SelectItem>
                   ))}
@@ -334,28 +335,28 @@ export function CronTaskSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label>Cron 表达式</Label>
+            <Label>{t('cron.cronLabel')}</Label>
             <Input
               type="text"
-              placeholder="*/30 * * * *（分 时 日 月 周）"
+              placeholder={t('cron.cronPlaceholder2')}
               value={cronExpression}
               onChange={(e) => setCronExpression(e.target.value)}
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              格式：分 时 日 月 周（例：0 9 * * 1-5 = 工作日每天 9 点）
+              {t('cron.cronHint')}
             </p>
           </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={handleCancel}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleSave}
               disabled={!selectedWorkspace || !selectedSkill || !cronExpression}
             >
-              {isEditing ? '保存' : '创建'}
+              {isEditing ? t('cron.saveTask') : t('cron.newTask')}
             </Button>
           </div>
         </div>
@@ -363,11 +364,11 @@ export function CronTaskSettings() {
 
       <div className="space-y-6">
         {loading && (
-          <div className="text-center py-8 text-muted-foreground">加载中...</div>
+          <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
         )}
         {!loading && tasks.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            暂无定时任务，点击「自动拉取」扫描或「新建任务」手动创建
+            {t('cron.emptyHint')}
           </div>
         )}
         {!loading && (() => {

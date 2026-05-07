@@ -54,7 +54,7 @@ function layoutNodes(
   // Self node at center — brightest
   nodes.push({
     id: 'self',
-    label: '本节点',
+    label: t('stardom.net.localNode'),
     type: 'self',
     x: cx,
     y: cy,
@@ -339,8 +339,8 @@ export function NetworkSandbox() {
       {tasks.length === 0 && onlineAgents.length <= 1 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center space-y-1">
-            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>星图待绘制</p>
-            <p className="text-[10px]" style={{ color: 'var(--bz-text-dim)', opacity: 0.5 }}>连接协作服务器后，协作星路将在此显现</p>
+            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.net.waiting')}</p>
+            <p className="text-[10px]" style={{ color: 'var(--bz-text-dim)', opacity: 0.5 }}>{t('stardom.net.hint')}</p>
           </div>
         </div>
       )}

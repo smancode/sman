@@ -10,7 +10,7 @@ import { BackendSettings } from './BackendSettings';
 import { LanguageSettings } from './LanguageSettings';
 import { StardomSettings } from '@/features/stardom/StardomSettings';
 import { useSettingsStore } from '@/stores/settings';
-import { t } from '@/locales';
+import { t, useLocale } from '@/locales';
 
 declare const __APP_VERSION__: string;
 const APP_VERSION = __APP_VERSION__;
@@ -55,19 +55,21 @@ function GitHubStarCount() {
 
   if (error) {
     return (
-      <span className="text-xs text-muted-foreground">点击给个 Star ⭐</span>
+      <span className="text-xs text-muted-foreground">{t('settings.about.community.starHint')}</span>
     );
   }
 
   if (stars === null) {
     return (
-      <span className="text-xs text-muted-foreground animate-pulse">加载中...</span>
+      <span className="text-xs text-muted-foreground animate-pulse">{t('common.loading')}</span>
     );
   }
 
+  const parts = t('settings.about.community.starCount').split('{count}');
+
   return (
     <span className="text-xs text-muted-foreground">
-      已有 <span className="font-semibold text-yellow-600 dark:text-yellow-400">{stars.toLocaleString()}</span> 位开发者加星
+      {parts[0]}<span className="font-semibold text-yellow-600 dark:text-yellow-400">{stars.toLocaleString()}</span>{parts[1]}
     </span>
   );
 }
@@ -107,6 +109,7 @@ const SECTIONS = [
 export function Settings() {
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const navigate = useNavigate();
+  useLocale(); // subscribe to locale changes for re-render
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState('llm');
   const isScrollingRef = useRef(false);
@@ -170,7 +173,7 @@ export function Settings() {
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
         >
           <ChevronLeft className="h-4 w-4" />
-          返回
+          {t('settings.back')}
         </button>
         <div className="flex-1 space-y-1">
           {SECTIONS.map(({ id, label, icon: Icon }) => {
@@ -224,7 +227,7 @@ export function Settings() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                加入社群
+                {t('settings.about.community')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -246,7 +249,7 @@ export function Settings() {
                     <GitHubStarCount />
                   </button>
                   <p className="text-xs text-muted-foreground text-center leading-relaxed max-w-[180px]">
-                    点击 Star 加入开源社区
+                    {t('settings.about.community.githubStar')}
                   </p>
                 </div>
 
@@ -254,9 +257,9 @@ export function Settings() {
                 <div className="flex flex-col items-center gap-2">
                   <WechatGroupQR />
                   <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                    扫码加入 Sman 微信交流群
+                    {t('settings.about.community.wechatScan')}
                     <br />
-                    (及时获取最新版本)
+                    {t('settings.about.community.wechatTip')}
                   </p>
                 </div>
               </div>

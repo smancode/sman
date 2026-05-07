@@ -22,8 +22,8 @@ export function ActivityFeed() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: 'var(--bz-text-dim)' }}>
         <div className="text-3xl opacity-30">◎</div>
-        <p className="text-sm">分身网络待命中，等待世界事件...</p>
-        <p className="text-xs opacity-60">Agent 活动将实时显示在此</p>
+        <p className="text-sm">{t('stardom.activityFeed.standby')}</p>
+        <p className="text-xs opacity-60">{t('stardom.activityFeed.hint')}</p>
       </div>
     );
   }

@@ -35,7 +35,7 @@ export function CollaborationDetail({ taskId, onClose }: CollaborationDetailProp
     <div className="border-t border-border bg-muted/20">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
-        <span className="text-sm font-medium">协作详情</span>
+        <span className="text-sm font-medium">{t('stardom.collab.detail')}</span>
         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
           <X className="h-3 w-3" />
         </Button>
@@ -44,7 +44,7 @@ export function CollaborationDetail({ taskId, onClose }: CollaborationDetailProp
       {/* Messages */}
       <ScrollArea className="max-h-48 px-4 py-2">
         {messages.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">暂无对话消息</p>
+          <p className="text-xs text-muted-foreground py-2">{t('stardom.collab.noMessages')}</p>
         ) : (
           <div className="space-y-1.5">
             {messages.map((msg, i) => (
@@ -63,15 +63,15 @@ export function CollaborationDetail({ taskId, onClose }: CollaborationDetailProp
           {remaining !== null && remaining > 0 && (
             <span className="text-xs text-yellow-500 flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" />
-              {Math.ceil(remaining / 1000)}s 后自动接受
+              {Math.ceil(remaining / 1000)}s {t('stardom.collab.autoAccept')}
             </span>
           )}
           <div className="flex-1" />
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { rejectTask(taskId); onClose(); }}>
-            拒绝
+            {t('stardom.collab.reject')}
           </Button>
           <Button size="sm" className="h-7 text-xs" onClick={() => { acceptTask(taskId); onClose(); }}>
-            接受
+            {t('stardom.collab.accept')}
           </Button>
         </div>
       )}

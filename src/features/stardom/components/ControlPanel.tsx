@@ -37,12 +37,12 @@ function SectionHeader({ label, count, open }: { label: string; count?: number; 
 // ── Task Phase Progress ──
 
 const TASK_PHASES = ['searching', 'offered', 'matched', 'chatting', 'completed'] as const;
-const PHASE_LABELS: Record<string, string> = {
-  searching: '扫描',
-  offered: '邀约',
-  matched: '链路',
-  chatting: '激活',
-  completed: '结算',
+const PHASE_LABEL_KEYS: Record<string, string> = {
+  searching: 'stardom.ctrl.searching',
+  offered: 'stardom.ctrl.offered',
+  matched: 'stardom.ctrl.matched',
+  chatting: 'stardom.ctrl.chatting',
+  completed: 'stardom.ctrl.completed',
 };
 const PHASE_COLORS: Record<string, string> = {
   searching: 'var(--bz-purple)',
@@ -71,7 +71,7 @@ function TaskPhaseBar({ status }: { status: string }) {
                 boxShadow: isActive ? `0 0 4px ${color}` : undefined,
               }}
             />
-            <span className="text-[8px]" style={{ color: isActive ? color : 'var(--bz-text-dim)' }}>{PHASE_LABELS[phase]}</span>
+            <span className="text-[8px]" style={{ color: isActive ? color : 'var(--bz-text-dim)' }}>{t(PHASE_LABEL_KEYS[phase])}</span>
           </div>
         );
       })}
@@ -88,11 +88,11 @@ function TaskQueue() {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="行动流" count={pending.length} open={open} />
+      <SectionHeader label={t("stardom.ctrl.actionFlow")} count={pending.length} open={open} />
       <CollapsibleContent>
         <div className="space-y-2 px-3 pb-2">
           {pending.length === 0 ? (
-            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>星域平静，无待处理行动</p>
+            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.ctrl.noActions')}</p>
           ) : (
             pending.map((task) => (
               <div key={task.taskId} className="rounded p-2 space-y-1.5" style={{ background: 'var(--bz-bg)', border: '1px solid var(--bz-border)' }}>
@@ -100,16 +100,16 @@ function TaskQueue() {
                   <span style={{ color: task.direction === 'outgoing' ? 'var(--bz-cyan)' : 'var(--bz-green)' }}>
                     {task.direction === 'outgoing' ? '→ ' : '← '}
                   </span>
-                  <span style={{ color: 'var(--bz-text)' }}>{task.helperName ?? task.requesterName ?? '未知节点'}</span>
+                  <span style={{ color: 'var(--bz-text)' }}>{task.helperName ?? task.requesterName ?? t('stardom.ctrl.unknownNode')}</span>
                 </div>
                 <p className="text-[10px] line-clamp-2" style={{ color: 'var(--bz-text-dim)' }}>{task.question}</p>
                 <TaskPhaseBar status={task.status} />
                 <div className="flex gap-1 pt-0.5">
                   <Button size="sm" className="h-5 text-[10px] px-2" style={{ background: 'var(--bz-green)', color: '#000' }} onClick={() => acceptTask(task.taskId)}>
-                    <Check className="h-2.5 w-2.5 mr-0.5" />接入
+                    <Check className="h-2.5 w-2.5 mr-0.5" />{t('stardom.ctrl.accept')}
                   </Button>
                   <Button variant="outline" size="sm" className="h-5 text-[10px] px-2" style={{ borderColor: 'var(--bz-border)', color: 'var(--bz-text-dim)' }} onClick={() => rejectTask(task.taskId)}>
-                    <X className="h-2.5 w-2.5 mr-0.5" />拒接
+                    <X className="h-2.5 w-2.5 mr-0.5" />{t('stardom.ctrl.reject')}
                   </Button>
                 </div>
               </div>
@@ -132,7 +132,7 @@ function Leaderboard() {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="贡献沉积" open={open as boolean} />
+      <SectionHeader label={t("stardom.ctrl.deposit")} open={open as boolean} />
       <CollapsibleContent>
         <div className="px-3 pb-2 space-y-1">
           {leaderboard.slice(0, 10).map((entry, i) => {
@@ -156,7 +156,7 @@ function Leaderboard() {
                     <span className="text-[10px] flex-shrink-0" style={{ color: level.color, textShadow: `0 0 4px ${level.glow}` }}>{level.icon}</span>
                     <span className={cn('truncate text-xs', isMe && 'font-medium')} style={{ color: 'var(--bz-text)' }}>{entry.name}</span>
                     {isBridge && (
-                      <span className="text-[8px] px-1 rounded" style={{ background: 'var(--bz-blue)20', color: 'var(--bz-blue)' }}>桥接</span>
+                      <span className="text-[8px] px-1 rounded" style={{ background: 'var(--bz-blue)20', color: 'var(--bz-blue)' }}>{t('stardom.ctrl.bridge')}</span>
                     )}
                   </div>
                   <span className="text-[10px] font-mono flex-shrink-0" style={{ color: level.color }}>{entry.reputation}</span>
@@ -183,7 +183,7 @@ function Leaderboard() {
             );
           })}
           {leaderboard.length === 0 && (
-            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>沉积数据待加载</p>
+            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.ctrl.depositLoading')}</p>
           )}
         </div>
       </CollapsibleContent>
@@ -199,7 +199,7 @@ function OnlineAgentList() {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <SectionHeader label="活跃节点" count={onlineAgents.length} open={open} />
+      <SectionHeader label={t("stardom.ctrl.activeNodes")} count={onlineAgents.length} open={open} />
       <CollapsibleContent>
         <div className="px-3 pb-2 space-y-0.5">
           {onlineAgents.map((agent) => {
@@ -220,7 +220,7 @@ function OnlineAgentList() {
             );
           })}
           {onlineAgents.length === 0 && (
-            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>无活跃节点</p>
+            <p className="text-[10px] py-1" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.ctrl.noNodes')}</p>
           )}
         </div>
       </CollapsibleContent>

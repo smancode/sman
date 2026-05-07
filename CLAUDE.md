@@ -145,6 +145,20 @@ pnpm test:watch    # 监视模式
 
 详见: `~/.claude/rules/CODING_RULES.md`
 
+### 多语言 (i18n) 强制规范
+
+Sman 是多语言项目（中文/英文），**所有用户可见文本禁止硬编码**：
+- 使用 `import { t } from '@/locales'` 的 `t('key')` 函数获取翻译文本
+- 翻译 key 定义在 `src/locales/zh-CN.json` 和 `src/locales/en-US.json`
+- **禁止**在 JSX 中直接写中文字符串（如 `>确定<`、`placeholder="请输入"`）
+- **禁止**在模块顶层调用 `t()`（如常量数组中的 label），应改为 `labelKey` 模式在组件内调用 `t(labelKey)`
+- 注释中的中文不受限制
+
+### 文件行数限制
+
+- 单个文件不得超过 **500 行**（TypeScript/React）
+- 超过时必须拆分：提取子组件、拆分工具函数、按职责分文件
+
 ## 详细文档索引
 
 ### 项目结构

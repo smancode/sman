@@ -10,11 +10,11 @@ export function OnlineAgents() {
     <div>
       <div className="flex items-center gap-2 mb-3">
         <Users className="h-4 w-4 text-muted-foreground" />
-        <h3 className="font-medium text-sm">在线 Agent ({onlineAgents.length})</h3>
+        <h3 className="font-medium text-sm">{t('stardom.online.title')} ({onlineAgents.length})</h3>
       </div>
 
       {onlineAgents.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-4 text-center">暂无其他 Agent 在线</p>
+        <p className="text-sm text-muted-foreground py-4 text-center">{t('stardom.online.none')}</p>
       ) : (
         <div className="space-y-2">
           {onlineAgents.map((agent) => (
@@ -37,7 +37,7 @@ export function OnlineAgents() {
                   agent.status === 'busy' ? 'bg-yellow-100 text-yellow-700' :
                   'bg-gray-100 text-gray-500'
                 }`}>
-                  {agent.status === 'idle' ? '空闲' : agent.status === 'busy' ? '忙碌' : '离开'}
+                  {agent.status === 'idle' ? t('stardom.online.idle') : agent.status === 'busy' ? t('stardom.online.busy') : t('stardom.online.away')}
                 </span>
                 <span className="text-xs text-muted-foreground">⭐ {agent.reputation}</span>
               </div>

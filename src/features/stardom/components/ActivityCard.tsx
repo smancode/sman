@@ -30,7 +30,7 @@ const TYPE_COLORS: Record<string, string> = {
 function timeAgo(timestamp: number): string {
   const diff = Date.now() - timestamp;
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return '刚刚';
+  if (seconds < 60) return t('stardom.activity.justNow');
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -47,23 +47,23 @@ function translateToWorldEvent(entry: ActivityEntry): string {
   switch (entry.type) {
     case 'task_event': {
       if (direction === 'outgoing') {
-        if (status === 'searching') return `星域扫描启动，正在寻找能力节点: ${entry.description}`;
-        if (status === 'matched') return `协作星路已建立，节点链路激活`;
-        if (status === 'chatting') return `星路进入实时协同状态，数据流传输中`;
+        if (status === 'searching') return `${t('stardom.activity.searchStart')}: ${entry.description}`;
+        if (status === 'matched') return t('stardom.activity.linkEstablished');
+        if (status === 'chatting') return t('stardom.activity.realtimeSync');
         return entry.description;
       }
-      if (status === 'offered') return `邻近星域发来协作链路请求`;
-      if (status === 'matched') return `星路握手完成，协作通道已激活`;
+      if (status === 'offered') return t('stardom.activity.collabRequest');
+      if (status === 'matched') return t('stardom.activity.handshakeDone');
       return entry.description;
     }
     case 'collab_start':
-      return `新协作星路开辟，节点已进入协同轨道`;
+      return t('stardom.activity.newPath');
     case 'collab_complete':
-      return `星路协作完成，贡献沉积已结算`;
+      return t('stardom.activity.completed');
     case 'reputation_change':
-      return entry.description.replace('声望', '贡献沉积').replace('网络影响力', '贡献沉积');
+      return entry.description;
     case 'capability_search':
-      return `正在扫描星域中的能力节点分布`;
+      return t('stardom.activity.scanning');
     case 'status_change':
       return entry.description;
     default:

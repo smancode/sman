@@ -125,7 +125,7 @@ function CapabilityItem({ capability, experience, agentName, score }: {
         <p className="text-[10px] line-clamp-2" style={{ color: 'var(--bz-text-dim)' }}>{experience}</p>
       )}
       <div className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>
-        沉积来源: {agentName}
+        {t('stardom.cap.depositFrom').replace('{agent}', agentName)}
       </div>
     </div>
   );
@@ -154,11 +154,11 @@ function LayerPanel({ layer, items }: {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: layer.color }}>{layer.title}</span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: layer.color + '20', color: layer.color }}>
-              {count} 项
+              {count} {t('stardom.cap.items')}
             </span>
           </div>
           <div className="text-[10px] mt-0.5" style={{ color: 'var(--bz-text-dim)' }}>{layer.subtitle}</div>
-          {/* 平均适配度 */}
+          {/* {t('stardom.cap.avgFitness')} */}
           {count > 0 && (
             <div className="w-full h-0.5 rounded-full mt-1.5 overflow-hidden" style={{ background: 'var(--bz-bg)' }}>
               <div className="h-full rounded-full transition-all duration-500" style={{ width: `${avgScore}%`, background: layer.color }} />
@@ -169,7 +169,7 @@ function LayerPanel({ layer, items }: {
           <span className="text-sm font-mono font-bold" style={{ color: layer.color, textShadow: `0 0 6px ${layer.glow}` }}>
             {avgScore}%
           </span>
-          <span className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>平均适配度</span>
+          <span className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.cap.avgFitness')}</span>
         </div>
       </button>
 
@@ -227,10 +227,10 @@ export function CapabilityTree() {
           <div>
             <h2 className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--bz-text)' }}>
               <span style={{ color: 'var(--bz-cyan)', textShadow: '0 0 8px var(--bz-cyan)' }}>⬡</span>
-              进化仓
+              {t('stardom.cap.evolutionBay')}
             </h2>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--bz-text-dim)' }}>
-              已沉积 {totalCapabilities} 项能力 · 数字显影度 {autoPct}%
+              {t('stardom.cap.summary').replace('{count}', String(totalCapabilities)).replace('{pct}', String(autoPct))}
             </p>
           </div>
           <div className="flex items-center gap-1.5">
@@ -250,7 +250,7 @@ export function CapabilityTree() {
                   key={layer.key}
                   className="h-full rounded-full transition-all duration-500"
                   style={{ width: `${(count / totalCapabilities) * 100}%`, background: layer.color, boxShadow: `0 0 4px ${layer.glow}` }}
-                  title={`${layer.title}: ${count} 项`}
+                  title={`${layer.title}: ${count} ${t('stardom.cap.items')}`}
                 />
               );
             })}
@@ -276,9 +276,9 @@ export function CapabilityTree() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center space-y-2">
             <div className="text-4xl opacity-20">⬡</div>
-            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>等待能力沉积</p>
+            <p className="text-sm" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.cap.waiting')}</p>
             <p className="text-xs" style={{ color: 'var(--bz-text-dim)', opacity: 0.6 }}>
-              完成协作任务后，经验将自动转化为能力接口
+              {t('stardom.cap.hint')}
             </p>
           </div>
         </div>

@@ -62,14 +62,14 @@ export function ResourceBar() {
               : 'none',
           animation: sending ? 'bz-pulse-yellow 1.5s ease-in-out infinite' : connection.connected ? 'bz-pulse-green 2s ease-in-out infinite' : 'none',
         }} />
-        <span className="text-xs font-medium">{sending ? '处理中' : connection.connected ? '已连接' : '本地模式'}</span>
+        <span className="text-xs font-medium">{sending ? t('stardom.myAgent.processing') : connection.connected ? t('stardom.res.connected') : t('stardom.res.localMode')}</span>
       </div>
 
-      <ResourceItem icon={Cpu} label="行动流" value={activeTasks} max={maxSlots} color="var(--bz-cyan)" glow="var(--bz-cyan)" />
-      <ResourceItem icon={Trophy} label="贡献沉积" value={reputation} color="var(--bz-amber)" glow="var(--bz-amber)" />
+      <ResourceItem icon={Cpu} label={t("stardom.ctrl.actionFlow")} value={activeTasks} max={maxSlots} color="var(--bz-cyan)" glow="var(--bz-cyan)" />
+      <ResourceItem icon={Trophy} label={t("stardom.ctrl.deposit")} value={reputation} color="var(--bz-amber)" glow="var(--bz-amber)" />
       <ResourceItem icon={Zap} label={level.title} value={`Lv.${level.level}`} color="var(--bz-purple)" />
-      <ResourceItem icon={Users} label="活跃节点" value={onlineAgents.length} color="var(--bz-green)" />
-      <ResourceItem icon={Radio} label="星域信号" value={connection.connected ? '强' : '无'} color={connection.connected ? 'var(--bz-green)' : 'var(--bz-red)'} />
+      <ResourceItem icon={Users} label={t("stardom.ctrl.activeNodes")} value={onlineAgents.length} color="var(--bz-green)" />
+      <ResourceItem icon={Radio} label={t("stardom.res.signal")} value={connection.connected ? t('stardom.res.strong') : t('stardom.res.none')} color={connection.connected ? 'var(--bz-green)' : 'var(--bz-red)'} />
     </div>
   );
 }

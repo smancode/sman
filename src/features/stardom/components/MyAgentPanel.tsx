@@ -18,10 +18,10 @@ function deriveAgentStatus(
   stardomConnected: boolean,
   stardomStatus?: string,
 ): { status: string; label: string; cssClass: string } {
-  if (localSending) return { status: 'busy', label: '处理中', cssClass: 'bz-status-busy' };
-  if (stardomConnected && stardomStatus === 'collaborating') return { status: 'collaborating', label: '协作中', cssClass: 'bz-status-collaborating' };
-  if (stardomConnected && stardomStatus === 'busy') return { status: 'busy', label: '忙碌', cssClass: 'bz-status-busy' };
-  return { status: 'idle', label: '空闲', cssClass: 'bz-status-idle' };
+  if (localSending) return { status: 'busy', label: t('stardom.myAgent.processing'), cssClass: 'bz-status-busy' };
+  if (stardomConnected && stardomStatus === 'collaborating') return { status: 'collaborating', label: t('stardom.myAgent.collaborating'), cssClass: 'bz-status-collaborating' };
+  if (stardomConnected && stardomStatus === 'busy') return { status: 'busy', label: t('stardom.online.busy'), cssClass: 'bz-status-busy' };
+  return { status: 'idle', label: t('stardom.online.idle'), cssClass: 'bz-status-idle' };
 }
 
 export function MyAgentPanel() {
@@ -48,9 +48,9 @@ export function MyAgentPanel() {
           </button>
           <img src="/favicon.svg" alt="Agent" className="h-7 w-7 object-contain rounded dark:brightness-0 dark:invert dark:opacity-80" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? '本地 Agent'}</div>
+            <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? t('stardom.myAgent.localAgent')}</div>
             <div className="flex items-center gap-1 text-xs" style={{ color: connected ? 'var(--bz-green)' : 'var(--bz-amber)' }}>
-              {connected ? <><Wifi className="h-3 w-3" /> 已连接星图</> : <><WifiOff className="h-3 w-3" /> 本地模式</>}
+              {connected ? <><Wifi className="h-3 w-3" /> {t('stardom.myAgent.connectedMap')}</> : <><WifiOff className="h-3 w-3" /> {t('stardom.myAgent.localMode2')}</>}
             </div>
           </div>
         </div>
@@ -62,7 +62,7 @@ export function MyAgentPanel() {
         <div className="p-3 space-y-4">
           {/* Status indicator with pulse */}
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>节点状态</div>
+            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.myAgent.nodeStatus')}</div>
             <div className="flex items-center gap-2">
               {sending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--bz-amber)' }} />
@@ -77,7 +77,7 @@ export function MyAgentPanel() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>
               <Trophy className="h-3 w-3" style={{ color: 'var(--bz-amber)' }} />
-              贡献沉积 · {repLevel.title}
+              {t('stardom.myAgent.depositTitle')} · {repLevel.title}
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-lg font-mono font-bold" style={{ color: repLevel.color, textShadow: `0 0 8px ${repLevel.glow}` }}>
@@ -97,7 +97,7 @@ export function MyAgentPanel() {
                   />
                 </div>
                 <div className="text-[9px]" style={{ color: 'var(--bz-text-dim)' }}>
-                  距{nextLevel.title}还需 {nextLevel.minRep - (reputation ?? 0)}
+                  {t('stardom.myAgent.needMore').replace('{title}', nextLevel.title).replace('{count}', String(nextLevel.minRep - (reputation ?? 0)))}
                 </div>
               </div>
             )}
@@ -106,7 +106,7 @@ export function MyAgentPanel() {
           {/* Collaboration Mode */}
           {connected && (
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>响应策略</div>
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.myAgent.strategy')}</div>
               <RadioGroup
                 value={connection.collabMode ?? 'notify'}
                 onValueChange={(v) => setMode(v as 'auto' | 'notify' | 'manual')}
@@ -116,7 +116,7 @@ export function MyAgentPanel() {
                   <div key={mode} className="flex items-center gap-2">
                     <RadioGroupItem value={mode} id={`mode-${mode}`} className="h-3 w-3" style={{ borderColor: 'var(--bz-border)' }} />
                     <Label htmlFor={`mode-${mode}`} className="text-xs cursor-pointer" style={{ color: 'var(--bz-text)' }}>
-                      {mode === 'auto' ? '全自动' : mode === 'notify' ? '半自动 30s' : '手动'}
+                      {mode === 'auto' ? t('stardom.myAgent.autoFull') : mode === 'notify' ? t('stardom.myAgent.semiAuto') : t('stardom.myAgent.manual')}
                     </Label>
                   </div>
                 ))}
@@ -129,13 +129,13 @@ export function MyAgentPanel() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span style={{ color: 'var(--bz-text-dim)' }} className="flex items-center gap-1">
-                  <Users className="h-3 w-3" /> 协作次数
+                  <Users className="h-3 w-3" /> {t('stardom.myAgent.collabCount')}
                 </span>
                 <span className="font-mono" style={{ color: 'var(--bz-cyan)' }}>{helpCount}</span>
               </div>
               {myRank > 0 && (
                 <div className="flex items-center justify-between text-xs">
-                  <span style={{ color: 'var(--bz-text-dim)' }}>沉积排名</span>
+                  <span style={{ color: 'var(--bz-text-dim)' }}>{t('stardom.myAgent.depositRank')}</span>
                   <span className="font-mono" style={{ color: 'var(--bz-cyan)' }}>#{myRank}</span>
                 </div>
               )}

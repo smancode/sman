@@ -531,6 +531,30 @@
     "text": "Language settings saved",
     "context": "Success message after saving language settings"
   },
+  "settings.back": {
+    "text": "Back",
+    "context": "Settings page back button"
+  },
+  "settings.about.community.githubStar": {
+    "text": "Click Star to join the open source community",
+    "context": "GitHub Star section hint"
+  },
+  "settings.about.community.starHint": {
+    "text": "Click to give a Star ⭐",
+    "context": "Fallback when GitHub star count fails to load"
+  },
+  "settings.about.community.wechatScan": {
+    "text": "Scan to join Sman WeChat group",
+    "context": "WeChat QR code hint"
+  },
+  "settings.about.community.wechatTip": {
+    "text": "(Get the latest version in time)",
+    "context": "WeChat QR code subtitle"
+  },
+  "settings.about.community.starCount": {
+    "text": "{count} developers have starred",
+    "context": "GitHub star count display, {count} is the number"
+  },
   "settings.about.title": {
     "text": "About",
     "context": "About section title"
@@ -548,7 +572,7 @@
     "context": "Documentation link text"
   },
   "settings.about.community": {
-    "text": "Community",
+    "text": "Join Community",
     "context": "Join community section title"
   },
   "git.title": {
@@ -1076,8 +1100,8 @@
     "context": "Workspace placeholder"
   },
   "cron.selectSkill": {
-    "text": "Select skill",
-    "context": "Skill select placeholder"
+    "text": "Select Skill",
+    "context": "Select Skill placeholder"
   },
   "cron.cronPlaceholder": {
     "text": "0 9 * * 1-5 (weekdays 9am)",
@@ -1554,5 +1578,413 @@
   "stardom.cap.supportSubtitle": {
     "text": "Weakly digital · Primarily assistive",
     "context": "Support layer subtitle"
+  },
+  "cron.noRecord": {
+    "text": "No records",
+    "context": "No execution records"
+  },
+  "cron.status.running": {
+    "text": "Running",
+    "context": "Running status"
+  },
+  "cron.status.success": {
+    "text": "Success",
+    "context": "Success status"
+  },
+  "cron.status.failed": {
+    "text": "Failed",
+    "context": "Failed status"
+  },
+  "cron.autoConfig": {
+    "text": "Auto",
+    "context": "Auto-configured tag"
+  },
+  "cron.nextExec": {
+    "text": "Next run: ",
+    "context": "Next execution prefix"
+  },
+  "cron.executeNow": {
+    "text": "Execute Now",
+    "context": "Execute now button title"
+  },
+  "cron.editTitle": {
+    "text": "Edit",
+    "context": "Edit button title"
+  },
+  "cron.confirmDeleteMsg": {
+    "text": "Are you sure you want to delete this cron task?",
+    "context": "Delete confirmation dialog"
+  },
+  "cron.scan.created": {
+    "text": "Created",
+    "context": "Scan result - created"
+  },
+  "cron.scan.updated": {
+    "text": "Updated",
+    "context": "Scan result - updated"
+  },
+  "cron.scan.disabled": {
+    "text": "Disabled",
+    "context": "Scan result - disabled"
+  },
+  "cron.scan.noChange": {
+    "text": "No changes",
+    "context": "Scan result - no changes"
+  },
+  "cron.scan.scanning": {
+    "text": "Scanning...",
+    "context": "Scanning status"
+  },
+  "cron.scan.autoFetch": {
+    "text": "Auto Fetch",
+    "context": "Auto fetch button"
+  },
+  "cron.scan.complete": {
+    "text": "Scan complete: ",
+    "context": "Scan complete prefix"
+  },
+  "cron.pageTitle": {
+    "text": "Cron Tasks",
+    "context": "Cron tasks page title"
+  },
+  "cron.pageDesc": {
+    "text": "Configure scheduled Skill tasks (standard cron expressions)",
+    "context": "Cron tasks page description"
+  },
+  "cron.close": {
+    "text": "Close",
+    "context": "Close button"
+  },
+  "cron.businessSystem": {
+    "text": "Business System",
+    "context": "Business system label"
+  },
+  "cron.selectBusinessSystem": {
+    "text": "Select business system",
+    "context": "Select business system placeholder"
+  },
+  "cron.noCrontab": {
+    "text": "(no crontab.md)",
+    "context": "No crontab file hint"
+  },
+  "cron.cronLabel": {
+    "text": "Cron Expression",
+    "context": "Cron expression label"
+  },
+  "cron.cronPlaceholder2": {
+    "text": "*/30 * * * * (min hour day month dow)",
+    "context": "Cron input placeholder"
+  },
+  "cron.cronHint": {
+    "text": "Format: min hour day month dow (e.g., 0 9 * * 1-5 = weekdays at 9am)",
+    "context": "Cron expression format hint"
+  },
+  "cron.emptyHint": {
+    "text": "No cron tasks yet. Click \"Auto Fetch\" to scan or \"New Task\" to create one",
+    "context": "Empty list hint"
+  },
+  "stardom.collab.autoAccept": {
+    "text": "s auto-accept",
+    "context": "Collaboration invite countdown"
+  },
+  "stardom.collab.reject": {
+    "text": "Reject",
+    "context": "Reject collaboration invite"
+  },
+  "stardom.collab.accept": {
+    "text": "Accept",
+    "context": "Accept collaboration invite"
+  },
+  "stardom.ctrl.searching": {
+    "text": "Scanning",
+    "context": "Scanning status"
+  },
+  "stardom.ctrl.offered": {
+    "text": "Invite",
+    "context": "Offered status"
+  },
+  "stardom.ctrl.matched": {
+    "text": "Link",
+    "context": "Matched status"
+  },
+  "stardom.ctrl.chatting": {
+    "text": "Active",
+    "context": "Chatting status"
+  },
+  "stardom.ctrl.completed": {
+    "text": "Settled",
+    "context": "Completed status"
+  },
+  "stardom.ctrl.actionFlow": {
+    "text": "Action Flow",
+    "context": "Action flow section title"
+  },
+  "stardom.ctrl.deposit": {
+    "text": "Reputation",
+    "context": "Reputation section title"
+  },
+  "stardom.ctrl.activeNodes": {
+    "text": "Active Nodes",
+    "context": "Active nodes section title"
+  },
+  "stardom.cap.depositFrom": {
+    "text": "Deposit from: {agent}",
+    "context": "Capability deposit source"
+  },
+  "stardom.cap.items": {
+    "text": "items",
+    "context": "Capability count unit"
+  },
+  "stardom.cap.evolutionBay": {
+    "text": "Evolution Bay",
+    "context": "Evolution bay section title"
+  },
+  "stardom.cap.summary": {
+    "text": "{count} capabilities deposited · Digital manifestation {pct}%",
+    "context": "Capability summary"
+  },
+  "stardom.cap.hint": {
+    "text": "After completing collaboration tasks, experience will automatically convert to capability interfaces",
+    "context": "Capability section hint"
+  },
+  "stardom.task.noTasks": {
+    "text": "No collaboration tasks",
+    "context": "No collaboration tasks hint"
+  },
+  "stardom.task.viewDashboard": {
+    "text": "View in Stardom Dashboard",
+    "context": "View dashboard link"
+  },
+  "stardom.online.idle": {
+    "text": "Idle",
+    "context": "Online node idle status"
+  },
+  "stardom.online.busy": {
+    "text": "Busy",
+    "context": "Online node busy status"
+  },
+  "stardom.online.away": {
+    "text": "Away",
+    "context": "Online node away status"
+  },
+  "stardom.net.localNode": {
+    "text": "Local Node",
+    "context": "Network sandbox local node label"
+  },
+  "stardom.quick.network": {
+    "text": "Stardom Map",
+    "context": "Quick bar - Stardom Map"
+  },
+  "stardom.quick.evolution": {
+    "text": "Evolution Bay",
+    "context": "Quick bar - Evolution Bay"
+  },
+  "stardom.quick.reputation": {
+    "text": "Reputation",
+    "context": "Quick bar - Reputation"
+  },
+  "stardom.quick.battles": {
+    "text": "Action Flow",
+    "context": "Quick bar - Action Flow"
+  },
+  "stardom.quick.report": {
+    "text": "Stardom Report",
+    "context": "Quick bar - Stardom Report"
+  },
+  "stardom.activity.justNow": {
+    "text": "Just now",
+    "context": "Just now"
+  },
+  "stardom.activity.searchStart": {
+    "text": "Stardom scan started, searching for capability nodes",
+    "context": "Scan start activity"
+  },
+  "stardom.activity.linkEstablished": {
+    "text": "Collaboration link established, node link activated",
+    "context": "Link established activity"
+  },
+  "stardom.activity.realtimeSync": {
+    "text": "Link in real-time collaboration, data streaming",
+    "context": "Real-time sync activity"
+  },
+  "stardom.activity.collabRequest": {
+    "text": "Nearby stardom sent collaboration link request",
+    "context": "Collaboration request activity"
+  },
+  "stardom.activity.handshakeDone": {
+    "text": "Link handshake complete, collaboration channel activated",
+    "context": "Handshake complete activity"
+  },
+  "stardom.activity.newPath": {
+    "text": "New collaboration link opened, node entered collaborative orbit",
+    "context": "New path activity"
+  },
+  "stardom.activity.completed": {
+    "text": "Collaboration complete, reputation settled",
+    "context": "Collaboration completed activity"
+  },
+  "stardom.activity.scanning": {
+    "text": "Scanning capability node distribution in stardom",
+    "context": "Scanning activity"
+  },
+  "stardom.myAgent.processing": {
+    "text": "Processing",
+    "context": "Agent processing status"
+  },
+  "stardom.myAgent.collaborating": {
+    "text": "Collaborating",
+    "context": "Agent collaborating status"
+  },
+  "stardom.collab.detail": {
+    "text": "Collaboration Detail",
+    "context": "Collaboration detail title"
+  },
+  "stardom.collab.noMessages": {
+    "text": "No messages yet",
+    "context": "No messages hint"
+  },
+  "stardom.cap.avgFitness": {
+    "text": "Avg. Fitness",
+    "context": "Average fitness"
+  },
+  "stardom.cap.waiting": {
+    "text": "Waiting for capability deposit",
+    "context": "Waiting for deposit"
+  },
+  "stardom.res.connected": {
+    "text": "Connected",
+    "context": "Connected status"
+  },
+  "stardom.res.localMode": {
+    "text": "Local Mode",
+    "context": "Local mode status"
+  },
+  "stardom.res.signal": {
+    "text": "Stardom Signal",
+    "context": "Stardom signal"
+  },
+  "stardom.res.strong": {
+    "text": "Strong",
+    "context": "Strong signal"
+  },
+  "stardom.res.none": {
+    "text": "None",
+    "context": "No signal"
+  },
+  "stardom.net.waiting": {
+    "text": "Map awaiting drawing",
+    "context": "Map waiting"
+  },
+  "stardom.net.hint": {
+    "text": "Collaboration links will appear here after connecting to the server",
+    "context": "Map hint"
+  },
+  "stardom.ctrl.noActions": {
+    "text": "Stardom is calm, no pending actions",
+    "context": "No pending actions"
+  },
+  "stardom.ctrl.unknownNode": {
+    "text": "Unknown Node",
+    "context": "Unknown node"
+  },
+  "stardom.ctrl.accept": {
+    "text": "Accept",
+    "context": "Accept button"
+  },
+  "stardom.ctrl.reject": {
+    "text": "Reject",
+    "context": "Reject button"
+  },
+  "stardom.ctrl.bridge": {
+    "text": "Bridge",
+    "context": "Bridge tag"
+  },
+  "stardom.ctrl.depositLoading": {
+    "text": "Deposit data loading",
+    "context": "Deposit data loading"
+  },
+  "stardom.ctrl.noNodes": {
+    "text": "No active nodes",
+    "context": "No active nodes"
+  },
+  "stardom.online.title": {
+    "text": "Online Agents",
+    "context": "Online Agents title"
+  },
+  "stardom.online.none": {
+    "text": "No other agents online",
+    "context": "No online agents"
+  },
+  "stardom.task.list": {
+    "text": "Task List",
+    "context": "Task list title"
+  },
+  "stardom.task.autoHint": {
+    "text": "Agent will automatically search for capabilities and assist you",
+    "context": "Task auto hint"
+  },
+  "stardom.task.active": {
+    "text": "Active",
+    "context": "Active tasks"
+  },
+  "stardom.task.history": {
+    "text": "History",
+    "context": "History tasks"
+  },
+  "stardom.myAgent.localAgent": {
+    "text": "Local Agent",
+    "context": "Local Agent name"
+  },
+  "stardom.myAgent.connectedMap": {
+    "text": "Connected to Stardom",
+    "context": "Connected to Stardom status"
+  },
+  "stardom.myAgent.localMode2": {
+    "text": "Local Mode",
+    "context": "Local mode status"
+  },
+  "stardom.myAgent.nodeStatus": {
+    "text": "Node Status",
+    "context": "Node status label"
+  },
+  "stardom.myAgent.depositTitle": {
+    "text": "Reputation",
+    "context": "Reputation title"
+  },
+  "stardom.myAgent.needMore": {
+    "text": "{count} more to {title}",
+    "context": "Upgrade needed"
+  },
+  "stardom.myAgent.strategy": {
+    "text": "Response Strategy",
+    "context": "Response strategy label"
+  },
+  "stardom.myAgent.autoFull": {
+    "text": "Fully Auto",
+    "context": "Full auto mode"
+  },
+  "stardom.myAgent.semiAuto": {
+    "text": "Semi-auto 30s",
+    "context": "Semi-auto mode"
+  },
+  "stardom.myAgent.manual": {
+    "text": "Manual",
+    "context": "Manual mode"
+  },
+  "stardom.myAgent.collabCount": {
+    "text": "Collaborations",
+    "context": "Collaboration count label"
+  },
+  "stardom.myAgent.depositRank": {
+    "text": "Reputation Rank",
+    "context": "Reputation rank label"
+  },
+  "stardom.activityFeed.standby": {
+    "text": "Agent network on standby, awaiting world events...",
+    "context": "Activity feed standby"
+  },
+  "stardom.activityFeed.hint": {
+    "text": "Agent activity will be displayed here in real-time",
+    "context": "Activity feed hint"
   }
 }
