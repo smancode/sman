@@ -18,8 +18,20 @@ interface LocaleState {
   locale: string;
 }
 
+const LOCALE_CACHE_KEY = 'sman-locale';
+
+function getInitialLocale(): string {
+  const cached = localStorage.getItem(LOCALE_CACHE_KEY);
+  if (cached && translations[cached]) return cached;
+
+  // 首次使用：从浏览器语言检测
+  const browserLang = navigator.language || '';
+  if (browserLang.toLowerCase().startsWith('zh')) return 'zh-CN';
+  return 'en-US';
+}
+
 const useLocaleStore = create<LocaleState>(() => ({
-  locale: 'zh-CN',
+  locale: getInitialLocale(),
 }));
 
 /**
@@ -29,9 +41,11 @@ export function setLocale(locale: string) {
   if (!translations[locale]) {
     console.warn(`[i18n] Unsupported locale: ${locale}, falling back to zh-CN`);
     useLocaleStore.setState({ locale: 'zh-CN' });
+    localStorage.setItem(LOCALE_CACHE_KEY, 'zh-CN');
     return;
   }
   useLocaleStore.setState({ locale });
+  localStorage.setItem(LOCALE_CACHE_KEY, locale);
   console.log(`[i18n] Language switched to: ${locale}`);
 }
 
