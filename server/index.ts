@@ -1094,7 +1094,13 @@ wss.on('connection', (ws: WebSocket) => {
           const session = store.getSession(msg.sessionId);
           if (!session) throw new Error('Session not found');
           const skills = skillsRegistry.getProjectSkills(session.workspace);
-          ws.send(JSON.stringify({ type: 'skills.listProject', skills }));
+          const commands = skillsRegistry.getProjectCommands(session.workspace);
+          const paths = smartPathStore.list(session.workspace).map(p => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+          }));
+          ws.send(JSON.stringify({ type: 'skills.listProject', skills, commands, paths }));
           break;
         }
 

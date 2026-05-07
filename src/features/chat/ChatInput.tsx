@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
-import { SkillPicker } from '@/components/SkillPicker';
+import { SkillPicker, type PickerItem } from '@/components/SkillPicker';
 
 export interface StagedMedia {
   fileName: string;
@@ -20,13 +20,6 @@ export interface StagedMedia {
   base64Data: string;
   /** Local file path (Electron drag-drop or file picker). When set, base64Data is empty. */
   filePath?: string;
-}
-
-interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
 }
 
 interface ChatInputProps {
@@ -62,6 +55,7 @@ function readFileAsBase64(file: File): Promise<string> {
 export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [skillPickerFilter, setSkillPickerFilter] = useState('');
   const [stagedMedia, setStagedMedia] = useState<StagedMedia[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -350,26 +344,44 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     ) {
       slashTriggeredRef.current = true;
       setShowSkillPicker(true);
+      setSkillPickerFilter('');
     } else if (charBeforeCursor !== '/') {
       slashTriggeredRef.current = false;
     }
+
+    // Update filter for skill picker: extract text after the last standalone /
+    if (showSkillPicker || slashTriggeredRef.current) {
+      const textBeforeCursor = value.slice(0, cursorPosition);
+      const slashIdx = textBeforeCursor.lastIndexOf('/');
+      if (slashIdx >= 0) {
+        const beforeSlash = textBeforeCursor[slashIdx - 1];
+        if (!beforeSlash || beforeSlash === ' ' || beforeSlash === '\n') {
+          setSkillPickerFilter(textBeforeCursor.slice(slashIdx + 1));
+        }
+      }
+    }
   };
 
-  const handleSkillSelect = (skill: Skill) => {
+  const handleSkillSelect = (item: PickerItem) => {
     const cursorPosition = textareaRef.current?.selectionStart || input.length;
-    const beforeSlash = input.slice(0, cursorPosition - 1);
+    const textBeforeCursor = input.slice(0, cursorPosition);
     const afterCursor = input.slice(cursorPosition);
 
-    const newInput = beforeSlash + '/' + skill.id + ' ' + afterCursor;
+    // Find the / that triggered the picker and replace from there
+    const slashIdx = textBeforeCursor.lastIndexOf('/');
+    const beforeSlash = textBeforeCursor.slice(0, slashIdx);
+
+    const newInput = beforeSlash + '/' + item.id + ' ' + afterCursor;
 
     setInput(newInput);
     setShowSkillPicker(false);
+    setSkillPickerFilter('');
     slashTriggeredRef.current = false;
 
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const newCursorPos = beforeSlash.length + 1 + skill.id.length + 1;
+        const newCursorPos = beforeSlash.length + 1 + item.id.length + 1;
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
     }, 0);
@@ -377,6 +389,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
 
   const handleSkillPickerClose = () => {
     setShowSkillPicker(false);
+    setSkillPickerFilter('');
     slashTriggeredRef.current = false;
   };
 
@@ -394,6 +407,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
             onClose={handleSkillPickerClose}
             onSelect={handleSkillSelect}
             sessionId={currentSessionId}
+            filter={skillPickerFilter}
           />
         </div>
       )}
@@ -474,7 +488,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
-              placeholder={disabled ? '未连接' : '输入消息... (输入 / 选择 Skill，可拖入文件)'}
+              placeholder={disabled ? '未连接' : '输入消息... (输入 / 选择【命令/Skill/路径】，可拖入文件)'}
               disabled={disabled}
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}

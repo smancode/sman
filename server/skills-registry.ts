@@ -10,6 +10,12 @@ export interface ProjectSkill {
   content: string;
 }
 
+export interface ProjectCommand {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export class SkillsRegistry {
   private homeDir: string;
   private registryPath: string;
@@ -129,5 +135,39 @@ export class SkillsRegistry {
     }
 
     return skills;
+  }
+
+  /**
+   * Get project-specific commands from {workspace}/.claude/commands/
+   * Commands are .md files, name is filename without extension.
+   */
+  getProjectCommands(workspace: string): ProjectCommand[] {
+    const commandsDir = path.join(workspace, '.claude', 'commands');
+    if (!fs.existsSync(commandsDir)) return [];
+
+    const commands: ProjectCommand[] = [];
+    const entries = fs.readdirSync(commandsDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        const commandId = entry.name.replace(/\.md$/, '');
+        let description = '';
+
+        const filePath = path.join(commandsDir, entry.name);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n').slice(0, 10);
+        for (const line of lines) {
+          const match = line.match(/^description:\s*(.+)/);
+          if (match) {
+            description = match[1].trim();
+            break;
+          }
+        }
+
+        commands.push({ id: commandId, name: commandId, description });
+      }
+    }
+
+    return commands;
   }
 }
