@@ -33,4 +33,31 @@ contextBridge.exposeInMainWorld('sman', {
 
   // Git
   getGitBranch: (dirPath: string) => ipcRenderer.invoke('git:getBranch', dirPath),
+
+  // Auto-updater
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    setFeedURL: (url: string) => ipcRenderer.invoke('updater:setFeedURL', url),
+    onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { version: string; releaseNotes?: string }) => callback(data);
+      ipcRenderer.on('updater:available', handler);
+      return () => ipcRenderer.removeListener('updater:available', handler);
+    },
+    onUpdateNotAvailable: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('updater:not-available', handler);
+      return () => ipcRenderer.removeListener('updater:not-available', handler);
+    },
+    onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { version: string }) => callback(data);
+      ipcRenderer.on('updater:downloaded', handler);
+      return () => ipcRenderer.removeListener('updater:downloaded', handler);
+    },
+    onUpdateError: (callback: (info: { message: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { message: string }) => callback(data);
+      ipcRenderer.on('updater:error', handler);
+      return () => ipcRenderer.removeListener('updater:error', handler);
+    },
+  },
 });
