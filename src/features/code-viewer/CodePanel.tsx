@@ -32,6 +32,7 @@ import { authFetch } from '@/lib/auth';
 import { streamdownComponents } from '@/features/chat/streamdown-components';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { CodeNavigator } from './CodeNavigator';
+import { t } from '@/locales';
 
 // ── Language extension mapping ────────────────────────────────────
 
@@ -93,7 +94,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
       <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="text-[13px]">加载文件中...</span>
+          <span className="text-[13px]">{t("codeviewer.loading")}</span>
         </div>
       </div>
     );
@@ -115,7 +116,7 @@ export function CodePanel({ workspace }: CodePanelProps) {
       <div className="h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <FileQuestion className="h-8 w-8 shrink-0" />
-          <span className="text-[13px]">点击左侧文件查看内容</span>
+          <span className="text-[13px]">{t("codeviewer.clickToView")}</span>
         </div>
       </div>
     );
@@ -153,12 +154,12 @@ function BinaryPanel({ file }: { file: BinaryFileInfo }) {
     <div className="h-full flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-muted-foreground text-center">
         <FileQuestion className="h-8 w-8 shrink-0" />
-        <span className="text-[12px] font-medium">二进制文件</span>
+        <span className="text-[12px] font-medium">{t("codeviewer.binaryFile")}</span>
         <span className="text-[12px]">
           {file.fileName} ({sizeStr}, {file.mimeType})
         </span>
         <span className="text-[12px] text-muted-foreground/60">
-          此文件类型无法预览
+          {t("codeviewer.cannotPreview")}
         </span>
       </div>
     </div>
@@ -249,14 +250,14 @@ function ImagePanel({ file, workspace }: { file: BinaryFileInfo; workspace: stri
           onClick={handleZoomOut}
           disabled={zoom <= 10}
           className="p-1 rounded hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-30"
-          title="缩小"
+          title={t("codeviewer.zoomOut")}
         >
           <ZoomOut className="w-4 h-4 text-muted-foreground" />
         </button>
         <button
           onClick={handleZoomReset}
           className="px-2 py-0.5 text-[11px] text-muted-foreground rounded hover:bg-[hsl(var(--muted))] transition-colors min-w-[40px] text-center"
-          title="1:1 原始大小"
+          title={t("codeviewer.zoomOriginal")}
         >
           {zoomLabel}
         </button>
@@ -264,7 +265,7 @@ function ImagePanel({ file, workspace }: { file: BinaryFileInfo; workspace: stri
           onClick={handleZoomIn}
           disabled={zoom >= 500}
           className="p-1 rounded hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-30"
-          title="放大"
+          title={t("codeviewer.zoomIn")}
         >
           <ZoomIn className="w-4 h-4 text-muted-foreground" />
         </button>
@@ -395,23 +396,23 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
         '.cm-gutters': { fontFamily: monoFont },
       }),
       EditorState.phrases.of({
-        'Find': '查找',
-        'Replace': '替换',
-        'next': '下一个',
-        'previous': '上一个',
-        'all': '全部',
-        'match case': '区分大小写',
-        'regexp': '正则表达式',
-        'by word': '全词匹配',
-        'replace': '替换',
-        'replace all': '全部替换',
-        'close': '关闭',
-        'current match': '当前匹配',
-        'on line': '行',
-        'replaced match on line $': '已替换第 $ 行的匹配',
-        'replaced $ matches': '已替换 $ 处匹配',
-        'Go to line': '跳转到行',
-        'go': '跳转',
+        'Find': t('codeviewer.find'),
+        'Replace': t('codeviewer.replace'),
+        'next': t('codeviewer.next'),
+        'previous': t('codeviewer.previous'),
+        'all': t('codeviewer.all'),
+        'match case': t('codeviewer.matchCase'),
+        'regexp': t('codeviewer.regexp'),
+        'by word': t('codeviewer.byWord'),
+        'replace': t('codeviewer.replace'),
+        'replace all': t('codeviewer.replaceAll'),
+        'close': t('codeviewer.close'),
+        'current match': t('codeviewer.currentMatch'),
+        'on line': t('codeviewer.onLine'),
+        'replaced match on line $': t('codeviewer.replacedOnLine'),
+        'replaced $ matches': t('codeviewer.replacedMatches'),
+        'Go to line': t('codeviewer.goToLine'),
+        'go': t('codeviewer.go'),
       }),
       search({ top: true }),
       highlightSelectionMatches(),
@@ -582,11 +583,11 @@ const FileHeader = memo(function FileHeader({
         {language}
       </span>
       <span className="text-[11px] text-muted-foreground/60 shrink-0">
-        {lineCount} 行
+        {lineCount} {t("codeviewer.lines").replace("${count}", String(lineCount))}
       </span>
       {truncated && (
         <span className="text-[11px] text-amber-500 shrink-0">
-          (已截断)
+          {t("codeviewer.truncated")}
         </span>
       )}
 
@@ -600,10 +601,10 @@ const FileHeader = memo(function FileHeader({
               ? 'border-purple-400 bg-purple-500/10 text-purple-500'
               : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] text-muted-foreground',
           )}
-          title={showSource ? '显示渲染' : '显示源码'}
+          title={showSource ? t('codeviewer.showRendered') : t('codeviewer.showSource')}
         >
           <Code2 className="h-3 w-3" />
-          源码
+          {t("codeviewer.source")}
         </button>
       )}
 
@@ -617,24 +618,24 @@ const FileHeader = memo(function FileHeader({
               ? 'border-blue-400 bg-blue-500/10 text-blue-500'
               : 'border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] text-muted-foreground',
           )}
-          title={editable ? '切换为只读' : '切换为编辑'}
+          title={editable ? t('codeviewer.toggleReadonly') : t('codeviewer.toggleEdit')}
         >
           {editable ? <Eye className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
-          {editable ? '只读' : '编辑'}
+          {editable ? t('codeviewer.readonly') : t('codeviewer.edit')}
         </button>
         {editable && dirty && (
           <button
             onClick={onSave}
             disabled={saving}
             className="flex items-center gap-1 px-2 py-1 text-[12px] rounded border border-green-400 bg-green-500/10 text-green-500 hover:bg-green-500/20 disabled:opacity-50 transition-colors"
-            title="保存 (Ctrl+S)"
+            title={t("codeviewer.saveTitle")}
           >
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            {saving ? '保存中...' : '保存'}
+            {saving ? t('codeviewer.saving') : t('codeviewer.save')}
           </button>
         )}
         {editable && dirty && (
-          <span className="text-[11px] text-amber-500 shrink-0">已修改</span>
+          <span className="text-[11px] text-amber-500 shrink-0">{t("codeviewer.modified")}</span>
         )}
       </div>
     </div>

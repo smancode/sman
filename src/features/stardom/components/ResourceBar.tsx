@@ -6,6 +6,7 @@ import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
 import { Cpu, Trophy, Zap, Users, Radio } from 'lucide-react';
 import { getReputationLevel } from './ReputationUtils';
+import { t } from '@/locales';
 
 function ResourceItem({ icon: Icon, label, value, max, color, glow }: {
   icon: React.ElementType;

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Wifi, WifiOff, Trophy, Users, ArrowLeft, Loader2 } from 'lucide-react';
 import { getReputationLevel, getReputationProgress, getNextLevel } from './ReputationUtils';
+import { t } from '@/locales';
 
 function deriveAgentStatus(
   localSending: boolean,

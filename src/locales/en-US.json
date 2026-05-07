@@ -653,7 +653,7 @@
   },
   "smartpath.run": {
     "text": "Run",
-    "context": "Run path button text"
+    "context": "Run button"
   },
   "smartpath.status.draft": {
     "text": "Draft",
@@ -1046,5 +1046,513 @@
   "codeviewer.current": {
     "text": "Current",
     "context": "Current location marker"
+  },
+  "cron.back": {
+    "text": "Back",
+    "context": "Back button"
+  },
+  "cron.noSystems": {
+    "text": "No systems yet",
+    "context": "No systems hint"
+  },
+  "cron.confirmDelete": {
+    "text": "Confirm to delete this task?",
+    "context": "Delete task confirmation"
+  },
+  "cron.taskName": {
+    "text": "Task Name",
+    "context": "Task name label"
+  },
+  "cron.taskName.placeholder": {
+    "text": "Enter task name",
+    "context": "Task name placeholder"
+  },
+  "cron.workspace": {
+    "text": "Workspace",
+    "context": "Workspace selector"
+  },
+  "cron.workspace.placeholder": {
+    "text": "Select workspace",
+    "context": "Workspace placeholder"
+  },
+  "cron.selectSkill": {
+    "text": "Select skill",
+    "context": "Skill select placeholder"
+  },
+  "cron.cronPlaceholder": {
+    "text": "0 9 * * 1-5 (weekdays 9am)",
+    "context": "Cron expression placeholder"
+  },
+  "cron.inputPlaceholder": {
+    "text": "Enter execution content...",
+    "context": "Execution input placeholder"
+  },
+  "cron.aiGenerate": {
+    "text": "AI Generate",
+    "context": "AI generate button"
+  },
+  "cron.aiGenerating": {
+    "text": "Generating...",
+    "context": "AI generating status"
+  },
+  "cron.testRun": {
+    "text": "Test Run",
+    "context": "Test run button"
+  },
+  "cron.testing": {
+    "text": "Running...",
+    "context": "Test running status"
+  },
+  "cron.saveTask": {
+    "text": "Save Task",
+    "context": "Save task button"
+  },
+  "cron.saving": {
+    "text": "Saving...",
+    "context": "Saving status"
+  },
+  "cron.newTask": {
+    "text": "New Task",
+    "context": "New task button"
+  },
+  "cron.editTask": {
+    "text": "Edit",
+    "context": "Edit task button"
+  },
+  "cron.deleteTask": {
+    "text": "Delete",
+    "context": "Delete task button"
+  },
+  "cron.lastRunAt": {
+    "text": "Last Run",
+    "context": "Last run time"
+  },
+  "cron.nextRunAt": {
+    "text": "Next Run",
+    "context": "Next run time"
+  },
+  "cron.noTasks": {
+    "text": "No cron tasks yet",
+    "context": "No tasks hint"
+  },
+  "cron.noTasksHint": {
+    "text": "Click the button above to create your first cron task",
+    "context": "Create task guide"
+  },
+  "cron.taskSettings": {
+    "text": "Task Management",
+    "context": "Task management card title"
+  },
+  "smartpath.back": {
+    "text": "Back",
+    "context": "Back button"
+  },
+  "smartpath.newPath": {
+    "text": "New Path",
+    "context": "New path button"
+  },
+  "smartpath.noPaths": {
+    "text": "No paths yet",
+    "context": "No paths hint"
+  },
+  "smartpath.steps": {
+    "text": " steps",
+    "context": "Step count"
+  },
+  "smartpath.stepName": {
+    "text": "Step name",
+    "context": "Step name placeholder"
+  },
+  "smartpath.executing": {
+    "text": "Running",
+    "context": "Executing status"
+  },
+  "smartpath.execute": {
+    "text": "Run",
+    "context": "Execute button"
+  },
+  "smartpath.stepInput": {
+    "text": "Describe what this step should do...",
+    "context": "Step input placeholder"
+  },
+  "smartpath.executionProcess": {
+    "text": "Execution Process",
+    "context": "Execution process title"
+  },
+  "smartpath.executionResult": {
+    "text": "Execution Result",
+    "context": "Execution result title"
+  },
+  "smartpath.waitingResponse": {
+    "text": "Waiting for response...",
+    "context": "Waiting response hint"
+  },
+  "smartpath.createPath": {
+    "text": "New Path",
+    "context": "Create path dialog title"
+  },
+  "smartpath.createPathDesc": {
+    "text": "Name the path and select a workspace",
+    "context": "Create path dialog description"
+  },
+  "smartpath.name": {
+    "text": "Name",
+    "context": "Path name label"
+  },
+  "smartpath.namePlaceholder": {
+    "text": "e.g. Daily Data Report",
+    "context": "Path name placeholder"
+  },
+  "smartpath.description": {
+    "text": "Description",
+    "context": "Path description label"
+  },
+  "smartpath.descriptionPlaceholder": {
+    "text": "Describe what this path does...",
+    "context": "Path description placeholder"
+  },
+  "smartpath.workspace": {
+    "text": "Workspace",
+    "context": "Workspace label"
+  },
+  "smartpath.workspacePlaceholder": {
+    "text": "Select workspace",
+    "context": "Workspace placeholder"
+  },
+  "smartpath.create": {
+    "text": "Create",
+    "context": "Create button"
+  },
+  "smartpath.cronPlaceholder": {
+    "text": "0 9 * * 1-5 (leave empty = no auto run)",
+    "context": "Cron expression placeholder"
+  },
+  "smartpath.scheduledExec": {
+    "text": "Scheduled Execution",
+    "context": "Scheduled execution label"
+  },
+  "smartpath.cronHint": {
+    "text": "Cron expression, e.g. 0 9 * * 1-5 runs weekdays at 9am. Leave empty for no auto run.",
+    "context": "Cron hint text"
+  },
+  "smartpath.stepLabel": {
+    "text": "Steps",
+    "context": "Steps label"
+  },
+  "smartpath.noSteps": {
+    "text": "No steps yet, click the button below to add",
+    "context": "No steps hint"
+  },
+  "smartpath.addStep": {
+    "text": "Add Step",
+    "context": "Add step button"
+  },
+  "smartpath.savePath": {
+    "text": "Save Path",
+    "context": "Save path button"
+  },
+  "smartpath.edit": {
+    "text": "Edit",
+    "context": "Edit button"
+  },
+  "smartpath.scheduledLabel": {
+    "text": "Scheduled: ",
+    "context": "Scheduled label"
+  },
+  "smartpath.noStepsView": {
+    "text": "No steps",
+    "context": "No steps view hint"
+  },
+  "smartpath.reusableResources": {
+    "text": "Reusable Resources",
+    "context": "Reusable resources label"
+  },
+  "smartpath.executionReport": {
+    "text": "Execution Report",
+    "context": "Execution report label"
+  },
+  "smartpath.executionHistory": {
+    "text": "Execution History",
+    "context": "Execution history label"
+  },
+  "smartpath.emptyState": {
+    "text": "Select a path to view details, or create a new one",
+    "context": "Empty state hint"
+  },
+  "smartpath.status.failed": {
+    "text": "Failed",
+    "context": "Path status: failed"
+  },
+  "smartpath.weekday": {
+    "text": "Weekdays ${hour}:00",
+    "context": "Weekday cron description"
+  },
+  "smartpath.daily": {
+    "text": "Daily ${hour}:00",
+    "context": "Daily cron description"
+  },
+  "smartpath.everyMinutes": {
+    "text": "Every ${min} minutes",
+    "context": "Every N minutes cron description"
+  },
+  "stardom.settings.title": {
+    "text": "Agent Stardom Settings",
+    "context": "Stardom config card title"
+  },
+  "stardom.settings.serverAddress": {
+    "text": "Stardom Server Address",
+    "context": "Server address label"
+  },
+  "stardom.settings.serverHint": {
+    "text": "Internal stardom server address",
+    "context": "Server address hint"
+  },
+  "stardom.settings.agentName": {
+    "text": "Agent Display Name",
+    "context": "Agent display name label"
+  },
+  "stardom.settings.agentNamePlaceholder": {
+    "text": "Your name (optional)",
+    "context": "Agent name placeholder"
+  },
+  "stardom.settings.collabMode": {
+    "text": "Collaboration Mode",
+    "context": "Collaboration mode label"
+  },
+  "stardom.settings.modeAuto": {
+    "text": "Full Auto",
+    "context": "Auto mode"
+  },
+  "stardom.settings.modeNotify": {
+    "text": "Semi-Auto (Recommended)",
+    "context": "Notify mode"
+  },
+  "stardom.settings.modeManual": {
+    "text": "Manual",
+    "context": "Manual mode"
+  },
+  "stardom.settings.modeHint": {
+    "text": "Semi-auto: notifies before accepting tasks, auto-accepts after 30s",
+    "context": "Mode hint"
+  },
+  "stardom.settings.maxSlots": {
+    "text": "Max Concurrent Slots",
+    "context": "Max slots label"
+  },
+  "stardom.settings.save": {
+    "text": "Save Settings",
+    "context": "Save button"
+  },
+  "stardom.disconnected": {
+    "text": "Disconnected",
+    "context": "Disconnected status"
+  },
+  "stardom.notConnected": {
+    "text": "Stardom not connected",
+    "context": "Not connected hint"
+  },
+  "stardom.unknown": {
+    "text": "Unknown",
+    "context": "Unknown status"
+  },
+  "stardom.reputation": {
+    "text": "Reputation",
+    "context": "Reputation label"
+  },
+  "stardom.slots": {
+    "text": "Slots",
+    "context": "Slots label"
+  },
+  "stardom.connected": {
+    "text": "Connected",
+    "context": "Connected status"
+  },
+  "stardom.dashboard.title": {
+    "text": "Stardom",
+    "context": "Dashboard title"
+  },
+  "stardom.dashboard.evolution": {
+    "text": "Evolution",
+    "context": "Evolution label"
+  },
+  "stardom.dashboard.immersive": {
+    "text": "Immersive",
+    "context": "Immersive view"
+  },
+  "stardom.dashboard.professional": {
+    "text": "Professional",
+    "context": "Professional view"
+  },
+  "stardom.task.searching": {
+    "text": "Searching",
+    "context": "Task status: searching"
+  },
+  "stardom.task.offered": {
+    "text": "Pending",
+    "context": "Task status: offered"
+  },
+  "stardom.task.matched": {
+    "text": "Matched",
+    "context": "Task status: matched"
+  },
+  "stardom.task.chatting": {
+    "text": "Collaborating",
+    "context": "Task status: chatting"
+  },
+  "stardom.task.completed": {
+    "text": "Completed",
+    "context": "Task status: completed"
+  },
+  "stardom.task.timeout": {
+    "text": "Timeout",
+    "context": "Task status: timeout"
+  },
+  "stardom.task.cancelled": {
+    "text": "Cancelled",
+    "context": "Task status: cancelled"
+  },
+  "stardom.task.iHelp": {
+    "text": "I Need Help",
+    "context": "I need help label"
+  },
+  "stardom.task.helpMe": {
+    "text": "Help Me",
+    "context": "Help me label"
+  },
+  "stardom.task.terminate": {
+    "text": "Terminate",
+    "context": "Terminate button"
+  },
+  "stardom.notify.autoAccept": {
+    "text": "auto-accept",
+    "context": "Auto-accept hint"
+  },
+  "stardom.notify.collabRequest": {
+    "text": "Collaboration Request",
+    "context": "Collab request title"
+  },
+  "stardom.notify.needConfirm": {
+    "text": "Confirm Required",
+    "context": "Need confirm label"
+  },
+  "stardom.notify.requestHelp": {
+    "text": "is requesting your help",
+    "context": "Request help text"
+  },
+  "stardom.notify.accept": {
+    "text": "Accept",
+    "context": "Accept button"
+  },
+  "stardom.notify.reject": {
+    "text": "Reject",
+    "context": "Reject button"
+  },
+  "stardom.chat.clickToView": {
+    "text": "Click a task card on the left to view collaboration chat",
+    "context": "Chat hint"
+  },
+  "stardom.chat.selectTask": {
+    "text": "Select an active task to view real-time Agent collaboration",
+    "context": "Select task hint"
+  },
+  "stardom.chat.task": {
+    "text": "Task",
+    "context": "Task label"
+  },
+  "stardom.chat.messages": {
+    "text": "messages",
+    "context": "Message count"
+  },
+  "stardom.chat.terminate": {
+    "text": "Terminate Collaboration",
+    "context": "Terminate collab button"
+  },
+  "stardom.chat.waiting": {
+    "text": "Waiting for conversation to start...",
+    "context": "Waiting hint"
+  },
+  "stardom.chat.realtimeHint": {
+    "text": "Messages will appear here in real-time once collaboration starts",
+    "context": "Realtime hint"
+  },
+  "stardom.leaderboard.title": {
+    "text": "Reputation Board",
+    "context": "Leaderboard title"
+  },
+  "stardom.leaderboard.noData": {
+    "text": "No ranking data yet",
+    "context": "No data hint"
+  },
+  "stardom.leaderboard.helpCount": {
+    "text": " helps",
+    "context": "Help count"
+  },
+  "stardom.guide.help": {
+    "text": "Help",
+    "context": "Help button"
+  },
+  "stardom.guide.welcome": {
+    "text": "Welcome to Agent Stardom",
+    "context": "Welcome title"
+  },
+  "stardom.guide.intro": {
+    "text": "Your Agent is collaborating for you automatically. It will:",
+    "context": "Guide intro"
+  },
+  "stardom.guide.feature1": {
+    "text": "Search other Agents for help when encountering unsolvable problems",
+    "context": "Feature 1"
+  },
+  "stardom.guide.feature2": {
+    "text": "Automatically initiate collaboration chat after finding a match",
+    "context": "Feature 2"
+  },
+  "stardom.guide.feature3": {
+    "text": "Switch to World view anytime to see all Agent positions",
+    "context": "Feature 3"
+  },
+  "stardom.guide.modeIntro": {
+    "text": "Collaboration mode controls Agent autonomy:",
+    "context": "Mode intro"
+  },
+  "stardom.guide.autoDesc": {
+    "text": "Agent takes tasks independently, no disturbance",
+    "context": "Auto description"
+  },
+  "stardom.guide.notifyDesc": {
+    "text": "Notifies before accepting, auto-accepts after 30s (Recommended)",
+    "context": "Notify description"
+  },
+  "stardom.guide.manualDesc": {
+    "text": "Every step requires your confirmation",
+    "context": "Manual description"
+  },
+  "stardom.guide.gotIt": {
+    "text": "Got It",
+    "context": "Got it button"
+  },
+  "stardom.cap.autoLayer": {
+    "text": "Full Auto Layer",
+    "context": "Capability layer: auto"
+  },
+  "stardom.cap.autoSubtitle": {
+    "text": "Highly agent-driven · Autonomous execution",
+    "context": "Auto layer subtitle"
+  },
+  "stardom.cap.collabLayer": {
+    "text": "Collaboration Enhanced Layer",
+    "context": "Capability layer: collaboration"
+  },
+  "stardom.cap.collabSubtitle": {
+    "text": "Human-AI synergy · Digitally enhanced",
+    "context": "Collab layer subtitle"
+  },
+  "stardom.cap.supportLayer": {
+    "text": "Support Assistance Layer",
+    "context": "Capability layer: support"
+  },
+  "stardom.cap.supportSubtitle": {
+    "text": "Weakly digital · Primarily assistive",
+    "context": "Support layer subtitle"
   }
 }

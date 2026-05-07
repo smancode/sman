@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { useCodeViewerStore, type SearchMatch } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 
 interface CodeNavigatorProps {
   workspace: string;
@@ -35,7 +36,7 @@ export function CodeNavigator({ workspace, currentFilePath }: CodeNavigatorProps
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--border))] shrink-0">
         <span className="text-[13px] font-medium truncate">
-          {searching ? '搜索中...' : `"${searchSymbol}" 的引用`}
+          {searching ? t('codeviewer.searchingRefs') : t('codeviewer.refsFor').replace('${symbol}', searchSymbol)}
         </span>
         <button
           className="shrink-0 p-0.5 rounded hover:bg-[hsl(var(--muted))] transition-colors text-muted-foreground"
@@ -49,10 +50,10 @@ export function CodeNavigator({ workspace, currentFilePath }: CodeNavigatorProps
       {searching ? (
         <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          搜索中...
+          {t("codeviewer.searchingRefs")}
         </div>
       ) : hasSearched ? (
-        <div className="py-6 text-center text-[13px] text-muted-foreground">未找到匹配</div>
+        <div className="py-6 text-center text-[13px] text-muted-foreground">{t("codeviewer.noMatches")}</div>
       ) : (
         <div className="overflow-y-auto flex-1 min-h-0">
           {searchResults.map((match, i) => (
@@ -98,7 +99,7 @@ function MatchItem({ match, isCurrentFile, onClick }: MatchItemProps) {
         <span className="shrink-0 text-muted-foreground/60">:{match.line}</span>
         {isCurrentFile && (
           <span className="shrink-0 text-[10px] px-1 py-0.5 rounded bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]">
-            当前
+            {t("codeviewer.current")}
           </span>
         )}
       </div>

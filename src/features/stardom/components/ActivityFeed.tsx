@@ -6,6 +6,7 @@ import { useStardomStore } from '@/stores/stardom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ActivityCard } from './ActivityCard';
 import { CollaborationDetail } from './CollaborationDetail';
+import { t } from '@/locales';
 
 export function ActivityFeed() {
   const { activityLog } = useStardomStore();

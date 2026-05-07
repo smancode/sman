@@ -4,6 +4,7 @@
 
 import type { ActivityEntry } from '@/types/stardom';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 
 // 世界事件图标 — Atlas 星图风格
 const TYPE_ICONS: Record<string, string> = {

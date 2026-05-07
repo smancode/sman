@@ -24,13 +24,14 @@ import { useSmartPathStore } from '@/stores/smart-path';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
 import type { SmartPath, SmartPathRun, SmartPathStep } from '@/types/settings';
+import { t } from '@/locales';
 
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' }> = {
-  draft: { label: '草稿', variant: 'secondary' },
-  ready: { label: '就绪', variant: 'outline' },
-  running: { label: '执行中', variant: 'default' },
-  completed: { label: '已完成', variant: 'success' },
-  failed: { label: '失败', variant: 'destructive' },
+const STATUS_CONFIG: Record<string, { labelKey: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'outline' }> = {
+  draft: { labelKey: 'smartpath.status.draft', variant: 'secondary' },
+  ready: { labelKey: 'smartpath.status.ready', variant: 'outline' },
+  running: { labelKey: 'smartpath.executing', variant: 'default' },
+  completed: { labelKey: 'smartpath.status.completed', variant: 'success' },
+  failed: { labelKey: 'smartpath.status.failed', variant: 'destructive' },
 };
 
 function getStepCount(p: SmartPath): number {
@@ -60,14 +61,14 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
     <div className="w-64 shrink-0 flex flex-col h-full">
       <div className="p-3 space-y-2">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronLeft className="h-4 w-4" /> 返回
+          <ChevronLeft className="h-4 w-4" /> {t('smartpath.back')}
         </button>
         <Button variant="outline" size="sm" className="w-full" onClick={onNew}>
-          <Plus className="h-4 w-4 mr-1" /> 新建路径
+          <Plus className="h-4 w-4 mr-1" /> {t('smartpath.newPath')}
         </Button>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-4">
-        {groups.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">暂无路径</div>}
+        {groups.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">{t('smartpath.noPaths')}</div>}
         {groups.map(([wsName, wsPaths]) => (
           <div key={wsName}>
             <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
@@ -84,10 +85,10 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
                       <span className="font-medium text-sm truncate">{p.name}</span>
                       <div className="flex items-center gap-1 shrink-0">
                         {p.cronExpression && <Clock className="h-3 w-3 text-muted-foreground" />}
-                        <Badge variant={sc?.variant || 'outline'} className="text-[10px] px-1.5 py-0">{sc?.label || p.status}</Badge>
+                        <Badge variant={sc?.variant || 'outline'} className="text-[10px] px-1.5 py-0">{sc ? t(sc.labelKey) : p.status}</Badge>
                       </div>
                     </div>
-                    <span className="text-xs text-muted-foreground">{getStepCount(p)} 个步骤</span>
+                    <span className="text-xs text-muted-foreground">{getStepCount(p)}{t('smartpath.steps')}</span>
                   </button>
                 );
               })}
@@ -125,31 +126,31 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
             <GripVertical className="h-4 w-4 text-muted-foreground cursor-move shrink-0" />
             <span className="text-sm font-semibold text-muted-foreground shrink-0">{index + 1}</span>
             <Input value={step.name || ''} onChange={(e) => onChange({ ...step, name: e.target.value })}
-              placeholder="步骤名称" className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium" />
+              placeholder={t("smartpath.stepName")} className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium" />
             <div className="flex-1" />
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0"
               disabled={!step.userInput.trim() || executing || !workspace} onClick={onExecute}>
               {executing ? <Loader2 className="h-3 w-3 animate-spin" />
                 : <Play className="h-3 w-3" />}
-              {executing ? '执行中' : '执行'}
+              {executing ? t('smartpath.executing') : t('smartpath.execute')}
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={onDelete}>
               <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           </div>
           <Textarea value={step.userInput} onChange={(e) => onChange({ ...step, userInput: e.target.value })}
-            placeholder="描述这一步要做什么..." className="min-h-[56px] text-sm resize-none" />
+            placeholder={t("smartpath.stepInput")} className="min-h-[56px] text-sm resize-none" />
 
           {(executing || hasResult) && (
             <Card className="border border-muted-foreground/20">
               <CardContent className="p-3">
                 <div className="text-xs text-muted-foreground mb-1.5 font-medium">
-                  {executing ? '执行过程' : '执行结果'}
+                  {executing ? t('smartpath.executionProcess') : t('smartpath.executionResult')}
                 </div>
                 <div ref={executing ? streamRef : undefined}
                   className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
                   {executing && !executionStream ? (
-                    <span className="text-muted-foreground animate-pulse">等待响应...</span>
+                    <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
                   ) : (
                     <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
                       {executionStream || ''}
@@ -193,13 +194,13 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
             <div className="text-xs text-muted-foreground mb-1.5 font-medium">
               {executing ? (
-                <><Loader2 className="h-3 w-3 inline animate-spin mr-1" />执行过程</>
-              ) : '执行结果'}
+                <><Loader2 className="h-3 w-3 inline animate-spin mr-1" />{t("smartpath.executionProcess")}</>
+              ) : t("smartpath.executionResult")}
             </div>
             <div ref={executing ? streamRef : undefined}
               className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
               {executing && !executionStream ? (
-                <span className="text-muted-foreground animate-pulse">等待响应...</span>
+                <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
               ) : (
                 <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
                   {executionStream || ''}
@@ -227,20 +228,20 @@ function CreateDialog({ open, onOpenChange, workspaceOptions, onSubmit }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>新建路径</DialogTitle><DialogDescription>给路径起个名字并选择工作目录</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{t("smartpath.createPath")}</DialogTitle><DialogDescription>{t("smartpath.createPathDesc")}</DialogDescription></DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="space-y-2"><Label>名称</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：每日数据报告" /></div>
-          <div className="space-y-2"><Label>功能描述</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述这个路径的作用..." className="min-h-[80px] resize-none" /></div>
-          <div className="space-y-2"><Label>工作目录</Label>
+          <div className="space-y-2"><Label>{t("smartpath.name")}</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("smartpath.namePlaceholder")} /></div>
+          <div className="space-y-2"><Label>{t("smartpath.description")}</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("smartpath.descriptionPlaceholder")} className="min-h-[80px] resize-none" /></div>
+          <div className="space-y-2"><Label>{t("smartpath.workspace")}</Label>
             <Select value={workspace} onValueChange={setWorkspace}>
-              <SelectTrigger><SelectValue placeholder="选择业务系统" /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t("smartpath.workspacePlaceholder")} /></SelectTrigger>
               <SelectContent>{workspaceOptions.map((o) => (<SelectItem key={o.value} value={o.value}><div className="flex items-center gap-2"><FolderOpen className="h-3.5 w-3.5" /><span>{o.label}</span></div></SelectItem>))}</SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={() => { if (name.trim() && workspace) onSubmit(name.trim(), description.trim(), workspace); }} disabled={!name.trim() || !workspace}>创建</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+          <Button onClick={() => { if (name.trim() && workspace) onSubmit(name.trim(), description.trim(), workspace); }} disabled={!name.trim() || !workspace}>{t("smartpath.create")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -256,7 +257,7 @@ function CronConfig({ value, onChange, disabled }: { value: string; onChange: (v
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="0 9 * * 1-5（留空=不自动执行）"
+        placeholder={t("smartpath.cronPlaceholder")}
         className="h-7 text-sm font-mono"
         disabled={disabled}
       />
@@ -273,9 +274,9 @@ function describeCron(expr: string): string {
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) return '';
   const [min, hour, dom, mon, dow] = parts;
-  if (min === '0' && hour !== '*' && dow === '1-5') return `工作日 ${hour}:00`;
-  if (min === '0' && hour !== '*' && dom === '*' && mon === '*' && dow === '*') return `每天 ${hour}:00`;
-  if (min.startsWith('*/') && hour === '*' && dom === '*' && mon === '*' && dow === '*') return `每 ${min.slice(2)} 分钟`;
+  if (min === '0' && hour !== '*' && dow === '1-5') return t('smartpath.weekday').replace('${hour}', hour)
+  if (min === '0' && hour !== '*' && dom === '*' && mon === '*' && dow === '*') return t('smartpath.daily').replace('${hour}', hour)
+  if (min.startsWith('*/') && hour === '*' && dom === '*' && mon === '*' && dow === '*') return t('smartpath.everyMinutes').replace('${min}', min.slice(2))
   return expr;
 }
 
@@ -285,8 +286,8 @@ function ReportViewer({ content, onClose }: { content: string; onClose: () => vo
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">执行报告</Label>
-        <Button variant="ghost" size="sm" onClick={onClose}>关闭</Button>
+        <Label className="text-sm font-medium">{t("smartpath.executionReport")}</Label>
+        <Button variant="ghost" size="sm" onClick={onClose}>{t("common.close")}</Button>
       </div>
       <Card>
         <CardContent className="p-4">
@@ -345,19 +346,19 @@ function PathEditor({ path, onSave, onCancel }: {
           className="h-8 text-lg font-semibold border-0 p-0 shadow-none focus-visible:ring-0" />
       </div>
       <div className="space-y-2">
-        <Label>功能描述</Label>
+        <Label>{t("smartpath.description")}</Label>
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder="描述这个路径的作用..." className="min-h-[80px] resize-none" />
+          placeholder={t("smartpath.descriptionPlaceholder")} className="min-h-[80px] resize-none" />
       </div>
       <div className="space-y-2">
-        <Label className="text-sm font-medium">定时执行</Label>
+        <Label className="text-sm font-medium">{t("smartpath.scheduledExec")}</Label>
         <CronConfig value={cronExpression} onChange={setCronExpression} />
-        <p className="text-xs text-muted-foreground">Cron 表达式，如：0 9 * * 1-5 表示工作日每天 9 点执行。留空则不自动执行。</p>
+        <p className="text-xs text-muted-foreground">{t("smartpath.cronHint")}</p>
       </div>
       <div className="space-y-0">
-        <Label className="text-sm font-medium mb-3 block">步骤</Label>
+        <Label className="text-sm font-medium mb-3 block">{t("smartpath.stepLabel")}</Label>
         {steps.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg border-dashed">还没有步骤，点击下方按钮添加</div>
+          <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg border-dashed">{t("smartpath.noSteps")}</div>
         )}
         {steps.map((s, i) => (
           <StepEditCard key={i} step={s} index={i} total={steps.length}
@@ -369,15 +370,15 @@ function PathEditor({ path, onSave, onCancel }: {
         ))}
         <div className="flex justify-center pt-5">
           <Button variant="outline" size="sm" onClick={() => setSteps((p) => [...p, { name: '', userInput: '' }])}>
-            <Plus className="h-4 w-4 mr-1.5" /> 添加步骤
+            <Plus className="h-4 w-4 mr-1.5" /> {t("smartpath.addStep")}
           </Button>
         </div>
       </div>
       <div className="flex gap-2 pt-2">
         <Button onClick={handleSave} disabled={!name.trim() || steps.length === 0 || saving}>
-          {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />} 保存路径
+          {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />} {t("smartpath.savePath")}
         </Button>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button variant="outline" onClick={onCancel}>{t("common.cancel")}</Button>
       </div>
     </div>
   );
@@ -428,13 +429,13 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
           {path.description && <p className="text-sm text-muted-foreground">{path.description}</p>}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderOpen className="h-3.5 w-3.5" /><span>{path.workspace.split(/[/\\]/).pop()}</span>
-            <Badge variant={sc?.variant || 'outline'} className="text-[10px]">{sc?.label || path.status}</Badge>
+            <Badge variant={sc?.variant || 'outline'} className="text-[10px]">{sc ? t(sc.labelKey) : path.status}</Badge>
           </div>
         </div>
         <div className="flex gap-1.5 shrink-0">
-          <Button variant="outline" size="sm" onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" /> 编辑</Button>
+          <Button variant="outline" size="sm" onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
           <Button size="sm" onClick={onRun} disabled={path.status === 'running'}>
-            {path.status === 'running' ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> 执行中</> : <><Play className="h-3.5 w-3.5 mr-1" /> 执行</>}
+            {path.status === 'running' ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> {t("smartpath.executing")}</> : <><Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}</>}
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
         </div>
@@ -443,14 +444,14 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
       {path.cronExpression && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="h-4 w-4" />
-          <span>定时执行：{path.cronExpression}</span>
+          <span>{t("smartpath.scheduledLabel")}{path.cronExpression}</span>
           <span className="text-xs">({describeCron(path.cronExpression)})</span>
         </div>
       )}
 
       <div className="space-y-0">
-        <Label className="text-sm font-medium mb-3 block">步骤</Label>
-        {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">暂无步骤</div>
+        <Label className="text-sm font-medium mb-3 block">{t("smartpath.stepLabel")}</Label>
+        {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">{t("smartpath.noStepsView")}</div>
           : <div className="space-y-0">{steps.map((s, i) => (
             <StepViewCard key={i} step={s} index={i} total={steps.length}
               executionStream={stepExecutionStream[i] || ''}
@@ -458,10 +459,10 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
           ))}</div>}
       </div>
 
-      {/* 可复用资源 */}
+      {/* Reusable resources */}
       {references.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">可复用资源</Label>
+          <Label className="text-sm font-medium">{t("smartpath.reusableResources")}</Label>
           <div className="space-y-1.5">
             {references.map((ref) => (
               <div key={ref.fileName}>
@@ -485,7 +486,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium">{ref.fileName}</span>
-                          <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>关闭</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>{t("common.close")}</Button>
                         </div>
                         <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
                           <Streamdown mode="static" controls={{ code: true, table: true }}>
@@ -502,10 +503,10 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
         </div>
       )}
 
-      {/* 执行报告列表 */}
+      {/* Execution reports */}
       {reports.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">执行报告</Label>
+          <Label className="text-sm font-medium">{t("smartpath.executionReport")}</Label>
           <div className="space-y-1.5">
             {reports.map((r) => (
               <div key={r.fileName}>
@@ -532,10 +533,10 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
         </div>
       )}
 
-      {/* 执行历史（兼容旧数据） */}
+      {/* Execution history (legacy) */}
       {runs.length > 0 && reports.length === 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">执行历史</Label>
+          <Label className="text-sm font-medium">{t("smartpath.executionHistory")}</Label>
           <div className="space-y-1.5">
             {runs.map((r) => { const rs = STATUS_CONFIG[r.status]; return (
               <div key={r.id} className="flex items-center justify-between rounded-md px-3 py-2 border text-sm">
@@ -561,8 +562,8 @@ function EmptyState({ onNew }: { onNew: () => void }) {
     <div className="flex items-center justify-center h-full">
       <div className="text-center space-y-3 max-w-xs">
         <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center"><Route className="h-6 w-6 text-muted-foreground" /></div>
-        <p className="text-sm text-muted-foreground">选择一个路径查看详情，或创建新路径</p>
-        <Button variant="outline" size="sm" onClick={onNew}><Plus className="h-4 w-4 mr-1.5" /> 新建路径</Button>
+        <p className="text-sm text-muted-foreground">{t("smartpath.emptyState")}</p>
+        <Button variant="outline" size="sm" onClick={onNew}><Plus className="h-4 w-4 mr-1.5" /> {t("smartpath.newPath")}</Button>
       </div>
     </div>
   );

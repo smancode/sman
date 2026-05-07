@@ -8,6 +8,7 @@ import { useGitStore, applyTemplate, type GitFileStatus, type GitDiffHunk, type 
 import { useCodeViewerStore } from '@/stores/code-viewer';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
+import { t, getCurrentLocale } from '@/locales';
 
 // ── Status helpers ─────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ function PanelContent() {
           <button
             onClick={() => useGitStore.getState().fetchRemote()}
             className="p-1.5 rounded hover:bg-[hsl(var(--muted))] transition-colors text-muted-foreground"
-            title="Fetch 远端"
+            title={t("git.fetch")}
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
@@ -134,10 +135,10 @@ function PanelContent() {
       {/* Tab bar: local / remote */}
       <div className={cn('flex border-b shrink-0', isDark ? 'border-[#30363d]' : 'border-gray-200')}>
         <TabButton active={diffTab === 'local'} onClick={() => setDiffTab('local')}>
-          本地变更
+          {t("git.localChanges")}
         </TabButton>
         <TabButton active={diffTab === 'remote'} onClick={() => setDiffTab('remote')}>
-          与远端差异
+          {t("git.remoteDiff")}
         </TabButton>
         <TabButton active={diffTab === 'log'} onClick={() => setDiffTab('log')}>
           Git Log
@@ -163,7 +164,7 @@ function PanelContent() {
             <FileList files={status.files} />
           ) : status.ahead === 0 ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
-              工作区干净，无变更
+              {t("git.clean")}
             </div>
           ) : null}
           {status.ahead > 0 && <AheadCommitsView ahead={status.ahead} />}
@@ -268,7 +269,7 @@ function BranchSelector() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜索分支..."
+                placeholder={t("git.searchBranch")}
                 className={cn(
                   'flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground',
                   isDark ? 'text-gray-200' : 'text-gray-800',
@@ -282,7 +283,7 @@ function BranchSelector() {
           <div className="max-h-72 overflow-y-auto">
             {localBranches.length > 0 && (
               <>
-                <div className="px-3 py-1.5 text-[11px] text-muted-foreground font-medium">本地分支</div>
+                <div className="px-3 py-1.5 text-[11px] text-muted-foreground font-medium">{t("git.localBranches")}</div>
                 {localBranches.map(b => (
                   <button
                     key={b.name}
@@ -303,7 +304,7 @@ function BranchSelector() {
             {remoteBranches.length > 0 && (
               <>
                 <div className={cn('px-3 py-1.5 text-[11px] text-muted-foreground font-medium border-t', isDark && 'border-[#30363d]')}>
-                  远端分支
+                  {t("git.remoteBranches")}
                 </div>
                 {remoteBranches.map(b => {
                   const localName = b.name.replace(/^remotes\/[^/]+\//, '');
@@ -315,7 +316,7 @@ function BranchSelector() {
                         'group flex items-center px-3 py-1.5 text-[13px] text-muted-foreground transition-colors',
                         isDark ? 'hover:bg-[#30363d]' : 'hover:bg-gray-50',
                       )}
-                      title={hasLocal ? `切换到 ${localName}` : `Checkout ${b.name} 到本地`}
+                      title={hasLocal ? `Switch to ${localName}` : `Checkout ${b.name} to local`}
                     >
                       <span className="truncate flex-1">{b.name.replace('remotes/', '')}</span>
                       <button
@@ -327,7 +328,7 @@ function BranchSelector() {
                             : 'text-muted-foreground hover:text-blue-600 hover:bg-blue-50',
                           'opacity-0 group-hover:opacity-100',
                         )}
-                        title={hasLocal ? '切换到此分支' : 'Checkout 到本地'}
+                        title={hasLocal ? t('git.switchToLocal') : t('git.checkoutToLocal')}
                       >
                         <Download className="w-3.5 h-3.5" />
                       </button>
@@ -337,10 +338,10 @@ function BranchSelector() {
               </>
             )}
             {branches.length === 0 && (
-              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">加载中...</div>
+              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">{t("git.loading")}</div>
             )}
             {branches.length > 0 && localBranches.length === 0 && remoteBranches.length === 0 && (
-              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">无匹配分支</div>
+              <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">{t("git.noMatchingBranch")}</div>
             )}
           </div>
         </div>
@@ -379,12 +380,12 @@ function AheadCommitsView({ ahead }: { ahead: number }) {
             const now = new Date();
             const diffMs = now.getTime() - d.getTime();
             const diffMins = Math.floor(diffMs / 60000);
-            if (diffMins < 60) return `${diffMins}分钟前`;
+            if (diffMins < 60) return t('git.minutesAgo').replace('${m}', String(diffMins));
             const diffHours = Math.floor(diffMins / 60);
-            if (diffHours < 24) return `${diffHours}小时前`;
+            if (diffHours < 24) return t('git.hoursAgo').replace('${h}', String(diffHours));
             const diffDays = Math.floor(diffHours / 24);
-            if (diffDays < 30) return `${diffDays}天前`;
-            return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+            if (diffDays < 30) return t('git.daysAgo').replace('${d}', String(diffDays));
+            return d.toLocaleDateString(getCurrentLocale() || 'zh-CN', { month: 'short', day: 'numeric' });
           } catch {
             return c.date;
           }
@@ -432,7 +433,7 @@ function FileList({ files }: { files: GitFileStatus[] }) {
   if (files.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
-        工作区干净，无变更
+        {t("git.clean")}
       </div>
     );
   }
@@ -448,7 +449,7 @@ function FileList({ files }: { files: GitFileStatus[] }) {
   }
 
   const groupLabels: Record<string, string> = {
-    staged: '已暂存', unstaged: '未暂存', untracked: '未跟踪',
+    staged: t('git.staged'), unstaged: t('git.unstaged'), untracked: t('git.untracked'),
   };
 
   return (
@@ -467,7 +468,7 @@ function FileList({ files }: { files: GitFileStatus[] }) {
             : <Square className="w-3.5 h-3.5" />
           }
         </button>
-        变更文件 ({files.length})
+        {t('git.changedFiles').replace('${count}', String(files.length))}
       </div>
 
       {Object.entries(groups).map(([groupKey, groupFiles]) => (
@@ -493,7 +494,7 @@ function FileList({ files }: { files: GitFileStatus[] }) {
               )}
               {selectedFile === file.path && diffLoading && (
                 <div className="px-4 py-3 flex items-center gap-2 text-[12px] text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" /> 加载差异...
+                  <Loader2 className="w-3 h-3 animate-spin" /> {t("git.loadingDiff")}
                 </div>
               )}
             </div>
@@ -548,7 +549,7 @@ function DiffView({ hunks, isDark, filePath }: { hunks: GitDiffHunk[]; isDark: b
   }, [workspace, filePath, openViewer]);
 
   if (hunks.length === 0) {
-    return <div className="px-6 py-2 text-[12px] text-muted-foreground">无差异内容</div>;
+    return <div className="px-6 py-2 text-[12px] text-muted-foreground">{t("git.noDiff")}</div>;
   }
 
   return (
@@ -563,7 +564,7 @@ function DiffView({ hunks, isDark, filePath }: { hunks: GitDiffHunk[]; isDark: b
           isDark ? 'border-[#30363d]' : 'border-gray-200',
         )}
       >
-        在编辑器中打开 →
+        {t("git.openInEditor")}
       </button>
       {hunks.map((hunk, hi) => (
         <div key={hi}>
@@ -611,7 +612,7 @@ function RemoteDiffTab() {
   if (!status?.hasUpstream) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
-        未设置远端跟踪分支
+        {t("git.noTracking")}
       </div>
     );
   }
@@ -619,7 +620,7 @@ function RemoteDiffTab() {
   if (remoteDiff.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-[13px]">
-        {status.ahead === 0 && status.behind === 0 ? '与远端完全同步' : '本地与远端无文件差异'}
+        {status.ahead === 0 && status.behind === 0 ? t('git.inSync') : t('git.noFileDiff')}
       </div>
     );
   }
@@ -627,7 +628,7 @@ function RemoteDiffTab() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className={cn('px-4 py-1.5 text-[12px] font-medium text-muted-foreground', isDark ? 'bg-[#1c2128]' : 'bg-white')}>
-        差异文件 ({remoteDiff.length})
+        {t('git.remoteDiffFiles').replace('${count}', String(remoteDiff.length))}
       </div>
       {remoteDiff.map(file => (
         <RemoteDiffFile key={file.path} file={file} isDark={isDark} />
@@ -840,7 +841,7 @@ function GitLogTab() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索 hash、消息、作者..."
+            placeholder={t("git.searchLog")}
             className={cn(
               'flex-1 bg-transparent outline-none text-[12px] placeholder:text-muted-foreground',
               isDark ? 'text-gray-200' : 'text-gray-800',
@@ -871,7 +872,7 @@ function GitLogTab() {
             ))}
             {searchResults.length === 0 && !logSearchLoading && (
               <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                无匹配结果
+                {t("git.noMatchingResults")}
               </div>
             )}
           </div>
@@ -885,7 +886,7 @@ function GitLogTab() {
               ))}
               {hasMore && (
                 <div className="px-3 py-2 text-center text-[11px] text-muted-foreground">
-                  向下滚动加载更多...
+                  {t("git.scrollLoadMore")}
                 </div>
               )}
             </div>
@@ -911,12 +912,12 @@ function LogEntry({ node, currentBranch, isDark }: { node: GitLogGraphNode; curr
       const now = new Date();
       const diffMs = now.getTime() - d.getTime();
       const diffMins = Math.floor(diffMs / 60000);
-      if (diffMins < 60) return `${diffMins}分钟前`;
+      if (diffMins < 60) return t('git.minutesAgo').replace('${m}', String(diffMins));
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours}小时前`;
+      if (diffHours < 24) return t('git.hoursAgo').replace('${h}', String(diffHours));
       const diffDays = Math.floor(diffHours / 24);
-      if (diffDays < 30) return `${diffDays}天前`;
-      return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+      if (diffDays < 30) return t('git.daysAgo').replace('${d}', String(diffDays));
+      return d.toLocaleDateString(getCurrentLocale() || 'zh-CN', { month: 'short', day: 'numeric' });
     } catch {
       return node.date;
     }
@@ -1048,7 +1049,7 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={`描述变更内容（留空则 AI 自动生成）...\nCtrl+Enter 提交`}
+        placeholder={t("git.commitPlaceholder")}
         rows={3}
         className={cn(
           'w-full px-3 py-2 text-[13px] rounded-md border resize-none font-mono mb-2',
@@ -1065,7 +1066,7 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
           <textarea
             value={commitTemplate}
             onChange={(e) => setCommitTemplate(e.target.value)}
-            placeholder={`自定义模板（作为 AI 提示的一部分）:\n\n示例:\n请用中文生成 commit message，格式为 Conventional Commits\n\n可用变量:\n\${added} \${modified} \${deleted}\n\${added_count} \${modified_count} \${total_count}\n\n示例:\nfeat(\${scope}): \${summary}`}
+            placeholder={t("git.templatePlaceholder")}
             rows={5}
             className={cn(
               'w-full px-3 py-2 text-[12px] rounded-md border resize-none font-mono',
@@ -1088,10 +1089,10 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
               ? 'text-amber-500 border-amber-400'
               : 'text-muted-foreground hover:text-[hsl(var(--foreground))] disabled:opacity-40 disabled:cursor-not-allowed',
           )}
-          title="AI 分析代码差异自动生成 commit message"
+          title={t("git.aiGenerateTitle")}
         >
           {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-          {generating ? '生成中...' : 'AI 生成'}
+          {generating ? t('git.aiGenerating') : t('git.aiGenerate')}
         </button>
         <button
           onClick={() => setShowTemplate(!showTemplate)}
@@ -1099,10 +1100,10 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
             'flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-md border transition-colors',
             showTemplate ? 'text-blue-500 border-blue-400' : 'text-muted-foreground hover:text-[hsl(var(--foreground))]',
           )}
-          title="自定义 commit message 模板"
+          title={t("git.templateTitle")}
         >
           <Settings2 className="w-3 h-3" />
-          模板
+          {t("git.template")}
         </button>
         <div className="flex-1" />
         <button
@@ -1113,10 +1114,10 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
             'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
           )}
-          title="Commit 到本地（留空消息则 AI 自动生成 commit message）"
+          title={t("git.commitTitle")}
         >
           {committing || generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          {committing ? 'Committing...' : generating ? '生成中...' : 'Commit'}
+          {committing ? t('git.committing') : generating ? t('git.aiGenerating') : 'Commit'}
         </button>
         <button
           onClick={handlePush}
@@ -1126,7 +1127,7 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
             'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
             'disabled:opacity-40 disabled:cursor-not-allowed',
           )}
-          title="智能 Push：自动 git pull 合并远端变更，如有冲突由 AI 解决，然后 git push"
+          title={t("git.smartPushTitle")}
         >
           {pushing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
           {pushing ? 'Pushing...' : 'Push'}

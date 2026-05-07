@@ -7,6 +7,7 @@ import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
 import { useMemo } from 'react';
 import { getReputationLevel } from './ReputationUtils';
+import { t } from '@/locales';
 
 interface GraphNode {
   id: string;

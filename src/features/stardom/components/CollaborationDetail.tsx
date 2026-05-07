@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { X, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { t } from '@/locales';
 
 interface CollaborationDetailProps {
   taskId: string;

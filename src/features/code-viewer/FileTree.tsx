@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCodeViewerStore, type DirEntry } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 
 // ── TreeNode ──
 
@@ -224,7 +225,7 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
           ref={inputRef}
           value={query}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="搜索文件..."
+          placeholder={t("codeviewer.searchFiles")}
           className="flex-1 min-w-0 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/50"
         />
         {isSearching && <Loader2 className="w-3 h-3 shrink-0 animate-spin text-muted-foreground" />}
@@ -233,14 +234,14 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
             <X className="w-3 h-3 text-muted-foreground" />
           </button>
         )}
-        <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none" title="过滤测试、构建等非源码目录">
+        <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none" title={t("codeviewer.filterTitle")}>
           <input
             type="checkbox"
             checked={sourceOnly}
             onChange={(e) => setFileSearchSourceOnly(e.target.checked)}
             className="w-3 h-3 accent-[hsl(var(--primary))]"
           />
-          <span className="text-[10px] text-muted-foreground whitespace-nowrap">只搜源码</span>
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{t("codeviewer.sourceOnly")}</span>
         </label>
       </div>
       {showResults && (
@@ -265,7 +266,7 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
             ))
           ) : !isSearching ? (
             <div className="px-3 py-2 text-[11px] text-muted-foreground text-center">
-              无匹配文件
+              {t("codeviewer.noMatchingFiles")}
             </div>
           ) : null}
         </ScrollArea>
@@ -340,7 +341,7 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
           className="text-[13px] text-muted-foreground hover:text-[hsl(var(--foreground))] transition-colors"
           onClick={onClose}
         >
-          &larr; 返回会话
+          ← {t("codeviewer.backToSession")}
         </button>
         <span className="text-[13px] text-muted-foreground/60">|</span>
         <span className="text-[13px] font-medium truncate">{workspaceName}</span>
@@ -354,16 +355,16 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
         <div className="py-1">
           {loading && rootEntries.length === 0 ? (
             <div className="text-center py-8 text-[13px] text-muted-foreground">
-              加载中...
+              {t("common.loading")}
             </div>
           ) : error ? (
             <div className="text-center py-8 px-4 text-[13px] text-destructive">
-              <p>加载失败</p>
+              <p>{t("codeviewer.loadFailed")}</p>
               <p className="text-xs mt-1">{error}</p>
             </div>
           ) : rootEntries.length === 0 ? (
             <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
-              <p>空目录</p>
+              <p>{t("codeviewer.emptyDir")}</p>
             </div>
           ) : (
             rootEntries.map((entry) => (

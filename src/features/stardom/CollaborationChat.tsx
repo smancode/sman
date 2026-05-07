@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useStardomStore } from '@/stores/stardom';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, X, User } from 'lucide-react';
+import { t } from '@/locales';
 
 export function CollaborationChat() {
   const { activeChat, connection, clearActiveChat, cancelTask } = useStardomStore();
@@ -17,8 +18,8 @@ export function CollaborationChat() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3 p-4">
         <MessageSquare className="h-10 w-10 text-muted-foreground/40" />
-        <p className="text-sm">点击左侧任务卡片查看协作对话</p>
-        <p className="text-xs text-muted-foreground/60">选择一个进行中的任务，实时查看 Agent 协作过程</p>
+        <p className="text-sm">{t("stardom.chat.clickToView")}</p>
+        <p className="text-xs text-muted-foreground/60">{t("stardom.chat.selectTask")}</p>
       </div>
     );
   }
@@ -28,15 +29,15 @@ export function CollaborationChat() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 头部：任务信息 */}
+      {/* Header: task info */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
         <div className="flex items-center gap-2 min-w-0">
           <MessageSquare className="h-4 w-4 text-primary shrink-0" />
           <span className="text-sm font-medium truncate">
-            任务 {activeChat.taskId.slice(0, 8)}
+            {t("stardom.chat.task")} {activeChat.taskId.slice(0, 8)}
           </span>
           <span className="text-xs text-muted-foreground">
-            {messages.length} 条消息
+            {messages.length} {t("stardom.chat.messages")}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -46,7 +47,7 @@ export function CollaborationChat() {
             className="h-6 text-xs text-red-500 hover:text-red-600"
             onClick={() => cancelTask(activeChat.taskId)}
           >
-            终止协作
+            {t("stardom.chat.terminate")}
           </Button>
           <Button
             variant="ghost"
@@ -63,8 +64,8 @@ export function CollaborationChat() {
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-            <p className="text-sm">等待对话开始...</p>
-            <p className="text-xs">协作建立后，消息将实时显示在这里</p>
+            <p className="text-sm">{t("stardom.chat.waiting")}</p>
+            <p className="text-xs">{t("stardom.chat.realtimeHint")}</p>
           </div>
         ) : (
           messages.map((msg, idx) => {

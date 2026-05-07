@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronDown, Trophy, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getReputationLevel } from './ReputationUtils';
+import { t } from '@/locales';
 
 // ── Shared section header ──
 

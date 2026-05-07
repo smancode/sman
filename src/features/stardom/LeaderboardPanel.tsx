@@ -1,6 +1,7 @@
 // src/features/stardom/LeaderboardPanel.tsx
 import { useStardomStore } from '@/stores/stardom';
 import { Trophy } from 'lucide-react';
+import { t } from '@/locales';
 
 export function LeaderboardPanel() {
   const { leaderboard } = useStardomStore();
@@ -9,11 +10,11 @@ export function LeaderboardPanel() {
     <div>
       <div className="flex items-center gap-2 mb-3">
         <Trophy className="h-4 w-4 text-yellow-500" />
-        <h3 className="font-medium text-sm">声望榜</h3>
+        <h3 className="font-medium text-sm">{t("stardom.leaderboard.title")}</h3>
       </div>
 
       {leaderboard.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-2 text-center">暂无排行数据</p>
+        <p className="text-sm text-muted-foreground py-2 text-center">{t("stardom.leaderboard.noData")}</p>
       ) : (
         <div className="space-y-1">
           {leaderboard.slice(0, 10).map((entry, index) => {
@@ -29,7 +30,7 @@ export function LeaderboardPanel() {
                   <span className="text-sm font-medium">{entry.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{entry.helpCount} 次帮助</span>
+                  <span className="text-xs text-muted-foreground">{entry.helpCount} {t("stardom.leaderboard.helpCount")}</span>
                   <span className="text-sm font-medium">⭐ {Math.round(entry.reputation)}</span>
                 </div>
               </div>

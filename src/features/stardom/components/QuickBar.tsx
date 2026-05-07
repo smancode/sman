@@ -2,6 +2,7 @@
 // 底部快捷入口 — 战术面板入口
 
 import { Dna, Map, Trophy, FileText, Network } from 'lucide-react';
+import { t } from '@/locales';
 
 const QUICK_ITEMS = [
   { icon: Network, label: '协作星图', key: 'network' },

@@ -652,8 +652,8 @@
     "context": "新建路径按钮文字"
   },
   "smartpath.run": {
-    "text": "运行",
-    "context": "运行路径按钮文字"
+    "text": "执行",
+    "context": "执行按钮"
   },
   "smartpath.status.draft": {
     "text": "草稿",
@@ -1046,5 +1046,513 @@
   "codeviewer.current": {
     "text": "当前位置",
     "context": "当前位置标记"
+  },
+  "cron.back": {
+    "text": "返回",
+    "context": "返回按钮"
+  },
+  "cron.noSystems": {
+    "text": "暂无业务系统",
+    "context": "无业务系统提示"
+  },
+  "cron.confirmDelete": {
+    "text": "确认删除该任务？",
+    "context": "删除任务确认"
+  },
+  "cron.taskName": {
+    "text": "任务名称",
+    "context": "任务名称标签"
+  },
+  "cron.taskName.placeholder": {
+    "text": "输入任务名称",
+    "context": "任务名称占位符"
+  },
+  "cron.workspace": {
+    "text": "工作目录",
+    "context": "工作目录选择器"
+  },
+  "cron.workspace.placeholder": {
+    "text": "选择业务系统",
+    "context": "工作目录占位符"
+  },
+  "cron.selectSkill": {
+    "text": "选择技能",
+    "context": "技能选择占位符"
+  },
+  "cron.cronPlaceholder": {
+    "text": "0 9 * * 1-5（工作日每天9点）",
+    "context": "Cron 表达式占位符"
+  },
+  "cron.inputPlaceholder": {
+    "text": "输入执行内容...",
+    "context": "执行内容输入占位符"
+  },
+  "cron.aiGenerate": {
+    "text": "AI 生成",
+    "context": "AI 生成按钮"
+  },
+  "cron.aiGenerating": {
+    "text": "生成中...",
+    "context": "AI 生成中状态"
+  },
+  "cron.testRun": {
+    "text": "测试执行",
+    "context": "测试执行按钮"
+  },
+  "cron.testing": {
+    "text": "执行中...",
+    "context": "测试执行中状态"
+  },
+  "cron.saveTask": {
+    "text": "保存任务",
+    "context": "保存任务按钮"
+  },
+  "cron.saving": {
+    "text": "保存中...",
+    "context": "保存中状态"
+  },
+  "cron.newTask": {
+    "text": "新建任务",
+    "context": "新建任务按钮"
+  },
+  "cron.editTask": {
+    "text": "编辑任务",
+    "context": "编辑任务按钮"
+  },
+  "cron.deleteTask": {
+    "text": "删除",
+    "context": "删除任务按钮"
+  },
+  "cron.lastRunAt": {
+    "text": "上次执行",
+    "context": "上次执行时间"
+  },
+  "cron.nextRunAt": {
+    "text": "下次执行",
+    "context": "下次执行时间"
+  },
+  "cron.noTasks": {
+    "text": "暂无定时任务",
+    "context": "无任务提示"
+  },
+  "cron.noTasksHint": {
+    "text": "点击上方按钮创建第一个定时任务",
+    "context": "创建任务引导"
+  },
+  "cron.taskSettings": {
+    "text": "任务管理",
+    "context": "任务管理卡片标题"
+  },
+  "smartpath.back": {
+    "text": "返回",
+    "context": "返回按钮"
+  },
+  "smartpath.newPath": {
+    "text": "新建路径",
+    "context": "新建路径按钮"
+  },
+  "smartpath.noPaths": {
+    "text": "暂无路径",
+    "context": "无路径提示"
+  },
+  "smartpath.steps": {
+    "text": "个步骤",
+    "context": "步骤数量"
+  },
+  "smartpath.stepName": {
+    "text": "步骤名称",
+    "context": "步骤名称占位符"
+  },
+  "smartpath.executing": {
+    "text": "执行中",
+    "context": "执行中状态"
+  },
+  "smartpath.execute": {
+    "text": "执行",
+    "context": "执行按钮"
+  },
+  "smartpath.stepInput": {
+    "text": "描述这一步要做什么...",
+    "context": "步骤输入占位符"
+  },
+  "smartpath.executionProcess": {
+    "text": "执行过程",
+    "context": "执行过程标题"
+  },
+  "smartpath.executionResult": {
+    "text": "执行结果",
+    "context": "执行结果标题"
+  },
+  "smartpath.waitingResponse": {
+    "text": "等待响应...",
+    "context": "等待响应提示"
+  },
+  "smartpath.createPath": {
+    "text": "新建路径",
+    "context": "创建路径对话框标题"
+  },
+  "smartpath.createPathDesc": {
+    "text": "给路径起个名字并选择工作目录",
+    "context": "创建路径对话框描述"
+  },
+  "smartpath.name": {
+    "text": "名称",
+    "context": "路径名称标签"
+  },
+  "smartpath.namePlaceholder": {
+    "text": "例如：每日数据报告",
+    "context": "路径名称占位符"
+  },
+  "smartpath.description": {
+    "text": "功能描述",
+    "context": "路径描述标签"
+  },
+  "smartpath.descriptionPlaceholder": {
+    "text": "描述这个路径的作用...",
+    "context": "路径描述占位符"
+  },
+  "smartpath.workspace": {
+    "text": "工作目录",
+    "context": "工作目录标签"
+  },
+  "smartpath.workspacePlaceholder": {
+    "text": "选择业务系统",
+    "context": "工作目录占位符"
+  },
+  "smartpath.create": {
+    "text": "创建",
+    "context": "创建按钮"
+  },
+  "smartpath.cronPlaceholder": {
+    "text": "0 9 * * 1-5（留空=不自动执行）",
+    "context": "Cron 表达式占位符"
+  },
+  "smartpath.scheduledExec": {
+    "text": "定时执行",
+    "context": "定时执行标签"
+  },
+  "smartpath.cronHint": {
+    "text": "Cron 表达式，如：0 9 * * 1-5 表示工作日每天 9 点执行。留空则不自动执行。",
+    "context": "Cron 提示文字"
+  },
+  "smartpath.stepLabel": {
+    "text": "步骤",
+    "context": "步骤标签"
+  },
+  "smartpath.noSteps": {
+    "text": "还没有步骤，点击下方按钮添加",
+    "context": "无步骤提示"
+  },
+  "smartpath.addStep": {
+    "text": "添加步骤",
+    "context": "添加步骤按钮"
+  },
+  "smartpath.savePath": {
+    "text": "保存路径",
+    "context": "保存路径按钮"
+  },
+  "smartpath.edit": {
+    "text": "编辑",
+    "context": "编辑按钮"
+  },
+  "smartpath.scheduledLabel": {
+    "text": "定时执行：",
+    "context": "定时执行标签"
+  },
+  "smartpath.noStepsView": {
+    "text": "暂无步骤",
+    "context": "无步骤查看提示"
+  },
+  "smartpath.reusableResources": {
+    "text": "可复用资源",
+    "context": "可复用资源标签"
+  },
+  "smartpath.executionReport": {
+    "text": "执行报告",
+    "context": "执行报告标签"
+  },
+  "smartpath.executionHistory": {
+    "text": "执行历史",
+    "context": "执行历史标签"
+  },
+  "smartpath.emptyState": {
+    "text": "选择一个路径查看详情，或创建新路径",
+    "context": "空状态提示"
+  },
+  "smartpath.status.failed": {
+    "text": "失败",
+    "context": "路径状态：失败"
+  },
+  "smartpath.weekday": {
+    "text": "工作日 ${hour}:00",
+    "context": "工作日 Cron 描述"
+  },
+  "smartpath.daily": {
+    "text": "每天 ${hour}:00",
+    "context": "每天 Cron 描述"
+  },
+  "smartpath.everyMinutes": {
+    "text": "每 ${min} 分钟",
+    "context": "每N分钟 Cron 描述"
+  },
+  "stardom.settings.title": {
+    "text": "Agent星图配置",
+    "context": "星图配置卡片标题"
+  },
+  "stardom.settings.serverAddress": {
+    "text": "星图服务器地址",
+    "context": "服务器地址标签"
+  },
+  "stardom.settings.serverHint": {
+    "text": "企业内网星图服务器地址",
+    "context": "服务器地址提示"
+  },
+  "stardom.settings.agentName": {
+    "text": "Agent 显示名",
+    "context": "Agent显示名标签"
+  },
+  "stardom.settings.agentNamePlaceholder": {
+    "text": "你的名字（可选）",
+    "context": "Agent显示名占位符"
+  },
+  "stardom.settings.collabMode": {
+    "text": "协作模式",
+    "context": "协作模式标签"
+  },
+  "stardom.settings.modeAuto": {
+    "text": "全自动",
+    "context": "自动模式"
+  },
+  "stardom.settings.modeNotify": {
+    "text": "半自动（推荐）",
+    "context": "半自动模式"
+  },
+  "stardom.settings.modeManual": {
+    "text": "手动",
+    "context": "手动模式"
+  },
+  "stardom.settings.modeHint": {
+    "text": "半自动：接任务前通知你，30秒无响应自动接",
+    "context": "模式提示"
+  },
+  "stardom.settings.maxSlots": {
+    "text": "最大并发槽位",
+    "context": "最大槽位标签"
+  },
+  "stardom.settings.save": {
+    "text": "保存配置",
+    "context": "保存按钮"
+  },
+  "stardom.disconnected": {
+    "text": "未连接",
+    "context": "未连接状态"
+  },
+  "stardom.notConnected": {
+    "text": "星图未连接",
+    "context": "星图未连接提示"
+  },
+  "stardom.unknown": {
+    "text": "未知",
+    "context": "未知状态"
+  },
+  "stardom.reputation": {
+    "text": "声望",
+    "context": "声望标签"
+  },
+  "stardom.slots": {
+    "text": "槽位",
+    "context": "槽位标签"
+  },
+  "stardom.connected": {
+    "text": "已连接",
+    "context": "已连接状态"
+  },
+  "stardom.dashboard.title": {
+    "text": "协作星图",
+    "context": "仪表盘标题"
+  },
+  "stardom.dashboard.evolution": {
+    "text": "进化仓",
+    "context": "进化仓标签"
+  },
+  "stardom.dashboard.immersive": {
+    "text": "沉浸",
+    "context": "沉浸视图"
+  },
+  "stardom.dashboard.professional": {
+    "text": "专业",
+    "context": "专业视图"
+  },
+  "stardom.task.searching": {
+    "text": "搜索中",
+    "context": "任务状态：搜索中"
+  },
+  "stardom.task.offered": {
+    "text": "待接受",
+    "context": "任务状态：待接受"
+  },
+  "stardom.task.matched": {
+    "text": "已匹配",
+    "context": "任务状态：已匹配"
+  },
+  "stardom.task.chatting": {
+    "text": "协作中",
+    "context": "任务状态：协作中"
+  },
+  "stardom.task.completed": {
+    "text": "已完成",
+    "context": "任务状态：已完成"
+  },
+  "stardom.task.timeout": {
+    "text": "超时",
+    "context": "任务状态：超时"
+  },
+  "stardom.task.cancelled": {
+    "text": "已取消",
+    "context": "任务状态：已取消"
+  },
+  "stardom.task.iHelp": {
+    "text": "我求助",
+    "context": "我求助标签"
+  },
+  "stardom.task.helpMe": {
+    "text": "帮我",
+    "context": "帮我标签"
+  },
+  "stardom.task.terminate": {
+    "text": "终止",
+    "context": "终止按钮"
+  },
+  "stardom.notify.autoAccept": {
+    "text": "后自动接受",
+    "context": "自动接受提示"
+  },
+  "stardom.notify.collabRequest": {
+    "text": "协作请求",
+    "context": "协作请求标题"
+  },
+  "stardom.notify.needConfirm": {
+    "text": "需确认",
+    "context": "需要确认标签"
+  },
+  "stardom.notify.requestHelp": {
+    "text": "向你请求帮助",
+    "context": "请求帮助文本"
+  },
+  "stardom.notify.accept": {
+    "text": "接受",
+    "context": "接受按钮"
+  },
+  "stardom.notify.reject": {
+    "text": "拒绝",
+    "context": "拒绝按钮"
+  },
+  "stardom.chat.clickToView": {
+    "text": "点击左侧任务卡片查看协作对话",
+    "context": "聊天提示"
+  },
+  "stardom.chat.selectTask": {
+    "text": "选择一个进行中的任务，实时查看 Agent 协作过程",
+    "context": "选择任务提示"
+  },
+  "stardom.chat.task": {
+    "text": "任务",
+    "context": "任务标签"
+  },
+  "stardom.chat.messages": {
+    "text": "条消息",
+    "context": "消息数量"
+  },
+  "stardom.chat.terminate": {
+    "text": "终止协作",
+    "context": "终止协作按钮"
+  },
+  "stardom.chat.waiting": {
+    "text": "等待对话开始...",
+    "context": "等待对话提示"
+  },
+  "stardom.chat.realtimeHint": {
+    "text": "协作建立后，消息将实时显示在这里",
+    "context": "实时消息提示"
+  },
+  "stardom.leaderboard.title": {
+    "text": "声望榜",
+    "context": "声望排行榜标题"
+  },
+  "stardom.leaderboard.noData": {
+    "text": "暂无排行数据",
+    "context": "无排行数据"
+  },
+  "stardom.leaderboard.helpCount": {
+    "text": "次帮助",
+    "context": "帮助次数"
+  },
+  "stardom.guide.help": {
+    "text": "帮助",
+    "context": "帮助按钮"
+  },
+  "stardom.guide.welcome": {
+    "text": "欢迎来到 Agent 星图",
+    "context": "欢迎标题"
+  },
+  "stardom.guide.intro": {
+    "text": "你的 Agent 正在帮你自动协作。它会：",
+    "context": "引导介绍"
+  },
+  "stardom.guide.feature1": {
+    "text": "遇到解决不了的问题时，搜索其他 Agent 求助",
+    "context": "功能1"
+  },
+  "stardom.guide.feature2": {
+    "text": "找到合适的人后，自动发起协作对话",
+    "context": "功能2"
+  },
+  "stardom.guide.feature3": {
+    "text": "你可以随时切换到「世界」视图查看所有 Agent 的位置",
+    "context": "功能3"
+  },
+  "stardom.guide.modeIntro": {
+    "text": "协作模式控制 Agent 的自主程度：",
+    "context": "模式介绍"
+  },
+  "stardom.guide.autoDesc": {
+    "text": "Agent 自行接任务，不打扰你",
+    "context": "全自动描述"
+  },
+  "stardom.guide.notifyDesc": {
+    "text": "接任务前通知你，30秒无响应自动接（推荐）",
+    "context": "半自动描述"
+  },
+  "stardom.guide.manualDesc": {
+    "text": "每一步都需要你确认",
+    "context": "手动描述"
+  },
+  "stardom.guide.gotIt": {
+    "text": "知道了",
+    "context": "知道了按钮"
+  },
+  "stardom.cap.autoLayer": {
+    "text": "全自动能力层",
+    "context": "能力层：全自动"
+  },
+  "stardom.cap.autoSubtitle": {
+    "text": "高度 agent 化 · 可自主执行",
+    "context": "全自动层副标题"
+  },
+  "stardom.cap.collabLayer": {
+    "text": "协作增强能力层",
+    "context": "能力层：协作增强"
+  },
+  "stardom.cap.collabSubtitle": {
+    "text": "人机协同 · 可增强数字化",
+    "context": "协作增强副标题"
+  },
+  "stardom.cap.supportLayer": {
+    "text": "辅助支持能力层",
+    "context": "能力层：辅助支持"
+  },
+  "stardom.cap.supportSubtitle": {
+    "text": "弱数字化 · 以辅助为主",
+    "context": "辅助支持副标题"
   }
 }

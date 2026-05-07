@@ -1,6 +1,7 @@
 // src/features/stardom/OnlineAgents.tsx
 import { useStardomStore } from '@/stores/stardom';
 import { Users } from 'lucide-react';
+import { t } from '@/locales';
 
 export function OnlineAgents() {
   const { onlineAgents } = useStardomStore();

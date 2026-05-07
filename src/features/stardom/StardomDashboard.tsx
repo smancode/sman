@@ -1,6 +1,6 @@
 // src/features/stardom/StardomDashboard.tsx
 // Agent 星图 — Collaboration Atlas
-// 深色基底 + 网络沙盘 + 世界事件流 + 资源条 + 进化仓
+// Dark base + network sandbox + world events + resource bar + evolution chamber
 
 import { useEffect, useState } from 'react';
 import { useStardomStore } from '@/stores/stardom';
@@ -16,6 +16,7 @@ import { OnboardingGuide } from './OnboardingGuide';
 import { Loader2, LayoutGrid, Network, Dna } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { t } from '@/locales';
 
 type ViewMode = 'immersive' | 'professional';
 type SubView = 'main' | 'evolution';
@@ -52,14 +53,14 @@ export function StardomDashboard() {
               style={{ color: subView === 'main' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               onClick={() => setSubView('main')}
             >
-              协作星图
+              {t("stardom.dashboard.title")}
             </button>
             <button
               className={cn('text-xs font-medium px-2 py-0.5 rounded transition-colors flex items-center gap-1', subView === 'evolution' && 'bg-white/10')}
               style={{ color: subView === 'evolution' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               onClick={() => setSubView('evolution')}
             >
-              <Dna className="h-3 w-3" /> 进化仓
+              <Dna className="h-3 w-3" /> {t("stardom.dashboard.evolution")}
             </button>
           </div>
           {subView === 'main' && (
@@ -71,7 +72,7 @@ export function StardomDashboard() {
                 onClick={() => setViewMode('immersive')}
                 style={{ color: viewMode === 'immersive' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               >
-                <Network className="h-3 w-3 mr-1" />沉浸
+                <Network className="h-3 w-3 mr-1" />{t("stardom.dashboard.immersive")}
               </Button>
               <Button
                 variant="ghost"
@@ -80,7 +81,7 @@ export function StardomDashboard() {
                 onClick={() => setViewMode('professional')}
                 style={{ color: viewMode === 'professional' ? 'var(--bz-cyan-glow)' : 'var(--bz-text-dim)' }}
               >
-                <LayoutGrid className="h-3 w-3 mr-1" />专业
+                <LayoutGrid className="h-3 w-3 mr-1" />{t("stardom.dashboard.professional")}
               </Button>
             </div>
           )}

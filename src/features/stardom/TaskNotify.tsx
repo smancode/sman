@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useStardomStore } from '@/stores/stardom';
 import { Button } from '@/components/ui/button';
 import { Bell, Check, X, Clock } from 'lucide-react';
+import { t } from '@/locales';
 
 function CountdownTimer({ endsAt }: { endsAt: string }) {
   const [remaining, setRemaining] = useState(() => {
@@ -25,7 +26,7 @@ function CountdownTimer({ endsAt }: { endsAt: string }) {
   return (
     <span className="flex items-center gap-1 text-xs text-amber-600">
       <Clock className="h-3 w-3" />
-      {remaining}s 后自动接受
+      {remaining}s {t("stardom.notify.autoAccept")}
     </span>
   );
 }
@@ -53,21 +54,21 @@ export function TaskNotify() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-medium">协作请求</span>
+                <span className="text-sm font-medium">{t("stardom.notify.collabRequest")}</span>
                 {notification.mode === 'notify' && (
                   <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
-                    半自动
+                    {t("stardom.settings.modeNotify")}
                   </span>
                 )}
                 {notification.mode === 'manual' && (
                   <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-                    需确认
+                    {t("stardom.notify.needConfirm")}
                   </span>
                 )}
               </div>
               <p className="text-sm text-muted-foreground mb-1">
                 <span className="font-medium text-foreground">{notification.from}</span>
-                {' 向你请求帮助'}
+                {' {t("stardom.notify.requestHelp")}'}
               </p>
               <p className="text-sm line-clamp-2">{notification.question}</p>
 
@@ -83,7 +84,7 @@ export function TaskNotify() {
                   onClick={() => acceptTask(notification.taskId)}
                 >
                   <Check className="h-3 w-3 mr-1" />
-                  接受
+                  {t("stardom.notify.accept")}
                 </Button>
                 <Button
                   variant="outline"
@@ -92,7 +93,7 @@ export function TaskNotify() {
                   onClick={() => rejectTask(notification.taskId)}
                 >
                   <X className="h-3 w-3 mr-1" />
-                  拒绝
+                  {t("stardom.notify.reject")}
                 </Button>
               </div>
             </div>

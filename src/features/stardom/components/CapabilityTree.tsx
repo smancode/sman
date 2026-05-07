@@ -6,6 +6,7 @@
 import { useStardomStore } from '@/stores/stardom';
 import { useState, useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { t } from '@/locales';
 
 // ── 三层数字化适配模型 ──
 
@@ -23,8 +24,8 @@ interface DigitizationLayer {
 const LAYERS: DigitizationLayer[] = [
   {
     key: 'auto',
-    title: '全自动能力层',
-    subtitle: '高度 agent 化 · 可自主执行',
+    title: t('stardom.cap.autoLayer'),
+    subtitle: t('stardom.cap.autoSubtitle'),
     icon: '⬡',
     color: 'var(--bz-green)',
     glow: 'var(--bz-green-glow)',
@@ -33,8 +34,8 @@ const LAYERS: DigitizationLayer[] = [
   },
   {
     key: 'enhanced',
-    title: '协作增强能力层',
-    subtitle: '人机协同 · 可增强数字化',
+    title: t('stardom.cap.collabLayer'),
+    subtitle: t('stardom.cap.collabSubtitle'),
     icon: '◈',
     color: 'var(--bz-cyan)',
     glow: 'var(--bz-cyan-glow)',
@@ -43,8 +44,8 @@ const LAYERS: DigitizationLayer[] = [
   },
   {
     key: 'assist',
-    title: '辅助支持能力层',
-    subtitle: '弱数字化 · 以辅助为主',
+    title: t('stardom.cap.supportLayer'),
+    subtitle: t('stardom.cap.supportSubtitle'),
     icon: '◉',
     color: 'var(--bz-text-dim)',
     glow: 'transparent',

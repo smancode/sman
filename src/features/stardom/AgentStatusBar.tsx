@@ -1,6 +1,7 @@
 // src/features/stardom/AgentStatusBar.tsx
 import { useStardomStore } from '@/stores/stardom';
 import { Circle, Zap } from 'lucide-react';
+import { t } from '@/locales';
 
 export function AgentStatusBar() {
   const { connection } = useStardomStore();
@@ -11,12 +12,12 @@ export function AgentStatusBar() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <Circle className="h-2.5 w-2.5 fill-current text-gray-400" />
-            <span>未连接</span>
+            <span>{t("stardom.disconnected")}</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           <Zap className="h-3.5 w-3.5 text-muted-foreground/50" />
-          <span className="text-muted-foreground/50">星图未连接</span>
+          <span className="text-muted-foreground/50">{t("stardom.notConnected")}</span>
         </div>
       </div>
     );
@@ -31,15 +32,15 @@ export function AgentStatusBar() {
         <div className="flex items-center gap-1.5">
           <Circle className={`h-2.5 w-2.5 fill-current ${statusColor}`} />
           <span>
-            {connection.agentName ?? 'Agent'}: {connection.agentStatus ?? '未知'}
+            {connection.agentName ?? 'Agent'}: {connection.agentStatus ?? t("stardom.unknown")}
           </span>
         </div>
-        <span>声望 {connection.reputation ?? 0}</span>
-        <span>槽位 {connection.activeSlots}/{connection.maxSlots}</span>
+        <span>{t("stardom.reputation")} {connection.reputation ?? 0}</span>
+        <span>{t("stardom.slots")} {connection.activeSlots}/{connection.maxSlots}</span>
       </div>
       <div className="flex items-center gap-1.5">
         <Zap className="h-3.5 w-3.5" />
-        <span>已连接</span>
+        <span>{t("stardom.connected")}</span>
       </div>
     </div>
   );

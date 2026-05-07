@@ -2,6 +2,7 @@
 import type { StardomTask } from '@/types/stardom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, ArrowLeft, Clock, Star } from 'lucide-react';
+import { t } from '@/locales';
 
 interface TaskCardProps {
   task: StardomTask;
@@ -10,13 +11,13 @@ interface TaskCardProps {
 }
 
 const statusLabels: Record<string, { label: string; color: string }> = {
-  searching: { label: '搜索中', color: 'bg-yellow-100 text-yellow-700' },
-  offered: { label: '待接受', color: 'bg-blue-100 text-blue-700' },
-  matched: { label: '已匹配', color: 'bg-indigo-100 text-indigo-700' },
-  chatting: { label: '协作中', color: 'bg-green-100 text-green-700' },
-  completed: { label: '已完成', color: 'bg-gray-100 text-gray-500' },
-  timeout: { label: '超时', color: 'bg-red-100 text-red-700' },
-  cancelled: { label: '已取消', color: 'bg-gray-100 text-gray-500' },
+  searching: { label: t('stardom.task.searching'), color: 'bg-yellow-100 text-yellow-700' },
+  offered: { label: t('stardom.task.offered'), color: 'bg-blue-100 text-blue-700' },
+  matched: { label: t('stardom.task.matched'), color: 'bg-indigo-100 text-indigo-700' },
+  chatting: { label: t('stardom.task.chatting'), color: 'bg-green-100 text-green-700' },
+  completed: { label: t('stardom.task.completed'), color: 'bg-gray-100 text-gray-500' },
+  timeout: { label: t('stardom.task.timeout'), color: 'bg-red-100 text-red-700' },
+  cancelled: { label: t('stardom.task.cancelled'), color: 'bg-gray-100 text-gray-500' },
 };
 
 export function TaskCard({ task, onClick, onCancel }: TaskCardProps) {
@@ -36,7 +37,7 @@ export function TaskCard({ task, onClick, onCancel }: TaskCardProps) {
             <ArrowLeft className="h-3.5 w-3.5 text-green-500" />
           )}
           <span className="text-xs text-muted-foreground">
-            {task.direction === 'outgoing' ? '我求助' : '帮我'}
+            {task.direction === 'outgoing' ? t('stardom.task.iHelp') : t('stardom.task.helpMe')}
           </span>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full ${status.color}`}>
@@ -60,7 +61,7 @@ export function TaskCard({ task, onClick, onCancel }: TaskCardProps) {
             className="h-6 text-xs text-red-500 hover:text-red-600"
             onClick={(e) => { e.stopPropagation(); onCancel(task.taskId); }}
           >
-            终止
+            {t("stardom.task.terminate")}
           </Button>
         )}
       </div>
