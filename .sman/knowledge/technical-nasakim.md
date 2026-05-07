@@ -1,6 +1,6 @@
 # Technical — nasakim
 
-> Last extracted: 2026-05-07T03:14:03.172Z
+> Last extracted: 2026-05-07T06:45:16.543Z
 
 ## Smart Path path.md 文件格式
 <!-- hash: 7a8b9c -->
@@ -40,3 +40,10 @@
 - 流式输出与工具调用：`await streamDone` 消息队列、SDK tool system
 - 多模型支持已可通过环境变量 `ANTHROPIC_BASE_URL` 实现，无需改动代码
 <!-- end: 6b1f8c -->
+
+## LLM prompt 语言硬编码问题与国际化改造点
+<!-- hash: 8q2r5w -->
+- `server/claude-session.ts:323` 中 `buildSmanContext()` 硬编码了"始终中文回复"
+- 问题：语言切换后已有会话仍强制中文，新建会话也继承硬编码
+- 改造方案：从 config 读取 language 字段，动态生成语言指令注入 prompt
+<!-- end: 8q2r5w -->

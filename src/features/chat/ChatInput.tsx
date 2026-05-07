@@ -5,7 +5,7 @@
  * Supports image/PDF upload via file picker or drag-drop.
  * Type "/" to open skill picker.
  */
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { SendHorizontal, RefreshCw, Brain, FileUp, X, Square, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -52,7 +52,7 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInputProps) {
+export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [skillPickerFilter, setSkillPickerFilter] = useState('');
@@ -329,7 +329,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
     [handleSend, showSkillPicker, input],
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInput(value);
 
@@ -360,7 +360,7 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
         }
       }
     }
-  };
+  }, [showSkillPicker]);
 
   const handleSkillSelect = (item: PickerItem) => {
     const cursorPosition = textareaRef.current?.selectionStart || input.length;
@@ -610,4 +610,4 @@ export function ChatInput({ onSend, disabled = false, isEmpty = false }: ChatInp
       </div>
     </div>
   );
-}
+});

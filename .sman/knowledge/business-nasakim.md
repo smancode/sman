@@ -1,6 +1,6 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-07T03:14:03.172Z
+> Last extracted: 2026-05-07T06:45:16.543Z
 
 ## Smart Path 的 path.md 元数据要求
 <!-- hash: a1b2c3 -->
@@ -59,3 +59,10 @@
 - 自研 coding 工具需重写约 50%：session 管理、MCP 协议、工具调用均需重建
 - 结论：当前阶段继续基于 Claude SDK 是最务实选择，多模型支持可通过 `ANTHROPIC_BASE_URL` 实现
 <!-- end: 8f3c1a -->
+
+## 国际化语言设定的业务需求
+<!-- hash: 4k7m2p -->
+- 用户可在设置页面修改 UI 语言，切换后需实时生效
+- UI 国际化方案：所有文本替换为占位符（如 `t('menu.settings')`），从对应语言的 JSON 文件映射，语言包预加载到内存
+- LLM prompt 中的语言要求也需动态跟随用户选择，而非硬编码"始终中文回复"
+<!-- end: 4k7m2p -->

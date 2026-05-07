@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo, memo } from 'react';
 import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -19,6 +19,55 @@ import { CodeViewerProvider } from '@/features/code-viewer';
 // ── Module-level: 记住每个会话的滚动比例 ──
 // key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
 const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
+
+// ── LazyMessage: IntersectionObserver-based lazy rendering ──
+// Renders a cheap placeholder until the message scrolls near the viewport.
+// Always renders the last N messages (user likely looking at recent content).
+const LAZY_ALWAYS_RENDER_COUNT = 6;
+const LAZY_ROOT_MARGIN = '800px 0px';
+
+const LazyMessage = memo(function LazyMessage({
+  msg,
+  index,
+  total,
+  showThinking,
+}: {
+  msg: Message;
+  index: number;
+  total: number;
+  showThinking: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Always render last N messages
+  const nearEnd = index >= total - LAZY_ALWAYS_RENDER_COUNT;
+
+  useEffect(() => {
+    if (nearEnd || visible) return;
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { rootMargin: LAZY_ROOT_MARGIN },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [nearEnd, visible]);
+
+  if (nearEnd || visible) {
+    return (
+      <ChatMessage
+        key={msg.id}
+        id={`msg-${msg.id}`}
+        message={msg}
+        showThinking={showThinking}
+      />
+    );
+  }
+
+  return <div ref={ref} className="min-h-[80px]" />;
+});
 
 export function Chat() {
   const connectionStatus = useWsConnection((s) => s.status);
@@ -150,12 +199,13 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {/* Render all messages */}
-              {messages.map((msg) => (
-                <ChatMessage
+              {/* Render messages — lazy load off-screen */}
+              {messages.map((msg, i) => (
+                <LazyMessage
                   key={msg.id}
-                  id={`msg-${msg.id}`}
-                  message={msg}
+                  msg={msg}
+                  index={i}
+                  total={messages.length}
                   showThinking={showThinking}
                 />
               ))}
