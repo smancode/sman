@@ -1,6 +1,6 @@
 # Technical — nasakim
 
-> Last extracted: 2026-05-06T10:22:53.100Z
+> Last extracted: 2026-05-07T02:33:40.843Z
 
 ## Smart Path path.md 文件格式
 <!-- hash: 7a8b9c -->
@@ -9,3 +9,17 @@
 - 后端存储：server/smart-path-store.ts；类型定义：src/types/settings.ts（SmartPath 含 description?）
 - 前端组件 src/features/smart-paths/index.tsx 负责新建/编辑/详情页的 description 展示与编辑
 <!-- end: 7a8b9c -->
+
+## MCP HTTP API 端点与实现
+<!-- hash: f6a7b8 -->
+- `POST /api/mcp/tools/list`：从数据库获取有会话的活跃 workspaces，返回 skills + paths 列表
+- `POST /api/mcp/tools/invoke`：参数含 workspace、toolType(skill/path)、toolId，path 类型走 smartPathEngine.run()，skill 类型创建临时会话执行
+- 路由定义在 `server/index.ts`，活跃 workspace 查询方法 `getActiveWorkspaces()` 在 `server/session-store.ts`
+<!-- end: f6a7b8 -->
+
+## skill-auto-updater 迁移位置
+<!-- hash: 2d6f8b -->
+- 原 skill-auto-updater 在 `.claude` 目录下工作（往 `.claude/skills/` 写入）
+- 需迁移到 `.sman` 体系，使 skill 自动更新写入 `.sman/skills/`
+- 这是自我进化能力的核心组件，迁移时不能影响现有 skill-injector 等模块的正常运行
+<!-- end: 2d6f8b -->
