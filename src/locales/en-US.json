@@ -2686,5 +2686,77 @@
   "chat.input.hint": {
     "text": "(Type / to select 【command/Skill/path】, drag files here)",
     "context": "Input extended hint"
+  },
+  "update.banner.ready": {
+    "text": "New version v{version} is ready",
+    "context": "Banner shown after update download completes, {version} is version number"
+  },
+  "update.banner.goSettings": {
+    "text": "Go to Settings",
+    "context": "Button in banner to navigate to settings"
+  },
+  "update.banner.close": {
+    "text": "Close",
+    "context": "Close update banner"
+  },
+  "update.banner.error": {
+    "text": "Update check failed",
+    "context": "Banner for update check error"
+  },
+  "update.settings.title": {
+    "text": "Check for Updates",
+    "context": "Settings page update section title"
+  },
+  "update.settings.currentVersion": {
+    "text": "Current Version",
+    "context": "Current version label"
+  },
+  "update.settings.checkButton": {
+    "text": "Check for Updates",
+    "context": "Manual check update button"
+  },
+  "update.settings.checking": {
+    "text": "Checking...",
+    "context": "Checking for updates status"
+  },
+  "update.settings.downloading": {
+    "text": "Downloading update...",
+    "context": "Downloading update status"
+  },
+  "update.settings.ready": {
+    "text": "New version v{version} is ready",
+    "context": "Update downloaded, {version} is version number"
+  },
+  "update.settings.installButton": {
+    "text": "Install Now",
+    "context": "Install update button"
+  },
+  "update.settings.notAvailable": {
+    "text": "You're up to date",
+    "context": "No update available"
+  },
+  "update.settings.error": {
+    "text": "Update error: {message}",
+    "context": "Update error message, {message} is error detail"
+  },
+  "update.settings.serverUrl": {
+    "text": "Update Server URL",
+    "context": "Update server URL input label"
+  },
+  "update.settings.serverUrlPlaceholder": {
+    "text": "http://your-server/updates",
+    "context": "Update server URL input placeholder"
+  },
+  "update.settings.serverUrlSaved": {
+    "text": "Update server URL saved",
+    "context": "Update server URL saved successfully"
+  },
+  "update.settings.retryButton": {
+    "text": "Retry",
+    "context": "Retry check update button"
+  },
+  "settings.sections.update": {
+    "text": "Check for Updates",
+    "context": "Check for updates nav item"
   }
 }

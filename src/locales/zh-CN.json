@@ -2686,5 +2686,77 @@
   "chat.input.hint": {
     "text": "(输入 / 选择【命令/Skill/路径】，可拖入文件)",
     "context": "输入框扩展提示"
+  },
+  "update.banner.ready": {
+    "text": "新版本 v{version} 已就绪",
+    "context": "更新下载完成后的横幅提示，{version} 是版本号"
+  },
+  "update.banner.goSettings": {
+    "text": "前往设置",
+    "context": "横幅中跳转设置页的按钮"
+  },
+  "update.banner.close": {
+    "text": "关闭",
+    "context": "关闭更新横幅"
+  },
+  "update.banner.error": {
+    "text": "更新检查失败",
+    "context": "更新检查出错的横幅提示"
+  },
+  "update.settings.title": {
+    "text": "检查更新",
+    "context": "设置页更新区域标题"
+  },
+  "update.settings.currentVersion": {
+    "text": "当前版本",
+    "context": "当前版本号标签"
+  },
+  "update.settings.checkButton": {
+    "text": "检查更新",
+    "context": "手动检查更新按钮"
+  },
+  "update.settings.checking": {
+    "text": "正在检查...",
+    "context": "正在检查更新中的状态"
+  },
+  "update.settings.downloading": {
+    "text": "正在下载更新...",
+    "context": "正在下载更新中的状态"
+  },
+  "update.settings.ready": {
+    "text": "新版本 v{version} 已就绪",
+    "context": "更新已下载完成，{version} 是版本号"
+  },
+  "update.settings.installButton": {
+    "text": "立即安装",
+    "context": "安装更新按钮"
+  },
+  "update.settings.notAvailable": {
+    "text": "已是最新版本",
+    "context": "没有可用更新"
+  },
+  "update.settings.error": {
+    "text": "更新出错：{message}",
+    "context": "更新错误信息，{message} 是错误详情"
+  },
+  "update.settings.serverUrl": {
+    "text": "更新服务器地址",
+    "context": "更新服务器URL输入框标签"
+  },
+  "update.settings.serverUrlPlaceholder": {
+    "text": "http://your-server/updates",
+    "context": "更新服务器URL输入框占位符"
+  },
+  "update.settings.serverUrlSaved": {
+    "text": "更新服务器地址已保存",
+    "context": "保存更新服务器地址成功"
+  },
+  "update.settings.retryButton": {
+    "text": "重试",
+    "context": "重试检查更新按钮"
+  },
+  "settings.sections.update": {
+    "text": "检查更新",
+    "context": "检查更新导航"
   }
 }
