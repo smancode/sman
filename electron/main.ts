@@ -351,10 +351,14 @@ app.whenReady().then(async () => {
   await waitForFrontend();
   createWindow();
 
-  // Auto-check for updates after 5s delay (production only)
+  // Auto-check for updates: initial 5s delay + every 2 hours (production only)
   if (!isDev) {
+    const CHECK_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch(() => {});
+      setInterval(() => {
+        autoUpdater.checkForUpdates().catch(() => {});
+      }, CHECK_INTERVAL);
     }, 5000);
   }
 });
