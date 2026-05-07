@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import http from 'http';
 import { execSync } from 'child_process';
+import { autoUpdater } from 'electron-updater';
 
 let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
@@ -34,6 +35,11 @@ if (!app.isPackaged) {
 
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 5880;
+
+// Auto-updater: silent download, never auto-install
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoRunAppAfterInstall = true;
 const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
 
 function createWindow(): void {
@@ -156,6 +162,51 @@ function registerIpcHandlers(): void {
     } catch {
       return null;
     }
+  });
+
+  // Update handlers
+  let updateInfo: { version: string } | null = null;
+
+  ipcMain.handle('updater:check', async () => {
+    if (isDev) return { status: 'not-available' };
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      if (result?.updateInfo) {
+        return { status: 'available', version: result.updateInfo.version };
+      }
+      return { status: 'not-available' };
+    } catch (err) {
+      return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle('updater:install', async () => {
+    if (!updateInfo) return;
+    autoUpdater.quitAndInstall();
+  });
+
+  ipcMain.handle('updater:setFeedURL', async (_event, url: string) => {
+    if (!url || typeof url !== 'string') return;
+    autoUpdater.setFeedURL({ provider: 'generic', url });
+  });
+
+  // Forward autoUpdater events to renderer
+  autoUpdater.on('update-available', (info) => {
+    updateInfo = { version: info.version };
+    mainWindow?.webContents.send('updater:available', { version: info.version, releaseNotes: info.releaseNotes });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('updater:not-available');
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateInfo = { version: info.version };
+    mainWindow?.webContents.send('updater:downloaded', { version: info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('updater:error', { message: err?.message || 'Unknown error' });
   });
 }
 
@@ -299,6 +350,13 @@ app.whenReady().then(async () => {
 
   await waitForFrontend();
   createWindow();
+
+  // Auto-check for updates after 5s delay (production only)
+  if (!isDev) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }, 5000);
+  }
 });
 
 app.on('window-all-closed', () => {
