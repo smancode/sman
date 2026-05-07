@@ -1,14 +1,16 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star } from 'lucide-react';
+import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star, Languages } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
 import { WebSearchSettings } from './WebSearchSettings';
 import { ChatbotSettings } from './ChatbotSettings';
 import { BackendSettings } from './BackendSettings';
+import { LanguageSettings } from './LanguageSettings';
 import { StardomSettings } from '@/features/stardom/StardomSettings';
 import { useSettingsStore } from '@/stores/settings';
+import { t } from '@/locales';
 
 declare const __APP_VERSION__: string;
 const APP_VERSION = __APP_VERSION__;
@@ -98,6 +100,7 @@ const SECTIONS = [
   { id: 'chatbot', label: 'Bot 机器人设置', icon: Bot },
   { id: 'websearch', label: '网络搜索配置', icon: Search },
   { id: 'stardom', label: '星域配置', icon: Store },
+  { id: 'language', label: '语言设置', icon: Languages },
   { id: 'community', label: '加入社群', icon: Users },
 ] as const;
 
@@ -170,21 +173,32 @@ export function Settings() {
           返回
         </button>
         <div className="flex-1 space-y-1">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => scrollToSection(id)}
-              className={cn(
-                'flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                activeSection === id
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
+          {SECTIONS.map(({ id, label, icon: Icon }) => {
+            const labels: Record<string, string> = {
+              llm: t('settings.llm.title'),
+              backend: t('settings.backend.title'),
+              chatbot: t('settings.chatbot.title'),
+              websearch: t('settings.webSearch.title'),
+              stardom: t('settings.stardom.title'),
+              language: t('settings.language.title'),
+              community: t('settings.about.community'),
+            };
+            return (
+              <button
+                key={id}
+                onClick={() => scrollToSection(id)}
+                className={cn(
+                  'flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  activeSection === id
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {labels[id] || label}
+              </button>
+            );
+          })}
         </div>
 
         {/* 版本号 */}
@@ -201,6 +215,9 @@ export function Settings() {
           <ChatbotSettings id="settings-chatbot" />
           <WebSearchSettings id="settings-websearch" />
           <StardomSettings id="settings-stardom" />
+
+          {/* 语言设置 */}
+          <LanguageSettings id="settings-language" />
 
           {/* 加入社群 */}
           <Card id="settings-community">

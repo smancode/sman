@@ -69,6 +69,7 @@ export interface StardomSettingsConfig {
 
 export interface SmanSettings {
   port: number;
+  language: string;  // 界面语言：'zh-CN' | 'en-US'
   llm: LlmConfig;
   savedLlms: LlmProfile[];
   currentLlmProfile: string;

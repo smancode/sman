@@ -16,6 +16,7 @@ import { useChatStore } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
 import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
+import { t } from '@/locales';
 import type { ChatSession } from '@/types/chat';
 
 // Simple local state for expanded systems (no need for a store)
@@ -157,7 +158,7 @@ const SessionItem = memo(function SessionItem({
           )}
           onClick={handleDelete}
           disabled={deleting}
-          title="删除会话"
+          title={t('session.delete')}
         >
           <Trash className="h-3.5 w-3.5" />
         </button>
@@ -396,7 +397,7 @@ export function SessionTree() {
           onClick={handleNewSession}
         >
           <Plus className="h-4 w-4" />
-          新建会话
+          {t('session.new')}
         </Button>
       </div>
 

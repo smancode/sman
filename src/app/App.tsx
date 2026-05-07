@@ -8,7 +8,9 @@ import { useChatStore } from '@/stores/chat';
 import { sessionCache } from '@/lib/session-cache';
 import { cronCache } from '@/lib/cron-cache';
 import { useTheme } from '@/hooks/useTheme';
+import { useLanguage } from '@/hooks/useLanguage';
 import { GitPanel } from '@/features/git/GitPanel';
+import { t } from '@/locales';
 
 function ConnectingOverlay({ status }: { status: string }) {
   const [dots, setDots] = useState('');
@@ -16,7 +18,7 @@ function ConnectingOverlay({ status }: { status: string }) {
     const timer = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 500);
     return () => clearInterval(timer);
   }, []);
-  const label = status === 'connecting' ? '正在连接后端' : '正在等待后端启动';
+  const label = status === 'connecting' ? t('common.loading') : t('common.loading');
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -88,6 +90,7 @@ export default function App() {
   const loadSessions = useChatStore((s) => s.loadSessions);
 
   useTheme();
+  useLanguage();
   useAutoConnect();
 
   useEffect(() => {

@@ -13,21 +13,22 @@ import {
 } from '@/components/ui/select';
 import { useSettingsStore } from '@/stores/settings';
 import type { DetectedCapabilities, LlmProfile } from '@/types/settings';
+import { t } from '@/locales';
 
 function CapabilitiesDisplay({ capabilities }: { capabilities?: DetectedCapabilities }) {
   if (!capabilities) return null;
 
   const items = [
-    { label: '文本', supported: capabilities.text },
-    { label: '图片', supported: capabilities.image },
-    { label: 'PDF', supported: capabilities.pdf },
-    { label: '音频', supported: capabilities.audio },
-    { label: '视频', supported: capabilities.video },
+    { label: t('settings.llm.capability.text'), supported: capabilities.text },
+    { label: t('settings.llm.capability.image'), supported: capabilities.image },
+    { label: t('settings.llm.capability.pdf'), supported: capabilities.pdf },
+    { label: t('settings.llm.capability.audio'), supported: capabilities.audio },
+    { label: t('settings.llm.capability.video'), supported: capabilities.video },
   ];
 
   return (
     <div className="flex items-center gap-3 flex-wrap text-sm">
-      <span className="text-muted-foreground">模态能力:</span>
+      <span className="text-muted-foreground">{t('settings.llm.capabilities.label')}</span>
       {items.map(({ label, supported }) => (
         <span key={label} className={`flex items-center gap-1 ${supported ? 'text-emerald-600' : 'text-muted-foreground/50'}`}>
           {supported ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
@@ -153,7 +154,7 @@ export function LLMSettings({ id }: { id?: string }) {
         setSelectedProfile(profileName);
       }
     } catch {
-      setTestResult({ success: false, error: '连接失败' });
+      setTestResult({ success: false, error: t('settings.llm.test.failed') });
     } finally {
       setTesting(false);
     }
@@ -161,7 +162,7 @@ export function LLMSettings({ id }: { id?: string }) {
 
   const handleDeleteProfile = async () => {
     if (!selectedProfile) return;
-    if (!confirm(`确定删除配置「${selectedProfile}」？`)) return;
+    if (!confirm(t('settings.llm.deleteProfile.confirm', { name: selectedProfile }))) return;
     try {
       await deleteLlmProfile(selectedProfile);
       setSelectedProfile('');
@@ -235,18 +236,18 @@ export function LLMSettings({ id }: { id?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="h-5 w-5" />
-          模型配置
+          {t('settings.llm.title')}
         </CardTitle>
-        <CardDescription>配置使用的模型和 API Key，保存时自动检测兼容性和模态能力</CardDescription>
+        <CardDescription>{t('settings.llm.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Saved LLM profiles dropdown */}
         <div className="space-y-2">
-          <Label>已保存的配置</Label>
+          <Label>{t('settings.llm.savedProfiles')}</Label>
           <div className="flex items-center gap-2">
             <Select value={selectedProfile} onValueChange={handleProfileChange}>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="选择已保存的配置，或新建..." />
+                <SelectValue placeholder={t('settings.llm.selectProfile')} />
               </SelectTrigger>
               <SelectContent>
                 {savedLlms.map(p => (
@@ -256,43 +257,43 @@ export function LLMSettings({ id }: { id?: string }) {
                 ))}
                 <SelectItem value="__new__">
                   <span className="flex items-center gap-1 text-muted-foreground">
-                    <Plus className="h-3.5 w-3.5" /> 新建配置...
+                    <Plus className="h-3.5 w-3.5" /> {t('settings.llm.newProfile')}
                   </span>
                 </SelectItem>
               </SelectContent>
             </Select>
             {selectedProfile && (
-              <Button variant="outline" size="sm" onClick={handleDeleteProfile} title="删除当前配置">
+              <Button variant="outline" size="sm" onClick={handleDeleteProfile} title={t('settings.llm.deleteProfile')}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             )}
           </div>
           {selectedProfile && (
             <p className="text-xs text-muted-foreground">
-              当前使用: <span className="font-medium text-foreground">{selectedProfile}</span>
+              {t('settings.llm.currentProfile')} <span className="font-medium text-foreground">{selectedProfile}</span>
             </p>
           )}
         </div>
 
         {/* Profile name (only when creating new or editing) */}
         <div className="space-y-2">
-          <Label>配置名称</Label>
+          <Label>{t('settings.llm.profileName')}</Label>
           <Input
             value={draftProfileName}
             onChange={(e) => setDraftProfileName(e.target.value)}
-            placeholder="给这个配置起个名字，如 Anthropic、DeepSeek..."
+            placeholder={t('settings.llm.profileName.placeholder')}
           />
         </div>
 
         {/* Base URL */}
         <div className="space-y-2">
-          <Label>Base URL</Label>
+          <Label>{t('settings.llm.baseUrl')}</Label>
           <div className="relative" ref={baseUrlPresetRef}>
             <div className="flex gap-1">
               <Input
                 value={draftBaseUrl}
                 onChange={(e) => setDraftBaseUrl(e.target.value)}
-                placeholder="https://api.anthropic.com（留空使用默认）"
+                placeholder={t('settings.llm.baseUrl.placeholder')}
                 className="flex-1"
               />
               <Button
@@ -300,7 +301,7 @@ export function LLMSettings({ id }: { id?: string }) {
                 size="icon"
                 className="shrink-0"
                 onClick={() => setShowBaseUrlPreset(!showBaseUrlPreset)}
-                title="选择预设 Base URL"
+                title={t('settings.llm.baseUrl.selectPreset')}
               >
                 <Globe className="h-4 w-4" />
               </Button>
@@ -327,18 +328,18 @@ export function LLMSettings({ id }: { id?: string }) {
               </div>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">支持 Anthropic 兼容格式的 API 地址</p>
+          <p className="text-xs text-muted-foreground">{t('settings.llm.baseUrl.hint')}</p>
         </div>
 
         {/* API Key */}
         <div className="space-y-2">
-          <Label>API Key</Label>
+          <Label>{t('settings.llm.apiKey')}</Label>
           <div className="relative">
             <Input
               type={showApiKey ? 'text' : 'password'}
               value={draftApiKey}
               onChange={(e) => setDraftApiKey(e.target.value)}
-              placeholder="sk-..."
+              placeholder={t('settings.llm.apiKey.placeholder')}
               className="pr-10"
             />
             <button
@@ -353,13 +354,13 @@ export function LLMSettings({ id }: { id?: string }) {
 
         {/* Model */}
         <div className="space-y-2">
-          <Label>Model</Label>
+          <Label>{t('settings.llm.model')}</Label>
           <div className="relative" ref={modelDropdownRef}>
             <div className="flex gap-1">
               <Input
                 value={draftModel}
                 onChange={(e) => { setDraftModel(e.target.value); setShowModelDropdown(false); }}
-                placeholder="claude-sonnet-4-6"
+                placeholder={t('settings.llm.model.placeholder')}
                 className="flex-1"
               />
               <Button
@@ -368,7 +369,7 @@ export function LLMSettings({ id }: { id?: string }) {
                 className="shrink-0"
                 onClick={handleFetchModels}
                 disabled={loadingModels || !draftApiKey}
-                title={draftApiKey ? '从 API 拉取模型列表' : '请先填写 API Key'}
+                title={draftApiKey ? t('settings.llm.model.fetch') : t('settings.llm.model.fetchDisabled')}
               >
                 {loadingModels ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
@@ -391,7 +392,7 @@ export function LLMSettings({ id }: { id?: string }) {
               </div>
             )}
             {modelsUnsupported && (
-              <p className="text-xs text-muted-foreground mt-1">该 API 不支持拉取模型列表，请手动输入模型名称</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('settings.llm.model.unsupported')}</p>
             )}
           </div>
         </div>
@@ -403,10 +404,10 @@ export function LLMSettings({ id }: { id?: string }) {
               ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               : <XCircle className="h-4 w-4 shrink-0 mt-0.5" />}
             <div className="flex flex-col gap-1">
-              <span>{testResult.success ? '连接成功' : testResult.error}</span>
+              <span>{testResult.success ? t('settings.llm.test.success') : testResult.error}</span>
               {testResult.success && <CapabilitiesDisplay capabilities={testResult.capabilities} />}
               {testResult.success && !testResult.error && (
-                <span className="text-xs opacity-60">配置已保存</span>
+                <span className="text-xs opacity-60">{t('settings.llm.test.saved')}</span>
               )}
             </div>
           </div>
@@ -427,11 +428,11 @@ export function LLMSettings({ id }: { id?: string }) {
             disabled={testing || !draftApiKey || !draftModel}
           >
             {testing
-              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />检测中...</>
-              : <span>测试并保存</span>}
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('settings.llm.testing')}</>
+              : <span>{t('settings.llm.save')}</span>}
           </Button>
           {hasChanges && !testing && (
-            <span className="text-xs text-muted-foreground">有未保存的更改</span>
+            <span className="text-xs text-muted-foreground">{t('settings.llm.unsavedChanges')}</span>
           )}
         </div>
       </CardContent>

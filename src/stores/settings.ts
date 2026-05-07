@@ -37,6 +37,7 @@ interface SettingsState {
   updateLlm: (updates: Partial<LlmConfig>) => Promise<void>;
   updateWebSearch: (updates: Partial<WebSearchConfig>) => Promise<void>;
   updateChatbot: (updates: Partial<ChatbotConfig>) => Promise<void>;
+  updateLanguage: (language: string) => Promise<void>;
   testAndSaveLlm: (apiKey: string, model: string, baseUrl?: string, profileName?: string) => Promise<TestAndSaveResult>;
   fetchModels: (apiKey: string, baseUrl?: string) => Promise<{ models: { id: string; displayName?: string }[]; unsupported?: boolean }>;
   selectLlmProfile: (name: string) => Promise<void>;
@@ -46,6 +47,7 @@ interface SettingsState {
 
 const DEFAULT_SETTINGS: SmanSettings = {
   port: 5880,
+  language: 'zh-CN',
   llm: { apiKey: '', model: '', userProfile: true },
   savedLlms: [],
   currentLlmProfile: '',
@@ -160,6 +162,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         reject(new Error(String(data.error)));
       });
       client.send({ type: 'settings.update', chatbot: updates });
+    });
+  },
+
+  updateLanguage: async (language) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    const prev = get().settings;
+    const optimistic = { ...prev, language } as SmanSettings;
+    set({ settings: optimistic });
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'settings.updated', (data) => {
+        unsub();
+        unsubErr();
+        set({ settings: data.config as SmanSettings });
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub();
+        unsubErr();
+        set({ settings: prev, error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+      client.send({ type: 'settings.update', language });
     });
   },
 

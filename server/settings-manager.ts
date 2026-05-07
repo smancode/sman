@@ -6,6 +6,7 @@ import type { SmanConfig } from './types.js';
 
 const DEFAULT_CONFIG: SmanConfig = {
   port: 5880,
+  language: 'zh-CN',
   llm: { apiKey: '', model: '', userProfile: true },
   savedLlms: [],
   currentLlmProfile: '',
@@ -39,11 +40,37 @@ export class SettingsManager {
 
   private read(): SmanConfig {
     if (!fs.existsSync(this.configPath)) {
-      fs.writeFileSync(this.configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), { encoding: 'utf-8', mode: 0o600 });
-      return { ...DEFAULT_CONFIG };
+      // 首次创建配置，检测系统语言
+      const detectedLanguage = this.detectSystemLanguage();
+      const initialConfig = { ...DEFAULT_CONFIG, language: detectedLanguage };
+      fs.writeFileSync(this.configPath, JSON.stringify(initialConfig, null, 2), { encoding: 'utf-8', mode: 0o600 });
+      this.log.info(`Initial config created with language: ${detectedLanguage}`);
+      return initialConfig;
     }
     const raw = fs.readFileSync(this.configPath, 'utf-8');
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    const config = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+
+    // 兼容旧配置：如果没有 language 字段，补充默认值
+    if (!config.language) {
+      config.language = 'zh-CN';
+      this.write(config);
+    }
+
+    return config;
+  }
+
+  /**
+   *检测系统语言
+   *中文环境 → zh-CN，其他 → en-US
+   */
+  private detectSystemLanguage(): string {
+    const envLang = process.env.LANG || process.env.LC_ALL || process.env.LC_MESSAGES || '';
+    const sysLocale = envLang.split('.')[0]; // 移除编码部分，如 'zh_CN.UTF-8' → 'zh_CN'
+
+    if (sysLocale.toLowerCase().startsWith('zh')) {
+      return 'zh-CN';
+    }
+    return 'en-US';
   }
 
   private write(config: SmanConfig): void {

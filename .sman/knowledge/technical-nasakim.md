@@ -1,6 +1,6 @@
 # Technical — nasakim
 
-> Last extracted: 2026-05-07T06:45:16.543Z
+> Last extracted: 2026-05-07T07:41:03.881Z
 
 ## Smart Path path.md 文件格式
 <!-- hash: 7a8b9c -->
@@ -47,3 +47,10 @@
 - 问题：语言切换后已有会话仍强制中文，新建会话也继承硬编码
 - 改造方案：从 config 读取 language 字段，动态生成语言指令注入 prompt
 <!-- end: 8q2r5w -->
+
+## 国际化涉及的关键前端文件清单
+<!-- hash: c9d0e1 -->
+- 翻译文件：`zh-CN.json`、`en-US.json`（150+ 翻译键，覆盖设置、Git、CodeViewer）
+- 已改造组件：LLMSettings、WebSearchSettings、ChatbotSettings、BackendSettings、App、Sidebar、ChatInput、SessionTree
+- 易遗漏点：常量文件中的选项标签（如 `WEB_SEARCH_PROVIDER_OPTIONS`）、Git 页面、CodeViewer 页面
+<!-- end: c9d0e1 -->

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { useSettingsStore } from '@/stores/settings';
 import { useWsConnection } from '@/stores/ws-connection';
+import { t } from '@/locales';
 
 type WeixinConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected';
 
@@ -48,7 +49,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
       setQrcodeUrl(msg.qrcodeUrl as string);
       setQrSessionKey(msg.sessionKey as string);
       setQrPolling(true);
-      setQrMessage('请用微信扫描二维码');
+      setQrMessage(t('settings.chatbot.weixin.scanQr'));
     };
     const handleQrStatus = (...args: unknown[]) => {
       const msg = args[0] as Record<string, unknown>;
@@ -56,26 +57,26 @@ export function ChatbotSettings({ id }: { id?: string }) {
       if (status === 'confirmed') {
         setWeixinStatus('connected');
         setQrPolling(false);
-        setQrMessage('连接成功！');
+        setQrMessage(t('settings.chatbot.weixin.scanConfirmed'));
         setQrcodeUrl(null);
         setQrSessionKey(null);
       } else if (status === 'expired') {
         setQrPolling(false);
-        setQrMessage('二维码已过期，请重新获取');
+        setQrMessage(t('settings.chatbot.weixin.scanExpired'));
       } else if (status === 'scaned') {
-        setQrMessage('已扫码，请在微信上确认...');
+        setQrMessage(t('settings.chatbot.weixin.scanScaned'));
       } else if (status === 'error') {
         setQrPolling(false);
-        setQrMessage((msg.message as string) || '发生错误');
+        setQrMessage((msg.message as string) || t('common.error'));
       } else {
         // 'wait', 'scaned_but_redirect', etc. — keep polling, update message
-        setQrMessage((msg.message as string) || '等待中...');
+        setQrMessage((msg.message as string) || t('settings.chatbot.weixin.scanWait'));
       }
     };
     const handleQrError = (...args: unknown[]) => {
       const msg = args[0] as Record<string, unknown>;
       setWeixinStatus('idle');
-      setQrMessage((msg.error as string) || '获取二维码失败');
+      setQrMessage((msg.error as string) || t('settings.chatbot.weixin.qrFailed'));
     };
 
     client.on('chatbot.weixin.status', handleStatus);
@@ -131,7 +132,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
     // Timeout: if no response in 15s, reset to idle
     setTimeout(() => {
       setWeixinStatus((prev) => prev === 'connecting' ? 'idle' : prev);
-      setQrMessage((prev) => prev === null ? '连接超时，请重试' : prev);
+      setQrMessage((prev) => prev === null ? t('settings.chatbot.weixin.timeout') : prev);
     }, 15_000);
   };
 
@@ -162,22 +163,22 @@ export function ChatbotSettings({ id }: { id?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageCircle className="h-5 w-5" />
-          Bot机器人配置
+          {t('settings.chatbot.title')}
         </CardTitle>
-        <CardDescription>配置企业微信和飞书机器人接入</CardDescription>
+        <CardDescription>{t('settings.chatbot.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
-            <button onClick={clearError} className="ml-auto text-xs underline">关闭</button>
+            <button onClick={clearError} className="ml-auto text-xs underline">{t('settings.chatbot.close')}</button>
           </div>
         )}
 
         {/* Global toggle */}
         <div className="flex items-center justify-between">
-          <Label>启用Bot机器人</Label>
+          <Label>{t('settings.chatbot.enabled')}</Label>
           <Switch
             checked={enabled}
             onCheckedChange={(checked) => updateChatbot({ enabled: checked }).catch(() => {})}
@@ -189,8 +190,8 @@ export function ChatbotSettings({ id }: { id?: string }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-base">企业微信</Label>
-              <p className="text-sm text-muted-foreground">通过企业微信机器人接收和回复消息</p>
+              <Label className="text-base">{t('settings.chatbot.wecom.title')}</Label>
+              <p className="text-sm text-muted-foreground">{t('settings.chatbot.wecom.description')}</p>
             </div>
             <Switch
               checked={wecom.enabled}
@@ -204,17 +205,17 @@ export function ChatbotSettings({ id }: { id?: string }) {
           {wecom.enabled && enabled && (
             <div className="space-y-3 pl-1">
               <div className="space-y-2">
-                <Label>Bot ID</Label>
+                <Label>{t('settings.chatbot.wecom.botId')}</Label>
                 <Input
                   value={wecom.botId}
                   onChange={(e) =>
                     updateChatbot({ wecom: { ...wecom, botId: e.target.value } }).catch(() => {})
                   }
-                  placeholder="输入企业微信 Bot ID"
+                  placeholder={t('settings.chatbot.wecom.botId.placeholder')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Secret</Label>
+                <Label>{t('settings.chatbot.wecom.secret')}</Label>
                 <div className="relative">
                   <Input
                     type={showWecomSecret ? 'text' : 'password'}
@@ -222,7 +223,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
                     onChange={(e) =>
                       updateChatbot({ wecom: { ...wecom, secret: e.target.value } }).catch(() => {})
                     }
-                    placeholder="输入企业微信 Secret"
+                    placeholder={t('settings.chatbot.wecom.secret.placeholder')}
                     className="pr-10"
                   />
                   <button
@@ -243,8 +244,8 @@ export function ChatbotSettings({ id }: { id?: string }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-base">飞书</Label>
-              <p className="text-sm text-muted-foreground">通过飞书机器人接收和回复消息</p>
+              <Label className="text-base">{t('settings.chatbot.feishu.title')}</Label>
+              <p className="text-sm text-muted-foreground">{t('settings.chatbot.feishu.description')}</p>
             </div>
             <Switch
               checked={feishu.enabled}
@@ -258,17 +259,17 @@ export function ChatbotSettings({ id }: { id?: string }) {
           {feishu.enabled && enabled && (
             <div className="space-y-3 pl-1">
               <div className="space-y-2">
-                <Label>App ID</Label>
+                <Label>{t('settings.chatbot.feishu.appId')}</Label>
                 <Input
                   value={feishu.appId}
                   onChange={(e) =>
                     updateChatbot({ feishu: { ...feishu, appId: e.target.value } }).catch(() => {})
                   }
-                  placeholder="输入飞书 App ID"
+                  placeholder={t('settings.chatbot.feishu.appId.placeholder')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>App Secret</Label>
+                <Label>{t('settings.chatbot.feishu.appSecret')}</Label>
                 <div className="relative">
                   <Input
                     type={showFeishuSecret ? 'text' : 'password'}
@@ -276,7 +277,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
                     onChange={(e) =>
                       updateChatbot({ feishu: { ...feishu, appSecret: e.target.value } }).catch(() => {})
                     }
-                    placeholder="输入飞书 App Secret"
+                    placeholder={t('settings.chatbot.feishu.appSecret.placeholder')}
                     className="pr-10"
                   />
                   <button
@@ -297,8 +298,8 @@ export function ChatbotSettings({ id }: { id?: string }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-base">微信</Label>
-              <p className="text-sm text-muted-foreground">通过微信Bot接收和回复消息</p>
+              <Label className="text-base">{t('settings.chatbot.weixin.title')}</Label>
+              <p className="text-sm text-muted-foreground">{t('settings.chatbot.weixin.description')}</p>
             </div>
             <Switch
               checked={weixin.enabled}
@@ -316,22 +317,22 @@ export function ChatbotSettings({ id }: { id?: string }) {
                 {weixinStatus === 'connected' ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span className="text-green-600">已连接</span>
+                    <span className="text-green-600">{t('settings.chatbot.weixin.status.connected')}</span>
                   </>
                 ) : weixinStatus === 'connecting' ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-                    <span className="text-yellow-600">连接中...</span>
+                    <span className="text-yellow-600">{t('settings.chatbot.weixin.status.connecting')}</span>
                   </>
                 ) : weixinStatus === 'disconnected' ? (
                   <>
                     <XCircle className="h-4 w-4 text-red-500" />
-                    <span className="text-red-600">会话已过期，请重新连接</span>
+                    <span className="text-red-600">{t('settings.chatbot.weixin.status.disconnected')}</span>
                   </>
                 ) : (
                   <>
                     <Unplug className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">未连接</span>
+                    <span className="text-muted-foreground">{t('settings.chatbot.weixin.status.idle')}</span>
                   </>
                 )}
               </div>
@@ -349,17 +350,17 @@ export function ChatbotSettings({ id }: { id?: string }) {
                   ) : (
                     <QrCode className="h-4 w-4 mr-2" />
                   )}
-                  连接微信
+                  {t('settings.chatbot.weixin.connect')}
                 </Button>
               )}
 
               {/* QR Code display */}
               {qrcodeUrl && (
                 <div className="flex flex-col items-center gap-3 p-4 rounded-lg border bg-muted/30">
-                  <p className="text-sm text-muted-foreground">请用微信扫描二维码</p>
+                  <p className="text-sm text-muted-foreground">{t('settings.chatbot.weixin.scanQr')}</p>
                   <img
                     src={qrcodeUrl}
-                    alt="微信登录二维码"
+                    alt={t('settings.chatbot.weixin.scanQr')}
                     className="w-48 h-48 rounded"
                   />
                   {qrMessage && (
@@ -376,7 +377,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
                   onClick={handleWeixinDisconnect}
                 >
                   <Unplug className="h-4 w-4 mr-2" />
-                  断开连接
+                  {t('settings.chatbot.weixin.disconnect')}
                 </Button>
               )}
             </div>
@@ -386,7 +387,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
         <div className="flex items-center gap-2 pt-4 border-t">
           <Button variant="outline" size="sm" onClick={handleSave} disabled={loading || saving}>
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
-            保存配置
+            {t('settings.chatbot.save')}
           </Button>
         </div>
       </CardContent>

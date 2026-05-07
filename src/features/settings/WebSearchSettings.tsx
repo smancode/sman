@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useSettingsStore } from '@/stores/settings';
 import { WEB_SEARCH_PROVIDER_OPTIONS, type WebSearchProvider } from '@/types/settings';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 
 export function WebSearchSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateWebSearch, clearError } = useSettingsStore();
@@ -39,12 +40,12 @@ export function WebSearchSettings({ id }: { id?: string }) {
         const res = await fetch('/api/searxng/test', { method: 'POST' });
         const data = await res.json();
         if (!data.ok) {
-          setSearxngError('连接 SearXNG 服务失败，请检查网络');
+          setSearxngError(t('settings.webSearch.connectionFailed'));
           setSearxngTesting(false);
           return;
         }
       } catch {
-        setSearxngError('连接 SearXNG 服务失败，请检查网络');
+        setSearxngError(t('settings.webSearch.connectionFailed'));
         setSearxngTesting(false);
         return;
       }
@@ -70,23 +71,46 @@ export function WebSearchSettings({ id }: { id?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Search className="h-5 w-5" />
-          网络搜索配置
+          {t('settings.webSearch.title')}
         </CardTitle>
-        <CardDescription>配置 Claude Code 的网络搜索能力</CardDescription>
+        <CardDescription>{t('settings.webSearch.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
-            <button onClick={clearError} className="ml-auto text-xs underline">关闭</button>
+            <button onClick={clearError} className="ml-auto text-xs underline">{t('settings.webSearch.close')}</button>
           </div>
         )}
 
         <div className="space-y-3">
-          <Label>搜索提供商</Label>
+          <Label>{t('settings.webSearch.provider')}</Label>
           <RadioGroup value={provider} onValueChange={handleProviderChange} className="space-y-2">
-            {WEB_SEARCH_PROVIDER_OPTIONS.map((option) => (
+            {WEB_SEARCH_PROVIDER_OPTIONS.map((option) => {
+              const getLabel = (value: string) => {
+                const labels: Record<string, string> = {
+                  builtin: t('settings.webSearch.provider.builtin'),
+                  baidu: t('settings.webSearch.provider.baidu'),
+                  brave: t('settings.webSearch.provider.brave'),
+                  tavily: t('settings.webSearch.provider.tavily'),
+                  searxng: t('settings.webSearch.provider.searxng'),
+                  bing: t('settings.webSearch.provider.bing'),
+                };
+                return labels[value] || option.label;
+              };
+              const getDescription = (value: string) => {
+                const descriptions: Record<string, string> = {
+                  builtin: t('settings.webSearch.provider.builtin.description'),
+                  baidu: t('settings.webSearch.provider.baidu.description'),
+                  brave: t('settings.webSearch.provider.brave.description'),
+                  tavily: t('settings.webSearch.provider.tavily.description'),
+                  searxng: t('settings.webSearch.provider.searxng.description'),
+                  bing: t('settings.webSearch.provider.bing.description'),
+                };
+                return descriptions[value] || option.description;
+              };
+              return (
               <Label
                 key={option.value}
                 htmlFor={option.value}
@@ -98,9 +122,9 @@ export function WebSearchSettings({ id }: { id?: string }) {
               >
                 <RadioGroupItem value={option.value} id={option.value} className="mt-0.5" />
                 <div className="flex-1">
-                  <div className="font-medium">{option.label}</div>
+                  <div className="font-medium">{getLabel(option.value)}</div>
                   <div className="text-sm text-muted-foreground">
-                    {option.description}
+                    {getDescription(option.value)}
                     {option.link && (
                       <button
                         type="button"
@@ -115,12 +139,12 @@ export function WebSearchSettings({ id }: { id?: string }) {
                           }
                         }}
                       >
-                        了解详情
+                        {t('settings.webSearch.learnMore')}
                       </button>
                     )}
                     {option.value === 'searxng' && searxngTesting && (
                       <span className="ml-2 text-muted-foreground inline-flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" /> 测试连通性…
+                        <Loader2 className="h-3 w-3 animate-spin" /> {t('settings.webSearch.testingConnection')}
                       </span>
                     )}
                     {option.value === 'searxng' && searxngError && !searxngTesting && (
@@ -129,19 +153,20 @@ export function WebSearchSettings({ id }: { id?: string }) {
                   </div>
                 </div>
               </Label>
-            ))}
+              );
+            })}
           </RadioGroup>
         </div>
 
         {(provider === 'brave' || provider === 'tavily' || provider === 'baidu') && (
           <div className="space-y-2">
-            <Label>{provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : '百度'} API Key</Label>
+            <Label>{provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : 'Baidu'} API Key</Label>
             <div className="relative">
               <Input
                 type={showApiKey ? 'text' : 'password'}
                 value={activeApiKeyField ?? ''}
                 onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={`输入 ${provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : '百度'} API Key`}
+                placeholder={t('settings.webSearch.apiKey.placeholder', { provider: provider === 'brave' ? 'Brave' : provider === 'tavily' ? 'Tavily' : 'Baidu' })}
                 className="pr-10"
               />
               <button
@@ -158,7 +183,7 @@ export function WebSearchSettings({ id }: { id?: string }) {
         <div className="flex items-center gap-2 pt-4 border-t">
           <Button variant="outline" size="sm" onClick={handleSave} disabled={loading || saving}>
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
-            保存配置
+            {t('settings.webSearch.save')}
           </Button>
         </div>
       </CardContent>

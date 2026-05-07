@@ -1,0 +1,1050 @@
+{
+  "_meta": {
+    "language": "简体中文",
+    "region": "中国"
+  },
+  "app.title": {
+    "text": "Sman",
+    "context": "应用标题"
+  },
+  "menu.sessions": {
+    "text": "会话",
+    "context": "顶部导航菜单项，显示会话列表"
+  },
+  "menu.settings": {
+    "text": "设置",
+    "context": "顶部导航菜单项，打开设置页面"
+  },
+  "menu.stardom": {
+    "text": "协作星图",
+    "context": "顶部导航菜单项，打开多 Agent 协作网络"
+  },
+  "menu.cron": {
+    "text": "定时任务",
+    "context": "顶部导航菜单项，打开定时任务管理"
+  },
+  "menu.smartpath": {
+    "text": "地球路径",
+    "context": "顶部导航菜单项，打开自动化工作流"
+  },
+  "session.new": {
+    "text": "新建会话",
+    "context": "侧边栏按钮，创建新对话"
+  },
+  "session.delete": {
+    "text": "删除",
+    "context": "删除会话按钮文字"
+  },
+  "session.delete.confirm": {
+    "text": "确定删除配置「${name}」？",
+    "context": "删除会话时的确认对话框标题"
+  },
+  "session.rename": {
+    "text": "重命名",
+    "context": "重命名会话按钮文字"
+  },
+  "session.label.placeholder": {
+    "text": "输入会话名称...",
+    "context": "重命名会话时的输入框占位符"
+  },
+  "chat.input.placeholder": {
+    "text": "输入消息...",
+    "context": "聊天输入框占位符文字"
+  },
+  "chat.send.button": {
+    "text": "发送",
+    "context": "输入框旁的发送按钮标签"
+  },
+  "chat.stop.button": {
+    "text": "停止",
+    "context": "停止生成按钮文字"
+  },
+  "chat.attach.file": {
+    "text": "附件",
+    "context": "添加附件按钮文字"
+  },
+  "chat.thinking": {
+    "text": "思考中...",
+    "context": "AI 思考中的状态指示器"
+  },
+  "settings.title": {
+    "text": "设置",
+    "context": "设置页面标题"
+  },
+  "settings.llm.title": {
+    "text": "LLM 设置",
+    "context": "LLM 配置区域标题"
+  },
+  "settings.llm.description": {
+    "text": "配置模型和 API Key。保存时自动检测兼容性和多模态能力。",
+    "context": "LLM 配置区域描述"
+  },
+  "settings.llm.capabilities.label": {
+    "text": "模态能力:",
+    "context": "模型能力标签前缀"
+  },
+  "settings.llm.capability.text": {
+    "text": "文本",
+    "context": "文本模态能力"
+  },
+  "settings.llm.capability.image": {
+    "text": "图片",
+    "context": "图片模态能力"
+  },
+  "settings.llm.capability.pdf": {
+    "text": "PDF",
+    "context": "PDF 模态能力"
+  },
+  "settings.llm.capability.audio": {
+    "text": "音频",
+    "context": "音频模态能力"
+  },
+  "settings.llm.capability.video": {
+    "text": "视频",
+    "context": "视频模态能力"
+  },
+  "settings.llm.savedProfiles": {
+    "text": "已保存的配置",
+    "context": "已保存配置下拉标签"
+  },
+  "settings.llm.selectProfile": {
+    "text": "选择已保存的配置，或新建...",
+    "context": "配置选择器占位符"
+  },
+  "settings.llm.newProfile": {
+    "text": "新建配置...",
+    "context": "新建配置选项文字"
+  },
+  "settings.llm.deleteProfile": {
+    "text": "删除当前配置",
+    "context": "删除配置按钮提示文字"
+  },
+  "settings.llm.currentProfile": {
+    "text": "当前：",
+    "context": "当前配置标签前缀"
+  },
+  "settings.llm.profileName": {
+    "text": "配置名称",
+    "context": "配置名称输入框标签"
+  },
+  "settings.llm.profileName.placeholder": {
+    "text": "给这个配置起个名字，如 Anthropic、DeepSeek...",
+    "context": "配置名称输入框占位符"
+  },
+  "settings.llm.baseUrl": {
+    "text": "Base URL",
+    "context": "Base URL 输入框标签"
+  },
+  "settings.llm.baseUrl.placeholder": {
+    "text": "https://api.anthropic.com（留空使用默认）",
+    "context": "Base URL 输入框占位符"
+  },
+  "settings.llm.baseUrl.selectPreset": {
+    "text": "选择预设 Base URL",
+    "context": "选择预设 Base URL 按钮提示文字"
+  },
+  "settings.llm.baseUrl.hint": {
+    "text": "支持 Anthropic 兼容格式的 API 地址",
+    "context": "Base URL 输入框提示文字"
+  },
+  "settings.llm.apiKey": {
+    "text": "API Key",
+    "context": "API Key 输入框标签"
+  },
+  "settings.llm.apiKey.placeholder": {
+    "text": "sk-...",
+    "context": "API Key 输入框占位符"
+  },
+  "settings.llm.model": {
+    "text": "模型",
+    "context": "模型输入框标签"
+  },
+  "settings.llm.model.placeholder": {
+    "text": "claude-sonnet-4-6",
+    "context": "模型输入框占位符"
+  },
+  "settings.llm.model.fetch": {
+    "text": "从 API 拉取模型列表",
+    "context": "获取模型列表按钮提示文字"
+  },
+  "settings.llm.model.fetchDisabled": {
+    "text": "请先填写 API Key",
+    "context": "未填写 API Key 时获取按钮禁用提示"
+  },
+  "settings.llm.model.unsupported": {
+    "text": "该 API 不支持拉取模型列表，请手动输入模型名称",
+    "context": "不支持 API 的警告文字"
+  },
+  "settings.llm.test.success": {
+    "text": "连接成功",
+    "context": "测试连接成功消息"
+  },
+  "settings.llm.test.saved": {
+    "text": "配置已保存",
+    "context": "配置保存成功消息"
+  },
+  "settings.llm.test.failed": {
+    "text": "连接失败",
+    "context": "测试连接失败消息"
+  },
+  "settings.llm.testing": {
+    "text": "检测中...",
+    "context": "测试 API Key 时的按钮文字"
+  },
+  "settings.llm.save": {
+    "text": "测试并保存",
+    "context": "保存 LLM 配置按钮文字"
+  },
+  "settings.llm.unsavedChanges": {
+    "text": "有未保存的更改",
+    "context": "未保存更改提示文字"
+  },
+  "settings.llm.deleteProfile.confirm": {
+    "text": "确定删除配置「${name}」？",
+    "context": "删除配置确认对话框文字"
+  },
+  "settings.webSearch.title": {
+    "text": "网络搜索设置",
+    "context": "网络搜索配置区域标题"
+  },
+  "settings.webSearch.description": {
+    "text": "配置 Claude Code 的网络搜索能力",
+    "context": "网络搜索配置区域描述"
+  },
+  "settings.webSearch.provider": {
+    "text": "搜索提供商",
+    "context": "搜索引擎选择器标签"
+  },
+  "settings.webSearch.provider.builtin": {
+    "text": "内置",
+    "context": "内置搜索引擎选项"
+  },
+  "settings.webSearch.provider.brave": {
+    "text": "Brave",
+    "context": "Brave 搜索引擎选项"
+  },
+  "settings.webSearch.provider.tavily": {
+    "text": "Tavily",
+    "context": "Tavily 搜索引擎选项"
+  },
+  "settings.webSearch.provider.baidu": {
+    "text": "百度搜索",
+    "context": "百度搜索引擎选项"
+  },
+  "settings.webSearch.provider.bing": {
+    "text": "Bing",
+    "context": "Bing 搜索引擎选项"
+  },
+  "settings.webSearch.provider.searxng": {
+    "text": "SearXNG",
+    "context": "SearXNG 搜索引擎选项"
+  },
+  "settings.webSearch.provider.builtin.description": {
+    "text": "内置搜索，无需 API Key",
+    "context": "内置搜索引擎描述"
+  },
+  "settings.webSearch.provider.brave.description": {
+    "text": "高质量搜索结果，需要 API Key",
+    "context": "Brave 搜索引擎描述"
+  },
+  "settings.webSearch.provider.tavily.description": {
+    "text": "专为 AI 应用优化",
+    "context": "Tavily 搜索引擎描述"
+  },
+  "settings.webSearch.provider.baidu.description": {
+    "text": "优化中文搜索，需要 API Key",
+    "context": "百度搜索引擎描述"
+  },
+  "settings.webSearch.provider.bing.description": {
+    "text": "微软搜索，需要 API Key",
+    "context": "Bing 搜索引擎描述"
+  },
+  "settings.webSearch.provider.searxng.description": {
+    "text": "开源元搜索引擎，需自建服务",
+    "context": "SearXNG 搜索引擎描述"
+  },
+  "settings.webSearch.learnMore": {
+    "text": "了解详情",
+    "context": "了解更多链接文字"
+  },
+  "settings.webSearch.testingConnection": {
+    "text": "测试连通性…",
+    "context": "测试 SearXNG 连接状态文字"
+  },
+  "settings.webSearch.connectionFailed": {
+    "text": "连接 SearXNG 服务失败，请检查网络",
+    "context": "SearXNG 连接失败消息"
+  },
+  "settings.webSearch.apiKey.placeholder": {
+    "text": "输入 ${provider} API Key",
+    "context": "API Key 输入框占位符"
+  },
+  "settings.webSearch.save": {
+    "text": "保存配置",
+    "context": "保存网络搜索配置按钮文字"
+  },
+  "settings.webSearch.close": {
+    "text": "关闭",
+    "context": "关闭错误消息按钮文字"
+  },
+  "settings.chatbot.title": {
+    "text": "Bot机器人配置",
+    "context": "Chatbot 配置区域标题"
+  },
+  "settings.chatbot.description": {
+    "text": "配置企业微信和飞书机器人接入",
+    "context": "Chatbot 配置区域描述"
+  },
+  "settings.chatbot.enabled": {
+    "text": "启用Bot机器人",
+    "context": "启用 Chatbot 开关标签"
+  },
+  "settings.chatbot.wecom.title": {
+    "text": "企业微信",
+    "context": "企业微信配置区域标题"
+  },
+  "settings.chatbot.wecom.description": {
+    "text": "通过企业微信机器人收发消息",
+    "context": "企业微信配置描述"
+  },
+  "settings.chatbot.wecom.botId": {
+    "text": "Bot ID",
+    "context": "企业微信 Bot ID 输入框标签"
+  },
+  "settings.chatbot.wecom.botId.placeholder": {
+    "text": "输入企业微信 Bot ID",
+    "context": "企业微信 Bot ID 输入框占位符"
+  },
+  "settings.chatbot.wecom.secret": {
+    "text": "Secret",
+    "context": "企业微信 Secret 输入框标签"
+  },
+  "settings.chatbot.wecom.secret.placeholder": {
+    "text": "输入企业微信 Secret",
+    "context": "企业微信 Secret 输入框占位符"
+  },
+  "settings.chatbot.feishu.title": {
+    "text": "飞书",
+    "context": "飞书配置区域标题"
+  },
+  "settings.chatbot.feishu.description": {
+    "text": "通过飞书机器人收发消息",
+    "context": "飞书配置描述"
+  },
+  "settings.chatbot.feishu.appId": {
+    "text": "App ID",
+    "context": "飞书 App ID 输入框标签"
+  },
+  "settings.chatbot.feishu.appId.placeholder": {
+    "text": "输入飞书 App ID",
+    "context": "飞书 App ID 输入框占位符"
+  },
+  "settings.chatbot.feishu.appSecret": {
+    "text": "App Secret",
+    "context": "飞书 App Secret 输入框标签"
+  },
+  "settings.chatbot.feishu.appSecret.placeholder": {
+    "text": "输入飞书 App Secret",
+    "context": "飞书 App Secret 输入框占位符"
+  },
+  "settings.chatbot.weixin.title": {
+    "text": "微信",
+    "context": "微信配置区域标题"
+  },
+  "settings.chatbot.weixin.description": {
+    "text": "通过微信机器人收发消息",
+    "context": "微信配置描述"
+  },
+  "settings.chatbot.weixin.status.connected": {
+    "text": "已连接",
+    "context": "微信已连接状态"
+  },
+  "settings.chatbot.weixin.status.connecting": {
+    "text": "连接中...",
+    "context": "微信连接中状态"
+  },
+  "settings.chatbot.weixin.status.disconnected": {
+    "text": "会话已过期，请重新连接",
+    "context": "微信会话过期状态"
+  },
+  "settings.chatbot.weixin.status.idle": {
+    "text": "未连接",
+    "context": "微信未连接状态"
+  },
+  "settings.chatbot.weixin.connect": {
+    "text": "连接微信",
+    "context": "连接微信按钮文字"
+  },
+  "settings.chatbot.weixin.disconnect": {
+    "text": "断开连接",
+    "context": "断开微信按钮文字"
+  },
+  "settings.chatbot.weixin.scanQr": {
+    "text": "请用微信扫码",
+    "context": "微信扫码提示文字"
+  },
+  "settings.chatbot.weixin.scanWait": {
+    "text": "等待中...",
+    "context": "微信扫码等待状态"
+  },
+  "settings.chatbot.weixin.scanScaned": {
+    "text": "已扫码，请在微信确认...",
+    "context": "微信已扫码等待确认状态"
+  },
+  "settings.chatbot.weixin.scanConfirmed": {
+    "text": "连接成功！",
+    "context": "微信连接成功消息"
+  },
+  "settings.chatbot.weixin.scanExpired": {
+    "text": "二维码已过期，请重新获取",
+    "context": "微信二维码过期消息"
+  },
+  "settings.chatbot.weixin.timeout": {
+    "text": "连接超时，请重试",
+    "context": "微信连接超时消息"
+  },
+  "settings.chatbot.weixin.qrFailed": {
+    "text": "获取二维码失败",
+    "context": "微信二维码获取失败消息"
+  },
+  "settings.chatbot.save": {
+    "text": "保存配置",
+    "context": "保存 Chatbot 配置按钮文字"
+  },
+  "settings.chatbot.close": {
+    "text": "关闭",
+    "context": "关闭错误消息按钮文字"
+  },
+  "settings.backend.title": {
+    "text": "后端连接",
+    "context": "后端连接配置区域标题"
+  },
+  "settings.backend.description": {
+    "text": "选择或添加后端服务器。本地模式自动获取 Token，远程模式需手动输入。",
+    "context": "后端连接配置描述"
+  },
+  "settings.backend.server": {
+    "text": "后端服务器",
+    "context": "后端服务器选择器标签"
+  },
+  "settings.backend.token": {
+    "text": "认证 Token",
+    "context": "认证 Token 输入框标签"
+  },
+  "settings.backend.token.placeholder": {
+    "text": "输入远程服务器 Token",
+    "context": "远程服务器 Token 输入框占位符"
+  },
+  "settings.backend.token.auto": {
+    "text": "本地自动获取",
+    "context": "本地模式 Token 自动获取占位符"
+  },
+  "settings.backend.connect": {
+    "text": "连接",
+    "context": "连接按钮文字"
+  },
+  "settings.backend.status.connected": {
+    "text": "已连接",
+    "context": "已连接状态"
+  },
+  "settings.backend.status.connecting": {
+    "text": "连接中",
+    "context": "连接中状态"
+  },
+  "settings.backend.status.disconnected": {
+    "text": "未连接",
+    "context": "未连接状态"
+  },
+  "settings.backend.status.authFailed": {
+    "text": "认证失败",
+    "context": "认证失败状态"
+  },
+  "settings.backend.status.label": {
+    "text": "状态:",
+    "context": "状态标签前缀"
+  },
+  "settings.backend.addServer": {
+    "text": "添加远程服务器",
+    "context": "添加远程服务器区域标题"
+  },
+  "settings.backend.alias": {
+    "text": "别名（可选，例如：测试服务器）",
+    "context": "服务器别名输入框占位符"
+  },
+  "settings.backend.address": {
+    "text": "地址: 192.168.1.100:5880",
+    "context": "服务器地址输入框占位符"
+  },
+  "settings.backend.tokenLabel": {
+    "text": "Token",
+    "context": "Token 输入框标签"
+  },
+  "settings.backend.testAndAdd": {
+    "text": "测试并添加",
+    "context": "测试并添加服务器按钮文字"
+  },
+  "settings.backend.testing": {
+    "text": "测试中...",
+    "context": "测试连接时按钮文字"
+  },
+  "settings.backend.testSuccess": {
+    "text": "连接成功，已添加到服务器列表",
+    "context": "测试连接成功消息"
+  },
+  "settings.backend.testFailed": {
+    "text": "连接失败，请检查地址和端口",
+    "context": "测试连接失败消息"
+  },
+  "settings.backend.delete": {
+    "text": "删除",
+    "context": "删除服务器按钮文字"
+  },
+  "settings.backend.local": {
+    "text": "本地",
+    "context": "本地服务器显示名称"
+  },
+  "settings.stardom.title": {
+    "text": "协作星图设置",
+    "context": "协作星图配置区域标题"
+  },
+  "settings.language.title": {
+    "text": "语言设置",
+    "context": "语言设置区域标题"
+  },
+  "settings.language.label": {
+    "text": "语言",
+    "context": "语言选择器标签"
+  },
+  "settings.language.zh-CN": {
+    "text": "简体中文",
+    "context": "语言选项：简体中文"
+  },
+  "settings.language.en-US": {
+    "text": "English",
+    "context": "语言选项：英语（美国）"
+  },
+  "settings.language.save": {
+    "text": "保存",
+    "context": "保存语言设置按钮文字"
+  },
+  "settings.language.saved": {
+    "text": "语言设置已保存",
+    "context": "保存语言设置成功消息"
+  },
+  "settings.about.title": {
+    "text": "关于",
+    "context": "关于区域标题"
+  },
+  "settings.about.version": {
+    "text": "版本",
+    "context": "版本号标签"
+  },
+  "settings.about.homepage": {
+    "text": "主页",
+    "context": "项目主页链接文字"
+  },
+  "settings.about.docs": {
+    "text": "文档",
+    "context": "文档链接文字"
+  },
+  "settings.about.community": {
+    "text": "社区",
+    "context": "加入社区区域标题"
+  },
+  "git.title": {
+    "text": "Git",
+    "context": "Git 面板标题"
+  },
+  "git.status": {
+    "text": "状态",
+    "context": "Git 状态标签"
+  },
+  "git.diff": {
+    "text": "差异",
+    "context": "查看变更按钮文字"
+  },
+  "git.commit": {
+    "text": "提交",
+    "context": "提交按钮文字"
+  },
+  "git.push": {
+    "text": "推送",
+    "context": "推送到远端按钮文字"
+  },
+  "git.pull": {
+    "text": "拉取",
+    "context": "从远端拉取按钮文字"
+  },
+  "git.branch": {
+    "text": "分支",
+    "context": "分支选择器标签"
+  },
+  "git.log": {
+    "text": "日志",
+    "context": "查看提交日志按钮文字"
+  },
+  "git.commitMessage.placeholder": {
+    "text": "输入提交消息...",
+    "context": "Git 提交消息输入框占位符"
+  },
+  "git.noChanges": {
+    "text": "无变更",
+    "context": "无变更时的提示文字"
+  },
+  "git.changes": {
+    "text": "个文件已变更",
+    "context": "显示变更文件数量，如「3 个文件已变更」"
+  },
+  "codeviewer.title": {
+    "text": "代码",
+    "context": "代码查看器面板标题"
+  },
+  "codeviewer.openFile": {
+    "text": "打开文件",
+    "context": "打开文件按钮文字"
+  },
+  "codeviewer.search": {
+    "text": "搜索",
+    "context": "代码搜索输入框占位符"
+  },
+  "codeviewer.noFileSelected": {
+    "text": "未选择文件",
+    "context": "未选择文件时的提示文字"
+  },
+  "cron.title": {
+    "text": "定时任务",
+    "context": "定时任务页面标题"
+  },
+  "cron.new": {
+    "text": "新建任务",
+    "context": "新建定时任务按钮文字"
+  },
+  "cron.enabled": {
+    "text": "已启用",
+    "context": "任务已启用状态标签"
+  },
+  "cron.disabled": {
+    "text": "已禁用",
+    "context": "任务已禁用状态标签"
+  },
+  "cron.expression": {
+    "text": "Cron 表达式",
+    "context": "Cron 表达式输入框标签"
+  },
+  "cron.skill": {
+    "text": "技能",
+    "context": "选择技能标签"
+  },
+  "cron.lastRun": {
+    "text": "上次运行",
+    "context": "上次运行时间标签"
+  },
+  "cron.nextRun": {
+    "text": "下次运行",
+    "context": "下次运行时间标签"
+  },
+  "smartpath.title": {
+    "text": "地球路径",
+    "context": "地球路径页面标题"
+  },
+  "smartpath.new": {
+    "text": "新建路径",
+    "context": "新建路径按钮文字"
+  },
+  "smartpath.run": {
+    "text": "运行",
+    "context": "运行路径按钮文字"
+  },
+  "smartpath.status.draft": {
+    "text": "草稿",
+    "context": "路径状态：草稿"
+  },
+  "smartpath.status.ready": {
+    "text": "就绪",
+    "context": "路径状态：就绪"
+  },
+  "smartpath.status.running": {
+    "text": "运行中",
+    "context": "路径状态：运行中"
+  },
+  "smartpath.status.completed": {
+    "text": "已完成",
+    "context": "路径状态：已完成"
+  },
+  "common.loading": {
+    "text": "加载中...",
+    "context": "通用加载指示器"
+  },
+  "common.save": {
+    "text": "保存",
+    "context": "通用保存按钮文字"
+  },
+  "common.cancel": {
+    "text": "取消",
+    "context": "通用取消按钮文字"
+  },
+  "common.confirm": {
+    "text": "确认",
+    "context": "通用确认按钮文字"
+  },
+  "common.delete": {
+    "text": "删除",
+    "context": "通用删除按钮文字"
+  },
+  "common.edit": {
+    "text": "编辑",
+    "context": "通用编辑按钮文字"
+  },
+  "common.close": {
+    "text": "关闭",
+    "context": "通用关闭按钮文字"
+  },
+  "common.error": {
+    "text": "错误",
+    "context": "通用错误消息标题"
+  },
+  "common.success": {
+    "text": "成功",
+    "context": "通用成功消息标题"
+  },
+  "git.fetch": {
+    "text": "拉取远端",
+    "context": "Git fetch 操作按钮"
+  },
+  "git.localChanges": {
+    "text": "本地变更",
+    "context": "本地变更标签"
+  },
+  "git.remoteDiff": {
+    "text": "与远端差异",
+    "context": "远端差异标签"
+  },
+  "git.clean": {
+    "text": "工作区干净，无变更",
+    "context": "工作区无变更提示"
+  },
+  "git.searchBranch": {
+    "text": "搜索分支...",
+    "context": "搜索分支输入框占位符"
+  },
+  "git.localBranches": {
+    "text": "本地分支",
+    "context": "本地分支区域标题"
+  },
+  "git.remoteBranches": {
+    "text": "远端分支",
+    "context": "远端分支区域标题"
+  },
+  "git.switchToLocal": {
+    "text": "切换到此分支",
+    "context": "切换分支按钮提示"
+  },
+  "git.checkoutToLocal": {
+    "text": "检出到本地",
+    "context": "检出到本地按钮提示"
+  },
+  "git.loading": {
+    "text": "加载中...",
+    "context": "加载状态提示"
+  },
+  "git.noMatchingBranch": {
+    "text": "无匹配分支",
+    "context": "无匹配分支消息"
+  },
+  "git.minutesAgo": {
+    "text": "${m} 分钟前",
+    "context": "时间显示：分钟前"
+  },
+  "git.hoursAgo": {
+    "text": "${h} 小时前",
+    "context": "时间显示：小时前"
+  },
+  "git.daysAgo": {
+    "text": "${d} 天前",
+    "context": "时间显示：天前"
+  },
+  "git.staged": {
+    "text": "已暂存",
+    "context": "已暂存状态"
+  },
+  "git.unstaged": {
+    "text": "未暂存",
+    "context": "未暂存状态"
+  },
+  "git.untracked": {
+    "text": "未跟踪",
+    "context": "未跟踪状态"
+  },
+  "git.changedFiles": {
+    "text": "变更文件 (${count})",
+    "context": "变更文件数量"
+  },
+  "git.loadingDiff": {
+    "text": "加载差异...",
+    "context": "加载差异状态"
+  },
+  "git.noDiff": {
+    "text": "无差异内容",
+    "context": "无差异内容消息"
+  },
+  "git.openInEditor": {
+    "text": "在编辑器中打开 →",
+    "context": "在编辑器中打开按钮"
+  },
+  "git.noTracking": {
+    "text": "未设置远端跟踪分支",
+    "context": "无跟踪分支消息"
+  },
+  "git.inSync": {
+    "text": "已与远端完全同步",
+    "context": "完全同步消息"
+  },
+  "git.noFileDiff": {
+    "text": "与远端无文件差异",
+    "context": "无文件差异消息"
+  },
+  "git.remoteDiffFiles": {
+    "text": "差异文件 (${count})",
+    "context": "远端差异文件数量"
+  },
+  "git.searchLog": {
+    "text": "搜索哈希、消息、作者...",
+    "context": "搜索日志输入框占位符"
+  },
+  "git.noMatchingResults": {
+    "text": "无匹配结果",
+    "context": "无匹配结果消息"
+  },
+  "git.scrollLoadMore": {
+    "text": "向下滚动加载更多...",
+    "context": "滚动加载更多消息"
+  },
+  "git.commitPlaceholder": {
+    "text": "描述变更（留空由 AI 生成）...\nCtrl+Enter 提交",
+    "context": "提交消息输入框占位符"
+  },
+  "git.templatePlaceholder": {
+    "text": "自定义模板（AI 提示词的一部分）：\n\n示例：\n使用 Conventional Commits 格式生成中文提交消息\n\n可用变量：\n${added} ${modified} ${deleted}\n${added_count} ${modified_count} ${total_count}",
+    "context": "自定义模板输入框占位符"
+  },
+  "git.aiGenerateTitle": {
+    "text": "AI 分析代码差异自动生成提交消息",
+    "context": "AI 生成按钮提示"
+  },
+  "git.aiGenerating": {
+    "text": "生成中...",
+    "context": "AI 生成状态"
+  },
+  "git.aiGenerate": {
+    "text": "AI 生成",
+    "context": "AI 生成按钮文字"
+  },
+  "git.templateTitle": {
+    "text": "自定义提交消息模板",
+    "context": "模板按钮提示"
+  },
+  "git.template": {
+    "text": "模板",
+    "context": "模板按钮文字"
+  },
+  "git.commitTitle": {
+    "text": "提交到本地（留空由 AI 生成）",
+    "context": "提交按钮提示"
+  },
+  "git.committing": {
+    "text": "提交中...",
+    "context": "提交中状态"
+  },
+  "git.smartPushTitle": {
+    "text": "智能推送：自动 git pull 合并远端变更，AI 解决冲突（如有），然后 git push",
+    "context": "智能推送按钮提示"
+  },
+  "codeviewer.loading": {
+    "text": "加载文件中...",
+    "context": "加载文件状态"
+  },
+  "codeviewer.clickToView": {
+    "text": "点击左侧文件查看内容",
+    "context": "点击查看提示"
+  },
+  "codeviewer.binaryFile": {
+    "text": "二进制文件",
+    "context": "二进制文件标签"
+  },
+  "codeviewer.cannotPreview": {
+    "text": "此文件类型无法预览",
+    "context": "无法预览消息"
+  },
+  "codeviewer.zoomOut": {
+    "text": "缩小",
+    "context": "缩小按钮提示"
+  },
+  "codeviewer.zoomOriginal": {
+    "text": "1:1 原始大小",
+    "context": "原始大小按钮提示"
+  },
+  "codeviewer.zoomIn": {
+    "text": "放大",
+    "context": "放大按钮提示"
+  },
+  "codeviewer.find": {
+    "text": "查找",
+    "context": "查找命令"
+  },
+  "codeviewer.replace": {
+    "text": "替换",
+    "context": "替换命令"
+  },
+  "codeviewer.next": {
+    "text": "下一个",
+    "context": "下一个匹配"
+  },
+  "codeviewer.previous": {
+    "text": "上一个",
+    "context": "上一个匹配"
+  },
+  "codeviewer.all": {
+    "text": "全部",
+    "context": "全部"
+  },
+  "codeviewer.matchCase": {
+    "text": "区分大小写",
+    "context": "区分大小写选项"
+  },
+  "codeviewer.regexp": {
+    "text": "正则表达式",
+    "context": "正则表达式选项"
+  },
+  "codeviewer.byWord": {
+    "text": "全词匹配",
+    "context": "全词匹配选项"
+  },
+  "codeviewer.replaceAll": {
+    "text": "全部替换",
+    "context": "全部替换命令"
+  },
+  "codeviewer.close": {
+    "text": "关闭",
+    "context": "关闭命令"
+  },
+  "codeviewer.currentMatch": {
+    "text": "当前匹配",
+    "context": "当前匹配提示"
+  },
+  "codeviewer.onLine": {
+    "text": "行",
+    "context": "行标签"
+  },
+  "codeviewer.replacedOnLine": {
+    "text": "已替换第 ${line} 行的匹配",
+    "context": "替换行提示"
+  },
+  "codeviewer.replacedMatches": {
+    "text": "已替换 ${count} 个匹配",
+    "context": "替换数量提示"
+  },
+  "codeviewer.goToLine": {
+    "text": "跳转到行",
+    "context": "跳转到行命令"
+  },
+  "codeviewer.go": {
+    "text": "跳转",
+    "context": "跳转按钮"
+  },
+  "codeviewer.lines": {
+    "text": "${count} 行",
+    "context": "行数显示"
+  },
+  "codeviewer.truncated": {
+    "text": "已截断",
+    "context": "截断标记"
+  },
+  "codeviewer.showRendered": {
+    "text": "显示渲染结果",
+    "context": "显示渲染结果提示"
+  },
+  "codeviewer.showSource": {
+    "text": "显示源码",
+    "context": "显示源码提示"
+  },
+  "codeviewer.source": {
+    "text": "源码",
+    "context": "源码按钮"
+  },
+  "codeviewer.toggleReadonly": {
+    "text": "切换到只读",
+    "context": "切换到只读提示"
+  },
+  "codeviewer.toggleEdit": {
+    "text": "切换到编辑",
+    "context": "切换到编辑提示"
+  },
+  "codeviewer.readonly": {
+    "text": "只读",
+    "context": "只读按钮文字"
+  },
+  "codeviewer.edit": {
+    "text": "编辑",
+    "context": "编辑按钮文字"
+  },
+  "codeviewer.save": {
+    "text": "保存",
+    "context": "保存按钮文字"
+  },
+  "codeviewer.saveTitle": {
+    "text": "保存 (Ctrl+S)",
+    "context": "保存按钮提示"
+  },
+  "codeviewer.saving": {
+    "text": "保存中...",
+    "context": "保存中状态"
+  },
+  "codeviewer.modified": {
+    "text": "已修改",
+    "context": "已修改标记"
+  },
+  "codeviewer.searchFiles": {
+    "text": "搜索文件...",
+    "context": "搜索文件占位符"
+  },
+  "codeviewer.filterTitle": {
+    "text": "过滤测试、构建等非源码目录",
+    "context": "过滤按钮提示"
+  },
+  "codeviewer.sourceOnly": {
+    "text": "仅源码",
+    "context": "仅源码选项"
+  },
+  "codeviewer.noMatchingFiles": {
+    "text": "无匹配文件",
+    "context": "无匹配文件消息"
+  },
+  "codeviewer.backToSession": {
+    "text": "← 返回会话",
+    "context": "返回会话按钮"
+  },
+  "codeviewer.loadFailed": {
+    "text": "加载失败",
+    "context": "加载失败消息"
+  },
+  "codeviewer.emptyDir": {
+    "text": "空目录",
+    "context": "空目录消息"
+  },
+  "codeviewer.searchingRefs": {
+    "text": "搜索中...",
+    "context": "搜索引用状态"
+  },
+  "codeviewer.refsFor": {
+    "text": "${symbol} 的引用",
+    "context": "引用搜索标题"
+  },
+  "codeviewer.noMatches": {
+    "text": "未找到匹配",
+    "context": "无匹配消息"
+  },
+  "codeviewer.current": {
+    "text": "当前位置",
+    "context": "当前位置标记"
+  }
+}

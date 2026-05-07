@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { SkillPicker, type PickerItem } from '@/components/SkillPicker';
+import { t } from '@/locales';
 
 export interface StagedMedia {
   fileName: string;
@@ -488,7 +489,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               onCompositionEnd={() => {
                 isComposingRef.current = false;
               }}
-              placeholder={disabled ? '未连接' : '输入消息... (输入 / 选择【命令/Skill/路径】，可拖入文件)'}
+              placeholder={disabled ? t('chat.input.placeholder') : `${t('chat.input.placeholder')} (输入 / 选择【命令/Skill/路径】，可拖入文件)`}
               disabled={disabled}
               className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
               rows={1}
@@ -587,7 +588,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
                 'shrink-0 h-9 w-9 rounded-lg transition-colors',
                 abortingRef.current && 'opacity-50 cursor-not-allowed'
               )}
-              title={abortingRef.current ? '正在停止...' : '停止'}
+              title={abortingRef.current ? t('chat.thinking') : t('chat.stop.button')}
             >
               <Square className="h-[18px] w-[18px]" fill="currentColor" />
             </Button>
@@ -601,7 +602,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
                 'shrink-0 h-9 w-9 rounded-lg transition-colors',
                 !canSend && 'opacity-50'
               )}
-              title="发送"
+              title={t('chat.send.button')}
             >
               <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
             </Button>

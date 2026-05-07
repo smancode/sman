@@ -1,0 +1,1050 @@
+{
+  "_meta": {
+    "language": "English",
+    "region": "United States"
+  },
+  "app.title": {
+    "text": "Sman",
+    "context": "Application title"
+  },
+  "menu.sessions": {
+    "text": "Sessions",
+    "context": "Top navigation menu item, shows session list"
+  },
+  "menu.settings": {
+    "text": "Settings",
+    "context": "Top navigation menu item, opens settings page"
+  },
+  "menu.stardom": {
+    "text": "Stardom",
+    "context": "Top navigation menu item, opens multi-agent collaboration network"
+  },
+  "menu.cron": {
+    "text": "Cron Tasks",
+    "context": "Top navigation menu item, opens scheduled task management"
+  },
+  "menu.smartpath": {
+    "text": "Smart Paths",
+    "context": "Top navigation menu item, opens automation workflows"
+  },
+  "session.new": {
+    "text": "New Session",
+    "context": "Sidebar button to create a new conversation"
+  },
+  "session.delete": {
+    "text": "Delete",
+    "context": "Delete session button text"
+  },
+  "session.delete.confirm": {
+    "text": "Confirm to delete this session?",
+    "context": "Confirmation dialog title when deleting a session"
+  },
+  "session.rename": {
+    "text": "Rename",
+    "context": "Rename session button text"
+  },
+  "session.label.placeholder": {
+    "text": "Enter session name...",
+    "context": "Input placeholder when renaming a session"
+  },
+  "chat.input.placeholder": {
+    "text": "Type a message...",
+    "context": "Chat input placeholder text"
+  },
+  "chat.send.button": {
+    "text": "Send",
+    "context": "Send button label next to input box"
+  },
+  "chat.stop.button": {
+    "text": "Stop",
+    "context": "Stop generating button text"
+  },
+  "chat.attach.file": {
+    "text": "Attach",
+    "context": "Add attachment button text"
+  },
+  "chat.thinking": {
+    "text": "Thinking...",
+    "context": "Status indicator when AI is thinking"
+  },
+  "settings.title": {
+    "text": "Settings",
+    "context": "Settings page title"
+  },
+  "settings.llm.title": {
+    "text": "LLM Settings",
+    "context": "LLM configuration section title"
+  },
+  "settings.llm.description": {
+    "text": "Configure model and API Key. Automatically detects compatibility and modal capabilities on save.",
+    "context": "LLM configuration section description"
+  },
+  "settings.llm.capabilities.label": {
+    "text": "Modal Capabilities:",
+    "context": "Model capabilities label prefix"
+  },
+  "settings.llm.capability.text": {
+    "text": "Text",
+    "context": "Text modal capability"
+  },
+  "settings.llm.capability.image": {
+    "text": "Image",
+    "context": "Image modal capability"
+  },
+  "settings.llm.capability.pdf": {
+    "text": "PDF",
+    "context": "PDF modal capability"
+  },
+  "settings.llm.capability.audio": {
+    "text": "Audio",
+    "context": "Audio modal capability"
+  },
+  "settings.llm.capability.video": {
+    "text": "Video",
+    "context": "Video modal capability"
+  },
+  "settings.llm.savedProfiles": {
+    "text": "Saved Profiles",
+    "context": "Saved profiles dropdown label"
+  },
+  "settings.llm.selectProfile": {
+    "text": "Select a saved profile, or create new...",
+    "context": "Profile selector placeholder"
+  },
+  "settings.llm.newProfile": {
+    "text": "New Profile...",
+    "context": "New profile option text"
+  },
+  "settings.llm.deleteProfile": {
+    "text": "Delete current profile",
+    "context": "Delete profile button tooltip text"
+  },
+  "settings.llm.currentProfile": {
+    "text": "Current:",
+    "context": "Current profile label prefix"
+  },
+  "settings.llm.profileName": {
+    "text": "Profile Name",
+    "context": "Profile name input field label"
+  },
+  "settings.llm.profileName.placeholder": {
+    "text": "Give this profile a name, e.g. Anthropic, DeepSeek...",
+    "context": "Profile name input field placeholder"
+  },
+  "settings.llm.baseUrl": {
+    "text": "Base URL",
+    "context": "Base URL input field label"
+  },
+  "settings.llm.baseUrl.placeholder": {
+    "text": "https://api.anthropic.com (leave empty for default)",
+    "context": "Base URL input field placeholder"
+  },
+  "settings.llm.baseUrl.selectPreset": {
+    "text": "Select preset Base URL",
+    "context": "Select preset Base URL button tooltip text"
+  },
+  "settings.llm.baseUrl.hint": {
+    "text": "Supports Anthropic-compatible API endpoints",
+    "context": "Base URL input field hint text"
+  },
+  "settings.llm.apiKey": {
+    "text": "API Key",
+    "context": "API Key input field label"
+  },
+  "settings.llm.apiKey.placeholder": {
+    "text": "sk-...",
+    "context": "API Key input field placeholder"
+  },
+  "settings.llm.model": {
+    "text": "Model",
+    "context": "Model input field label"
+  },
+  "settings.llm.model.placeholder": {
+    "text": "claude-sonnet-4-6",
+    "context": "Model input field placeholder"
+  },
+  "settings.llm.model.fetch": {
+    "text": "Fetch model list from API",
+    "context": "Fetch model list button tooltip text"
+  },
+  "settings.llm.model.fetchDisabled": {
+    "text": "Please fill in API Key first",
+    "context": "Fetch button disabled tooltip when API Key is missing"
+  },
+  "settings.llm.model.unsupported": {
+    "text": "This API does not support fetching model list, please enter model name manually",
+    "context": "Unsupported API warning text"
+  },
+  "settings.llm.test.success": {
+    "text": "Connection successful",
+    "context": "Test connection success message"
+  },
+  "settings.llm.test.saved": {
+    "text": "Profile saved",
+    "context": "Profile saved message"
+  },
+  "settings.llm.test.failed": {
+    "text": "Connection failed",
+    "context": "Test connection failure message"
+  },
+  "settings.llm.testing": {
+    "text": "Testing...",
+    "context": "Button text when testing API Key"
+  },
+  "settings.llm.save": {
+    "text": "Test & Save",
+    "context": "Save LLM configuration button text"
+  },
+  "settings.llm.unsavedChanges": {
+    "text": "You have unsaved changes",
+    "context": "Unsaved changes hint text"
+  },
+  "settings.llm.deleteProfile.confirm": {
+    "text": "Confirm to delete profile \"${name}\"?",
+    "context": "Delete profile confirmation dialog text"
+  },
+  "settings.webSearch.title": {
+    "text": "Web Search Settings",
+    "context": "Web search configuration section title"
+  },
+  "settings.webSearch.description": {
+    "text": "Configure Claude Code's web search capabilities",
+    "context": "Web search configuration section description"
+  },
+  "settings.webSearch.provider": {
+    "text": "Search Provider",
+    "context": "Search engine selector label"
+  },
+  "settings.webSearch.provider.builtin": {
+    "text": "Built-in",
+    "context": "Built-in search engine option"
+  },
+  "settings.webSearch.provider.brave": {
+    "text": "Brave",
+    "context": "Brave search engine option"
+  },
+  "settings.webSearch.provider.tavily": {
+    "text": "Tavily",
+    "context": "Tavily search engine option"
+  },
+  "settings.webSearch.provider.baidu": {
+    "text": "Baidu",
+    "context": "Baidu search engine option"
+  },
+  "settings.webSearch.provider.bing": {
+    "text": "Bing",
+    "context": "Bing search engine option"
+  },
+  "settings.webSearch.provider.searxng": {
+    "text": "SearXNG",
+    "context": "SearXNG search engine option"
+  },
+  "settings.webSearch.provider.builtin.description": {
+    "text": "Built-in search, no API Key required",
+    "context": "Built-in search engine description"
+  },
+  "settings.webSearch.provider.brave.description": {
+    "text": "High-quality search results, requires API Key",
+    "context": "Brave search engine description"
+  },
+  "settings.webSearch.provider.tavily.description": {
+    "text": "Optimized for AI applications",
+    "context": "Tavily search engine description"
+  },
+  "settings.webSearch.provider.baidu.description": {
+    "text": "Optimized for Chinese search, requires API Key",
+    "context": "Baidu search engine description"
+  },
+  "settings.webSearch.provider.bing.description": {
+    "text": "Microsoft search, requires API Key",
+    "context": "Bing search engine description"
+  },
+  "settings.webSearch.provider.searxng.description": {
+    "text": "Open-source metasearch, requires self-hosting",
+    "context": "SearXNG search engine description"
+  },
+  "settings.webSearch.learnMore": {
+    "text": "Learn more",
+    "context": "Learn more link text"
+  },
+  "settings.webSearch.testingConnection": {
+    "text": "Testing connection…",
+    "context": "Testing SearXNG connection status text"
+  },
+  "settings.webSearch.connectionFailed": {
+    "text": "Failed to connect to SearXNG service, please check network",
+    "context": "SearXNG connection failure message"
+  },
+  "settings.webSearch.apiKey.placeholder": {
+    "text": "Enter ${provider} API Key",
+    "context": "API Key input field placeholder"
+  },
+  "settings.webSearch.save": {
+    "text": "Save Configuration",
+    "context": "Save web search configuration button text"
+  },
+  "settings.webSearch.close": {
+    "text": "Close",
+    "context": "Close error message button text"
+  },
+  "settings.chatbot.title": {
+    "text": "Bot Settings",
+    "context": "Chatbot configuration section title"
+  },
+  "settings.chatbot.description": {
+    "text": "Configure WeCom, Feishu, and WeChat bot integration",
+    "context": "Chatbot configuration section description"
+  },
+  "settings.chatbot.enabled": {
+    "text": "Enable Bot",
+    "context": "Enable chatbot toggle label"
+  },
+  "settings.chatbot.wecom.title": {
+    "text": "WeCom",
+    "context": "WeCom (Enterprise WeChat) configuration section title"
+  },
+  "settings.chatbot.wecom.description": {
+    "text": "Receive and reply to messages via WeCom bot",
+    "context": "WeCom configuration description"
+  },
+  "settings.chatbot.wecom.botId": {
+    "text": "Bot ID",
+    "context": "WeCom Bot ID input field label"
+  },
+  "settings.chatbot.wecom.botId.placeholder": {
+    "text": "Enter WeCom Bot ID",
+    "context": "WeCom Bot ID input field placeholder"
+  },
+  "settings.chatbot.wecom.secret": {
+    "text": "Secret",
+    "context": "WeCom Secret input field label"
+  },
+  "settings.chatbot.wecom.secret.placeholder": {
+    "text": "Enter WeCom Secret",
+    "context": "WeCom Secret input field placeholder"
+  },
+  "settings.chatbot.feishu.title": {
+    "text": "Feishu",
+    "context": "Feishu configuration section title"
+  },
+  "settings.chatbot.feishu.description": {
+    "text": "Receive and reply to messages via Feishu bot",
+    "context": "Feishu configuration description"
+  },
+  "settings.chatbot.feishu.appId": {
+    "text": "App ID",
+    "context": "Feishu App ID input field label"
+  },
+  "settings.chatbot.feishu.appId.placeholder": {
+    "text": "Enter Feishu App ID",
+    "context": "Feishu App ID input field placeholder"
+  },
+  "settings.chatbot.feishu.appSecret": {
+    "text": "App Secret",
+    "context": "Feishu App Secret input field label"
+  },
+  "settings.chatbot.feishu.appSecret.placeholder": {
+    "text": "Enter Feishu App Secret",
+    "context": "Feishu App Secret input field placeholder"
+  },
+  "settings.chatbot.weixin.title": {
+    "text": "WeChat",
+    "context": "WeChat configuration section title"
+  },
+  "settings.chatbot.weixin.description": {
+    "text": "Receive and reply to messages via WeChat bot",
+    "context": "WeChat configuration description"
+  },
+  "settings.chatbot.weixin.status.connected": {
+    "text": "Connected",
+    "context": "WeChat connected status"
+  },
+  "settings.chatbot.weixin.status.connecting": {
+    "text": "Connecting...",
+    "context": "WeChat connecting status"
+  },
+  "settings.chatbot.weixin.status.disconnected": {
+    "text": "Session expired, please reconnect",
+    "context": "WeChat session expired status"
+  },
+  "settings.chatbot.weixin.status.idle": {
+    "text": "Not connected",
+    "context": "WeChat not connected status"
+  },
+  "settings.chatbot.weixin.connect": {
+    "text": "Connect WeChat",
+    "context": "Connect WeChat button text"
+  },
+  "settings.chatbot.weixin.disconnect": {
+    "text": "Disconnect",
+    "context": "Disconnect WeChat button text"
+  },
+  "settings.chatbot.weixin.scanQr": {
+    "text": "Please scan the QR code with WeChat",
+    "context": "WeChat scan QR prompt text"
+  },
+  "settings.chatbot.weixin.scanWait": {
+    "text": "Waiting...",
+    "context": "WeChat scan waiting status"
+  },
+  "settings.chatbot.weixin.scanScaned": {
+    "text": "Scanned, please confirm on WeChat...",
+    "context": "WeChat scanned waiting confirmation status"
+  },
+  "settings.chatbot.weixin.scanConfirmed": {
+    "text": "Connected successfully!",
+    "context": "WeChat connection success message"
+  },
+  "settings.chatbot.weixin.scanExpired": {
+    "text": "QR code expired, please get a new one",
+    "context": "WeChat QR code expired message"
+  },
+  "settings.chatbot.weixin.timeout": {
+    "text": "Connection timeout, please retry",
+    "context": "WeChat connection timeout message"
+  },
+  "settings.chatbot.weixin.qrFailed": {
+    "text": "Failed to get QR code",
+    "context": "WeChat QR code fetch failure message"
+  },
+  "settings.chatbot.save": {
+    "text": "Save Configuration",
+    "context": "Save Chatbot configuration button text"
+  },
+  "settings.chatbot.close": {
+    "text": "Close",
+    "context": "Close error message button text"
+  },
+  "settings.backend.title": {
+    "text": "Backend Connection",
+    "context": "Backend connection configuration section title"
+  },
+  "settings.backend.description": {
+    "text": "Select or add backend servers. Local mode auto-fetches Token, remote mode requires manual input.",
+    "context": "Backend connection configuration description"
+  },
+  "settings.backend.server": {
+    "text": "Backend Server",
+    "context": "Backend server selector label"
+  },
+  "settings.backend.token": {
+    "text": "Auth Token",
+    "context": "Auth Token input field label"
+  },
+  "settings.backend.token.placeholder": {
+    "text": "Enter remote server Token",
+    "context": "Remote server Token input field placeholder"
+  },
+  "settings.backend.token.auto": {
+    "text": "Auto-fetch for localhost",
+    "context": "Local mode Token auto-fetch placeholder"
+  },
+  "settings.backend.connect": {
+    "text": "Connect",
+    "context": "Connect button text"
+  },
+  "settings.backend.status.connected": {
+    "text": "Connected",
+    "context": "Connected status"
+  },
+  "settings.backend.status.connecting": {
+    "text": "Connecting",
+    "context": "Connecting status"
+  },
+  "settings.backend.status.disconnected": {
+    "text": "Disconnected",
+    "context": "Disconnected status"
+  },
+  "settings.backend.status.authFailed": {
+    "text": "Auth failed",
+    "context": "Authentication failed status"
+  },
+  "settings.backend.status.label": {
+    "text": "Status:",
+    "context": "Status label prefix"
+  },
+  "settings.backend.addServer": {
+    "text": "Add Remote Server",
+    "context": "Add remote server section title"
+  },
+  "settings.backend.alias": {
+    "text": "Alias (optional, e.g. Test Server)",
+    "context": "Server alias input field placeholder"
+  },
+  "settings.backend.address": {
+    "text": "Address: 192.168.1.100:5880",
+    "context": "Server address input field placeholder"
+  },
+  "settings.backend.tokenLabel": {
+    "text": "Token",
+    "context": "Token input field label"
+  },
+  "settings.backend.testAndAdd": {
+    "text": "Test & Add",
+    "context": "Test and add server button text"
+  },
+  "settings.backend.testing": {
+    "text": "Testing...",
+    "context": "Button text when testing connection"
+  },
+  "settings.backend.testSuccess": {
+    "text": "Connection successful, added to server list",
+    "context": "Test connection success message"
+  },
+  "settings.backend.testFailed": {
+    "text": "Connection failed, please check address and port",
+    "context": "Test connection failure message"
+  },
+  "settings.backend.delete": {
+    "text": "Delete",
+    "context": "Delete server button text"
+  },
+  "settings.backend.local": {
+    "text": "Local",
+    "context": "Local server display name"
+  },
+  "settings.stardom.title": {
+    "text": "Stardom Settings",
+    "context": "Stardom configuration section title"
+  },
+  "settings.language.title": {
+    "text": "Language Settings",
+    "context": "Language settings section title"
+  },
+  "settings.language.label": {
+    "text": "Language",
+    "context": "Language selector label"
+  },
+  "settings.language.zh-CN": {
+    "text": "简体中文",
+    "context": "Language option: Simplified Chinese"
+  },
+  "settings.language.en-US": {
+    "text": "English",
+    "context": "Language option: English (United States)"
+  },
+  "settings.language.save": {
+    "text": "Save",
+    "context": "Save language settings button text"
+  },
+  "settings.language.saved": {
+    "text": "Language settings saved",
+    "context": "Success message after saving language settings"
+  },
+  "settings.about.title": {
+    "text": "About",
+    "context": "About section title"
+  },
+  "settings.about.version": {
+    "text": "Version",
+    "context": "Version number label"
+  },
+  "settings.about.homepage": {
+    "text": "Homepage",
+    "context": "Project homepage link text"
+  },
+  "settings.about.docs": {
+    "text": "Documentation",
+    "context": "Documentation link text"
+  },
+  "settings.about.community": {
+    "text": "Community",
+    "context": "Join community section title"
+  },
+  "git.title": {
+    "text": "Git",
+    "context": "Git panel title"
+  },
+  "git.status": {
+    "text": "Status",
+    "context": "Git status label"
+  },
+  "git.diff": {
+    "text": "Diff",
+    "context": "View changes button text"
+  },
+  "git.commit": {
+    "text": "Commit",
+    "context": "Commit button text"
+  },
+  "git.push": {
+    "text": "Push",
+    "context": "Push to remote button text"
+  },
+  "git.pull": {
+    "text": "Pull",
+    "context": "Pull from remote button text"
+  },
+  "git.branch": {
+    "text": "Branch",
+    "context": "Branch selector label"
+  },
+  "git.log": {
+    "text": "Log",
+    "context": "View commit log button text"
+  },
+  "git.commitMessage.placeholder": {
+    "text": "Enter commit message...",
+    "context": "Git commit message input placeholder"
+  },
+  "git.noChanges": {
+    "text": "No changes",
+    "context": "Text shown when there are no changes"
+  },
+  "git.changes": {
+    "text": "files changed",
+    "context": "Text showing number of changed files, like '3 files changed'"
+  },
+  "codeviewer.title": {
+    "text": "Code",
+    "context": "Code viewer panel title"
+  },
+  "codeviewer.openFile": {
+    "text": "Open File",
+    "context": "Open file button text"
+  },
+  "codeviewer.search": {
+    "text": "Search",
+    "context": "Code search input placeholder"
+  },
+  "codeviewer.noFileSelected": {
+    "text": "No file selected",
+    "context": "Text shown when no file is selected"
+  },
+  "cron.title": {
+    "text": "Cron Tasks",
+    "context": "Cron tasks page title"
+  },
+  "cron.new": {
+    "text": "New Task",
+    "context": "New cron task button text"
+  },
+  "cron.enabled": {
+    "text": "Enabled",
+    "context": "Task enabled status label"
+  },
+  "cron.disabled": {
+    "text": "Disabled",
+    "context": "Task disabled status label"
+  },
+  "cron.expression": {
+    "text": "Cron Expression",
+    "context": "Cron expression input field label"
+  },
+  "cron.skill": {
+    "text": "Skill",
+    "context": "Select skill label"
+  },
+  "cron.lastRun": {
+    "text": "Last Run",
+    "context": "Last run time label"
+  },
+  "cron.nextRun": {
+    "text": "Next Run",
+    "context": "Next run time label"
+  },
+  "smartpath.title": {
+    "text": "Smart Paths",
+    "context": "Smart paths page title"
+  },
+  "smartpath.new": {
+    "text": "New Path",
+    "context": "New path button text"
+  },
+  "smartpath.run": {
+    "text": "Run",
+    "context": "Run path button text"
+  },
+  "smartpath.status.draft": {
+    "text": "Draft",
+    "context": "Path status: draft"
+  },
+  "smartpath.status.ready": {
+    "text": "Ready",
+    "context": "Path status: ready"
+  },
+  "smartpath.status.running": {
+    "text": "Running",
+    "context": "Path status: running"
+  },
+  "smartpath.status.completed": {
+    "text": "Completed",
+    "context": "Path status: completed"
+  },
+  "common.loading": {
+    "text": "Loading...",
+    "context": "Generic loading indicator"
+  },
+  "common.save": {
+    "text": "Save",
+    "context": "Generic save button text"
+  },
+  "common.cancel": {
+    "text": "Cancel",
+    "context": "Generic cancel button text"
+  },
+  "common.confirm": {
+    "text": "Confirm",
+    "context": "Generic confirm button text"
+  },
+  "common.delete": {
+    "text": "Delete",
+    "context": "Generic delete button text"
+  },
+  "common.edit": {
+    "text": "Edit",
+    "context": "Generic edit button text"
+  },
+  "common.close": {
+    "text": "Close",
+    "context": "Generic close button text"
+  },
+  "common.error": {
+    "text": "Error",
+    "context": "Generic error message title"
+  },
+  "common.success": {
+    "text": "Success",
+    "context": "Generic success message title"
+  },
+  "git.fetch": {
+    "text": "Fetch Remote",
+    "context": "Git fetch operation button"
+  },
+  "git.localChanges": {
+    "text": "Local Changes",
+    "context": "Local changes tab"
+  },
+  "git.remoteDiff": {
+    "text": "Remote Diff",
+    "context": "Remote diff tab"
+  },
+  "git.clean": {
+    "text": "Working tree clean, no changes",
+    "context": "Working tree clean message"
+  },
+  "git.searchBranch": {
+    "text": "Search branches...",
+    "context": "Search branch input placeholder"
+  },
+  "git.localBranches": {
+    "text": "Local Branches",
+    "context": "Local branches section title"
+  },
+  "git.remoteBranches": {
+    "text": "Remote Branches",
+    "context": "Remote branches section title"
+  },
+  "git.switchToLocal": {
+    "text": "Switch to this branch",
+    "context": "Switch branch button tooltip"
+  },
+  "git.checkoutToLocal": {
+    "text": "Checkout to local",
+    "context": "Checkout to local button tooltip"
+  },
+  "git.loading": {
+    "text": "Loading...",
+    "context": "Loading status"
+  },
+  "git.noMatchingBranch": {
+    "text": "No matching branches",
+    "context": "No matching branches message"
+  },
+  "git.minutesAgo": {
+    "text": "${m}m ago",
+    "context": "Time display: minutes ago"
+  },
+  "git.hoursAgo": {
+    "text": "${h}h ago",
+    "context": "Time display: hours ago"
+  },
+  "git.daysAgo": {
+    "text": "${d}d ago",
+    "context": "Time display: days ago"
+  },
+  "git.staged": {
+    "text": "Staged",
+    "context": "Staged status"
+  },
+  "git.unstaged": {
+    "text": "Unstaged",
+    "context": "Unstaged status"
+  },
+  "git.untracked": {
+    "text": "Untracked",
+    "context": "Untracked status"
+  },
+  "git.changedFiles": {
+    "text": "Changed files (${count})",
+    "context": "Changed files count"
+  },
+  "git.loadingDiff": {
+    "text": "Loading diff...",
+    "context": "Loading diff status"
+  },
+  "git.noDiff": {
+    "text": "No diff content",
+    "context": "No diff content message"
+  },
+  "git.openInEditor": {
+    "text": "Open in editor →",
+    "context": "Open in editor button"
+  },
+  "git.noTracking": {
+    "text": "No remote tracking branch set",
+    "context": "No tracking branch message"
+  },
+  "git.inSync": {
+    "text": "Fully synced with remote",
+    "context": "Fully synced message"
+  },
+  "git.noFileDiff": {
+    "text": "No file differences with remote",
+    "context": "No file diff message"
+  },
+  "git.remoteDiffFiles": {
+    "text": "Diff files (${count})",
+    "context": "Remote diff files count"
+  },
+  "git.searchLog": {
+    "text": "Search hash, message, author...",
+    "context": "Search log input placeholder"
+  },
+  "git.noMatchingResults": {
+    "text": "No matching results",
+    "context": "No matching results message"
+  },
+  "git.scrollLoadMore": {
+    "text": "Scroll down to load more...",
+    "context": "Scroll load more message"
+  },
+  "git.commitPlaceholder": {
+    "text": "Describe changes (leave empty for AI generation)...\nCtrl+Enter to commit",
+    "context": "Commit message input placeholder"
+  },
+  "git.templatePlaceholder": {
+    "text": "Custom template (part of AI prompt):\n\nExample:\nGenerate Chinese commit message in Conventional Commits format\n\nAvailable variables:\n${added} ${modified} ${deleted}\n${added_count} ${modified_count} ${total_count}",
+    "context": "Custom template input placeholder"
+  },
+  "git.aiGenerateTitle": {
+    "text": "AI analyzes code diff to auto-generate commit message",
+    "context": "AI generate button tooltip"
+  },
+  "git.aiGenerating": {
+    "text": "Generating...",
+    "context": "AI generating status"
+  },
+  "git.aiGenerate": {
+    "text": "AI Generate",
+    "context": "AI generate button text"
+  },
+  "git.templateTitle": {
+    "text": "Custom commit message template",
+    "context": "Template button tooltip"
+  },
+  "git.template": {
+    "text": "Template",
+    "context": "Template button text"
+  },
+  "git.commitTitle": {
+    "text": "Commit to local (leave empty for AI generation)",
+    "context": "Commit button tooltip"
+  },
+  "git.committing": {
+    "text": "Committing...",
+    "context": "Committing status"
+  },
+  "git.smartPushTitle": {
+    "text": "Smart Push: Auto git pull to merge remote changes, AI resolves conflicts if any, then git push",
+    "context": "Smart push button tooltip"
+  },
+  "codeviewer.loading": {
+    "text": "Loading file...",
+    "context": "Loading file status"
+  },
+  "codeviewer.clickToView": {
+    "text": "Click files on the left to view content",
+    "context": "Click to view hint"
+  },
+  "codeviewer.binaryFile": {
+    "text": "Binary File",
+    "context": "Binary file label"
+  },
+  "codeviewer.cannotPreview": {
+    "text": "This file type cannot be previewed",
+    "context": "Cannot preview message"
+  },
+  "codeviewer.zoomOut": {
+    "text": "Zoom Out",
+    "context": "Zoom out button tooltip"
+  },
+  "codeviewer.zoomOriginal": {
+    "text": "1:1 Original Size",
+    "context": "Original size button tooltip"
+  },
+  "codeviewer.zoomIn": {
+    "text": "Zoom In",
+    "context": "Zoom in button tooltip"
+  },
+  "codeviewer.find": {
+    "text": "Find",
+    "context": "Find command"
+  },
+  "codeviewer.replace": {
+    "text": "Replace",
+    "context": "Replace command"
+  },
+  "codeviewer.next": {
+    "text": "Next",
+    "context": "Next match"
+  },
+  "codeviewer.previous": {
+    "text": "Previous",
+    "context": "Previous match"
+  },
+  "codeviewer.all": {
+    "text": "All",
+    "context": "All"
+  },
+  "codeviewer.matchCase": {
+    "text": "Match Case",
+    "context": "Match case option"
+  },
+  "codeviewer.regexp": {
+    "text": "RegExp",
+    "context": "Regular expression option"
+  },
+  "codeviewer.byWord": {
+    "text": "By Word",
+    "context": "Whole word match option"
+  },
+  "codeviewer.replaceAll": {
+    "text": "Replace All",
+    "context": "Replace all command"
+  },
+  "codeviewer.close": {
+    "text": "Close",
+    "context": "Close command"
+  },
+  "codeviewer.currentMatch": {
+    "text": "Current match",
+    "context": "Current match hint"
+  },
+  "codeviewer.onLine": {
+    "text": "on line",
+    "context": "Line label"
+  },
+  "codeviewer.replacedOnLine": {
+    "text": "Replaced match on line ${line}",
+    "context": "Replaced on line hint"
+  },
+  "codeviewer.replacedMatches": {
+    "text": "Replaced ${count} matches",
+    "context": "Replaced count hint"
+  },
+  "codeviewer.goToLine": {
+    "text": "Go to Line",
+    "context": "Go to line command"
+  },
+  "codeviewer.go": {
+    "text": "Go",
+    "context": "Go button"
+  },
+  "codeviewer.lines": {
+    "text": "${count} lines",
+    "context": "Line count display"
+  },
+  "codeviewer.truncated": {
+    "text": "truncated",
+    "context": "Truncated marker"
+  },
+  "codeviewer.showRendered": {
+    "text": "Show Rendered",
+    "context": "Show rendered hint"
+  },
+  "codeviewer.showSource": {
+    "text": "Show Source",
+    "context": "Show source hint"
+  },
+  "codeviewer.source": {
+    "text": "Source",
+    "context": "Source button"
+  },
+  "codeviewer.toggleReadonly": {
+    "text": "Switch to readonly",
+    "context": "Switch to readonly hint"
+  },
+  "codeviewer.toggleEdit": {
+    "text": "Switch to edit",
+    "context": "Switch to edit hint"
+  },
+  "codeviewer.readonly": {
+    "text": "Readonly",
+    "context": "Readonly button text"
+  },
+  "codeviewer.edit": {
+    "text": "Edit",
+    "context": "Edit button text"
+  },
+  "codeviewer.save": {
+    "text": "Save",
+    "context": "Save button text"
+  },
+  "codeviewer.saveTitle": {
+    "text": "Save (Ctrl+S)",
+    "context": "Save button tooltip"
+  },
+  "codeviewer.saving": {
+    "text": "Saving...",
+    "context": "Saving status"
+  },
+  "codeviewer.modified": {
+    "text": "Modified",
+    "context": "Modified marker"
+  },
+  "codeviewer.searchFiles": {
+    "text": "Search files...",
+    "context": "Search files placeholder"
+  },
+  "codeviewer.filterTitle": {
+    "text": "Filter test, build and other non-source directories",
+    "context": "Filter tooltip"
+  },
+  "codeviewer.sourceOnly": {
+    "text": "Source only",
+    "context": "Source only option"
+  },
+  "codeviewer.noMatchingFiles": {
+    "text": "No matching files",
+    "context": "No matching files message"
+  },
+  "codeviewer.backToSession": {
+    "text": "← Back to Session",
+    "context": "Back to session button"
+  },
+  "codeviewer.loadFailed": {
+    "text": "Load Failed",
+    "context": "Load failed message"
+  },
+  "codeviewer.emptyDir": {
+    "text": "Empty Directory",
+    "context": "Empty directory message"
+  },
+  "codeviewer.searchingRefs": {
+    "text": "Searching...",
+    "context": "Searching references status"
+  },
+  "codeviewer.refsFor": {
+    "text": "References for ${symbol}",
+    "context": "Reference search title"
+  },
+  "codeviewer.noMatches": {
+    "text": "No matches found",
+    "context": "No matches message"
+  },
+  "codeviewer.current": {
+    "text": "Current",
+    "context": "Current location marker"
+  }
+}

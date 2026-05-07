@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { SessionTree } from '@/components/SessionTree';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useTheme } from '@/hooks/useTheme';
+import { t } from '@/locales';
 
 export function Sidebar() {
   const { theme, toggleTheme } = useTheme();
@@ -100,7 +101,7 @@ export function Sidebar() {
                   >
                     <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
-                  <span>协作星图</span>
+                  <span>{t('menu.stardom')}</span>
                 </>
               )}
             </NavLink>
@@ -125,7 +126,7 @@ export function Sidebar() {
                   >
                     <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
-                  <span>定时任务</span>
+                  <span>{t('menu.cron')}</span>
                 </>
               )}
             </NavLink>
@@ -150,7 +151,7 @@ export function Sidebar() {
                   >
                     <Route className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
-                  <span>地球路径</span>
+                  <span>{t('menu.smartpath')}</span>
                 </>
               )}
             </NavLink>
@@ -185,7 +186,7 @@ export function Sidebar() {
                 >
                   <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
                 </div>
-                <span>设置</span>
+                <span>{t('menu.settings')}</span>
               </>
             )}
           </NavLink>

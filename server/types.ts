@@ -50,6 +50,7 @@ export interface LlmProfile {
 
 export interface SmanConfig {
   port: number;
+  language: string;  // 界面语言：'zh-CN' | 'en-US'
   llm: {
     apiKey: string;
     model: string;

@@ -3,6 +3,7 @@ import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from '@/stores/chat';
 import { useCronStore } from '@/stores/cron';
+import { t } from '@/locales';
 
 const STORAGE_KEY_SERVERS = 'sman-servers';
 const STORAGE_KEY_SELECTED = 'sman-selected-server';
@@ -24,7 +25,7 @@ function loadServers(): ServerEntry[] {
       if (list.some(s => s.name === LOCALHOST_NAME)) return list;
     }
   } catch { /* ignore */ }
-  return [{ name: LOCALHOST_NAME, url: '', token: '', alias: '本机' }];
+  return [{ name: LOCALHOST_NAME, url: '', token: '', alias: t('settings.backend.local') }];
 }
 
 function saveServers(servers: ServerEntry[]) {
@@ -179,24 +180,24 @@ export function BackendSettings({ id }: { id?: string }) {
   };
 
   const statusText: Record<string, string> = {
-    connected: '已连接',
-    connecting: '连接中',
-    disconnected: '未连接',
-    auth_failed: '认证失败',
+    connected: t('settings.backend.status.connected'),
+    connecting: t('settings.backend.status.connecting'),
+    disconnected: t('settings.backend.status.disconnected'),
+    auth_failed: t('settings.backend.status.authFailed'),
   };
 
   return (
     <div id={id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
       <div className="flex flex-col space-y-1.5 p-6">
-        <h3 className="text-2xl font-semibold leading-none tracking-tight">后端连接</h3>
+        <h3 className="text-2xl font-semibold leading-none tracking-tight">{t('settings.backend.title')}</h3>
         <p className="text-sm text-muted-foreground">
-          选择或添加后端服务器。本机模式自动获取 Token，远程模式需手动输入。
+          {t('settings.backend.description')}
         </p>
       </div>
       <div className="p-6 pt-0 space-y-4">
         {/* Server selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium leading-none">后端服务器</label>
+          <label className="text-sm font-medium leading-none">{t('settings.backend.server')}</label>
           <select
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={selectedName}
@@ -205,7 +206,7 @@ export function BackendSettings({ id }: { id?: string }) {
             {servers.map(s => {
               const label = s.alias
                 ? `${s.alias} (${s.name})`
-                : s.name + (s.url ? ` (${s.url})` : ' (本机)');
+                : s.name + (s.url ? ` (${s.url})` : ` (${t('settings.backend.local')})`);
               return (
                 <option key={s.name} value={s.name}>
                   {label}
@@ -223,20 +224,20 @@ export function BackendSettings({ id }: { id?: string }) {
               className="ml-2 text-red-500 hover:text-red-700 text-xs underline"
               onClick={() => handleRemoveServer(currentServer.name)}
             >
-              删除
+              {t('settings.backend.delete')}
             </button>
           </div>
         )}
 
         {/* Token (read-only for localhost) */}
         <div className="space-y-2">
-          <label className="text-sm font-medium leading-none">认证 Token</label>
+          <label className="text-sm font-medium leading-none">{t('settings.backend.token')}</label>
           <input
             type="password"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder={isLocal ? '本机自动获取' : '输入远程服务器 Token'}
+            placeholder={isLocal ? t('settings.backend.token.auto') : t('settings.backend.token.placeholder')}
             readOnly={isLocal}
           />
         </div>
@@ -247,47 +248,47 @@ export function BackendSettings({ id }: { id?: string }) {
             className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground shadow hover:bg-primary/90 h-8 px-3"
             onClick={handleSaveAndConnect}
           >
-            连接
+            {t('settings.backend.connect')}
           </button>
           <span className="text-sm text-muted-foreground ml-2">
-            状态: {statusText[status] || status}
+            {t('settings.backend.status.label')} {statusText[status] || status}
           </span>
         </div>
 
         {/* Add remote server */}
         <div className="border-t pt-4 space-y-2">
-          <label className="text-sm font-medium leading-none">添加远程服务器</label>
+          <label className="text-sm font-medium leading-none">{t('settings.backend.addServer')}</label>
           <input
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newAlias}
             onChange={(e) => { setNewAlias(e.target.value); setTestResult(null); }}
-            placeholder="别名（可选，例如：测试服务器）"
+            placeholder={t('settings.backend.alias')}
           />
           <input
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newAddr}
             onChange={(e) => { setNewAddr(e.target.value); setTestResult(null); }}
-            placeholder="地址: 192.168.1.100:5880"
+            placeholder={t('settings.backend.address')}
           />
           <input
             type="password"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             value={newToken}
             onChange={(e) => { setNewToken(e.target.value); setTestResult(null); }}
-            placeholder="Token"
+            placeholder={t('settings.backend.tokenLabel')}
           />
           <button
             className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent h-8 px-3 disabled:opacity-50"
             onClick={handleTestAndAdd}
             disabled={testing || !newAddr.trim()}
           >
-            {testing ? '测试中...' : '测试并添加'}
+            {testing ? t('settings.backend.testing') : t('settings.backend.testAndAdd')}
           </button>
           {testResult === 'ok' && (
-            <p className="text-xs text-green-600">连接成功，已添加到服务器列表</p>
+            <p className="text-xs text-green-600">{t('settings.backend.testSuccess')}</p>
           )}
           {testResult === 'fail' && (
-            <p className="text-xs text-red-600">连接失败，请检查地址和端口</p>
+            <p className="text-xs text-red-600">{t('settings.backend.testFailed')}</p>
           )}
         </div>
       </div>
