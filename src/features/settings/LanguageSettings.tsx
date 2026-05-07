@@ -1,12 +1,10 @@
 /**
  *语言设置组件
- *允许用户选择界面语言
+ *选择即生效，无需保存按钮
  */
 
-import { useState } from 'react';
 import { Languages } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -25,24 +23,7 @@ interface LanguageSettingsProps {
 export function LanguageSettings({ id }: LanguageSettingsProps) {
   const settings = useSettingsStore(s => s.settings);
   const updateLanguage = useSettingsStore(s => s.updateLanguage);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
   const currentLanguage = settings?.language || 'zh-CN';
-
-  const handleSave = async () => {
-    setSaving(true);
-    setSaved(false);
-    try {
-      await updateLanguage(currentLanguage);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (error) {
-      console.error('Failed to save language:', error);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <Card id={id}>
@@ -61,7 +42,6 @@ export function LanguageSettings({ id }: LanguageSettingsProps) {
             <Select
               value={currentLanguage}
               onValueChange={(value) => {
-                // 立即更新本地状态，UI 立即响应
                 updateLanguage(value);
               }}
             >
@@ -74,19 +54,7 @@ export function LanguageSettings({ id }: LanguageSettingsProps) {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="mt-6"
-          >
-            {saving ? t('common.loading') : t('settings.language.save')}
-          </Button>
         </div>
-        {saved && (
-          <p className="mt-3 text-sm text-green-600 dark:text-green-400">
-            {t('settings.language.saved')}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
