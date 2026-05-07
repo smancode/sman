@@ -70,6 +70,28 @@ function GitHubStarCount() {
   );
 }
 
+const WECHAT_QR_REMOTE_URL = 'https://h5.smancode.com/qrsman/wechat-cropped.png';
+const WECHAT_QR_LOCAL_URL = '/resources/pictures/sman-wechat-group.png';
+
+function WechatGroupQR() {
+  const [src, setSrc] = useState(WECHAT_QR_LOCAL_URL);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setSrc(WECHAT_QR_REMOTE_URL);
+    img.onerror = () => setSrc(WECHAT_QR_LOCAL_URL);
+    img.src = WECHAT_QR_REMOTE_URL;
+  }, []);
+
+  return (
+    <img
+      src={src}
+      alt="Sman 微信群二维码"
+      className="w-[150px] h-[150px] rounded-xl object-cover border-2 border-yellow-400 dark:border-border/60"
+    />
+  );
+}
+
 const SECTIONS = [
   { id: 'llm', label: '模型配置', icon: Cpu },
   { id: 'backend', label: '后端连接', icon: Wifi },
@@ -213,11 +235,7 @@ export function Settings() {
 
                 {/* 微信群 — 右侧 */}
                 <div className="flex flex-col items-center gap-2">
-                  <img
-                    src="/resources/pictures/sman-wechat-group.png"
-                    alt="Sman 微信群二维码"
-                    className="w-[150px] h-[150px] rounded-xl object-cover border-2 border-yellow-400 dark:border-border/60"
-                  />
+                  <WechatGroupQR />
                   <p className="text-xs text-muted-foreground text-center leading-relaxed">
                     扫码加入 Sman 微信交流群
                     <br />

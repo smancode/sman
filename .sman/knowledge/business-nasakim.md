@@ -1,6 +1,6 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-07T02:33:40.843Z
+> Last extracted: 2026-05-07T03:14:03.172Z
 
 ## Smart Path 的 path.md 元数据要求
 <!-- hash: a1b2c3 -->
@@ -51,3 +51,11 @@
 - MCP 能力赋予权限必须保留：通过 capability_list/load/run 在不增加上下文的情况下无限赋能
 - 这是 Sman 相比普通 Harness 的关键优势，不能因为引入新架构而削弱
 <!-- end: 5b8a1f -->
+
+## Sman 是深度定制版 Claude Code
+<!-- hash: 8f3c1a -->
+- 项目从设计之初就深度依赖 Claude SDK（session 管理、MCP 框架、工具调用、流式输出等 13 个文件 28+ 处 import）
+- 切换到其他 coding 工具（Cursor/Copilot）成本极高（重写 50-80%），因后端协议不开放
+- 自研 coding 工具需重写约 50%：session 管理、MCP 协议、工具调用均需重建
+- 结论：当前阶段继续基于 Claude SDK 是最务实选择，多模型支持可通过 `ANTHROPIC_BASE_URL` 实现
+<!-- end: 8f3c1a -->
