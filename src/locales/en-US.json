@@ -64,8 +64,8 @@
     "context": "Add attachment button text"
   },
   "chat.thinking": {
-    "text": "Thinking...",
-    "context": "Status indicator when AI is thinking"
+    "text": "Thinking",
+    "context": "Thinking label"
   },
   "settings.title": {
     "text": "Settings",
@@ -1986,5 +1986,641 @@
   "stardom.activityFeed.hint": {
     "text": "Agent activity will be displayed here in real-time",
     "context": "Activity feed hint"
+  },
+  "batch.status.draft": {
+    "text": "Draft",
+    "context": "Batch task status - draft"
+  },
+  "batch.status.generating": {
+    "text": "Generating",
+    "context": "Batch task status - generating"
+  },
+  "batch.status.generated": {
+    "text": "Generated",
+    "context": "Batch task status - generated"
+  },
+  "batch.status.testing": {
+    "text": "Testing",
+    "context": "Batch task status - testing"
+  },
+  "batch.status.tested": {
+    "text": "Test Passed",
+    "context": "Batch task status - tested"
+  },
+  "batch.status.saved": {
+    "text": "Saved",
+    "context": "Batch task status - saved"
+  },
+  "batch.status.queued": {
+    "text": "Queued",
+    "context": "Batch task status - queued"
+  },
+  "batch.status.running": {
+    "text": "Running",
+    "context": "Batch task status - running"
+  },
+  "batch.status.paused": {
+    "text": "Paused",
+    "context": "Batch task status - paused"
+  },
+  "batch.status.completed": {
+    "text": "Completed",
+    "context": "Batch task status - completed"
+  },
+  "batch.status.failed": {
+    "text": "Failed",
+    "context": "Batch task status - failed"
+  },
+  "batch.confirmDelete": {
+    "text": "Are you sure you want to delete this task?",
+    "context": "Batch task delete confirmation"
+  },
+  "batch.successFail": {
+    "text": "{success} succeeded / {failed} failed",
+    "context": "Success/fail stats"
+  },
+  "batch.everyMinutes": {
+    "text": "Every {minutes} min",
+    "context": "Every N minutes"
+  },
+  "batch.generate": {
+    "text": "Generate",
+    "context": "Generate code button"
+  },
+  "batch.test": {
+    "text": "Test",
+    "context": "Test button"
+  },
+  "batch.testing": {
+    "text": "Testing...",
+    "context": "Testing status"
+  },
+  "batch.save": {
+    "text": "Save",
+    "context": "Save button"
+  },
+  "batch.execute": {
+    "text": "Execute",
+    "context": "Execute button"
+  },
+  "batch.continue": {
+    "text": "Continue",
+    "context": "Continue button"
+  },
+  "batch.pause": {
+    "text": "Pause",
+    "context": "Pause button"
+  },
+  "batch.cancel": {
+    "text": "Cancel",
+    "context": "Cancel button"
+  },
+  "batch.reExecute": {
+    "text": "Re-execute",
+    "context": "Re-execute button"
+  },
+  "batch.retryFailed": {
+    "text": "Retry Failed",
+    "context": "Retry failed button"
+  },
+  "batch.edit": {
+    "text": "Edit",
+    "context": "Edit button"
+  },
+  "batch.delete": {
+    "text": "Delete",
+    "context": "Delete button"
+  },
+  "batch.businessSystem": {
+    "text": "Business System: ",
+    "context": "Business system label"
+  },
+  "batch.concurrency": {
+    "text": "Concurrency: ",
+    "context": "Concurrency label"
+  },
+  "batch.createdAt": {
+    "text": "Created: ",
+    "context": "Created time label"
+  },
+  "batch.startedAt": {
+    "text": "Started: ",
+    "context": "Started time label"
+  },
+  "chat.initFailed": {
+    "text": "Initialization Failed",
+    "context": "Init failed title"
+  },
+  "chat.autoMode.desc": {
+    "text": "AUTO mode: Auto-confirm all questions",
+    "context": "AUTO mode desc"
+  },
+  "chat.autoMode.enable": {
+    "text": "Enable AUTO mode",
+    "context": "Enable AUTO mode"
+  },
+  "chat.copyFail": {
+    "text": "Failed to copy session",
+    "context": "Copy session failed"
+  },
+  "chat.createFail": {
+    "text": "Failed to create session",
+    "context": "Create session failed"
+  },
+  "chat.loadFail": {
+    "text": "Failed to load",
+    "context": "Load failed"
+  },
+  "batch.finishedAt": {
+    "text": "Finished: ",
+    "context": "Finished label"
+  },
+  "batch.scheduledExec": {
+    "text": "Scheduled: ",
+    "context": "Scheduled label"
+  },
+  "batch.scheduledEnabled": {
+    "text": "Enabled, every {minutes} min",
+    "context": "Scheduled enabled"
+  },
+  "batch.scheduledPreset": {
+    "text": "Disabled (preset: {minutes} min)",
+    "context": "Scheduled preset"
+  },
+  "batch.scheduledDisabled": {
+    "text": "Disabled",
+    "context": "Scheduled disabled"
+  },
+  "batch.taskDesc": {
+    "text": "Description",
+    "context": "Task description label"
+  },
+  "batch.execTemplate": {
+    "text": "Exec Template: ",
+    "context": "Exec template label"
+  },
+  "batch.envVars": {
+    "text": "Environment Variables",
+    "context": "Environment variables label"
+  },
+  "batch.genCode": {
+    "text": "Generated Code",
+    "context": "Generated code label"
+  },
+  "batch.concurrencyLabel": {
+    "text": "Concurrency",
+    "context": "Concurrency label"
+  },
+  "batch.cronInterval": {
+    "text": "Cron Interval",
+    "context": "Cron interval label"
+  },
+  "batch.minutes": {
+    "text": "Minutes",
+    "context": "Minutes unit"
+  },
+  "batch.hours": {
+    "text": "Hours",
+    "context": "Hours unit"
+  },
+  "batch.selectBusinessSystem": {
+    "text": "Select business system",
+    "context": "Select business system placeholder"
+  },
+  "batch.selectSkill": {
+    "text": "Select Skill",
+    "context": "Select Skill placeholder"
+  },
+  "batch.taskDescLabel": {
+    "text": "Description",
+    "context": "Description label"
+  },
+  "batch.taskDescPlaceholder": {
+    "text": "Describe how to fetch data...",
+    "context": "Description placeholder"
+  },
+  "batch.loadTemplate": {
+    "text": "Load Template",
+    "context": "Load template button"
+  },
+  "batch.execTemplateLabel": {
+    "text": "Exec Template",
+    "context": "Exec template label"
+  },
+  "batch.fieldRef": {
+    "text": "Use ${field_name} to reference data fields",
+    "context": "Field reference hint"
+  },
+  "batch.mdTemplateTitle": {
+    "text": "# Data Fetch Config",
+    "context": "MD template title"
+  },
+  "batch.mdDataSource": {
+    "text": "## Data Source\nDescribe data source and connection",
+    "context": "MD template data source"
+  },
+  "batch.mdDataFormat": {
+    "text": "## Data Format\nDescribe the returned JSON array format",
+    "context": "MD template data format"
+  },
+  "batch.mdExecTemplate": {
+    "text": "## Exec Template",
+    "context": "MD template exec template"
+  },
+  "batch.businessSystemLabel": {
+    "text": "Business System",
+    "context": "Business system label"
+  },
+  "batch.envVarsOptional": {
+    "text": "Environment Variables (optional)",
+    "context": "Env vars optional label"
+  },
+  "batch.createTask": {
+    "text": "Create Task",
+    "context": "Create task button"
+  },
+  "batch.smartTask": {
+    "text": "Smart Tasks",
+    "context": "Smart tasks title"
+  },
+  "batch.smartTaskDesc": {
+    "text": "Generate task code from description in real-time",
+    "context": "Smart tasks description"
+  },
+  "batch.newTask": {
+    "text": "New Task",
+    "context": "New task button"
+  },
+  "batch.loading": {
+    "text": "Loading...",
+    "context": "Loading"
+  },
+  "batch.emptyHint": {
+    "text": "No smart tasks yet. Click \"New Task\" to get started",
+    "context": "Empty list hint"
+  },
+  "chat.init.title": {
+    "text": "Initializing Project",
+    "context": "Init title"
+  },
+  "chat.init.scanning": {
+    "text": "Scanning project structure...",
+    "context": "Scanning phase"
+  },
+  "chat.init.matching": {
+    "text": "Analyzing and matching best capabilities...",
+    "context": "Matching phase"
+  },
+  "chat.init.injecting": {
+    "text": "Injecting capabilities...",
+    "context": "Injecting phase"
+  },
+  "chat.init.default": {
+    "text": "Initializing...",
+    "context": "Default init"
+  },
+  "chat.init.complete": {
+    "text": "Project Initialized",
+    "context": "Init complete title"
+  },
+  "chat.init.loadedSkills": {
+    "text": "Loaded",
+    "context": "Loaded N skills prefix"
+  },
+  "chat.init.skills": {
+    "text": " capabilities:",
+    "context": "Skills count suffix"
+  },
+  "chat.init.failed": {
+    "text": "Initialization Failed",
+    "context": "Init failed title"
+  },
+  "chat.welcome": {
+    "text": "Welcome to",
+    "context": "Welcome text"
+  },
+  "chat.selectSystem": {
+    "text": "Select a business system",
+    "context": "Welcome hint - select system"
+  },
+  "chat.startChat": {
+    "text": "Start chatting",
+    "context": "Welcome hint - start chat"
+  },
+  "chat.viewDetail": {
+    "text": "View details",
+    "context": "View details"
+  },
+  "chat.file": {
+    "text": "File",
+    "context": "File label"
+  },
+  "chat.close": {
+    "text": "Close",
+    "context": "Close button"
+  },
+  "chat.toolCalls": {
+    "text": " tool calls",
+    "context": "Tool calls count suffix"
+  },
+  "chat.uploadFile": {
+    "text": "Upload File",
+    "context": "Upload file button"
+  },
+  "chat.showThinking": {
+    "text": "Show Thinking & Tools",
+    "context": "Show thinking button"
+  },
+  "chat.hideThinking": {
+    "text": "Hide Thinking & Tools",
+    "context": "Hide thinking button"
+  },
+  "chat.refresh": {
+    "text": "Refresh",
+    "context": "Refresh button"
+  },
+  "session.local": {
+    "text": "Local",
+    "context": "Local label"
+  },
+  "session.newSession": {
+    "text": "New Session",
+    "context": "New session default name"
+  },
+  "session.copySession": {
+    "text": "Copy Session",
+    "context": "Copy session button"
+  },
+  "session.copyFail": {
+    "text": "Failed to copy session",
+    "context": "Copy failed"
+  },
+  "session.createFail": {
+    "text": "Failed to create session",
+    "context": "Create failed"
+  },
+  "session.noSessions": {
+    "text": "No sessions",
+    "context": "No sessions hint"
+  },
+  "session.createHint": {
+    "text": "Click the button above to create a new session",
+    "context": "Create session guide"
+  },
+  "sidebar.sessions": {
+    "text": "Sessions",
+    "context": "Sessions nav"
+  },
+  "sidebar.stardom": {
+    "text": "Stardom",
+    "context": "Stardom nav"
+  },
+  "sidebar.cron": {
+    "text": "Cron Tasks",
+    "context": "Cron nav"
+  },
+  "sidebar.smartpath": {
+    "text": "Smart Paths",
+    "context": "Smart Paths nav"
+  },
+  "sidebar.settings": {
+    "text": "Settings",
+    "context": "Settings nav"
+  },
+  "userProfile.title": {
+    "text": "User Profile",
+    "context": "User profile title"
+  },
+  "userProfile.desc": {
+    "text": "Automatically learn your preferences to make the assistant smarter over time",
+    "context": "User profile desc"
+  },
+  "userProfile.enable": {
+    "text": "Enable User Profile",
+    "context": "Enable label"
+  },
+  "userProfile.hint": {
+    "text": "Auto-analyze after each conversation to build your preference profile",
+    "context": "Enable hint"
+  },
+  "userProfile.enabled": {
+    "text": "Profile is enabled. The assistant will update your profile after each conversation and reference it in future chats.",
+    "context": "Enabled desc"
+  },
+  "userProfile.file": {
+    "text": "Profile file: ",
+    "context": "Profile file label"
+  },
+  "userProfile.disabled": {
+    "text": "Profile is disabled. The assistant will not auto-learn your preferences.",
+    "context": "Disabled desc"
+  },
+  "dir.title": {
+    "text": "Select Project Directory",
+    "context": "Directory selector title"
+  },
+  "dir.recent": {
+    "text": "Recent",
+    "context": "Recent"
+  },
+  "dir.noRecent": {
+    "text": "No recent directories",
+    "context": "No recent dirs"
+  },
+  "skill.loadFail": {
+    "text": "Failed to load",
+    "context": "Load failed"
+  },
+  "ask.title": {
+    "text": "Assistant Question",
+    "context": "Assistant question title"
+  },
+  "ask.reply": {
+    "text": "Reply",
+    "context": "Reply button"
+  },
+  "streamdown.thinking": {
+    "text": "Thinking",
+    "context": "Thinking label"
+  },
+  "streamdown.toolCalls": {
+    "text": " tool calls",
+    "context": "Tool calls suffix"
+  },
+  "toolbar.upload": {
+    "text": "Upload File",
+    "context": "Upload button"
+  },
+  "toolbar.refresh": {
+    "text": "Refresh",
+    "context": "Refresh button"
+  },
+  "batchPage.title": {
+    "text": "Smart Tasks",
+    "context": "Smart tasks page title"
+  },
+  "batchPage.desc": {
+    "text": "Execute automated tasks in batch",
+    "context": "Smart tasks page desc"
+  },
+  "settings.sections.llm": {
+    "text": "LLM Settings",
+    "context": "LLM nav"
+  },
+  "settings.sections.backend": {
+    "text": "Backend",
+    "context": "Backend nav"
+  },
+  "settings.sections.chatbot": {
+    "text": "Bot Settings",
+    "context": "Bot nav"
+  },
+  "settings.sections.websearch": {
+    "text": "Web Search",
+    "context": "Search nav"
+  },
+  "settings.sections.stardom": {
+    "text": "Stardom",
+    "context": "Stardom nav"
+  },
+  "settings.sections.language": {
+    "text": "Language",
+    "context": "Language nav"
+  },
+  "settings.sections.community": {
+    "text": "Community",
+    "context": "Community nav"
+  },
+  "streamdown.expandAll": {
+    "text": "Expand All",
+    "context": "Expand all"
+  },
+  "streamdown.collapse": {
+    "text": "Collapse",
+    "context": "Collapse"
+  },
+  "chat.thinking2": {
+    "text": "Thinking",
+    "context": "Thinking label"
+  },
+  "chat.welcome2": {
+    "text": "Welcome to",
+    "context": "Welcome"
+  },
+  "chat.selectSystem2": {
+    "text": "Select business system",
+    "context": "Select system"
+  },
+  "chat.startChat2": {
+    "text": "Start chatting",
+    "context": "Start chat"
+  },
+  "chat.viewDetail2": {
+    "text": "View details",
+    "context": "View details"
+  },
+  "ask.answered": {
+    "text": "Answered",
+    "context": "Answered"
+  },
+  "ask.wantMore": {
+    "text": "Claude wants to know more",
+    "context": "Want more"
+  },
+  "ask.other": {
+    "text": "Other...",
+    "context": "Other placeholder"
+  },
+  "ask.submit": {
+    "text": "Submit",
+    "context": "Submit button"
+  },
+  "dir.selectDir": {
+    "text": "Select business system directory",
+    "context": "Select dir title"
+  },
+  "dir.manualInput": {
+    "text": "Enter path manually",
+    "context": "Manual input"
+  },
+  "dir.emptyDir": {
+    "text": "Empty directory",
+    "context": "Empty dir"
+  },
+  "dir.cancel": {
+    "text": "Cancel",
+    "context": "Cancel"
+  },
+  "dir.confirm": {
+    "text": "Select this directory",
+    "context": "Confirm"
+  },
+  "sidebar.unpin": {
+    "text": "Unpin",
+    "context": "Unpin"
+  },
+  "sidebar.pin": {
+    "text": "Pin",
+    "context": "Pin"
+  },
+  "sidebar.connected": {
+    "text": "Connected",
+    "context": "Connected"
+  },
+  "sidebar.connecting": {
+    "text": "Connecting...",
+    "context": "Connecting"
+  },
+  "sidebar.disconnected": {
+    "text": "Disconnected",
+    "context": "Disconnected"
+  },
+  "sidebar.darkMode": {
+    "text": "Dark Mode",
+    "context": "Dark mode"
+  },
+  "sidebar.lightMode": {
+    "text": "Light Mode",
+    "context": "Light mode"
+  },
+  "skill.filter": {
+    "text": "Filter",
+    "context": "Filter"
+  },
+  "skill.selectCommand": {
+    "text": "Select command",
+    "context": "Select command"
+  },
+  "skill.keyHint": {
+    "text": "Select · Enter confirm · Esc cancel",
+    "context": "Key hint"
+  },
+  "skill.noMatch": {
+    "text": "No matches",
+    "context": "No match"
+  },
+  "skill.noItems": {
+    "text": "No items available",
+    "context": "No items"
+  },
+  "llm.defaultProfile": {
+    "text": "Default",
+    "context": "Default profile name"
+  },
+  "batchTask.back": {
+    "text": "Back",
+    "context": "Back button"
+  },
+  "batchTask.noSystems": {
+    "text": "No business systems",
+    "context": "No systems hint"
+  },
+  "titlebar.codeBrowser": {
+    "text": "Click to open code browser",
+    "context": "Code browser tooltip"
+  },
+  "titlebar.git": {
+    "text": "Click to open Git panel",
+    "context": "Git panel tooltip"
   }
 }

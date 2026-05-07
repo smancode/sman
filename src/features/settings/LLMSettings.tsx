@@ -139,7 +139,7 @@ export function LLMSettings({ id }: { id?: string }) {
       const apiKey = draftApiKey.trim();
       const model = draftModel.trim();
       const baseUrl = draftBaseUrl.trim();
-      const profileName = (draftProfileName || selectedProfile || '默认').trim();
+      const profileName = (draftProfileName || selectedProfile || t('llm.defaultProfile')).trim();
 
       // Sync trimmed values back to draft state
       setDraftApiKey(apiKey);

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
+
 
 export function ChatToolbar() {
   const refresh = useChatStore((s) => s.refresh);
@@ -30,7 +32,7 @@ export function ChatToolbar() {
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>刷新</p>
+          <p>{t('toolbar.refresh')}</p>
         </TooltipContent>
       </Tooltip>
 
@@ -50,7 +52,7 @@ export function ChatToolbar() {
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>{showThinking ? '隐藏思考与工具' : '显示思考与工具'}</p>
+          <p>{showThinking ? t('chat.hideThinking') : t('chat.showThinking')}</p>
         </TooltipContent>
       </Tooltip>
     </div>

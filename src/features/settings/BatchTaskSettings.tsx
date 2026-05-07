@@ -16,20 +16,21 @@ import { useBatchStore } from '@/stores/batch';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 import type { BatchTask, BatchTaskStatus } from '@/types/settings';
 
-const STATUS_CONFIG: Record<BatchTaskStatus, { icon: typeof Loader2; text: string; className: string }> = {
-  draft: { icon: FileCode, text: '草稿', className: 'text-muted-foreground' },
-  generating: { icon: Loader2, text: '生成中', className: 'text-blue-500' },
-  generated: { icon: FileCode, text: '已生成', className: 'text-blue-600' },
-  testing: { icon: FlaskConical, text: '测试中', className: 'text-purple-500' },
-  tested: { icon: CheckCircle, text: '测试通过', className: 'text-green-600' },
-  saved: { icon: Save, text: '已保存', className: 'text-green-600' },
-  queued: { icon: Loader2, text: '排队中', className: 'text-yellow-600' },
-  running: { icon: Play, text: '执行中', className: 'text-blue-500' },
-  paused: { icon: Pause, text: '已暂停', className: 'text-yellow-600' },
-  completed: { icon: CheckCircle, text: '已完成', className: 'text-green-600' },
-  failed: { icon: XCircle, text: '失败', className: 'text-red-600' },
+const STATUS_CONFIG: Record<BatchTaskStatus, { icon: typeof Loader2; textKey: string; className: string }> = {
+  draft: { icon: FileCode, textKey: 'batch.status.draft', className: 'text-muted-foreground' },
+  generating: { icon: Loader2, textKey: 'batch.status.generating', className: 'text-blue-500' },
+  generated: { icon: FileCode, textKey: 'batch.status.generated', className: 'text-blue-600' },
+  testing: { icon: FlaskConical, textKey: 'batch.status.testing', className: 'text-purple-500' },
+  tested: { icon: CheckCircle, textKey: 'batch.status.tested', className: 'text-green-600' },
+  saved: { icon: Save, textKey: 'batch.status.saved', className: 'text-green-600' },
+  queued: { icon: Loader2, textKey: 'batch.status.queued', className: 'text-yellow-600' },
+  running: { icon: Play, textKey: 'batch.status.running', className: 'text-blue-500' },
+  paused: { icon: Pause, textKey: 'batch.status.paused', className: 'text-yellow-600' },
+  completed: { icon: CheckCircle, textKey: 'batch.status.completed', className: 'text-green-600' },
+  failed: { icon: XCircle, textKey: 'batch.status.failed', className: 'text-red-600' },
 };
 
 function StatusBadge({ status }: { status: BatchTaskStatus }) {
@@ -38,7 +39,7 @@ function StatusBadge({ status }: { status: BatchTaskStatus }) {
   return (
     <div className={cn('flex items-center gap-1 text-xs', config.className)}>
       <Icon className={cn('h-3 w-3', (status === 'generating' || status === 'testing' || status === 'running') && 'animate-spin')} />
-      <span>{config.text}</span>
+      <span>{t(config.textKey)}</span>
     </div>
   );
 }
@@ -95,7 +96,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
   const canEdit = !isBusy && !isRunning && !isPaused;
 
   const handleDelete = async () => {
-    if (!confirm('确定要删除这个任务吗？')) return;
+    if (!confirm(t('batch.confirmDelete'))) return;
     await deleteTask(task.id);
   };
 
@@ -150,13 +151,13 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
             <StatusBadge status={task.status} />
             {task.totalItems > 0 && (
-              <span>{task.successCount} 成功 / {task.failedCount} 失败</span>
+              <span>{t('batch.successFail').replace('{success}', String(task.successCount)).replace('{failed}', String(task.failedCount))}</span>
             )}
             {task.totalCost > 0 && <span>¥{task.totalCost.toFixed(4)}</span>}
             {task.cronEnabled && (
               <span className="flex items-center gap-1 text-blue-500">
                 <Timer className="h-3 w-3" />
-                每 {task.cronIntervalMinutes} 分钟
+                {t('batch.everyMinutes').replace('{minutes}', String(task.cronIntervalMinutes))}
               </span>
             )}
           </div>
@@ -176,45 +177,45 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
       <div className="border-t px-3 py-2 flex items-center gap-1.5 flex-wrap">
         {isDraft && (
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => generateCode(task.id)} disabled={isBusy}>
-            <Wand2 className="h-3.5 w-3.5" /> 生成代码
+            <Wand2 className="h-3.5 w-3.5" /> {t('batch.generate')}
           </Button>
         )}
 
         {isGenerated && (
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => testCode(task.id)} disabled={isBusy}>
-            <FlaskConical className="h-3.5 w-3.5" /> 测试
+            <FlaskConical className="h-3.5 w-3.5" /> {t('batch.test')}
           </Button>
         )}
         {testing && (
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled>
-            <FlaskConical className="h-3.5 w-3.5 animate-spin" /> 测试中...
+            <FlaskConical className="h-3.5 w-3.5 animate-spin" /> {t('batch.testing')}
           </Button>
         )}
 
         {isTested && (
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => saveTask(task.id)} disabled={isBusy}>
-            <Save className="h-3.5 w-3.5" /> 保存
+            <Save className="h-3.5 w-3.5" /> {t('batch.save')}
           </Button>
         )}
 
         {isSaved && (
           <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
-            <Play className="h-3.5 w-3.5" /> 执行
+            <Play className="h-3.5 w-3.5" /> {t('batch.execute')}
           </Button>
         )}
         {isPaused && (
           <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
-            <Play className="h-3.5 w-3.5" /> 继续
+            <Play className="h-3.5 w-3.5" /> {t('batch.continue')}
           </Button>
         )}
 
         {isRunning && (
           <>
             <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => pauseTask(task.id)}>
-              <Pause className="h-3.5 w-3.5" /> 暂停
+              <Pause className="h-3.5 w-3.5" /> {t('batch.pause')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive" onClick={() => cancelTask(task.id)}>
-              <Square className="h-3.5 w-3.5" /> 取消
+              <Square className="h-3.5 w-3.5" /> {t('batch.cancel')}
             </Button>
           </>
         )}
@@ -222,11 +223,11 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
         {isDone && (
           <>
             <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => executeTask(task.id)} disabled={isBusy}>
-              <Play className="h-3.5 w-3.5" /> 重新执行
+              <Play className="h-3.5 w-3.5" /> {t('batch.reExecute')}
             </Button>
             {hasFailed && (
               <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => retryFailed(task.id)} disabled={isBusy}>
-                <RotateCcw className="h-3.5 w-3.5" /> 重试失败
+                <RotateCcw className="h-3.5 w-3.5" /> {t('batch.retryFailed')}
               </Button>
             )}
           </>
@@ -243,7 +244,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
 
         {canEdit && (
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleStartEdit}>
-            <Pencil className="h-3.5 w-3.5" /> 编辑
+            <Pencil className="h-3.5 w-3.5" /> {t('batch.edit')}
           </Button>
         )}
 
@@ -254,7 +255,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
           onClick={handleDelete}
           disabled={isRunning}
         >
-          <Trash2 className="h-3.5 w-3.5" /> 删除
+          <Trash2 className="h-3.5 w-3.5" /> {t('batch.delete')}
         </Button>
       </div>
 
@@ -263,50 +264,50 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
         <div className="border-t px-3 py-3 text-xs text-muted-foreground space-y-3">
           {/* Basic info */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-            <div><span className="text-foreground font-medium">业务系统：</span>{workspaceName}</div>
+            <div><span className="text-foreground font-medium">{t('batch.businessSystem')}</span>{workspaceName}</div>
             <div><span className="text-foreground font-medium">Skill：</span>{task.skillName}</div>
-            <div><span className="text-foreground font-medium">并发数：</span>{task.concurrency}</div>
-            <div><span className="text-foreground font-medium">创建时间：</span>{new Date(task.createdAt).toLocaleString('zh-CN')}</div>
-            {task.startedAt && <div><span className="text-foreground font-medium">开始执行：</span>{new Date(task.startedAt).toLocaleString('zh-CN')}</div>}
-            {task.finishedAt && <div><span className="text-foreground font-medium">结束执行：</span>{new Date(task.finishedAt).toLocaleString('zh-CN')}</div>}
+            <div><span className="text-foreground font-medium">{t('batch.concurrency')}</span>{task.concurrency}</div>
+            <div><span className="text-foreground font-medium">{t('batch.createdAt')}</span>{new Date(task.createdAt).toLocaleString('zh-CN')}</div>
+            {task.startedAt && <div><span className="text-foreground font-medium">{t('batch.startedAt')}</span>{new Date(task.startedAt).toLocaleString('zh-CN')}</div>}
+            {task.finishedAt && <div><span className="text-foreground font-medium">{t('batch.finishedAt')}</span>{new Date(task.finishedAt).toLocaleString('zh-CN')}</div>}
           </div>
 
           {/* Cron info */}
           <div>
-            <span className="text-foreground font-medium">定时执行：</span>
+            <span className="text-foreground font-medium">{t('batch.scheduledExec')}</span>
             {task.cronEnabled
-              ? <span className="text-green-600">已启用，每 {task.cronIntervalMinutes} 分钟执行一次</span>
+              ? <span className="text-green-600">{t('batch.scheduledEnabled').replace('{minutes}', String(task.cronIntervalMinutes))}</span>
               : task.cronIntervalMinutes
-                ? <span>未启用（预设间隔 {task.cronIntervalMinutes} 分钟）</span>
-                : <span>未启用</span>
+                ? <span>{t('batch.scheduledPreset').replace('{minutes}', String(task.cronIntervalMinutes))}</span>
+                : <span>{t('batch.scheduledDisabled')}</span>
             }
           </div>
 
           {/* Config content */}
           {task.mdContent && (
             <div>
-              <div className="text-foreground font-medium mb-1">任务描述</div>
+              <div className="text-foreground font-medium mb-1">{t('batch.taskDesc')}</div>
               <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-40 whitespace-pre-wrap">{task.mdContent}</pre>
             </div>
           )}
 
           {task.execTemplate && (
             <div>
-              <span className="text-foreground font-medium">执行模板：</span>
+              <span className="text-foreground font-medium">{t('batch.execTemplate')}</span>
               <code className="bg-muted px-1.5 py-0.5 rounded">{task.execTemplate}</code>
             </div>
           )}
 
           {task.envVars && (
             <div>
-              <div className="text-foreground font-medium mb-1">环境变量</div>
+              <div className="text-foreground font-medium mb-1">{t('batch.envVars')}</div>
               <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-24 whitespace-pre-wrap">{task.envVars}</pre>
             </div>
           )}
 
           {task.generatedCode && (
             <div>
-              <div className="text-foreground font-medium mb-1">生成代码</div>
+              <div className="text-foreground font-medium mb-1">{t('batch.genCode')}</div>
               <pre className="bg-muted p-2 rounded text-xs overflow-x-auto max-h-40">
                 {task.generatedCode.slice(0, 500)}{task.generatedCode.length > 500 ? '...' : ''}
               </pre>
@@ -319,7 +320,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
       {expanded && editing && (
         <div className="border-t px-3 py-3 space-y-3">
           <div className="space-y-2">
-            <Label className="text-xs">任务描述</Label>
+            <Label className="text-xs">{t('batch.taskDescLabel')}</Label>
             <Textarea
               value={editMdContent}
               onChange={(e) => setEditMdContent(e.target.value)}
@@ -329,7 +330,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs">执行模板</Label>
+            <Label className="text-xs">{t('batch.execTemplateLabel')}</Label>
             <Input
               value={editExecTemplate}
               onChange={(e) => setEditExecTemplate(e.target.value)}
@@ -338,7 +339,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs">环境变量</Label>
+            <Label className="text-xs">{t('batch.envVars')}</Label>
             <Textarea
               value={editEnvVars}
               onChange={(e) => setEditEnvVars(e.target.value)}
@@ -349,7 +350,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label className="text-xs">并发数</Label>
+              <Label className="text-xs">{t('batch.concurrencyLabel')}</Label>
               <Input
                 type="number"
                 min={1}
@@ -359,7 +360,7 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
               />
             </div>
             <div className="space-y-2 col-span-2">
-              <Label className="text-xs">定时间隔</Label>
+              <Label className="text-xs">{t('batch.cronInterval')}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -374,8 +375,8 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="minutes">分钟</SelectItem>
-                    <SelectItem value="hours">小时</SelectItem>
+                    <SelectItem value="minutes">{t('batch.minutes')}</SelectItem>
+                    <SelectItem value="hours">{t('batch.hours')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -384,10 +385,10 @@ function BatchTaskCard({ task }: { task: BatchTask }) {
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
-              <X className="h-3.5 w-3.5 mr-1" /> 取消
+              <X className="h-3.5 w-3.5 mr-1" /> {t('batch.cancel')}
             </Button>
             <Button size="sm" onClick={handleSaveEdit}>
-              <Save className="h-3.5 w-3.5 mr-1" /> 保存
+              <Save className="h-3.5 w-3.5 mr-1" /> {t('batch.save')}
             </Button>
           </div>
         </div>
@@ -454,15 +455,13 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
   };
 
   const handleLoadTemplate = () => {
-    setMdContent(`# 数据获取配置
+    setMdContent(`t('batch.mdTemplateTitle')
 
-## 数据源
-描述数据来源和连接方式
+t('batch.mdDataSource')
 
-## 数据格式
-描述返回的 JSON 数组格式
+t('batch.mdDataFormat')
 
-## 执行模板
+t('batch.mdExecTemplate')
 /test \${name}
 `);
   };
@@ -471,9 +470,9 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
     <div className="p-4 rounded-lg border bg-muted/50 space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>业务系统</Label>
+          <Label>{t('batch.businessSystemLabel')}</Label>
           <Select value={workspace} onValueChange={setWorkspace}>
-            <SelectTrigger><SelectValue placeholder="选择业务系统" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={t('batch.selectBusinessSystem')} /></SelectTrigger>
             <SelectContent>
               {workspaces.map((ws) => (
                 <SelectItem key={ws} value={ws}>{ws.split(/[/\\]/).pop()}</SelectItem>
@@ -485,7 +484,7 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
         <div className="space-y-2">
           <Label>Skill</Label>
           <Select value={skillName} onValueChange={setSkillName} disabled={!workspace}>
-            <SelectTrigger><SelectValue placeholder="选择 Skill" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder={t('batch.selectSkill')} /></SelectTrigger>
             <SelectContent>
               {skills.map((skill) => (
                 <SelectItem key={skill.name} value={skill.name}>{skill.name}</SelectItem>
@@ -497,24 +496,24 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
 
       <div className="grid grid-cols-[1fr_auto] gap-4">
         <div className="space-y-2">
-          <Label>任务描述</Label>
+          <Label>{t('batch.taskDescLabel')}</Label>
           <Textarea
             value={mdContent}
             onChange={(e) => setMdContent(e.target.value)}
-            placeholder="描述如何获取数据..."
+            placeholder={t('batch.taskDescPlaceholder')}
             rows={6}
             className="font-mono text-xs"
           />
         </div>
         <div className="flex flex-col gap-2 pt-6">
           <Button variant="outline" size="sm" onClick={handleLoadTemplate}>
-            加载模板
+            {t('batch.loadTemplate')}
           </Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>执行模板</Label>
+        <Label>{t('batch.execTemplateLabel')}</Label>
         <Input
           value={execTemplate}
           onChange={(e) => setExecTemplate(e.target.value)}
@@ -522,12 +521,12 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
           className="font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
-          使用 {'${field_name}'} 引用数据字段
+          {t('batch.fieldRef')}
         </p>
       </div>
 
       <div className="space-y-2">
-        <Label>环境变量（可选）</Label>
+        <Label>{t('batch.envVarsOptional')}</Label>
         <Textarea
           value={envVars}
           onChange={(e) => setEnvVars(e.target.value)}
@@ -539,7 +538,7 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>并发数</Label>
+          <Label>{t('batch.concurrencyLabel')}</Label>
           <Input
             type="number"
             min={1}
@@ -550,7 +549,7 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
           />
         </div>
         <div className="space-y-2">
-          <Label>定时间隔</Label>
+          <Label>{t('batch.cronInterval')}</Label>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -565,8 +564,8 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="minutes">分钟</SelectItem>
-                <SelectItem value="hours">小时</SelectItem>
+                <SelectItem value="minutes">{t('batch.minutes')}</SelectItem>
+                <SelectItem value="hours">{t('batch.hours')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -575,13 +574,13 @@ function NewTaskForm({ onCancel }: { onCancel: () => void }) {
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>
-          取消
+          {t('batch.cancel')}
         </Button>
         <Button
           onClick={handleCreate}
           disabled={!workspace || !skillName || !mdContent.trim()}
         >
-          创建任务
+          {t('batch.createTask')}
         </Button>
       </div>
     </div>
@@ -606,21 +605,21 @@ export function BatchTaskSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">智能任务</h3>
+          <h3 className="text-lg font-medium">{t('batch.smartTask')}</h3>
           <p className="text-sm text-muted-foreground">
-            根据任务描述实时生成任务代码
+            {t('batch.smartTaskDesc')}
           </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
           <Plus className="h-4 w-4 mr-2" />
-          新建任务
+          {t('batch.newTask')}
         </Button>
       </div>
 
       {error && (
         <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center justify-between">
           <span>{error}</span>
-          <Button variant="ghost" size="sm" onClick={clearError}>关闭</Button>
+          <Button variant="ghost" size="sm" onClick={clearError}>{t('common.close')}</Button>
         </div>
       )}
 
@@ -628,10 +627,10 @@ export function BatchTaskSettings() {
 
       <div className="space-y-6">
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">加载中...</div>
+          <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
         ) : tasks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            暂无智能任务，点击"新建任务"开始配置
+            {t('batch.emptyHint')}
           </div>
         ) : (() => {
           const grouped = new Map<string, BatchTask[]>();

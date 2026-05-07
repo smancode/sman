@@ -4,6 +4,7 @@ import { FolderOpen, ChevronRight, Loader2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { authFetch } from '@/lib/auth';
+import { t } from '@/locales';
 
 interface DirectoryEntry {
   name: string;
@@ -162,7 +163,7 @@ export function DirectorySelectorDialog({
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="flex items-center gap-2">
             <FolderOpen className="h-5 w-5 text-muted-foreground" />
-            <span className="font-medium">选择业务系统目录</span>
+            <span className="font-medium">{t('dir.selectDir')}</span>
           </div>
           <Button variant="ghost" size="sm" onClick={handleCancel}>
             ✕
@@ -198,7 +199,7 @@ export function DirectorySelectorDialog({
               <button
                 onClick={startEditing}
                 className="shrink-0 p-1 rounded hover:bg-muted/80 text-muted-foreground"
-                title="手动输入路径"
+                title={t('dir.manualInput')}
               >
                 <Pencil className="h-3 w-3" />
               </button>
@@ -218,7 +219,7 @@ export function DirectorySelectorDialog({
             </div>
           ) : entries.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              空目录
+              {t('dir.emptyDir')}
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -264,10 +265,10 @@ export function DirectorySelectorDialog({
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30">
           <Button variant="outline" size="sm" onClick={handleCancel}>
-            取消
+            {t('dir.cancel')}
           </Button>
           <Button size="sm" onClick={handleSelect}>
-            选择此目录
+            {t('dir.confirm')}
           </Button>
         </div>
       </div>

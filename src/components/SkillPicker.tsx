@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Wrench, Terminal, Route, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWsConnection } from '@/stores/ws-connection';
+import { t } from '@/locales';
+
 
 export interface Skill {
   id: string;
@@ -77,7 +79,7 @@ export function SkillPicker({ open, onClose, onSelect, sessionId, filter = '' }:
         setPaths(data.paths || []);
         setLoading(false);
       } else if (data.type === 'error' && data.sessionId === sessionId) {
-        setError(data.error || '加载失败');
+        setError(data.error || t('skill.loadFail'));
         setLoading(false);
       }
     };
@@ -173,10 +175,10 @@ export function SkillPicker({ open, onClose, onSelect, sessionId, filter = '' }:
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30 overflow-hidden">
         <Wrench className="h-4 w-4 text-muted-foreground shrink-0" />
         <span className="text-sm font-medium truncate">
-          {filter ? `筛选: ${filter}` : '选择命令'}
+          {filter ? `${t('skill.filter')}: ${filter}` : t('skill.selectCommand')}
         </span>
         <span className="text-xs text-muted-foreground ml-auto shrink-0">
-          ↑↓ 选择 · Enter 确认 · Esc 取消
+          ↑↓ {t('skill.keyHint')}
         </span>
       </div>
 
@@ -189,7 +191,7 @@ export function SkillPicker({ open, onClose, onSelect, sessionId, filter = '' }:
           <div className="px-3 py-4 text-sm text-destructive text-center">{error}</div>
         ) : allItems.length === 0 ? (
           <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-            {filter ? '没有匹配项' : '暂无可选项'}
+            {filter ? t('skill.noMatch') : t('skill.noItems')}
           </div>
         ) : (
           groupedItems.map((group) => {

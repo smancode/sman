@@ -68,7 +68,7 @@ function BackendStatusBar() {
   const isLocal = !url;
   const statusColor = status === 'connected' ? 'bg-green-500' : 'bg-yellow-500';
   const label = isLocal
-    ? '本机'
+    ? t('session.local')
     : alias
       ? `${alias} (${address})`
       : address;
@@ -134,7 +134,7 @@ const SessionItem = memo(function SessionItem({
       onMouseLeave={() => setHovered(false)}
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate flex-1 min-w-0">{session.label || '新会话'}</span>
+      <span className="truncate flex-1 min-w-0">{session.label || t('session.newSession')}</span>
       <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'hidden')}>
         {!isChatbot && (
           <button
@@ -144,7 +144,7 @@ const SessionItem = memo(function SessionItem({
               'text-muted-foreground hover:text-primary',
             )}
             onClick={handleDuplicate}
-            title="复制会话"
+            title={t('session.copySession')}
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
@@ -358,7 +358,7 @@ export function SessionTree() {
       loadSessions(); // non-blocking background sync
     } catch (err) {
       console.error('[SessionTree] Failed to duplicate session:', err);
-      alert(`复制会话失败: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`${t('session.copyFail')}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -375,7 +375,7 @@ export function SessionTree() {
       loadSessions(); // non-blocking background sync
     } catch (err) {
       console.error('[SessionTree] Failed to create session:', err);
-      alert(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`${t('session.createFail')}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -410,8 +410,8 @@ export function SessionTree() {
           <div className="p-2 pt-1">
             {systems.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
-                <p>暂无会话</p>
-                <p className="text-xs mt-1">点击上方按钮创建新会话</p>
+                <p>{t('session.noSessions')}</p>
+                <p className="text-xs mt-1">{t('session.createHint')}</p>
               </div>
             ) : (
               systems.map((system) => (

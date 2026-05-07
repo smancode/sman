@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useChatStore } from '../../stores/chat';
+import { t } from '@/locales';
+
 
 /** All card types auto-dismiss after 5s — init is background work, don't bother the user */
 const AUTO_DISMISS_MS = 5000;
@@ -34,12 +36,12 @@ export function InitBanner() {
         <>
           <span className="text-lg animate-spin">&#9676;</span>
           <div className="flex-1">
-            <div className="font-medium text-sm">项目初始化中</div>
+            <div className="font-medium text-sm">{t('chat.init.title')}</div>
             <div className="text-xs text-gray-400 mt-1">
-              {initCard.phase === 'scanning' && '正在扫描项目结构...'}
-              {initCard.phase === 'matching' && '正在分析并匹配最佳能力...'}
-              {initCard.phase === 'injecting' && '正在注入能力...'}
-              {!initCard.phase && '正在初始化...'}
+              {initCard.phase === 'scanning' && t('chat.init.scanning')}
+              {initCard.phase === 'matching' && t('chat.init.matching')}
+              {initCard.phase === 'injecting' && t('chat.init.injecting')}
+              {!initCard.phase && t('chat.init.default')}
             </div>
           </div>
         </>
@@ -49,7 +51,7 @@ export function InitBanner() {
         <>
           <span className="text-lg">&#10003;</span>
           <div className="flex-1">
-            <div className="font-medium text-sm">项目初始化完成</div>
+            <div className="font-medium text-sm">{t('chat.init.complete')}</div>
             {initCard.projectSummary && (
               <div className="text-xs mt-1">
                 <span className="font-medium">{initCard.projectSummary}</span>
@@ -60,7 +62,7 @@ export function InitBanner() {
             )}
             {initCard.injectedSkills && initCard.injectedSkills.length > 0 && (
               <div className="text-xs text-gray-500 mt-1">
-                已加载 {initCard.injectedSkills.length} 个能力:
+                {t('chat.init.loadedSkills')} {initCard.injectedSkills.length} {t('chat.init.skills')}
                 {' ' + initCard.injectedSkills.map(s => s.name).join(', ')}
               </div>
             )}
@@ -72,7 +74,7 @@ export function InitBanner() {
         <>
           <span className="text-lg">&#9888;</span>
           <div className="flex-1">
-            <div className="font-medium text-sm">初始化失败</div>
+            <div className="font-medium text-sm">{t('chat.init.failed')}</div>
             <div className="text-xs text-gray-500">{initCard.error}</div>
           </div>
         </>

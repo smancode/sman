@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { BatchTaskSettings } from '@/features/settings/BatchTaskSettings';
 import { useBatchStore } from '@/stores/batch';
 import { useWsConnection } from '@/stores/ws-connection';
+import { t } from '@/locales';
 
 export function BatchTasksPage() {
   const navigate = useNavigate();
@@ -90,10 +91,10 @@ export function BatchTasksPage() {
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
         >
           <ChevronLeft className="h-4 w-4" />
-          返回
+          {t('batchTask.back')}
         </button>
         {groups.length === 0 && (
-          <div className="text-xs text-muted-foreground px-3 py-2">暂无业务系统</div>
+          <div className="text-xs text-muted-foreground px-3 py-2">{t('batchTask.noSystems')}</div>
         )}
         {groups.map(([name]) => (
           <button

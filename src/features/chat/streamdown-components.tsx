@@ -7,6 +7,8 @@
 
 import { useEffect, useRef } from 'react';
 import type { Components } from 'streamdown';
+import { t } from '@/locales';
+
 
 /** Custom components for Streamdown — clean table rendering without the wrapper */
 export const streamdownComponents: Components = {
@@ -93,19 +95,19 @@ export function applyCodeBlockCollapse(container: HTMLElement | null) {
       // Create toggle button
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'code-collapse-toggle';
-      toggleBtn.title = '展开全部';
+      toggleBtn.title = t('streamdown.expandAll');
       toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
       toggleBtn.addEventListener('click', () => {
         const isCollapsed = target.dataset.collapsed === 'true';
         if (isCollapsed) {
           target.dataset.collapsed = 'false';
           target.style.maxHeight = 'none';
-          toggleBtn.title = '收起';
+          toggleBtn.title = t('streamdown.collapse');
           toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>';
         } else {
           target.dataset.collapsed = 'true';
           target.style.maxHeight = `${COLLAPSED_MAX_HEIGHT}px`;
-          toggleBtn.title = '展开全部';
+          toggleBtn.title = t('streamdown.expandAll');
           toggleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
         }
       });

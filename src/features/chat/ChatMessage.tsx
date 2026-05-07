@@ -16,6 +16,8 @@ import type { Message, AttachedFileMeta } from '@/stores/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, getToolDisplayName, formatToolSummary, buildContent, safeTimestamp } from './message-utils';
 import { useCodePlugin } from '@/lib/streamdown-plugins';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
+import { t } from '@/locales';
+
 
 interface ChatMessageProps {
   id?: string;
@@ -459,7 +461,7 @@ function ThinkingBlock({ content }: { content: string }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-        <span className="font-medium shrink-0">思考</span>
+        <span className="font-medium shrink-0">{t('chat.thinking')}</span>
         {!expanded && summary && (
           <span className="truncate min-w-0 flex-1 opacity-60">{summary}</span>
         )}
@@ -511,7 +513,7 @@ function FileCard({ file }: { file: AttachedFileMeta }) {
       <div className="min-w-0 overflow-hidden">
         <p className="text-xs font-medium truncate">{file.fileName}</p>
         <p className="text-[10px] text-muted-foreground">
-          {file.fileSize > 0 ? formatFileSize(file.fileSize) : '文件'}
+          {file.fileSize > 0 ? formatFileSize(file.fileSize) : t('chat.file')}
         </p>
       </div>
     </div>
@@ -632,7 +634,7 @@ function ImageLightbox({
             size="icon"
             className="h-8 w-8 bg-white/10 hover:bg-white/20 text-white"
             onClick={onClose}
-            title="关闭"
+            title={t('chat.close')}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -659,7 +661,7 @@ function CollapsedToolSummary({ tools }: { tools: Array<{ id?: string; name: str
         onClick={() => setExpanded(!expanded)}
       >
         <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-        <span>{tools.length} 个工具调用</span>
+        <span>{tools.length} {t('chat.toolCalls')}</span>
         <span className="flex gap-1 flex-wrap">
           {uniqueNames.map(name => (
             <span key={name} className="px-1 py-0.5 bg-muted rounded text-[11px] font-mono">{name}</span>

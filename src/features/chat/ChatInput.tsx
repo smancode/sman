@@ -510,7 +510,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>上传文件</p>
+              <p>{t('chat.uploadFile')}</p>
             </TooltipContent>
           </Tooltip>
 
@@ -530,7 +530,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{showThinking ? '隐藏思考与工具' : '显示思考与工具'}</p>
+              <p>{showThinking ? t('chat.hideThinking') : t('chat.showThinking')}</p>
             </TooltipContent>
           </Tooltip>
 
@@ -550,7 +550,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{autoConfirm ? 'AUTO 模式：自动确认所有提问' : '开启 AUTO 模式'}</p>
+              <p>{autoConfirm ? t('chat.autoMode.desc') : t('chat.autoMode.enable')}</p>
             </TooltipContent>
           </Tooltip>
 
@@ -568,7 +568,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>刷新</p>
+              <p>{t('chat.refresh')}</p>
             </TooltipContent>
           </Tooltip>
 

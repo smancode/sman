@@ -5,6 +5,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGitStore } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
+import { t } from '@/locales';
 
 declare global {
   interface Window {
@@ -82,7 +83,7 @@ export function Titlebar() {
               const sessionId = useChatStore.getState().currentSessionId;
               useCodeViewerStore.getState().openViewer(workspace, '', null, sessionId);
             }}
-            title="点击打开代码浏览器"
+            title={t('titlebar.codeBrowser')}
           >
             {workspace}
           </span>
@@ -92,7 +93,7 @@ export function Titlebar() {
               <span
                 className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded hover:bg-[hsl(var(--muted))] cursor-pointer transition-colors"
                 onClick={() => useGitStore.getState().openPanel()}
-                title="点击打开 Git 管理"
+                title={t('titlebar.git')}
               >
                 <GitBranch className="w-3 h-3" />
                 <span>{gitBranch}</span>

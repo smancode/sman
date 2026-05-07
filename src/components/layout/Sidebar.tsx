@@ -200,7 +200,7 @@ export function Sidebar() {
               hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
             )}
             onClick={() => setPinned((p) => !p)}
-            title={pinned ? '取消固定' : '固定展开'}
+            title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
           >
             <Pin
               className={cn('h-3.5 w-3.5', pinned && 'text-foreground rotate-45')}
@@ -219,10 +219,10 @@ export function Sidebar() {
             )}
             title={
               connectionStatus === 'connected'
-                ? '已连接'
+                ? t('sidebar.connected')
                 : connectionStatus === 'connecting'
-                  ? '连接中...'
-                  : '未连接'
+                  ? t('sidebar.connecting')
+                  : t('sidebar.disconnected')
             }
           />
 
@@ -232,7 +232,7 @@ export function Sidebar() {
             size="icon"
             className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-lg"
             onClick={toggleTheme}
-            title={theme === 'light' ? '深色模式' : '浅色模式'}
+            title={theme === 'light' ? t('sidebar.darkMode') : t('sidebar.lightMode')}
           >
             {theme === 'light' ? (
               <Moon className="h-[18px] w-[18px]" />

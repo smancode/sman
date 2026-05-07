@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import { getToolDisplayName, formatToolSummary } from './message-utils';
 import { CodeViewerProvider } from '@/features/code-viewer';
+import { t } from '@/locales';
 
 
 // ── Module-level: 记住每个会话的滚动比例 ──
@@ -409,7 +410,7 @@ function ThinkingBlock({ content }: { content: string }) {
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-        <span className="font-medium shrink-0">思考</span>
+        <span className="font-medium shrink-0">{t('chat.thinking2')}</span>
         {!expanded && summary && (
           <span className="truncate min-w-0 flex-1 opacity-60">{summary}</span>
         )}
@@ -535,12 +536,12 @@ function WelcomeScreen() {
     <div className="relative flex flex-col items-center justify-center text-center h-full overflow-hidden">
       <div className="relative z-10 text-center px-8">
         <h1 className="text-4xl md:text-5xl tracking-wide">
-          <span className="font-light italic text-foreground/80">欢迎使用</span>{' '}
+          <span className="font-light italic text-foreground/80">{t('chat.welcome2')}</span>{' '}
           <span className="font-black not-italic text-foreground">Sman</span>
         </h1>
         <div className="flex items-center justify-center gap-2 mt-6">
-          <span className="hint-chip">选择业务系统</span>
-          <span className="hint-chip">开始对话</span>
+          <span className="hint-chip">{t('chat.selectSystem2')}</span>
+          <span className="hint-chip">{t('chat.startChat2')}</span>
         </div>
       </div>
 
@@ -657,7 +658,7 @@ function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => vo
               {error.errorCode === 'unknown' && error.rawError && (
                 <details className="mt-1.5">
                   <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                    查看详情
+                    {t('chat.viewDetail2')}
                   </summary>
                   <pre className="text-[11px] text-foreground/60 whitespace-pre-wrap break-all mt-1 font-mono leading-relaxed max-h-32 overflow-y-auto">
                     {error.rawError.slice(0, 300)}{error.rawError.length > 300 ? '...' : ''}

@@ -64,8 +64,8 @@
     "context": "添加附件按钮文字"
   },
   "chat.thinking": {
-    "text": "思考中...",
-    "context": "AI 思考中的状态指示器"
+    "text": "思考",
+    "context": "思考标签"
   },
   "settings.title": {
     "text": "设置",
@@ -1986,5 +1986,641 @@
   "stardom.activityFeed.hint": {
     "text": "Agent 活动将实时显示在此",
     "context": "活动 Feed 提示"
+  },
+  "batch.status.draft": {
+    "text": "草稿",
+    "context": "批量任务状态-草稿"
+  },
+  "batch.status.generating": {
+    "text": "生成中",
+    "context": "批量任务状态-生成中"
+  },
+  "batch.status.generated": {
+    "text": "已生成",
+    "context": "批量任务状态-已生成"
+  },
+  "batch.status.testing": {
+    "text": "测试中",
+    "context": "批量任务状态-测试中"
+  },
+  "batch.status.tested": {
+    "text": "测试通过",
+    "context": "批量任务状态-测试通过"
+  },
+  "batch.status.saved": {
+    "text": "已保存",
+    "context": "批量任务状态-已保存"
+  },
+  "batch.status.queued": {
+    "text": "排队中",
+    "context": "批量任务状态-排队中"
+  },
+  "batch.status.running": {
+    "text": "执行中",
+    "context": "批量任务状态-执行中"
+  },
+  "batch.status.paused": {
+    "text": "已暂停",
+    "context": "批量任务状态-已暂停"
+  },
+  "batch.status.completed": {
+    "text": "已完成",
+    "context": "批量任务状态-已完成"
+  },
+  "batch.status.failed": {
+    "text": "失败",
+    "context": "批量任务状态-失败"
+  },
+  "batch.confirmDelete": {
+    "text": "确定要删除这个任务吗？",
+    "context": "批量任务删除确认"
+  },
+  "batch.successFail": {
+    "text": "{success} 成功 / {failed} 失败",
+    "context": "成功/失败统计"
+  },
+  "batch.everyMinutes": {
+    "text": "每 {minutes} 分钟",
+    "context": "每N分钟"
+  },
+  "batch.generate": {
+    "text": "生成代码",
+    "context": "生成代码按钮"
+  },
+  "batch.test": {
+    "text": "测试",
+    "context": "测试按钮"
+  },
+  "batch.testing": {
+    "text": "测试中...",
+    "context": "测试中状态"
+  },
+  "batch.save": {
+    "text": "保存",
+    "context": "保存按钮"
+  },
+  "batch.execute": {
+    "text": "执行",
+    "context": "执行按钮"
+  },
+  "batch.continue": {
+    "text": "继续",
+    "context": "继续按钮"
+  },
+  "batch.pause": {
+    "text": "暂停",
+    "context": "暂停按钮"
+  },
+  "batch.cancel": {
+    "text": "取消",
+    "context": "取消按钮"
+  },
+  "batch.reExecute": {
+    "text": "重新执行",
+    "context": "重新执行按钮"
+  },
+  "batch.retryFailed": {
+    "text": "重试失败",
+    "context": "重试失败按钮"
+  },
+  "batch.edit": {
+    "text": "编辑",
+    "context": "编辑按钮"
+  },
+  "batch.delete": {
+    "text": "删除",
+    "context": "删除按钮"
+  },
+  "batch.businessSystem": {
+    "text": "业务系统：",
+    "context": "业务系统标签"
+  },
+  "batch.concurrency": {
+    "text": "并发数：",
+    "context": "并发数标签"
+  },
+  "batch.createdAt": {
+    "text": "创建时间：",
+    "context": "创建时间标签"
+  },
+  "batch.startedAt": {
+    "text": "开始执行：",
+    "context": "开始执行标签"
+  },
+  "chat.initFailed": {
+    "text": "初始化失败",
+    "context": "初始化失败标题"
+  },
+  "chat.autoMode.desc": {
+    "text": "AUTO 模式：自动确认所有提问",
+    "context": "AUTO 模式描述"
+  },
+  "chat.autoMode.enable": {
+    "text": "开启 AUTO 模式",
+    "context": "开启 AUTO 模式"
+  },
+  "chat.copyFail": {
+    "text": "复制会话失败",
+    "context": "复制会话失败"
+  },
+  "chat.createFail": {
+    "text": "创建会话失败",
+    "context": "创建会话失败"
+  },
+  "chat.loadFail": {
+    "text": "加载失败",
+    "context": "加载失败"
+  },
+  "batch.finishedAt": {
+    "text": "结束执行：",
+    "context": "结束执行标签"
+  },
+  "batch.scheduledExec": {
+    "text": "定时执行：",
+    "context": "定时执行标签"
+  },
+  "batch.scheduledEnabled": {
+    "text": "已启用，每 {minutes} 分钟执行一次",
+    "context": "定时已启用"
+  },
+  "batch.scheduledPreset": {
+    "text": "未启用（预设间隔 {minutes} 分钟）",
+    "context": "定时预设"
+  },
+  "batch.scheduledDisabled": {
+    "text": "未启用",
+    "context": "定时未启用"
+  },
+  "batch.taskDesc": {
+    "text": "任务描述",
+    "context": "任务描述标签"
+  },
+  "batch.execTemplate": {
+    "text": "执行模板：",
+    "context": "执行模板标签"
+  },
+  "batch.envVars": {
+    "text": "环境变量",
+    "context": "环境变量标签"
+  },
+  "batch.genCode": {
+    "text": "生成代码",
+    "context": "生成代码标签"
+  },
+  "batch.concurrencyLabel": {
+    "text": "并发数",
+    "context": "并发数标签"
+  },
+  "batch.cronInterval": {
+    "text": "定时间隔",
+    "context": "定时间隔标签"
+  },
+  "batch.minutes": {
+    "text": "分钟",
+    "context": "分钟单位"
+  },
+  "batch.hours": {
+    "text": "小时",
+    "context": "小时单位"
+  },
+  "batch.selectBusinessSystem": {
+    "text": "选择业务系统",
+    "context": "选择业务系统占位"
+  },
+  "batch.selectSkill": {
+    "text": "选择 Skill",
+    "context": "选择 Skill 占位"
+  },
+  "batch.taskDescLabel": {
+    "text": "任务描述",
+    "context": "任务描述标签"
+  },
+  "batch.taskDescPlaceholder": {
+    "text": "描述如何获取数据...",
+    "context": "任务描述占位"
+  },
+  "batch.loadTemplate": {
+    "text": "加载模板",
+    "context": "加载模板按钮"
+  },
+  "batch.execTemplateLabel": {
+    "text": "执行模板",
+    "context": "执行模板标签"
+  },
+  "batch.fieldRef": {
+    "text": "使用 ${field_name} 引用数据字段",
+    "context": "字段引用提示"
+  },
+  "batch.mdTemplateTitle": {
+    "text": "# 数据获取配置",
+    "context": "MD模板标题"
+  },
+  "batch.mdDataSource": {
+    "text": "## 数据源\n描述数据来源和连接方式",
+    "context": "MD模板数据源"
+  },
+  "batch.mdDataFormat": {
+    "text": "## 数据格式\n描述返回的 JSON 数组格式",
+    "context": "MD模板数据格式"
+  },
+  "batch.mdExecTemplate": {
+    "text": "## 执行模板",
+    "context": "MD模板执行模板"
+  },
+  "batch.businessSystemLabel": {
+    "text": "业务系统",
+    "context": "业务系统标签"
+  },
+  "batch.envVarsOptional": {
+    "text": "环境变量（可选）",
+    "context": "环境变量可选标签"
+  },
+  "batch.createTask": {
+    "text": "创建任务",
+    "context": "创建任务按钮"
+  },
+  "batch.smartTask": {
+    "text": "智能任务",
+    "context": "智能任务标题"
+  },
+  "batch.smartTaskDesc": {
+    "text": "根据任务描述实时生成任务代码",
+    "context": "智能任务描述"
+  },
+  "batch.newTask": {
+    "text": "新建任务",
+    "context": "新建任务按钮"
+  },
+  "batch.loading": {
+    "text": "加载中...",
+    "context": "加载中"
+  },
+  "batch.emptyHint": {
+    "text": "暂无智能任务，点击\"新建任务\"开始配置",
+    "context": "空列表提示"
+  },
+  "chat.init.title": {
+    "text": "项目初始化中",
+    "context": "初始化中标题"
+  },
+  "chat.init.scanning": {
+    "text": "正在扫描项目结构...",
+    "context": "扫描阶段"
+  },
+  "chat.init.matching": {
+    "text": "正在分析并匹配最佳能力...",
+    "context": "匹配阶段"
+  },
+  "chat.init.injecting": {
+    "text": "正在注入能力...",
+    "context": "注入阶段"
+  },
+  "chat.init.default": {
+    "text": "正在初始化...",
+    "context": "默认初始化"
+  },
+  "chat.init.complete": {
+    "text": "项目初始化完成",
+    "context": "初始化完成标题"
+  },
+  "chat.init.loadedSkills": {
+    "text": "已加载",
+    "context": "已加载N个能力前缀"
+  },
+  "chat.init.skills": {
+    "text": "个能力:",
+    "context": "能力数量后缀"
+  },
+  "chat.init.failed": {
+    "text": "初始化失败",
+    "context": "初始化失败标题"
+  },
+  "chat.welcome": {
+    "text": "欢迎使用",
+    "context": "欢迎语"
+  },
+  "chat.selectSystem": {
+    "text": "选择业务系统",
+    "context": "欢迎提示-选择系统"
+  },
+  "chat.startChat": {
+    "text": "开始对话",
+    "context": "欢迎提示-开始对话"
+  },
+  "chat.viewDetail": {
+    "text": "查看详情",
+    "context": "查看详情"
+  },
+  "chat.file": {
+    "text": "文件",
+    "context": "文件标签"
+  },
+  "chat.close": {
+    "text": "关闭",
+    "context": "关闭按钮"
+  },
+  "chat.toolCalls": {
+    "text": "个工具调用",
+    "context": "工具调用数量后缀"
+  },
+  "chat.uploadFile": {
+    "text": "上传文件",
+    "context": "上传文件按钮"
+  },
+  "chat.showThinking": {
+    "text": "显示思考与工具",
+    "context": "显示思考按钮"
+  },
+  "chat.hideThinking": {
+    "text": "隐藏思考与工具",
+    "context": "隐藏思考按钮"
+  },
+  "chat.refresh": {
+    "text": "刷新",
+    "context": "刷新按钮"
+  },
+  "session.local": {
+    "text": "本机",
+    "context": "本机标签"
+  },
+  "session.newSession": {
+    "text": "新会话",
+    "context": "新会话默认名"
+  },
+  "session.copySession": {
+    "text": "复制会话",
+    "context": "复制会话按钮"
+  },
+  "session.copyFail": {
+    "text": "复制会话失败",
+    "context": "复制失败"
+  },
+  "session.createFail": {
+    "text": "创建会话失败",
+    "context": "创建失败"
+  },
+  "session.noSessions": {
+    "text": "暂无会话",
+    "context": "无会话提示"
+  },
+  "session.createHint": {
+    "text": "点击上方按钮创建新会话",
+    "context": "创建会话引导"
+  },
+  "sidebar.sessions": {
+    "text": "会话",
+    "context": "会话导航"
+  },
+  "sidebar.stardom": {
+    "text": "协作星图",
+    "context": "协作星图导航"
+  },
+  "sidebar.cron": {
+    "text": "定时任务",
+    "context": "定时任务导航"
+  },
+  "sidebar.smartpath": {
+    "text": "地球路径",
+    "context": "地球路径导航"
+  },
+  "sidebar.settings": {
+    "text": "设置",
+    "context": "设置导航"
+  },
+  "userProfile.title": {
+    "text": "用户画像",
+    "context": "用户画像标题"
+  },
+  "userProfile.desc": {
+    "text": "自动学习你的偏好和习惯，让助手越用越懂你",
+    "context": "用户画像描述"
+  },
+  "userProfile.enable": {
+    "text": "启用用户画像",
+    "context": "启用标签"
+  },
+  "userProfile.hint": {
+    "text": "每次对话后自动分析，积累你的偏好画像",
+    "context": "启用提示"
+  },
+  "userProfile.enabled": {
+    "text": "画像功能已开启。助手会在每次对话后自动更新画像，并在下次对话中参考。",
+    "context": "已开启说明"
+  },
+  "userProfile.file": {
+    "text": "画像文件：",
+    "context": "画像文件标签"
+  },
+  "userProfile.disabled": {
+    "text": "画像功能已关闭。助手不会自动学习你的偏好。",
+    "context": "已关闭说明"
+  },
+  "dir.title": {
+    "text": "选择项目目录",
+    "context": "目录选择标题"
+  },
+  "dir.recent": {
+    "text": "最近使用",
+    "context": "最近使用"
+  },
+  "dir.noRecent": {
+    "text": "暂无最近使用的目录",
+    "context": "无最近目录"
+  },
+  "skill.loadFail": {
+    "text": "加载失败",
+    "context": "加载失败"
+  },
+  "ask.title": {
+    "text": "助手提问",
+    "context": "助手提问标题"
+  },
+  "ask.reply": {
+    "text": "回复",
+    "context": "回复按钮"
+  },
+  "streamdown.thinking": {
+    "text": "思考",
+    "context": "思考标签"
+  },
+  "streamdown.toolCalls": {
+    "text": "个工具调用",
+    "context": "工具调用后缀"
+  },
+  "toolbar.upload": {
+    "text": "上传文件",
+    "context": "上传按钮"
+  },
+  "toolbar.refresh": {
+    "text": "刷新",
+    "context": "刷新按钮"
+  },
+  "batchPage.title": {
+    "text": "智能任务",
+    "context": "智能任务页面标题"
+  },
+  "batchPage.desc": {
+    "text": "批量执行自动化任务",
+    "context": "智能任务页面描述"
+  },
+  "settings.sections.llm": {
+    "text": "模型配置",
+    "context": "模型配置导航"
+  },
+  "settings.sections.backend": {
+    "text": "后端连接",
+    "context": "后端连接导航"
+  },
+  "settings.sections.chatbot": {
+    "text": "Bot 机器人设置",
+    "context": "Bot设置导航"
+  },
+  "settings.sections.websearch": {
+    "text": "网络搜索配置",
+    "context": "搜索配置导航"
+  },
+  "settings.sections.stardom": {
+    "text": "星域配置",
+    "context": "星域配置导航"
+  },
+  "settings.sections.language": {
+    "text": "语言设置",
+    "context": "语言设置导航"
+  },
+  "settings.sections.community": {
+    "text": "加入社群",
+    "context": "加入社群导航"
+  },
+  "streamdown.expandAll": {
+    "text": "展开全部",
+    "context": "展开全部"
+  },
+  "streamdown.collapse": {
+    "text": "收起",
+    "context": "收起"
+  },
+  "chat.thinking2": {
+    "text": "思考",
+    "context": "思考标签"
+  },
+  "chat.welcome2": {
+    "text": "欢迎使用",
+    "context": "欢迎"
+  },
+  "chat.selectSystem2": {
+    "text": "选择业务系统",
+    "context": "选择系统"
+  },
+  "chat.startChat2": {
+    "text": "开始对话",
+    "context": "开始对话"
+  },
+  "chat.viewDetail2": {
+    "text": "查看详情",
+    "context": "查看详情"
+  },
+  "ask.answered": {
+    "text": "已回答",
+    "context": "已回答"
+  },
+  "ask.wantMore": {
+    "text": "Claude 想了解更多",
+    "context": "想了解更多"
+  },
+  "ask.other": {
+    "text": "其他...",
+    "context": "其他占位符"
+  },
+  "ask.submit": {
+    "text": "提交回答",
+    "context": "提交按钮"
+  },
+  "dir.selectDir": {
+    "text": "选择业务系统目录",
+    "context": "选择目录标题"
+  },
+  "dir.manualInput": {
+    "text": "手动输入路径",
+    "context": "手动输入提示"
+  },
+  "dir.emptyDir": {
+    "text": "空目录",
+    "context": "空目录标签"
+  },
+  "dir.cancel": {
+    "text": "取消",
+    "context": "取消按钮"
+  },
+  "dir.confirm": {
+    "text": "选择此目录",
+    "context": "确认按钮"
+  },
+  "sidebar.unpin": {
+    "text": "取消固定",
+    "context": "取消固定"
+  },
+  "sidebar.pin": {
+    "text": "固定展开",
+    "context": "固定展开"
+  },
+  "sidebar.connected": {
+    "text": "已连接",
+    "context": "已连接"
+  },
+  "sidebar.connecting": {
+    "text": "连接中...",
+    "context": "连接中"
+  },
+  "sidebar.disconnected": {
+    "text": "未连接",
+    "context": "未连接"
+  },
+  "sidebar.darkMode": {
+    "text": "深色模式",
+    "context": "深色模式"
+  },
+  "sidebar.lightMode": {
+    "text": "浅色模式",
+    "context": "浅色模式"
+  },
+  "skill.filter": {
+    "text": "筛选",
+    "context": "筛选"
+  },
+  "skill.selectCommand": {
+    "text": "选择命令",
+    "context": "选择命令"
+  },
+  "skill.keyHint": {
+    "text": "选择 · Enter 确认 · Esc 取消",
+    "context": "快捷键提示"
+  },
+  "skill.noMatch": {
+    "text": "没有匹配项",
+    "context": "无匹配"
+  },
+  "skill.noItems": {
+    "text": "暂无可选项",
+    "context": "无可选项"
+  },
+  "llm.defaultProfile": {
+    "text": "默认",
+    "context": "默认配置名"
+  },
+  "batchTask.back": {
+    "text": "返回",
+    "context": "返回按钮"
+  },
+  "batchTask.noSystems": {
+    "text": "暂无业务系统",
+    "context": "无系统提示"
+  },
+  "titlebar.codeBrowser": {
+    "text": "点击打开代码浏览器",
+    "context": "代码浏览器提示"
+  },
+  "titlebar.git": {
+    "text": "点击打开 Git 管理",
+    "context": "Git管理提示"
   }
 }

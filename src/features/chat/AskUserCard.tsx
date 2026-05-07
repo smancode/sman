@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
+import { t } from '@/locales';
 
 interface QuestionData {
   question: string;
@@ -53,7 +54,7 @@ export function AskUserCard({ askId, questions, answered, answers }: AskUserCard
       <div className="w-full rounded-lg border border-border bg-muted/30 p-3 space-y-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Check className="h-4 w-4 text-green-500" />
-          <span className="font-medium">已回答</span>
+          <span className="font-medium">{t('ask.answered')}</span>
         </div>
         {questions.map((q, i) => (
           <div key={i} className="text-sm">
@@ -71,7 +72,7 @@ export function AskUserCard({ askId, questions, answered, answers }: AskUserCard
     <div className="w-full rounded-lg border border-primary/30 bg-card p-4 space-y-4 shadow-sm">
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         <MessageCircleQuestion className="h-4 w-4 text-primary" />
-        <span>Claude 想了解更多</span>
+        <span>{t('ask.wantMore')}</span>
       </div>
 
       {questions.map((q, qIndex) => (
@@ -98,7 +99,7 @@ export function AskUserCard({ askId, questions, answered, answers }: AskUserCard
             })}
           </div>
           <Input
-            placeholder="其他..."
+            placeholder={t('ask.other')}
             value={otherTexts[qIndex] ?? ''}
             onChange={e => setOtherTexts(prev => ({ ...prev, [qIndex]: e.target.value }))}
             className="h-8 text-xs"
@@ -108,7 +109,7 @@ export function AskUserCard({ askId, questions, answered, answers }: AskUserCard
 
       <Button size="sm" onClick={handleSubmit} className="w-full">
         <Send className="h-3.5 w-3.5 mr-1.5" />
-        提交回答
+        {t('ask.submit')}
       </Button>
     </div>
   );
