@@ -276,17 +276,28 @@ function ImagePanel({ file, workspace }: { file: BinaryFileInfo; workspace: stri
 
 // ── MarkdownPreview ─────────────────────────────────────────────────
 
+const FRONTMATTER_RE = /^(---)\r?\n([\s\S]*?)\r?\n\1\r?\n/;
+
 function MarkdownPreview({ content }: { content: string }) {
   const codePlugin = useCodePlugin();
+  const match = content.match(FRONTMATTER_RE);
+  const frontmatter = match ? match[2] : null;
+  const body = match ? content.slice(match[0].length) : content;
+
   return (
     <div className="px-6 py-4 prose prose-sm dark:prose-invert max-w-none break-words text-foreground">
+      {frontmatter && (
+        <pre className="not-prose text-[12px] leading-relaxed bg-[hsl(var(--muted))] rounded-md px-3 py-2 mb-4 overflow-x-auto font-mono text-muted-foreground border border-[hsl(var(--border))]">
+          {frontmatter}
+        </pre>
+      )}
       <Streamdown
         mode="static"
         components={streamdownComponents}
         controls={{ code: true, table: true }}
         plugins={codePlugin ? { code: codePlugin } : undefined}
       >
-        {content}
+        {body}
       </Streamdown>
     </div>
   );

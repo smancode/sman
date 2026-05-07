@@ -341,7 +341,7 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
           className="text-[13px] text-muted-foreground hover:text-[hsl(var(--foreground))] transition-colors"
           onClick={onClose}
         >
-          ← {t("codeviewer.backToSession")}
+          {t("codeviewer.backToSession")}
         </button>
         <span className="text-[13px] text-muted-foreground/60">|</span>
         <span className="text-[13px] font-medium truncate">{workspaceName}</span>
