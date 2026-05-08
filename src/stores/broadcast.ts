@@ -25,7 +25,8 @@ function saveReadIds(ids: Set<string>): void {
   } catch {}
 }
 
-function handleBroadcastsResponse(msg: Record<string, unknown>) {
+function handleBroadcastsResponse(...args: unknown[]) {
+  const msg = args[0] as Record<string, unknown>;
   if (msg?.type !== 'hub:broadcasts' || !Array.isArray(msg?.data)) return;
   const { readIds } = useBroadcastStore.getState();
   const unread = (msg.data as BroadcastMessage[]).filter(m => !readIds.has(m.id));

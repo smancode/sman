@@ -11,8 +11,8 @@ import enUS from './en-US.json';
 type LocaleDict = Record<string, { text: string; context?: string }>;
 
 const translations: Record<string, LocaleDict> = {
-  'zh-CN': zhCN as LocaleDict,
-  'en-US': enUS as LocaleDict,
+  'zh-CN': zhCN as unknown as LocaleDict,
+  'en-US': enUS as unknown as LocaleDict,
 };
 
 interface LocaleState {
@@ -62,16 +62,17 @@ export function setLocale(locale: string) {
   console.log(`[i18n] Language switched to: ${locale}`);
 }
 
-export function t(key: string): string {
+export function t(key: string, params?: Record<string, string>): string {
   const currentLocale = useLocaleStore.getState().locale;
 
-  const dict = translations[currentLocale];
-  if (dict?.[key]?.text) {
-    return dict[key].text;
-  }
-
-  if (translations['zh-CN']?.[key]?.text) {
-    return translations['zh-CN'][key].text;
+  let text = translations[currentLocale]?.[key]?.text || translations['zh-CN']?.[key]?.text;
+  if (text) {
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        text = text.replace(`\${${k}}`, v);
+      }
+    }
+    return text;
   }
 
   console.error(`[i18n] Missing key: "${key}"`);
