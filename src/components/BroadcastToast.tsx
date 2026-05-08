@@ -20,6 +20,7 @@ export function BroadcastToast() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4">
         <h3 className="font-semibold text-sm">{current.title || t('hub.broadcast.title')}</h3>
         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{current.body}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{new Date(current.createdAt).toLocaleString()}</p>
         <button
           onClick={() => dismiss(current.id)}
           className="mt-2 text-xs text-blue-500 hover:text-blue-600"
