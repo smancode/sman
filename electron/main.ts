@@ -299,8 +299,8 @@ async function ensureHubConfig(homeDir: string): Promise<void> {
     // config.json doesn't exist yet, server will create it
   }
 
-  // Enterprise build: auto-enable hub when build-time vars are injected
-  if (INJECTED_HUB_URL && INJECTED_PSK) {
+  // Enterprise build: auto-enable hub when HUB_URL is injected (PSK has built-in fallback)
+  if (INJECTED_HUB_URL) {
     if (!config.hub?.enabled) {
       config.hub = { ...config.hub, serverUrl: INJECTED_HUB_URL, enabled: true };
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));

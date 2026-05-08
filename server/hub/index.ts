@@ -29,15 +29,15 @@ export function initHub(
 
   // Priority: SMAN_HUB_URL env > config.hub.serverUrl
   const serverUrl = process.env.SMAN_HUB_URL || hub?.serverUrl || '';
-  // Enterprise build: if SMAN_HUB_URL + SMAN_PSK are injected, treat as enabled
-  const forceEnabled = !!(process.env.SMAN_HUB_URL && process.env.SMAN_PSK);
+  // Enterprise build: SMAN_HUB_URL injected = auto-enable (PSK has built-in fallback)
+  const forceEnabled = !!process.env.SMAN_HUB_URL;
 
   if ((!hub?.enabled && !forceEnabled) || !serverUrl) return;
 
   hubClient = new HubClient({
     getServerUrl: () => process.env.SMAN_HUB_URL || settingsManager.getConfig().hub?.serverUrl || '',
     getEnabled: () => {
-      if (process.env.SMAN_HUB_URL && process.env.SMAN_PSK) return true;
+      if (process.env.SMAN_HUB_URL) return true;
       return settingsManager.getConfig().hub?.enabled ?? false;
     },
     getVersion,
