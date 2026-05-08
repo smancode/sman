@@ -2022,6 +2022,14 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'hub:fetch': {
+          const hubCli = getHubClient();
+          if (hubCli) {
+            hubCli.fetchBroadcasts();
+          }
+          break;
+        }
+
         default:
           if (msg.type?.startsWith('stardom.')) {
             const bridge = getStardomBridge();

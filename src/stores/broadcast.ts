@@ -41,6 +41,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     };
 
     client.on('hub:broadcast', handler);
+    // Trigger a broadcast fetch on subscribe (WS just connected)
+    client.send({ type: 'hub:fetch' });
     return () => client.off('hub:broadcast', handler);
   },
 
