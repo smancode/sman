@@ -34,8 +34,14 @@ cd "$SCRIPT_DIR"
 
 # ── 自动设置日期版本号 ──
 # 格式: YY.MMDD.HH （如 26.429.15, 26.1029.15）
-# 不用前导零避免 semver 吞零，月份本身可区分（429=4月29, 1029=10月29）
-DATE_VERSION=$(date '+%y.%m%d.%H')
+# !! semver 要求每段为纯数字无前导零，否则 electron-updater 会崩溃 !!
+#    错误示范: 26.0508.16 → "App version is not a valid semver version"
+#    正确做法: 用 10# 前缀强制十进制解析，乘法拼接去前导零
+#    5月8日 = 5*100+8 = 508, 10月29日 = 10*100+29 = 1029
+_V_MAJOR=$(date +%y)
+_V_MINOR=$((10#$(date +%m) * 100 + 10#$(date +%d)))
+_V_PATCH=$((10#$(date +%H)))
+DATE_VERSION="${_V_MAJOR}.${_V_MINOR}.${_V_PATCH}"
 info "设置版本号: ${DATE_VERSION}"
 node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${DATE_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 VERSION="${DATE_VERSION}"
