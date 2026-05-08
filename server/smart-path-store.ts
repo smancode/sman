@@ -291,6 +291,7 @@ export class SmartPathStore {
     if (!fs.existsSync(f)) throw new Error(`Run not found: ${runId}`);
     const existing: SmartPathRun = JSON.parse(fs.readFileSync(f, 'utf-8'));
     fs.writeFileSync(f, JSON.stringify({ ...existing, ...updates }, null, 2), 'utf-8');
+    this.cleanupOldRuns(ws, pathId);
   }
 
   listRuns(pathId: string, ws: string): SmartPathRun[] {
@@ -394,5 +395,37 @@ export class SmartPathStore {
 
   updateRunGuide(ws: string, pathId: string, content: string): void {
     this.saveReference(ws, pathId, 'run.md', content);
+  }
+
+  /** 只保留最近 MAX_RUNS 次执行记录，删除更早的 runs 和对应 reports */
+  private cleanupOldRuns(ws: string, pathId: string, maxRuns = 5): void {
+    try {
+      const rd = this.runsDir(ws, pathId);
+      if (!fs.existsSync(rd)) return;
+      const runs = fs.readdirSync(rd)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+          try {
+            const r = JSON.parse(fs.readFileSync(path.join(rd, f), 'utf-8'));
+            return { file: f, startedAt: r.startedAt || '', reportFileName: r.reportFileName || '' };
+          } catch { return null; }
+        })
+        .filter((r): r is { file: string; startedAt: string; reportFileName: string } => r !== null)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+
+      if (runs.length <= maxRuns) return;
+
+      for (let i = maxRuns; i < runs.length; i++) {
+        const runFile = path.join(rd, runs[i].file);
+        fs.unlinkSync(runFile);
+        if (runs[i].reportFileName) {
+          const reportFile = path.join(this.reportsDir(ws, pathId), runs[i].reportFileName);
+          if (fs.existsSync(reportFile)) fs.unlinkSync(reportFile);
+        }
+        this.log.info(`Cleaned up old run: ${runs[i].file}`);
+      }
+    } catch (err) {
+      this.log.warn(`Failed to cleanup old runs: ${err}`);
+    }
   }
 }

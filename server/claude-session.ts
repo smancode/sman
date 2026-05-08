@@ -1261,10 +1261,9 @@ export class ClaudeSessionManager {
 
     // Track streamed content — declared outside try so catch can save partial state on abort
     let fullContent = '';
-    // Accumulated text across all turns and tool_use segments — never cleared.
-    // fullContent is reset on each assistant event and tool_use start, so previous text
-    // segments would be lost on abort/refresh without this accumulator.
-    let accumulatedText = '';
+    // Single source of truth for all streamed text across all turns.
+    // stream_event deltas append here directly; never reset.
+    let allText = '';
     let currentThinking = '';
     let allThinking = '';
     let allToolUses: Array<{ id: string; name: string; input: string; summary?: string; elapsedSeconds?: number }> = [];
@@ -1422,7 +1421,7 @@ export class ClaudeSessionManager {
           clearInterval(partialSaveTimer!);
           return;
         }
-        const partialContent = (accumulatedText + fullContent).trim();
+        const partialContent = allText.trim() || fullContent.trim();
         const partialThinking = allThinking.trim();
         if (!partialContent && !partialThinking && allToolUses.length === 0 && !currentToolUse) return;
 
@@ -1482,27 +1481,12 @@ export class ClaudeSessionManager {
             }
             // Flush previous text segment so UI can freeze it
             if (fullContent.trim()) {
-              accumulatedText += fullContent;
               wsSend(JSON.stringify({
                 type: 'chat.segment',
                 sessionId,
                 segmentType: 'text',
               }));
-              // Reset fullContent for the new turn
               fullContent = '';
-            }
-            // The SDK sends accumulated text here (includePartialMessages: true),
-            // but we already streamed it token-by-token via 'stream_event' events.
-            // Only use SDK text as fallback when no stream_event deltas were received
-            // (e.g. partial messages that were never streamed as deltas).
-            // Previously, always overwriting fullContent here caused:
-            // 1. Duplicate content (stream_event text already moved to accumulatedText)
-            // 2. Lost newlines (SDK accumulated text may lack newlines between blocks)
-            if (!fullContent.trim()) {
-              const text = this.extractTextContent(sdkMsg);
-              if (text) {
-                fullContent = text;
-              }
             }
             break;
           }
@@ -1549,6 +1533,7 @@ export class ClaudeSessionManager {
                   }));
                 } else {
                   fullContent += delta.content;
+                  allText += delta.content;
                   deltaCount++;
                   if (deltaCount <= 3) {
                     this.log.info(`[stream] ${sessionId}: sending text delta #${deltaCount}, len=${delta.content.length}`);
@@ -1580,7 +1565,6 @@ export class ClaudeSessionManager {
                   }
                   // Freeze current text segment before tool starts
                   if (fullContent.trim()) {
-                    accumulatedText += fullContent;
                     wsSend(JSON.stringify({
                       type: 'chat.segment',
                       sessionId,
@@ -1756,7 +1740,7 @@ export class ClaudeSessionManager {
             }
 
             // Store assistant message with contentBlocks
-            const finalContent = (accumulatedText + fullContent).trim() || '';
+            const finalContent = allText.trim() || fullContent.trim() || '';
             if (finalContent || contentBlocks.length > 0) {
               this.store.addMessage(sessionId, {
                 role: 'assistant',
@@ -1906,7 +1890,7 @@ export class ClaudeSessionManager {
       if (abortController.signal.aborted) {
         // Clear partial messages before saving final partial message
         this.store.clearPartialMessages(sessionId);
-        this.savePartialAssistantMessage(sessionId, accumulatedText + fullContent, allThinking, allToolUses, currentToolUse);
+        this.savePartialAssistantMessage(sessionId, allText || fullContent, allThinking, allToolUses, currentToolUse);
         const reason = stallAbortReason || '';
 
         // Check if this was a user-initiated abort (stop button).
@@ -1936,7 +1920,7 @@ export class ClaudeSessionManager {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         // Save partial assistant content so the user doesn't lose what was already streamed
         this.store.clearPartialMessages(sessionId);
-        this.savePartialAssistantMessage(sessionId, accumulatedText + fullContent, allThinking, allToolUses, currentToolUse);
+        this.savePartialAssistantMessage(sessionId, allText || fullContent, allThinking, allToolUses, currentToolUse);
 
         const reason = stallAbortReason || '';
         // Check if user-initiated abort
@@ -2170,11 +2154,7 @@ export class ClaudeSessionManager {
         switch (sdkMsg.type) {
           case 'assistant': {
             toolInProgress = false;
-            // Only use SDK accumulated text as fallback when no deltas received
-            if (!fullContent.trim()) {
-              const text = this.extractTextContent(sdkMsg);
-              if (text) fullContent = text;
-            }
+            // Skip SDK accumulated text — stream_event deltas already built fullContent
             break;
           }
           case 'stream_event': {

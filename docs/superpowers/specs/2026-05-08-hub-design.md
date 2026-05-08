@@ -1,4 +1,4 @@
-# Sman 遥测系统设计
+# Sman Hub 系统设计
 
 > 日期: 2026-05-08
 > 状态: 已确认
@@ -15,7 +15,7 @@
 ```
 Sman Client (Electron)                     sman-server (独立项目)
 ┌──────────────────────┐                  ┌─────────────────────────┐
-│  telemetry.ts        │                  │  Express + SQLite       │
+│  hub.ts        │                  │  Express + SQLite       │
 │  ├─ 启动上报          │──POST /report──→│  ├─ clients 表           │
 │  ├─ 每小时心跳        │──POST /report──→│  ├─ reports 表           │
 │  ├─ 拉广播           │──GET /broadcasts─→│  ├─ broadcasts 表       │
@@ -149,7 +149,7 @@ sman-server/
 │   │   └── admin.ts     # 管理接口
 │   └── types.ts
 └── data/                # SQLite 数据（gitignore）
-    └── telemetry.db
+    └── hub.db
 ```
 
 ### 数据库表
@@ -204,23 +204,23 @@ admin 用 `ADMIN_TOKEN` 环境变量做 Bearer 认证。
 
 ### 配置注入
 
-`electron/main.ts` 启动时，若 config.json 无 telemetry 字段，写入:
+`electron/main.ts` 启动时，若 config.json 无 hub 字段，写入:
 ```json
 {
-  "telemetry": {
+  "hub": {
     "serverUrl": "https://your-server.com",
     "enabled": true
   }
 }
 ```
 
-### 遥测模块
+### Hub 模块
 
-拆分为 `server/telemetry/` 目录（遵循 500 行限制）:
+拆分为 `server/hub/` 目录（遵循 500 行限制）:
 
 ```
-server/telemetry/
-├── index.ts       # initTelemetry 入口 + 定时调度
+server/hub/
+├── index.ts       # initHub 入口 + 定时调度
 ├── client.ts      # reportHeartbeat, fetchBroadcasts, ackBroadcasts
 ├── crypto.ts      # encrypt/decrypt (AES-256-GCM)
 └── types.ts       # 类型定义
@@ -235,17 +235,17 @@ AND deleted_at IS NULL
 
 ### 广播展示
 
-1. 遥测模块拉取到广播后，通过 WebSocket 发送给前端:
+1. Hub 模块拉取到广播后，通过 WebSocket 发送给前端:
    ```json
-   { "type": "telemetry:broadcast", "data": { "id": "bc_001", "title": "...", "body": "..." } }
+   { "type": "hub:broadcast", "data": { "id": "bc_001", "title": "...", "body": "..." } }
    ```
-2. 前端 MainLayout 监听 `telemetry:broadcast`，以 Toast 通知展示
+2. 前端 MainLayout 监听 `hub:broadcast`，以 Toast 通知展示
 3. 用户关闭 Toast 后，自动调用 `ackBroadcasts([id])` 确认已读
 4. 前端维护已展示广播 ID 集合，防止重复展示
 
 ## 整合自动更新服务
 
-sman-server 同时承担**更新文件托管**职责，与遥测共用同一个部署实例。
+sman-server 同时承担**更新文件托管**职责，与Hub共用同一个部署实例。
 
 ### 更新文件服务
 
@@ -261,10 +261,10 @@ GET /updates/sman/Sman-Setup-{ver}.exe — Windows 安装包
 
 ### 配置整合
 
-`~/.sman/config.json` 的 telemetry 字段扩展：
+`~/.sman/config.json` 的 hub 字段扩展：
 ```json
 {
-  "telemetry": {
+  "hub": {
     "serverUrl": "https://your-server.com",
     "enabled": true,
     "updateUrl": "https://your-server.com/updates/sman"
@@ -272,14 +272,14 @@ GET /updates/sman/Sman-Setup-{ver}.exe — Windows 安装包
 }
 ```
 
-- `serverUrl`: 遥测上报地址（`/api/report`、`/api/broadcasts`、`/api/ack`）
+- `serverUrl`: Hub上报地址（`/api/report`、`/api/broadcasts`、`/api/ack`）
 - `updateUrl`: electron-updater 的 feed URL
 - 两者共享同一个域名，分别在不同路径
 
 ### Electron 启动流程变更
 
 1. `electron/main.ts` 启动时读取 config.json
-2. 若 `telemetry.updateUrl` 存在，调用 `autoUpdater.setFeedURL({ provider: 'generic', url: telemetry.updateUrl })`
+2. 若 `hub.updateUrl` 存在，调用 `autoUpdater.setFeedURL({ provider: 'generic', url: hub.updateUrl })`
 3. 这样 runtime override 就持久化了，不再每次重启丢失
 
 ### Admin 接口

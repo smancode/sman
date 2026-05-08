@@ -1081,48 +1081,26 @@ wss.on('connection', (ws: WebSocket) => {
                 || paths.find(p => p.id === pathName)
                 || paths.find(p => p.name.toLowerCase() === pathName.toLowerCase());
               if (matchedPath) {
-                // Execute the path and stream results as chat messages
                 const argsToUse = pathArgs || matchedPath.defaultArgs || '';
-                // Send a user message showing the command (without the internal prompt)
-                wsSend(JSON.stringify({
-                  type: 'chat.delta',
-                  sessionId: chatSessionId,
-                  deltaType: 'text',
-                  content: ``,
-                }));
+                const pathDir = `.sman/paths/${matchedPath.id}`;
+                const wrappedContent = [
+                  `[用户发起了一个执行path的请求，path为${pathDir}，参数为"${argsToUse}"，请按照path.md并参考run.md执行该path]`,
+                  '',
+                  '执行要求：',
+                  `1. 先读取 ${pathDir}/path.md 获取步骤定义`,
+                  `2. 如果 ${pathDir}/references/run.md 存在，读取作为参考`,
+                  `3. 按步骤逐一执行，前一步结果作为下一步上下文`,
+                  `4. 用户参数为:{${argsToUse}}，请根据任务需要使用`,
+                  '5. 直接执行，不要询问用户，给出简洁结果',
+                ].join('\n');
 
-                // Start path execution in background
-                smartPathEngine.run(
-                  matchedPath.id,
-                  workspace,
-                  (stepIndex, delta) => {
-                    // Stream each step's delta as chat.delta
-                    wsSend(JSON.stringify({
-                      type: 'chat.delta',
-                      sessionId: chatSessionId,
-                      deltaType: 'text',
-                      content: delta,
-                    }));
-                  },
-                  (stepIndex, result) => {
-                    // Step completed — could send a segment marker if needed
-                  },
-                  (data) => {
-                    // Progress updates
-                  },
-                  argsToUse,
-                ).then(() => {
-                  wsSend(JSON.stringify({
-                    type: 'chat.done',
-                    sessionId: chatSessionId,
-                  }));
-                }).catch((err) => {
-                  wsSend(JSON.stringify({
-                    type: 'chat.error',
-                    sessionId: chatSessionId,
-                    error: err instanceof Error ? err.message : String(err),
-                  }));
-                });
+                // Save original user message to session (showing what user typed)
+                store.addMessage(chatSessionId, { role: 'user', content });
+
+                // Send wrapped prompt via normal sendMessage with retryCount=1 to skip double-saving
+                // This preserves session context, enables multi-turn follow-up
+                const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
+                await sessionManager.sendMessage(chatSessionId, wrappedContent, wsSend, media, 1);
                 break;
               }
             }
