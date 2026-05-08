@@ -243,6 +243,53 @@ AND deleted_at IS NULL
 3. 用户关闭 Toast 后，自动调用 `ackBroadcasts([id])` 确认已读
 4. 前端维护已展示广播 ID 集合，防止重复展示
 
+## 整合自动更新服务
+
+sman-server 同时承担**更新文件托管**职责，与遥测共用同一个部署实例。
+
+### 更新文件服务
+
+```
+GET /updates/sman/latest.yml       — 版本元数据（electron-updater 格式）
+GET /updates/sman/Sman-{ver}.dmg   — macOS 安装包
+GET /updates/sman/Sman-Setup-{ver}.exe — Windows 安装包
+```
+
+- 更新文件存储在 `data/updates/sman/` 目录
+- `latest.yml` 由 electron-builder 自动生成，上传到 server 即可
+- Express 静态文件中间件挂载 `/updates` 路径
+
+### 配置整合
+
+`~/.sman/config.json` 的 telemetry 字段扩展：
+```json
+{
+  "telemetry": {
+    "serverUrl": "https://your-server.com",
+    "enabled": true,
+    "updateUrl": "https://your-server.com/updates/sman"
+  }
+}
+```
+
+- `serverUrl`: 遥测上报地址（`/api/report`、`/api/broadcasts`、`/api/ack`）
+- `updateUrl`: electron-updater 的 feed URL
+- 两者共享同一个域名，分别在不同路径
+
+### Electron 启动流程变更
+
+1. `electron/main.ts` 启动时读取 config.json
+2. 若 `telemetry.updateUrl` 存在，调用 `autoUpdater.setFeedURL({ provider: 'generic', url: telemetry.updateUrl })`
+3. 这样 runtime override 就持久化了，不再每次重启丢失
+
+### Admin 接口
+
+```
+POST /admin/upload — 上传更新包（multipart form, 需 admin token）
+```
+
+上传后自动解压到 `data/updates/sman/`，更新 `latest.yml`。
+
 ## 后续扩展
 
 - 下发 Skill

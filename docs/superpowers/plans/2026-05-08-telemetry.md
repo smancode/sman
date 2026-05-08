@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 Sman 添加遥测能力，新建 sman-server 收集使用统计并支持广播通知。
+**Goal:** 为 Sman 添加遥测能力 + 整合自动更新服务。新建 sman-server 收集使用统计、支持广播通知、托管更新包。
 
-**Architecture:** Client 每小时 HTTP POST 上报心跳（hostname@ip、版本、活跃会话数）+ 拉取广播。Server 独立部署 Express + SQLite，AES-256-GCM 加密通讯。所有网络请求 try-catch，失败静默。
+**Architecture:** Client 每小时 HTTP POST 上报心跳（hostname@ip、版本、活跃会话数）+ 拉取广播。Server 独立部署 Express + SQLite，AES-256-GCM 加密通讯，同时通过静态文件服务托管 electron-updater 更新包。所有网络请求 try-catch，失败静默。更新 URL 通过 config.json 持久化，Electron 启动时读取并设置。
 
 **Tech Stack:** Node.js, TypeScript, Express, better-sqlite3, Node.js crypto (AES-256-GCM)
 
@@ -689,8 +689,11 @@ export function createBroadcastRouter(db: TelemetryDB, psk: string): Router {
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { TelemetryDB } from '../db.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
-export function createAdminRouter(db: TelemetryDB, adminToken: string): Router {
+export function createAdminRouter(db: TelemetryDB, adminToken: string, updatesDir: string): Router {
   const router = Router();
 
   router.use((req: Request, res: Response, next) => {
@@ -725,9 +728,34 @@ export function createAdminRouter(db: TelemetryDB, adminToken: string): Router {
     res.json(db.getAllClients());
   });
 
+  // 上传更新包 — multipart form 解析用 express 原始 body
+  router.put('/upload', (req: Request, res: Response) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const filename = req.query.filename as string;
+      if (!filename) {
+        res.status(400).json({ error: 'filename query param required' });
+        return;
+      }
+      // 只允许 yml, dmg, exe 扩展名
+      const ext = path.extname(filename).toLowerCase();
+      if (!['.yml', '.dmg', '.exe', '.blockmap'].includes(ext)) {
+        res.status(400).json({ error: 'Unsupported file type' });
+        return;
+      }
+      const targetPath = path.join(updatesDir, path.basename(filename));
+      fs.writeFileSync(targetPath, Buffer.concat(chunks));
+      res.json({ ok: true, path: `/updates/sman/${path.basename(filename)}` });
+    });
+    req.on('error', () => res.status(500).json({ error: 'Upload failed' }));
+  });
+
   return router;
 }
 ```
+
+> 上传用 `PUT /admin/upload?filename=latest.yml`，body 是文件原始内容。生产环境可以用 scp/sftp 直接传文件到 `data/updates/sman/`，更简单。
 
 - [ ] **Step 4: 创建 src/index.ts**
 
@@ -735,6 +763,7 @@ export function createAdminRouter(db: TelemetryDB, adminToken: string): Router {
 import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { TelemetryDB } from './db.js';
 import { createReportRouter } from './routes/report.js';
 import { createBroadcastRouter } from './routes/broadcast.js';
@@ -755,19 +784,27 @@ if (!ADMIN_TOKEN) {
   process.exit(1);
 }
 
+// 确保更新文件目录存在
+const updatesDir = path.join(DATA_DIR, 'updates', 'sman');
+fs.mkdirSync(updatesDir, { recursive: true });
+
 const db = new TelemetryDB(path.join(DATA_DIR, 'telemetry.db'));
 const app = express();
 
 app.use(express.json({ limit: '1mb' }));
 
+// 更新文件静态服务 — electron-updater 从这里下载 latest.yml 和安装包
+app.use('/updates/sman', express.static(updatesDir));
+
 app.use('/api', createReportRouter(db, PSK));
 app.use('/api', createBroadcastRouter(db, PSK));
-app.use('/admin', createAdminRouter(db, ADMIN_TOKEN));
+app.use('/admin', createAdminRouter(db, ADMIN_TOKEN, updatesDir));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 const server = app.listen(PORT, () => {
   console.log(`sman-server listening on port ${PORT}`);
+  console.log(`Updates served at /updates/sman`);
 });
 
 process.on('SIGTERM', () => {
@@ -840,9 +877,14 @@ cd /Users/nasakim/projects/sman-server && git add -A && git commit -m "feat: add
 ```typescript
   telemetry?: {
     serverUrl: string;
+    updateUrl: string;
     enabled: boolean;
   };
 ```
+
+- `serverUrl`: 遥测服务器地址（如 `https://your-server.com`）
+- `updateUrl`: electron-updater feed URL（如 `https://your-server.com/updates/sman`）
+- `enabled`: 是否启用遥测
 
 - [ ] **Step 2: 在 server/settings-manager.ts 的 DEFAULT_CONFIG 添加 telemetry 默认值**
 
@@ -850,6 +892,7 @@ cd /Users/nasakim/projects/sman-server && git add -A && git commit -m "feat: add
 ```typescript
   telemetry: {
     serverUrl: '',
+    updateUrl: '',
     enabled: false,
   },
 ```
@@ -1417,19 +1460,19 @@ cd /Users/nasakim/projects/sman && git add src/stores/broadcast.ts src/component
 
 ---
 
-### Task 7: Electron 配置注入 — 打包时写入 telemetry serverUrl
+### Task 7: Electron 配置注入 — 遥测 + 更新 URL 持久化
 
 **Depends on:** Task 4
 
 **Files:**
-- Modify: `electron/main.ts` — 在 startServerInProcess 后写入默认 telemetry config
+- Modify: `electron/main.ts` — 启动后写入默认 telemetry config + 设置 autoUpdater feed URL
 
 - [ ] **Step 1: 在 electron/main.ts 添加 telemetry config 注入逻辑**
 
 在 `startServerInProcess()` 完成后（约 line 293 之后），添加配置注入:
 
 ```typescript
-// 注入 telemetry 配置（仅 production）
+// 注入 telemetry 配置 + 持久化更新 URL（仅 production）
 async function ensureTelemetryConfig(homeDir: string): Promise<void> {
   const configPath = path.join(homeDir, 'config.json');
   try {
@@ -1438,9 +1481,14 @@ async function ensureTelemetryConfig(homeDir: string): Promise<void> {
     if (!config.telemetry || !config.telemetry.serverUrl) {
       config.telemetry = {
         serverUrl: 'https://your-sman-server.com',
+        updateUrl: 'https://your-sman-server.com/updates/sman',
         enabled: true,
       };
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+    }
+    // 从 config 读取 updateUrl 并设置到 autoUpdater（持久化 runtime override）
+    if (config.telemetry?.updateUrl) {
+      autoUpdater.setFeedURL({ provider: 'generic', url: config.telemetry.updateUrl });
     }
   } catch {
     // 配置文件不存在，server 初始化时会创建
@@ -1454,6 +1502,8 @@ const home = serverModule.homeDir;
 await ensureTelemetryConfig(home);
 ```
 
+> **关键变更**: autoUpdater 的 feed URL 不再依赖 `package.json` 的 placeholder，也不需要用户每次手动在 UpdateSettings 中设置。首次启动时从 config.json 读取并设置，后续用户修改 config 中的 `telemetry.updateUrl` 即可。
+
 - [ ] **Step 2: 运行编译检查**
 
 ```bash
@@ -1463,7 +1513,7 @@ cd /Users/nasakim/projects/sman && pnpm build:electron
 - [ ] **Step 3: 提交**
 
 ```bash
-cd /Users/nasakim/projects/sman && git add electron/main.ts && git commit -m "feat: inject telemetry config on Electron startup"
+cd /Users/nasakim/projects/sman && git add electron/main.ts && git commit -m "feat: inject telemetry + update URL config on Electron startup"
 ```
 
 ---
@@ -1473,13 +1523,28 @@ cd /Users/nasakim/projects/sman && git add electron/main.ts && git commit -m "fe
 ```
 Task 1 (sman-server: 初始化+crypto)
   └─→ Task 2 (sman-server: DB)
-       └─→ Task 3 (sman-server: 路由+入口)
+       └─→ Task 3 (sman-server: 路由+入口+更新静态服务+上传接口)
 
-Task 4 (sman: telemetry client 模块) — 独立于 Task 1-3
+Task 4 (sman: telemetry client 模块 + session store 扩展) — 独立于 Task 1-3
   └─→ Task 5 (sman: server/index.ts 集成)
-       └─→ Task 6 (sman: 前端 Toast)
-  Task 4 └─→ Task 7 (sman: Electron 配置注入)
+       └─→ Task 6 (sman: 前端 Toast + WS ack)
+  Task 4 └─→ Task 7 (sman: Electron 遥测+更新URL配置注入)
 ```
 
 **可并行**: Task 1-3 (server) 和 Task 4 (client 模块) 可以同时进行。
 **串行**: Task 5 → Task 6 必须在 Task 4 之后。
+
+## sman-server 部署说明
+
+1. 复制 `.env.example` 为 `.env`，填入真实的 PSK（32字节）和 ADMIN_TOKEN
+2. `pnpm install && pnpm dev` 启动
+3. 上传更新包:
+   ```bash
+   curl -X PUT -H "Authorization: Bearer $TOKEN" --data-binary @latest.yml \
+     "http://localhost:5882/admin/upload?filename=latest.yml"
+   curl -X PUT -H "Authorization: Bearer $TOKEN" --data-binary @Sman-26.5.0.dmg \
+     "http://localhost:5882/admin/upload?filename=Sman-26.5.0.dmg"
+   ```
+4. Client 配置 `telemetry.serverUrl` 指向 `http://your-server:5882`（不含路径）
+5. Client 配置 `telemetry.updateUrl` 指向 `http://your-server:5882/updates/sman`
+6. 或直接 scp 文件到 `data/updates/sman/` 目录
