@@ -1,6 +1,6 @@
 # Conventions — nasakim
 
-> Last extracted: 2026-05-08T02:33:10.296Z
+> Last extracted: 2026-05-08T03:25:16.244Z
 
 ## Markdown 文件元数据统一使用 YAML front matter
 <!-- hash: d4e5f6 -->
@@ -42,3 +42,12 @@
 - 动态拼接方案：翻译文件写完整句子 + 参数插值，禁止拼接片段
 - 模块顶层禁止调用 `t()`（初始化时 locale 未确定）
 <!-- end: 3t5v8y -->
+
+## 时区处理规范（已写入 CLAUDE.md）
+<!-- hash: 5m8n2q -->
+- Git 时间范围查询：禁止用 `--since="today"`，必须显式指定日期 `--since="$DATE 00:00:00" --until="$DATE 23:59:59"`
+- Git 时间输出：`git log --date` 注意时区偏移，必要时用 `--date=local` 或 `TZ=UTC`
+- `date` 命令：脚本中用 `$(date +%Y-%m-%d)` 获取日期时注意系统时区与预期是否一致
+- 文件时间比较：`touch`/`find -newer` 等依赖系统时钟，跨时区部署需统一 TZ
+- JavaScript Date：服务端统一用 UTC 或 ISO 8601，禁止依赖本地时区
+<!-- end: 5m8n2q -->

@@ -1,6 +1,6 @@
 # Technical — nasakim
 
-> Last extracted: 2026-05-08T02:33:10.296Z
+> Last extracted: 2026-05-08T03:25:16.244Z
 
 ## Smart Path path.md 文件格式
 <!-- hash: 7a8b9c -->
@@ -54,3 +54,10 @@
 - 已改造组件：LLMSettings、WebSearchSettings、ChatbotSettings、BackendSettings、App、Sidebar、ChatInput、SessionTree
 - 易遗漏点：常量文件中的选项标签（如 `WEB_SEARCH_PROVIDER_OPTIONS`）、Git 页面、CodeViewer 页面
 <!-- end: c9d0e1 -->
+
+## 代码统计脚本时区陷阱与修复
+<!-- hash: 9x4z7k -->
+- 脚本 `tmp/daily-code-stats.sh` 曾用 `--since="today"` 导致统计结果为空（Git 时区兼容问题）
+- 修复：改为 `--since="$TODAY 00:00:00" --until="$TODAY 23:59:59"` 显式指定日期范围
+- 同时修复统计逻辑：所有 commit 的 diff 统一传给 awk 处理，而非逐 commit 处理导致重复计算
+<!-- end: 9x4z7k -->

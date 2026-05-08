@@ -338,9 +338,10 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
     const charBeforeCursor = value[cursorPosition - 1];
     const charBeforeSlash = value[cursorPosition - 2];
 
+    // Only show picker when / is the first character of the input
     if (
       charBeforeCursor === '/' &&
-      (!charBeforeSlash || charBeforeSlash === ' ' || charBeforeSlash === '\n') &&
+      cursorPosition === 1 &&
       !slashTriggeredRef.current
     ) {
       slashTriggeredRef.current = true;
@@ -350,15 +351,10 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
       slashTriggeredRef.current = false;
     }
 
-    // Update filter for skill picker: extract text after the last standalone /
+    // Update filter for skill picker: extract text after the leading /
     if (showSkillPicker || slashTriggeredRef.current) {
-      const textBeforeCursor = value.slice(0, cursorPosition);
-      const slashIdx = textBeforeCursor.lastIndexOf('/');
-      if (slashIdx >= 0) {
-        const beforeSlash = textBeforeCursor[slashIdx - 1];
-        if (!beforeSlash || beforeSlash === ' ' || beforeSlash === '\n') {
-          setSkillPickerFilter(textBeforeCursor.slice(slashIdx + 1));
-        }
+      if (value.startsWith('/')) {
+        setSkillPickerFilter(value.slice(1));
       }
     }
   }, [showSkillPicker]);
@@ -372,7 +368,9 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
     const slashIdx = textBeforeCursor.lastIndexOf('/');
     const beforeSlash = textBeforeCursor.slice(0, slashIdx);
 
-    const newInput = beforeSlash + '/' + item.id + ' ' + afterCursor;
+    // For paths, use name (user-friendly); for skills/commands, use id
+    const itemValue = item.category === 'path' ? item.name : item.id;
+    const newInput = beforeSlash + '/' + itemValue + ' ' + afterCursor;
 
     setInput(newInput);
     setShowSkillPicker(false);
@@ -382,7 +380,7 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
-        const newCursorPos = beforeSlash.length + 1 + item.id.length + 1;
+        const newCursorPos = beforeSlash.length + 1 + itemValue.length + 1;
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
     }, 0);

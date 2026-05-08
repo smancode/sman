@@ -1261,9 +1261,9 @@ export class ClaudeSessionManager {
 
     // Track streamed content — declared outside try so catch can save partial state on abort
     let fullContent = '';
-    // Single source of truth for all streamed text across all turns.
-    // stream_event deltas append here directly; never reset.
-    let allText = '';
+    // Collected text segments — each segment is frozen when a tool_use starts or assistant event fires.
+    // Preserves the original segment boundaries so the UI can render them as separate blocks after refresh.
+    const textSegments: string[] = [];
     let currentThinking = '';
     let allThinking = '';
     let allToolUses: Array<{ id: string; name: string; input: string; summary?: string; elapsedSeconds?: number }> = [];
@@ -1421,7 +1421,7 @@ export class ClaudeSessionManager {
           clearInterval(partialSaveTimer!);
           return;
         }
-        const partialContent = allText.trim() || fullContent.trim();
+        const partialContent = [...textSegments, fullContent].filter(s => s.trim()).join('\n').trim();
         const partialThinking = allThinking.trim();
         if (!partialContent && !partialThinking && allToolUses.length === 0 && !currentToolUse) return;
 
@@ -1481,6 +1481,7 @@ export class ClaudeSessionManager {
             }
             // Flush previous text segment so UI can freeze it
             if (fullContent.trim()) {
+              textSegments.push(fullContent);
               wsSend(JSON.stringify({
                 type: 'chat.segment',
                 sessionId,
@@ -1533,7 +1534,6 @@ export class ClaudeSessionManager {
                   }));
                 } else {
                   fullContent += delta.content;
-                  allText += delta.content;
                   deltaCount++;
                   if (deltaCount <= 3) {
                     this.log.info(`[stream] ${sessionId}: sending text delta #${deltaCount}, len=${delta.content.length}`);
@@ -1565,6 +1565,7 @@ export class ClaudeSessionManager {
                   }
                   // Freeze current text segment before tool starts
                   if (fullContent.trim()) {
+                    textSegments.push(fullContent);
                     wsSend(JSON.stringify({
                       type: 'chat.segment',
                       sessionId,
@@ -1739,8 +1740,21 @@ export class ClaudeSessionManager {
               }
             }
 
+            // Flush remaining fullContent into textSegments
+            if (fullContent.trim()) {
+              textSegments.push(fullContent);
+            }
+
+            // Build contentBlocks: insert text segments alongside thinking/tool_use
+            // Text segments go before the first tool_use of their turn, thinking before everything.
+            const finalContent = textSegments.filter(s => s.trim()).join('\n');
+            // Insert text blocks into contentBlocks so the UI can render them as separate segments
+            if (textSegments.length > 0) {
+              const textBlocks = textSegments.filter(s => s.trim()).map(s => ({ type: 'text' as const, text: s }));
+              contentBlocks.unshift(...textBlocks);
+            }
+
             // Store assistant message with contentBlocks
-            const finalContent = allText.trim() || fullContent.trim() || '';
             if (finalContent || contentBlocks.length > 0) {
               this.store.addMessage(sessionId, {
                 role: 'assistant',
@@ -1890,7 +1904,7 @@ export class ClaudeSessionManager {
       if (abortController.signal.aborted) {
         // Clear partial messages before saving final partial message
         this.store.clearPartialMessages(sessionId);
-        this.savePartialAssistantMessage(sessionId, allText || fullContent, allThinking, allToolUses, currentToolUse);
+        this.savePartialAssistantMessage(sessionId, [...textSegments, fullContent].filter(s => s.trim()).join('\n'), allThinking, allToolUses, currentToolUse);
         const reason = stallAbortReason || '';
 
         // Check if this was a user-initiated abort (stop button).
@@ -1920,7 +1934,7 @@ export class ClaudeSessionManager {
       if (err?.name === 'AbortError' || abortController.signal.aborted) {
         // Save partial assistant content so the user doesn't lose what was already streamed
         this.store.clearPartialMessages(sessionId);
-        this.savePartialAssistantMessage(sessionId, allText || fullContent, allThinking, allToolUses, currentToolUse);
+        this.savePartialAssistantMessage(sessionId, [...textSegments, fullContent].filter(s => s.trim()).join('\n'), allThinking, allToolUses, currentToolUse);
 
         const reason = stallAbortReason || '';
         // Check if user-initiated abort

@@ -128,6 +128,52 @@ pnpm test:watch    # 监视模式
 6. **环境隔离**: `getCleanEnv()` 清除 `ANTHROPIC_*/OPENAI_*/CLAUDE_*` 环境变量，使用隔离的 `CLAUDE_CONFIG_DIR`
 7. **消息排队**: SDK 不支持打断正在执行的 turn，后端通过 `await streamDone` 排队
 
+## 时区处理规范
+
+### 原则
+所有涉及时间的操作必须**显式指定时区或日期格式**，禁止使用相对时间（如 "today"），避免因系统时区设置导致的时间偏差。
+
+### 常见场景
+
+| 场景 | ❌ 错误做法 | ✅ 正确做法 |
+|------|-----------|-----------|
+| Git log 时间范围 | `--since="today"` | `--since="2026-05-08 00:00:00" --until="2026-05-08 23:59:59"` |
+| Git 时间输出 | `--date=local`（依赖系统时区） | `--date=iso` 或 `--date=raw` + 显式转换 |
+| date 命令 | `date`（依赖系统时区） | `date -u +"%Y-%m-%d %H:%M:%S UTC"` 或 `TZ=Asia/Shanghai date` |
+| 文件时间比较 | `find -mtime 0`（依赖系统时区） | `find -newermt "2026-05-08 00:00:00"` |
+| 数据库时间存储 | `DATETIME DEFAULT NOW()` | `DATETIME DEFAULT (datetime('now', 'localtime'))` 或显式指定 |
+| JavaScript Date | `new Date()`（依赖浏览器时区） | `dayjs().tz('Asia/Shanghai').format()` 或显式指定 timezone |
+| 日志时间戳 | `new Date().toISOString()`（UTC） | 统一格式 + 时区后缀：`2026-05-08T10:30:00+08:00` |
+
+### Git 特定注意事项
+
+```bash
+# ❌ 错误：--since="today" 会根据系统时区判断，可能导致时区偏差
+git log --since="today"
+
+# ✅ 正确：显式指定日期范围
+TODAY=$(date +%Y-%m-%d)
+git log --since="$TODAY 00:00:00" --until="$TODAY 23:59:59"
+
+# ❌ 错误：--date=local 依赖系统时区配置
+git log --date=local
+
+# ✅ 正确：使用 ISO 格式或原始时间戳
+git log --date=iso
+git log --date=raw
+```
+
+### 跨环境最佳实践
+
+1. **存储时间**：统一使用 UTC 时间戳或 ISO 8601 格式（带时区）
+2. **显示时间**：根据用户时区转换显示
+3. **时间比较**：先转换为同一时区再比较
+4. **脚本时间**：在脚本开头显式设置 `TZ` 环境变量
+   ```bash
+   export TZ='Asia/Shanghai'
+   TODAY=$(date +%Y-%m-%d)
+   ```
+
 ## 核心规则（必须遵守）
 
 ### UI 响应性优先
