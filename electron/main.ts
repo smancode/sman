@@ -291,26 +291,30 @@ function buildMenu(): void {
  */
 async function ensureHubConfig(homeDir: string): Promise<void> {
   const configPath = path.join(homeDir, 'config.json');
+  let config: Record<string, any> = {};
   try {
     const content = await fs.readFile(configPath, 'utf-8');
-    const config = JSON.parse(content);
-    if (!config.hub || !config.hub.serverUrl) {
-      config.hub = {
-        serverUrl: '',
-        updateUrl: '',
-        enabled: false,
-      };
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-    }
-    // Priority: build-time injection > config.hub.updateUrl > package.json default
-    const updateUrl = INJECTED_UPDATE_URL || config.hub?.updateUrl;
-    if (updateUrl) {
-      autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
-    }
+    config = JSON.parse(content);
   } catch {
     // config.json doesn't exist yet, server will create it
   }
-  // Even without config.json, injected URL should work
+
+  // Enterprise build: auto-enable hub when build-time vars are injected
+  if (INJECTED_HUB_URL && INJECTED_PSK) {
+    if (!config.hub?.enabled) {
+      config.hub = { ...config.hub, serverUrl: INJECTED_HUB_URL, enabled: true };
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+    }
+  } else if (!config.hub || !config.hub.serverUrl) {
+    config.hub = { serverUrl: '', updateUrl: '', enabled: false };
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+  }
+
+  // Priority: build-time injection > config.hub.updateUrl > package.json default
+  const updateUrl = INJECTED_UPDATE_URL || config.hub?.updateUrl;
+  if (updateUrl) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
+  }
   if (INJECTED_UPDATE_URL) {
     autoUpdater.setFeedURL({ provider: 'generic', url: INJECTED_UPDATE_URL });
   }
