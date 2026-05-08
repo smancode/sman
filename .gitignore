@@ -6,6 +6,7 @@ bundled/
 logs/
 .env
 .env.local
+.env.build
 .idea/
 .vscode/
 *.swp

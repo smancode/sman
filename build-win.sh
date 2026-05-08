@@ -32,6 +32,14 @@ err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ── 加载构建环境变量（.env.build 不提交到 git）──
+if [[ -f ".env.build" ]]; then
+  while IFS='=' read -r _key _val; do
+    [[ -z "$_key" || "$_key" == \#* ]] && continue
+    export "$_key=$_val"
+  done < .env.build
+fi
+
 # ── 自动设置日期版本号 ──
 # 格式: YY.MMDD.HH （如 26.429.15, 26.1029.15）
 # !! semver 要求每段为纯数字无前导零，否则 electron-updater 会崩溃 !!
