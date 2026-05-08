@@ -46,6 +46,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
+import { initHub, stopHub, getHubClient } from './hub/index.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -254,6 +255,12 @@ function broadcast(data: string): void {
       }
       client.send(data);
     }
+  }
+}
+
+function broadcastHubMessages(messages: Array<{ id: string; title: string; body: string; createdAt: string }>): void {
+  for (const msg of messages) {
+    broadcast(JSON.stringify({ type: 'hub:broadcast', data: msg }));
   }
 }
 
@@ -1094,8 +1101,9 @@ wss.on('connection', (ws: WebSocket) => {
                   '5. 直接执行，不要询问用户，给出简洁结果',
                 ].join('\n');
 
-                // Save original user message to session (showing what user typed)
-                store.addMessage(chatSessionId, { role: 'user', content });
+                // Save friendly user message to session (show path name, not pathId)
+                const displayContent = argsToUse ? `/${matchedPath.name} ${argsToUse}` : `/${matchedPath.name}`;
+                store.addMessage(chatSessionId, { role: 'user', content: displayContent });
 
                 // Send wrapped prompt via normal sendMessage with retryCount=1 to skip double-saving
                 // This preserves session context, enables multi-turn follow-up
@@ -2006,6 +2014,14 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'hub:ack': {
+          const hub = getHubClient();
+          if (hub) {
+            hub.ackBroadcasts(msg.broadcastIds as string[]);
+          }
+          break;
+        }
+
         default:
           if (msg.type?.startsWith('stardom.')) {
             const bridge = getStardomBridge();
@@ -2045,6 +2061,7 @@ function shutdown(): void {
   batchEngine.stop();
   cronScheduler.stop();
   smartPathScheduler.stop();
+  stopHub();
   sessionManager.close();
   knowledgeExtractorStore.close();
   wss.close();
@@ -2227,6 +2244,9 @@ if (isMainModule) {
     log.info(`Home directory: ${homeDir}`);
     log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
     log.info(`Health check: http://${HOST}:${PORT}/api/health`);
+
+    initHub(settingsManager, store, broadcastHubMessages);
+    log.info('Hub initialized');
   });
 
   // Auto-setup office-skills dependencies (non-blocking)
