@@ -342,6 +342,17 @@ async function startServerInProcess(): Promise<void> {
       console.log(`[Electron] Server listening on ${HOST}:${BACKEND_PORT}`);
       console.log(`[Electron] Home: ${serverModule.homeDir}`);
       await ensureHubConfig(serverModule.homeDir);
+      // Init hub reporting — server/index.ts only calls initHub() inside
+      // the isMainModule block, which is false when loaded via import().
+      // Must call it explicitly here.
+      if (typeof serverModule.startHub === 'function') {
+        try {
+          serverModule.startHub();
+          console.log('[Electron] Hub initialized');
+        } catch (err) {
+          console.error('[Electron] startHub failed:', err);
+        }
+      }
     });
   } catch (err) {
     console.error('[Electron] Failed to start server:', err);

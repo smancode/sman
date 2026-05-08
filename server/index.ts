@@ -2137,6 +2137,13 @@ async function setupOfficeSkills(): Promise<void> {
 export { shutdown as stopServer };
 export { server, homeDir };
 
+/** Called by Electron's startServerInProcess() after listen().
+ *  server/index.ts only calls initHub() inside the isMainModule block,
+ *  which is false when loaded via dynamic import(). */
+export function startHub(): void {
+  initHub(settingsManager, store, broadcastStore);
+}
+
 // Stardom Bridge（独立模块，未配置时无副作用）
 initStardomBridge({
   sessionManager,
