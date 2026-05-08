@@ -3,8 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useUpdateStore } from '@/stores/update';
 import { t } from '@/locales';
-import { useUpdateStore } from '@/stores/update';
-import { t } from '@/locales';
 
 declare const __APP_VERSION__: string;
 const APP_VERSION = __APP_VERSION__;
