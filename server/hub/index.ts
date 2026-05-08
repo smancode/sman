@@ -3,8 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { SessionStore } from '../session-store.js';
 import type { SettingsManager } from '../settings-manager.js';
+import type { BroadcastStore } from '../broadcast-store.js';
 import { HubClient } from './client.js';
-import type { BroadcastMessage } from './types.js';
 
 let hubClient: HubClient | null = null;
 
@@ -22,7 +22,7 @@ function getVersion(): string {
 export function initHub(
   settingsManager: SettingsManager,
   sessionStore: SessionStore,
-  onBroadcast: (messages: BroadcastMessage[]) => void,
+  broadcastStore: BroadcastStore,
 ): void {
   const config = settingsManager.getConfig();
   const hub = config.hub;
@@ -34,7 +34,7 @@ export function initHub(
     getEnabled: () => settingsManager.getConfig().hub?.enabled ?? false,
     getVersion,
     sessionStore,
-    onBroadcast,
+    broadcastStore,
   });
 
   hubClient.start();

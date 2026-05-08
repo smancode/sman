@@ -46,7 +46,8 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub, getHubClient } from './hub/index.js';
+import { initHub, stopHub } from './hub/index.js';
+import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -114,6 +115,7 @@ ensureHomeDir(homeDir);
 
 const dbPath = path.join(homeDir, 'sman.db');
 const store = new SessionStore(dbPath);
+const broadcastStore = new BroadcastStore(store.getDatabase());
 const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
 setSessionManagerForPush(sessionManager);
@@ -255,12 +257,6 @@ function broadcast(data: string): void {
       }
       client.send(data);
     }
-  }
-}
-
-function broadcastHubMessages(messages: Array<{ id: string; title: string; body: string; createdAt: string }>): void {
-  for (const msg of messages) {
-    broadcast(JSON.stringify({ type: 'hub:broadcast', data: msg }));
   }
 }
 
@@ -2014,19 +2010,10 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
-        case 'hub:ack': {
-          const hub = getHubClient();
-          if (hub) {
-            hub.ackBroadcasts(msg.broadcastIds as string[]);
-          }
-          break;
-        }
-
-        case 'hub:fetch': {
-          const hubCli = getHubClient();
-          if (hubCli) {
-            hubCli.fetchBroadcasts();
-          }
+        case 'hub:query': {
+          const broadcasts = broadcastStore.getRecent(7);
+          log.info(`hub:query from WS client, returning ${broadcasts.length} broadcast(s)`);
+          ws.send(JSON.stringify({ type: 'hub:broadcasts', data: broadcasts }));
           break;
         }
 
@@ -2253,7 +2240,7 @@ if (isMainModule) {
     log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
     log.info(`Health check: http://${HOST}:${PORT}/api/health`);
 
-    initHub(settingsManager, store, broadcastHubMessages);
+    initHub(settingsManager, store, broadcastStore);
     log.info('Hub initialized');
   });
 

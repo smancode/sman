@@ -149,6 +149,10 @@ export class SessionStore {
     this.log.info('Database initialized');
   }
 
+  getDatabase(): Database.Database {
+    return this.db;
+  }
+
   createSession(input: CreateSessionInput): Session {
     const { id, systemId, workspace, isCron } = input;
     const isCronValue = isCron ? 1 : 0;

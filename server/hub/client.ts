@@ -1,8 +1,11 @@
 import os from 'node:os';
 import type { SessionStore } from '../session-store.js';
-import type { BroadcastMessage, ReportPayload, BroadcastQueryPayload, AckPayload } from './types.js';
+import type { BroadcastStore } from '../broadcast-store.js';
+import type { BroadcastMessage, ReportPayload, BroadcastQueryPayload } from './types.js';
 import { buildEncryptedRequest, decrypt } from './crypto.js';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('Hub');
 const TIMEOUT_MS = 5000;
 const REPORT_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -11,17 +14,15 @@ interface HubDeps {
   getEnabled: () => boolean;
   getVersion: () => string;
   sessionStore: SessionStore;
-  onBroadcast: (messages: BroadcastMessage[]) => void;
+  broadcastStore: BroadcastStore;
 }
 
 export class HubClient {
   private deps: HubDeps;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private lastBroadcastFetch: string;
 
   constructor(deps: HubDeps) {
     this.deps = deps;
-    this.lastBroadcastFetch = new Date(0).toISOString();
   }
 
   start(): void {
@@ -56,11 +57,7 @@ export class HubClient {
     return `${hostname}@${ip}`;
   }
 
-  private getActiveSessionCount(): number {
-    return this.deps.sessionStore.getActiveSessionCount();
-  }
-
-  async reportHeartbeat(): Promise<void> {
+  private async reportHeartbeat(): Promise<void> {
     try {
       const clientId = this.getClientId();
       const payload: ReportPayload = {
@@ -69,10 +66,9 @@ export class HubClient {
         hostname: os.hostname(),
         ip: clientId.split('@')[1],
         reportTime: new Date().toISOString(),
-        activeSessions: this.getActiveSessionCount(),
+        activeSessions: this.deps.sessionStore.getActiveSessionCount(),
       };
 
-      console.log(`[hub] reporting heartbeat: ${clientId}, sessions=${payload.activeSessions}`);
       const url = `${this.deps.getServerUrl()}/api/report`;
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -86,23 +82,20 @@ export class HubClient {
 
       clearTimeout(tid);
       if (!res.ok) {
-        console.error(`[hub] report failed: ${res.status}`);
-      } else {
-        console.log(`[hub] heartbeat ok`);
+        log.error(`heartbeat failed: ${res.status}`);
       }
-    } catch (err) {
-      console.error(`[hub] report error: ${err instanceof Error ? err.message : String(err)}`);
+    } catch {
+      // silent
     }
   }
 
-  async fetchBroadcasts(): Promise<void> {
+  private async fetchBroadcasts(): Promise<void> {
     try {
       const payload: BroadcastQueryPayload = {
         clientId: this.getClientId(),
-        since: this.lastBroadcastFetch,
+        since: new Date(0).toISOString(),
       };
 
-      console.log(`[hub] fetching broadcasts since ${this.lastBroadcastFetch}`);
       const url = `${this.deps.getServerUrl()}/api/broadcasts`;
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -115,48 +108,16 @@ export class HubClient {
       });
 
       clearTimeout(tid);
-      if (!res.ok) {
-        console.error(`[hub] fetch broadcasts failed: ${res.status}`);
-        return;
-      }
+      if (!res.ok) return;
 
       const body = await res.json();
-      const data = decrypt(body.payload) as { messages: BroadcastMessage[]; hasMore: boolean };
+      const data = decrypt(body.payload) as { messages: BroadcastMessage[] };
 
-      if (data.messages.length > 0) {
-        console.log(`[hub] received ${data.messages.length} broadcast(s): ${data.messages.map(m => m.title).join(', ')}`);
-        this.lastBroadcastFetch = new Date().toISOString();
-        this.deps.onBroadcast(data.messages);
-      } else {
-        console.log(`[hub] no new broadcasts`);
-      }
-    } catch (err) {
-      console.error(`[hub] fetch broadcasts error: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  async ackBroadcasts(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    try {
-      const payload: AckPayload = {
-        clientId: this.getClientId(),
-        broadcastIds: ids,
-      };
-
-      const url = `${this.deps.getServerUrl()}/api/ack`;
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildEncryptedRequest(payload)),
-        signal: controller.signal,
-      });
-
-      clearTimeout(tid);
-      if (!res.ok) {
-        console.error(`[hub] ack failed: ${res.status}`);
+      const added = this.deps.broadcastStore.mergeBroadcasts(
+        data.messages.map(m => ({ id: m.id, title: m.title, body: m.body, createdAt: m.createdAt }))
+      );
+      if (added > 0) {
+        log.info(`Fetched ${added} new broadcast(s)`);
       }
     } catch {
       // silent

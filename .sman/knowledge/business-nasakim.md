@@ -1,6 +1,6 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-08T03:25:16.244Z
+> Last extracted: 2026-05-08T05:30:21.817Z
 
 ## Smart Path 的 path.md 元数据要求
 <!-- hash: a1b2c3 -->
