@@ -1,4 +1,6 @@
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { SessionStore } from '../session-store.js';
 import type { BroadcastStore } from '../broadcast-store.js';
 import type { BroadcastMessage, ReportPayload, BroadcastQueryPayload } from './types.js';
@@ -28,9 +30,9 @@ export class HubClient {
   start(): void {
     const enabled = this.deps.getEnabled();
     const serverUrl = this.deps.getServerUrl();
-    log.info(`start() called: enabled=${enabled}, serverUrl=${serverUrl || '(empty)'}`);
+    this.debugLog(`HubClient.start() enabled=${enabled}, serverUrl=${serverUrl || '(empty)'}`);
     if (!enabled || !serverUrl) {
-      log.warn(`Hub not starting: enabled=${enabled}, serverUrl='${serverUrl || ''}'`);
+      this.debugLog(`Hub NOT starting`);
       return;
     }
     this.reportHeartbeat();
@@ -63,6 +65,14 @@ export class HubClient {
     return `${hostname}@${ip}`;
   }
 
+  private debugLog(msg: string): void {
+    try {
+      const logPath = path.join(os.homedir(), '.sman', 'hub-debug.log');
+      const line = `[${new Date().toISOString()}] ${msg}\n`;
+      fs.appendFileSync(logPath, line);
+    } catch {}
+  }
+
   private async reportHeartbeat(): Promise<void> {
     try {
       const clientId = this.getClientId();
@@ -77,7 +87,7 @@ export class HubClient {
 
       const serverUrl = this.deps.getServerUrl();
       const url = `${serverUrl}/api/report`;
-      log.info(`heartbeat → ${url} (clientId=${clientId}, version=${payload.version})`);
+      this.debugLog(`heartbeat → ${url} (clientId=${clientId}, version=${payload.version})`);
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -89,13 +99,14 @@ export class HubClient {
       });
 
       clearTimeout(tid);
+      const body = await res.text();
       if (!res.ok) {
-        log.error(`heartbeat failed: ${res.status} ${await res.text().catch(() => '')}`);
+        this.debugLog(`heartbeat FAILED: ${res.status} ${body}`);
       } else {
-        log.info(`heartbeat OK: ${res.status}`);
+        this.debugLog(`heartbeat OK: ${res.status} ${body}`);
       }
     } catch (err) {
-      log.error(`heartbeat error: ${err instanceof Error ? err.message : err}`);
+      this.debugLog(`heartbeat ERROR: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

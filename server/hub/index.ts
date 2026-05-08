@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import type { SessionStore } from '../session-store.js';
 import type { SettingsManager } from '../settings-manager.js';
 import type { BroadcastStore } from '../broadcast-store.js';
@@ -63,4 +64,12 @@ export function stopHub(): void {
 
 export function getHubClient(): HubClient | null {
   return hubClient;
+}
+
+export function getHubStatus(): Record<string, unknown> {
+  return {
+    initialized: hubClient !== null,
+    SMAN_HUB_URL: process.env.SMAN_HUB_URL || '(not set)',
+    SMAN_PSK: process.env.SMAN_PSK ? '(set, ' + process.env.SMAN_PSK.length + ' chars)' : '(not set, will use bundled hub.key)',
+  };
 }

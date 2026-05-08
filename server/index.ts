@@ -46,7 +46,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub } from './hub/index.js';
+import { initHub, stopHub, getHubStatus } from './hub/index.js';
 import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -488,6 +488,13 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toLocaleString('zh-CN', { hour12: false }) }));
+    return;
+  }
+
+  // Public: hub diagnostics (no auth, for debugging)
+  if (req.url === '/api/hub-status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getHubStatus()));
     return;
   }
 
@@ -2014,6 +2021,11 @@ wss.on('connection', (ws: WebSocket) => {
           const broadcasts = broadcastStore.getRecent(7);
           log.info(`hub:query from WS client, returning ${broadcasts.length} broadcast(s)`);
           ws.send(JSON.stringify({ type: 'hub:broadcasts', data: broadcasts }));
+          break;
+        }
+
+        case 'hub:status': {
+          ws.send(JSON.stringify({ type: 'hub:status', data: getHubStatus() }));
           break;
         }
 
