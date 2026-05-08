@@ -44,8 +44,9 @@ export function CodeViewerOverlay() {
   }, [open, closeViewer]);
 
   const handleSelectFile = useCallback((fp: string) => {
-    loadFile(fp);
-  }, [loadFile]);
+    const isReload = fp === filePath;
+    loadFile(fp, isReload);
+  }, [loadFile, filePath]);
 
   // Drag to resize tree
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

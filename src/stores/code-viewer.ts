@@ -68,6 +68,50 @@ interface FileCacheEntry {
 }
 
 const MAX_FILE_CACHE = 10;
+const REFRESH_INTERVAL_MS = 5000;
+let _refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+function startFileRefresh() {
+  stopFileRefresh();
+  _refreshTimer = setInterval(() => {
+    const state = useCodeViewerStore.getState();
+    if (!state.open || !state.filePath || state.dirty || state.saving) return;
+    // Silently re-fetch current file without updating loading state
+    const client = getWsClient();
+    if (!client) return;
+    const filePath = state.filePath;
+    const loadId = state._activeLoadId;
+    const unsub = wrapHandler(client, 'code.readFile', (msg) => {
+      if (useCodeViewerStore.getState()._activeLoadId !== loadId) { unsub(); return; }
+      unsub();
+      const result = msg.result as (FileContent | BinaryFileInfo | { error?: string }) | undefined;
+      if (!result || ('error' in result && result.error)) return;
+      const file = result as FileContent | BinaryFileInfo;
+      // Only update if content actually changed
+      const current = useCodeViewerStore.getState().currentFile;
+      if (current && 'content' in current && 'content' in file) {
+        if ((current as FileContent).content === (file as FileContent).content) return;
+      }
+      // Don't overwrite if user is editing
+      if (useCodeViewerStore.getState().dirty) return;
+      const newCache = new Map(useCodeViewerStore.getState().fileCache);
+      newCache.set(filePath, { file, timestamp: Date.now() });
+      useCodeViewerStore.setState({ currentFile: file, fileCache: newCache });
+    });
+    client.send({
+      type: 'code.readFile',
+      workspace: state.workspace,
+      filePath,
+    });
+  }, REFRESH_INTERVAL_MS);
+}
+
+function stopFileRefresh() {
+  if (_refreshTimer) {
+    clearInterval(_refreshTimer);
+    _refreshTimer = null;
+  }
+}
 
 // In-flight loadDir promises to prevent duplicate requests for the same path
 const _dirInFlight = new Map<string, Promise<DirEntry[]>>();
@@ -116,7 +160,7 @@ interface CodeViewerState {
   // Actions
   openViewer: (workspace: string, filePath: string, lineNumber?: number | null, sessionId?: string | null) => void;
   closeViewer: () => void;
-  loadFile: (filePath: string) => void;
+  loadFile: (filePath: string, forceRefresh?: boolean) => void;
   loadDir: (dirPath: string) => Promise<DirEntry[]>;
   searchSymbols: (symbol: string, fileExt?: string) => void;
   clearSearch: () => void;
@@ -208,6 +252,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   },
 
   closeViewer() {
+    stopFileRefresh();
     set({
       open: false,
       currentFile: null,
@@ -219,7 +264,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     });
   },
 
-  loadFile(filePath: string) {
+  loadFile(filePath: string, forceRefresh = false) {
     const client = getWsClient();
     if (!client) return;
 
@@ -231,17 +276,20 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       return;
     }
 
-    // Check cache first
-    const cached = fileCache.get(filePath);
-    if (cached) {
-      set({
-        currentFile: cached.file,
-        loading: false,
-        error: null,
-        filePath,
-        dirty: false,
-      });
-      return;
+    // Check cache first (skip if forceRefresh or user has unsaved edits)
+    if (!forceRefresh) {
+      const cached = fileCache.get(filePath);
+      if (cached) {
+        set({
+          currentFile: cached.file,
+          loading: false,
+          error: null,
+          filePath,
+          dirty: false,
+        });
+        startFileRefresh();
+        return;
+      }
     }
 
     const loadId = get()._activeLoadId + 1;
@@ -293,6 +341,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
         fileCache: newCache,
         dirty: false,
       });
+      startFileRefresh();
     });
 
     client.send({
