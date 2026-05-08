@@ -67,7 +67,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Sman',
     titleBarStyle: 'hidden',
-    ...(process.platform === 'win32' ? { frame: false, transparent: true, backgroundColor: '#00000000' } : {}),
+    ...(process.platform === 'win32' ? { frame: false, transparent: true, backgroundColor: '#00000000', roundedCorners: true } : {}),
     show: false,
     icon: path.join(__dirname, isDev ? '../public/favicon.png' : '../../public/favicon.png'),
     webPreferences: {
