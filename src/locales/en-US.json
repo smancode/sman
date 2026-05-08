@@ -2770,5 +2770,13 @@
   "settings.sections.update": {
     "text": "Check for Updates",
     "context": "Check for updates nav item"
+  },
+  "hub.broadcast.title": {
+    "text": "Sman Notice",
+    "context": "Default title for broadcast notification"
+  },
+  "hub.broadcast.dismiss": {
+    "text": "Got it",
+    "context": "Button to dismiss broadcast notification"
   }
 }

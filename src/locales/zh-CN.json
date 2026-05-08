@@ -2770,5 +2770,13 @@
   "settings.sections.update": {
     "text": "检查更新",
     "context": "检查更新导航"
+  },
+  "hub.broadcast.title": {
+    "text": "Sman 通知",
+    "context": "广播通知的默认标题"
+  },
+  "hub.broadcast.dismiss": {
+    "text": "知道了",
+    "context": "关闭广播通知按钮"
   }
 }

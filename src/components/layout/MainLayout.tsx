@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Titlebar } from './Titlebar';
 import { UpdateBanner } from '@/components/UpdateBanner';
+import { BroadcastToast } from '@/components/BroadcastToast';
 import { useChatStore } from '@/stores/chat';
 import { useUpdateStore } from '@/stores/update';
 import { cn } from '@/lib/utils';
@@ -82,6 +83,7 @@ export function MainLayout() {
           </main>
         </div>
       </div>
+      <BroadcastToast />
     </div>
   );
 }
