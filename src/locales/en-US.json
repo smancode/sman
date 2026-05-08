@@ -2771,6 +2771,10 @@
     "text": "Check for Updates",
     "context": "Check for updates nav item"
   },
+  "update.settings.releaseNotes": {
+    "text": "Release Notes",
+    "context": "Update release notes heading"
+  },
   "hub.broadcast.title": {
     "text": "Sman Notice",
     "context": "Default title for broadcast notification"

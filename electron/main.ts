@@ -38,6 +38,18 @@ if (!app.isPackaged) {
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 5880;
 
+// Build-time enterprise injection.
+// electron-vite define replaces process.env.SMAN_* with string literals when env vars are set.
+// Open-source builds leave them as actual process.env reads (undefined at build time).
+const INJECTED_UPDATE_URL = process.env.SMAN_UPDATE_URL;
+const INJECTED_HUB_URL = process.env.SMAN_HUB_URL;
+const INJECTED_PSK = process.env.SMAN_PSK;
+
+// Propagate to process.env so server-side code (loaded at runtime) can also read them.
+if (INJECTED_UPDATE_URL) process.env.SMAN_UPDATE_URL = INJECTED_UPDATE_URL;
+if (INJECTED_HUB_URL) process.env.SMAN_HUB_URL = INJECTED_HUB_URL;
+if (INJECTED_PSK) process.env.SMAN_PSK = INJECTED_PSK;
+
 // Auto-updater: silent download, never auto-install
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -290,11 +302,17 @@ async function ensureHubConfig(homeDir: string): Promise<void> {
       };
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
     }
-    if (config.hub?.updateUrl) {
-      autoUpdater.setFeedURL({ provider: 'generic', url: config.hub.updateUrl });
+    // Priority: build-time injection > config.hub.updateUrl > package.json default
+    const updateUrl = INJECTED_UPDATE_URL || config.hub?.updateUrl;
+    if (updateUrl) {
+      autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
     }
   } catch {
     // config.json doesn't exist yet, server will create it
+  }
+  // Even without config.json, injected URL should work
+  if (INJECTED_UPDATE_URL) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: INJECTED_UPDATE_URL });
   }
 }
 

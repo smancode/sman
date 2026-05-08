@@ -27,10 +27,13 @@ export function initHub(
   const config = settingsManager.getConfig();
   const hub = config.hub;
 
-  if (!hub?.enabled || !hub?.serverUrl) return;
+  // Priority: SMAN_HUB_URL env > config.hub.serverUrl
+  const serverUrl = process.env.SMAN_HUB_URL || hub?.serverUrl || '';
+
+  if (!hub?.enabled || !serverUrl) return;
 
   hubClient = new HubClient({
-    getServerUrl: () => settingsManager.getConfig().hub?.serverUrl || '',
+    getServerUrl: () => process.env.SMAN_HUB_URL || settingsManager.getConfig().hub?.serverUrl || '',
     getEnabled: () => settingsManager.getConfig().hub?.enabled ?? false,
     getVersion,
     sessionStore,

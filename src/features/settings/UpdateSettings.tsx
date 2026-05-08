@@ -14,6 +14,7 @@ interface UpdateSettingsProps {
 export function UpdateSettings({ id }: UpdateSettingsProps) {
   const status = useUpdateStore((s) => s.status);
   const newVersion = useUpdateStore((s) => s.newVersion);
+  const releaseNotes = useUpdateStore((s) => s.releaseNotes);
   const errorMessage = useUpdateStore((s) => s.errorMessage);
   const isElectron = useUpdateStore((s) => s.isElectron);
   const checkUpdate = useUpdateStore((s) => s.checkUpdate);
@@ -55,14 +56,21 @@ export function UpdateSettings({ id }: UpdateSettingsProps) {
             </span>
           )}
           {status === 'ready' && newVersion && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-primary font-medium">
-                {t('update.settings.ready').replace('{version}', newVersion)}
-              </span>
-              <Button onClick={installUpdate} size="sm">
-                <Download className="h-4 w-4 mr-1.5" />
-                {t('update.settings.installButton')}
-              </Button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-primary font-medium">
+                  {t('update.settings.ready').replace('{version}', newVersion)}
+                </span>
+                <Button onClick={installUpdate} size="sm">
+                  <Download className="h-4 w-4 mr-1.5" />
+                  {t('update.settings.installButton')}
+                </Button>
+              </div>
+              {releaseNotes && (
+                <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                  {releaseNotes}
+                </div>
+              )}
             </div>
           )}
           {status === 'not-available' && (

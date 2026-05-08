@@ -7,6 +7,7 @@ export function UpdateBanner() {
   const navigate = useNavigate();
   const status = useUpdateStore((s) => s.status);
   const newVersion = useUpdateStore((s) => s.newVersion);
+  const releaseNotes = useUpdateStore((s) => s.releaseNotes);
   const bannerDismissed = useUpdateStore((s) => s.bannerDismissed);
   const isElectron = useUpdateStore((s) => s.isElectron);
   const dismissBanner = useUpdateStore((s) => s.dismissBanner);
@@ -16,9 +17,14 @@ export function UpdateBanner() {
   if (status === 'ready' && newVersion) {
     return (
       <div className="flex items-center justify-between px-4 py-2 bg-primary/10 border-b border-primary/20 text-sm animate-in slide-in-from-top duration-300">
-        <div className="flex items-center gap-2">
-          <Download className="h-4 w-4 text-primary" />
-          <span>{t('update.banner.ready').replace('{version}', newVersion)}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Download className="h-4 w-4 text-primary shrink-0" />
+          <div className="min-w-0">
+            <span>{t('update.banner.ready').replace('{version}', newVersion)}</span>
+            {releaseNotes && (
+              <p className="text-xs text-muted-foreground truncate">{releaseNotes.split('\n')[0]}</p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button

@@ -2,9 +2,19 @@ import { create } from 'zustand';
 
 type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'not-available' | 'error';
 
+function normalizeReleaseNotes(raw: unknown): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    return raw.map((item: { version?: string; note?: string }) => item.note || '').filter(Boolean).join('\n') || null;
+  }
+  return null;
+}
+
 interface UpdateState {
   status: UpdateStatus;
   newVersion: string | null;
+  releaseNotes: string | null;
   errorMessage: string | null;
   bannerDismissed: boolean;
   isElectron: boolean;
@@ -18,6 +28,7 @@ interface UpdateState {
 export const useUpdateStore = create<UpdateState>((set) => ({
   status: 'idle',
   newVersion: null,
+  releaseNotes: null,
   errorMessage: null,
   bannerDismissed: false,
   isElectron: !!window.sman?.updater,
@@ -49,7 +60,12 @@ export const useUpdateStore = create<UpdateState>((set) => ({
     if (!window.sman?.updater) return () => {};
 
     const unsubAvailable = window.sman.updater.onUpdateAvailable((info) => {
-      set({ status: 'downloading', newVersion: info.version, bannerDismissed: false });
+      set({
+        status: 'downloading',
+        newVersion: info.version,
+        releaseNotes: normalizeReleaseNotes(info.releaseNotes),
+        bannerDismissed: false,
+      });
     });
 
     const unsubNotAvailable = window.sman.updater.onUpdateNotAvailable(() => {

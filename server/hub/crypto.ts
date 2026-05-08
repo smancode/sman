@@ -1,16 +1,57 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { EncryptedRequest } from './types.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
-
-const PSK = 'sman-hub-aes256-key!!2026-32b!!!';
+const KEY_LENGTH = 32;
 const PSK_VERSION = 1;
 
+const DEFAULT_PSK = 'sman-hub-aes256-key!!2026-32b!!!';
+
+let cachedKey: string | null = null;
+
+function getBundledKeyPath(): string {
+  // extraResources puts hub.key next to the app executable
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  // dev: project root; prod: resources/ alongside app
+  return path.resolve(__dirname, '../../hub.key');
+}
+
+function readKeyFile(filePath: string): string | null {
+  try {
+    const key = fs.readFileSync(filePath, 'utf-8').trim();
+    if (key.length === KEY_LENGTH) return key;
+  } catch {}
+  return null;
+}
+
+function loadPsk(): string {
+  if (cachedKey) return cachedKey;
+
+  // Priority: SMAN_PSK env > ~/.sman/hub.key (user override) > bundled hub.key > default
+  if (process.env.SMAN_PSK && process.env.SMAN_PSK.length === KEY_LENGTH) {
+    cachedKey = process.env.SMAN_PSK;
+    return cachedKey;
+  }
+
+  const userKey = readKeyFile(path.join(os.homedir(), '.sman', 'hub.key'));
+  if (userKey) { cachedKey = userKey; return userKey; }
+
+  const bundledKey = readKeyFile(getBundledKeyPath());
+  if (bundledKey) { cachedKey = bundledKey; return bundledKey; }
+
+  cachedKey = DEFAULT_PSK;
+  return DEFAULT_PSK;
+}
+
 export function encrypt(data: unknown): string {
+  const key = Buffer.from(loadPsk(), 'utf-8');
   const iv = crypto.randomBytes(IV_LENGTH);
-  const key = Buffer.from(PSK, 'utf-8');
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const plaintext = JSON.stringify(data);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
@@ -19,8 +60,8 @@ export function encrypt(data: unknown): string {
 }
 
 export function decrypt(encoded: string): unknown {
+  const key = Buffer.from(loadPsk(), 'utf-8');
   const buf = Buffer.from(encoded, 'base64');
-  const key = Buffer.from(PSK, 'utf-8');
   const iv = buf.subarray(0, IV_LENGTH);
   const authTag = buf.subarray(buf.length - AUTH_TAG_LENGTH);
   const ciphertext = buf.subarray(IV_LENGTH, buf.length - AUTH_TAG_LENGTH);

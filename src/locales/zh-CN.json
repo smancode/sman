@@ -2771,6 +2771,10 @@
     "text": "检查更新",
     "context": "检查更新导航"
   },
+  "update.settings.releaseNotes": {
+    "text": "更新日志",
+    "context": "更新版本日志标题"
+  },
   "hub.broadcast.title": {
     "text": "Sman 通知",
     "context": "广播通知的默认标题"
