@@ -5,7 +5,9 @@ import type { SessionStore } from '../session-store.js';
 import type { SettingsManager } from '../settings-manager.js';
 import type { BroadcastStore } from '../broadcast-store.js';
 import { HubClient } from './client.js';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('Hub');
 let hubClient: HubClient | null = null;
 
 function getVersion(): string {
@@ -19,27 +21,33 @@ function getVersion(): string {
   }
 }
 
+function getServerUrl(sm: SettingsManager): string {
+  return process.env.SMAN_HUB_URL || sm.getConfig().hub?.serverUrl || '';
+}
+
+function isHubEnabled(sm: SettingsManager): boolean {
+  // SMAN_HUB_URL injected (enterprise build) = always enabled
+  if (process.env.SMAN_HUB_URL) return true;
+  return sm.getConfig().hub?.enabled ?? false;
+}
+
 export function initHub(
   settingsManager: SettingsManager,
   sessionStore: SessionStore,
   broadcastStore: BroadcastStore,
 ): void {
-  const config = settingsManager.getConfig();
-  const hub = config.hub;
+  const serverUrl = getServerUrl(settingsManager);
+  const enabled = isHubEnabled(settingsManager);
+  log.info(`initHub: enabled=${enabled}, serverUrl=${serverUrl || '(empty)'}`);
 
-  // Priority: SMAN_HUB_URL env > config.hub.serverUrl
-  const serverUrl = process.env.SMAN_HUB_URL || hub?.serverUrl || '';
-  // Enterprise build: SMAN_HUB_URL injected = auto-enable (PSK has built-in fallback)
-  const forceEnabled = !!process.env.SMAN_HUB_URL;
-
-  if ((!hub?.enabled && !forceEnabled) || !serverUrl) return;
+  if (!enabled || !serverUrl) {
+    log.info(`Hub disabled (enabled=${enabled}, serverUrl='${serverUrl}')`);
+    return;
+  }
 
   hubClient = new HubClient({
-    getServerUrl: () => process.env.SMAN_HUB_URL || settingsManager.getConfig().hub?.serverUrl || '',
-    getEnabled: () => {
-      if (process.env.SMAN_HUB_URL) return true;
-      return settingsManager.getConfig().hub?.enabled ?? false;
-    },
+    getServerUrl: () => getServerUrl(settingsManager),
+    getEnabled: () => isHubEnabled(settingsManager),
     getVersion,
     sessionStore,
     broadcastStore,

@@ -26,7 +26,13 @@ export class HubClient {
   }
 
   start(): void {
-    if (!this.deps.getEnabled() || !this.deps.getServerUrl()) return;
+    const enabled = this.deps.getEnabled();
+    const serverUrl = this.deps.getServerUrl();
+    log.info(`start() called: enabled=${enabled}, serverUrl=${serverUrl || '(empty)'}`);
+    if (!enabled || !serverUrl) {
+      log.warn(`Hub not starting: enabled=${enabled}, serverUrl='${serverUrl || ''}'`);
+      return;
+    }
     this.reportHeartbeat();
     this.fetchBroadcasts();
     this.timer = setInterval(() => {
@@ -69,7 +75,9 @@ export class HubClient {
         activeSessions: this.deps.sessionStore.getActiveSessionCount(),
       };
 
-      const url = `${this.deps.getServerUrl()}/api/report`;
+      const serverUrl = this.deps.getServerUrl();
+      const url = `${serverUrl}/api/report`;
+      log.info(`heartbeat → ${url} (clientId=${clientId}, version=${payload.version})`);
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -82,21 +90,26 @@ export class HubClient {
 
       clearTimeout(tid);
       if (!res.ok) {
-        log.error(`heartbeat failed: ${res.status}`);
+        log.error(`heartbeat failed: ${res.status} ${await res.text().catch(() => '')}`);
+      } else {
+        log.info(`heartbeat OK: ${res.status}`);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      log.error(`heartbeat error: ${err instanceof Error ? err.message : err}`);
     }
   }
 
   private async fetchBroadcasts(): Promise<void> {
     try {
+      const clientId = this.getClientId();
       const payload: BroadcastQueryPayload = {
-        clientId: this.getClientId(),
+        clientId,
         since: new Date(0).toISOString(),
       };
 
-      const url = `${this.deps.getServerUrl()}/api/broadcasts`;
+      const serverUrl = this.deps.getServerUrl();
+      const url = `${serverUrl}/api/broadcasts`;
+      log.info(`fetchBroadcasts → ${url} (clientId=${clientId})`);
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -108,19 +121,23 @@ export class HubClient {
       });
 
       clearTimeout(tid);
-      if (!res.ok) return;
+      if (!res.ok) {
+        log.error(`fetchBroadcasts failed: ${res.status}`);
+        return;
+      }
 
       const body = await res.json();
       const data = decrypt(body.payload) as { messages: BroadcastMessage[] };
+      log.info(`fetchBroadcasts got ${data.messages.length} message(s)`);
 
       const added = this.deps.broadcastStore.mergeBroadcasts(
         data.messages.map(m => ({ id: m.id, title: m.title, body: m.body, createdAt: m.createdAt }))
       );
       if (added > 0) {
-        log.info(`Fetched ${added} new broadcast(s)`);
+        log.info(`Stored ${added} new broadcast(s)`);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      log.error(`fetchBroadcasts error: ${err instanceof Error ? err.message : err}`);
     }
   }
 }
