@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Download, RefreshCw, Server } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useUpdateStore } from '@/stores/update';
+import { t } from '@/locales';
 import { useUpdateStore } from '@/stores/update';
 import { t } from '@/locales';
 
@@ -20,17 +20,8 @@ export function UpdateSettings({ id }: UpdateSettingsProps) {
   const isElectron = useUpdateStore((s) => s.isElectron);
   const checkUpdate = useUpdateStore((s) => s.checkUpdate);
   const installUpdate = useUpdateStore((s) => s.installUpdate);
-  const [serverUrl, setServerUrl] = useState('');
-  const [urlSaved, setUrlSaved] = useState(false);
 
   if (!isElectron) return null;
-
-  const handleSaveServerUrl = () => {
-    if (!serverUrl.trim()) return;
-    window.sman?.updater?.setFeedURL?.(serverUrl.trim());
-    setUrlSaved(true);
-    setTimeout(() => setUrlSaved(false), 2000);
-  };
 
   return (
     <Card id={id}>
@@ -95,27 +86,6 @@ export function UpdateSettings({ id }: UpdateSettingsProps) {
                 {t('update.settings.retryButton')}
               </Button>
             </div>
-          )}
-        </div>
-
-        <div className="space-y-2 pt-2 border-t">
-          <label className="text-sm font-medium flex items-center gap-1.5">
-            <Server className="h-4 w-4 text-muted-foreground" />
-            {t('update.settings.serverUrl')}
-          </label>
-          <div className="flex gap-2">
-            <Input
-              value={serverUrl}
-              onChange={(e) => { setServerUrl(e.target.value); setUrlSaved(false); }}
-              placeholder={t('update.settings.serverUrlPlaceholder')}
-              className="flex-1"
-            />
-            <Button onClick={handleSaveServerUrl} variant="outline" size="sm" disabled={!serverUrl.trim()}>
-              {urlSaved ? '✓' : t('common.confirm')}
-            </Button>
-          </div>
-          {urlSaved && (
-            <p className="text-xs text-green-600">{t('update.settings.serverUrlSaved')}</p>
           )}
         </div>
       </CardContent>

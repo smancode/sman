@@ -172,7 +172,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle('updater:check', async () => {
     if (isDev) return { status: 'not-available' };
     try {
-      const result = await autoUpdater.checkForUpdates();
+      const result = await Promise.race([
+        autoUpdater.checkForUpdates(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+      ]);
+      if (!result) return { status: 'error', message: 'Check timed out (10s)' };
       if (result?.updateInfo) {
         return { status: 'available', version: result.updateInfo.version };
       }

@@ -25,7 +25,13 @@ export const useUpdateStore = create<UpdateState>((set) => ({
   checkUpdate: () => {
     if (!window.sman?.updater) return;
     set({ status: 'checking' });
-    window.sman.updater.check().catch(() => {
+    window.sman.updater.check().then((result) => {
+      if (result?.status === 'not-available') {
+        set({ status: 'not-available' });
+      } else if (result?.status === 'error') {
+        set({ status: 'error', errorMessage: result.message });
+      }
+    }).catch(() => {
       set({ status: 'error', errorMessage: 'Failed to check' });
     });
   },
