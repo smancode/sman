@@ -189,6 +189,7 @@ export interface SmartPath {
   steps: string; // JSON string of SmartPathStep[]
   status: SmartPathStatus;
   cronExpression?: string;
+  defaultArgs?: string;
   createdAt: string;
   updatedAt: string;
 }

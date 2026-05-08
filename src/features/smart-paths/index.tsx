@@ -122,11 +122,11 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
       <div className="flex justify-center"><div className="w-px h-4 bg-border" /></div>
       <Card className="relative group">
         <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <GripVertical className="h-4 w-4 text-muted-foreground cursor-move shrink-0" />
             <span className="text-sm font-semibold text-muted-foreground shrink-0">{index + 1}</span>
             <Input value={step.name || ''} onChange={(e) => onChange({ ...step, name: e.target.value })}
-              placeholder={t("smartpath.stepName")} className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium" />
+              placeholder={t("smartpath.stepName")} className="h-6 text-sm border-0 p-0 shadow-none focus-visible:ring-0 font-medium min-w-0" />
             <div className="flex-1" />
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 shrink-0"
               disabled={!step.userInput.trim() || executing || !workspace} onClick={onExecute}>
@@ -148,11 +148,11 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                   {executing ? t('smartpath.executionProcess') : t('smartpath.executionResult')}
                 </div>
                 <div ref={executing ? streamRef : undefined}
-                  className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
+                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
                   {executing && !executionStream ? (
                     <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
                   ) : (
-                    <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
+                    <Streamdown mode='static' controls={{ code: true, table: true }}>
                       {executionStream || ''}
                     </Streamdown>
                   )}
@@ -187,8 +187,8 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
         {index < total - 1 && <div className="w-px flex-1 min-h-[16px] bg-border mt-1" />}
       </div>
       <div className="flex-1 pb-3">
-        {step.name && <p className="text-sm font-medium">{step.name}</p>}
-        <p className="text-sm leading-relaxed text-muted-foreground">{step.userInput}</p>
+        {step.name && <p className="text-sm font-medium break-words">{step.name}</p>}
+        <p className="text-sm leading-relaxed text-muted-foreground break-words">{step.userInput}</p>
 
         {(executing || executionStream) && (
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
@@ -198,11 +198,11 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
               ) : t("smartpath.executionResult")}
             </div>
             <div ref={executing ? streamRef : undefined}
-              className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
+              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
               {executing && !executionStream ? (
                 <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
               ) : (
-                <Streamdown mode={executing ? 'streaming' : 'static'} controls={{ code: true, table: true }}>
+                <Streamdown mode='static' controls={{ code: true, table: true }}>
                   {executionStream || ''}
                 </Streamdown>
               )}
@@ -291,7 +291,7 @@ function ReportViewer({ content, onClose }: { content: string; onClose: () => vo
       </div>
       <Card>
         <CardContent className="p-4">
-          <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[500px] overflow-y-auto">
+          <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[500px] overflow-y-auto">
             <Streamdown mode="static" controls={{ code: true, table: true }}>
               {content}
             </Streamdown>
@@ -306,13 +306,14 @@ function ReportViewer({ content, onClose }: { content: string; onClose: () => vo
 
 function PathEditor({ path, onSave, onCancel }: {
   path: SmartPath;
-  onSave: (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => Promise<void>;
+  onSave: (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string, defaultArgs: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(path.name);
   const [description, setDescription] = useState(path.description || '');
   const [steps, setSteps] = useState<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } });
   const [cronExpression, setCronExpression] = useState(path.cronExpression || '');
+  const [defaultArgs, setDefaultArgs] = useState(path.defaultArgs || '');
   const [saving, setSaving] = useState(false);
 
   const executeStep = useSmartPathStore((s) => s.executeStep);
@@ -334,7 +335,7 @@ function PathEditor({ path, onSave, onCancel }: {
     if (!name.trim() || steps.length === 0) return;
     setSaving(true);
     try {
-      await onSave(name.trim(), description.trim(), steps, path.id, path.workspace, cronExpression.trim());
+      await onSave(name.trim(), description.trim(), steps, path.id, path.workspace, cronExpression.trim(), defaultArgs.trim());
     } finally { setSaving(false); }
   };
 
@@ -354,6 +355,16 @@ function PathEditor({ path, onSave, onCancel }: {
         <Label className="text-sm font-medium">{t("smartpath.scheduledExec")}</Label>
         <CronConfig value={cronExpression} onChange={setCronExpression} />
         <p className="text-xs text-muted-foreground">{t("smartpath.cronHint")}</p>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">{t("smartpath.parameters")}</Label>
+        <Input
+          value={defaultArgs}
+          onChange={(e) => setDefaultArgs(e.target.value)}
+          placeholder={t("smartpath.parametersPlaceholder")}
+          className="h-7 text-sm"
+        />
+        <p className="text-xs text-muted-foreground">{t("smartpath.parametersHint")}</p>
       </div>
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">{t("smartpath.stepLabel")}</Label>
@@ -395,6 +406,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
   const sc = STATUS_CONFIG[path.status];
   const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
+  const running = useSmartPathStore((s) => s.running);
   const fetchReport = useSmartPathStore((s) => s.fetchReport);
   const currentReport = useSmartPathStore((s) => s.currentReport);
   const references = useSmartPathStore((s) => s.references);
@@ -434,17 +446,24 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
         </div>
         <div className="flex gap-1.5 shrink-0">
           <Button variant="outline" size="sm" onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
-          <Button size="sm" onClick={onRun} disabled={path.status === 'running'}>
-            {path.status === 'running' ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> {t("smartpath.executing")}</> : <><Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}</>}
+          <Button size="sm" onClick={onRun} disabled={running}>
+            {running ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> {t("smartpath.executing")}</> : <><Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}</>}
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
         </div>
       </div>
 
+      {path.defaultArgs && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span className="text-xs font-medium text-foreground">{t("smartpath.parameters")}:</span>
+          <span className="text-xs break-all">{path.defaultArgs}</span>
+        </div>
+      )}
+
       {path.cronExpression && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="h-4 w-4" />
-          <span>{t("smartpath.scheduledLabel")}{path.cronExpression}</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="h-4 w-4 shrink-0" />
+          <span className="break-all">{t("smartpath.scheduledLabel")}{path.cronExpression}</span>
           <span className="text-xs">({describeCron(path.cronExpression)})</span>
         </div>
       )}
@@ -488,7 +507,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
                           <span className="text-sm font-medium">{ref.fileName}</span>
                           <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>{t("common.close")}</Button>
                         </div>
-                        <div className="markdown-content overflow-x-auto prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
+                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
                           <Streamdown mode="static" controls={{ code: true, table: true }}>
                             {currentReference}
                           </Streamdown>
@@ -546,7 +565,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
                     : <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
                   <span className="text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span>
                 </div>
-                <Badge variant={rs?.variant || 'outline'} className="text-[10px]">{rs?.label || r.status}</Badge>
+                <Badge variant={rs?.variant || 'outline'} className="text-[10px]">{rs ? t(rs.labelKey) : r.status}</Badge>
               </div>); })}
           </div>
         </div>
@@ -622,8 +641,8 @@ export function SmartPathPage() {
     setEditing(true);
   };
 
-  const handleSave = async (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string) => {
-    await updatePath(pathId, workspace, { name, description, steps: JSON.stringify(steps), status: 'ready', cronExpression });
+  const handleSave = async (name: string, description: string, steps: SmartPathStep[], pathId: string, workspace: string, cronExpression: string, defaultArgs: string) => {
+    await updatePath(pathId, workspace, { name, description, steps: JSON.stringify(steps), status: 'ready', cronExpression, defaultArgs });
     setEditing(false);
   };
 
@@ -645,7 +664,7 @@ export function SmartPathPage() {
           ) : currentPath ? (
             <PathDetail path={currentPath} runs={runs} reports={reports}
               onEdit={() => setEditing(true)}
-              onRun={() => runPath(currentPath.id, currentPath.workspace)}
+              onRun={() => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs)}
               onDelete={() => { deletePath(currentPath.id, currentPath.workspace); setCurrentPath(null); }} />
           ) : (
             <EmptyState onNew={() => setCreateOpen(true)} />

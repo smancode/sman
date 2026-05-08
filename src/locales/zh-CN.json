@@ -1259,6 +1259,18 @@
     "text": "Cron 表达式，如：0 9 * * 1-5 表示工作日每天 9 点执行。留空则不自动执行。",
     "context": "Cron 提示文字"
   },
+  "smartpath.parameters": {
+    "text": "参数",
+    "context": "参数标签"
+  },
+  "smartpath.parametersPlaceholder": {
+    "text": "输入默认参数（如：000001）",
+    "context": "参数输入框占位符"
+  },
+  "smartpath.parametersHint": {
+    "text": "执行路径时，如果没有提供参数，将使用此默认值。",
+    "context": "参数提示文字"
+  },
   "smartpath.stepLabel": {
     "text": "步骤",
     "context": "步骤标签"

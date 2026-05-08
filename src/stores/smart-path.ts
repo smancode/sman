@@ -46,7 +46,7 @@ interface SmartPathState {
   createPath: (input: { name: string; description?: string; workspace: string; steps: string }) => Promise<SmartPath>;
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
   deletePath: (pathId: string, workspace: string) => Promise<void>;
-  runPath: (pathId: string, workspace: string) => Promise<void>;
+  runPath: (pathId: string, workspace: string, args?: string) => Promise<void>;
   fetchRuns: (pathId: string, workspace: string) => Promise<void>;
   fetchReport: (pathId: string, workspace: string, fileName: string) => Promise<void>;
   generateStep: (userInput: string, workspace: string, previousSteps: SmartPathStep[]) => Promise<string>;
@@ -150,7 +150,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     });
   },
 
-  runPath: async (pathId, workspace) => {
+  runPath: async (pathId, workspace, args) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
     set({ running: true, error: null, stepExecutionStream: {}, stepExecutionStatus: {} });
@@ -201,7 +201,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         set({ running: false, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
-      client.send({ type: 'smartpath.run', pathId, workspace });
+      client.send({ type: 'smartpath.run', pathId, workspace, args });
     });
   },
 

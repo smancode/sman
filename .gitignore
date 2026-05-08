@@ -31,3 +31,5 @@ shared/*.js
 settings.json
 
 crontab.lock
+.sman/paths/*/runs/
+.sman/paths/*/reports/

@@ -1064,8 +1064,72 @@ wss.on('connection', (ws: WebSocket) => {
               log.warn(`No active subscribed client for session ${chatSessionId}, message dropped`);
             }
           };
+
+          const content = msg.content ?? '';
+
+          // Check for /path command: /pathName args...
+          const pathCommandMatch = content.trim().match(/^\/([a-zA-Z0-9_\-一-龥]+)(?:\s+(.*))?$/);
+          if (pathCommandMatch) {
+            const pathName = pathCommandMatch[1];
+            const pathArgs = pathCommandMatch[2] || '';
+            const session = store.getSession(chatSessionId);
+            if (session) {
+              const workspace = session.workspace;
+              const paths = smartPathStore.list(workspace);
+              // Find path by name or id (exact match first, then fuzzy)
+              const matchedPath = paths.find(p => p.name === pathName)
+                || paths.find(p => p.id === pathName)
+                || paths.find(p => p.name.toLowerCase() === pathName.toLowerCase());
+              if (matchedPath) {
+                // Execute the path and stream results as chat messages
+                const argsToUse = pathArgs || matchedPath.defaultArgs || '';
+                // Send a user message showing the command (without the internal prompt)
+                wsSend(JSON.stringify({
+                  type: 'chat.delta',
+                  sessionId: chatSessionId,
+                  deltaType: 'text',
+                  content: ``,
+                }));
+
+                // Start path execution in background
+                smartPathEngine.run(
+                  matchedPath.id,
+                  workspace,
+                  (stepIndex, delta) => {
+                    // Stream each step's delta as chat.delta
+                    wsSend(JSON.stringify({
+                      type: 'chat.delta',
+                      sessionId: chatSessionId,
+                      deltaType: 'text',
+                      content: delta,
+                    }));
+                  },
+                  (stepIndex, result) => {
+                    // Step completed — could send a segment marker if needed
+                  },
+                  (data) => {
+                    // Progress updates
+                  },
+                  argsToUse,
+                ).then(() => {
+                  wsSend(JSON.stringify({
+                    type: 'chat.done',
+                    sessionId: chatSessionId,
+                  }));
+                }).catch((err) => {
+                  wsSend(JSON.stringify({
+                    type: 'chat.error',
+                    sessionId: chatSessionId,
+                    error: err instanceof Error ? err.message : String(err),
+                  }));
+                });
+                break;
+              }
+            }
+          }
+
           const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
-          await sessionManager.sendMessage(msg.sessionId, msg.content ?? '', wsSend, media, 0);
+          await sessionManager.sendMessage(msg.sessionId, content, wsSend, media, 0);
           break;
         }
 
@@ -1563,6 +1627,8 @@ wss.on('connection', (ws: WebSocket) => {
           try {
             const runPathId = msg.pathId as string;
             const runWorkspace = msg.workspace as string;
+            const pathToRun = smartPathStore.get(runPathId, runWorkspace);
+            const runArgs = (msg.args as string) || pathToRun?.defaultArgs || '';
             smartPathEngine.run(
               runPathId,
               runWorkspace,
@@ -1575,6 +1641,7 @@ wss.on('connection', (ws: WebSocket) => {
               (data) => {
                 broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: runPathId, ...data }));
               },
+              runArgs,
             ).then(() => {
               const p = smartPathStore.get(runPathId, runWorkspace);
               const refs = smartPathStore.listReferences(runWorkspace, runPathId);

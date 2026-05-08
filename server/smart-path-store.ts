@@ -132,6 +132,7 @@ export class SmartPathStore {
       steps: data.steps ? JSON.stringify(data.steps) : '[]',
       status: data.status || 'draft',
       cronExpression: data.cron_expression || '',
+      defaultArgs: data.default_args || '',
       createdAt: data.created_at || new Date().toISOString(),
       updatedAt: data.updated_at || data.created_at || new Date().toISOString(),
     };
@@ -150,6 +151,7 @@ export class SmartPathStore {
       updated_at: p.updatedAt || p.createdAt,
       status: p.status,
       cron_expression: p.cronExpression || '',
+      default_args: p.defaultArgs || '',
       steps,
     };
     const contentBody = `# ${p.name}\n\n${p.description || ''}\n`;

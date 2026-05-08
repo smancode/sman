@@ -71,6 +71,7 @@ export class SmartPathEngine {
     onStepProgress: (stepIndex: number, delta: string) => void,
     onStepResult: (stepIndex: number, result: string) => void,
     onProgress?: (data: { stepIndex: number; totalSteps: number; status: string }) => void,
+    args?: string,
   ): Promise<void> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
@@ -90,7 +91,12 @@ export class SmartPathEngine {
 
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
-        const prompt = buildStepPrompt(step.userInput, stepResults.length > 0 ? stepResults[stepResults.length - 1] : undefined, referencesContext);
+        // 如果是第一步且有传入参数，将参数注入到 userInput 中
+        let userInput = step.userInput;
+        if (i === 0 && args) {
+          userInput = `${userInput}\n\n用户参数为:{${args}}，请根据任务需要使用。`;
+        }
+        const prompt = buildStepPrompt(userInput, stepResults.length > 0 ? stepResults[stepResults.length - 1] : undefined, referencesContext);
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;
         this.sessionManager.createEphemeralSessionWithId(workspace, sessionId);

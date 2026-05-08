@@ -1259,6 +1259,18 @@
     "text": "Cron expression, e.g. 0 9 * * 1-5 runs weekdays at 9am. Leave empty for no auto run.",
     "context": "Cron hint text"
   },
+  "smartpath.parameters": {
+    "text": "Parameters",
+    "context": "Parameters label"
+  },
+  "smartpath.parametersPlaceholder": {
+    "text": "Enter default parameters (e.g. 000001)",
+    "context": "Parameters input placeholder"
+  },
+  "smartpath.parametersHint": {
+    "text": "When executing the path, if no arguments are provided, this default value will be used.",
+    "context": "Parameters hint text"
+  },
   "smartpath.stepLabel": {
     "text": "Steps",
     "context": "Steps label"
