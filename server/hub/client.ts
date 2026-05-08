@@ -72,6 +72,7 @@ export class HubClient {
         activeSessions: this.getActiveSessionCount(),
       };
 
+      console.log(`[hub] reporting heartbeat: ${clientId}, sessions=${payload.activeSessions}`);
       const url = `${this.deps.getServerUrl()}/api/report`;
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -86,9 +87,11 @@ export class HubClient {
       clearTimeout(tid);
       if (!res.ok) {
         console.error(`[hub] report failed: ${res.status}`);
+      } else {
+        console.log(`[hub] heartbeat ok`);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error(`[hub] report error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -99,6 +102,7 @@ export class HubClient {
         since: this.lastBroadcastFetch,
       };
 
+      console.log(`[hub] fetching broadcasts since ${this.lastBroadcastFetch}`);
       const url = `${this.deps.getServerUrl()}/api/broadcasts`;
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -111,17 +115,23 @@ export class HubClient {
       });
 
       clearTimeout(tid);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.error(`[hub] fetch broadcasts failed: ${res.status}`);
+        return;
+      }
 
       const body = await res.json();
       const data = decrypt(body.payload) as { messages: BroadcastMessage[]; hasMore: boolean };
 
       if (data.messages.length > 0) {
+        console.log(`[hub] received ${data.messages.length} broadcast(s): ${data.messages.map(m => m.title).join(', ')}`);
         this.lastBroadcastFetch = new Date().toISOString();
         this.deps.onBroadcast(data.messages);
+      } else {
+        console.log(`[hub] no new broadcasts`);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error(`[hub] fetch broadcasts error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
