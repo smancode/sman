@@ -1491,15 +1491,18 @@ export class ClaudeSessionManager {
               // Reset fullContent for the new turn
               fullContent = '';
             }
-            // NOTE: We do NOT send text from the 'assistant' event as delta.
             // The SDK sends accumulated text here (includePartialMessages: true),
             // but we already streamed it token-by-token via 'stream_event' events.
-            // Sending it again would cause duplicate content in the UI.
-            // The text in this event becomes the authoritative fullContent for
-            // error recovery / partial save, but UI rendering comes from stream_events.
-            const text = this.extractTextContent(sdkMsg);
-            if (text) {
-              fullContent = text;
+            // Only use SDK text as fallback when no stream_event deltas were received
+            // (e.g. partial messages that were never streamed as deltas).
+            // Previously, always overwriting fullContent here caused:
+            // 1. Duplicate content (stream_event text already moved to accumulatedText)
+            // 2. Lost newlines (SDK accumulated text may lack newlines between blocks)
+            if (!fullContent.trim()) {
+              const text = this.extractTextContent(sdkMsg);
+              if (text) {
+                fullContent = text;
+              }
             }
             break;
           }
@@ -2167,8 +2170,11 @@ export class ClaudeSessionManager {
         switch (sdkMsg.type) {
           case 'assistant': {
             toolInProgress = false;
-            const text = this.extractTextContent(sdkMsg);
-            if (text) fullContent = text;
+            // Only use SDK accumulated text as fallback when no deltas received
+            if (!fullContent.trim()) {
+              const text = this.extractTextContent(sdkMsg);
+              if (text) fullContent = text;
+            }
             break;
           }
           case 'stream_event': {

@@ -67,6 +67,8 @@ function cleanUserText(text: string): string {
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
     // Remove [工作目录: /path/to/workspace] prefix and following newlines
     .replace(/^\[工作目录:[^\]]*\]\n\n/, '')
+    // Remove language hint injected for Claude SDK
+    .replace(/^\[IMPORTANT: You MUST respond[^\]]*\]\s*/g, '')
     .trim();
 }
 

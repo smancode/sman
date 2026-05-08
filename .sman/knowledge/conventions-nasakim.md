@@ -1,6 +1,6 @@
 # Conventions — nasakim
 
-> Last extracted: 2026-05-07T10:00:14.933Z
+> Last extracted: 2026-05-08T01:53:45.688Z
 
 ## Markdown 文件元数据统一使用 YAML front matter
 <!-- hash: d4e5f6 -->

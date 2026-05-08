@@ -5,7 +5,7 @@ import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
 import { sessionCache } from '@/lib/session-cache';
 import { contextUsageCache } from '@/lib/context-usage-cache';
-import { LANGUAGE_HINTS } from '@/locales';
+
 import type { ChatSession, ContentBlock, InitCard } from '@/types/chat';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
@@ -1294,13 +1294,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       // Send message — file paths are already embedded in content text
-      // 自动注入语言要求到 user message
-      const settings = useSettingsStore.getState().settings;
-      const language = settings?.language || 'zh-CN';
-      const languageHint = LANGUAGE_HINTS[language] || '';
-      const finalContent = languageHint ? `${languageHint}\n\n${trimmed}` : trimmed;
-
-      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: finalContent, autoConfirm: get().autoConfirm };
+      // Language hint is handled by server-side system prompt, not injected here
+      const msg: Record<string, unknown> = { type: 'chat.send', sessionId: streamSessionId, content: trimmed, autoConfirm: get().autoConfirm };
       if (media && media.length > 0) {
         msg.media = media;
       }
