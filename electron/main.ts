@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
 import http from 'http';
 import { execSync } from 'child_process';
 import electronUpdater from 'electron-updater';
@@ -272,6 +273,27 @@ function buildMenu(): void {
  *
  * Dev mode: server is started externally by dev.sh (pnpm dev:server).
  */
+async function ensureHubConfig(homeDir: string): Promise<void> {
+  const configPath = path.join(homeDir, 'config.json');
+  try {
+    const content = await fs.readFile(configPath, 'utf-8');
+    const config = JSON.parse(content);
+    if (!config.hub || !config.hub.serverUrl) {
+      config.hub = {
+        serverUrl: '',
+        updateUrl: '',
+        enabled: false,
+      };
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+    }
+    if (config.hub?.updateUrl) {
+      autoUpdater.setFeedURL({ provider: 'generic', url: config.hub.updateUrl });
+    }
+  } catch {
+    // config.json doesn't exist yet, server will create it
+  }
+}
+
 async function startServerInProcess(): Promise<void> {
   if (isDev) return;
 
@@ -290,9 +312,10 @@ async function startServerInProcess(): Promise<void> {
     // Server creates http server at import time but only listens when run directly.
     // We call listen() ourselves.
     const HOST = process.env.HOST || '127.0.0.1';
-    serverModule.server.listen(BACKEND_PORT, HOST, () => {
+    serverModule.server.listen(BACKEND_PORT, HOST, async () => {
       console.log(`[Electron] Server listening on ${HOST}:${BACKEND_PORT}`);
       console.log(`[Electron] Home: ${serverModule.homeDir}`);
+      await ensureHubConfig(serverModule.homeDir);
     });
   } catch (err) {
     console.error('[Electron] Failed to start server:', err);
