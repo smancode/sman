@@ -74,6 +74,11 @@ export interface SmanConfig {
     token: string;
   };
   stardom?: StardomConfig;
+  hub?: {
+    serverUrl: string;
+    updateUrl: string;
+    enabled: boolean;
+  };
 }
 
 // === Cron Task Types ===

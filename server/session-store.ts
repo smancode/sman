@@ -300,6 +300,13 @@ export class SessionStore {
     return row?.sdk_session_id;
   }
 
+  getActiveSessionCount(): number {
+    const row = this.db.prepare(
+      "SELECT COUNT(*) as c FROM sessions WHERE last_active_at > datetime('now', '-1 hour') AND deleted_at IS NULL"
+    ).get() as { c: number };
+    return row.c;
+  }
+
   /** Get distinct active workspaces (excluding deleted and cron sessions) */
   getActiveWorkspaces(): string[] {
     const rows = this.db.prepare(

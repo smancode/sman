@@ -27,6 +27,11 @@ const DEFAULT_CONFIG: SmanConfig = {
   auth: {
     token: '',
   },
+  hub: {
+    serverUrl: '',
+    updateUrl: '',
+    enabled: false,
+  },
 };
 
 export class SettingsManager {
