@@ -27,6 +27,7 @@ export class HubClient {
   start(): void {
     if (!this.deps.getEnabled() || !this.deps.getServerUrl()) return;
     this.reportHeartbeat();
+    this.fetchBroadcasts();
     this.timer = setInterval(() => {
       this.reportHeartbeat();
       this.fetchBroadcasts();
