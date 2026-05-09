@@ -720,6 +720,11 @@ export class ClaudeSessionManager {
           return entry?.session ?? null;
         },
         pluginsDir,
+        getLlmConfig: () => {
+          const llm = this.config?.llm;
+          if (!llm?.apiKey || !llm?.model) return null;
+          return { apiKey: llm.apiKey, model: llm.model, baseUrl: llm.baseUrl };
+        },
         onWorkflowUpdate: (sid: string, step: number) => {
           self.updateWorkflowStep(sid, step);
         },

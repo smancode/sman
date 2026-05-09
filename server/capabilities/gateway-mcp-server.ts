@@ -295,10 +295,67 @@ export function createCapabilityGatewayMcpServer(options: CapabilityGatewayOptio
     },
   );
 
+  const llmCallTool = tool(
+    'llm_call',
+    'Send a prompt directly to the LLM and return the response. '
+    + 'Use this when you need a one-shot LLM call with a clean prompt — '
+    + 'no Claude Code system prompt, no tool definitions, just the user\'s prompt and the raw model response. '
+    + 'Ideal for text generation, summarization, translation, analysis, or any task where you want '
+    + 'a fresh model response without the current session\'s context influencing the output.',
+    {
+      prompt: z.string().describe('The complete prompt to send to the LLM. This is sent as-is with no system prompt or tool definitions.'),
+    },
+    async (args: any) => {
+      const { prompt: userPrompt } = args;
+
+      const llmConfig = options.getLlmConfig?.();
+      if (!llmConfig) {
+        return errorResult('LLM 配置不可用，无法调用。请检查设置中的 API Key 和 Model 配置。');
+      }
+
+      try {
+        const baseUrl = llmConfig.baseUrl?.replace(/\/$/, '') ?? 'https://api.anthropic.com';
+        const response = await fetch(`${baseUrl}/v1/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': llmConfig.apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: llmConfig.model,
+            max_tokens: 16384,
+            messages: [
+              { role: 'user', content: userPrompt },
+            ],
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          return errorResult(`LLM 调用失败 (HTTP ${response.status}): ${errText.slice(0, 500)}`);
+        }
+
+        const data = await response.json() as any;
+        const text = data.content?.[0]?.text ?? '';
+        const usage = data.usage;
+
+        const usageNote = usage
+          ? `\n\n---\nTokens: ${usage.input_tokens ?? '?'} input, ${usage.output_tokens ?? '?'} output`
+          : '';
+
+        return textResult(text + usageNote);
+      } catch (e: any) {
+        return errorResult(`LLM 调用异常: ${e.message}`);
+      }
+    },
+  );
+
   return createSdkMcpServer({
     name: 'capability-gateway',
     version: '1.0.0',
-    tools: [listTool, loadTool, runTool, workflowUpdateTool],
+    tools: [listTool, loadTool, runTool, workflowUpdateTool, llmCallTool],
   });
 }
 
