@@ -318,7 +318,7 @@ const chatbotManager = new ChatbotSessionManager(
     return config.wecom.bots.find((b: any) => b.id === botProfileId);
   },
   (sessionId: string, label: string) => {
-    sendToSessionClients(sessionId, JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
+    broadcast(JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
   },
 );
 

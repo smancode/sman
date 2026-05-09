@@ -42,6 +42,11 @@ function registerListeners(client: WsClient) {
       useChatStore.setState({ initCard: data.card as import('@/types/chat').InitCard });
     }
   });
+
+  // Refresh sidebar when bot sessions are created
+  client.on('session.chatbotCreated', () => {
+    useChatStore.getState().loadSessions();
+  });
 }
 
 /** Create or recreate WsClient — reads URL + token from localStorage */

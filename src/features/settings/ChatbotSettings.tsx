@@ -41,7 +41,9 @@ export function ChatbotSettings({ id }: { id?: string }) {
 
     const handleStatus = (...args: unknown[]) => {
       const msg = args[0] as Record<string, unknown>;
-      if (msg.status) setWeixinStatus(msg.status as WeixinConnectionStatus);
+      if (msg.status) {
+        setWeixinStatus((prev) => prev === msg.status ? prev : (msg.status as WeixinConnectionStatus));
+      }
     };
     const handleQrResponse = (...args: unknown[]) => {
       const msg = args[0] as Record<string, unknown>;
@@ -68,7 +70,8 @@ export function ChatbotSettings({ id }: { id?: string }) {
         setQrPolling(false);
         setQrMessage((msg.message as string) || t('common.error'));
       } else {
-        setQrMessage((msg.message as string) || t('settings.chatbot.weixin.scanWait'));
+        const newMsg = (msg.message as string) || t('settings.chatbot.weixin.scanWait');
+        setQrMessage((prev) => prev === newMsg ? prev : newMsg);
       }
     };
     const handleQrError = (...args: unknown[]) => {

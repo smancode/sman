@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, memo } from 'react';
 import { Eye, EyeOff, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ interface WeComBotEditorProps {
   onUpdateBots: (bots: WeComBotProfile[]) => void;
 }
 
-export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorProps) {
+export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorProps) {
   const [expandedBots, setExpandedBots] = useState<Record<string, boolean>>({});
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [botSkills, setBotSkills] = useState<Record<string, string[]>>({});
@@ -316,4 +316,4 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
       ))}
     </div>
   );
-}
+});
