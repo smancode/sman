@@ -1003,6 +1003,15 @@ wss.on('connection', (ws: WebSocket) => {
             .filter(bs => allLocalSessions.some(s => s.id === bs.sessionId))
             .map(bs => {
               const s = allLocalSessions.find(s => s.id === bs.sessionId);
+              // Look up bot mode from config
+              const userKeyParts = bs.userKey.split(':');
+              const botProfileId = userKeyParts.length >= 2 ? userKeyParts[1] : 'default';
+              let botMode: 'full' | 'query' = 'full';
+              if (botProfileId !== 'default') {
+                const cfg = settingsManager.getConfig().chatbot;
+                const botProfile = cfg?.wecom?.bots?.find((b: any) => b.id === botProfileId);
+                if (botProfile?.mode) botMode = botProfile.mode;
+              }
               return {
                 id: bs.sessionId,
                 workspace: bs.workspace,
@@ -1011,6 +1020,7 @@ wss.on('connection', (ws: WebSocket) => {
                 lastActiveAt: s?.lastActiveAt,
                 source: 'bot' as const,
                 botLabel: bs.botLabel,
+                botMode,
               };
             });
 
@@ -1066,7 +1076,11 @@ wss.on('connection', (ws: WebSocket) => {
 
           sessionManager.abort(sessionId);
           sessionManager.clearTokenUsage(sessionId);
+          sessionManager.closeV2Session(sessionId);
           store.deleteSession(sessionId);
+
+          // Clean up chatbot_sessions if this was a bot session
+          chatbotStore.deleteSessionBySessionId(sessionId);
 
           // Unsubscribe all clients from this deleted session
           const clients = getSessionClients(sessionId);
@@ -1231,6 +1245,30 @@ wss.on('connection', (ws: WebSocket) => {
           knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
           if ((safeUpdates as Record<string, unknown>).chatbot) {
+            // Clean up sessions for deleted bots
+            const chatbotUpdate = (safeUpdates as Record<string, unknown>).chatbot as Record<string, unknown> | undefined;
+            const wecomUpdate = chatbotUpdate?.wecom as Record<string, unknown> | undefined;
+            const newBots = (wecomUpdate?.bots ?? []) as Array<{ id: string }>;
+            const newBotIds = new Set(newBots.map((b) => b.id));
+            const allBotSessions = chatbotStore.getSessionsWithBotInfo();
+            const deletedBotProfileIds = new Set<string>();
+            for (const bs of allBotSessions) {
+              const parts = bs.userKey.split(':');
+              const profileId = parts.length >= 2 ? parts[1] : '';
+              if (profileId && profileId !== 'default' && !newBotIds.has(profileId)) {
+                deletedBotProfileIds.add(profileId);
+              }
+            }
+            for (const profileId of deletedBotProfileIds) {
+              const deleted = chatbotStore.deleteSessionsByBotProfileId(profileId);
+              for (const { sessionId } of deleted) {
+                sessionManager.abort(sessionId);
+                sessionManager.closeV2Session(sessionId);
+                store.deleteSession(sessionId);
+              }
+              log.info(`Cleaned up ${deleted.length} sessions for deleted bot profile: ${profileId}`);
+            }
+
             wecomConnections.forEach(c => c.stop());
             wecomConnections = [];
             feishuConnection?.stop();

@@ -263,15 +263,25 @@ export function SessionTree() {
   const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
   // Derive local systems and bot groups from sessions
-  const { localSystems, botGroups, localSessionsBySystem, botSessionsByLabel } = useMemo(() => {
+  const { localSystems, botGroups, localSessionsBySystem, botSessionsByGroup } = useMemo(() => {
     const localMap = new Map<string, { systemId: string; name: string; workspace: string }>();
-    const botLabelSet = new Map<string, string>();
+    // Bot groups: query mode keyed by "botLabel|workspace", full mode keyed by "botLabel|"
+    const botGroupMap = new Map<string, { groupKey: string; displayName: string }>();
 
     for (const session of sessions) {
       if (session.source === 'bot') {
         const label = session.botLabel || 'Unknown Bot';
-        if (!botLabelSet.has(label)) {
-          botLabelSet.set(label, label);
+        const ws = session.workspace || '';
+        const isQuery = session.botMode === 'query';
+        // Full mode: group by botLabel only; Query mode: group by botLabel+workspace
+        const groupKey = isQuery ? `${label}|${ws}` : `${label}|`;
+        if (!botGroupMap.has(groupKey)) {
+          let displayName = label;
+          if (isQuery && ws) {
+            const wsName = ws.split(/[/\\]/).pop() || ws;
+            displayName = `${label} - ${wsName}`;
+          }
+          botGroupMap.set(groupKey, { groupKey, displayName });
         }
       } else {
         if (!session.workspace) continue;
@@ -287,7 +297,7 @@ export function SessionTree() {
     }
 
     const localSystems = Array.from(localMap.values());
-    const botGroups = Array.from(botLabelSet.keys());
+    const botGroups = Array.from(botGroupMap.values());
 
     const localSessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
       if (session.source === 'bot') return acc;
@@ -297,20 +307,23 @@ export function SessionTree() {
       return acc;
     }, {} as Record<string, ChatSession[]>);
 
-    const botSessionsByLabel = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
+    const botSessionsByGroup = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
       if (session.source !== 'bot') return acc;
       const label = session.botLabel || 'Unknown Bot';
-      if (!acc[label]) acc[label] = [];
-      acc[label].push(session);
+      const ws = session.workspace || '';
+      const isQuery = session.botMode === 'query';
+      const groupKey = isQuery ? `${label}|${ws}` : `${label}|`;
+      if (!acc[groupKey]) acc[groupKey] = [];
+      acc[groupKey].push(session);
       return acc;
     }, {} as Record<string, ChatSession[]>);
 
-    return { localSystems, botGroups, localSessionsBySystem, botSessionsByLabel };
+    return { localSystems, botGroups, localSessionsBySystem, botSessionsByGroup };
   }, [sessions]);
 
   // Stable key for auto-expand effect
   const systemIdsKey = useMemo(
-    () => localSystems.map((s) => s.systemId).sort().join(',') + '|' + botGroups.sort().join(','),
+    () => localSystems.map((s) => s.systemId).sort().join(',') + '|' + botGroups.map((g) => g.groupKey).sort().join(','),
     [localSystems, botGroups],
   );
 
@@ -321,9 +334,9 @@ export function SessionTree() {
         toggleSystemExpanded(system.systemId, true);
       }
     });
-    botGroups.forEach((label) => {
-      if (!expandedSystems.has(`bot-${label}`)) {
-        toggleSystemExpanded(`bot-${label}`, true);
+    botGroups.forEach((g) => {
+      if (!expandedSystems.has(`bot-${g.groupKey}`)) {
+        toggleSystemExpanded(`bot-${g.groupKey}`, true);
       }
     });
   }, [systemIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -336,7 +349,9 @@ export function SessionTree() {
     if (!session) return;
 
     if (session.source === 'bot' && session.botLabel) {
-      const botKey = `bot-${session.botLabel}`;
+      const isQuery = session.botMode === 'query';
+      const groupKey = isQuery ? `${session.botLabel}|${session.workspace || ''}` : `${session.botLabel}|`;
+      const botKey = `bot-${groupKey}`;
       if (!expandedSystems.has(botKey)) {
         toggleSystemExpanded(botKey, true);
       }
@@ -470,14 +485,14 @@ export function SessionTree() {
                     <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground/50 uppercase tracking-wider">
                       {t('session.botSessions')}
                     </div>
-                    {botGroups.map((label) => (
+                    {botGroups.map((g) => (
                       <SystemGroup
-                        key={`bot-${label}`}
-                        system={{ systemId: `bot-${label}`, name: `🤖 ${label}`, workspace: `bot-${label}` }}
-                        sessions={botSessionsByLabel[label] || []}
+                        key={`bot-${g.groupKey}`}
+                        system={{ systemId: `bot-${g.groupKey}`, name: `🤖 ${g.displayName}`, workspace: `bot-${g.groupKey}` }}
+                        sessions={botSessionsByGroup[g.groupKey] || []}
                         currentSessionId={currentSessionId}
-                        expanded={expandedSystems.has(`bot-${label}`)}
-                        onToggle={() => toggleSystem(`bot-${label}`)}
+                        expanded={expandedSystems.has(`bot-${g.groupKey}`)}
+                        onToggle={() => toggleSystem(`bot-${g.groupKey}`)}
                         onSessionSelect={handleSessionSelect}
                         onSessionDelete={handleSessionDelete}
                         onSessionDuplicate={() => {}}

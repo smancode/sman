@@ -94,6 +94,22 @@ export class ChatbotStore {
     ).run(userKey, workspace);
   }
 
+  deleteSessionBySessionId(sessionId: string): void {
+    this.db.prepare(
+      'DELETE FROM chatbot_sessions WHERE session_id = ?'
+    ).run(sessionId);
+  }
+
+  deleteSessionsByBotProfileId(botProfileId: string): Array<{ sessionId: string }> {
+    const rows = this.db.prepare(
+      'SELECT session_id as sessionId FROM chatbot_sessions WHERE user_key LIKE ?'
+    ).all(`%:${botProfileId}:%`) as Array<{ sessionId: string }>;
+    this.db.prepare(
+      'DELETE FROM chatbot_sessions WHERE user_key LIKE ?'
+    ).run(`%:${botProfileId}:%`);
+    return rows;
+  }
+
   getSessionsByUserKey(userKey: string): Array<{ sessionId: string; workspace: string; botLabel: string | null }> {
     return this.db.prepare(
       'SELECT session_id as sessionId, workspace, bot_label as botLabel FROM chatbot_sessions WHERE user_key = ?'
