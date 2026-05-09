@@ -779,9 +779,12 @@ private handleNew(userKey: string, sender: ChatResponseSender): void {
   const parts = userKey.split(':');
   const botProfileId = parts[1];
   const botProfile = this.getBotProfile(botProfileId);
-  if (botProfile) {
-    this.ensureSession(userKey, workspace, parts[0], botProfile);
+  if (!botProfile) {
+    // Bot profile was deleted — cannot recreate session, inform user
+    sender.finish('Bot 配置已变更，无法新建会话。请联系管理员。');
+    return;
   }
+  this.ensureSession(userKey, workspace, parts[0], botProfile);
 
   const projectName = path.basename(workspace);
   sender.finish(`已新建会话: ${projectName}\n旧会话的聊天记录仍可在桌面端查看。`);
