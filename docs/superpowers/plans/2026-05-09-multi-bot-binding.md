@@ -36,11 +36,12 @@
 
 ## Chunk 1: Backend Data Model & Config Migration
 
-### Task 1: Update TypeScript types
+### Task 1: Update TypeScript types (frontend + backend)
 
 **Files:**
 - Modify: `src/types/settings.ts:46-61`
 - Modify: `server/chatbot/types.ts`
+- Modify: `src/stores/settings.ts:62-67`
 
 - [ ] **Step 1: Update `ChatbotConfig` in `src/types/settings.ts`**
 
@@ -75,9 +76,40 @@ export interface ChatbotConfig {
 }
 ```
 
-- [ ] **Step 2: Add `botProfileId` to `IncomingMessage` in `server/chatbot/types.ts`**
+- [ ] **Step 2: Update `ChatbotConfig` in `server/chatbot/types.ts`**
 
-Add field after `media`:
+The backend `SmanConfig` (in `server/types.ts:72`) imports `ChatbotConfig` from `server/chatbot/types.ts`. This file must also be updated to match. Replace the `ChatbotConfig` interface (lines 1-16):
+
+```ts
+export interface WeComBotProfile {
+  id: string;
+  label: string;
+  botId: string;
+  secret: string;
+  mode: 'full' | 'query';
+  workspace: string;
+  allowedSkills: string[];
+  enabled: boolean;
+}
+
+export interface ChatbotConfig {
+  enabled: boolean;
+  wecom: {
+    enabled: boolean;
+    bots: WeComBotProfile[];
+  };
+  feishu: {
+    enabled: boolean;
+    appId: string;
+    appSecret: string;
+  };
+  weixin: {
+    enabled: boolean;
+  };
+}
+```
+
+Also add `botProfileId` to `IncomingMessage`:
 
 ```ts
 export interface IncomingMessage {
@@ -92,11 +124,25 @@ export interface IncomingMessage {
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Update `DEFAULT_SETTINGS` in `src/stores/settings.ts`**
+
+Change line 64 from:
+
+```ts
+wecom: { enabled: false, botId: '', secret: '' },
+```
+
+To:
+
+```ts
+wecom: { enabled: false, bots: [] },
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/types/settings.ts server/chatbot/types.ts
-git commit -m "feat(bot): update types for multi-bot profile and botProfileId"
+git add src/types/settings.ts server/chatbot/types.ts src/stores/settings.ts
+git commit -m "feat(bot): update types for multi-bot profile, sync frontend+backend"
 ```
 
 ### Task 2: Config migration in SettingsManager
@@ -318,8 +364,35 @@ function startChatbotConnections(): void {
     log.info(`WeCom bot connections started: ${wecomConnections.length} bots`);
   }
 
-  // Feishu and Weixin remain unchanged...
+  // Feishu: pass botProfileId='default' for single-instance compatibility
+  if (chatbotConfig.feishu.enabled && chatbotConfig.feishu.appId && chatbotConfig.feishu.appSecret) {
+    feishuConnection = new FeishuBotConnection({
+      appId: chatbotConfig.feishu.appId,
+      appSecret: chatbotConfig.feishu.appSecret,
+      botProfileId: 'default',
+      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+    });
+    feishuConnection.start();
+    log.info('Feishu bot connection started');
+  }
+
+  // Weixin: pass botProfileId='default' for single-instance compatibility
+  if (chatbotConfig.weixin?.enabled) {
+    weixinConnection = new WeixinBotConnection({
+      homeDir,
+      botProfileId: 'default',
+      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+      onStatusChange: (status) => {
+        broadcast(JSON.stringify({ type: 'chatbot.weixin.status', status }));
+      },
+    });
+    weixinConnection.start();
+    log.info('WeChat bot connection initialized');
+  }
 }
+```
+
+**Important:** `FeishuBotConnection` and `WeixinBotConnection` also need `botProfileId` added to their config interfaces, and they must set `msg.botProfileId` on outgoing `IncomingMessage` objects — same pattern as `WeComBotConnection` in Task 4. The `getBotProfile` function passed to `ChatbotSessionManager` must return a fallback profile for `'default'` (see Task 7).
 ```
 
 - [ ] **Step 3: Update stop logic**
@@ -370,7 +443,7 @@ export class ChatbotSessionManager {
   // Global bot concurrency: max 2 simultaneous bot queries
   private activeBotCount = 0;
   private maxBotConcurrency = 2;
-  private botQueue: Array<{ userKey: string; execute: () => Promise<void> }> = [];
+  private botQueue: Array<{ userKey: string; sender: ChatResponseSender; execute: () => Promise<void> }> = [];
   // Bot profile lookup
   private getBotProfile: (botProfileId: string) => import('./types.js').WeComBotProfile | undefined;
 
@@ -461,15 +534,27 @@ async handleMessage(msg: IncomingMessage, sender: ChatResponseSender): Promise<v
     }
   }
 
+  // Reject if this user already has an active query
+  if (this.activeQueries.has(userKey)) {
+    sender.finish('你有一条消息正在处理中，请稍后再试。');
+    return;
+  }
+
   // Global bot concurrency control
   if (this.activeBotCount >= this.maxBotConcurrency) {
     const queuePos = this.botQueue.length + 1;
-    sender.finish(`当前有 ${this.activeBotCount} 个请求在处理中，你排在第 ${queuePos} 位，请稍候...`);
+    // Use sendChunk (not finish) so the sender stays alive for the actual response later
+    sender.sendChunk(`当前有 ${this.activeBotCount} 个请求在处理中，你排在第 ${queuePos} 位，请稍候...`);
     return new Promise<void>((resolve) => {
-      this.botQueue.push({ userKey, execute: async () => {
-        await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
-        resolve();
-      }});
+      this.botQueue.push({
+        userKey,
+        sender,
+        execute: async () => {
+          sender.sendChunk('开始处理你的问题...');
+          await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
+          resolve();
+        },
+      });
     });
   }
 
@@ -485,6 +570,11 @@ async handleMessage(msg: IncomingMessage, sender: ChatResponseSender): Promise<v
 private processQueue(): void {
   while (this.botQueue.length > 0 && this.activeBotCount < this.maxBotConcurrency) {
     const next = this.botQueue.shift()!;
+    // Skip if the queued user now has an active query (they sent another message that was processed first)
+    if (this.activeQueries.has(next.userKey)) {
+      next.sender.finish('你有一条消息正在处理中，跳过排队消息。');
+      continue;
+    }
     this.activeBotCount++;
     next.execute().finally(() => {
       this.activeBotCount--;
@@ -728,7 +818,11 @@ git commit -m "feat(bot): multi-bot routing, concurrency control, mode enforceme
 **Files:**
 - Modify: `server/index.ts:297-302`
 
+**Note:** This task must be done BEFORE Task 5 (or merged with it), because Task 5 changes `startChatbotConnections()` which uses `chatbotManager`, and the constructor signature change here must land first to avoid a broken build.
+
 - [ ] **Step 1: Update ChatbotSessionManager constructor call**
+
+The lookup function must handle `'default'` botProfileId (used by Feishu/Weixin) by returning a synthetic full-mode profile:
 
 ```ts
 const chatbotManager = new ChatbotSessionManager(
@@ -736,6 +830,19 @@ const chatbotManager = new ChatbotSessionManager(
   sessionManager,
   chatbotStore,
   (botProfileId: string) => {
+    // Feishu/Weixin use 'default' as botProfileId — return a synthetic full-mode profile
+    if (botProfileId === 'default') {
+      return {
+        id: 'default',
+        label: 'Bot',
+        botId: '',
+        secret: '',
+        mode: 'full' as const,
+        workspace: '',
+        allowedSkills: [],
+        enabled: true,
+      };
+    }
     const config = settingsManager.getConfig().chatbot;
     if (!config?.wecom?.bots) return undefined;
     return config.wecom.bots.find(b => b.id === botProfileId);
@@ -746,7 +853,7 @@ const chatbotManager = new ChatbotSessionManager(
 );
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Commit (merge with Task 5 if both are in the same chunk)**
 
 ```bash
 git add server/index.ts
@@ -847,6 +954,29 @@ if (mode === 'query') {
     if (READ_BLOCKED_TOOLS.has(params.toolName)) {
       return { behavior: 'deny' as const };
     }
+    // Skill whitelist enforcement: if allowedSkills is set and the tool call
+    // references a skill name not in the whitelist, deny it.
+    // Claude calls skills via the Skill tool or MCP tools named after skills.
+    if (allowedSkills && allowedSkills.length > 0) {
+      const toolName = params.toolName;
+      // Skill tool: check the skill name in the input
+      if (toolName === 'Skill' && params.input?.skill) {
+        const skillName = String(params.input.skill);
+        if (!allowedSkills.some(s => skillName === s || skillName.endsWith(`:${s}`))) {
+          return { behavior: 'deny' as const };
+        }
+      }
+      // MCP skill tools: typically named like "skill--name" or "skill_name"
+      // Check if the tool name contains a skill name not in the whitelist
+      if (toolName.startsWith('skill-') || toolName.startsWith('skill_')) {
+        const isAllowed = allowedSkills.some(s =>
+          toolName.includes(s) || toolName.endsWith(`-${s}`) || toolName.endsWith(`_${s}`)
+        );
+        if (!isAllowed) {
+          return { behavior: 'deny' as const };
+        }
+      }
+    }
     return { behavior: 'allow' as const };
   };
 }
@@ -935,9 +1065,19 @@ case 'session.list': {
 
 - [ ] **Step 3: Update frontend loadSessions to map new fields**
 
-In `src/stores/chat.ts`, the `loadSessions` method maps backend sessions. Ensure `source` and `botLabel` are mapped:
+In `src/stores/chat.ts` line 371-377, the mapping is explicit (not spread). Add `source` and `botLabel`:
 
-The existing mapping already spreads all fields. Since the backend now sends `source` and `botLabel`, they'll be included automatically if the `ChatSession` type has them.
+```ts
+const sessions: ChatSession[] = data.sessions.map((s: Record<string, unknown>) => ({
+  key: String(s.id),
+  label: s.label ? String(s.label) : undefined,
+  workspace: s.workspace ? String(s.workspace) : undefined,
+  createdAt: s.createdAt ? String(s.createdAt) : undefined,
+  lastActiveAt: s.lastActiveAt ? String(s.lastActiveAt) : undefined,
+  source: s.source === 'bot' ? 'bot' : 'local',
+  botLabel: s.botLabel ? String(s.botLabel) : undefined,
+}));
+```
 
 - [ ] **Step 4: Commit**
 
