@@ -1254,7 +1254,8 @@ wss.on('connection', (ws: WebSocket) => {
 
             // Regenerate bot prompts and iterate CLAUDE.md
             if (newBots.some((b) => b.mode === 'collect')) {
-              chatbotManager.ensureIterateClaudeMd();
+              const collectBot = newBots.find((b) => b.mode === 'collect') as { collectPrompt?: string } | undefined;
+              chatbotManager.ensureIterateClaudeMd(collectBot?.collectPrompt);
             }
             if (newBots.some((b) => b.mode === 'query' || b.mode === 'collect')) {
               chatbotManager.ensureBotPrompts();
@@ -1929,6 +1930,29 @@ wss.on('connection', (ws: WebSocket) => {
             }
           } catch { /* ignore */ }
           ws.send(JSON.stringify({ type: 'chatbot.listWorkspaceSkills', skills }));
+          break;
+        }
+
+        case 'chatbot.getCollectFiles': {
+          const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
+          if (!fs.existsSync(iterateDir)) {
+            ws.send(JSON.stringify({ type: 'chatbot.getCollectFiles', files: [] }));
+            break;
+          }
+          try {
+            const files = fs.readdirSync(iterateDir)
+              .filter(f => f.endsWith('-iter.md'))
+              .sort()
+              .reverse()
+              .map(f => ({
+                name: f,
+                date: f.replace('-iter.md', ''),
+                content: fs.readFileSync(path.join(iterateDir, f), 'utf-8'),
+              }));
+            ws.send(JSON.stringify({ type: 'chatbot.getCollectFiles', files }));
+          } catch {
+            ws.send(JSON.stringify({ type: 'chatbot.getCollectFiles', files: [] }));
+          }
           break;
         }
 

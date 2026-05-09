@@ -7,6 +7,7 @@ export interface WeComBotProfile {
   workspace: string;
   allowedSkills: string[];
   enabled: boolean;
+  collectPrompt?: string;
 }
 
 export interface ChatbotConfig {

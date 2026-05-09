@@ -2839,6 +2839,22 @@
     "text": "Skill Whitelist",
     "context": "Skill whitelist title"
   },
+  "chatbot.collectPrompt": {
+    "text": "Collection Prompt",
+    "context": "Custom prompt for feedback collection mode"
+  },
+  "chatbot.collectPromptPlaceholder": {
+    "text": "Customize this bot's behavior and collection rules",
+    "context": "Collection prompt input placeholder"
+  },
+  "chatbot.viewCollectFiles": {
+    "text": "View Collected Records",
+    "context": "Button to view collected feedback files"
+  },
+  "chatbot.noCollectFiles": {
+    "text": "No records yet",
+    "context": "Empty state when no feedback files exist"
+  },
   "session.botSessions": {
     "text": "Bot Sessions",
     "context": "Bot sessions group title"

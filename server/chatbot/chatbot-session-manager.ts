@@ -522,10 +522,17 @@ export class ChatbotSessionManager {
   }
 
   /** Regenerate iterate CLAUDE.md (called on every config save with collect-mode bot) */
-  ensureIterateClaudeMd(): void {
+  ensureIterateClaudeMd(collectPrompt?: string): void {
     const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
     this.ensureIterateDir(iterateDir);
     const claudeMd = path.join(iterateDir, 'CLAUDE.md');
+
+    // If user provided custom prompt, use it directly as CLAUDE.md
+    if (collectPrompt?.trim()) {
+      fs.writeFileSync(claudeMd, collectPrompt.trim(), 'utf-8');
+      this.log.info(`Regenerated iterate CLAUDE.md with custom prompt at ${claudeMd}`);
+      return;
+    }
     fs.writeFileSync(claudeMd, `# 反馈收集助手
 
 你是一个反馈收集助手。

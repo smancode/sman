@@ -2839,6 +2839,22 @@
     "text": "Skill 白名单",
     "context": "Skill 白名单标题"
   },
+  "chatbot.collectPrompt": {
+    "text": "信息收集提示词",
+    "context": "反馈收集模式的自定义提示词"
+  },
+  "chatbot.collectPromptPlaceholder": {
+    "text": "自定义此 Bot 的行为和收集规则",
+    "context": "收集提示词输入框占位符"
+  },
+  "chatbot.viewCollectFiles": {
+    "text": "查看收集记录",
+    "context": "查看反馈收集文件的按钮"
+  },
+  "chatbot.noCollectFiles": {
+    "text": "暂无收集记录",
+    "context": "没有反馈文件时的提示"
+  },
   "session.botSessions": {
     "text": "Bot 会话",
     "context": "Bot 会话分组标题"

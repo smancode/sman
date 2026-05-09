@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, memo } from 'react';
-import { Eye, EyeOff, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Eye, EyeOff, Plus, Trash2, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -27,6 +28,9 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
   const [botSkills, setBotSkills] = useState<Record<string, string[]>>({});
   const [botSkillsLoading, setBotSkillsLoading] = useState<Record<string, boolean>>({});
   const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const [collectFiles, setCollectFiles] = useState<Array<{ name: string; date: string; content: string }>>([]);
+  const [showCollectFiles, setShowCollectFiles] = useState(false);
+  const [collectLoading, setCollectLoading] = useState(false);
 
   const getWs = useCallback(() => useWsConnection.getState().client, []);
 
@@ -111,6 +115,28 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
     setTimeout(() => {
       setBotSkillsLoading((prev) => ({ ...prev, [botId]: false }));
       client.off('chatbot.listWorkspaceSkills', handler);
+    }, 10_000);
+  };
+
+  const loadCollectFiles = () => {
+    const client = getWs();
+    if (!client) return;
+
+    setCollectLoading(true);
+    const handler = (...args: unknown[]) => {
+      const msg = args[0] as Record<string, unknown>;
+      if (msg.files) {
+        setCollectFiles(msg.files as Array<{ name: string; date: string; content: string }>);
+      }
+      setCollectLoading(false);
+      client.off('chatbot.getCollectFiles', handler);
+    };
+    client.on('chatbot.getCollectFiles', handler);
+    client.send({ type: 'chatbot.getCollectFiles' });
+
+    setTimeout(() => {
+      setCollectLoading(false);
+      client.off('chatbot.getCollectFiles', handler);
     }, 10_000);
   };
 
@@ -306,6 +332,57 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
                           <span>{skill}</span>
                         </label>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Collect prompt (collect mode only) */}
+              {bot.mode === 'collect' && (
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">{t('chatbot.collectPrompt')}</Label>
+                    <textarea
+                      value={bot.collectPrompt || ''}
+                      onChange={(e) => updateBot(bot.id, { collectPrompt: e.target.value })}
+                      placeholder={t('chatbot.collectPromptPlaceholder')}
+                      rows={6}
+                      className="w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      if (showCollectFiles) {
+                        setShowCollectFiles(false);
+                      } else {
+                        loadCollectFiles();
+                        setShowCollectFiles(true);
+                      }
+                    }}
+                    disabled={collectLoading}
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    {t('chatbot.viewCollectFiles')}
+                  </Button>
+                  {showCollectFiles && (
+                    <div className="border rounded-lg">
+                      {collectFiles.length === 0 ? (
+                        <p className="text-xs text-muted-foreground p-3">{t('chatbot.noCollectFiles')}</p>
+                      ) : (
+                        <ScrollArea className="max-h-80">
+                          {collectFiles.map((f) => (
+                            <div key={f.name} className="border-b last:border-b-0">
+                              <div className="px-3 py-1.5 bg-muted/50 text-xs font-medium text-muted-foreground sticky top-0">
+                                {f.date}
+                              </div>
+                              <pre className="px-3 py-2 text-xs whitespace-pre-wrap break-words">{f.content}</pre>
+                            </div>
+                          ))}
+                        </ScrollArea>
+                      )}
                     </div>
                   )}
                 </div>
