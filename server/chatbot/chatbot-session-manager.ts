@@ -519,9 +519,14 @@ export class ChatbotSessionManager {
     if (!fs.existsSync(iterateDir)) {
       fs.mkdirSync(iterateDir, { recursive: true });
     }
+  }
+
+  /** Regenerate iterate CLAUDE.md (called on every config save with collect-mode bot) */
+  ensureIterateClaudeMd(): void {
+    const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
+    this.ensureIterateDir(iterateDir);
     const claudeMd = path.join(iterateDir, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMd)) {
-      fs.writeFileSync(claudeMd, `# 反馈收集助手
+    fs.writeFileSync(claudeMd, `# 反馈收集助手
 
 你是一个专门的反馈收集助手。你的职责是：
 
@@ -594,7 +599,6 @@ export class ChatbotSessionManager {
 - 已有功能的问题记为"问题反馈"，新需求记为"功能请求"
 - 追加后记得保存文件
 `, 'utf-8');
-      this.log.info(`Created iterate CLAUDE.md at ${claudeMd}`);
-    }
+    this.log.info(`Regenerated iterate CLAUDE.md at ${claudeMd}`);
   }
 }

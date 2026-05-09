@@ -1248,8 +1248,13 @@ wss.on('connection', (ws: WebSocket) => {
             // Clean up sessions for deleted bots
             const chatbotUpdate = (safeUpdates as Record<string, unknown>).chatbot as Record<string, unknown> | undefined;
             const wecomUpdate = chatbotUpdate?.wecom as Record<string, unknown> | undefined;
-            const newBots = (wecomUpdate?.bots ?? []) as Array<{ id: string }>;
+            const newBots = (wecomUpdate?.bots ?? []) as Array<{ id: string; mode?: string }>;
             const newBotIds = new Set(newBots.map((b) => b.id));
+
+            // Regenerate iterate CLAUDE.md if any collect-mode bot exists
+            if (newBots.some((b) => b.mode === 'collect')) {
+              chatbotManager.ensureIterateClaudeMd();
+            }
             const allBotSessions = chatbotStore.getSessionsWithBotInfo();
             const deletedBotProfileIds = new Set<string>();
             for (const bs of allBotSessions) {
