@@ -998,15 +998,6 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'session.list': {
           const allLocalSessions = sessionManager.listSessions();
-          const localSessions = allLocalSessions.map(s => ({
-            id: s.id,
-            workspace: s.workspace,
-            label: s.label,
-            createdAt: s.createdAt,
-            lastActiveAt: s.lastActiveAt,
-            source: 'local' as const,
-            botLabel: null as string | null,
-          }));
 
           const botSessions = chatbotStore.getSessionsWithBotInfo()
             .filter(bs => allLocalSessions.some(s => s.id === bs.sessionId))
@@ -1022,6 +1013,20 @@ wss.on('connection', (ws: WebSocket) => {
                 botLabel: bs.botLabel,
               };
             });
+
+          const botSessionIds = new Set(botSessions.map(bs => bs.id));
+
+          const localSessions = allLocalSessions
+            .filter(s => !botSessionIds.has(s.id))
+            .map(s => ({
+              id: s.id,
+              workspace: s.workspace,
+              label: s.label,
+              createdAt: s.createdAt,
+              lastActiveAt: s.lastActiveAt,
+              source: 'local' as const,
+              botLabel: null as string | null,
+            }));
 
           const sessions = [...localSessions, ...botSessions];
           ws.send(JSON.stringify({ type: 'session.list', sessions }));

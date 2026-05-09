@@ -344,7 +344,7 @@ export class WeComBotConnection {
     const buildContent = (): string => {
       const toolLine = activeToolName ? `🔧 ${activeToolName}...\n\n` : '';
       const thinkBlock = thinkingLines.length > 0
-        ? `<![CDATA[<think]]>\n${thinkingLines.join('\n')}\n<![CDATA[</think]]>\n\n`
+        ? `<think>\n${thinkingLines.join('\n')}\n</think>\n\n`
         : '';
       return toolLine + thinkBlock + accumulated;
     };
@@ -358,7 +358,7 @@ export class WeComBotConnection {
         Buffer.byteLength(content, 'utf8') > MAX_CONTENT_BYTES
       ) {
         thinkingLines.shift();
-        const truncatedThink = `<![CDATA[<think]]>\n...\n${thinkingLines.join('\n')}\n<![CDATA[</think]]>\n\n`;
+        const truncatedThink = `<think>\n...\n${thinkingLines.join('\n')}\n</think>\n\n`;
         content = `🔧 ${activeToolName}...\n\n` + truncatedThink + accumulated;
       }
 
@@ -417,7 +417,7 @@ export class WeComBotConnection {
         if (started) {
           // Final message: include thinking block + full answer (no tool status)
           const thinkBlock = thinkingLines.length > 0
-            ? `<![CDATA[<think]]>\n${thinkingLines.join('\n')}\n<![CDATA[</think]]>\n\n`
+            ? `<think>\n${thinkingLines.join('\n')}\n</think>\n\n`
             : '';
           const finalContent = thinkBlock + fullContent;
           activeToolName = null;
