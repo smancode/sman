@@ -2782,5 +2782,61 @@
   "hub.broadcast.dismiss": {
     "text": "Got it",
     "context": "Button to dismiss broadcast notification"
+  },
+  "chatbot.botList": {
+    "text": "Bot List",
+    "context": "Bot list title"
+  },
+  "chatbot.addBot": {
+    "text": "Add Bot",
+    "context": "Add bot button"
+  },
+  "chatbot.removeBot": {
+    "text": "Remove",
+    "context": "Remove bot button"
+  },
+  "chatbot.botLabel": {
+    "text": "Bot Name",
+    "context": "Bot name label"
+  },
+  "chatbot.botMode": {
+    "text": "Mode",
+    "context": "Bot mode label"
+  },
+  "chatbot.modeFull": {
+    "text": "Full Access",
+    "context": "Full access mode"
+  },
+  "chatbot.modeQuery": {
+    "text": "Read-only Q&A",
+    "context": "Read-only Q&A mode"
+  },
+  "chatbot.botWorkspace": {
+    "text": "Bound Project",
+    "context": "Bound project label"
+  },
+  "chatbot.selectWorkspace": {
+    "text": "Select Project",
+    "context": "Select project placeholder"
+  },
+  "chatbot.allowedSkills": {
+    "text": "Allowed Skills",
+    "context": "Allowed skills label"
+  },
+  "chatbot.noSkills": {
+    "text": "No skills found in this project",
+    "context": "No skills hint"
+  },
+  "chatbot.loadingSkills": {
+    "text": "Loading...",
+    "context": "Skills loading"
+  },
+  "chatbot.skillWhitelist": {
+    "text": "Skill Whitelist",
+    "context": "Skill whitelist title"
+  },
+  "session.botSessions": {
+    "text": "Bot Sessions",
+    "context": "Bot sessions group title"
   }
 }

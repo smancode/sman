@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageCircle, Eye, EyeOff, Save, AlertCircle, Smartphone, QrCode, Loader2, CheckCircle2, XCircle, Unplug } from 'lucide-react';
+import { MessageCircle, Eye, EyeOff, Save, AlertCircle, QrCode, Loader2, CheckCircle2, XCircle, Unplug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,12 +9,12 @@ import { Separator } from '@/components/ui/separator';
 import { useSettingsStore } from '@/stores/settings';
 import { useWsConnection } from '@/stores/ws-connection';
 import { t } from '@/locales';
+import { WeComBotEditor } from './WeComBotEditor';
 
 type WeixinConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected';
 
 export function ChatbotSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateChatbot, clearError } = useSettingsStore();
-  const [showWecomSecret, setShowWecomSecret] = useState(false);
   const [showFeishuSecret, setShowFeishuSecret] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -28,11 +28,10 @@ export function ChatbotSettings({ id }: { id?: string }) {
 
   const chatbot = settings?.chatbot;
   const enabled = chatbot?.enabled ?? false;
-  const wecom = chatbot?.wecom ?? { enabled: false, botId: '', secret: '' };
+  const wecom = chatbot?.wecom ?? { enabled: false, bots: [] };
   const feishu = chatbot?.feishu ?? { enabled: false, appId: '', appSecret: '' };
   const weixin = chatbot?.weixin ?? { enabled: false };
 
-  // Get WebSocket client for WeChat QR flow
   const getWs = useCallback(() => useWsConnection.getState().client, []);
 
   // Listen for WeChat status updates
@@ -69,7 +68,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
         setQrPolling(false);
         setQrMessage((msg.message as string) || t('common.error'));
       } else {
-        // 'wait', 'scaned_but_redirect', etc. — keep polling, update message
         setQrMessage((msg.message as string) || t('settings.chatbot.weixin.scanWait'));
       }
     };
@@ -84,7 +82,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
     client.on('chatbot.weixin.qr.status', handleQrStatus);
     client.on('chatbot.weixin.qr.error', handleQrError);
 
-    // Get initial status
     if (weixin.enabled && enabled) {
       client.send({ type: 'chatbot.weixin.getStatus' });
     }
@@ -100,15 +97,12 @@ export function ChatbotSettings({ id }: { id?: string }) {
   // Poll for QR login status
   useEffect(() => {
     if (!qrPolling || !qrSessionKey) return;
-
     const client = getWs();
     if (!client) return;
 
     const poll = () => {
       client.send({ type: 'chatbot.weixin.qr.poll', sessionKey: qrSessionKey });
     };
-
-    // Poll every 3 seconds
     poll();
     pollTimerRef.current = setInterval(poll, 3000);
 
@@ -128,8 +122,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
     setQrSessionKey(null);
     setQrMessage(null);
     client.send({ type: 'chatbot.weixin.qr.request' });
-
-    // Timeout: if no response in 15s, reset to idle
     setTimeout(() => {
       setWeixinStatus((prev) => prev === 'connecting' ? 'idle' : prev);
       setQrMessage((prev) => prev === null ? t('settings.chatbot.weixin.timeout') : prev);
@@ -185,7 +177,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
           />
         </div>
 
-        {/* WeCom */}
+        {/* WeCom - Multi-bot */}
         <Separator />
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -201,42 +193,11 @@ export function ChatbotSettings({ id }: { id?: string }) {
               disabled={!enabled}
             />
           </div>
-
-          {wecom.enabled && enabled && (
-            <div className="space-y-3 pl-1">
-              <div className="space-y-2">
-                <Label>{t('settings.chatbot.wecom.botId')}</Label>
-                <Input
-                  value={wecom.botId}
-                  onChange={(e) =>
-                    updateChatbot({ wecom: { ...wecom, botId: e.target.value } }).catch(() => {})
-                  }
-                  placeholder={t('settings.chatbot.wecom.botId.placeholder')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('settings.chatbot.wecom.secret')}</Label>
-                <div className="relative">
-                  <Input
-                    type={showWecomSecret ? 'text' : 'password'}
-                    value={wecom.secret}
-                    onChange={(e) =>
-                      updateChatbot({ wecom: { ...wecom, secret: e.target.value } }).catch(() => {})
-                    }
-                    placeholder={t('settings.chatbot.wecom.secret.placeholder')}
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowWecomSecret(!showWecomSecret)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showWecomSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <WeComBotEditor
+            bots={wecom.bots}
+            enabled={wecom.enabled && enabled}
+            onUpdateBots={(bots) => updateChatbot({ wecom: { ...wecom, bots } }).catch(() => {})}
+          />
         </div>
 
         {/* Feishu */}
@@ -312,7 +273,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
 
           {weixin.enabled && enabled && (
             <div className="space-y-3 pl-1">
-              {/* Connection status */}
               <div className="flex items-center gap-2 text-sm">
                 {weixinStatus === 'connected' ? (
                   <>
@@ -337,7 +297,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
                 )}
               </div>
 
-              {/* QR Code flow */}
               {weixinStatus !== 'connected' && !qrcodeUrl && (
                 <Button
                   variant="outline"
@@ -354,7 +313,6 @@ export function ChatbotSettings({ id }: { id?: string }) {
                 </Button>
               )}
 
-              {/* QR Code display */}
               {qrcodeUrl && (
                 <div className="flex flex-col items-center gap-3 p-4 rounded-lg border bg-muted/30">
                   <p className="text-sm text-muted-foreground">{t('settings.chatbot.weixin.scanQr')}</p>
@@ -369,13 +327,8 @@ export function ChatbotSettings({ id }: { id?: string }) {
                 </div>
               )}
 
-              {/* Disconnect button */}
               {weixinStatus === 'connected' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleWeixinDisconnect}
-                >
+                <Button variant="outline" size="sm" onClick={handleWeixinDisconnect}>
                   <Unplug className="h-4 w-4 mr-2" />
                   {t('settings.chatbot.weixin.disconnect')}
                 </Button>

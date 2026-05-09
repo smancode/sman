@@ -262,42 +262,70 @@ export function SessionTree() {
   const loadSessions = useChatStore((s) => s.loadSessions);
   const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
-  // Derive systems from sessions (group by workspace)
-  const { systems, sessionsBySystem } = useMemo(() => {
-    const map = sessions.reduce<Map<string, { systemId: string; name: string; workspace: string }>>((acc, session) => {
-      if (!session.workspace) return acc;
-      if (!acc.has(session.workspace)) {
-        const name = session.workspace.split(/[/\\]/).pop() || session.workspace;
-        acc.set(session.workspace, {
-          systemId: session.workspace,
-          name,
-          workspace: session.workspace,
-        });
+  // Derive local systems and bot groups from sessions
+  const { localSystems, botGroups, localSessionsBySystem, botSessionsByLabel } = useMemo(() => {
+    const localMap = new Map<string, { systemId: string; name: string; workspace: string }>();
+    const botLabelSet = new Map<string, string>();
+
+    for (const session of sessions) {
+      if (session.source === 'bot') {
+        const label = session.botLabel || 'Unknown Bot';
+        if (!botLabelSet.has(label)) {
+          botLabelSet.set(label, label);
+        }
+      } else {
+        if (!session.workspace) continue;
+        if (!localMap.has(session.workspace)) {
+          const name = session.workspace.split(/[/\\]/).pop() || session.workspace;
+          localMap.set(session.workspace, {
+            systemId: session.workspace,
+            name,
+            workspace: session.workspace,
+          });
+        }
       }
-      return acc;
-    }, new Map());
-    const systems = Array.from(map.values());
-    const sessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
+    }
+
+    const localSystems = Array.from(localMap.values());
+    const botGroups = Array.from(botLabelSet.keys());
+
+    const localSessionsBySystem = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
+      if (session.source === 'bot') return acc;
       const sysId = session.workspace || '__default__';
       if (!acc[sysId]) acc[sysId] = [];
       acc[sysId].push(session);
       return acc;
-    }, {});
-    return { systems, sessionsBySystem };
+    }, {} as Record<string, ChatSession[]>);
+
+    const botSessionsByLabel = sessions.reduce<Record<string, ChatSession[]>>((acc, session) => {
+      if (session.source !== 'bot') return acc;
+      const label = session.botLabel || 'Unknown Bot';
+      if (!acc[label]) acc[label] = [];
+      acc[label].push(session);
+      return acc;
+    }, {} as Record<string, ChatSession[]>);
+
+    return { localSystems, botGroups, localSessionsBySystem, botSessionsByLabel };
   }, [sessions]);
 
   // Stable key for auto-expand effect
-  const systemIdsKey = useMemo(() => systems.map((s) => s.systemId).sort().join(','), [systems]);
+  const systemIdsKey = useMemo(
+    () => localSystems.map((s) => s.systemId).sort().join(',') + '|' + botGroups.sort().join(','),
+    [localSystems, botGroups],
+  );
 
   // Auto-expand all systems when sessions load (on app start or refresh)
   useEffect(() => {
-    if (systems.length > 0) {
-      systems.forEach((system) => {
-        if (!expandedSystems.has(system.systemId)) {
-          toggleSystemExpanded(system.systemId, true);
-        }
-      });
-    }
+    localSystems.forEach((system) => {
+      if (!expandedSystems.has(system.systemId)) {
+        toggleSystemExpanded(system.systemId, true);
+      }
+    });
+    botGroups.forEach((label) => {
+      if (!expandedSystems.has(`bot-${label}`)) {
+        toggleSystemExpanded(`bot-${label}`, true);
+      }
+    });
   }, [systemIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-expand & auto-scroll to current session
@@ -307,7 +335,12 @@ export function SessionTree() {
     const session = sessions.find((s) => s.key === currentSessionId);
     if (!session) return;
 
-    if (session.workspace && !expandedSystems.has(session.workspace)) {
+    if (session.source === 'bot' && session.botLabel) {
+      const botKey = `bot-${session.botLabel}`;
+      if (!expandedSystems.has(botKey)) {
+        toggleSystemExpanded(botKey, true);
+      }
+    } else if (session.workspace && !expandedSystems.has(session.workspace)) {
       toggleSystemExpanded(session.workspace, true);
     }
 
@@ -409,25 +442,50 @@ export function SessionTree() {
       <div ref={scrollAreaRef} className="flex-1 min-h-0">
         <ScrollArea className="h-full">
           <div className="p-2 pt-1">
-            {systems.length === 0 ? (
+            {localSystems.length === 0 && botGroups.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
                 <p>{t('session.noSessions')}</p>
                 <p className="text-xs mt-1">{t('session.createHint')}</p>
               </div>
             ) : (
-              systems.map((system) => (
-                <SystemGroup
-                  key={system.systemId}
-                  system={system}
-                  sessions={sessionsBySystem[system.systemId] || []}
-                  currentSessionId={currentSessionId}
-                  expanded={expandedSystems.has(system.systemId)}
-                  onToggle={() => toggleSystem(system.systemId)}
-                  onSessionSelect={handleSessionSelect}
-                  onSessionDelete={handleSessionDelete}
-                  onSessionDuplicate={handleSessionDuplicate}
-                />
-              ))
+              <>
+                {/* Local sessions grouped by workspace */}
+                {localSystems.map((system) => (
+                  <SystemGroup
+                    key={system.systemId}
+                    system={system}
+                    sessions={localSessionsBySystem[system.systemId] || []}
+                    currentSessionId={currentSessionId}
+                    expanded={expandedSystems.has(system.systemId)}
+                    onToggle={() => toggleSystem(system.systemId)}
+                    onSessionSelect={handleSessionSelect}
+                    onSessionDelete={handleSessionDelete}
+                    onSessionDuplicate={handleSessionDuplicate}
+                  />
+                ))}
+
+                {/* Bot sessions grouped by bot label */}
+                {botGroups.length > 0 && (
+                  <>
+                    <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground/50 uppercase tracking-wider">
+                      {t('session.botSessions')}
+                    </div>
+                    {botGroups.map((label) => (
+                      <SystemGroup
+                        key={`bot-${label}`}
+                        system={{ systemId: `bot-${label}`, name: `🤖 ${label}`, workspace: `bot-${label}` }}
+                        sessions={botSessionsByLabel[label] || []}
+                        currentSessionId={currentSessionId}
+                        expanded={expandedSystems.has(`bot-${label}`)}
+                        onToggle={() => toggleSystem(`bot-${label}`)}
+                        onSessionSelect={handleSessionSelect}
+                        onSessionDelete={handleSessionDelete}
+                        onSessionDuplicate={() => {}}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>

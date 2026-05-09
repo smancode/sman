@@ -810,7 +810,10 @@ export class ClaudeSessionManager {
    * Returns { session, isFresh } where isFresh=true means a new session was created
    * (resume failed or first creation), so caller should inject conversation history.
    */
-  private async getOrCreateV2Session(sessionId: string): Promise<{ session: SDKSession; isFresh: boolean }> {
+  private async getOrCreateV2Session(
+    sessionId: string,
+    canUseToolOverride?: (params: { toolName: string; input: Record<string, unknown> }) => Promise<{ behavior: string; updatedInput?: Record<string, unknown> }>,
+  ): Promise<{ session: SDKSession; isFresh: boolean }> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -859,8 +862,10 @@ export class ClaudeSessionManager {
         ? this.buildScannerSessionOptions(session.workspace)
         : this.buildSessionOptions(session.workspace);
 
-      // Inject canUseTool callback for AskUserQuestion bridge (desktop sessions only)
-      if (!isScanner) {
+      // Inject canUseTool callback
+      if (canUseToolOverride) {
+        (options as any).canUseTool = canUseToolOverride;
+      } else if (!isScanner) {
         const capturedSessionId = sessionId;
         (options as any).canUseTool = async (params: { toolName: string; input: Record<string, unknown> }) => {
           if (params.toolName !== 'AskUserQuestion') {
@@ -2236,6 +2241,8 @@ export class ClaudeSessionManager {
     media?: MediaAttachment[],
     onThinking?: (chunk: string) => void,
     onToolStatus?: (toolName: string, status: 'start' | 'end') => void,
+    mode: 'full' | 'query' = 'full',
+    allowedSkills?: string[],
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -2318,16 +2325,47 @@ export class ClaudeSessionManager {
     stallChecker.unref();
 
     try {
-      const { session: v2Session } = await this.getOrCreateV2Session(sessionId);
+      // Build canUseTool override for query (read-only) mode
+      const READ_BLOCKED_TOOLS = new Set(['Write', 'Edit', 'Bash', 'NotebookEdit']);
+
+      let canUseToolOverride: ((params: { toolName: string; input: Record<string, unknown> }) => Promise<{ behavior: string; updatedInput?: Record<string, unknown> }>) | undefined;
+
+      if (mode === 'query') {
+        canUseToolOverride = async (params) => {
+          if (params.toolName === 'AskUserQuestion') {
+            return { behavior: 'deny' as const };
+          }
+          if (READ_BLOCKED_TOOLS.has(params.toolName)) {
+            return { behavior: 'deny' as const };
+          }
+          if (allowedSkills && allowedSkills.length > 0) {
+            const toolName = params.toolName;
+            if (toolName === 'Skill' && params.input?.skill) {
+              const skillName = String(params.input.skill);
+              if (!allowedSkills.some(s => skillName === s || skillName.endsWith(`:${s}`))) {
+                return { behavior: 'deny' as const };
+              }
+            }
+          }
+          return { behavior: 'allow' as const };
+        };
+      }
+
+      const { session: v2Session } = await this.getOrCreateV2Session(sessionId, canUseToolOverride);
 
       // Inject user profile + Sman context into content for Claude
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
       const smanContext = this.buildSmanContext(projectName, sessionId);
-      const messagePrefix = profilePrefix
-        ? `${smanContext}\n${profilePrefix}`
-        : smanContext;
+
+      let modePrefix = '';
+      if (mode === 'query') {
+        const skillList = allowedSkills?.length ? allowedSkills.join(', ') : '全部';
+        modePrefix = `\n[只读答疑模式] 你是一个只读答疑助手，绑定项目: ${projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n`;
+      }
+      const messagePrefix = [smanContext, profilePrefix, modePrefix]
+        .filter(Boolean).join('\n');
       const capabilities = this.config?.llm?.capabilities;
 
       const builtContent = buildContentBlocks(content, media, capabilities);

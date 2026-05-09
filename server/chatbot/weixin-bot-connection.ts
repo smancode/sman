@@ -382,6 +382,7 @@ export class WeixinBotConnection {
       requestId: `weixin-${msg.message_id ?? Date.now()}`,
       chatType: 'single',
       chatId: userId,
+      botProfileId: 'default',
     };
 
     const sender = this.createSender(userId);

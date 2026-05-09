@@ -47,6 +47,8 @@ export interface ChatSession {
   workspace?: string
   createdAt?: string
   lastActiveAt?: string
+  source?: 'local' | 'bot'
+  botLabel?: string
 }
 
 export interface ToolStatus {

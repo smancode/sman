@@ -20,7 +20,7 @@ const DEFAULT_CONFIG: SmanConfig = {
   },
   chatbot: {
     enabled: false,
-    wecom: { enabled: false, botId: '', secret: '' },
+    wecom: { enabled: false, bots: [] },
     feishu: { enabled: false, appId: '', appSecret: '' },
     weixin: { enabled: false },
   },
@@ -61,7 +61,33 @@ export class SettingsManager {
       this.write(config);
     }
 
+    this.migrateChatbotConfig(config);
     return config;
+  }
+
+  private migrateChatbotConfig(config: SmanConfig): void {
+    const wecom = (config.chatbot as any).wecom;
+    if (wecom && !Array.isArray(wecom.bots) && wecom.botId !== undefined) {
+      const oldBotId = wecom.botId || '';
+      const oldSecret = wecom.secret || '';
+      const oldEnabled = wecom.enabled || false;
+      const newWecom = {
+        enabled: oldEnabled && !!oldBotId,
+        bots: oldBotId ? [{
+          id: crypto.randomUUID(),
+          label: 'WeCom Bot',
+          botId: oldBotId,
+          secret: oldSecret,
+          mode: 'full' as const,
+          workspace: '',
+          allowedSkills: [],
+          enabled: true,
+        }] : [],
+      };
+      (config.chatbot as any).wecom = newWecom;
+      this.log.info('Migrated chatbot config from single-bot to multi-bot format');
+      this.write(config);
+    }
   }
 
   /**

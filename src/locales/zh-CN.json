@@ -2782,5 +2782,61 @@
   "hub.broadcast.dismiss": {
     "text": "知道了",
     "context": "关闭广播通知按钮"
+  },
+  "chatbot.botList": {
+    "text": "Bot 列表",
+    "context": "Bot 列表标题"
+  },
+  "chatbot.addBot": {
+    "text": "添加 Bot",
+    "context": "添加 Bot 按钮"
+  },
+  "chatbot.removeBot": {
+    "text": "删除",
+    "context": "删除 Bot 按钮"
+  },
+  "chatbot.botLabel": {
+    "text": "Bot 名称",
+    "context": "Bot 名称标签"
+  },
+  "chatbot.botMode": {
+    "text": "模式",
+    "context": "Bot 模式标签"
+  },
+  "chatbot.modeFull": {
+    "text": "完全权限",
+    "context": "完全权限模式"
+  },
+  "chatbot.modeQuery": {
+    "text": "只读答疑",
+    "context": "只读答疑模式"
+  },
+  "chatbot.botWorkspace": {
+    "text": "绑定项目",
+    "context": "绑定项目标签"
+  },
+  "chatbot.selectWorkspace": {
+    "text": "选择项目",
+    "context": "选择项目占位符"
+  },
+  "chatbot.allowedSkills": {
+    "text": "允许的 Skills",
+    "context": "允许的 Skills 标签"
+  },
+  "chatbot.noSkills": {
+    "text": "该项目下暂无 Skills",
+    "context": "无 Skills 提示"
+  },
+  "chatbot.loadingSkills": {
+    "text": "加载中...",
+    "context": "Skills 加载中"
+  },
+  "chatbot.skillWhitelist": {
+    "text": "Skill 白名单",
+    "context": "Skill 白名单标题"
+  },
+  "session.botSessions": {
+    "text": "Bot 会话",
+    "context": "Bot 会话分组标题"
   }
 }
