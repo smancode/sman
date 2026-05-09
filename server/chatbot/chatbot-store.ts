@@ -41,6 +41,14 @@ export class ChatbotStore {
       );
     `);
     this.db.pragma('journal_mode = WAL');
+
+    // Migrate: add bot_label column if missing
+    const columns = this.db.pragma('table_info(chatbot_sessions)') as Array<{ name: string }>;
+    if (!columns.find(c => c.name === 'bot_label')) {
+      this.db.exec('ALTER TABLE chatbot_sessions ADD COLUMN bot_label TEXT');
+      this.log.info('Migrated chatbot_sessions: added bot_label column');
+    }
+
     this.log.info('ChatbotStore initialized');
   }
 
@@ -63,11 +71,21 @@ export class ChatbotStore {
     ).get(userKey, workspace) as ChatbotSession | undefined;
   }
 
-  setSession(userKey: string, workspace: string, sessionId: string): void {
+  setSession(userKey: string, workspace: string, sessionId: string, botLabel?: string): void {
     this.db.prepare(
-      `INSERT INTO chatbot_sessions (user_key, workspace, session_id, created_at, last_active_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))
-       ON CONFLICT(user_key, workspace) DO UPDATE SET session_id = excluded.session_id, last_active_at = datetime('now')`
-    ).run(userKey, workspace, sessionId);
+      `INSERT INTO chatbot_sessions (user_key, workspace, session_id, bot_label, created_at, last_active_at)
+       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+       ON CONFLICT(user_key, workspace) DO UPDATE SET
+         session_id = excluded.session_id,
+         bot_label = excluded.bot_label,
+         last_active_at = datetime('now')`
+    ).run(userKey, workspace, sessionId, botLabel ?? null);
+  }
+
+  getSessionsWithBotInfo(): Array<{ userKey: string; sessionId: string; botLabel: string | null; workspace: string }> {
+    return this.db.prepare(
+      'SELECT user_key as userKey, session_id as sessionId, bot_label as botLabel, workspace FROM chatbot_sessions ORDER BY last_active_at DESC'
+    ).all() as Array<{ userKey: string; sessionId: string; botLabel: string | null; workspace: string }>;
   }
 
   deleteSession(userKey: string, workspace: string): void {
