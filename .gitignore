@@ -33,4 +33,4 @@ settings.json
 
 crontab.lock
 .sman/paths/*/runs/
-.sman/paths/*/reports/
+.sman/paths/*/reports/node_modules

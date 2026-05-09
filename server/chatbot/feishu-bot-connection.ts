@@ -145,6 +145,7 @@ export class FeishuBotConnection {
       chatType: chatType as 'p2p' | 'group',
       chatId,
       media,
+      botProfileId: 'default',
     };
 
     const sender = this.createSender(chatId);
