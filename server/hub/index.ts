@@ -12,14 +12,19 @@ const log = createLogger('Hub');
 let hubClient: HubClient | null = null;
 
 function getVersion(): string {
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const pkgPath = path.resolve(__dirname, '../../package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    return pkg.version || 'unknown';
-  } catch {
-    return 'unknown';
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  // Probe upward to find package.json with a version field.
+  // Source: server/hub/ → ../../package.json (project root)
+  // Compiled: dist/server/server/hub/ → ../../../../package.json (project root)
+  // Electron packaged: app.asar/server/hub/ → ../../package.json
+  for (const rel of ['../../package.json', '../../../package.json', '../../../../package.json']) {
+    try {
+      const pkgPath = path.resolve(__dirname, rel);
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      if (pkg.version) return pkg.version;
+    } catch { /* continue */ }
   }
+  return 'unknown';
 }
 
 function getServerUrl(sm: SettingsManager): string {
