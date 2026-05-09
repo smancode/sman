@@ -1,8 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Eye, EyeOff, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useWsConnection } from '@/stores/ws-connection';
 import { t } from '@/locales';
@@ -19,8 +26,27 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [botSkills, setBotSkills] = useState<Record<string, string[]>>({});
   const [botSkillsLoading, setBotSkillsLoading] = useState<Record<string, boolean>>({});
+  const [workspaces, setWorkspaces] = useState<string[]>([]);
 
   const getWs = useCallback(() => useWsConnection.getState().client, []);
+
+  // Fetch available workspaces on mount
+  useEffect(() => {
+    const client = getWs();
+    if (!client) return;
+
+    const handler = (...args: unknown[]) => {
+      const msg = args[0] as Record<string, unknown>;
+      if (msg.workspaces) {
+        setWorkspaces(msg.workspaces as string[]);
+      }
+      client.off('cron.workspaces', handler);
+    };
+    client.on('cron.workspaces', handler);
+    client.send({ type: 'cron.workspaces' });
+
+    return () => { client.off('cron.workspaces', handler); };
+  }, [getWs]);
 
   const addBot = () => {
     const newBot: WeComBotProfile = {
@@ -194,7 +220,7 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
                     variant={bot.mode === 'full' ? 'default' : 'outline'}
                     size="sm"
                     className="h-7 text-xs flex-1"
-                    onClick={() => updateBot(bot.id, { mode: 'full' })}
+                    onClick={() => updateBot(bot.id, { mode: 'full', workspace: '', allowedSkills: [] })}
                   >
                     {t('chatbot.modeFull')}
                   </Button>
@@ -209,21 +235,30 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
                 </div>
               </div>
 
-              {/* Workspace */}
-              <div className="space-y-1">
-                <Label className="text-xs">{t('chatbot.botWorkspace')}</Label>
-                <Input
-                  value={bot.workspace}
-                  onChange={(e) => updateBot(bot.id, { workspace: e.target.value })}
-                  onBlur={() => {
-                    if (bot.mode === 'query' && bot.workspace) {
-                      loadSkills(bot.id, bot.workspace);
-                    }
-                  }}
-                  placeholder={t('chatbot.selectWorkspace')}
-                  className="h-8 text-sm"
-                />
-              </div>
+              {/* Workspace (query mode only) */}
+              {bot.mode === 'query' && (
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('chatbot.botWorkspace')}</Label>
+                  <Select
+                    value={bot.workspace}
+                    onValueChange={(ws) => {
+                      updateBot(bot.id, { workspace: ws, allowedSkills: [] });
+                      loadSkills(bot.id, ws);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder={t('chatbot.selectWorkspace')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workspaces.map((ws) => (
+                        <SelectItem key={ws} value={ws}>
+                          {ws.split(/[/\\]/).pop()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Skills whitelist (query mode only) */}
               {bot.mode === 'query' && bot.workspace && (
