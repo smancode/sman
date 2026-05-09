@@ -167,7 +167,7 @@ export class ChatbotSessionManager {
         return;
       }
     } else if (mode === 'collect') {
-      workspace = path.join(os.homedir(), '.sman', 'iterate');
+      workspace = path.join(os.homedir(), '.sman', 'iterate', botProfile.id);
       this.ensureIterateDir(workspace);
     } else {
       let userState = this.store.getUserState(userKey);
@@ -521,9 +521,9 @@ export class ChatbotSessionManager {
     }
   }
 
-  /** Regenerate iterate CLAUDE.md (called on every config save with collect-mode bot) */
-  ensureIterateClaudeMd(collectPrompt?: string): void {
-    const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
+  /** Regenerate iterate CLAUDE.md for a specific bot (called on every config save with collect-mode bot) */
+  ensureIterateClaudeMd(botProfileId: string, collectPrompt?: string): void {
+    const iterateDir = path.join(os.homedir(), '.sman', 'iterate', botProfileId);
     this.ensureIterateDir(iterateDir);
     const claudeMd = path.join(iterateDir, 'CLAUDE.md');
 

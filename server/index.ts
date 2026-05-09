@@ -1253,9 +1253,10 @@ wss.on('connection', (ws: WebSocket) => {
             const newBotIds = new Set(newBots.map((b) => b.id));
 
             // Regenerate bot prompts and iterate CLAUDE.md
-            if (newBots.some((b) => b.mode === 'collect')) {
-              const collectBot = newBots.find((b) => b.mode === 'collect') as { collectPrompt?: string } | undefined;
-              chatbotManager.ensureIterateClaudeMd(collectBot?.collectPrompt);
+            for (const bot of newBots) {
+              if (bot.mode === 'collect') {
+                chatbotManager.ensureIterateClaudeMd(bot.id, (bot as { collectPrompt?: string }).collectPrompt);
+              }
             }
             if (newBots.some((b) => b.mode === 'query' || b.mode === 'collect')) {
               chatbotManager.ensureBotPrompts();
@@ -1275,6 +1276,11 @@ wss.on('connection', (ws: WebSocket) => {
                 sessionManager.abort(sessionId);
                 sessionManager.closeV2Session(sessionId);
                 store.deleteSession(sessionId);
+              }
+              // Clean up iterate directory for deleted collect bots
+              const iterateDir = path.join(os.homedir(), '.sman', 'iterate', profileId);
+              if (fs.existsSync(iterateDir)) {
+                fs.rmSync(iterateDir, { recursive: true, force: true });
               }
               log.info(`Cleaned up ${deleted.length} sessions for deleted bot profile: ${profileId}`);
             }
@@ -1934,7 +1940,12 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'chatbot.getCollectFiles': {
-          const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
+          const botId = String(msg.botProfileId || '');
+          if (!botId) {
+            ws.send(JSON.stringify({ type: 'chatbot.getCollectFiles', files: [] }));
+            break;
+          }
+          const iterateDir = path.join(os.homedir(), '.sman', 'iterate', botId);
           if (!fs.existsSync(iterateDir)) {
             ws.send(JSON.stringify({ type: 'chatbot.getCollectFiles', files: [] }));
             break;

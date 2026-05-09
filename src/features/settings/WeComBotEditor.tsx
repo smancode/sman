@@ -118,7 +118,7 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
     }, 10_000);
   };
 
-  const loadCollectFiles = () => {
+  const loadCollectFiles = (botProfileId: string) => {
     const client = getWs();
     if (!client) return;
 
@@ -132,7 +132,7 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
       client.off('chatbot.getCollectFiles', handler);
     };
     client.on('chatbot.getCollectFiles', handler);
-    client.send({ type: 'chatbot.getCollectFiles' });
+    client.send({ type: 'chatbot.getCollectFiles', botProfileId });
 
     setTimeout(() => {
       setCollectLoading(false);
@@ -358,7 +358,7 @@ export const WeComBotEditor = memo(function WeComBotEditor({ bots, enabled, onUp
                       if (showCollectFiles) {
                         setShowCollectFiles(false);
                       } else {
-                        loadCollectFiles();
+                        loadCollectFiles(bot.id);
                         setShowCollectFiles(true);
                       }
                     }}
