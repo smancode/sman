@@ -272,12 +272,12 @@ export function SessionTree() {
       if (session.source === 'bot') {
         const label = session.botLabel || 'Unknown Bot';
         const ws = session.workspace || '';
-        const isQuery = session.botMode === 'query';
+        const isFixedWorkspace = session.botMode === 'query' || session.botMode === 'collect';
         // Full mode: group by botLabel only; Query mode: group by botLabel+workspace
-        const groupKey = isQuery ? `${label}|${ws}` : `${label}|`;
+        const groupKey = isFixedWorkspace ? `${label}|${ws}` : `${label}|`;
         if (!botGroupMap.has(groupKey)) {
           let displayName = label;
-          if (isQuery && ws) {
+          if (isFixedWorkspace && ws) {
             const wsName = ws.split(/[/\\]/).pop() || ws;
             displayName = `${label} - ${wsName}`;
           }
@@ -311,8 +311,8 @@ export function SessionTree() {
       if (session.source !== 'bot') return acc;
       const label = session.botLabel || 'Unknown Bot';
       const ws = session.workspace || '';
-      const isQuery = session.botMode === 'query';
-      const groupKey = isQuery ? `${label}|${ws}` : `${label}|`;
+      const isFixedWorkspace = session.botMode === 'query' || session.botMode === 'collect';
+      const groupKey = isFixedWorkspace ? `${label}|${ws}` : `${label}|`;
       if (!acc[groupKey]) acc[groupKey] = [];
       acc[groupKey].push(session);
       return acc;
@@ -349,8 +349,8 @@ export function SessionTree() {
     if (!session) return;
 
     if (session.source === 'bot' && session.botLabel) {
-      const isQuery = session.botMode === 'query';
-      const groupKey = isQuery ? `${session.botLabel}|${session.workspace || ''}` : `${session.botLabel}|`;
+      const isFixedWorkspace = session.botMode === 'query' || session.botMode === 'collect';
+      const groupKey = isFixedWorkspace ? `${session.botLabel}|${session.workspace || ''}` : `${session.botLabel}|`;
       const botKey = `bot-${groupKey}`;
       if (!expandedSystems.has(botKey)) {
         toggleSystemExpanded(botKey, true);

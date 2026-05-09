@@ -2811,6 +2811,10 @@
     "text": "只读答疑",
     "context": "只读答疑模式"
   },
+  "chatbot.modeCollect": {
+    "text": "反馈收集",
+    "context": "反馈收集模式"
+  },
   "chatbot.botWorkspace": {
     "text": "绑定项目",
     "context": "绑定项目标签"

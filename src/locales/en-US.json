@@ -2811,6 +2811,10 @@
     "text": "Read-only Q&A",
     "context": "Read-only Q&A mode"
   },
+  "chatbot.modeCollect": {
+    "text": "Feedback Collector",
+    "context": "Feedback collection mode"
+  },
   "chatbot.botWorkspace": {
     "text": "Bound Project",
     "context": "Bound project label"

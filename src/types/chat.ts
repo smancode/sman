@@ -49,7 +49,7 @@ export interface ChatSession {
   lastActiveAt?: string
   source?: 'local' | 'bot'
   botLabel?: string
-  botMode?: 'full' | 'query'
+  botMode?: 'full' | 'query' | 'collect'
 }
 
 export interface ToolStatus {

@@ -2241,7 +2241,7 @@ export class ClaudeSessionManager {
     media?: MediaAttachment[],
     onThinking?: (chunk: string) => void,
     onToolStatus?: (toolName: string, status: 'start' | 'end') => void,
-    mode: 'full' | 'query' = 'full',
+    mode: 'full' | 'query' | 'collect' = 'full',
     allowedSkills?: string[],
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
@@ -2349,6 +2349,24 @@ export class ClaudeSessionManager {
           }
           return { behavior: 'allow' as const };
         };
+      } else if (mode === 'collect') {
+        canUseToolOverride = async (params) => {
+          if (params.toolName === 'AskUserQuestion') {
+            return { behavior: 'deny' as const };
+          }
+          // Block dangerous tools, allow Write for feedback files
+          if (READ_BLOCKED_TOOLS.has(params.toolName)) {
+            return { behavior: 'deny' as const };
+          }
+          // Only allow writing to .md files in the iterate directory
+          if (params.toolName === 'Write' || params.toolName === 'Edit') {
+            const filePath = String(params.input?.file_path || params.input?.filePath || '');
+            if (!filePath.includes('iterate') || !filePath.endsWith('.md')) {
+              return { behavior: 'deny' as const };
+            }
+          }
+          return { behavior: 'allow' as const };
+        };
       }
 
       const { session: v2Session } = await this.getOrCreateV2Session(sessionId, canUseToolOverride);
@@ -2363,6 +2381,8 @@ export class ClaudeSessionManager {
       if (mode === 'query') {
         const skillList = allowedSkills?.length ? allowedSkills.join(', ') : '全部';
         modePrefix = `\n[只读答疑模式] 你是一个只读答疑助手，绑定项目: ${projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n`;
+      } else if (mode === 'collect') {
+        modePrefix = `\n[反馈收集模式] 你是一个专门的反馈收集助手。\n你的任务是倾听用户反馈，简洁温暖略带幽默地回复，并将有价值的反馈追加到当天的文件中。\n反馈文件路径: ${workspace}/YYYY-MM-DD-iter.md\n请严格遵循 CLAUDE.md 中的格式追加反馈。\n`;
       }
       const messagePrefix = [smanContext, profilePrefix, modePrefix]
         .filter(Boolean).join('\n');

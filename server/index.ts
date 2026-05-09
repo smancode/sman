@@ -1006,7 +1006,7 @@ wss.on('connection', (ws: WebSocket) => {
               // Look up bot mode from config
               const userKeyParts = bs.userKey.split(':');
               const botProfileId = userKeyParts.length >= 2 ? userKeyParts[1] : 'default';
-              let botMode: 'full' | 'query' = 'full';
+              let botMode: 'full' | 'query' | 'collect' = 'full';
               if (botProfileId !== 'default') {
                 const cfg = settingsManager.getConfig().chatbot;
                 const botProfile = cfg?.wecom?.bots?.find((b: any) => b.id === botProfileId);

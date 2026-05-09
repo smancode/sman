@@ -376,7 +376,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           lastActiveAt: s.lastActiveAt ? String(s.lastActiveAt) : undefined,
           source: s.source === 'bot' ? 'bot' : 'local',
           botLabel: s.botLabel ? String(s.botLabel) : undefined,
-          botMode: s.botMode === 'query' ? 'query' : undefined,
+          botMode: (s.botMode === 'query' || s.botMode === 'collect') ? s.botMode : undefined,
         }));
 
         const state = get();

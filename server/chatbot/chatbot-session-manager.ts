@@ -166,6 +166,9 @@ export class ChatbotSessionManager {
         sender.finish('Bot 未绑定项目目录，请联系管理员配置。');
         return;
       }
+    } else if (mode === 'collect') {
+      workspace = path.join(os.homedir(), '.sman', 'iterate');
+      this.ensureIterateDir(workspace);
     } else {
       let userState = this.store.getUserState(userKey);
       if (!userState?.currentWorkspace) {
@@ -235,27 +238,35 @@ export class ChatbotSessionManager {
     userKey: string,
     command: { command: string; args: string; rawCommand: string },
     sender: ChatResponseSender,
-    mode: 'full' | 'query',
+    mode: 'full' | 'query' | 'collect',
     botProfile: WeComBotProfile,
   ): Promise<void> {
+    const isRestricted = mode === 'query' || mode === 'collect';
+
     switch (command.command) {
       case 'cd':
-        if (mode === 'query') {
-          sender.finish('当前为只读答疑模式，不支持切换项目。');
+        if (isRestricted) {
+          sender.finish(mode === 'collect'
+            ? '当前为反馈收集模式，不支持切换项目。'
+            : '当前为只读答疑模式，不支持切换项目。');
           return;
         }
         await this.handleCd(userKey, command.args, sender);
         break;
       case 'workspaces':
-        if (mode === 'query') {
-          sender.finish(`当前绑定项目: ${path.basename(botProfile.workspace)}\n(只读模式，不支持切换)`);
+        if (isRestricted) {
+          sender.finish(mode === 'collect'
+            ? '反馈收集模式，无需切换项目。'
+            : `当前绑定项目: ${path.basename(botProfile.workspace)}\n(只读模式，不支持切换)`);
           return;
         }
         this.handleWorkspaces(sender);
         break;
       case 'pwd':
-        if (mode === 'query') {
-          sender.finish(`当前项目: ${botProfile.workspace}`);
+        if (isRestricted) {
+          sender.finish(mode === 'collect'
+            ? '反馈收集模式，自动记录到 ~/.sman/iterate/'
+            : `当前项目: ${botProfile.workspace}`);
         } else {
           this.handlePwd(userKey, sender);
         }
@@ -342,9 +353,17 @@ export class ChatbotSessionManager {
     sender.finish(`可用项目:\n${list}\n\n使用 //cd <项目名>  or <数字> 切换。`);
   }
 
-  private handleHelp(sender: ChatResponseSender, showUnknownHint = false, mode: 'full' | 'query' = 'full'): void {
+  private handleHelp(sender: ChatResponseSender, showUnknownHint = false, mode: 'full' | 'query' | 'collect' = 'full'): void {
     const prefix = showUnknownHint ? '未知命令，' : '';
-    if (mode === 'query') {
+    if (mode === 'collect') {
+      sender.finish(
+        `${prefix}可用命令:\n` +
+        `//new - 新建会话，清空上下文重新开始\n` +
+        `//help - 显示此帮助信息\n` +
+        `//status - 显示当前状态\n\n` +
+        `直接发送消息即可反馈问题或建议。`,
+      );
+    } else if (mode === 'query') {
       sender.finish(
         `${prefix}可用命令:\n` +
         `//new - 新建会话，清空上下文重新开始\n` +
@@ -412,12 +431,12 @@ export class ChatbotSessionManager {
     content: string,
     sender: ChatResponseSender,
     media?: import('./types.js').MediaAttachment[],
-    mode: 'full' | 'query' = 'full',
+    mode: 'full' | 'query' | 'collect' = 'full',
     botProfile?: WeComBotProfile,
   ): Promise<void> {
-    // In query mode, check if workspace changed and clean up stale sessions
+    // In query/collect mode, check if workspace changed and clean up stale sessions
     let workspaceChanged = false;
-    if (mode === 'query') {
+    if (mode === 'query' || mode === 'collect') {
       const staleSessions = this.store.getSessionsByUserKey(userKey);
       for (const s of staleSessions) {
         if (s.workspace !== workspace) {
@@ -492,5 +511,52 @@ export class ChatbotSessionManager {
     this.activeQueries.clear();
     this.botQueue = [];
     this.activeBotCount = 0;
+  }
+
+  // ── Iterate (collect mode) helpers ──
+
+  private ensureIterateDir(iterateDir: string): void {
+    if (!fs.existsSync(iterateDir)) {
+      fs.mkdirSync(iterateDir, { recursive: true });
+    }
+    const claudeMd = path.join(iterateDir, 'CLAUDE.md');
+    if (!fs.existsSync(claudeMd)) {
+      fs.writeFileSync(claudeMd, `# 反馈收集助手
+
+你是一个专门的反馈收集助手。你的职责是：
+
+1. 以简洁、温暖、略带幽默的方式回复用户
+2. 倾听用户的问题反馈、投诉、建议等
+3. 根据对话内容，判断是否需要记录为反馈条目
+4. 如果是有效反馈（非闲聊/问候），追加到当天的反馈文件中
+
+## 反馈文件格式
+
+文件名: YYYY-MM-DD-iter.md（如 2026-05-09-iter.md）
+路径: ~/.sman/iterate/
+
+## 追加格式
+
+\`\`\`markdown
+## 问题反馈 / 投诉 / 建议 / 其他分类
+
+- **用户**: 企微用户
+- **内容**: 用户的反馈内容摘要
+- **时间**: YYYY-MM-DD HH:mm:ss
+
+---
+
+\`\`\`
+
+## 规则
+
+- 每条反馈用 \`##\` 标题分类
+- 同一天的所有反馈追加到同一个文件
+- 只记录有实质内容的反馈，忽略纯寒暄
+- 用户的原话尽量保留，可以适当概括但不改原意
+- 追加后记得保存文件
+`, 'utf-8');
+      this.log.info(`Created iterate CLAUDE.md at ${claudeMd}`);
+    }
   }
 }

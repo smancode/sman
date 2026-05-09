@@ -163,6 +163,11 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
                   {t('chatbot.modeQuery')}
                 </span>
               )}
+              {bot.mode === 'collect' && (
+                <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-1.5 py-0.5 rounded">
+                  {t('chatbot.modeCollect')}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Switch
@@ -243,6 +248,14 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
                     onClick={() => updateBot(bot.id, { mode: 'query' })}
                   >
                     {t('chatbot.modeQuery')}
+                  </Button>
+                  <Button
+                    variant={bot.mode === 'collect' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 text-xs flex-1"
+                    onClick={() => updateBot(bot.id, { mode: 'collect', workspace: '', allowedSkills: [] })}
+                  >
+                    {t('chatbot.modeCollect')}
                   </Button>
                 </div>
               </div>

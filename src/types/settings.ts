@@ -48,7 +48,7 @@ export interface WeComBotProfile {
   label: string;
   botId: string;
   secret: string;
-  mode: 'full' | 'query';
+  mode: 'full' | 'query' | 'collect';
   workspace: string;
   allowedSkills: string[];
   enabled: boolean;
