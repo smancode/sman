@@ -296,12 +296,33 @@ smartPathScheduler.setOnProgress((pathId, data) => {
 
 // Chatbot integration (WeCom + Feishu)
 const chatbotStore = new ChatbotStore(dbPath);
-const chatbotManager = new ChatbotSessionManager(homeDir, sessionManager, chatbotStore, (sessionId: string, label: string) => {
-  // Send only to clients subscribed to this session (not broadcast to all)
-  sendToSessionClients(sessionId, JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
-});
+const chatbotManager = new ChatbotSessionManager(
+  homeDir,
+  sessionManager,
+  chatbotStore,
+  (botProfileId: string) => {
+    if (botProfileId === 'default') {
+      return {
+        id: 'default',
+        label: 'Bot',
+        botId: '',
+        secret: '',
+        mode: 'full' as const,
+        workspace: '',
+        allowedSkills: [],
+        enabled: true,
+      };
+    }
+    const config = settingsManager.getConfig().chatbot;
+    if (!config?.wecom?.bots) return undefined;
+    return config.wecom.bots.find((b: any) => b.id === botProfileId);
+  },
+  (sessionId: string, label: string) => {
+    sendToSessionClients(sessionId, JSON.stringify({ type: 'session.chatbotCreated', sessionId, label }));
+  },
+);
 
-let wecomConnection: WeComBotConnection | null = null;
+let wecomConnections: WeComBotConnection[] = [];
 let feishuConnection: FeishuBotConnection | null = null;
 let weixinConnection: WeixinBotConnection | null = null;
 
@@ -309,14 +330,19 @@ function startChatbotConnections(): void {
   const chatbotConfig = settingsManager.getConfig().chatbot;
   if (!chatbotConfig?.enabled) return;
 
-  if (chatbotConfig.wecom.enabled && chatbotConfig.wecom.botId && chatbotConfig.wecom.secret) {
-    wecomConnection = new WeComBotConnection({
-      botId: chatbotConfig.wecom.botId,
-      secret: chatbotConfig.wecom.secret,
-      onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
-    });
-    wecomConnection.start();
-    log.info('WeCom bot connection started');
+  if (chatbotConfig.wecom.enabled && chatbotConfig.wecom.bots?.length > 0) {
+    for (const bot of chatbotConfig.wecom.bots) {
+      if (!bot.enabled || !bot.botId || !bot.secret) continue;
+      const conn = new WeComBotConnection({
+        botId: bot.botId,
+        secret: bot.secret,
+        botProfileId: bot.id,
+        onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
+      });
+      conn.start();
+      wecomConnections.push(conn);
+    }
+    log.info(`WeCom bot connections started: ${wecomConnections.length} bots`);
   }
 
   if (chatbotConfig.feishu.enabled && chatbotConfig.feishu.appId && chatbotConfig.feishu.appSecret) {
@@ -971,16 +997,35 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'session.list': {
-          const sessions = sessionManager.listSessions().map(s => ({
+          const allLocalSessions = sessionManager.listSessions();
+          const localSessions = allLocalSessions.map(s => ({
             id: s.id,
             workspace: s.workspace,
             label: s.label,
             createdAt: s.createdAt,
             lastActiveAt: s.lastActiveAt,
+            source: 'local' as const,
+            botLabel: null as string | null,
           }));
+
+          const botSessions = chatbotStore.getSessionsWithBotInfo()
+            .filter(bs => allLocalSessions.some(s => s.id === bs.sessionId))
+            .map(bs => {
+              const s = allLocalSessions.find(s => s.id === bs.sessionId);
+              return {
+                id: bs.sessionId,
+                workspace: bs.workspace,
+                label: s?.label || '',
+                createdAt: s?.createdAt,
+                lastActiveAt: s?.lastActiveAt,
+                source: 'bot' as const,
+                botLabel: bs.botLabel,
+              };
+            });
+
+          const sessions = [...localSessions, ...botSessions];
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
 
-          // Subscribe client to all listed sessions (for multi-tab support)
           for (const session of sessions) {
             subscribeClientToSession(ws, session.id);
           }
@@ -1181,7 +1226,8 @@ wss.on('connection', (ws: WebSocket) => {
           knowledgeExtractor.updateConfig(config);
           batchEngine.setConfig(config.llm);
           if ((safeUpdates as Record<string, unknown>).chatbot) {
-            wecomConnection?.stop();
+            wecomConnections.forEach(c => c.stop());
+            wecomConnections = [];
             feishuConnection?.stop();
             weixinConnection?.stop();
             startChatbotConnections();
@@ -2061,7 +2107,8 @@ wss.on('connection', (ws: WebSocket) => {
 
 // Graceful shutdown
 function shutdown(): void {
-  wecomConnection?.stop();
+  wecomConnections.forEach(c => c.stop());
+  wecomConnections = [];
   feishuConnection?.stop();
   weixinConnection?.stop();
   chatbotManager.stop();
