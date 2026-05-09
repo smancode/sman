@@ -94,6 +94,12 @@ export class ChatbotStore {
     ).run(userKey, workspace);
   }
 
+  getSessionsByUserKey(userKey: string): Array<{ sessionId: string; workspace: string; botLabel: string | null }> {
+    return this.db.prepare(
+      'SELECT session_id as sessionId, workspace, bot_label as botLabel FROM chatbot_sessions WHERE user_key = ?'
+    ).all(userKey) as Array<{ sessionId: string; workspace: string; botLabel: string | null }>;
+  }
+
   updateSdkSessionId(userKey: string, workspace: string, sdkSessionId: string): void {
     this.db.prepare(
       "UPDATE chatbot_sessions SET sdk_session_id = ?, last_active_at = datetime('now') WHERE user_key = ? AND workspace = ?"

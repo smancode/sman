@@ -415,6 +415,21 @@ export class ChatbotSessionManager {
     mode: 'full' | 'query' = 'full',
     botProfile?: WeComBotProfile,
   ): Promise<void> {
+    // In query mode, check if workspace changed and clean up stale sessions
+    let workspaceChanged = false;
+    if (mode === 'query') {
+      const staleSessions = this.store.getSessionsByUserKey(userKey);
+      for (const s of staleSessions) {
+        if (s.workspace !== workspace) {
+          this.log.info(`Bot workspace changed for ${userKey}: ${s.workspace} -> ${workspace}, cleaning up old session ${s.sessionId}`);
+          this.sessionManager.abort(s.sessionId);
+          this.sessionManager.closeV2Session(s.sessionId);
+          this.store.deleteSession(userKey, s.workspace);
+          workspaceChanged = true;
+        }
+      }
+    }
+
     const session = this.store.getSession(userKey, workspace);
     if (!session) {
       // Session missing — recreate it
@@ -423,6 +438,9 @@ export class ChatbotSessionManager {
       } catch (err) {
         sender.error(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
         return;
+      }
+      if (workspaceChanged) {
+        sender.sendChunk(`[系统提示: Bot 绑定项目已变更，上下文已重置，新项目: ${path.basename(workspace)}]\n\n`);
       }
     }
 
