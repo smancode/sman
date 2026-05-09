@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo, mem
 import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
-import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS, freezeLiveText, getStreamingBlocks, clearStreamingBlocks, sendingSessions } from '@/stores/chat';
+import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS, freezeLiveText, getStreamingBlocks, clearStreamingBlocks, sendingSessions, cleanupStream } from '@/stores/chat';
 import type { Message } from '@/stores/chat';
 import { AskUserCard } from './AskUserCard';
 import { useWsConnection } from '@/stores/ws-connection';
@@ -159,10 +159,16 @@ export function Chat() {
       useChatStore.getState().loadHistory();
     }
     if (!isConnected && prevConnectedRef.current) {
-      // WebSocket disconnected — reset sending state to prevent stuck UI
+      // WebSocket disconnected — reset ALL streaming sessions to prevent stuck UI
       const state = useChatStore.getState();
+      // Clean up all active streaming sessions, not just the current one
+      for (const sid of sendingSessions) {
+        cleanupStream(sid);
+        clearStreamingBlocks(sid);
+        sendingSessions.delete(sid);
+      }
+      // Freeze current session's streaming content into a message
       if (state.sending) {
-        // Freeze whatever we have so far into a message
         const blocks = getStreamingBlocks(state.currentSessionId);
         const frozen = freezeLiveText(blocks);
         const textContent = frozen
@@ -181,8 +187,6 @@ export function Chat() {
         } else {
           useChatStore.setState({ sending: false, streamingBlocks: [], waitingHint: null });
         }
-        clearStreamingBlocks(state.currentSessionId);
-        sendingSessions.delete(state.currentSessionId);
       }
     }
     prevConnectedRef.current = isConnected;

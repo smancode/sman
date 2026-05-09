@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { useChatStore } from '@/stores/chat';
+import { useChatStore, sendingSessions } from '@/stores/chat';
 import { SkillPicker, type PickerItem } from '@/components/SkillPicker';
 import { t } from '@/locales';
 
@@ -219,7 +219,10 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
   }, [processFiles]);
 
   const handleSend = useCallback(() => {
-    if (!canSend || useChatStore.getState().sending) return;
+    if (!canSend) return;
+    // Check per-session sending state, not global boolean
+    const sid = useChatStore.getState().currentSessionId;
+    if (sid && sendingSessions.has(sid)) return;
     const textToSend = input.trim();
 
     // Split into path-based (Electron local files) and base64-based (web uploads)

@@ -201,6 +201,16 @@ const streamCleanups = new Map<string, () => void>();
 // Monotonically increasing generation counter to distinguish old vs new streams for the same session
 let streamGeneration = 0;
 
+/** Sync the store's `sending` boolean with the per-session sendingSessions set.
+ *  `sending` should always reflect whether the CURRENT session is streaming. */
+function syncSending(): void {
+  const { currentSessionId, sending } = useChatStore.getState();
+  const shouldSend = currentSessionId ? sendingSessions.has(currentSessionId) : false;
+  if (sending !== shouldSend) {
+    useChatStore.setState({ sending: shouldSend });
+  }
+}
+
 function registerStreamCleanup(sessionId: string, cleanup: () => void): void {
   // If there's a previous cleanup (e.g. user sent new message before previous stream finished), call it
   const prev = streamCleanups.get(sessionId);
@@ -208,7 +218,7 @@ function registerStreamCleanup(sessionId: string, cleanup: () => void): void {
   streamCleanups.set(sessionId, cleanup);
 }
 
-function cleanupStream(sessionId: string): void {
+export function cleanupStream(sessionId: string): void {
   const fn = streamCleanups.get(sessionId);
   if (fn) {
     fn();
@@ -420,10 +430,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const targetBlocks = getStreamingBlocks(sessionId);
     const isTargetSending = sendingSessions.has(sessionId);
 
-    const hasStaleStreamingPlaceholder = quickCached?.some(
+    // If target is streaming, remove [进行中] placeholders from cache to avoid
+    // showing both the placeholder message AND the live streamingBlocks.
+    const cleanedCached = isTargetSending && quickCached
+      ? removeAutoSavedPartial(quickCached)
+      : quickCached;
+
+    const hasStaleStreamingPlaceholder = cleanedCached?.some(
       m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !isTargetSending
     );
-    const initCached = hasStaleStreamingPlaceholder ? null : quickCached;
+    const initCached = hasStaleStreamingPlaceholder ? null : cleanedCached;
 
     set({
       currentSessionId: sessionId,
@@ -449,10 +465,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Guard: user switched away while we awaited IndexedDB
     if (get().currentSessionId !== sessionId) return;
 
-    const hasStalePlaceholder = cached?.some(
-      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !sendingSessions.has(sessionId)
+    // If target is now streaming, remove [进行中] placeholders to prevent double-display
+    const isStillSending = sendingSessions.has(sessionId);
+    const cleanedAsyncCached = isStillSending && cached
+      ? removeAutoSavedPartial(cached)
+      : cached;
+
+    const hasStalePlaceholder = cleanedAsyncCached?.some(
+      m => m.role === 'assistant' && m.content.startsWith('[进行中] ') && !isStillSending
     );
-    const finalCached = hasStalePlaceholder ? null : cached;
+    const finalCached = hasStalePlaceholder ? null : cleanedAsyncCached;
 
     set({
       messages: finalCached ?? [],
@@ -657,8 +679,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   preheatSession: () => {
     const client = getWsClient();
-    const { currentSessionId, sending } = get();
-    if (!client || !currentSessionId || sending) return;
+    const { currentSessionId } = get();
+    if (!client || !currentSessionId || sendingSessions.has(currentSessionId)) return;
     client.send({ type: 'session.preheat', sessionId: currentSessionId });
   },
 
@@ -852,7 +874,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }, 20_000);
       const clearWaitingHint = () => {
         if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null; }
-        if (get().waitingHint) set({ waitingHint: null });
+        if (get().waitingHint && get().currentSessionId === streamSessionId) set({ waitingHint: null });
       };
 
       // Monitor chat.aborted (stall or user-initiated) — ignore stale aborts from previous streams
@@ -906,9 +928,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
             const cachedMessages = removeAutoSavedPartial(cached ?? []);
             sessionCache.set(streamSessionId, [...cachedMessages, assistantMsg]);
-            if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-              set({ sending: false });
-            }
+            syncSending();
           }
         } else {
           // Streaming collected nothing but backend may have saved partial content to SQLite.
@@ -925,8 +945,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
               } : {}),
             });
             get().loadHistory();
-          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-            set({ sending: false });
+          } else {
+            syncSending();
           }
         }
       });
@@ -1169,10 +1189,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const cached = sessionCache.get(streamSessionId) as Message[] | null;
             const finalMessages = [...removeAutoSavedPartial(cached ?? []), assistantMsg];
             sessionCache.set(streamSessionId, finalMessages);
-            // Also clear visible sending if this background session was the one showing
-            if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-              set({ sending: false });
-            }
+            syncSending();
           }
         } else {
           // Streaming collected nothing — backend may have stored the message in SQLite.
@@ -1180,9 +1197,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (get().currentSessionId === streamSessionId) {
             set({ streamingBlocks: [], sending: false, waitingHint: null, ...(usage ? { contextUsage: usage } : {}) });
             get().loadHistory();
-          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-            // Background session completed — clear visible sending if no other session is streaming
-            set({ sending: false });
+          } else {
+            syncSending();
           }
         }
       });
@@ -1207,8 +1223,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sending: false,
             waitingHint: null,
           });
-        } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-          set({ sending: false });
+        } else {
+          syncSending();
         }
       });
 
@@ -1279,8 +1295,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 },
               });
             }
-          } else if (get().sending && !sendingSessions.has(get().currentSessionId)) {
-            set({ sending: false });
+          } else {
+            syncSending();
           }
         }
       }, 30_000);
@@ -1301,7 +1317,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       client.send(msg);
     } catch (err) {
-      set({ error: { message: String(err), errorCode: 'unknown' }, sending: false });
+      sendingSessions.delete(streamSessionId);
+      syncSending();
+      if (get().currentSessionId === streamSessionId) {
+        set({ error: { message: String(err), errorCode: 'unknown' } });
+      }
     }
   },
 
@@ -1357,6 +1377,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionCache.invalidate(currentSessionId);
       cleanupStream(currentSessionId);
       clearStreamingBlocks(currentSessionId);
+      sendingSessions.delete(currentSessionId);
     }
     set({ messages: [], streamingBlocks: [], error: null, contextWarning: null, contextUsage: null, sending: false });
     get().loadHistory();
@@ -1395,11 +1416,13 @@ function streamingBlocksToContentBlocks(blocks: StreamingBlock[]): ContentBlock[
   return result;
 }
 
-/** Remove the last auto-saved "[进行中]" partial message from cached messages */
+/** Remove all trailing auto-saved "[进行中]" partial messages from cached messages */
 function removeAutoSavedPartial(cached: Message[]): Message[] {
-  if (cached.length > 0 && cached[cached.length - 1].role === 'assistant'
-    && cached[cached.length - 1].content.startsWith('[进行中] ')) {
-    return cached.slice(0, -1);
+  // Remove ALL trailing [进行中] messages, not just one
+  let end = cached.length;
+  while (end > 0 && cached[end - 1].role === 'assistant'
+    && cached[end - 1].content.startsWith('[进行中] ')) {
+    end--;
   }
-  return cached;
+  return end === cached.length ? cached : cached.slice(0, end);
 }

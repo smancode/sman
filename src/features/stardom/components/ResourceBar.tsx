@@ -42,6 +42,7 @@ function ResourceItem({ icon: Icon, label, value, max, color, glow }: {
 
 export function ResourceBar() {
   const { connection, tasks, onlineAgents } = useStardomStore();
+  // Use global sending — ResourceBar shows overall activity, not per-session
   const sending = useChatStore((s) => s.sending);
 
   const activeTasks = tasks.filter(t => ['searching', 'offered', 'matched', 'chatting'].includes(t.status)).length;
