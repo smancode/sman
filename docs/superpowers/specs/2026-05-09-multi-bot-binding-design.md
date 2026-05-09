@@ -77,11 +77,11 @@ interface IncomingMessage {
 ### 1.4 Session ID 格式
 
 ```
-本地 session:    {timestamp}-{random}              (现有格式)
-Bot session:     bot-{botProfileId}-{timestamp}-{random}
+本地 session:    {timestamp}-{random}                          (现有格式)
+Bot session:     chatbot-{botProfileId}-{timestamp}-{random}
 ```
 
-前缀 `bot-` + botProfileId 确保 ID 空间永不重叠。
+保留 `chatbot-` 前缀（兼容现有前端 `session.key.startsWith('chatbot-')` 判断），加入 botProfileId 确保不同 Bot 的 session ID 不重叠。
 
 ### 1.5 userKey 设计
 
@@ -112,18 +112,18 @@ wecom:{botProfileId}:{userId}
 │  │                                       │   │
 │  │  ┌─ @queryAbot ──────────────────┐   │   │
 │  │  │ userKey: wecom:{id}:zhangsan   │   │   │
-│  │  │ session: bot-{id}-{ts}-{rand}  │   │   │
+│  │  │ session: chatbot-{id}-{ts}-{rand}  │   │   │
 │  │  │ V2 进程: 独立                  │   │   │
 │  │  │ 存储: chatbot_sessions 表      │   │   │
 │  │  ├───────────────────────────────┤   │   │
 │  │  │ userKey: wecom:{id}:lisi       │   │   │
-│  │  │ session: bot-{id}-{ts}-{rand2} │   │   │
+│  │  │ session: chatbot-{id}-{ts}-{rand2} │   │   │
 │  │  │ V2 进程: 独立                  │   │   │
 │  │  └───────────────────────────────┘   │   │
 │  │                                       │   │
 │  │  ┌─ @devBot ─────────────────────┐   │   │
 │  │  │ userKey: wecom:{id2}:wangwu    │   │   │
-│  │  │ session: bot-{id2}-{ts}-{rand} │   │   │
+│  │  │ session: chatbot-{id2}-{ts}-{rand} │   │   │
 │  │  │ V2 进程: 独立                  │   │   │
 │  │  └───────────────────────────────┘   │   │
 │  └───────────────────────────────────────┘   │
@@ -134,7 +134,7 @@ wecom:{botProfileId}:{userId}
 
 | 维度 | 本地 vs Bot | Bot vs Bot | 同 Bot 不同用户 |
 |------|------------|-----------|----------------|
-| Session ID 前缀 | 无 vs `bot-` | `bot-{profileId1}-` vs `bot-{profileId2}-` | `bot-{profileId}-{ts1}` vs `bot-{profileId}-{ts2}` |
+| Session ID 前缀 | 无 vs `chatbot-` | `chatbot-{profileId1}-` vs `chatbot-{profileId2}-` | `chatbot-{profileId}-{ts1}` vs `chatbot-{profileId}-{ts2}` |
 | 存储表 | 主 session 表 | chatbot_sessions（同一张表，userKey 含 profileId 区分） | userKey 含 userId 区分 |
 | V2 进程 | 独立 | 独立 | 独立 |
 | 创建路径 | 桌面端 WS | ChatbotSessionManager | ChatbotSessionManager |
@@ -144,7 +144,7 @@ wecom:{botProfileId}:{userId}
 
 ### 2.3 隔离保障措施
 
-1. **ID 前缀强制**：Bot session 创建时 ID 格式硬编码为 `bot-{botProfileId}-`，本地 session 创建时不允许 `bot-` 前缀
+1. **ID 前缀强制**：Bot session 创建时 ID 格式硬编码为 `chatbot-{botProfileId}-`，本地 session 创建时不允许 `chatbot-` 前缀
 2. **数据表分离**：`chatbot_sessions` 表独立于本地 session 表，查询时从不交叉
 3. **V2 进程独立**：每个 Bot session 的 V2 SDK 进程完全独立，一个崩溃不影响其他
 4. **清理独立**：关闭某个 Bot session 只清理其 V2 进程和表记录，不碰其他 session
@@ -251,7 +251,7 @@ CREATE TABLE chatbot_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_key TEXT NOT NULL,           -- wecom:{botProfileId}:{userId}
   workspace TEXT NOT NULL,
-  session_id TEXT NOT NULL,          -- bot-{botProfileId}-{ts}-{rand}
+  session_id TEXT NOT NULL,          -- chatbot-{botProfileId}-{ts}-{rand}
   sdk_session_id TEXT,
   bot_label TEXT,                    -- "@queryAbot"
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -259,6 +259,46 @@ CREATE TABLE chatbot_sessions (
   UNIQUE(user_key, workspace)
 );
 ```
+
+**数据库迁移方案**：`ChatbotStore.init()` 检测旧表结构：
+
+```ts
+const columns = db.pragma('table_info(chatbot_sessions)');
+if (!columns.find(c => c.name === 'bot_label')) {
+  db.exec('ALTER TABLE chatbot_sessions ADD COLUMN bot_label TEXT');
+}
+```
+
+旧 `user_key` 格式 `wecom:{userId}` 的记录保留不迁移，新消息创建的 session 使用新格式 `wecom:{botProfileId}:{userId}`。旧 session 自然过期后被清理。
+
+### 5.4 连接管理改造
+
+```ts
+// before: 单个连接变量
+let wecomConnection: WeComBotConnection | null = null;
+
+// after: 连接数组
+let wecomConnections: WeComBotConnection[] = [];
+```
+
+`startChatbotConnections()` 遍历 `wecom.bots[]`，每个 enabled 的 bot 创建一个连接实例。`settings.update` 触发重连时先停掉所有连接再重建，进程退出时同理。
+
+### 5.5 canUseTool 注入路径
+
+当前 `canUseTool` 只在桌面端 session 创建时注入。Bot session 的 V2 进程需要增加注入：
+
+- `getOrCreateV2Session()` 增加 `canUseTool` 参数透传
+- `sendMessageForChatbot()` 调用时根据 Bot mode 构建不同的 `canUseTool` 回调
+- query 模式：拦截 Write/Edit/Bash/NotebookEdit
+- full 模式：与桌面端一致，仅桥接 AskUserQuestion
+
+### 5.6 并发限制
+
+`maxBotConcurrency` 硬编码为 2，暂不提供配置入口。后续可在 `ChatbotConfig` 增加 `maxConcurrency` 字段。
+
+### 5.7 非企微平台兼容
+
+`IncomingMessage.botProfileId` 字段为必填。飞书/微信 Bot 当前只有单实例，`botProfileId` 使用固定占位值 `'default'`，不影响现有行为。后续如需多 Bot 支持再扩展。
 
 ## 6. 前端改造
 
