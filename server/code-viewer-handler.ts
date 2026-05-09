@@ -80,7 +80,9 @@ export function hasNullBytes(buffer: Buffer): boolean {
   return false;
 }
 
-export function shouldHide(_name: string): boolean {
+export function shouldHide(name: string): boolean {
+  if (name.startsWith('.')) return true;
+  if (HIDDEN_DIRS.has(name)) return true;
   return false;
 }
 
