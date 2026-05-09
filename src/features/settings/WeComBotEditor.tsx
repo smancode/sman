@@ -48,6 +48,18 @@ export function WeComBotEditor({ bots, enabled, onUpdateBots }: WeComBotEditorPr
     return () => { client.off('cron.workspaces', handler); };
   }, [getWs]);
 
+  // Auto-load skills for query-mode bots that already have a workspace
+  useEffect(() => {
+    const client = getWs();
+    if (!client) return;
+
+    for (const bot of bots) {
+      if (bot.mode === 'query' && bot.workspace && !botSkills[bot.id] && !botSkillsLoading[bot.id]) {
+        loadSkills(bot.id, bot.workspace);
+      }
+    }
+  }, [bots]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addBot = () => {
     const newBot: WeComBotProfile = {
       id: crypto.randomUUID(),
