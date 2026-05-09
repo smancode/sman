@@ -7,6 +7,7 @@ import { downloadAndDecrypt, wecomMsgtypeToMediaType } from './wecom-media.js';
 interface WeComBotConfig {
   botId: string;
   secret: string;
+  botProfileId: string;
   onMessage: (msg: IncomingMessage, sender: ChatResponseSender) => Promise<void>;
 }
 
@@ -28,12 +29,14 @@ export class WeComBotConnection {
   private reconnecting = false;
   private stopped = false;
   private config: WeComBotConfig;
+  private readonly botProfileId: string;
   // Pending messages queued while disconnected, flushed on reconnection.
   private pendingQueue: object[] = [];
 
   constructor(config: WeComBotConfig) {
     this.config = config;
-    this.log = createLogger('WeComBot');
+    this.botProfileId = config.botProfileId;
+    this.log = createLogger(`WeComBot:${config.botProfileId.substring(0, 8)}`);
   }
 
   start(): void {
@@ -285,6 +288,7 @@ export class WeComBotConnection {
       chatType: chatType as 'single' | 'group',
       chatId: chatId || userId,
       media,
+      botProfileId: this.botProfileId,
     };
 
     const sender = this.createSender(requestId);
