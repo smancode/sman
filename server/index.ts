@@ -1858,6 +1858,28 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'chatbot.listWorkspaceSkills': {
+          const wsPath = msg.workspace as string;
+          if (!wsPath || typeof wsPath !== 'string') {
+            ws.send(JSON.stringify({ type: 'chatbot.listWorkspaceSkills', error: 'Missing workspace' }));
+            break;
+          }
+          const skillsDir = path.join(wsPath, '.claude', 'skills');
+          const skills: string[] = [];
+          try {
+            if (fs.existsSync(skillsDir)) {
+              const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isDirectory()) {
+                  skills.push(entry.name);
+                }
+              }
+            }
+          } catch { /* ignore */ }
+          ws.send(JSON.stringify({ type: 'chatbot.listWorkspaceSkills', skills }));
+          break;
+        }
+
         // ── Code Viewer ──────────────────────────────────────────
         case 'code.listDir': {
           if (!msg.workspace) {
