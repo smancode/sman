@@ -43,12 +43,22 @@ export interface WebSearchConfig {
   maxUsesPerSession: number;
 }
 
+export interface WeComBotProfile {
+  id: string;
+  label: string;
+  botId: string;
+  secret: string;
+  mode: 'full' | 'query';
+  workspace: string;
+  allowedSkills: string[];
+  enabled: boolean;
+}
+
 export interface ChatbotConfig {
   enabled: boolean;
   wecom: {
     enabled: boolean;
-    botId: string;
-    secret: string;
+    bots: WeComBotProfile[];
   };
   feishu: {
     enabled: boolean;

@@ -61,7 +61,7 @@ const DEFAULT_SETTINGS: SmanSettings = {
   },
   chatbot: {
     enabled: false,
-    wecom: { enabled: false, botId: '', secret: '' },
+    wecom: { enabled: false, bots: [] },
     feishu: { enabled: false, appId: '', appSecret: '' },
     weixin: { enabled: false },
   },
