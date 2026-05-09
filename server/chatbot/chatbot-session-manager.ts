@@ -438,7 +438,6 @@ export class ChatbotSessionManager {
     try {
       sender.start();
 
-      // TODO (Task 8): pass mode and allowedSkills after sendMessageForChatbot signature update
       const fullContent = await this.sessionManager.sendMessageForChatbot(
         sessionId,
         content,
@@ -448,7 +447,8 @@ export class ChatbotSessionManager {
         media,
         (chunk) => sender.sendThinking(chunk),
         (toolName, status) => sender.sendToolStatus(toolName, status),
-        // mode, botProfile?.allowedSkills,
+        mode,
+        botProfile?.allowedSkills,
       );
 
       // Strip all "(no content)" placeholders from the final content
