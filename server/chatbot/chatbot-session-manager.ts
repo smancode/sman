@@ -6,7 +6,7 @@ import { createLogger, type Logger } from '../utils/logger.js';
 import type { ClaudeSessionManager } from '../claude-session.js';
 import { ChatbotStore } from './chatbot-store.js';
 import { parseChatCommand } from './chat-command-parser.js';
-import type { IncomingMessage, ChatResponseSender } from './types.js';
+import type { IncomingMessage, ChatResponseSender, WeComBotProfile } from './types.js';
 
 const QUERY_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -16,16 +16,22 @@ export class ChatbotSessionManager {
   private sessionManager: ClaudeSessionManager;
   private activeQueries = new Map<string, AbortController>();
   private onSessionCreated?: (sessionId: string, label: string) => void;
+  private activeBotCount = 0;
+  private maxBotConcurrency = 2;
+  private botQueue: Array<{ userKey: string; sender: ChatResponseSender; execute: () => Promise<void> }> = [];
+  private getBotProfile: (botProfileId: string) => WeComBotProfile | undefined;
 
   constructor(
     private homeDir: string,
     sessionManager: ClaudeSessionManager,
     store: ChatbotStore,
+    getBotProfile: (botProfileId: string) => WeComBotProfile | undefined,
     onSessionCreated?: (sessionId: string, label: string) => void,
   ) {
     this.log = createLogger('ChatbotSessionManager');
     this.sessionManager = sessionManager;
     this.store = store;
+    this.getBotProfile = getBotProfile;
     this.onSessionCreated = onSessionCreated;
   }
 
@@ -98,7 +104,7 @@ export class ChatbotSessionManager {
   }
 
   /** Ensure a chatbot session exists for this userKey+workspace */
-  private ensureSession(userKey: string, workspacePath: string, platform: string): void {
+  private ensureSession(userKey: string, workspacePath: string, platform: string, botProfile: WeComBotProfile): void {
     let session = this.store.getSession(userKey, workspacePath);
     if (session) {
       // Try to restore soft-deleted session
@@ -117,13 +123,13 @@ export class ChatbotSessionManager {
       this.store.deleteSession(userKey, workspacePath);
     }
 
-    const sessionId = `chatbot-${Date.now()}-${uuidv4().substring(0, 8)}`;
+    const sessionId = `chatbot-${botProfile.id}-${Date.now()}-${uuidv4().substring(0, 8)}`;
     this.sessionManager.createSessionWithId(workspacePath, sessionId, false);
 
     const label = this.buildLabel(platform, userKey, workspacePath);
     this.sessionManager.updateSessionLabel(sessionId, label);
 
-    this.store.setSession(userKey, workspacePath, sessionId);
+    this.store.setSession(userKey, workspacePath, sessionId, botProfile.label);
 
     // Notify frontend to refresh sidebar
     this.onSessionCreated?.(sessionId, label);
@@ -132,43 +138,95 @@ export class ChatbotSessionManager {
   // ── Message handling ──
 
   async handleMessage(msg: IncomingMessage, sender: ChatResponseSender): Promise<void> {
-    const userKey = `${msg.platform}:${msg.userId}`;
+    const botProfile = this.getBotProfile(msg.botProfileId);
+    if (!botProfile) {
+      sender.finish('Bot 配置未找到，请联系管理员。');
+      return;
+    }
+
+    const userKey = `${msg.platform}:${botProfile.id}:${msg.userId}`;
+    const mode = botProfile.mode;
+
     const parseResult = parseChatCommand(msg.content);
 
     if (parseResult.isCommand) {
       if (parseResult.command) {
-        await this.handleCommand(userKey, parseResult.command, sender);
+        await this.handleCommand(userKey, parseResult.command, sender, mode, botProfile);
       } else {
-        this.handleHelp(sender, true);
+        this.handleHelp(sender, true, mode);
       }
       return;
     }
 
-    // Auto-select first available workspace if user has none set
-    let userState = this.store.getUserState(userKey);
-    if (!userState?.currentWorkspace) {
-      const workspaces = this.getDesktopWorkspaces();
-      if (workspaces.length > 0) {
-        const defaultWorkspace = workspaces[0].path;
-        this.store.setUserState(userKey, defaultWorkspace);
-        this.ensureSession(userKey, defaultWorkspace, msg.platform);
-        userState = this.store.getUserState(userKey);
+    // Resolve workspace based on mode
+    let workspace: string;
+    if (mode === 'query') {
+      workspace = botProfile.workspace;
+      if (!workspace) {
+        sender.finish('Bot 未绑定项目目录，请联系管理员配置。');
+        return;
+      }
+    } else {
+      let userState = this.store.getUserState(userKey);
+      if (!userState?.currentWorkspace) {
+        const workspaces = this.getDesktopWorkspaces();
+        if (workspaces.length > 0) {
+          workspace = workspaces[0].path;
+          this.store.setUserState(userKey, workspace);
+        } else {
+          sender.finish('暂无可用的项目目录。请先在桌面端打开一个项目。');
+          return;
+        }
+      } else {
+        workspace = userState.currentWorkspace;
       }
     }
 
-    if (!userState?.currentWorkspace) {
-      sender.finish('暂无可用的项目目录。请先在桌面端打开一个项目。');
-      return;
-    }
-
+    // Reject if this user already has an active query
     if (this.activeQueries.has(userKey)) {
-      this.log.info(`Rejecting message from ${userKey}: active query in progress`);
-      sender.finish('当前还有未完成的请求，请稍后再试。');
+      sender.finish('你有一条消息正在处理中，请稍后再试。');
       return;
     }
 
-    this.log.info(`Executing chat query for ${userKey}, workspace=${userState.currentWorkspace}, content="${msg.content.substring(0, 50)}"`);
-    await this.executeChatQuery(userKey, userState.currentWorkspace, msg.content, sender, msg.media);
+    // Global bot concurrency control
+    if (this.activeBotCount >= this.maxBotConcurrency) {
+      const queuePos = this.botQueue.length + 1;
+      sender.sendChunk(`当前有 ${this.activeBotCount} 个请求在处理中，你排在第 ${queuePos} 位，请稍候...`);
+      return new Promise<void>((resolve) => {
+        this.botQueue.push({
+          userKey,
+          sender,
+          execute: async () => {
+            sender.sendChunk('开始处理你的问题...');
+            await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
+            resolve();
+          },
+        });
+      });
+    }
+
+    this.activeBotCount++;
+    try {
+      await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
+    } finally {
+      this.activeBotCount--;
+      this.processQueue();
+    }
+  }
+
+  private processQueue(): void {
+    while (this.botQueue.length > 0 && this.activeBotCount < this.maxBotConcurrency) {
+      const next = this.botQueue.shift()!;
+      if (this.activeQueries.has(next.userKey)) {
+        next.sender.finish('你有一条消息正在处理中，跳过排队消息。');
+        continue;
+      }
+      this.activeBotCount++;
+      next.execute().finally(() => {
+        this.activeBotCount--;
+        this.processQueue();
+      });
+    }
   }
 
   // ── Commands ──
@@ -177,19 +235,33 @@ export class ChatbotSessionManager {
     userKey: string,
     command: { command: string; args: string; rawCommand: string },
     sender: ChatResponseSender,
+    mode: 'full' | 'query',
+    botProfile: WeComBotProfile,
   ): Promise<void> {
     switch (command.command) {
       case 'cd':
+        if (mode === 'query') {
+          sender.finish('当前为只读答疑模式，不支持切换项目。');
+          return;
+        }
         await this.handleCd(userKey, command.args, sender);
         break;
-      case 'pwd':
-        this.handlePwd(userKey, sender);
-        break;
       case 'workspaces':
+        if (mode === 'query') {
+          sender.finish(`当前绑定项目: ${path.basename(botProfile.workspace)}\n(只读模式，不支持切换)`);
+          return;
+        }
         this.handleWorkspaces(sender);
         break;
+      case 'pwd':
+        if (mode === 'query') {
+          sender.finish(`当前项目: ${botProfile.workspace}`);
+        } else {
+          this.handlePwd(userKey, sender);
+        }
+        break;
       case 'help':
-        this.handleHelp(sender);
+        this.handleHelp(sender, false, mode);
         break;
       case 'status':
         this.handleStatus(userKey, sender);
@@ -240,7 +312,12 @@ export class ChatbotSessionManager {
     }
 
     this.store.setUserState(userKey, workspacePath);
-    this.ensureSession(userKey, workspacePath, userKey.split(':')[0]);
+    const parts = userKey.split(':');
+    const botProfileId = parts.length >= 2 ? parts[1] : '';
+    const botProfile = this.getBotProfile(botProfileId);
+    if (botProfile) {
+      this.ensureSession(userKey, workspacePath, parts[0], botProfile);
+    }
 
     const projectName = path.basename(workspacePath);
     sender.finish(`已切换到: ${projectName} (${workspacePath})`);
@@ -265,17 +342,27 @@ export class ChatbotSessionManager {
     sender.finish(`可用项目:\n${list}\n\n使用 //cd <项目名>  or <数字> 切换。`);
   }
 
-  private handleHelp(sender: ChatResponseSender, showUnknownHint = false): void {
+  private handleHelp(sender: ChatResponseSender, showUnknownHint = false, mode: 'full' | 'query' = 'full'): void {
     const prefix = showUnknownHint ? '未知命令，' : '';
-    sender.finish(
-      `${prefix}可用系统命令:\n` +
-      `//workspaces  or  //wss - 列出桌面端已打开的项目\n` +
-      `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
-      `//pwd - 显示当前工作目录\n` +
-      `//new - 新建会话，清空上下文重新开始\n` +
-      `//help - 显示此帮助信息\n\n` +
-      `直接发送消息开启对话。`,
-    );
+    if (mode === 'query') {
+      sender.finish(
+        `${prefix}可用命令:\n` +
+        `//new - 新建会话，清空上下文重新开始\n` +
+        `//help - 显示此帮助信息\n` +
+        `//status - 显示当前状态\n\n` +
+        `直接发送消息即可提问。`,
+      );
+    } else {
+      sender.finish(
+        `${prefix}可用系统命令:\n` +
+        `//workspaces  or  //wss - 列出桌面端已打开的项目\n` +
+        `//cd <项目名或路径> - 切换工作目录 (支持 ~ 路径)\n` +
+        `//pwd - 显示当前工作目录\n` +
+        `//new - 新建会话，清空上下文重新开始\n` +
+        `//help - 显示此帮助信息\n\n` +
+        `直接发送消息开启对话。`,
+      );
+    }
   }
 
   private handleStatus(userKey: string, sender: ChatResponseSender): void {
@@ -288,7 +375,7 @@ export class ChatbotSessionManager {
   private handleNew(userKey: string, sender: ChatResponseSender): void {
     const state = this.store.getUserState(userKey);
     if (!state?.currentWorkspace) {
-      sender.finish('当前未设置工作目录，无需新建会话。\n使用 //cd <项目名或路径> 切换工作目录。');
+      sender.finish('当前未设置工作目录，无需新建会话。');
       return;
     }
 
@@ -303,7 +390,15 @@ export class ChatbotSessionManager {
 
     // Create a new session (ensureSession will overwrite the old mapping)
     this.store.deleteSession(userKey, workspace);
-    this.ensureSession(userKey, workspace, userKey.split(':')[0]);
+
+    const parts = userKey.split(':');
+    const botProfileId = parts[1];
+    const botProfile = this.getBotProfile(botProfileId);
+    if (!botProfile) {
+      sender.finish('Bot 配置已变更，无法新建会话。请联系管理员。');
+      return;
+    }
+    this.ensureSession(userKey, workspace, parts[0], botProfile);
 
     const projectName = path.basename(workspace);
     sender.finish(`已新建会话: ${projectName}\n旧会话的聊天记录仍可在桌面端查看。`);
@@ -317,12 +412,14 @@ export class ChatbotSessionManager {
     content: string,
     sender: ChatResponseSender,
     media?: import('./types.js').MediaAttachment[],
+    mode: 'full' | 'query' = 'full',
+    botProfile?: WeComBotProfile,
   ): Promise<void> {
     const session = this.store.getSession(userKey, workspace);
     if (!session) {
       // Session missing — recreate it
       try {
-        this.ensureSession(userKey, workspace, userKey.split(':')[0]);
+        this.ensureSession(userKey, workspace, userKey.split(':')[0], botProfile!);
       } catch (err) {
         sender.error(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
         return;
@@ -341,6 +438,7 @@ export class ChatbotSessionManager {
     try {
       sender.start();
 
+      // TODO (Task 8): pass mode and allowedSkills after sendMessageForChatbot signature update
       const fullContent = await this.sessionManager.sendMessageForChatbot(
         sessionId,
         content,
@@ -350,6 +448,7 @@ export class ChatbotSessionManager {
         media,
         (chunk) => sender.sendThinking(chunk),
         (toolName, status) => sender.sendToolStatus(toolName, status),
+        // mode, botProfile?.allowedSkills,
       );
 
       // Strip all "(no content)" placeholders from the final content
@@ -373,5 +472,7 @@ export class ChatbotSessionManager {
       controller.abort();
     }
     this.activeQueries.clear();
+    this.botQueue = [];
+    this.activeBotCount = 0;
   }
 }
