@@ -198,8 +198,10 @@ export function clearStreamingBlocks(sessionId: string): void {
 // Track per-session streaming cleanup functions so we can unsubscribe when session changes
 const streamCleanups = new Map<string, () => void>();
 
-// Monotonically increasing generation counter to distinguish old vs new streams for the same session
-let streamGeneration = 0;
+// Per-session generation counter to distinguish old vs new streams for the SAME session.
+// Each session has its own counter — sending a message in session B must NOT invalidate
+// the generation check for session A's stream handlers.
+const streamGenerationMap = new Map<string, number>();
 
 /** Sync the store's `sending` boolean with the per-session sendingSessions set.
  *  `sending` should always reflect whether the CURRENT session is streaming. */
@@ -336,6 +338,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Optimistic: remove from local state immediately for instant UI feedback
     sessionCache.invalidate(sessionId);
+    cleanupStream(sessionId);
+    clearStreamingBlocks(sessionId);
+    sendingSessions.delete(sessionId);
+    streamGenerationMap.delete(sessionId);
     const state = get();
     const remaining = state.sessions.filter(s => s.key !== sessionId);
     const switchingToDeleted = state.currentSessionId === sessionId;
@@ -345,6 +351,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ sessions: remaining, currentSessionId: newId });
     if (switchingToDeleted) {
       sessionCache.invalidate(newId);
+      syncSending();
       get().loadHistory();
     }
 
@@ -755,8 +762,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Capture sessionId at registration time — this is the primeKey for all streaming ops
     const streamSessionId = currentSessionId;
 
-    // Capture generation to ignore stale aborted/done events from previous streams
-    const myGeneration = ++streamGeneration;
+    // Capture per-session generation to ignore stale aborted/done events from previous streams
+    // for THIS session only. Other sessions' streams are unaffected.
+    const prevGen = streamGenerationMap.get(streamSessionId) ?? 0;
+    const myGeneration = prevGen + 1;
+    streamGenerationMap.set(streamSessionId, myGeneration);
 
     // Pre-heat session & refresh git branch (deferred from ChatInput to avoid blocking typing)
     get().preheatSession();
@@ -880,7 +890,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Monitor chat.aborted (stall or user-initiated) — ignore stale aborts from previous streams
       const unsubAborted = wrapHandler(client, 'chat.aborted', (data) => {
         if (data.sessionId !== streamSessionId) return;
-        if (myGeneration !== streamGeneration) return; // Stale abort from a previous stream
+        if (myGeneration !== (streamGenerationMap.get(streamSessionId) ?? 0)) return; // Stale abort from a previous stream
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
         cleanup();
@@ -1126,7 +1136,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubContextWarn = wrapHandler(client, 'chat.context_warning', (data: Record<string, unknown>) => {
         if (data.sessionId !== streamSessionId) return;
-        if (myGeneration !== streamGeneration) return;
+        if (myGeneration !== (streamGenerationMap.get(streamSessionId) ?? 0)) return;
         if (get().currentSessionId === streamSessionId) {
           set({
             contextWarning: {
@@ -1140,7 +1150,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubDone = wrapHandler(client, 'chat.done', (data) => {
         if (data.sessionId !== streamSessionId) return;
-        if (myGeneration !== streamGeneration) return; // Stale done from a previous stream
+        if (myGeneration !== (streamGenerationMap.get(streamSessionId) ?? 0)) return; // Stale done from a previous stream
         // Flush any remaining batched deltas before finalizing
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         flushDeltas();
@@ -1205,7 +1215,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         if (data.sessionId !== streamSessionId) return;
-        if (myGeneration !== streamGeneration) return; // Stale error from a previous stream
+        if (myGeneration !== (streamGenerationMap.get(streamSessionId) ?? 0)) return; // Stale error from a previous stream
         if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
         pendingText = '';
         pendingThinking = '';
