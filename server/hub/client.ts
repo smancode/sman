@@ -54,13 +54,30 @@ export class HubClient {
     const hostname = os.hostname();
     const nets = os.networkInterfaces();
     let ip = '127.0.0.1';
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name] || []) {
-        if (net.family === 'IPv4' && !net.internal) {
-          ip = net.address;
-          break;
-        }
+
+    // Prefer non-VPN, non-virtual NIC IPs: 10.x (enterprise), 192.168.x, 172.16-31.x
+    // Skip VPN/tunnel addresses (172.x where x < 16 or > 31), APIPA (169.254.x), virtual adapters
+    const candidates: { address: string; priority: number }[] = [];
+    const skipNames = /^(tun|tap|veth|vEthernet|docker|br-|vnic|vmware|vbox|hyper-v|wsl)/i;
+
+    for (const [name, interfaces] of Object.entries(nets)) {
+      if (skipNames.test(name)) continue;
+      for (const net of interfaces || []) {
+        if (net.family !== 'IPv4' || net.internal) continue;
+        const addr = net.address;
+        if (addr.startsWith('169.254.')) continue; // APIPA
+        let priority = 0;
+        if (addr.startsWith('10.')) priority = 3;           // Enterprise LAN
+        else if (addr.startsWith('192.168.')) priority = 2; // Home/office LAN
+        else if (/^172\.(1[6-9]|2\d|3[01])\./.test(addr)) priority = 1; // RFC1918 172.16-31
+        else priority = 0; // Public IP or other
+        candidates.push({ address: addr, priority });
       }
+    }
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.priority - a.priority);
+      ip = candidates[0].address;
     }
     return `${hostname}@${ip}`;
   }
