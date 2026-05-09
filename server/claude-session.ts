@@ -29,6 +29,7 @@ import { buildContentBlocks, type ContentBlock } from './utils/content-blocks.js
 import type { MediaAttachment } from './chatbot/types.js';
 import { UserProfileManager } from './user-profile.js';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import fs from 'fs';
 
@@ -2380,9 +2381,9 @@ export class ClaudeSessionManager {
       let modePrefix = '';
       if (mode === 'query') {
         const skillList = allowedSkills?.length ? allowedSkills.join(', ') : '全部';
-        modePrefix = `\n[只读答疑模式] 你是一个只读答疑助手，绑定项目: ${projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n`;
+        modePrefix = this.loadBotPrompt('query', { projectName, skillList });
       } else if (mode === 'collect') {
-        modePrefix = `\n[反馈收集模式] 你是一个专门的反馈收集助手。\n你的任务是倾听用户反馈，简洁温暖略带幽默地回复，并将有价值的反馈追加到当天的文件中。\n反馈文件路径: ${workspace}/YYYY-MM-DD-iter.md\n请严格遵循 CLAUDE.md 中的格式追加反馈。\n`;
+        modePrefix = this.loadBotPrompt('collect', { workspace });
       }
       const messagePrefix = [smanContext, profilePrefix, modePrefix]
         .filter(Boolean).join('\n');
@@ -2877,6 +2878,31 @@ export class ClaudeSessionManager {
     this.preheatPromises.clear();
     this.sessions.clear();
     this.sdkSessionIds.clear();
+  }
+
+  /**
+   * Load bot prompt from ~/.sman/bot-prompts/{mode}.md
+   * Supports simple template variables: {{projectName}}, {{skillList}}, {{workspace}}
+   */
+  private loadBotPrompt(mode: string, vars: Record<string, string>): string {
+    const promptDir = path.join(os.homedir(), '.sman', 'bot-prompts');
+    const promptFile = path.join(promptDir, `${mode}.md`);
+    try {
+      let content = fs.readFileSync(promptFile, 'utf-8');
+      for (const [key, value] of Object.entries(vars)) {
+        content = content.replaceAll(`{{${key}}}`, value);
+      }
+      return '\n' + content;
+    } catch {
+      // Fallback if file missing
+      if (mode === 'query') {
+        return `\n[只读答疑模式] 你是一个只读答疑助手，绑定项目: ${vars.projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${vars.skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n`;
+      }
+      if (mode === 'collect') {
+        return `\n[反馈收集模式] 你是一个专门的反馈收集助手。\n反馈文件路径: ${vars.workspace}/YYYY-MM-DD-iter.md\n请严格遵循 CLAUDE.md 中的格式追加反馈。\n`;
+      }
+      return '';
+    }
   }
 }
 

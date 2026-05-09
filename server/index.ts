@@ -337,6 +337,7 @@ function startChatbotConnections(): void {
         botId: bot.botId,
         secret: bot.secret,
         botProfileId: bot.id,
+        getMode: () => bot.mode,
         onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
       });
       conn.start();
@@ -1251,9 +1252,12 @@ wss.on('connection', (ws: WebSocket) => {
             const newBots = (wecomUpdate?.bots ?? []) as Array<{ id: string; mode?: string }>;
             const newBotIds = new Set(newBots.map((b) => b.id));
 
-            // Regenerate iterate CLAUDE.md if any collect-mode bot exists
+            // Regenerate bot prompts and iterate CLAUDE.md
             if (newBots.some((b) => b.mode === 'collect')) {
               chatbotManager.ensureIterateClaudeMd();
+            }
+            if (newBots.some((b) => b.mode === 'query' || b.mode === 'collect')) {
+              chatbotManager.ensureBotPrompts();
             }
             const allBotSessions = chatbotStore.getSessionsWithBotInfo();
             const deletedBotProfileIds = new Set<string>();

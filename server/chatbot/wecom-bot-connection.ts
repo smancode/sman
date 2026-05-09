@@ -8,6 +8,7 @@ interface WeComBotConfig {
   botId: string;
   secret: string;
   botProfileId: string;
+  getMode: () => 'full' | 'query' | 'collect';
   onMessage: (msg: IncomingMessage, sender: ChatResponseSender) => Promise<void>;
 }
 
@@ -300,12 +301,19 @@ export class WeComBotConnection {
     const requestId = msg.headers?.req_id;
 
     if (eventType === 'enter_chat') {
+      const mode = this.config.getMode();
+      let welcome = '欢迎使用 Sman，输入 //help 查看可用命令。';
+      if (mode === 'query') {
+        welcome = '你好，我是项目答疑助手，有什么问题直接问我就行。';
+      } else if (mode === 'collect') {
+        welcome = '你好，欢迎反馈问题和建议，我会帮你记录。';
+      }
       this.send({
         cmd: 'aibot_respond_welcome_msg',
         headers: { req_id: requestId },
         body: {
           msgtype: 'text',
-          text: { content: '欢迎使用 Sman，输入 //help 查看可用命令。' },
+          text: { content: welcome },
         },
       });
     }

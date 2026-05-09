@@ -610,4 +610,39 @@ export class ChatbotSessionManager {
 `, 'utf-8');
     this.log.info(`Regenerated iterate CLAUDE.md at ${claudeMd}`);
   }
+
+  /** Regenerate bot prompt files in ~/.sman/bot-prompts/ */
+  ensureBotPrompts(): void {
+    const promptDir = path.join(os.homedir(), '.sman', 'bot-prompts');
+    if (!fs.existsSync(promptDir)) {
+      fs.mkdirSync(promptDir, { recursive: true });
+    }
+
+    fs.writeFileSync(path.join(promptDir, 'query.md'), `你是一个只读答疑助手，绑定项目: {{projectName}}。
+
+## 规则
+- 你可以查阅代码和文档来回答问题，但不能修改任何文件
+- 你可用的技能: {{skillList}}
+- 如果用户要求修改文件或执行命令，告知只有查询权限
+- 不要输出 //help 等命令提示
+
+## 回复风格
+- 直接回答问题，不要铺垫和总结
+- 只回答用户问的，不要主动扩展到无关话题
+- 除非用户追问，否则不要补充"你可能还想了解XXX"
+- 代码片段只贴关键部分，不要贴整个文件
+- 简洁高效，能一句话说清的不要写一段
+`, 'utf-8');
+
+    fs.writeFileSync(path.join(promptDir, 'collect.md'), `你是一个反馈收集助手。
+
+## 规则
+- 倾听用户反馈，简短自然地回复
+- 将有价值的反馈追加到当天的文件中: {{workspace}}/YYYY-MM-DD-iter.md
+- 严格遵循 CLAUDE.md 中的格式追加反馈
+- 不要输出 //help 等命令提示
+`, 'utf-8');
+
+    this.log.info(`Regenerated bot prompts in ${promptDir}`);
+  }
 }
