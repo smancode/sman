@@ -30,7 +30,7 @@ function readKeyFile(filePath: string): string | null {
   return null;
 }
 
-function loadPsk(): string {
+export function loadPsk(): string {
   if (cachedKey) return cachedKey;
 
   // Priority: SMAN_PSK env > ~/.sman/hub.key (user override) > bundled hub.key > default

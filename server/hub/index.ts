@@ -12,6 +12,7 @@ import { HubWsClient } from './hub-ws-client.js';
 import { EvaluationHandler } from './evaluation-handler.js';
 import { TaskWorker } from './task-worker.js';
 import { readInitMd } from './init-reader.js';
+import { loadPsk } from './crypto.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('Hub');
@@ -38,13 +39,7 @@ function getServerUrl(sm: SettingsManager): string {
 }
 
 function getPsk(): string {
-  if (process.env.SMAN_PSK) return process.env.SMAN_PSK;
-  try {
-    const homeDir = process.env.SMANBASE_HOME || path.join(os.homedir(), '.sman');
-    return fs.readFileSync(path.join(homeDir, 'hub.key'), 'utf-8').trim();
-  } catch {
-    return '';
-  }
+  return loadPsk();
 }
 
 function getClientId(): string {
