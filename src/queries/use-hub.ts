@@ -1,5 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWsConnection } from '@/stores/ws-connection';
+import {
+  parseWithFallback,
+  RoomSchema,
+  AgentSchema,
+  TaskSchema,
+  TaskEventSchema,
+  RoomListUpdateSchema,
+  RoomInfoUpdateSchema,
+  AgentListUpdateSchema,
+  TaskListUpdateSchema,
+  TaskDetailUpdateSchema,
+  EMPTY_ROOMS,
+  EMPTY_TASKS,
+  EMPTY_AGENTS,
+  EMPTY_EVENTS,
+} from '@/schemas/hub';
 import type { Room, Agent, Task, TaskEvent } from '@/schemas/hub';
 
 function sendToHub(msg: Record<string, unknown>): Promise<unknown> {
@@ -48,8 +64,9 @@ export function useRooms() {
   return useQuery({
     queryKey: ['hub', 'rooms'] as const,
     queryFn: async () => {
-      const result = await sendToHub({ type: 'room.list' }) as { rooms: Room[] };
-      return result.rooms ?? [];
+      const raw = await sendToHub({ type: 'room.list' });
+      const parsed = parseWithFallback(raw, RoomListUpdateSchema, { rooms: EMPTY_ROOMS }, 'room.list');
+      return parsed.rooms ?? EMPTY_ROOMS;
     },
     staleTime: 30_000,
   });
@@ -60,10 +77,13 @@ export function useRoom(roomId: string | undefined) {
     queryKey: ['hub', 'rooms', roomId] as const,
     queryFn: async () => {
       if (!roomId) return null;
-      const result = await sendToHub({ type: 'room.info', roomId }) as {
-        room: Room; members: unknown[]; agents: Agent[];
-      };
-      return result;
+      const raw = await sendToHub({ type: 'room.info', roomId });
+      const parsed = parseWithFallback(raw, RoomInfoUpdateSchema, {
+        room: null as unknown as Room,
+        members: [],
+        agents: EMPTY_AGENTS,
+      }, 'room.info');
+      return parsed;
     },
     enabled: !!roomId,
   });
@@ -102,9 +122,10 @@ export function useRoomAgents(roomId: string | undefined) {
   return useQuery({
     queryKey: ['hub', 'rooms', roomId, 'agents'] as const,
     queryFn: async () => {
-      if (!roomId) return [];
-      const result = await sendToHub({ type: 'agent.list', roomId }) as { agents: Agent[] };
-      return result.agents ?? [];
+      if (!roomId) return EMPTY_AGENTS;
+      const raw = await sendToHub({ type: 'agent.list', roomId });
+      const parsed = parseWithFallback(raw, AgentListUpdateSchema, { agents: EMPTY_AGENTS }, 'agent.list');
+      return parsed.agents ?? EMPTY_AGENTS;
     },
     enabled: !!roomId,
   });
@@ -125,9 +146,10 @@ export function useRoomTasks(roomId: string | undefined) {
   return useQuery({
     queryKey: ['hub', 'rooms', roomId, 'tasks'] as const,
     queryFn: async () => {
-      if (!roomId) return [];
-      const result = await sendToHub({ type: 'task.list', roomId }) as { tasks: Task[] };
-      return result.tasks ?? [];
+      if (!roomId) return EMPTY_TASKS;
+      const raw = await sendToHub({ type: 'task.list', roomId });
+      const parsed = parseWithFallback(raw, TaskListUpdateSchema, { tasks: EMPTY_TASKS }, 'task.list');
+      return parsed.tasks ?? EMPTY_TASKS;
     },
     enabled: !!roomId,
   });
@@ -138,10 +160,12 @@ export function useTaskDetail(taskId: string | undefined) {
     queryKey: ['hub', 'tasks', taskId] as const,
     queryFn: async () => {
       if (!taskId) return null;
-      const result = await sendToHub({ type: 'task.detail', taskId }) as {
-        task: Task; events: TaskEvent[];
-      };
-      return result;
+      const raw = await sendToHub({ type: 'task.detail', taskId });
+      const parsed = parseWithFallback(raw, TaskDetailUpdateSchema, {
+        task: null as unknown as Task,
+        events: EMPTY_EVENTS,
+      }, 'task.detail');
+      return parsed;
     },
     enabled: !!taskId,
   });
