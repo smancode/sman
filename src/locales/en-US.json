@@ -731,6 +731,10 @@
     "text": "Success",
     "context": "Generic success message title"
   },
+  "common.saved": {
+    "text": "Saved",
+    "context": "Save success feedback"
+  },
   "git.fetch": {
     "text": "Fetch Remote",
     "context": "Git fetch operation button"

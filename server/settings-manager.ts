@@ -134,6 +134,7 @@ export class SettingsManager {
     if (updates.llm) updated.llm = { ...config.llm, ...updates.llm };
     if (updates.webSearch) updated.webSearch = { ...config.webSearch, ...updates.webSearch };
     if (updates.chatbot) updated.chatbot = { ...config.chatbot, ...updates.chatbot };
+    if (updates.hub) updated.hub = { ...config.hub, ...updates.hub };
     this.write(updated);
     return updated;
   }

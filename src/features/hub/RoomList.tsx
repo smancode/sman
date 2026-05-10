@@ -15,18 +15,23 @@ export function RoomList({ selectedRoomId, onSelectRoom }: RoomListProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [joinId, setJoinId] = useState('');
+  const [error, setError] = useState('');
 
   const handleCreate = () => {
     if (!newName.trim()) return;
+    setError('');
     createRoom.mutate({ name: newName.trim() }, {
       onSuccess: () => { setNewName(''); setShowCreate(false); },
+      onError: (err) => setError(err.message),
     });
   };
 
   const handleJoin = () => {
     if (!joinId.trim()) return;
+    setError('');
     joinRoom.mutate({ roomId: joinId.trim() }, {
       onSuccess: () => setJoinId(''),
+      onError: (err) => setError(err.message),
     });
   };
 
@@ -41,6 +46,11 @@ export function RoomList({ selectedRoomId, onSelectRoom }: RoomListProps) {
 
   return (
     <div className="p-4 space-y-3">
+      {error && (
+        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <button
           onClick={() => setShowCreate(!showCreate)}

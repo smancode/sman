@@ -47,6 +47,7 @@ import { testAnthropicCompat, detectCapabilities, listModels } from './model-cap
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 import { initHub, stopHub, getHubStatus } from './hub/index.js';
+import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -501,19 +502,13 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
   }
 
   const urlObj = new URL(req.url!, `http://localhost`);
-  const targetPath = urlObj.pathname.replace('/api/hub', '/admin') + urlObj.search;
+  // /api/hub/rooms → /api/hub/rooms, /api/hub/tasks?roomId=x → /api/hub/tasks?roomId=x
+  const targetPath = urlObj.pathname.replace('/api/hub', '/api/hub') + urlObj.search;
   const targetUrl = `${hubUrl}${targetPath}`;
 
   try {
-    const adminToken = settingsManager.getConfig().hub?.adminToken || '';
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (adminToken) {
-      headers['Authorization'] = `Bearer ${adminToken}`;
-    }
-
-    const body = req.method !== 'GET' && req.method !== 'HEAD'
+    // Read body from frontend
+    const rawBody = req.method !== 'GET' && req.method !== 'HEAD'
       ? await new Promise<string>((resolve) => {
           let data = '';
           req.on('data', (chunk) => { data += chunk; });
@@ -521,17 +516,51 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
         })
       : undefined;
 
+    // Build PSK-encrypted payload
+    let payload: Record<string, unknown> = {};
+    if (rawBody) {
+      try { payload = JSON.parse(rawBody); } catch {}
+    }
+    // For GET requests with query params, pass them in payload so sman-server can read
+    if (req.method === 'GET' && urlObj.search) {
+      const params = new URLSearchParams(urlObj.search);
+      for (const [k, v] of params) {
+        payload[k] = v;
+      }
+    }
+
+    const encrypted = buildEncryptedRequest(payload);
+
     const fetchRes = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body: body || undefined,
+      method: req.method === 'GET' ? 'POST' : req.method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(encrypted),
     });
 
-    const contentType = fetchRes.headers.get('content-type') || 'application/json';
     const responseBody = await fetchRes.text();
 
-    res.writeHead(fetchRes.status, { 'Content-Type': contentType });
-    res.end(responseBody);
+    if (!fetchRes.ok) {
+      res.writeHead(fetchRes.status, { 'Content-Type': 'application/json' });
+      res.end(responseBody);
+      return;
+    }
+
+    // Decrypt sman-server response
+    try {
+      const encRes = JSON.parse(responseBody);
+      if (encRes.payload) {
+        const decrypted = decrypt(encRes.payload);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(decrypted));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(responseBody);
+      }
+    } catch {
+      // If decryption fails, pass through as-is
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(responseBody);
+    }
   } catch (err) {
     res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `Hub proxy error: ${(err as Error).message}` }));

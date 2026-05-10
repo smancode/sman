@@ -731,6 +731,10 @@
     "text": "成功",
     "context": "通用成功消息标题"
   },
+  "common.saved": {
+    "text": "已保存",
+    "context": "保存成功提示"
+  },
   "git.fetch": {
     "text": "拉取远端",
     "context": "Git fetch 操作按钮"

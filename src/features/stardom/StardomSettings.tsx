@@ -21,7 +21,7 @@ export function StardomSettings({ id }: { id?: string }) {
   const [maxSlots, setMaxSlots] = useState(stardom?.maxConcurrentTasks ?? 3);
   const hub = settings?.hub;
   const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
-  const [hubToken, setHubToken] = useState(hub?.adminToken ?? '');
+  const [hubSaved, setHubSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -40,8 +40,10 @@ export function StardomSettings({ id }: { id?: string }) {
   const handleHubSave = () => {
     client?.send({
       type: 'settings.update',
-      hub: { serverUrl: hubUrl, adminToken: hubToken, enabled: !!hubUrl, updateUrl: hub?.updateUrl ?? '' },
+      hub: { serverUrl: hubUrl, enabled: !!hubUrl, updateUrl: hub?.updateUrl ?? '', adminToken: '' },
     });
+    setHubSaved(true);
+    setTimeout(() => setHubSaved(false), 2000);
   };
 
   return (
@@ -122,18 +124,9 @@ export function StardomSettings({ id }: { id?: string }) {
             />
             <p className="text-xs text-muted-foreground">{t('hub.settings.serverUrlHint')}</p>
           </div>
-          <div className="space-y-2">
-            <Label>{t('hub.settings.adminToken')}</Label>
-            <Input
-              type="password"
-              placeholder={t('hub.settings.adminTokenPlaceholder')}
-              value={hubToken}
-              onChange={(e) => setHubToken(e.target.value)}
-            />
-          </div>
           <Button variant="outline" size="sm" onClick={handleHubSave} disabled={!hubUrl}>
             <Save className="h-4 w-4 mr-2" />
-            {t('hub.settings.save')}
+            {hubSaved ? t('common.saved') : t('hub.settings.save')}
           </Button>
         </div>
       </CardContent>

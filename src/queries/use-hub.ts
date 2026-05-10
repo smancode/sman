@@ -28,7 +28,14 @@ async function hubFetch(path: string, init?: RequestInit): Promise<unknown> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Hub error: ${res.status} ${body}`);
+    let msg = `Hub error: ${res.status}`;
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.error) msg = parsed.error;
+    } catch {
+      if (body) msg += ` ${body}`;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }
