@@ -87,6 +87,12 @@ export interface SmanSettings {
   webSearch: WebSearchConfig;
   chatbot: ChatbotConfig;
   stardom?: StardomSettingsConfig;
+  hub?: {
+    serverUrl: string;
+    updateUrl: string;
+    enabled: boolean;
+    adminToken: string;
+  };
 }
 
 export const WEB_SEARCH_PROVIDER_OPTIONS: {

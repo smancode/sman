@@ -2868,8 +2868,8 @@
     "context": "Hub 协作中心导航菜单项"
   },
   "hub.tab.rooms": {
-    "text": "房间",
-    "context": "Hub tab：房间列表"
+    "text": "项目组",
+    "context": "Hub tab：项目组列表"
   },
   "hub.tab.tasks": {
     "text": "任务",
@@ -2884,32 +2884,32 @@
     "context": "Hub 未连接提示"
   },
   "hub.room.create": {
-    "text": "创建房间",
-    "context": "创建房间按钮"
+    "text": "创建项目组",
+    "context": "创建项目组按钮"
   },
   "hub.room.join": {
     "text": "加入",
-    "context": "加入房间按钮"
+    "context": "加入项目组按钮"
   },
   "hub.room.joinId": {
-    "text": "输入房间 ID",
-    "context": "加入房间 ID 输入框占位符"
+    "text": "输入项目组 ID",
+    "context": "加入项目组 ID 输入框占位符"
   },
   "hub.room.namePlaceholder": {
-    "text": "房间名称",
-    "context": "创建房间名称输入框占位符"
+    "text": "项目组名称",
+    "context": "创建项目组名称输入框占位符"
   },
   "hub.room.leave": {
     "text": "离开",
-    "context": "离开房间按钮"
+    "context": "离开项目组按钮"
   },
   "hub.room.empty": {
-    "text": "暂无房间",
-    "context": "无房间提示"
+    "text": "暂无项目组",
+    "context": "无项目组提示"
   },
   "hub.room.selected": {
-    "text": "当前房间",
-    "context": "已选中房间标签"
+    "text": "当前项目组",
+    "context": "已选中项目组标签"
   },
   "hub.task.create": {
     "text": "新建任务",
@@ -2944,8 +2944,8 @@
     "context": "任务状态：失败"
   },
   "hub.task.selectRoom": {
-    "text": "请先选择房间",
-    "context": "未选择房间时的提示"
+    "text": "请先选择项目组",
+    "context": "未选择项目组时的提示"
   },
   "hub.task.assignee": {
     "text": "执行者",
@@ -2956,8 +2956,8 @@
     "context": "任务重试次数标签"
   },
   "hub.agent.selectRoom": {
-    "text": "请先选择房间",
-    "context": "未选择房间时 Agent 列表提示"
+    "text": "请先选择项目组",
+    "context": "未选择项目组时 Agent 列表提示"
   },
   "hub.agent.empty": {
     "text": "暂无 Agent",
@@ -2966,5 +2966,11 @@
   "hub.agent.registered": {
     "text": "注册时间",
     "context": "Agent 注册时间标签"
-  }
+  },
+  "hub.settings.title": { "text": "Hub 连接配置" },
+  "hub.settings.serverUrl": { "text": "Hub 服务器地址" },
+  "hub.settings.serverUrlHint": { "text": "sman-server 的地址（如 http://192.168.1.100:5882）" },
+  "hub.settings.adminToken": { "text": "Admin Token" },
+  "hub.settings.adminTokenPlaceholder": { "text": "sman-server 的 ADMIN_TOKEN" },
+  "hub.settings.save": { "text": "保存 Hub 配置" }
 }

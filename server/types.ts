@@ -78,6 +78,7 @@ export interface SmanConfig {
     serverUrl: string;
     updateUrl: string;
     enabled: boolean;
+    adminToken: string;
   };
 }
 

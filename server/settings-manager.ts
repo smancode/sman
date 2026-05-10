@@ -31,6 +31,7 @@ const DEFAULT_CONFIG: SmanConfig = {
     serverUrl: '',
     updateUrl: '',
     enabled: false,
+    adminToken: '',
   },
 };
 

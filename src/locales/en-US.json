@@ -2868,8 +2868,8 @@
     "context": "Hub collaboration center menu item"
   },
   "hub.tab.rooms": {
-    "text": "Rooms",
-    "context": "Hub tab: room list"
+    "text": "Project Groups",
+    "context": "Hub tab: project group list"
   },
   "hub.tab.tasks": {
     "text": "Tasks",
@@ -2884,32 +2884,32 @@
     "context": "Hub not connected hint"
   },
   "hub.room.create": {
-    "text": "Create Room",
-    "context": "Create room button"
+    "text": "Create Project Group",
+    "context": "Create project group button"
   },
   "hub.room.join": {
     "text": "Join",
-    "context": "Join room button"
+    "context": "Join project group button"
   },
   "hub.room.joinId": {
-    "text": "Enter room ID",
-    "context": "Join room ID input placeholder"
+    "text": "Enter project group ID",
+    "context": "Join project group ID input placeholder"
   },
   "hub.room.namePlaceholder": {
-    "text": "Room name",
-    "context": "Create room name input placeholder"
+    "text": "Project group name",
+    "context": "Create project group name input placeholder"
   },
   "hub.room.leave": {
     "text": "Leave",
-    "context": "Leave room button"
+    "context": "Leave project group button"
   },
   "hub.room.empty": {
-    "text": "No rooms yet",
-    "context": "No rooms hint"
+    "text": "No project groups yet",
+    "context": "No project groups hint"
   },
   "hub.room.selected": {
-    "text": "Current Room",
-    "context": "Selected room label"
+    "text": "Current Project Group",
+    "context": "Selected project group label"
   },
   "hub.task.create": {
     "text": "New Task",
@@ -2944,8 +2944,8 @@
     "context": "Task status: failed"
   },
   "hub.task.selectRoom": {
-    "text": "Select a room first",
-    "context": "No room selected hint for tasks"
+    "text": "Select a project group first",
+    "context": "No project group selected hint for tasks"
   },
   "hub.task.assignee": {
     "text": "Assignee",
@@ -2956,8 +2956,8 @@
     "context": "Task retry count label"
   },
   "hub.agent.selectRoom": {
-    "text": "Select a room first",
-    "context": "No room selected hint for agents"
+    "text": "Select a project group first",
+    "context": "No project group selected hint for agents"
   },
   "hub.agent.empty": {
     "text": "No agents yet",
@@ -2966,5 +2966,11 @@
   "hub.agent.registered": {
     "text": "Registered",
     "context": "Agent registration time label"
-  }
+  },
+  "hub.settings.title": { "text": "Hub Connection" },
+  "hub.settings.serverUrl": { "text": "Hub Server URL" },
+  "hub.settings.serverUrlHint": { "text": "sman-server address (e.g. http://192.168.1.100:5882)" },
+  "hub.settings.adminToken": { "text": "Admin Token" },
+  "hub.settings.adminTokenPlaceholder": { "text": "sman-server ADMIN_TOKEN" },
+  "hub.settings.save": { "text": "Save Hub Config" }
 }

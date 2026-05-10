@@ -19,6 +19,9 @@ export function StardomSettings({ id }: { id?: string }) {
   const [agentName, setAgentName] = useState(stardom?.agentName ?? '');
   const [mode, setMode] = useState<string>(stardom?.mode ?? 'notify');
   const [maxSlots, setMaxSlots] = useState(stardom?.maxConcurrentTasks ?? 3);
+  const hub = settings?.hub;
+  const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
+  const [hubToken, setHubToken] = useState(hub?.adminToken ?? '');
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -32,6 +35,13 @@ export function StardomSettings({ id }: { id?: string }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleHubSave = () => {
+    client?.send({
+      type: 'settings.update',
+      hub: { serverUrl: hubUrl, adminToken: hubToken, enabled: !!hubUrl, updateUrl: hub?.updateUrl ?? '' },
+    });
   };
 
   return (
@@ -97,6 +107,33 @@ export function StardomSettings({ id }: { id?: string }) {
           <Button variant="outline" size="sm" onClick={handleSave} disabled={saving || !server}>
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
             {t("stardom.settings.save")}
+          </Button>
+        </div>
+
+        {/* Hub Connection */}
+        <div className="pt-4 border-t space-y-3">
+          <h4 className="text-sm font-semibold">{t('hub.settings.title')}</h4>
+          <div className="space-y-2">
+            <Label>{t('hub.settings.serverUrl')}</Label>
+            <Input
+              placeholder="http://localhost:5882"
+              value={hubUrl}
+              onChange={(e) => setHubUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t('hub.settings.serverUrlHint')}</p>
+          </div>
+          <div className="space-y-2">
+            <Label>{t('hub.settings.adminToken')}</Label>
+            <Input
+              type="password"
+              placeholder={t('hub.settings.adminTokenPlaceholder')}
+              value={hubToken}
+              onChange={(e) => setHubToken(e.target.value)}
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={handleHubSave} disabled={!hubUrl}>
+            <Save className="h-4 w-4 mr-2" />
+            {t('hub.settings.save')}
           </Button>
         </div>
       </CardContent>

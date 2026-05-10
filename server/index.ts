@@ -492,6 +492,52 @@ function verifyHttpAuth(req: http.IncomingMessage): boolean {
   return match[1] === authToken;
 }
 
+async function handleHubProxy(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const hubUrl = settingsManager.getConfig().hub?.serverUrl;
+  if (!hubUrl) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Hub not configured' }));
+    return;
+  }
+
+  const urlObj = new URL(req.url!, `http://localhost`);
+  const targetPath = urlObj.pathname.replace('/api/hub', '/admin') + urlObj.search;
+  const targetUrl = `${hubUrl}${targetPath}`;
+
+  try {
+    const adminToken = settingsManager.getConfig().hub?.adminToken || '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (adminToken) {
+      headers['Authorization'] = `Bearer ${adminToken}`;
+    }
+
+    const body = req.method !== 'GET' && req.method !== 'HEAD'
+      ? await new Promise<string>((resolve) => {
+          let data = '';
+          req.on('data', (chunk) => { data += chunk; });
+          req.on('end', () => resolve(data));
+        })
+      : undefined;
+
+    const fetchRes = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: body || undefined,
+    });
+
+    const contentType = fetchRes.headers.get('content-type') || 'application/json';
+    const responseBody = await fetchRes.text();
+
+    res.writeHead(fetchRes.status, { 'Content-Type': contentType });
+    res.end(responseBody);
+  } catch (err) {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: `Hub proxy error: ${(err as Error).message}` }));
+  }
+}
+
 const server = http.createServer((req, res) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -617,6 +663,12 @@ const server = http.createServer((req, res) => {
   if (req.url?.startsWith('/api/') && !verifyHttpAuth(req)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
+    return;
+  }
+
+  // Hub proxy — forward to sman-server REST API
+  if (req.url?.startsWith('/api/hub/')) {
+    handleHubProxy(req, res);
     return;
   }
 
