@@ -42,6 +42,7 @@ export interface InitCard {
   phase?: 'scanning' | 'matching' | 'injecting';
   /** For 'complete' and 'already' cards */
   projectSummary?: string;
+  description?: string;
   techStack?: string[];
   injectedSkills?: Array<{ id: string; name: string }>;
   /** For 'already' cards */

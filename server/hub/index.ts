@@ -11,6 +11,7 @@ import { HubClient } from './client.js';
 import { HubWsClient } from './hub-ws-client.js';
 import { EvaluationHandler } from './evaluation-handler.js';
 import { TaskWorker } from './task-worker.js';
+import { readInitMd } from './init-reader.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('Hub');
@@ -116,7 +117,10 @@ export function initHub(
       }
       if (msg.type === 'room.created') {
         const room = msg.room as { id: string } | undefined;
-        if (room) joinedRoomId = room.id;
+        if (room) {
+          joinedRoomId = room.id;
+          registerAgentsForWorkspaces(sessionStore, hubWsClient!, joinedRoomId, getClientId());
+        }
       }
       // Auto-join rooms after receiving room list
       if (msg.type === 'room.list.update' && !joinedRoomId) {
@@ -165,10 +169,13 @@ function registerAgentsForWorkspaces(
   const workspaces = sessionStore.getActiveWorkspaces();
   for (const workspace of workspaces) {
     const agentId = buildAgentId(clientId, workspace);
+    const initInfo = readInitMd(workspace);
     wsClient.registerAgent(agentId, roomId, workspace, {
-      skills: [],
-      techStack: [],
-      projectType: '',
+      skills: initInfo?.skills ?? [],
+      techStack: initInfo?.techStack ?? [],
+      projectType: initInfo?.projectType ?? '',
+      summary: initInfo?.summary ?? '',
+      description: initInfo?.description ?? '',
     });
   }
 }

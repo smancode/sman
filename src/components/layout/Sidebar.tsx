@@ -9,7 +9,7 @@ import {
   Route,
   ChevronUp,
   Pin,
-  Globe,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -126,7 +126,7 @@ export function Sidebar() {
                       isActive ? 'text-foreground' : 'text-muted-foreground',
                     )}
                   >
-                    <Globe className="h-[18px] w-[18px]" strokeWidth={2} />
+                    <Users className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
                   <span>{t('menu.hub')}</span>
                 </>

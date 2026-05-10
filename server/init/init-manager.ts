@@ -330,6 +330,7 @@ export class InitManager {
       `**Type:** ${scanResult.types.join(', ')}`,
       `**Tech Stack:** ${matchResult.techStack.join(', ')}`,
       `**Summary:** ${matchResult.projectSummary}`,
+      `**Description:** ${matchResult.projectSummary}`,
       `**Files:** ${scanResult.fileCount}`,
       `**Git:** ${scanResult.isGitRepo ? 'yes' : 'no'}`,
       `**CLAUDE.md:** ${scanResult.hasClaudeMd ? 'existing' : claudeMdGenerated ? 'generated' : 'missing'}`,
@@ -358,6 +359,7 @@ export class InitManager {
 
   private parseInitMdToCard(content: string, workspace: string): InitCard {
     const summary = content.match(/\*\*Summary:\*\* (.+)/)?.[1] || '';
+    const description = content.match(/\*\*Description:\*\* (.+)/)?.[1] || '';
     const techStack = content.match(/\*\*Tech Stack:\*\* (.+)/)?.[1]?.split(', ') || [];
     const initializedAt = content.match(/initializedAt: "([^"]+)"/)?.[1] || '';
     const skills = [...content.matchAll(/^- (.+)$/gm)].map(m => m[1]);
@@ -366,6 +368,7 @@ export class InitManager {
       type: 'already',
       workspace,
       projectSummary: summary,
+      description,
       techStack,
       injectedSkills: skills.map(id => ({ id, name: id })),
       initializedAt,

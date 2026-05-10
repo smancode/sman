@@ -50,7 +50,7 @@ export function useRooms() {
   return useQuery({
     queryKey: ['hub', 'rooms'] as const,
     queryFn: async () => {
-      const raw = await hubFetch('/rooms');
+      const raw = await hubFetch('/rooms', { method: 'POST', body: JSON.stringify({}) });
       const rooms = Array.isArray(raw) ? raw : (raw as { rooms?: unknown[] })?.rooms ?? [];
       const parsed = parseWithFallback({ type: 'room.list.update', rooms }, RoomListUpdateSchema, { rooms: EMPTY_ROOMS }, 'room.list');
       return parsed.rooms ?? EMPTY_ROOMS;
@@ -79,7 +79,7 @@ export function useRoom(roomId: string | undefined) {
 export function useCreateRoom() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: { name: string; description?: string; maxAgents?: number }) =>
+    mutationFn: (params: { name: string; description?: string; maxAgents?: number; visibility?: 'public' | 'private' }) =>
       hubFetch('/rooms', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });

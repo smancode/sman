@@ -528,6 +528,10 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
         payload[k] = v;
       }
     }
+    // Inject clientId for room listing so server can filter private rooms
+    if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST') {
+      payload.clientId = `${os.userInfo().username}@${os.hostname()}`;
+    }
 
     const encrypted = buildEncryptedRequest(payload);
 

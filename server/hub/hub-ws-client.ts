@@ -41,7 +41,11 @@ export class HubWsClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectDelay = RECONNECT_BASE_MS;
   private connected = false;
-  private registeredAgents = new Map<string, { roomId: string; workspace: string }>();
+  private registeredAgents = new Map<string, {
+    roomId: string;
+    workspace: string;
+    capabilities: { skills: string[]; techStack: string[]; projectType: string; summary?: string; description?: string };
+  }>();
 
   constructor(deps: HubWsDeps) {
     this.deps = deps;
@@ -72,8 +76,8 @@ export class HubWsClient {
     }
   }
 
-  registerAgent(agentId: string, roomId: string, workspace: string, capabilities: { skills: string[]; techStack: string[]; projectType: string }): void {
-    this.registeredAgents.set(agentId, { roomId, workspace });
+  registerAgent(agentId: string, roomId: string, workspace: string, capabilities: { skills: string[]; techStack: string[]; projectType: string; summary?: string; description?: string }): void {
+    this.registeredAgents.set(agentId, { roomId, workspace, capabilities });
     this.send({
       type: 'agent.register',
       agentId,
@@ -180,7 +184,7 @@ export class HubWsClient {
         agentId,
         roomId: info.roomId,
         workspace: info.workspace,
-        capabilities: { skills: [], techStack: [], projectType: '' },
+        capabilities: info.capabilities,
       });
     }
   }

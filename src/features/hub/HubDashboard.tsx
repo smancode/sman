@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { t } from '@/locales';
 import { PageLayout } from '@/components/common/PageLayout';
 import { FeedbackState } from '@/components/common/FeedbackState';
@@ -15,7 +15,7 @@ import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot,
+  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot, Search, Globe, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +40,8 @@ export function HubDashboard() {
   const [newName, setNewName] = useState('');
   const [joinId, setJoinId] = useState('');
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [newRoomPublic, setNewRoomPublic] = useState(false);
   const createRoom = useCreateRoom();
   const joinRoom = useJoinRoom();
   const leaveRoom = useLeaveRoom();
@@ -56,8 +58,8 @@ export function HubDashboard() {
   const handleCreate = () => {
     if (!newName.trim()) return;
     setError('');
-    createRoom.mutate({ name: newName.trim() }, {
-      onSuccess: () => { setNewName(''); setShowCreate(false); },
+    createRoom.mutate({ name: newName.trim(), visibility: newRoomPublic ? 'public' : 'private' }, {
+      onSuccess: () => { setNewName(''); setShowCreate(false); setNewRoomPublic(false); },
       onError: (err) => setError(err.message),
     });
   };
@@ -76,6 +78,21 @@ export function HubDashboard() {
   }
 
   const needsConfig = !hub?.serverUrl;
+
+  const filteredRooms = useMemo(() => {
+    if (!rooms || !searchQuery.trim()) return rooms || [];
+    const q = searchQuery.trim().toLowerCase();
+    return rooms.filter(room => {
+      const name = room.name.toLowerCase();
+      let ni = 0;
+      for (let qi = 0; qi < q.length; qi++) {
+        while (ni < name.length && name[ni] !== q[qi]) ni++;
+        if (ni >= name.length) return false;
+        ni++;
+      }
+      return true;
+    });
+  }, [rooms, searchQuery]);
 
   const sidebar = (
     <TooltipProvider delayDuration={300}>
@@ -151,6 +168,28 @@ export function HubDashboard() {
               {t('common.confirm')}
             </Button>
           </div>
+          <button
+            onClick={() => setNewRoomPublic(!newRoomPublic)}
+            className={cn(
+              'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors',
+              newRoomPublic ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {newRoomPublic ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+            {newRoomPublic ? t('hub.room.public') : t('hub.room.private')}
+          </button>
+        </div>
+      )}
+
+      {(rooms && rooms.length > 3) && (
+        <div className="relative mb-1.5">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('hub.room.searchPlaceholder')}
+            className="h-6 pl-6 text-xs"
+          />
         </div>
       )}
 
@@ -158,10 +197,12 @@ export function HubDashboard() {
         <div className="space-y-0.5 px-1">
           {isLoading ? (
             <div className="py-4 text-center text-xs text-muted-foreground">{t('common.loading')}</div>
-          ) : !rooms || rooms.length === 0 ? (
-            <div className="py-4 text-center text-xs text-muted-foreground">{t('hub.room.empty')}</div>
+          ) : filteredRooms.length === 0 ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              {searchQuery.trim() ? t('hub.room.searchEmpty') : t('hub.room.empty')}
+            </div>
           ) : (
-            rooms.map((room) => (
+            filteredRooms.map((room) => (
               <div
                 key={room.id}
                 onClick={() => { setSelectedRoomId(room.id); setSelectedTaskId(undefined); }}
@@ -172,6 +213,13 @@ export function HubDashboard() {
                     : 'text-foreground hover:bg-muted'
                 )}
               >
+                <span className="shrink-0">
+                  {room.visibility === 'public' ? (
+                    <Globe className="h-3 w-3 text-muted-foreground" />
+                  ) : (
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </span>
                 <span className="truncate flex-1">{room.name}</span>
                 <button
                   onClick={(e) => {

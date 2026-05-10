@@ -2868,12 +2868,12 @@
     "context": "Bot 会话分组标题"
   },
   "menu.hub": {
-    "text": "Hub",
-    "context": "Hub 协作中心导航菜单项"
+    "text": "组队",
+    "context": "组队导航菜单项"
   },
   "hub.tab.rooms": {
     "text": "项目组",
-    "context": "Hub tab：项目组列表"
+    "context": "组队 tab：项目组列表"
   },
   "hub.tab.tasks": {
     "text": "任务",
@@ -2884,8 +2884,8 @@
     "context": "Hub tab：Agent 列表"
   },
   "hub.status.notConnected": {
-    "text": "Hub 未连接",
-    "context": "Hub 未连接提示"
+    "text": "未连接",
+    "context": "组队未连接提示"
   },
   "hub.room.create": {
     "text": "创建项目组",
@@ -2910,6 +2910,22 @@
   "hub.room.empty": {
     "text": "暂无项目组",
     "context": "无项目组提示"
+  },
+  "hub.room.searchPlaceholder": {
+    "text": "搜索项目组...",
+    "context": "项目组搜索框占位符"
+  },
+  "hub.room.searchEmpty": {
+    "text": "未找到项目组",
+    "context": "搜索无结果提示"
+  },
+  "hub.room.public": {
+    "text": "公开",
+    "context": "公开项目组标签"
+  },
+  "hub.room.private": {
+    "text": "私有",
+    "context": "私有项目组标签"
   },
   "hub.room.selected": {
     "text": "当前项目组",
@@ -3103,8 +3119,20 @@
     "text": "注册时间",
     "context": "Agent 注册时间标签"
   },
-  "hub.settings.title": { "text": "Hub 连接配置" },
-  "hub.settings.serverUrl": { "text": "Hub 服务器地址" },
+  "hub.agent.description": {
+    "text": "系统描述",
+    "context": "Agent 业务系统描述标签"
+  },
+  "hub.agent.skills": {
+    "text": "技能",
+    "context": "Agent 技能标签"
+  },
+  "hub.agent.projectType": {
+    "text": "项目类型",
+    "context": "Agent 项目类型标签"
+  },
+  "hub.settings.title": { "text": "连接配置" },
+  "hub.settings.serverUrl": { "text": "服务器地址" },
   "hub.settings.serverUrlHint": { "text": "sman-server 的地址（如 http://192.168.1.100:5882）" },
   "hub.settings.adminToken": { "text": "Admin Token" },
   "hub.settings.adminTokenPlaceholder": { "text": "sman-server 的 ADMIN_TOKEN" },

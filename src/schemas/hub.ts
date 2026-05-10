@@ -19,6 +19,8 @@ export const AgentCapabilitiesSchema = z.object({
   skills: z.array(z.string()).default([]),
   techStack: z.array(z.string()).default([]),
   projectType: z.string().default(''),
+  summary: z.string().default(''),
+  description: z.string().default(''),
 }).passthrough();
 
 export const RoomSchema = z.object({
@@ -26,6 +28,7 @@ export const RoomSchema = z.object({
   name: z.string(),
   description: z.string().nullable().default(null),
   owner_id: z.string(),
+  visibility: z.enum(['public', 'private']).default('private'),
   active: z.number().default(1),
   max_agents: z.number().default(10),
   created_at: z.string(),
