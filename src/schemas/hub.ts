@@ -7,7 +7,7 @@ import { z, type ZodType } from 'zod';
 export const AgentStatusValues = ['online', 'offline', 'busy'] as const;
 export type AgentStatusType = typeof AgentStatusValues[number];
 
-export const TaskStatusValues = ['draft', 'evaluating', 'confirmed', 'rejected', 'dispatched', 'running', 'completed', 'failed', 'cancelled', 'queued'] as const;
+export const TaskStatusValues = ['draft', 'evaluating', 'confirmed', 'rejected', 'dispatched', 'running', 'stopping', 'completed', 'failed', 'cancelled', 'queued'] as const;
 export type TaskStatusType = typeof TaskStatusValues[number];
 
 export const AgentStatusSchema = z.string();
@@ -32,6 +32,7 @@ export const RoomSchema = z.object({
   active: z.number().default(1),
   max_agents: z.number().default(10),
   created_at: z.string(),
+  isOwner: z.boolean().optional().default(false),
 }).passthrough();
 
 export const RoomMemberSchema = z.object({

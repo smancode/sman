@@ -2979,6 +2979,10 @@
     "text": "已取消",
     "context": "任务状态：已取消"
   },
+  "hub.task.stopping": {
+    "text": "停止中",
+    "context": "任务状态：停止中"
+  },
   "hub.task.confirm": {
     "text": "确认",
     "context": "确认任务按钮"
@@ -2986,6 +2990,10 @@
   "hub.task.reject": {
     "text": "驳回",
     "context": "驳回任务按钮"
+  },
+  "hub.task.stop": {
+    "text": "停止",
+    "context": "停止任务按钮"
   },
   "hub.task.dispatch": {
     "text": "派发执行",

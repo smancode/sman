@@ -529,8 +529,11 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
       }
     }
     // Inject clientId for room listing so server can filter private rooms
+    // Also inject ownerId for room creation
     if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST') {
-      payload.clientId = `${os.userInfo().username}@${os.hostname()}`;
+      const cid = `${os.userInfo().username}@${os.hostname()}`;
+      payload.clientId = cid;
+      if (payload.name) payload.ownerId = cid;
     }
 
     const encrypted = buildEncryptedRequest(payload);
@@ -553,7 +556,14 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
     try {
       const encRes = JSON.parse(responseBody);
       if (encRes.payload) {
-        const decrypted = decrypt(encRes.payload);
+        const decrypted = decrypt(encRes.payload) as unknown;
+        // Tag isOwner on room list responses
+        if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST' && Array.isArray(decrypted)) {
+          const cid = `${os.userInfo().username}@${os.hostname()}`;
+          for (const room of decrypted as { owner_id?: string; isOwner?: boolean }[]) {
+            room.isOwner = room.owner_id === cid;
+          }
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(decrypted));
       } else {

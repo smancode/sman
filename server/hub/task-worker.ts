@@ -72,6 +72,32 @@ export class TaskWorker {
     if (msg.type === 'task.dispatched_to') {
       this.handleDispatchedTo(msg as unknown as DispatchedAssignment);
     }
+    if (msg.type === 'task.stopping_to') {
+      this.handleStoppingTo(msg);
+    }
+  }
+
+  private handleStoppingTo(msg: HubWsInbound): void {
+    const taskId = msg.taskId as string;
+    const agentId = msg.agentId as string;
+
+    log.info(`Received stop request for task ${taskId}`);
+
+    // Immediately ack
+    this.deps.hubWsClient.send({ type: 'task.stop.ack', taskId, agentId });
+
+    // Abort local execution
+    this.cancelTask(taskId);
+
+    // Report failure asynchronously
+    setImmediate(() => {
+      this.deps.hubWsClient.send({
+        type: 'task.fail',
+        taskId,
+        agentId,
+        error: 'stopped_by_user',
+      });
+    });
   }
 
   private handleDispatchedTo(data: DispatchedAssignment): void {

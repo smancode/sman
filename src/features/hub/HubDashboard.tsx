@@ -10,12 +10,12 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
-import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAgents } from '@/queries/use-hub';
+import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useDissolveRoom, useRoomAgents } from '@/queries/use-hub';
 import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot, Search, Globe, Lock,
+  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot, Search, Globe, Lock, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -45,6 +45,7 @@ export function HubDashboard() {
   const createRoom = useCreateRoom();
   const joinRoom = useJoinRoom();
   const leaveRoom = useLeaveRoom();
+  const dissolveRoom = useDissolveRoom();
 
   const handleHubSave = () => {
     client?.send({
@@ -221,16 +222,31 @@ export function HubDashboard() {
                   )}
                 </span>
                 <span className="truncate flex-1">{room.name}</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    leaveRoom.mutate({ roomId: room.id });
-                    if (selectedRoomId === room.id) setSelectedRoomId(undefined);
-                  }}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
-                >
-                  <LogOut className="h-3 w-3" />
-                </button>
+                {room.isOwner ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dissolveRoom.mutate({ roomId: room.id }, {
+                        onSuccess: () => { if (selectedRoomId === room.id) setSelectedRoomId(undefined); },
+                        onError: (err) => setError(err.message),
+                      });
+                    }}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      leaveRoom.mutate({ roomId: room.id });
+                      if (selectedRoomId === room.id) setSelectedRoomId(undefined);
+                    }}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                  >
+                    <LogOut className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             ))
           )}

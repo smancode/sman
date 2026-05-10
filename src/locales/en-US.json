@@ -2979,6 +2979,10 @@
     "text": "Cancelled",
     "context": "Task status: cancelled"
   },
+  "hub.task.stopping": {
+    "text": "Stopping",
+    "context": "Task status: stopping"
+  },
   "hub.task.confirm": {
     "text": "Confirm",
     "context": "Confirm task button"
@@ -2986,6 +2990,10 @@
   "hub.task.reject": {
     "text": "Reject",
     "context": "Reject task button"
+  },
+  "hub.task.stop": {
+    "text": "Stop",
+    "context": "Stop task button"
   },
   "hub.task.dispatch": {
     "text": "Dispatch",

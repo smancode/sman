@@ -6,9 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useTaskDetail, useConfirmTask, useRejectTask, useDispatchTask, useApproveReport, useRejectReport } from '@/queries/use-hub';
+import { useTaskDetail, useConfirmTask, useRejectTask, useDispatchTask, useApproveReport, useRejectReport, useStopTask } from '@/queries/use-hub';
 import type { Task, EvaluationReport, TaskAssignment, Agent, Subtask } from '@/schemas/hub';
-import { ChevronLeft, Check, X, Send, FileText } from 'lucide-react';
+import { ChevronLeft, Check, X, Send, FileText, StopCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailProps {
@@ -22,6 +22,7 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
   const confirmTask = useConfirmTask();
   const rejectTask = useRejectTask();
   const dispatchTask = useDispatchTask();
+  const stopTask = useStopTask();
 
   if (isLoading) return <div className="p-4 text-sm text-muted-foreground">{t('common.loading')}</div>;
   if (!detail) return <div className="p-4 text-sm text-muted-foreground">{t('hub.task.notFound')}</div>;
@@ -31,6 +32,7 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
   const canConfirm = task.status === 'evaluating' && evaluations.length > 0;
   const canDispatch = task.status === 'confirmed';
   const canReject = task.status === 'evaluating';
+  const canStop = task.status === 'dispatched' || task.status === 'running';
 
   return (
     <div className="flex h-full flex-col">
@@ -47,6 +49,26 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
               <span className="text-[11px] font-mono text-muted-foreground">{task.git_branch}</span>
             )}
           </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {canStop && (
+            <Button variant="outline" size="sm" className="h-7 text-xs text-orange-600 hover:text-orange-700" onClick={() => stopTask.mutate({ taskId })}>
+              <StopCircle className="h-3.5 w-3.5 mr-1" />
+              {t('hub.task.stop')}
+            </Button>
+          )}
+          {canConfirm && (
+            <Button size="sm" className="h-7 text-xs" onClick={() => confirmTask.mutate({ taskId })}>
+              <Check className="h-3.5 w-3.5 mr-1" />
+              {t('hub.task.confirm')}
+            </Button>
+          )}
+          {canReject && (
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => rejectTask.mutate({ taskId })}>
+              <X className="h-3.5 w-3.5 mr-1" />
+              {t('hub.task.reject')}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -82,22 +104,6 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
               </div>
             </div>
           )}
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
-            {canConfirm && (
-              <Button size="sm" onClick={() => confirmTask.mutate({ taskId })}>
-                <Check className="h-3 w-3 mr-1" />
-                {t('hub.task.confirm')}
-              </Button>
-            )}
-            {canReject && (
-              <Button variant="outline" size="sm" onClick={() => rejectTask.mutate({ taskId })}>
-                <X className="h-3 w-3 mr-1" />
-                {t('hub.task.reject')}
-              </Button>
-            )}
-          </div>
 
           {/* Evaluation Reports */}
           {evaluations.length > 0 && (
@@ -209,6 +215,7 @@ function StatusBadge({ status }: { status: string }) {
     completed: { label: t('hub.task.completed'), cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400' },
     failed: { label: t('hub.task.failed'), cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
     cancelled: { label: t('hub.task.cancelled'), cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400' },
+    stopping: { label: t('hub.task.stopping'), cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   };
   const info = map[status] || { label: status, cls: 'bg-gray-100 text-gray-600' };
   return <span className={cn('inline-block rounded px-1.5 py-0.5 text-[11px] font-medium', info.cls)}>{info.label}</span>;

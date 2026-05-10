@@ -6,11 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRoomTasks, useCreateTask, useCancelTask } from '@/queries/use-hub';
+import { useRoomTasks, useCreateTask, useCancelTask, useStopTask } from '@/queries/use-hub';
 import type { CreateTaskParams } from '@/queries/use-hub';
 import { useHubTaskProgress } from '@/stores/hub-task-progress';
 import type { Task, TaskStatusType, Subtask } from '@/schemas/hub';
-import { Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, ChevronDown, ChevronUp, StopCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const STATUS_COLUMNS: { status: TaskStatusType; labelKey: string; color: string; badgeClass: string }[] = [
@@ -18,6 +18,7 @@ const STATUS_COLUMNS: { status: TaskStatusType; labelKey: string; color: string;
   { status: 'confirmed', labelKey: 'hub.task.confirmed', color: 'border-t-amber-400 dark:border-t-amber-600', badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   { status: 'dispatched', labelKey: 'hub.task.dispatched', color: 'border-t-blue-400 dark:border-t-blue-600', badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
   { status: 'running', labelKey: 'hub.task.running', color: 'border-t-green-400 dark:border-t-green-600', badgeClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  { status: 'stopping', labelKey: 'hub.task.stopping', color: 'border-t-orange-400 dark:border-t-orange-600', badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   { status: 'completed', labelKey: 'hub.task.completed', color: 'border-t-gray-300 dark:border-t-gray-600', badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400' },
   { status: 'failed', labelKey: 'hub.task.failed', color: 'border-t-red-400 dark:border-t-red-600', badgeClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
 ];
@@ -31,6 +32,7 @@ export function TaskBoard({ roomId, onSelectTask }: TaskBoardProps) {
   const { data: tasks, isLoading } = useRoomTasks(roomId);
   const createTask = useCreateTask();
   const cancelTask = useCancelTask();
+  const stopTask = useStopTask();
   const progressMap = useHubTaskProgress((s) => s.progressMap);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -77,6 +79,7 @@ export function TaskBoard({ roomId, onSelectTask }: TaskBoardProps) {
                       statusBadgeClass={col.badgeClass}
                       progress={progressMap[task.id]?.progress}
                       onCancel={() => cancelTask.mutate({ taskId: task.id })}
+                      onStop={() => stopTask.mutate({ taskId: task.id })}
                       onClick={() => onSelectTask?.(task.id)}
                     />
                   ))}
@@ -208,11 +211,12 @@ function TaskCreateForm({ roomId, onSubmit, onCancel }: {
   );
 }
 
-function TaskCard({ task, statusBadgeClass, progress, onCancel, onClick }: {
+function TaskCard({ task, statusBadgeClass, progress, onCancel, onStop, onClick }: {
   task: Task;
   statusBadgeClass: string;
   progress?: string;
   onCancel: () => void;
+  onStop: () => void;
   onClick?: () => void;
 }) {
   const subtaskCount = parseSubtaskCount(task.subtasks);
@@ -227,14 +231,25 @@ function TaskCard({ task, statusBadgeClass, progress, onCancel, onClick }: {
     >
       <div className="flex items-start justify-between gap-1">
         <span className="text-sm font-medium leading-tight">{task.title}</span>
-        {canCancel(task.status) && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCancel(); }}
-            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-all"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
+        <div className="flex items-center shrink-0">
+          {canStop(task.status) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onStop(); }}
+              className="rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-orange-500 transition-all"
+              title={t('hub.task.stop')}
+            >
+              <StopCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canCancel(task.status) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCancel(); }}
+              className="rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-all"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
       {task.description && (
         <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
@@ -262,7 +277,11 @@ function TaskCard({ task, statusBadgeClass, progress, onCancel, onClick }: {
 }
 
 function canCancel(status: string): boolean {
-  return ['evaluating', 'confirmed', 'dispatched', 'queued'].includes(status);
+  return ['evaluating', 'confirmed', 'draft', 'rejected', 'queued'].includes(status);
+}
+
+function canStop(status: string): boolean {
+  return ['dispatched', 'running'].includes(status);
 }
 
 function parseSubtaskCount(subtasksJson: string): number {

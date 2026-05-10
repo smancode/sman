@@ -110,7 +110,7 @@ export function useRoomAgents(roomId: string | undefined) {
     queryKey: ['hub', 'rooms', roomId, 'agents'] as const,
     queryFn: async () => {
       if (!roomId) return EMPTY_AGENTS;
-      const raw = await hubFetch('/agents');
+      const raw = await hubFetch(`/rooms/${roomId}/agents`, { method: 'POST', body: JSON.stringify({ roomId }) });
       const agents = Array.isArray(raw) ? raw : [];
       const parsed = parseWithFallback({ type: 'agent.list.update', roomId, agents }, AgentListUpdateSchema, { agents: EMPTY_AGENTS }, 'agent.list');
       return parsed.agents ?? EMPTY_AGENTS;
@@ -196,6 +196,24 @@ export function useCancelTask() {
     mutationFn: (params: { taskId: string }) =>
       hubFetch(`/tasks/${params.taskId}/cancel`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useStopTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { taskId: string }) =>
+      hubFetch(`/tasks/${params.taskId}/stop`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useDissolveRoom() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { roomId: string }>({
+    mutationFn: (params) =>
+      hubFetch(`/rooms/${params.roomId}/dissolve`, { method: 'POST', body: JSON.stringify({}) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
 
