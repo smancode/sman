@@ -46,7 +46,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub, getHubStatus } from './hub/index.js';
+import { initHub, stopHub, getHubStatus, getHubWsClient } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { BroadcastStore } from './broadcast-store.js';
 
@@ -562,6 +562,17 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
           const cid = `${os.userInfo().username}@${os.hostname()}`;
           for (const room of decrypted as { owner_id?: string; isOwner?: boolean }[]) {
             room.isOwner = room.owner_id === cid;
+          }
+        }
+        // After creating a room via REST, join via WS and register agents
+        if (targetPath === '/api/hub/rooms' && req.method === 'POST' && !Array.isArray(decrypted)) {
+          const room = decrypted as { id?: string; name?: string } | null;
+          if (room?.id && room?.name) {
+            const wsClient = getHubWsClient();
+            if (wsClient?.isConnected()) {
+              const cid = `${os.userInfo().username}@${os.hostname()}`;
+              wsClient.send({ type: 'room.join', roomId: room.id, clientId: cid, displayName: cid });
+            }
           }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
