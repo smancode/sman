@@ -55,14 +55,32 @@ function extractReferences(text: string): Array<{ fileName: string; content: str
   return refs;
 }
 
+interface ActiveRun {
+  abortController: AbortController;
+  sessionIds: string[];
+}
+
 export class SmartPathEngine {
   private log: Logger;
+  private activeRuns = new Map<string, ActiveRun>(); // pathId -> ActiveRun
 
   constructor(
     private store: SmartPathStore,
     private sessionManager: ClaudeSessionManager,
   ) {
     this.log = createLogger('SmartPathEngine');
+  }
+
+  /** 中止正在执行的路径 */
+  abort(pathId: string): void {
+    const run = this.activeRuns.get(pathId);
+    if (!run) return;
+    run.abortController.abort();
+    for (const sid of run.sessionIds) {
+      try { this.sessionManager.abort(sid, '用户中止路径执行'); } catch { /* ignore */ }
+    }
+    this.activeRuns.delete(pathId);
+    this.log.info(`Path ${pathId} aborted by user`);
   }
 
   async run(
@@ -83,6 +101,10 @@ export class SmartPathEngine {
     const run = this.store.createRun(pathId, workspace);
     this.store.update(pathId, workspace, { status: 'running' });
 
+    const abortController = new AbortController();
+    const sessionIds: string[] = [];
+    this.activeRuns.set(pathId, { abortController, sessionIds });
+
     // 加载 references 上下文
     const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
 
@@ -90,8 +112,9 @@ export class SmartPathEngine {
       const stepResults: string[] = [];
 
       for (let i = 0; i < steps.length; i++) {
+        if (abortController.signal.aborted) throw new Error('用户中止执行');
+
         const step = steps[i];
-        // 如果是第一步且有传入参数，将参数注入到 userInput 中
         let userInput = step.userInput;
         if (i === 0 && args) {
           userInput = `${userInput}\n\n用户参数为:{${args}}，请根据任务需要使用。`;
@@ -100,14 +123,14 @@ export class SmartPathEngine {
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;
         this.sessionManager.createEphemeralSessionWithId(workspace, sessionId);
-        const abort = new AbortController();
+        sessionIds.push(sessionId);
 
         let stepFullContent = '';
         try {
           const stepReturned = await this.sessionManager.sendMessageForStep(
             sessionId,
             prompt,
-            abort,
+            abortController,
             (delta) => {
               stepFullContent += delta;
               onStepProgress(i, delta);
@@ -118,7 +141,6 @@ export class SmartPathEngine {
           const stepResult = (stepReturned || stepFullContent).trim();
           stepResults.push(stepResult);
 
-          // 提取并保存 reference 文件
           const refs = extractReferences(stepResult);
           for (const ref of refs) {
             this.store.saveReference(workspace, pathId, ref.fileName, ref.content);
@@ -132,10 +154,8 @@ export class SmartPathEngine {
         }
       }
 
-      // 只更新状态，不回写 executionResult 到 path 定义
       this.store.update(pathId, workspace, { status: 'completed' });
 
-      // 生成执行报告
       const reportFileName = this.store.createReport(
         workspace, pathId, smartPath.name, steps, stepResults, run.id,
         'completed', run.startedAt, isoNow(),
@@ -149,21 +169,23 @@ export class SmartPathEngine {
         reportFileName: reportBasename,
       });
 
-      // 更新 references/run.md
       await this.updateRunGuide(workspace, pathId, steps, stepResults);
 
       this.log.info(`Path ${pathId} completed`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const isAborted = abortController.signal.aborted;
       this.store.updateRun(run.id, workspace, pathId, {
-        status: 'failed',
+        status: isAborted ? 'failed' : 'failed',
         errorMessage: msg,
         stepResults: JSON.stringify({ error: msg }),
         finishedAt: isoNow(),
       });
       this.store.update(pathId, workspace, { status: 'failed' });
-      this.log.error(`Path ${pathId} failed: ${msg}`);
+      this.log.error(`Path ${pathId} ${isAborted ? 'aborted' : 'failed'}: ${msg}`);
       throw err;
+    } finally {
+      this.activeRuns.delete(pathId);
     }
   }
 

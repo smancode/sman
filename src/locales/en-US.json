@@ -1195,6 +1195,10 @@
     "text": "Run",
     "context": "Execute button"
   },
+  "smartpath.stop": {
+    "text": "Stop",
+    "context": "Stop button"
+  },
   "smartpath.stepInput": {
     "text": "Describe what this step should do...",
     "context": "Step input placeholder"

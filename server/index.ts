@@ -1696,7 +1696,8 @@ wss.on('connection', (ws: WebSocket) => {
         case 'smartpath.update': {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
           const { pathId, workspace, type: _t, ...updates } = msg;
-          const p = smartPathStore.update(pathId as string, workspace as string, updates as any);
+          const allWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const p = smartPathStore.update(pathId as string, workspace as string, updates as any, allWs);
           // 同步调度：cron 表达式变更时重新调度
           if (updates.cronExpression !== undefined || updates.status !== undefined) {
             if (p.cronExpression && p.status !== 'running') {
@@ -1711,8 +1712,16 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'smartpath.delete': {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
-          smartPathStore.del(msg.pathId as string, msg.workspace as string);
+          const allWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          smartPathStore.del(msg.pathId as string, msg.workspace as string, allWs);
           ws.send(JSON.stringify({ type: 'smartpath.deleted', pathId: msg.pathId }));
+          break;
+        }
+
+        case 'smartpath.abort': {
+          if (!msg.pathId) throw new Error('Missing pathId');
+          smartPathEngine.abort(msg.pathId as string);
+          ws.send(JSON.stringify({ type: 'smartpath.aborted', pathId: msg.pathId }));
           break;
         }
 
@@ -1721,11 +1730,14 @@ wss.on('connection', (ws: WebSocket) => {
           try {
             const runPathId = msg.pathId as string;
             const runWorkspace = msg.workspace as string;
-            const pathToRun = smartPathStore.get(runPathId, runWorkspace);
+            const runAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const pathToRun = smartPathStore.get(runPathId, runWorkspace, runAllWs);
+            // 使用路径实际存储的 workspace（解决跨平台路径不一致问题）
+            const actualRunWs = pathToRun?.workspace || runWorkspace;
             const runArgs = (msg.args as string) || pathToRun?.defaultArgs || '';
             smartPathEngine.run(
               runPathId,
-              runWorkspace,
+              actualRunWs,
               (stepIndex, delta) => {
                 broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: runPathId, stepIndex, delta }));
               },
@@ -1737,8 +1749,8 @@ wss.on('connection', (ws: WebSocket) => {
               },
               runArgs,
             ).then(() => {
-              const p = smartPathStore.get(runPathId, runWorkspace);
-              const refs = smartPathStore.listReferences(runWorkspace, runPathId);
+              const p = smartPathStore.get(runPathId, actualRunWs);
+              const refs = smartPathStore.listReferences(actualRunWs, runPathId);
               broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: p, references: refs }));
             }).catch((err) => {
               broadcast(JSON.stringify({ type: 'smartpath.failed', pathId: runPathId, error: err instanceof Error ? err.message : String(err) }));
@@ -1752,30 +1764,41 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'smartpath.runs': {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
-          const runs = smartPathStore.listRuns(msg.pathId as string, msg.workspace as string);
-          // 附带报告列表
-          const reports = smartPathStore.listReports(msg.pathId as string, msg.workspace as string);
+          const runsWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const runsPath = smartPathStore.get(msg.pathId as string, msg.workspace as string, runsWs);
+          const runsActualWs = runsPath?.workspace || (msg.workspace as string);
+          const runs = smartPathStore.listRuns(msg.pathId as string, runsActualWs);
+          const reports = smartPathStore.listReports(msg.pathId as string, runsActualWs);
           ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs, reports }));
           break;
         }
 
         case 'smartpath.report': {
           if (!msg.pathId || !msg.workspace || !msg.fileName) throw new Error('Missing pathId, workspace or fileName');
-          const content = smartPathStore.getReport(msg.workspace as string, msg.pathId as string, msg.fileName as string);
+          const reportWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const reportPath = smartPathStore.get(msg.pathId as string, msg.workspace as string, reportWs);
+          const reportActualWs = reportPath?.workspace || (msg.workspace as string);
+          const content = smartPathStore.getReport(reportActualWs, msg.pathId as string, msg.fileName as string);
           ws.send(JSON.stringify({ type: 'smartpath.report', pathId: msg.pathId, fileName: msg.fileName, content }));
           break;
         }
 
         case 'smartpath.references': {
           if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
-          const refs = smartPathStore.listReferences(msg.workspace as string, msg.pathId as string);
+          const refsWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const refsPath = smartPathStore.get(msg.pathId as string, msg.workspace as string, refsWs);
+          const refsActualWs = refsPath?.workspace || (msg.workspace as string);
+          const refs = smartPathStore.listReferences(refsActualWs, msg.pathId as string);
           ws.send(JSON.stringify({ type: 'smartpath.references', pathId: msg.pathId, references: refs }));
           break;
         }
 
         case 'smartpath.reference.read': {
           if (!msg.pathId || !msg.workspace || !msg.fileName) throw new Error('Missing pathId, workspace or fileName');
-          const content = smartPathStore.getReference(msg.workspace as string, msg.pathId as string, msg.fileName as string);
+          const refReadWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const refReadPath = smartPathStore.get(msg.pathId as string, msg.workspace as string, refReadWs);
+          const refReadActualWs = refReadPath?.workspace || (msg.workspace as string);
+          const content = smartPathStore.getReference(refReadActualWs, msg.pathId as string, msg.fileName as string);
           ws.send(JSON.stringify({ type: 'smartpath.reference.content', pathId: msg.pathId, fileName: msg.fileName, content }));
           break;
         }

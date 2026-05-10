@@ -47,6 +47,7 @@ interface SmartPathState {
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
   deletePath: (pathId: string, workspace: string) => Promise<void>;
   runPath: (pathId: string, workspace: string, args?: string) => Promise<void>;
+  abortPath: (pathId: string) => void;
   fetchRuns: (pathId: string, workspace: string) => Promise<void>;
   fetchReport: (pathId: string, workspace: string, fileName: string) => Promise<void>;
   generateStep: (userInput: string, workspace: string, previousSteps: SmartPathStep[]) => Promise<string>;
@@ -203,6 +204,12 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       });
       client.send({ type: 'smartpath.run', pathId, workspace, args });
     });
+  },
+
+  abortPath: (pathId) => {
+    const client = getWsClient();
+    if (!client) return;
+    client.send({ type: 'smartpath.abort', pathId });
   },
 
   fetchRuns: async (pathId, workspace) => {

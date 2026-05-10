@@ -121,14 +121,32 @@ export class SmartPathStore {
 
   // ── 文件读写 ──
 
+  /**
+   * 从文件路径反推当前系统的实际 workspace 路径。
+   * 文件路径格式: {ws}/.sman/paths/{id}/path.md → 向上 3 级得到 ws
+   * 支持跨平台：无论 front matter 中存储的是 Windows/Linux/macOS 路径，
+   * 始终返回当前系统上文件实际所在的 workspace 路径。
+   */
+  private resolveActualWorkspace(filePath: string): string {
+    // filePath = {ws}/.sman/paths/{id}/path.md → dirname = {ws}/.sman/paths/{id}
+    const idDir = path.dirname(filePath);
+    // → dirname = {ws}/.sman/paths
+    const pathsDir = path.dirname(idDir);
+    // → dirname = {ws}/.sman
+    const smanDir = path.dirname(pathsDir);
+    // → dirname = {ws}
+    return path.dirname(smanDir);
+  }
+
   private read(filePath: string): SmartPath {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const { data } = matter(raw);
+    const actualWs = this.resolveActualWorkspace(filePath);
     return {
       id: path.basename(path.dirname(filePath)),
       name: data.name || '',
       description: data.description || '',
-      workspace: data.workspace || '',
+      workspace: actualWs,
       steps: data.steps ? JSON.stringify(data.steps) : '[]',
       status: data.status || 'draft',
       cronExpression: data.cron_expression || '',
@@ -194,7 +212,33 @@ export class SmartPathStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  get(id: string, ws: string): SmartPath | undefined {
+  /**
+   * 跨 workspace 查找路径：先用传入的 ws 定位，找不到则遍历所有 workspace。
+   * 解决跨平台场景（如 Windows 创建的路径在 macOS 上编辑）。
+   */
+  private findInWorkspaces<T>(id: string, ws: string, workspaces: string[], fn: (resolvedWs: string) => T | undefined): T | undefined {
+    // 1. 先用传入的 ws 直接查找
+    this.migrateIfNeeded(ws, id);
+    const result = fn(ws);
+    if (result !== undefined) return result;
+
+    // 2. 回退：遍历所有 workspace 查找
+    for (const altWs of workspaces) {
+      if (altWs === ws) continue;
+      this.migrateIfNeeded(altWs, id);
+      const altResult = fn(altWs);
+      if (altResult !== undefined) return altResult;
+    }
+    return undefined;
+  }
+
+  get(id: string, ws: string, workspaces?: string[]): SmartPath | undefined {
+    if (workspaces && workspaces.length > 0) {
+      return this.findInWorkspaces(id, ws, workspaces, (resolvedWs) => {
+        const f = this.pathFile(resolvedWs, id);
+        return fs.existsSync(f) ? this.read(f) : undefined;
+      });
+    }
     this.migrateIfNeeded(ws, id);
     const f = this.pathFile(ws, id);
     return fs.existsSync(f) ? this.read(f) : undefined;
@@ -222,18 +266,20 @@ export class SmartPathStore {
     return p;
   }
 
-  update(id: string, ws: string, updates: Partial<SmartPath>): SmartPath {
-    const existing = this.get(id, ws);
+  update(id: string, ws: string, updates: Partial<SmartPath>, workspaces?: string[]): SmartPath {
+    const existing = this.get(id, ws, workspaces);
     if (!existing) throw new Error(`Path not found: ${id}`);
+    // 使用路径实际存储的 workspace（解决跨平台路径不一致问题）
+    const actualWs = existing.workspace;
     const merged = { ...existing, ...updates, updatedAt: new Date().toISOString() };
 
     // 名称变更 → 迁移整个目录
     if (updates.name && updates.name !== existing.name) {
-      const newId = this.generatePathId(ws, updates.name);
+      const newId = this.generatePathId(actualWs, updates.name);
       merged.id = newId;
 
-      const oldDir = this.pathDir(ws, id);
-      const newDir = this.pathDir(ws, newId);
+      const oldDir = this.pathDir(actualWs, id);
+      const newDir = this.pathDir(actualWs, newId);
       if (fs.existsSync(oldDir)) {
         fs.mkdirSync(path.dirname(newDir), { recursive: true });
         fs.renameSync(oldDir, newDir);
@@ -243,7 +289,7 @@ export class SmartPathStore {
       this.write({ ...merged, id: newId });
 
       // 清理旧平铺文件
-      const oldFile = this.legacyFile(ws, id);
+      const oldFile = this.legacyFile(actualWs, id);
       if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
 
       return merged;
@@ -253,12 +299,14 @@ export class SmartPathStore {
     return merged;
   }
 
-  del(id: string, ws: string): void {
-    const subDir = this.pathDir(ws, id);
-    const legacyF = this.legacyFile(ws, id);
-    if (!fs.existsSync(subDir) && !fs.existsSync(legacyF)) {
-      throw new Error(`Path not found: ${id}`);
-    }
+  del(id: string, ws: string, workspaces?: string[]): void {
+    // 尝试在传入的 ws 或备选 workspace 中定位路径
+    const found = this.get(id, ws, workspaces);
+    if (!found) throw new Error(`Path not found: ${id}`);
+    const actualWs = found.workspace;
+
+    const subDir = this.pathDir(actualWs, id);
+    const legacyF = this.legacyFile(actualWs, id);
 
     // 删除整个 {id}/ 目录
     if (fs.existsSync(subDir)) fs.rmSync(subDir, { recursive: true });

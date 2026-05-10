@@ -3,6 +3,7 @@ import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from '@/stores/chat';
 import { useCronStore } from '@/stores/cron';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/locales';
 
 const STORAGE_KEY_SERVERS = 'sman-servers';
@@ -187,14 +188,14 @@ export function BackendSettings({ id }: { id?: string }) {
   };
 
   return (
-    <div id={id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
-      <div className="flex flex-col space-y-1.5 p-6">
-        <h3 className="text-2xl font-semibold leading-none tracking-tight">{t('settings.backend.title')}</h3>
-        <p className="text-sm text-muted-foreground">
+    <Card id={id}>
+      <CardHeader>
+        <CardTitle>{t('settings.backend.title')}</CardTitle>
+        <CardDescription>
           {t('settings.backend.description')}
-        </p>
-      </div>
-      <div className="p-6 pt-0 space-y-4">
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
         {/* Server selector */}
         <div className="space-y-2">
           <label className="text-sm font-medium leading-none">{t('settings.backend.server')}</label>
@@ -291,8 +292,8 @@ export function BackendSettings({ id }: { id?: string }) {
             <p className="text-xs text-red-600">{t('settings.backend.testFailed')}</p>
           )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 

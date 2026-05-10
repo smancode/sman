@@ -4,6 +4,20 @@ import { ChatbotStore } from '../../../server/chatbot/chatbot-store.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import type { WeComBotProfile } from '../../../server/chatbot/types.js';
+
+const defaultBotProfile: WeComBotProfile = {
+  id: 'bot-1',
+  label: 'TestBot',
+  botId: 'test-bot-id',
+  secret: 'test-secret',
+  mode: 'full',
+  workspace: '',
+  allowedSkills: [],
+  enabled: true,
+};
+
+const mockGetBotProfile = vi.fn().mockReturnValue(defaultBotProfile);
 
 const mockCreateSessionWithId = vi.fn();
 const mockSendMessageForChatbot = vi.fn();
@@ -30,8 +44,9 @@ describe('ChatbotSessionManager', () => {
     homeDir = path.join(os.tmpdir(), `chatbot-mgr-home-${Date.now()}`);
     fs.mkdirSync(homeDir, { recursive: true });
     store = new ChatbotStore(dbPath);
-    manager = new ChatbotSessionManager(homeDir, mockSessionManager, store);
+    manager = new ChatbotSessionManager(homeDir, mockSessionManager, store, mockGetBotProfile);
     vi.clearAllMocks();
+    mockGetBotProfile.mockReturnValue(defaultBotProfile);
     mockSessionManager.listSessions.mockReturnValue([]);
   });
 
@@ -60,6 +75,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//help',
         requestId: 'req-1',
         chatType: 'single',
@@ -76,6 +92,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//pwd',
         requestId: 'req-1',
         chatType: 'single',
@@ -87,11 +104,12 @@ describe('ChatbotSessionManager', () => {
 
     it('should handle //pwd with workspace', async () => {
       store.addWorkspace('/data/projectA', 'projectA');
-      store.setUserState('wecom:user1', '/data/projectA');
+      store.setUserState('wecom:bot-1:user1', '/data/projectA');
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//pwd',
         requestId: 'req-1',
         chatType: 'single',
@@ -106,6 +124,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//workspaces',
         requestId: 'req-1',
         chatType: 'single',
@@ -127,6 +146,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//workspaces',
         requestId: 'req-1',
         chatType: 'single',
@@ -142,6 +162,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//status',
         requestId: 'req-1',
         chatType: 'single',
@@ -166,6 +187,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//cd projectA',
         requestId: 'req-1',
         chatType: 'single',
@@ -182,6 +204,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//cd unknown-project',
         requestId: 'req-1',
         chatType: 'single',
@@ -201,6 +224,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//cd path',
         requestId: 'req-1',
         chatType: 'single',
@@ -215,6 +239,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: '//cd',
         requestId: 'req-1',
         chatType: 'single',
@@ -231,6 +256,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: 'hello',
         requestId: 'req-1',
         chatType: 'single',
@@ -245,8 +271,8 @@ describe('ChatbotSessionManager', () => {
       const testDir = path.join(homeDir, 'projectA');
       fs.mkdirSync(testDir, { recursive: true });
       store.addWorkspace(testDir, 'projectA');
-      store.setUserState('wecom:user1', testDir);
-      store.setSession('wecom:user1', testDir, 'sess-1');
+      store.setUserState('wecom:bot-1:user1', testDir);
+      store.setSession('wecom:bot-1:user1', testDir, 'sess-1');
 
       mockSendMessageForChatbot.mockResolvedValueOnce('Hello! How can I help?');
 
@@ -254,6 +280,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'wecom',
         userId: 'user1',
+        botProfileId: 'bot-1',
         content: 'hello',
         requestId: 'req-1',
         chatType: 'single',
@@ -269,6 +296,8 @@ describe('ChatbotSessionManager', () => {
         undefined,
         expect.any(Function),
         expect.any(Function),
+        'full',
+        [],
       );
       expect(responses[0]).toBe('Hello! How can I help?');
     });
@@ -277,8 +306,8 @@ describe('ChatbotSessionManager', () => {
       const testDir = path.join(homeDir, 'projectA');
       fs.mkdirSync(testDir, { recursive: true });
       store.addWorkspace(testDir, 'projectA');
-      store.setUserState('feishu:ou_123', testDir);
-      store.setSession('feishu:ou_123', testDir, 'sess-fs-1');
+      store.setUserState('feishu:bot-1:ou_123', testDir);
+      store.setSession('feishu:bot-1:ou_123', testDir, 'sess-fs-1');
 
       mockSendMessageForChatbot.mockResolvedValueOnce('Feishu response');
 
@@ -286,6 +315,7 @@ describe('ChatbotSessionManager', () => {
       await manager.handleMessage({
         platform: 'feishu',
         userId: 'ou_123',
+        botProfileId: 'bot-1',
         content: '你好',
         requestId: 'req-fs-1',
         chatType: 'p2p',

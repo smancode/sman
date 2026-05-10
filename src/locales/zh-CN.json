@@ -1195,6 +1195,10 @@
     "text": "执行",
     "context": "执行按钮"
   },
+  "smartpath.stop": {
+    "text": "停止",
+    "context": "停止按钮"
+  },
   "smartpath.stepInput": {
     "text": "描述这一步要做什么...",
     "context": "步骤输入占位符"

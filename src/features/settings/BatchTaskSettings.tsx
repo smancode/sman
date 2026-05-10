@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { FeedbackState } from '@/components/common/FeedbackState';
 import { useBatchStore } from '@/stores/batch';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
@@ -627,11 +628,9 @@ export function BatchTaskSettings() {
 
       <div className="space-y-6">
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
+          <FeedbackState state="loading" title={t('common.loading')} />
         ) : tasks.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            {t('batch.emptyHint')}
-          </div>
+          <FeedbackState state="empty" title={t('batch.emptyHint')} />
         ) : (() => {
           const grouped = new Map<string, BatchTask[]>();
           for (const t of tasks) {

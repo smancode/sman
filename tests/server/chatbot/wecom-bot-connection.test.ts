@@ -7,6 +7,8 @@ describe('WeComBotConnection', () => {
     const conn = new WeComBotConnection({
       botId: 'test-bot',
       secret: 'test-secret',
+      botProfileId: 'test-bot-profile',
+      getMode: () => 'full',
       onMessage: vi.fn(),
     });
     expect(typeof conn.start).toBe('function');

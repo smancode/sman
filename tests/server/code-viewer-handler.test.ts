@@ -97,17 +97,14 @@ describe('code-viewer-handler', () => {
   });
 
   describe('shouldHide', () => {
-    it('should hide known hidden directories', () => {
-      expect(shouldHide('.git')).toBe(true);
-      expect(shouldHide('node_modules')).toBe(true);
-      expect(shouldHide('dist')).toBe(true);
-      expect(shouldHide('build')).toBe(true);
-      expect(shouldHide('.sman')).toBe(true);
-    });
-
-    it('should hide dot-prefixed names', () => {
-      expect(shouldHide('.env')).toBe(true);
-      expect(shouldHide('.vscode')).toBe(true);
+    it('should not hide anything (user requested show all)', () => {
+      expect(shouldHide('.git')).toBe(false);
+      expect(shouldHide('node_modules')).toBe(false);
+      expect(shouldHide('dist')).toBe(false);
+      expect(shouldHide('build')).toBe(false);
+      expect(shouldHide('.sman')).toBe(false);
+      expect(shouldHide('.env')).toBe(false);
+      expect(shouldHide('.vscode')).toBe(false);
     });
 
     it('should not hide normal names', () => {
@@ -159,7 +156,7 @@ describe('code-viewer-handler', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it('should list entries excluding hidden dirs', () => {
+    it('should list all entries including hidden dirs', () => {
       fs.mkdirSync(path.join(tmpDir, 'src'));
       fs.mkdirSync(path.join(tmpDir, '.git'));
       fs.mkdirSync(path.join(tmpDir, 'node_modules'));
@@ -173,8 +170,8 @@ describe('code-viewer-handler', () => {
       expect(names).toContain('src');
       expect(names).toContain('README.md');
       expect(names).toContain('package.json');
-      expect(names).not.toContain('.git');
-      expect(names).not.toContain('node_modules');
+      expect(names).toContain('.git');
+      expect(names).toContain('node_modules');
     });
 
     it('should list nested directory', () => {
@@ -317,11 +314,13 @@ describe('code-viewer-handler', () => {
       expect(paths.some(p => p.includes('utils.ts'))).toBe(true);
     });
 
-    it('should skip hidden directories', () => {
+    it('should search all directories including hidden (show all mode)', () => {
+      // shouldHide returns false for everything — user requested show all
       const result = handleSearchSymbols(tmpDir, 'myVar');
 
+      // node_modules contains myVar, and since we show all, it should be found
       const paths = result.matches.map(m => m.filePath);
-      expect(paths.some(p => p.includes('node_modules'))).toBe(false);
+      expect(paths.some(p => p.includes('node_modules'))).toBe(true);
     });
 
     it('should respect maxResults limit', () => {

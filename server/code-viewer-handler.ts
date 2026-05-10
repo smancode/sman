@@ -80,9 +80,8 @@ export function hasNullBytes(buffer: Buffer): boolean {
   return false;
 }
 
-export function shouldHide(name: string): boolean {
-  if (name.startsWith('.')) return true;
-  if (HIDDEN_DIRS.has(name)) return true;
+// 不要过滤任何文件，用户要求显示全部。见 commit 3fae77b
+export function shouldHide(_name: string): boolean {
   return false;
 }
 

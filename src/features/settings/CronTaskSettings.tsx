@@ -3,6 +3,7 @@ import { Plus, Trash2, Play, Pencil, CheckCircle, XCircle, Clock, Loader2, Refre
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FeedbackState } from '@/components/common/FeedbackState';
 import {
   Select,
   SelectContent,
@@ -364,12 +365,10 @@ export function CronTaskSettings() {
 
       <div className="space-y-6">
         {loading && (
-          <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
+          <FeedbackState state="loading" title={t('common.loading')} />
         )}
         {!loading && tasks.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            {t('cron.emptyHint')}
-          </div>
+          <FeedbackState state="empty" title={t('cron.emptyHint')} />
         )}
         {!loading && (() => {
           const sorted = [...tasks].sort((a, b) => {

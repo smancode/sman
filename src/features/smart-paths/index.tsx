@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
-  FolderOpen, Save, GripVertical, Route, Pencil,
+  FolderOpen, Save, GripVertical, Route, Pencil, Square,
   Clock, FileText, FileCode,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
@@ -397,10 +397,10 @@ function PathEditor({ path, onSave, onCancel }: {
 
 // ── View mode ──
 
-function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
+function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   path: SmartPath; runs: SmartPathRun[];
   reports: Array<{ fileName: string; createdAt: string }>;
-  onEdit: () => void; onRun: () => void; onDelete: () => void;
+  onEdit: () => void; onRun: () => void; onAbort: () => void; onDelete: () => void;
 }) {
   const steps = useMemo<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } }, [path.steps]);
   const sc = STATUS_CONFIG[path.status];
@@ -445,11 +445,17 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onDelete }: {
           </div>
         </div>
         <div className="flex gap-1.5 shrink-0">
-          <Button variant="outline" size="sm" onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
-          <Button size="sm" onClick={onRun} disabled={running}>
-            {running ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> {t("smartpath.executing")}</> : <><Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}</>}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
+          <Button variant="outline" size="sm" onClick={onEdit} disabled={running}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
+          {running ? (
+            <Button variant="destructive" size="sm" onClick={onAbort}>
+              <Square className="h-3.5 w-3.5 mr-1" /> {t("smartpath.stop")}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={onRun}>
+              <Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={running}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
         </div>
       </div>
 
@@ -604,6 +610,7 @@ export function SmartPathPage() {
   const updatePath = useSmartPathStore((s) => s.updatePath);
   const deletePath = useSmartPathStore((s) => s.deletePath);
   const runPath = useSmartPathStore((s) => s.runPath);
+  const abortPath = useSmartPathStore((s) => s.abortPath);
   const fetchRuns = useSmartPathStore((s) => s.fetchRuns);
   const fetchReferences = useSmartPathStore((s) => s.fetchReferences);
   const setCurrentPath = useSmartPathStore((s) => s.setCurrentPath);
@@ -665,6 +672,7 @@ export function SmartPathPage() {
             <PathDetail path={currentPath} runs={runs} reports={reports}
               onEdit={() => setEditing(true)}
               onRun={() => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs)}
+              onAbort={() => abortPath(currentPath.id)}
               onDelete={() => { deletePath(currentPath.id, currentPath.workspace); setCurrentPath(null); }} />
           ) : (
             <EmptyState onNew={() => setCreateOpen(true)} />

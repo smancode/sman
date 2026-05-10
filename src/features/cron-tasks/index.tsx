@@ -1,17 +1,18 @@
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CronTaskSettings } from '@/features/settings/CronTaskSettings';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
+import { useScrollSpy } from '@/hooks/useScrollSpy';
+import { PageLayout } from '@/components/common/PageLayout';
 import { t } from '@/locales';
 
 export function CronTasksPage() {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
-  const isScrollingRef = useRef(false);
 
   const tasks = useCronStore((s) => s.tasks);
   const fetchTasks = useCronStore((s) => s.fetchTasks);
@@ -39,86 +40,55 @@ export function CronTasksPage() {
     }
   }, [groups, activeWorkspace]);
 
-  // Intersection observer
+  const { activeId, setActiveId, scrollTo } = useScrollSpy({
+    containerRef: scrollRef,
+    items: groups.map(([name]) => ({ id: name })),
+    idPrefix: 'cron-ws-',
+    threshold: 0.2,
+  });
+
+  // Sync scroll spy active id with local state
   useEffect(() => {
-    const container = scrollRef.current;
-    if (!container || groups.length === 0) return;
-
-    let ready = false;
-    const timer = setTimeout(() => { ready = true; }, 200);
-    const observers: IntersectionObserver[] = [];
-
-    groups.forEach(([name]) => {
-      const el = document.getElementById(`cron-ws-${name}`);
-      if (!el) return;
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (ready && entry.isIntersecting && !isScrollingRef.current) {
-              setActiveWorkspace(name);
-            }
-          });
-        },
-        { root: container, threshold: 0.2 },
-      );
-      observer.observe(el);
-      observers.push(observer);
-    });
-
-    return () => {
-      clearTimeout(timer);
-      observers.forEach((o) => o.disconnect());
-    };
-  }, [groups]);
-
-  const scrollToWorkspace = useCallback((name: string) => {
-    const el = document.getElementById(`cron-ws-${name}`);
-    if (el) {
-      isScrollingRef.current = true;
-      setActiveWorkspace(name);
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setTimeout(() => { isScrollingRef.current = false; }, 800);
-    }
-  }, []);
+    if (activeId) setActiveWorkspace(activeId);
+  }, [activeId]);
 
   return (
-    <div className="flex h-full">
-      {/* Left nav */}
-      <nav className="w-64 shrink-0 p-4 space-y-1">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          {t('cron.back')}
-        </button>
-        {groups.length === 0 && (
-          <div className="text-xs text-muted-foreground px-3 py-2">{t('cron.noSystems')}</div>
-        )}
-        {groups.map(([name]) => (
+    <PageLayout
+      scrollRef={scrollRef}
+      sidebar={
+        <>
           <button
-            key={name}
-            onClick={() => scrollToWorkspace(name)}
-            className={cn(
-              'flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              activeWorkspace === name
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
           >
-            <FolderOpen className="h-4 w-4" />
-            {name}
+            <ChevronLeft className="h-4 w-4" />
+            {t('cron.back')}
           </button>
-        ))}
-      </nav>
-
-      {/* Right content */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto p-6 space-y-6">
-          <CronTaskSettings />
-        </div>
-      </div>
-    </div>
+          {groups.length === 0 && (
+            <div className="text-xs text-muted-foreground px-3 py-2">{t('cron.noSystems')}</div>
+          )}
+          {groups.map(([name]) => (
+            <button
+              key={name}
+              onClick={() => {
+                setActiveWorkspace(name);
+                scrollTo(name);
+              }}
+              className={cn(
+                'flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                activeWorkspace === name
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <FolderOpen className="h-4 w-4" />
+              {name}
+            </button>
+          ))}
+        </>
+      }
+    >
+      <CronTaskSettings />
+    </PageLayout>
   );
 }
