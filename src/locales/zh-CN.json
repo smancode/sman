@@ -2947,6 +2947,138 @@
     "text": "失败",
     "context": "任务状态：失败"
   },
+  "hub.task.evaluating": {
+    "text": "评估中",
+    "context": "任务状态：评估中"
+  },
+  "hub.task.confirmed": {
+    "text": "已确认",
+    "context": "任务状态：已确认"
+  },
+  "hub.task.rejected": {
+    "text": "已驳回",
+    "context": "任务状态：已驳回"
+  },
+  "hub.task.cancelled": {
+    "text": "已取消",
+    "context": "任务状态：已取消"
+  },
+  "hub.task.confirm": {
+    "text": "确认",
+    "context": "确认任务按钮"
+  },
+  "hub.task.reject": {
+    "text": "驳回",
+    "context": "驳回任务按钮"
+  },
+  "hub.task.dispatch": {
+    "text": "派发执行",
+    "context": "派发任务按钮"
+  },
+  "hub.task.advanced": {
+    "text": "高级选项",
+    "context": "任务创建高级选项"
+  },
+  "hub.task.acceptancePlaceholder": {
+    "text": "验收标准（可选）",
+    "context": "验收标准输入框占位符"
+  },
+  "hub.task.gitBranchPlaceholder": {
+    "text": "Git 分支（可选）",
+    "context": "Git 分支输入框占位符"
+  },
+  "hub.task.subtasks": {
+    "text": "子任务",
+    "context": "子任务标题"
+  },
+  "hub.task.addSubtask": {
+    "text": "添加子任务",
+    "context": "添加子任务按钮"
+  },
+  "hub.task.subtaskName": {
+    "text": "子任务名称",
+    "context": "子任务名称输入框占位符"
+  },
+  "hub.task.subtaskUnit": {
+    "text": "个子任务",
+    "context": "子任务数量单位"
+  },
+  "hub.task.description": {
+    "text": "描述",
+    "context": "任务描述标题"
+  },
+  "hub.task.acceptance": {
+    "text": "验收标准",
+    "context": "验收标准标题"
+  },
+  "hub.task.notFound": {
+    "text": "任务不存在",
+    "context": "任务不存在提示"
+  },
+  "hub.task.evaluationReports": {
+    "text": "评估报告",
+    "context": "评估报告标题"
+  },
+  "hub.task.assignments": {
+    "text": "派发记录",
+    "context": "派发记录标题"
+  },
+  "hub.task.events": {
+    "text": "事件记录",
+    "context": "任务事件记录标题"
+  },
+  "hub.task.result": {
+    "text": "执行结果",
+    "context": "执行结果标题"
+  },
+  "hub.task.error": {
+    "text": "错误信息",
+    "context": "错误信息标题"
+  },
+  "hub.task.claimers": {
+    "text": "人认领",
+    "context": "认领人数标签"
+  },
+  "hub.task.approve": {
+    "text": "通过",
+    "context": "通过评估报告按钮"
+  },
+  "hub.task.rejectReport": {
+    "text": "驳回",
+    "context": "驳回评估报告按钮"
+  },
+  "hub.task.pending": {
+    "text": "待审核",
+    "context": "评估报告状态：待审核"
+  },
+  "hub.task.approved": {
+    "text": "已通过",
+    "context": "评估报告状态：已通过"
+  },
+  "hub.task.assigned": {
+    "text": "已分配",
+    "context": "派发状态：已分配"
+  },
+  "hub.task.showApproach": {
+    "text": "查看实现思路",
+    "context": "展开查看实现思路"
+  },
+  "hub.task.hideApproach": {
+    "text": "收起",
+    "context": "收起实现思路"
+  },
+  "hub.task.dispatchTitle": {
+    "text": "派发任务",
+    "context": "派发任务面板标题"
+  },
+  "hub.task.selectAgent": {
+    "text": "选择 Agent",
+    "context": "选择 Agent 下拉框"
+  },
+  "hub.task.instructionsPlaceholder": {
+    "text": "额外指令（可选）",
+    "context": "额外指令输入框占位符"
+  },
   "hub.task.selectRoom": {
     "text": "请先选择项目组",
     "context": "未选择项目组时的提示"

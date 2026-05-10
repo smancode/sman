@@ -2413,7 +2413,7 @@ export { server, homeDir };
  *  server/index.ts only calls initHub() inside the isMainModule block,
  *  which is false when loaded via dynamic import(). */
 export function startHub(): void {
-  initHub(settingsManager, store, broadcastStore);
+  initHub(settingsManager, store, broadcastStore, sessionManager);
 }
 
 // Stardom Bridge（独立模块，未配置时无副作用）
@@ -2519,7 +2519,7 @@ if (isMainModule) {
     log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
     log.info(`Health check: http://${HOST}:${PORT}/api/health`);
 
-    initHub(settingsManager, store, broadcastStore);
+    initHub(settingsManager, store, broadcastStore, sessionManager);
     log.info('Hub initialized');
   });
 

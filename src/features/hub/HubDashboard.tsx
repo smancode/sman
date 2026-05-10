@@ -10,19 +10,24 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
-import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom } from '@/queries/use-hub';
+import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useRoomAgents } from '@/queries/use-hub';
 import { TaskBoard } from './TaskBoard';
+import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot,
+  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 export function HubDashboard() {
+  const navigate = useNavigate();
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>();
   const [rightTab, setRightTab] = useState<'tasks' | 'agents'>('tasks');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
   const status = useWsConnection((s) => s.status);
   const { data: rooms, error: roomsError, isLoading } = useRooms();
+  const { data: agents } = useRoomAgents(selectedRoomId);
   const settings = useSettingsStore((s) => s.settings);
   const client = useWsConnection((s) => s.client);
 
@@ -72,9 +77,15 @@ export function HubDashboard() {
 
   const needsConfig = !hub?.serverUrl;
 
-  // Sidebar: project group list
   const sidebar = (
     <TooltipProvider delayDuration={300}>
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        {t('cron.back')}
+      </button>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
           {t('hub.tab.rooms')}
@@ -153,7 +164,7 @@ export function HubDashboard() {
             rooms.map((room) => (
               <div
                 key={room.id}
-                onClick={() => setSelectedRoomId(room.id)}
+                onClick={() => { setSelectedRoomId(room.id); setSelectedTaskId(undefined); }}
                 className={cn(
                   'group flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer transition-colors text-sm',
                   selectedRoomId === room.id
@@ -180,7 +191,6 @@ export function HubDashboard() {
 
       <Separator className="my-2" />
 
-      {/* Join by ID */}
       <div className="flex gap-1.5">
         <Input
           value={joinId}
@@ -212,43 +222,52 @@ export function HubDashboard() {
     </Button>
   ) : undefined;
 
-  // Right content
   const content = selectedRoomId ? (
     <div className="flex h-full flex-col">
-      {/* Content header */}
-      <div className="flex items-center gap-2 border-b px-6 py-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setRightTab('tasks')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
-              rightTab === 'tasks' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
-            )}
-          >
-            <ListTodo className="h-3.5 w-3.5" />
-            {t('hub.tab.tasks')}
-          </button>
-          <button
-            onClick={() => setRightTab('agents')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
-              rightTab === 'agents' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
-            )}
-          >
-            <Bot className="h-3.5 w-3.5" />
-            {t('hub.tab.agents')}
-          </button>
-        </div>
-        <Badge variant="secondary" className="ml-auto text-[11px] font-mono">
-          {selectedRoomId.slice(0, 8)}
-        </Badge>
-      </div>
+      {selectedTaskId ? (
+        <TaskDetail
+          taskId={selectedTaskId}
+          agents={agents || []}
+          onBack={() => setSelectedTaskId(undefined)}
+        />
+      ) : (
+        <>
+          <div className="flex items-center gap-2 border-b px-6 py-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setRightTab('tasks')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
+                  rightTab === 'tasks' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
+                )}
+              >
+                <ListTodo className="h-3.5 w-3.5" />
+                {t('hub.tab.tasks')}
+              </button>
+              <button
+                onClick={() => setRightTab('agents')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
+                  rightTab === 'agents' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
+                )}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                {t('hub.tab.agents')}
+              </button>
+            </div>
+            <Badge variant="secondary" className="ml-auto text-[11px] font-mono">
+              {selectedRoomId.slice(0, 8)}
+            </Badge>
+          </div>
 
-      {/* Content body */}
-      <div className="flex-1 overflow-hidden">
-        {rightTab === 'tasks' && <TaskBoard roomId={selectedRoomId} />}
-        {rightTab === 'agents' && <AgentList roomId={selectedRoomId} />}
-      </div>
+          <div className="flex-1 overflow-hidden">
+            {rightTab === 'tasks' && (
+              <TaskBoard roomId={selectedRoomId} onSelectTask={(id) => setSelectedTaskId(id)} />
+            )}
+            {rightTab === 'agents' && <AgentList roomId={selectedRoomId} />}
+          </div>
+        </>
+      )}
     </div>
   ) : (
     <FeedbackState

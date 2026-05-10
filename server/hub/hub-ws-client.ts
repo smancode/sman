@@ -118,6 +118,9 @@ export class HubWsClient {
           log.info(`Hub WS authenticated as ${msg.clientId || 'unknown'}`);
           this.startHeartbeat();
           this.reRegisterAgents();
+          // Request room list to auto-join
+          this.send({ type: 'room.list' });
+          this.deps.onMessage?.(msg);
         } else if (msg.type === 'auth.fail') {
           log.error(`Hub WS auth failed: ${msg.reason}`);
           this.ws?.close();

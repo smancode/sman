@@ -29,7 +29,7 @@ export function MainLayout() {
   const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
   const isWindows = window.sman?.platform === 'win32';
-  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom'].includes(location.pathname);
+  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom', '/hub'].includes(location.pathname);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {

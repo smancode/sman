@@ -1,22 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import type { SessionStore } from '../session-store.js';
 import type { SettingsManager } from '../settings-manager.js';
 import type { BroadcastStore } from '../broadcast-store.js';
+import type { ClaudeSessionManager } from '../claude-session.js';
 import { HubClient } from './client.js';
+import { HubWsClient } from './hub-ws-client.js';
+import { EvaluationHandler } from './evaluation-handler.js';
+import { TaskWorker } from './task-worker.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('Hub');
+
 let hubClient: HubClient | null = null;
+let hubWsClient: HubWsClient | null = null;
+let evaluationHandler: EvaluationHandler | null = null;
+let taskWorker: TaskWorker | null = null;
 
 function getVersion(): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  // Probe upward to find package.json with a version field.
-  // Source: server/hub/ → ../../package.json (project root)
-  // Compiled: dist/server/server/hub/ → ../../../../package.json (project root)
-  // Electron packaged: app.asar/server/hub/ → ../../package.json
   for (const rel of ['../../package.json', '../../../package.json', '../../../../package.json']) {
     try {
       const pkgPath = path.resolve(__dirname, rel);
@@ -31,16 +36,38 @@ function getServerUrl(sm: SettingsManager): string {
   return process.env.SMAN_HUB_URL || sm.getConfig().hub?.serverUrl || '';
 }
 
+function getPsk(): string {
+  if (process.env.SMAN_PSK) return process.env.SMAN_PSK;
+  try {
+    const homeDir = process.env.SMANBASE_HOME || path.join(os.homedir(), '.sman');
+    return fs.readFileSync(path.join(homeDir, 'hub.key'), 'utf-8').trim();
+  } catch {
+    return '';
+  }
+}
+
+function getClientId(): string {
+  const hostname = os.hostname();
+  const user = os.userInfo().username;
+  return `${user}@${hostname}`;
+}
+
 function isHubEnabled(sm: SettingsManager): boolean {
-  // SMAN_HUB_URL injected (enterprise build) = always enabled
   if (process.env.SMAN_HUB_URL) return true;
   return sm.getConfig().hub?.enabled ?? false;
+}
+
+function buildAgentId(clientId: string, workspace: string): string {
+  const hash = crypto.createHash('sha256').update(`${clientId}:${workspace}`).digest('hex').slice(0, 12);
+  const hostname = clientId.split('@')[0] || clientId;
+  return `${hostname}:${hash}`;
 }
 
 export function initHub(
   settingsManager: SettingsManager,
   sessionStore: SessionStore,
   broadcastStore: BroadcastStore,
+  sessionManager?: ClaudeSessionManager,
 ): void {
   const serverUrl = getServerUrl(settingsManager);
   const enabled = isHubEnabled(settingsManager);
@@ -51,6 +78,7 @@ export function initHub(
     return;
   }
 
+  // HTTP client for heartbeat/broadcast
   hubClient = new HubClient({
     getServerUrl: () => getServerUrl(settingsManager),
     getEnabled: () => isHubEnabled(settingsManager),
@@ -58,12 +86,102 @@ export function initHub(
     sessionStore,
     broadcastStore,
   });
-
   hubClient.start();
+
+  // WebSocket client for task collaboration
+  if (!sessionManager) {
+    log.info('No sessionManager provided, skipping WS connection');
+    return;
+  }
+
+  const psk = getPsk();
+  if (!psk) {
+    log.warn('No PSK key available, skipping WS connection');
+    return;
+  }
+
+  let joinedRoomId: string | undefined;
+
+  hubWsClient = new HubWsClient({
+    getServerUrl: () => getServerUrl(settingsManager),
+    getPsk: () => getPsk(),
+    getClientId: () => getClientId(),
+    sessionStore,
+    settingsManager,
+    onMessage: (msg) => {
+      // Track joined room
+      if (msg.type === 'room.joined') {
+        joinedRoomId = msg.roomId;
+        registerAgentsForWorkspaces(sessionStore, hubWsClient!, joinedRoomId, getClientId());
+      }
+      if (msg.type === 'room.created') {
+        const room = msg.room as { id: string } | undefined;
+        if (room) joinedRoomId = room.id;
+      }
+      // Auto-join rooms after receiving room list
+      if (msg.type === 'room.list.update' && !joinedRoomId) {
+        const rooms = msg.rooms as { id: string }[] | undefined;
+        if (rooms && rooms.length > 0) {
+          const clientId = getClientId();
+          hubWsClient!.send({ type: 'room.join', roomId: rooms[0].id, clientId, displayName: clientId });
+        }
+      }
+      // On auth success, register agents if we already have a room
+      if (msg.type === 'auth.ok' && joinedRoomId) {
+        registerAgentsForWorkspaces(sessionStore, hubWsClient!, joinedRoomId, getClientId());
+      }
+
+      evaluationHandler?.handleMessage(msg);
+      taskWorker?.handleMessage(msg);
+    },
+  });
+
+  evaluationHandler = new EvaluationHandler({
+    hubWsClient,
+    sessionManager,
+    sessionStore,
+    getAgentId: (workspace) => buildAgentId(getClientId(), workspace),
+    getRoomId: () => joinedRoomId,
+  });
+
+  taskWorker = new TaskWorker({
+    hubWsClient,
+    sessionManager,
+    getAgentId: (workspace) => buildAgentId(getClientId(), workspace),
+  });
+
+  hubWsClient.start();
+  evaluationHandler.start();
+  taskWorker.start();
+}
+
+function registerAgentsForWorkspaces(
+  sessionStore: SessionStore,
+  wsClient: HubWsClient,
+  roomId: string | undefined,
+  clientId: string,
+): void {
+  if (!roomId) return;
+  const workspaces = sessionStore.getActiveWorkspaces();
+  for (const workspace of workspaces) {
+    const agentId = buildAgentId(clientId, workspace);
+    wsClient.registerAgent(agentId, roomId, workspace, {
+      skills: [],
+      techStack: [],
+      projectType: '',
+    });
+  }
 }
 
 export function stopHub(): void {
+  evaluationHandler?.stop();
+  taskWorker?.stop();
+  hubWsClient?.stop();
   hubClient?.stop();
+
+  evaluationHandler = null;
+  taskWorker = null;
+  hubWsClient = null;
   hubClient = null;
 }
 
@@ -71,9 +189,14 @@ export function getHubClient(): HubClient | null {
   return hubClient;
 }
 
+export function getHubWsClient(): HubWsClient | null {
+  return hubWsClient;
+}
+
 export function getHubStatus(): Record<string, unknown> {
   return {
     initialized: hubClient !== null,
+    wsConnected: hubWsClient?.isConnected() ?? false,
     SMAN_HUB_URL: process.env.SMAN_HUB_URL || '(not set)',
     SMAN_PSK: process.env.SMAN_PSK ? '(set, ' + process.env.SMAN_PSK.length + ' chars)' : '(not set, will use bundled hub.key)',
   };

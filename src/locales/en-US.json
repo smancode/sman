@@ -2947,6 +2947,138 @@
     "text": "Failed",
     "context": "Task status: failed"
   },
+  "hub.task.evaluating": {
+    "text": "Evaluating",
+    "context": "Task status: evaluating"
+  },
+  "hub.task.confirmed": {
+    "text": "Confirmed",
+    "context": "Task status: confirmed"
+  },
+  "hub.task.rejected": {
+    "text": "Rejected",
+    "context": "Task status: rejected"
+  },
+  "hub.task.cancelled": {
+    "text": "Cancelled",
+    "context": "Task status: cancelled"
+  },
+  "hub.task.confirm": {
+    "text": "Confirm",
+    "context": "Confirm task button"
+  },
+  "hub.task.reject": {
+    "text": "Reject",
+    "context": "Reject task button"
+  },
+  "hub.task.dispatch": {
+    "text": "Dispatch",
+    "context": "Dispatch task button"
+  },
+  "hub.task.advanced": {
+    "text": "Advanced",
+    "context": "Task creation advanced options"
+  },
+  "hub.task.acceptancePlaceholder": {
+    "text": "Acceptance criteria (optional)",
+    "context": "Acceptance criteria input placeholder"
+  },
+  "hub.task.gitBranchPlaceholder": {
+    "text": "Git branch (optional)",
+    "context": "Git branch input placeholder"
+  },
+  "hub.task.subtasks": {
+    "text": "Subtasks",
+    "context": "Subtasks title"
+  },
+  "hub.task.addSubtask": {
+    "text": "Add subtask",
+    "context": "Add subtask button"
+  },
+  "hub.task.subtaskName": {
+    "text": "Subtask name",
+    "context": "Subtask name input placeholder"
+  },
+  "hub.task.subtaskUnit": {
+    "text": "subtasks",
+    "context": "Subtask count unit"
+  },
+  "hub.task.description": {
+    "text": "Description",
+    "context": "Task description title"
+  },
+  "hub.task.acceptance": {
+    "text": "Acceptance Criteria",
+    "context": "Acceptance criteria title"
+  },
+  "hub.task.notFound": {
+    "text": "Task not found",
+    "context": "Task not found message"
+  },
+  "hub.task.evaluationReports": {
+    "text": "Evaluation Reports",
+    "context": "Evaluation reports title"
+  },
+  "hub.task.assignments": {
+    "text": "Assignments",
+    "context": "Assignments title"
+  },
+  "hub.task.events": {
+    "text": "Events",
+    "context": "Task events title"
+  },
+  "hub.task.result": {
+    "text": "Result",
+    "context": "Task result title"
+  },
+  "hub.task.error": {
+    "text": "Error",
+    "context": "Task error title"
+  },
+  "hub.task.claimers": {
+    "text": "claimers",
+    "context": "Claimer count label"
+  },
+  "hub.task.approve": {
+    "text": "Approve",
+    "context": "Approve evaluation report button"
+  },
+  "hub.task.rejectReport": {
+    "text": "Reject",
+    "context": "Reject evaluation report button"
+  },
+  "hub.task.pending": {
+    "text": "Pending",
+    "context": "Report status: pending"
+  },
+  "hub.task.approved": {
+    "text": "Approved",
+    "context": "Report status: approved"
+  },
+  "hub.task.assigned": {
+    "text": "Assigned",
+    "context": "Assignment status: assigned"
+  },
+  "hub.task.showApproach": {
+    "text": "View approach",
+    "context": "Show approach details"
+  },
+  "hub.task.hideApproach": {
+    "text": "Hide",
+    "context": "Hide approach details"
+  },
+  "hub.task.dispatchTitle": {
+    "text": "Dispatch Task",
+    "context": "Dispatch task panel title"
+  },
+  "hub.task.selectAgent": {
+    "text": "Select Agent",
+    "context": "Select agent dropdown"
+  },
+  "hub.task.instructionsPlaceholder": {
+    "text": "Instructions (optional)",
+    "context": "Instructions input placeholder"
+  },
   "hub.task.selectRoom": {
     "text": "Select a project group first",
     "context": "No project group selected hint for tasks"

@@ -4,6 +4,8 @@ import {
   RoomSchema,
   TaskSchema,
   TaskEventSchema,
+  EvaluationReportSchema,
+  TaskAssignmentSchema,
   RoomListUpdateSchema,
   RoomInfoUpdateSchema,
   AgentListUpdateSchema,
@@ -13,8 +15,10 @@ import {
   EMPTY_TASKS,
   EMPTY_AGENTS,
   EMPTY_EVENTS,
+  EMPTY_EVALUATIONS,
+  EMPTY_ASSIGNMENTS,
 } from '@/schemas/hub';
-import type { Room, Agent, Task, TaskEvent } from '@/schemas/hub';
+import type { Room, Agent, Task, TaskEvent, EvaluationReport, TaskAssignment } from '@/schemas/hub';
 
 async function hubFetch(path: string, init?: RequestInit): Promise<unknown> {
   const token = localStorage.getItem('sman-backend-token') || '';
@@ -47,7 +51,6 @@ export function useRooms() {
     queryKey: ['hub', 'rooms'] as const,
     queryFn: async () => {
       const raw = await hubFetch('/rooms');
-      // Server returns array of rooms directly
       const rooms = Array.isArray(raw) ? raw : (raw as { rooms?: unknown[] })?.rooms ?? [];
       const parsed = parseWithFallback({ type: 'room.list.update', rooms }, RoomListUpdateSchema, { rooms: EMPTY_ROOMS }, 'room.list');
       return parsed.rooms ?? EMPTY_ROOMS;
@@ -141,6 +144,13 @@ export function useRoomTasks(roomId: string | undefined) {
   });
 }
 
+export interface TaskDetailData {
+  task: Task;
+  events: TaskEvent[];
+  evaluations: EvaluationReport[];
+  assignments: TaskAssignment[];
+}
+
 export function useTaskDetail(taskId: string | undefined) {
   return useQuery({
     queryKey: ['hub', 'tasks', taskId] as const,
@@ -150,16 +160,30 @@ export function useTaskDetail(taskId: string | undefined) {
       const parsed = parseWithFallback(raw, TaskDetailUpdateSchema, {
         task: null as unknown as Task,
         events: EMPTY_EVENTS,
+        evaluations: EMPTY_EVALUATIONS,
+        assignments: EMPTY_ASSIGNMENTS,
       }, 'task.detail');
-      return parsed;
+      return parsed as TaskDetailData;
     },
     enabled: !!taskId,
   });
 }
 
+export interface CreateTaskParams {
+  roomId: string;
+  title: string;
+  description?: string;
+  priority?: number;
+  context?: Record<string, unknown>;
+  acceptanceCriteria?: string;
+  subtasks?: { id: string; name: string; description?: string }[];
+  autoExecute?: boolean;
+  gitBranch?: string;
+}
+
 export function useCreateTask() {
   const qc = useQueryClient();
-  return useMutation<unknown, Error, { roomId: string; title: string; description?: string; priority?: number; context?: Record<string, unknown> }>({
+  return useMutation<unknown, Error, CreateTaskParams>({
     mutationFn: (params) =>
       hubFetch('/tasks', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['hub', 'rooms', vars.roomId, 'tasks'] }),
@@ -171,6 +195,74 @@ export function useCancelTask() {
   return useMutation({
     mutationFn: (params: { taskId: string }) =>
       hubFetch(`/tasks/${params.taskId}/cancel`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useConfirmTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { taskId: string }) =>
+      hubFetch(`/tasks/${params.taskId}/confirm`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useRejectTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { taskId: string; reason?: string }) =>
+      hubFetch(`/tasks/${params.taskId}/reject`, { method: 'POST', body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useDispatchTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      taskId: string;
+      assignments: Array<{
+        agentId: string;
+        workspace: string;
+        subtaskIds: string[];
+        instructions?: string;
+      }>;
+    }) =>
+      hubFetch(`/tasks/${params.taskId}/dispatch`, { method: 'POST', body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+// ---- Evaluation hooks ----
+
+export function useEvaluationReports(taskId: string | undefined) {
+  return useQuery({
+    queryKey: ['hub', 'tasks', taskId, 'evaluations'] as const,
+    queryFn: async () => {
+      if (!taskId) return EMPTY_EVALUATIONS;
+      const raw = await hubFetch('/evaluations', { method: 'POST', body: JSON.stringify({ taskId }) });
+      const reports = Array.isArray(raw) ? raw : [];
+      return reports as EvaluationReport[];
+    },
+    enabled: !!taskId,
+  });
+}
+
+export function useApproveReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { reportId: string }) =>
+      hubFetch(`/evaluations/${params.reportId}/approve`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
+  });
+}
+
+export function useRejectReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { reportId: string; comment?: string }) =>
+      hubFetch(`/evaluations/${params.reportId}/reject`, { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }

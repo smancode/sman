@@ -1,32 +1,19 @@
 import { z, type ZodType } from 'zod';
 
 // ---------------------------------------------------------------------------
-// Defensive Hub Schemas — borrowed from Multica's lenient schema philosophy
-//
-// Key design principles:
-//   1. String enums stored as z.string(), not z.enum([...]) — a new server-side
-//      status value should render as a generic fallback, never crash a safeParse
-//   2. Every object schema uses .passthrough() — unknown server-side fields
-//      pass through instead of being silently stripped
-//   3. Arrays use .default([]) — missing fields degrade to empty lists
-//   4. parseWithFallback is the ONLY way to consume API data — validation
-//      failure logs a warning and returns the caller-supplied fallback,
-//      never throws, never white-screens
+// Defensive Hub Schemas
 // ---------------------------------------------------------------------------
-
-// ── Lenient enum-like types ──
 
 export const AgentStatusValues = ['online', 'offline', 'busy'] as const;
 export type AgentStatusType = typeof AgentStatusValues[number];
 
-export const TaskStatusValues = ['queued', 'dispatched', 'running', 'completed', 'failed', 'cancelled'] as const;
+export const TaskStatusValues = ['draft', 'evaluating', 'confirmed', 'rejected', 'dispatched', 'running', 'completed', 'failed', 'cancelled', 'queued'] as const;
 export type TaskStatusType = typeof TaskStatusValues[number];
 
-// Schema accepts any string so new server values don't break parsing
 export const AgentStatusSchema = z.string();
 export const TaskStatusSchema = z.string();
 
-// ── Object schemas (all .passthrough() to let unknown fields through) ──
+// ── Object schemas ──
 
 export const AgentCapabilitiesSchema = z.object({
   skills: z.array(z.string()).default([]),
@@ -64,6 +51,12 @@ export const AgentSchema = z.object({
   registered_at: z.string(),
 }).passthrough();
 
+export const SubtaskSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+}).passthrough();
+
 export const TaskSchema = z.object({
   id: z.string(),
   room_id: z.string(),
@@ -78,6 +71,11 @@ export const TaskSchema = z.object({
   error: z.string().nullable().default(null),
   retry_count: z.number().default(0),
   max_retries: z.number().default(3),
+  acceptance_criteria: z.string().nullable().default(null),
+  subtasks: z.string().default('[]'),
+  auto_execute: z.number().default(0),
+  git_branch: z.string().nullable().default(null),
+  version: z.number().default(1),
   started_at: z.string().nullable().default(null),
   completed_at: z.string().nullable().default(null),
   created_at: z.string(),
@@ -90,6 +88,34 @@ export const TaskEventSchema = z.object({
   event: z.string(),
   actor: z.string().nullable(),
   metadata: z.string().default('{}'),
+  created_at: z.string(),
+}).passthrough();
+
+export const EvaluationReportSchema = z.object({
+  id: z.string(),
+  task_id: z.string(),
+  agent_id: z.string(),
+  workspace: z.string(),
+  claimed_subtasks: z.string().default('[]'),
+  approach: z.string().nullable().default(null),
+  complexity: z.string().nullable().default(null),
+  dependencies: z.string().default('[]'),
+  raw_response: z.string().nullable().default(null),
+  status: z.string().default('pending'),
+  review_comment: z.string().nullable().default(null),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough();
+
+export const TaskAssignmentSchema = z.object({
+  id: z.string(),
+  task_id: z.string(),
+  agent_id: z.string(),
+  workspace: z.string(),
+  subtask_ids: z.string().default('[]'),
+  instructions: z.string().nullable().default(null),
+  report_id: z.string().nullable().default(null),
+  status: z.string().default('assigned'),
   created_at: z.string(),
 }).passthrough();
 
@@ -123,31 +149,23 @@ export const TaskDetailUpdateSchema = z.object({
   type: z.string(),
   task: TaskSchema,
   events: z.array(TaskEventSchema).default([]),
+  evaluations: z.array(EvaluationReportSchema).default([]),
+  assignments: z.array(TaskAssignmentSchema).default([]),
 }).passthrough();
 
-// ── Types (strict TS types derived from schemas + known values) ──
+// ── Types ──
 
 export type Room = z.infer<typeof RoomSchema>;
 export type RoomMember = z.infer<typeof RoomMemberSchema>;
 export type Agent = z.infer<typeof AgentSchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type TaskEvent = z.infer<typeof TaskEventSchema>;
+export type EvaluationReport = z.infer<typeof EvaluationReportSchema>;
+export type TaskAssignment = z.infer<typeof TaskAssignmentSchema>;
+export type Subtask = z.infer<typeof SubtaskSchema>;
 
-// ── parseWithFallback: boundary defense ──
+// ── parseWithFallback ──
 
-/**
- * Validate data against a Zod schema, returning parsed value on success
- * or caller-supplied fallback on failure. Never throws.
- *
- * This is the boundary defense that turns "API contract drifted" from a
- * white-screen incident into a degraded-but-rendering page.
- *
- * The return type is anchored to T (inferred from fallback), not to the
- * schema's z.infer. Schemas are intentionally lenient — string enums as
- * z.string() so unknown values still parse — so the parsed runtime value
- * can be wider than the strict TS type at the call site. The caller asserts
- * compatibility by typing the fallback.
- */
 export function parseWithFallback<T>(
   data: unknown,
   schema: ZodType,
@@ -172,3 +190,5 @@ export const EMPTY_ROOMS: Room[] = [];
 export const EMPTY_TASKS: Task[] = [];
 export const EMPTY_AGENTS: Agent[] = [];
 export const EMPTY_EVENTS: TaskEvent[] = [];
+export const EMPTY_EVALUATIONS: EvaluationReport[] = [];
+export const EMPTY_ASSIGNMENTS: TaskAssignment[] = [];
