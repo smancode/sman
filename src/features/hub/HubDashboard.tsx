@@ -1,31 +1,43 @@
 import { useState } from 'react';
 import { t } from '@/locales';
-import { RoomList } from './RoomList';
-import { TaskBoard } from './TaskBoard';
-import { AgentList } from './AgentList';
-import { useWsConnection } from '@/stores/ws-connection';
-import { useRooms } from '@/queries/use-hub';
-import { useSettingsStore } from '@/stores/settings';
+import { PageLayout } from '@/components/common/PageLayout';
+import { FeedbackState } from '@/components/common/FeedbackState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Save, Server } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { useWsConnection } from '@/stores/ws-connection';
+import { useSettingsStore } from '@/stores/settings';
+import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom } from '@/queries/use-hub';
+import { TaskBoard } from './TaskBoard';
+import { AgentList } from './AgentList';
+import {
+  Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function HubDashboard() {
-  const [activeTab, setActiveTab] = useState<'rooms' | 'tasks' | 'agents'>('rooms');
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>();
+  const [rightTab, setRightTab] = useState<'tasks' | 'agents'>('tasks');
   const status = useWsConnection((s) => s.status);
-  const { data: rooms, error: roomsError } = useRooms();
+  const { data: rooms, error: roomsError, isLoading } = useRooms();
   const settings = useSettingsStore((s) => s.settings);
   const client = useWsConnection((s) => s.client);
 
   const hub = settings?.hub;
+  const [showConfig, setShowConfig] = useState(false);
   const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
   const [hubSaved, setHubSaved] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
 
-  const needsConfig = !hub?.serverUrl;
-  const hasError = roomsError || (needsConfig && rooms === undefined);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [joinId, setJoinId] = useState('');
+  const [error, setError] = useState('');
+  const createRoom = useCreateRoom();
+  const joinRoom = useJoinRoom();
+  const leaveRoom = useLeaveRoom();
 
   const handleHubSave = () => {
     client?.send({
@@ -36,99 +48,223 @@ export function HubDashboard() {
     setTimeout(() => setHubSaved(false), 2000);
   };
 
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    setError('');
+    createRoom.mutate({ name: newName.trim() }, {
+      onSuccess: () => { setNewName(''); setShowCreate(false); },
+      onError: (err) => setError(err.message),
+    });
+  };
+
+  const handleJoin = () => {
+    if (!joinId.trim()) return;
+    setError('');
+    joinRoom.mutate({ roomId: joinId.trim() }, {
+      onSuccess: () => setJoinId(''),
+      onError: (err) => setError(err.message),
+    });
+  };
+
   if (status !== 'connected') {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        {t('hub.status.notConnected')}
-      </div>
-    );
+    return <FeedbackState state="error" title={t('hub.status.notConnected')} />;
   }
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 border-b px-4 py-2">
-        {(['rooms', 'tasks', 'agents'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              activeTab === tab
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            {t(`hub.tab.${tab}`)}
-          </button>
-        ))}
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className={`ml-auto rounded-md p-1.5 transition-colors ${showConfig ? 'bg-muted' : 'text-muted-foreground hover:bg-muted'}`}
-          title={t('hub.settings.title')}
-        >
-          <Server className="h-4 w-4" />
-        </button>
-        {selectedRoomId && !showConfig && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {t('hub.room.selected')}: {selectedRoomId.slice(0, 8)}...
-          </span>
-        )}
+  const needsConfig = !hub?.serverUrl;
+
+  // Sidebar: project group list
+  const sidebar = (
+    <TooltipProvider delayDuration={300}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+          {t('hub.tab.rooms')}
+        </span>
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => { setShowCreate(!showCreate); setError(''); }}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t('hub.room.create')}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setShowConfig(!showConfig)}
+                className={cn(
+                  'rounded p-1 transition-colors',
+                  showConfig ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t('hub.settings.title')}</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {showConfig && (
-        <div className="border-b bg-muted/30 px-4 py-3 space-y-3">
-          <div className="flex items-end gap-3">
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs">{t('hub.settings.serverUrl')}</Label>
-              <Input
-                placeholder="http://server:5882"
-                value={hubUrl}
-                onChange={(e) => setHubUrl(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-            <Button variant="outline" size="sm" onClick={handleHubSave} disabled={!hubUrl}>
-              <Save className="h-3.5 w-3.5 mr-1" />
-              {hubSaved ? t('common.saved') : t('hub.settings.save')}
-            </Button>
-          </div>
-          {hasError && (
-            <p className="text-xs text-destructive">
-              {roomsError ? (roomsError as Error).message : t('hub.status.notConfigured')}
-            </p>
+        <div className="mb-2 space-y-2 rounded-md border bg-muted/30 p-2.5">
+          <Input
+            placeholder="http://server:5882"
+            value={hubUrl}
+            onChange={(e) => setHubUrl(e.target.value)}
+            className="h-7 text-xs"
+          />
+          <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={handleHubSave} disabled={!hubUrl}>
+            {hubSaved ? t('common.saved') : t('hub.settings.save')}
+          </Button>
+          {needsConfig && (
+            <p className="text-[11px] text-destructive">{t('hub.status.notConfigured')}</p>
           )}
         </div>
       )}
 
-      {!showConfig && hasError && (
-        <div className="border-b bg-destructive/5 px-4 py-2 text-sm text-destructive flex items-center justify-between">
-          <span>{roomsError ? (roomsError as Error).message : t('hub.status.notConfigured')}</span>
-          <button onClick={() => setShowConfig(true)} className="text-xs underline">
-            {t('hub.settings.title')}
-          </button>
+      {showCreate && (
+        <div className="mb-2 space-y-1.5">
+          <div className="flex gap-1.5">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={t('hub.room.namePlaceholder')}
+              className="h-7 text-xs flex-1"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              autoFocus
+            />
+            <Button size="sm" className="h-7 px-2.5 text-xs shrink-0" onClick={handleCreate} disabled={!newName.trim()}>
+              {t('common.confirm')}
+            </Button>
+          </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
-        {activeTab === 'rooms' && (
-          <RoomList selectedRoomId={selectedRoomId} onSelectRoom={setSelectedRoomId} />
-        )}
-        {activeTab === 'tasks' && selectedRoomId && (
-          <TaskBoard roomId={selectedRoomId} />
-        )}
-        {activeTab === 'tasks' && !selectedRoomId && (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            {t('hub.task.selectRoom')}
-          </div>
-        )}
-        {activeTab === 'agents' && selectedRoomId && (
-          <AgentList roomId={selectedRoomId} />
-        )}
-        {activeTab === 'agents' && !selectedRoomId && (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            {t('hub.agent.selectRoom')}
-          </div>
-        )}
+      <ScrollArea className="flex-1 -mx-1">
+        <div className="space-y-0.5 px-1">
+          {isLoading ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">{t('common.loading')}</div>
+          ) : !rooms || rooms.length === 0 ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">{t('hub.room.empty')}</div>
+          ) : (
+            rooms.map((room) => (
+              <div
+                key={room.id}
+                onClick={() => setSelectedRoomId(room.id)}
+                className={cn(
+                  'group flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer transition-colors text-sm',
+                  selectedRoomId === room.id
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-foreground hover:bg-muted'
+                )}
+              >
+                <span className="truncate flex-1">{room.name}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    leaveRoom.mutate({ roomId: room.id });
+                    if (selectedRoomId === room.id) setSelectedRoomId(undefined);
+                  }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                >
+                  <LogOut className="h-3 w-3" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+
+      <Separator className="my-2" />
+
+      {/* Join by ID */}
+      <div className="flex gap-1.5">
+        <Input
+          value={joinId}
+          onChange={(e) => setJoinId(e.target.value)}
+          placeholder={t('hub.room.joinId')}
+          className="h-7 text-xs flex-1"
+          onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+        />
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={handleJoin} disabled={!joinId.trim()}>
+          <LogIn className="h-3 w-3 mr-1" />
+          {t('hub.room.join')}
+        </Button>
+      </div>
+
+      {error && (
+        <p className="mt-1.5 text-[11px] text-destructive truncate" title={error}>{error}</p>
+      )}
+
+      {roomsError && !needsConfig && (
+        <p className="mt-1.5 text-[11px] text-destructive">{(roomsError as Error).message}</p>
+      )}
+    </TooltipProvider>
+  );
+
+  const sidebarFooter = !showConfig && needsConfig ? (
+    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowConfig(true)}>
+      <Server className="h-3 w-3 mr-1.5" />
+      {t('hub.settings.title')}
+    </Button>
+  ) : undefined;
+
+  // Right content
+  const content = selectedRoomId ? (
+    <div className="flex h-full flex-col">
+      {/* Content header */}
+      <div className="flex items-center gap-2 border-b px-6 py-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setRightTab('tasks')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
+              rightTab === 'tasks' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            <ListTodo className="h-3.5 w-3.5" />
+            {t('hub.tab.tasks')}
+          </button>
+          <button
+            onClick={() => setRightTab('agents')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors',
+              rightTab === 'agents' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            <Bot className="h-3.5 w-3.5" />
+            {t('hub.tab.agents')}
+          </button>
+        </div>
+        <Badge variant="secondary" className="ml-auto text-[11px] font-mono">
+          {selectedRoomId.slice(0, 8)}
+        </Badge>
+      </div>
+
+      {/* Content body */}
+      <div className="flex-1 overflow-hidden">
+        {rightTab === 'tasks' && <TaskBoard roomId={selectedRoomId} />}
+        {rightTab === 'agents' && <AgentList roomId={selectedRoomId} />}
       </div>
     </div>
+  ) : (
+    <FeedbackState
+      state={isLoading ? 'loading' : rooms && rooms.length === 0 ? 'empty' : 'empty'}
+      title={t('hub.room.selected')}
+      description={t('hub.task.selectRoom')}
+    />
+  );
+
+  return (
+    <PageLayout
+      sidebar={sidebar}
+      sidebarFooter={sidebarFooter}
+      contentClassName="h-full p-0"
+    >
+      {content}
+    </PageLayout>
   );
 }
