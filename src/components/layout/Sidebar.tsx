@@ -9,6 +9,7 @@ import {
   Route,
   ChevronUp,
   Pin,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ export function Sidebar() {
   const connectionStatus = useWsConnection((s) => s.status);
   const location = useLocation();
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
-  const shouldBlur = !['/chat', '/stardom'].includes(location.pathname);
+  const shouldBlur = !['/chat', '/stardom', '/hub'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovering, setHovering] = useState(false);
@@ -103,6 +104,31 @@ export function Sidebar() {
                     <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
                   <span>{t('menu.stardom')}</span>
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/hub"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Globe className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>{t('menu.hub')}</span>
                 </>
               )}
             </NavLink>

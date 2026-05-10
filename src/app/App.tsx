@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { QueryProvider } from '@/lib/query-provider';
 import { router } from './routes';
 import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
 import { sessionCache } from '@/lib/session-cache';
 import { cronCache } from '@/lib/cron-cache';
+import { registerHubEventHandlers } from '@/lib/hub-event-handler';
 import { useTheme } from '@/hooks/useTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { GitPanel } from '@/features/git/GitPanel';
@@ -102,6 +104,7 @@ export default function App() {
       fetchSettings(),
     ]).then(() => {
       loadSessions();
+      registerHubEventHandlers();
     });
   }, [status, fetchSettings, loadSessions]);
 
@@ -116,10 +119,12 @@ export default function App() {
   }, [client, status, loadSessions]);
 
   return (
-    <TooltipProvider>
-      {status !== 'connected' && <ConnectingOverlay status={status} />}
-      <RouterProvider router={router} />
-      <GitPanel />
-    </TooltipProvider>
+    <QueryProvider>
+      <TooltipProvider>
+        {status !== 'connected' && <ConnectingOverlay status={status} />}
+        <RouterProvider router={router} />
+        <GitPanel />
+      </TooltipProvider>
+    </QueryProvider>
   );
 }

@@ -2858,5 +2858,109 @@
   "session.botSessions": {
     "text": "Bot 会话",
     "context": "Bot 会话分组标题"
+  },
+  "menu.hub": {
+    "text": "Hub",
+    "context": "Hub 协作中心导航菜单项"
+  },
+  "hub.tab.rooms": {
+    "text": "房间",
+    "context": "Hub tab：房间列表"
+  },
+  "hub.tab.tasks": {
+    "text": "任务",
+    "context": "Hub tab：任务看板"
+  },
+  "hub.tab.agents": {
+    "text": "Agent",
+    "context": "Hub tab：Agent 列表"
+  },
+  "hub.status.notConnected": {
+    "text": "Hub 未连接",
+    "context": "Hub 未连接提示"
+  },
+  "hub.room.create": {
+    "text": "创建房间",
+    "context": "创建房间按钮"
+  },
+  "hub.room.join": {
+    "text": "加入",
+    "context": "加入房间按钮"
+  },
+  "hub.room.joinId": {
+    "text": "输入房间 ID",
+    "context": "加入房间 ID 输入框占位符"
+  },
+  "hub.room.namePlaceholder": {
+    "text": "房间名称",
+    "context": "创建房间名称输入框占位符"
+  },
+  "hub.room.leave": {
+    "text": "离开",
+    "context": "离开房间按钮"
+  },
+  "hub.room.empty": {
+    "text": "暂无房间",
+    "context": "无房间提示"
+  },
+  "hub.room.selected": {
+    "text": "当前房间",
+    "context": "已选中房间标签"
+  },
+  "hub.task.create": {
+    "text": "新建任务",
+    "context": "新建任务按钮"
+  },
+  "hub.task.titlePlaceholder": {
+    "text": "任务标题",
+    "context": "任务标题输入框占位符"
+  },
+  "hub.task.descPlaceholder": {
+    "text": "任务描述（可选）",
+    "context": "任务描述输入框占位符"
+  },
+  "hub.task.queued": {
+    "text": "排队中",
+    "context": "任务状态：排队中"
+  },
+  "hub.task.dispatched": {
+    "text": "已分配",
+    "context": "任务状态：已分配"
+  },
+  "hub.task.running": {
+    "text": "运行中",
+    "context": "任务状态：运行中"
+  },
+  "hub.task.completed": {
+    "text": "已完成",
+    "context": "任务状态：已完成"
+  },
+  "hub.task.failed": {
+    "text": "失败",
+    "context": "任务状态：失败"
+  },
+  "hub.task.selectRoom": {
+    "text": "请先选择房间",
+    "context": "未选择房间时的提示"
+  },
+  "hub.task.assignee": {
+    "text": "执行者",
+    "context": "任务执行者标签"
+  },
+  "hub.task.retryCount": {
+    "text": "重试次数",
+    "context": "任务重试次数标签"
+  },
+  "hub.agent.selectRoom": {
+    "text": "请先选择房间",
+    "context": "未选择房间时 Agent 列表提示"
+  },
+  "hub.agent.empty": {
+    "text": "暂无 Agent",
+    "context": "无 Agent 提示"
+  },
+  "hub.agent.registered": {
+    "text": "注册时间",
+    "context": "Agent 注册时间标签"
   }
 }

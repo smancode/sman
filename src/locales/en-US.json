@@ -2858,5 +2858,109 @@
   "session.botSessions": {
     "text": "Bot Sessions",
     "context": "Bot sessions group title"
+  },
+  "menu.hub": {
+    "text": "Hub",
+    "context": "Hub collaboration center menu item"
+  },
+  "hub.tab.rooms": {
+    "text": "Rooms",
+    "context": "Hub tab: room list"
+  },
+  "hub.tab.tasks": {
+    "text": "Tasks",
+    "context": "Hub tab: task board"
+  },
+  "hub.tab.agents": {
+    "text": "Agents",
+    "context": "Hub tab: agent list"
+  },
+  "hub.status.notConnected": {
+    "text": "Hub not connected",
+    "context": "Hub not connected hint"
+  },
+  "hub.room.create": {
+    "text": "Create Room",
+    "context": "Create room button"
+  },
+  "hub.room.join": {
+    "text": "Join",
+    "context": "Join room button"
+  },
+  "hub.room.joinId": {
+    "text": "Enter room ID",
+    "context": "Join room ID input placeholder"
+  },
+  "hub.room.namePlaceholder": {
+    "text": "Room name",
+    "context": "Create room name input placeholder"
+  },
+  "hub.room.leave": {
+    "text": "Leave",
+    "context": "Leave room button"
+  },
+  "hub.room.empty": {
+    "text": "No rooms yet",
+    "context": "No rooms hint"
+  },
+  "hub.room.selected": {
+    "text": "Current Room",
+    "context": "Selected room label"
+  },
+  "hub.task.create": {
+    "text": "New Task",
+    "context": "Create task button"
+  },
+  "hub.task.titlePlaceholder": {
+    "text": "Task title",
+    "context": "Task title input placeholder"
+  },
+  "hub.task.descPlaceholder": {
+    "text": "Description (optional)",
+    "context": "Task description input placeholder"
+  },
+  "hub.task.queued": {
+    "text": "Queued",
+    "context": "Task status: queued"
+  },
+  "hub.task.dispatched": {
+    "text": "Dispatched",
+    "context": "Task status: dispatched"
+  },
+  "hub.task.running": {
+    "text": "Running",
+    "context": "Task status: running"
+  },
+  "hub.task.completed": {
+    "text": "Completed",
+    "context": "Task status: completed"
+  },
+  "hub.task.failed": {
+    "text": "Failed",
+    "context": "Task status: failed"
+  },
+  "hub.task.selectRoom": {
+    "text": "Select a room first",
+    "context": "No room selected hint for tasks"
+  },
+  "hub.task.assignee": {
+    "text": "Assignee",
+    "context": "Task assignee label"
+  },
+  "hub.task.retryCount": {
+    "text": "Retries",
+    "context": "Task retry count label"
+  },
+  "hub.agent.selectRoom": {
+    "text": "Select a room first",
+    "context": "No room selected hint for agents"
+  },
+  "hub.agent.empty": {
+    "text": "No agents yet",
+    "context": "No agents hint"
+  },
+  "hub.agent.registered": {
+    "text": "Registered",
+    "context": "Agent registration time label"
   }
 }
