@@ -2007,6 +2007,10 @@
     "text": "Agent 活动将实时显示在此",
     "context": "活动 Feed 提示"
   },
+  "stardom.entry.comingSoon": {
+    "text": "星际航道探索中，敬请期待",
+    "context": "星图入口动画提示文字"
+  },
   "batch.status.draft": {
     "text": "草稿",
     "context": "批量任务状态-草稿"

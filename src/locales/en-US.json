@@ -2007,6 +2007,10 @@
     "text": "Agent activity will be displayed here in real-time",
     "context": "Activity feed hint"
   },
+  "stardom.entry.comingSoon": {
+    "text": "Exploring new starlanes... Stay tuned",
+    "context": "Stardom entry animation hint text"
+  },
   "batch.status.draft": {
     "text": "Draft",
     "context": "Batch task status - draft"
