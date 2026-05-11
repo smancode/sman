@@ -134,7 +134,7 @@ const SessionItem = memo(function SessionItem({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {(session.label?.startsWith('[路径]')) ? (
+      {(session.label?.startsWith('/')) ? (
         <Route className="h-3.5 w-3.5 shrink-0 text-primary" />
       ) : (
         <MessageSquare className="h-3.5 w-3.5 shrink-0" />
