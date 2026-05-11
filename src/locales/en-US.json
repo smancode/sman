@@ -2911,6 +2911,14 @@
     "text": "No project groups yet",
     "context": "No project groups hint"
   },
+  "hub.room.prevPage": {
+    "text": "Prev",
+    "context": "Pagination: previous page"
+  },
+  "hub.room.nextPage": {
+    "text": "Next",
+    "context": "Pagination: next page"
+  },
   "hub.room.searchPlaceholder": {
     "text": "Search project groups...",
     "context": "Project group search input placeholder"

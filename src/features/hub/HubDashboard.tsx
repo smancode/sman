@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { t } from '@/locales';
 import { PageLayout } from '@/components/common/PageLayout';
 import { FeedbackState } from '@/components/common/FeedbackState';
@@ -26,7 +26,6 @@ export function HubDashboard() {
   const [rightTab, setRightTab] = useState<'tasks' | 'agents'>('tasks');
   const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
   const status = useWsConnection((s) => s.status);
-  const { data: rooms, error: roomsError, isLoading } = useRooms();
   const { data: agents } = useRoomAgents(selectedRoomId);
   const settings = useSettingsStore((s) => s.settings);
   const client = useWsConnection((s) => s.client);
@@ -40,8 +39,17 @@ export function HubDashboard() {
   const [newName, setNewName] = useState('');
   const [joinId, setJoinId] = useState('');
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 10;
   const [newRoomPublic, setNewRoomPublic] = useState(false);
+
+  const { data: roomResult, error: roomsError, isLoading } = useRooms(appliedSearch, page * PAGE_SIZE, PAGE_SIZE);
+  const rooms = roomResult?.rooms;
+  const totalRooms = roomResult?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalRooms / PAGE_SIZE));
+
   const createRoom = useCreateRoom();
   const joinRoom = useJoinRoom();
   const leaveRoom = useLeaveRoom();
@@ -79,21 +87,6 @@ export function HubDashboard() {
   }
 
   const needsConfig = !hub?.serverUrl;
-
-  const filteredRooms = useMemo(() => {
-    if (!rooms || !searchQuery.trim()) return rooms || [];
-    const q = searchQuery.trim().toLowerCase();
-    return rooms.filter(room => {
-      const name = room.name.toLowerCase();
-      let ni = 0;
-      for (let qi = 0; qi < q.length; qi++) {
-        while (ni < name.length && name[ni] !== q[qi]) ni++;
-        if (ni >= name.length) return false;
-        ni++;
-      }
-      return true;
-    });
-  }, [rooms, searchQuery]);
 
   const sidebar = (
     <TooltipProvider delayDuration={300}>
@@ -182,28 +175,34 @@ export function HubDashboard() {
         </div>
       )}
 
-      {(rooms && rooms.length > 3) && (
-        <div className="relative mb-1.5">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('hub.room.searchPlaceholder')}
-            className="h-6 pl-6 text-xs"
-          />
-        </div>
-      )}
+      <div className="flex gap-1 mb-1.5">
+        <Input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder={t('hub.room.searchPlaceholder')}
+          className="h-6 text-xs flex-1"
+          onKeyDown={(e) => { if (e.key === 'Enter') { setAppliedSearch(searchInput.trim()); setPage(0); } }}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 shrink-0"
+          onClick={() => { setAppliedSearch(searchInput.trim()); setPage(0); }}
+        >
+          <Search className="h-3 w-3" />
+        </Button>
+      </div>
 
       <ScrollArea className="flex-1 -mx-1">
         <div className="space-y-0.5 px-1">
           {isLoading ? (
             <div className="py-4 text-center text-xs text-muted-foreground">{t('common.loading')}</div>
-          ) : filteredRooms.length === 0 ? (
+          ) : !rooms || rooms.length === 0 ? (
             <div className="py-4 text-center text-xs text-muted-foreground">
-              {searchQuery.trim() ? t('hub.room.searchEmpty') : t('hub.room.empty')}
+              {appliedSearch ? t('hub.room.searchEmpty') : t('hub.room.empty')}
             </div>
           ) : (
-            filteredRooms.map((room) => (
+            rooms.map((room) => (
               <div
                 key={room.id}
                 onClick={() => { setSelectedRoomId(room.id); setSelectedTaskId(undefined); }}
@@ -251,6 +250,25 @@ export function HubDashboard() {
             ))
           )}
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-2 py-1.5 border-t text-[11px] text-muted-foreground">
+            <button
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0}
+              className="hover:text-foreground disabled:opacity-30 disabled:cursor-default"
+            >
+              {t('hub.room.prevPage')}
+            </button>
+            <span>{page + 1}/{totalPages}</span>
+            <button
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+              disabled={page >= totalPages - 1}
+              className="hover:text-foreground disabled:opacity-30 disabled:cursor-default"
+            >
+              {t('hub.room.nextPage')}
+            </button>
+          </div>
+        )}
       </ScrollArea>
 
       <Separator className="my-2" />

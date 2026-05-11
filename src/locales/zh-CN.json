@@ -2911,6 +2911,14 @@
     "text": "暂无项目组",
     "context": "无项目组提示"
   },
+  "hub.room.prevPage": {
+    "text": "上一页",
+    "context": "翻页：上一页"
+  },
+  "hub.room.nextPage": {
+    "text": "下一页",
+    "context": "翻页：下一页"
+  },
   "hub.room.searchPlaceholder": {
     "text": "搜索项目组...",
     "context": "项目组搜索框占位符"

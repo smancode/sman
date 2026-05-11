@@ -195,6 +195,10 @@ export function getHubWsClient(): HubWsClient | null {
   return hubWsClient;
 }
 
+export function getEvaluationHandler(): EvaluationHandler | null {
+  return evaluationHandler;
+}
+
 export function getHubStatus(): Record<string, unknown> {
   return {
     initialized: hubClient !== null,

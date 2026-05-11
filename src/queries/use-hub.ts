@@ -46,14 +46,21 @@ async function hubFetch(path: string, init?: RequestInit): Promise<unknown> {
 
 // ---- Room hooks ----
 
-export function useRooms() {
+export interface RoomListResult {
+  rooms: Room[];
+  total: number;
+}
+
+export function useRooms(search?: string, offset = 0, limit = 10) {
   return useQuery({
-    queryKey: ['hub', 'rooms'] as const,
+    queryKey: ['hub', 'rooms', search, offset, limit] as const,
     queryFn: async () => {
-      const raw = await hubFetch('/rooms', { method: 'POST', body: JSON.stringify({}) });
-      const rooms = Array.isArray(raw) ? raw : (raw as { rooms?: unknown[] })?.rooms ?? [];
+      const raw = await hubFetch('/rooms', { method: 'POST', body: JSON.stringify({ search: search || undefined, offset, limit }) });
+      const data = raw as { rooms?: unknown[]; total?: number } | null;
+      const rooms = Array.isArray(raw) ? raw : data?.rooms ?? [];
+      const total = data?.total ?? (Array.isArray(rooms) ? rooms.length : 0);
       const parsed = parseWithFallback({ type: 'room.list.update', rooms }, RoomListUpdateSchema, { rooms: EMPTY_ROOMS }, 'room.list');
-      return parsed.rooms ?? EMPTY_ROOMS;
+      return { rooms: parsed.rooms ?? EMPTY_ROOMS, total } as RoomListResult;
     },
     staleTime: 15_000,
   });

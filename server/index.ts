@@ -46,7 +46,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub, getHubStatus, getHubWsClient } from './hub/index.js';
+import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { BroadcastStore } from './broadcast-store.js';
 
@@ -572,6 +572,16 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
             if (wsClient?.isConnected()) {
               const cid = `${os.userInfo().username}@${os.hostname()}`;
               wsClient.send({ type: 'room.join', roomId: room.id, clientId: cid, displayName: cid });
+            }
+          }
+        }
+        // After creating a task via REST, trigger evaluation
+        if (targetPath === '/api/hub/tasks' && req.method === 'POST' && !Array.isArray(decrypted)) {
+          const task = decrypted as { id?: string; room_id?: string; title?: string; status?: string } | null;
+          if (task?.id && task?.title) {
+            const evalHandler = getEvaluationHandler();
+            if (evalHandler) {
+              evalHandler.handleMessage({ type: 'task.created', task });
             }
           }
         }
