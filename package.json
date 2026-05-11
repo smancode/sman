@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "26.4.21",
+  "version": "26.511.15",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -177,9 +177,18 @@
     ],
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
-      "category": "public.app-category.developer-tools"
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Sman-Setup-${version}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [

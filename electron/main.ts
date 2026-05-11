@@ -36,7 +36,8 @@ if (!app.isPackaged) {
 }
 
 const isDev = !app.isPackaged;
-const BACKEND_PORT = 5880;
+const DEFAULT_PORT = 5880;
+let backendPort = DEFAULT_PORT;
 
 // Build-time enterprise injection.
 // electron-vite define replaces process.env.SMAN_* with string literals when env vars are set.
@@ -54,7 +55,9 @@ if (INJECTED_PSK) process.env.SMAN_PSK = INJECTED_PSK;
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.autoRunAppAfterInstall = true;
-const FRONTEND_URL = isDev ? 'http://localhost:5881' : `http://localhost:${BACKEND_PORT}`;
+function getFrontendUrl(): string {
+  return isDev ? 'http://localhost:5881' : `http://localhost:${backendPort}`;
+}
 
 function createWindow(): void {
   const preloadPath = path.join(__dirname, '../preload/preload.cjs');
@@ -77,7 +80,7 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.loadURL(FRONTEND_URL);
+  mainWindow.loadURL(getFrontendUrl());
   // Dev mode: disable HTTP cache to ensure Vite HMR changes are always picked up
   if (isDev) {
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -99,7 +102,7 @@ function createWindow(): void {
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const current = mainWindow!.webContents.getURL();
-    if (url !== current && !url.startsWith(FRONTEND_URL) && !url.startsWith('http://localhost:')) {
+    if (url !== current && !url.startsWith(getFrontendUrl()) && !url.startsWith('http://localhost:')) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -336,27 +339,42 @@ async function startServerInProcess(): Promise<void> {
     serverModule = await import(serverUrl);
 
     // Server creates http server at import time but only listens when run directly.
-    // We call listen() ourselves.
+    // We call listen() ourselves, with auto port fallback on EADDRINUSE.
     const HOST = process.env.HOST || '127.0.0.1';
-    serverModule.server.listen(BACKEND_PORT, HOST, async () => {
-      console.log(`[Electron] Server listening on ${HOST}:${BACKEND_PORT}`);
-      console.log(`[Electron] Home: ${serverModule.homeDir}`);
-      await ensureHubConfig(serverModule.homeDir);
-      // Init hub reporting — server/index.ts only calls initHub() inside
-      // the isMainModule block, which is false when loaded via import().
-      // Must call it explicitly here.
-      if (typeof serverModule.startHub === 'function') {
-        try {
-          serverModule.startHub();
-          console.log('[Electron] Hub initialized');
-        } catch (err) {
-          console.error('[Electron] startHub failed:', err);
-        }
-      }
+    const PORT_ENV = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
+    if (PORT_ENV > 0) {
+      backendPort = PORT_ENV;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const tryListen = (port: number, attempts: number) => {
+        serverModule.server.listen(port, HOST, async () => {
+          backendPort = port;
+          console.log(`[Electron] Server listening on ${HOST}:${port}`);
+          console.log(`[Electron] Home: ${serverModule.homeDir}`);
+          await ensureHubConfig(serverModule.homeDir);
+          if (typeof serverModule.startHub === 'function') {
+            try {
+              serverModule.startHub();
+              console.log('[Electron] Hub initialized');
+            } catch (err) {
+              console.error('[Electron] startHub failed:', err);
+            }
+          }
+          resolve();
+        }).on('error', (err: NodeJS.ErrnoException) => {
+          if (err.code === 'EADDRINUSE' && attempts > 0) {
+            console.log(`[Electron] Port ${port} in use, trying ${port + 1}...`);
+            tryListen(port + 1, attempts - 1);
+          } else {
+            reject(err);
+          }
+        });
+      };
+      tryListen(backendPort, 10);
     });
   } catch (err) {
     console.error('[Electron] Failed to start server:', err);
-    // Show error dialog so we can see what went wrong
     const errDetail = err instanceof Error
       ? `${err.message}\n\n${err.stack || ''}`
       : String(err);
@@ -364,7 +382,6 @@ async function startServerInProcess(): Promise<void> {
       'Server Startup Error',
       `Failed to start backend server:\n${errDetail}\n\nPath: ${serverPath}\n__dirname: ${__dirname}`
     );
-    // Don't throw — let the app continue so user can see the error
   }
 }
 

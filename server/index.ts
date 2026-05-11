@@ -2564,10 +2564,12 @@ function buildStepSystemPrompt(): string {
   ].join('\n');
 }
 
-const isMainModule = process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
-                     process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
-                     process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js') ||
-                     process.argv[1]?.replace(/\\/g, '/').endsWith('app/index.js');
+const isMainModule = !process.env.ELECTRON_RUN_AS_NODE &&
+                     (process as any).type === undefined &&
+                     (process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
+                      process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
+                      process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js') ||
+                      process.argv[1]?.replace(/\\/g, '/').endsWith('app/index.js'));
 
 if (isMainModule) {
   process.on('SIGTERM', () => {
