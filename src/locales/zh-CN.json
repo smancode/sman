@@ -735,6 +735,10 @@
     "text": "已保存",
     "context": "保存成功提示"
   },
+  "common.back": {
+    "text": "返回",
+    "context": "返回上一页按钮"
+  },
   "git.fetch": {
     "text": "拉取远端",
     "context": "Git fetch 操作按钮"
@@ -2008,7 +2012,7 @@
     "context": "活动 Feed 提示"
   },
   "stardom.entry.comingSoon": {
-    "text": "星际航道探索中，敬请期待",
+    "text": "星际航道内测中，敬请期待",
     "context": "星图入口动画提示文字"
   },
   "batch.status.draft": {

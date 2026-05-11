@@ -4,25 +4,40 @@ interface Star {
   x: number;
   y: number;
   z: number;
-  color: string;
+  charIdx: number;
 }
 
-const STAR_COUNT = 300;
+const STAR_COUNT = 75;
 const SPEED = 0.02;
 const BG_COLOR = '#050510';
-const CYAN_COLORS = ['#00f0ff', '#00c8ff', '#00a0ff', '#40e0ff', '#80f0ff'];
-const MAGENTA_COLORS = ['#ff00ff', '#ff40ff', '#ff80ff', '#ffffff'];
+const STAR_COLOR = '#00ff41';
 const TRAIL_ALPHA = 0.15;
-const ENGINE_PULSE_SPEED = 0.002;
+const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+=~';
+const CHAR_COUNT = CHARS.length;
+const ATLAS_FONT_SIZE = 20;
+const ATLAS_CELL = 24;
+
+function buildAtlas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_CELL * CHAR_COUNT;
+  canvas.height = ATLAS_CELL;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = `${ATLAS_FONT_SIZE}px monospace`;
+  ctx.fillStyle = STAR_COLOR;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < CHAR_COUNT; i++) {
+    ctx.fillText(CHARS[i], i * ATLAS_CELL + ATLAS_CELL / 2, ATLAS_CELL / 2);
+  }
+  return canvas;
+}
 
 function createStar(width: number, height: number, resetZ = false): Star {
-  const isCyan = Math.random() < 0.8;
-  const palette = isCyan ? CYAN_COLORS : MAGENTA_COLORS;
   return {
     x: (Math.random() - 0.5) * width * 2,
     y: (Math.random() - 0.5) * height * 2,
     z: resetZ ? Math.random() * 0.01 : Math.random() * 2,
-    color: palette[Math.floor(Math.random() * palette.length)],
+    charIdx: Math.floor(Math.random() * CHAR_COUNT),
   };
 }
 
@@ -33,8 +48,8 @@ export function StarfieldCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvas.getContext('2d')!;
+    const atlas = buildAtlas();
 
     const dpr = window.devicePixelRatio || 1;
     let width = window.innerWidth;
@@ -63,11 +78,11 @@ export function StarfieldCanvas() {
       const cx = width / 2;
       const cy = height / 2;
 
-      const pulse = 0.6 + 0.4 * Math.sin(frame * ENGINE_PULSE_SPEED);
+      const pulse = 0.6 + 0.4 * Math.sin(frame * 0.002);
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120 * pulse);
-      grad.addColorStop(0, `rgba(0, 240, 255, ${0.08 * pulse})`);
-      grad.addColorStop(0.5, `rgba(0, 200, 255, ${0.03 * pulse})`);
-      grad.addColorStop(1, 'rgba(0, 200, 255, 0)');
+      grad.addColorStop(0, `rgba(0, 255, 65, ${0.08 * pulse})`);
+      grad.addColorStop(0.5, `rgba(0, 255, 65, ${0.03 * pulse})`);
+      grad.addColorStop(1, 'rgba(0, 255, 65, 0)');
       ctx.fillStyle = grad;
       ctx.fillRect(cx - 150, cy - 150, 300, 300);
 
@@ -80,29 +95,31 @@ export function StarfieldCanvas() {
 
         const sx = cx + (star.x / star.z) * 0.5;
         const sy = cy + (star.y / star.z) * 0.5;
-        const size = Math.min(3, (1 - star.z / 2) * 4);
-        const alpha = Math.min(1, (1 - star.z / 2) * 1.5);
 
-        if (sx < -10 || sx > width + 10 || sy < -10 || sy > height + 10) {
+        if (sx < -20 || sx > width + 20 || sy < -20 || sy > height + 20) {
           Object.assign(star, createStar(width, height, false));
           star.z = 2;
           continue;
         }
 
-        ctx.beginPath();
-        ctx.arc(sx, sy, size, 0, Math.PI * 2);
-        ctx.fillStyle = star.color;
+        const progress = 1 - star.z / 2;
+        const size = Math.max(4, Math.min(14, progress * 16));
+        const alpha = Math.min(1, progress * 1.5);
+
         ctx.globalAlpha = alpha;
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        ctx.drawImage(
+          atlas,
+          star.charIdx * ATLAS_CELL, 0, ATLAS_CELL, ATLAS_CELL,
+          sx - size / 2, sy - size / 2, size, size,
+        );
       }
+      ctx.globalAlpha = 1;
 
       animRef.current = requestAnimationFrame(draw);
     };
 
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
-
     animRef.current = requestAnimationFrame(draw);
 
     return () => {

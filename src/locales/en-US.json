@@ -735,6 +735,10 @@
     "text": "Saved",
     "context": "Save success feedback"
   },
+  "common.back": {
+    "text": "Back",
+    "context": "Navigate back button"
+  },
   "git.fetch": {
     "text": "Fetch Remote",
     "context": "Git fetch operation button"

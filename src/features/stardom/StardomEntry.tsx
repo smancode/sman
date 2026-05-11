@@ -1,19 +1,31 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { StarfieldCanvas } from './StarfieldCanvas';
 import { StardomDashboard } from './StardomDashboard';
 import { useStardomDevMode } from '@/queries/use-hub';
+import { useSettingsStore } from '@/stores/settings';
 import { t } from '@/locales';
 
-type Phase = 'checking' | 'locked' | 'unlocking' | 'dashboard';
+type Phase = 'checking' | 'locked' | 'unlocking' | 'unlocked';
 
 const CHECK_DELAY_MS = 3000;
 const FADE_DURATION_MS = 2000;
 
 export function StardomEntry() {
-  const { data: devMode, isError, isFetched } = useStardomDevMode();
+  const navigate = useNavigate();
+  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const settings = useSettingsStore((s) => s.settings);
+  const { data: remoteEnabled, isError, isFetched } = useStardomDevMode();
   const [phase, setPhase] = useState<Phase>('checking');
   const [showMessage, setShowMessage] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Refresh settings on mount to pick up manual config.json edits
+  useEffect(() => {
+    fetchSettings().then(() => setSettingsLoaded(true));
+  }, [fetchSettings]);
 
   // Inject @keyframes for breathe animation on mount
   useEffect(() => {
@@ -30,15 +42,17 @@ export function StardomEntry() {
   }, []);
 
   useEffect(() => {
+    if (!settingsLoaded) return;
     if (!isFetched && !isError) return;
 
-    const enabled = devMode === true;
+    const localEnabled = settings?.stardomEnabled === true;
+    const enabled = localEnabled || remoteEnabled === true;
 
     timerRef.current = setTimeout(() => {
       if (enabled) {
         setPhase('unlocking');
         timerRef.current = setTimeout(() => {
-          setPhase('dashboard');
+          setPhase('unlocked');
         }, FADE_DURATION_MS);
       } else {
         setPhase('locked');
@@ -49,13 +63,11 @@ export function StardomEntry() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isFetched, isError, devMode]);
-
-  if (phase === 'dashboard') {
-    return <StardomDashboard />;
-  }
+  }, [settingsLoaded, isFetched, isError, settings, remoteEnabled]);
 
   const isFading = phase === 'unlocking';
+  const showDashboard = phase === 'unlocking' || phase === 'unlocked';
+  const dashboardOpacity = phase === 'unlocked' ? 1 : phase === 'unlocking' ? 0 : 0;
 
   return (
     <div
@@ -66,41 +78,84 @@ export function StardomEntry() {
         overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          transition: isFading ? `opacity ${FADE_DURATION_MS}ms ease-out` : undefined,
-          opacity: isFading ? 0 : 1,
-        }}
-      >
-        <StarfieldCanvas />
-        {showMessage && (
-          <div
+      {/* Dashboard layer (behind animation, fades in) */}
+      {showDashboard && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: dashboardOpacity,
+            transition: isFading ? `opacity ${FADE_DURATION_MS}ms ease-in` : undefined,
+          }}
+        >
+          <StardomDashboard />
+        </div>
+      )}
+
+      {/* Animation layer (in front, fades out) */}
+      {phase !== 'unlocked' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: isFading ? 0 : 1,
+            transition: isFading ? `opacity ${FADE_DURATION_MS}ms ease-out` : undefined,
+            zIndex: 1,
+          }}
+        >
+          <StarfieldCanvas />
+          <button
+            onClick={() => navigate('/chat')}
             style={{
               position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
+              top: 20,
+              left: 20,
+              background: 'rgba(0, 255, 65, 0.08)',
+              border: '1px solid rgba(0, 255, 65, 0.2)',
+              borderRadius: 8,
+              color: '#00ff41',
+              padding: '8px 14px',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              zIndex: 10,
+              transition: 'background 0.2s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0, 255, 65, 0.15)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0, 255, 65, 0.08)'; }}
           >
-            <p
-              className="stardom-coming-soon"
+            <ArrowLeft className="h-4 w-4" />
+            {t('common.back')}
+          </button>
+          {showMessage && (
+            <div
               style={{
-                color: '#00f0ff',
-                fontSize: '1.25rem',
-                fontWeight: 300,
-                letterSpacing: '0.15em',
-                textShadow: '0 0 20px rgba(0, 240, 255, 0.5), 0 0 40px rgba(0, 240, 255, 0.2)',
-                margin: 0,
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
               }}
             >
-              {t('stardom.entry.comingSoon')}
-            </p>
-          </div>
-        )}
-      </div>
+              <p
+                className="stardom-coming-soon"
+                style={{
+                  color: '#00ff41',
+                  fontSize: '1.25rem',
+                  fontWeight: 300,
+                  letterSpacing: '0.15em',
+                  textShadow: '0 0 20px rgba(0, 255, 65, 0.5), 0 0 40px rgba(0, 255, 65, 0.2)',
+                  margin: 0,
+                }}
+              >
+                {t('stardom.entry.comingSoon')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
