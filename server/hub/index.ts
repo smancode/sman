@@ -14,6 +14,7 @@ import { TaskWorker } from './task-worker.js';
 import { readInitMd } from './init-reader.js';
 import { loadPsk } from './crypto.js';
 import { createLogger } from '../utils/logger.js';
+import { getClientId } from '../utils/network.js';
 
 const log = createLogger('Hub');
 
@@ -40,12 +41,6 @@ function getServerUrl(sm: SettingsManager): string {
 
 function getPsk(): string {
   return loadPsk();
-}
-
-function getClientId(): string {
-  const hostname = os.hostname();
-  const user = os.userInfo().username;
-  return `${user}@${hostname}`;
 }
 
 function isHubEnabled(sm: SettingsManager): boolean {

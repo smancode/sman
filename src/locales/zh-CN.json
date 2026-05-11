@@ -2923,9 +2923,17 @@
     "text": "离开",
     "context": "离开项目组按钮"
   },
+  "hub.room.dissolve": {
+    "text": "解散",
+    "context": "解散项目组按钮"
+  },
   "hub.room.empty": {
     "text": "暂无项目组",
     "context": "无项目组提示"
+  },
+  "hub.room.owner": {
+    "text": "发起人",
+    "context": "项目组发起人标签"
   },
   "hub.room.prevPage": {
     "text": "上一页",

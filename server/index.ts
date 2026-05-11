@@ -48,6 +48,7 @@ import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
+import { getClientId } from './utils/network.js';
 import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -533,7 +534,7 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
     // Inject clientId for room listing so server can filter private rooms
     // Also inject ownerId for room creation
     if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST') {
-      const cid = `${os.userInfo().username}@${os.hostname()}`;
+      const cid = getClientId();
       payload.clientId = cid;
       if (payload.name) payload.ownerId = cid;
     }
@@ -572,10 +573,17 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
       if (encRes.payload) {
         const decrypted = decrypt(encRes.payload) as unknown;
         // Tag isOwner on room list responses
-        if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST' && Array.isArray(decrypted)) {
-          const cid = `${os.userInfo().username}@${os.hostname()}`;
-          for (const room of decrypted as { owner_id?: string; isOwner?: boolean }[]) {
-            room.isOwner = room.owner_id === cid;
+        if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST') {
+          const rooms = Array.isArray(decrypted)
+            ? decrypted
+            : (decrypted as { rooms?: unknown[] })?.rooms;
+          if (Array.isArray(rooms)) {
+            const cid = getClientId();
+            const cidUser = cid.split('@')[0];
+            for (const room of rooms as { owner_id?: string; isOwner?: boolean }[]) {
+              const ownerUser = (room.owner_id ?? '').split('@')[0];
+              room.isOwner = room.owner_id === cid || ownerUser === cidUser;
+            }
           }
         }
         // After creating a room via REST, join via WS and register agents
@@ -584,7 +592,7 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
           if (room?.id && room?.name) {
             const wsClient = getHubWsClient();
             if (wsClient?.isConnected()) {
-              const cid = `${os.userInfo().username}@${os.hostname()}`;
+              const cid = getClientId();
               wsClient.send({ type: 'room.join', roomId: room.id, clientId: cid, displayName: cid });
             }
           }

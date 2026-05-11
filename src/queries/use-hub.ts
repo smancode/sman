@@ -115,7 +115,7 @@ export function useCreateRoom() {
   return useMutation({
     mutationFn: (params: { name: string; description?: string; maxAgents?: number; visibility?: 'public' | 'private' }) =>
       hubMutate('/rooms', { method: 'POST', body: JSON.stringify(params) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
+    onSuccess: () => qc.refetchQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
 

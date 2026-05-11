@@ -15,7 +15,7 @@ import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Server, Plus, LogIn, LogOut, Settings2, Users, ListTodo, Bot, Search, Globe, Lock, Trash2,
+  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -28,12 +28,8 @@ export function HubDashboard() {
   const status = useWsConnection((s) => s.status);
   const { data: agents } = useRoomAgents(selectedRoomId);
   const settings = useSettingsStore((s) => s.settings);
-  const client = useWsConnection((s) => s.client);
 
   const hub = settings?.hub;
-  const [showConfig, setShowConfig] = useState(false);
-  const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
-  const [hubSaved, setHubSaved] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -42,28 +38,20 @@ export function HubDashboard() {
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 20;
   const [newRoomPublic, setNewRoomPublic] = useState(false);
 
   const { data: roomResult, error: roomsError, isLoading } = useRooms(appliedSearch, page * PAGE_SIZE, PAGE_SIZE);
   const rooms = roomResult?.rooms;
   const totalRooms = roomResult?.total ?? 0;
   const hubUnreachable = roomResult?.unreachable === true;
+  const selectedRoom = rooms?.find((r) => r.id === selectedRoomId);
   const totalPages = Math.max(1, Math.ceil(totalRooms / PAGE_SIZE));
 
   const createRoom = useCreateRoom();
   const joinRoom = useJoinRoom();
   const leaveRoom = useLeaveRoom();
   const dissolveRoom = useDissolveRoom();
-
-  const handleHubSave = () => {
-    client?.send({
-      type: 'settings.update',
-      hub: { serverUrl: hubUrl, enabled: !!hubUrl, updateUrl: hub?.updateUrl ?? '', adminToken: '' },
-    });
-    setHubSaved(true);
-    setTimeout(() => setHubSaved(false), 2000);
-  };
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -86,8 +74,6 @@ export function HubDashboard() {
   if (status !== 'connected') {
     return <FeedbackState state="error" title={t('hub.status.notConnected')} />;
   }
-
-  const needsConfig = !hub?.serverUrl;
 
   const sidebar = (
     <TooltipProvider delayDuration={300}>
@@ -119,39 +105,8 @@ export function HubDashboard() {
             </TooltipTrigger>
             <TooltipContent side="right">{t('hub.room.create')}</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setShowConfig(!showConfig)}
-                className={cn(
-                  'rounded p-1 transition-colors',
-                  showConfig ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{t('hub.settings.title')}</TooltipContent>
-          </Tooltip>
         </div>
       </div>
-
-      {showConfig && (
-        <div className="mb-2 space-y-2 rounded-md border bg-muted/30 p-2.5">
-          <Input
-            placeholder="http://server:5882"
-            value={hubUrl}
-            onChange={(e) => setHubUrl(e.target.value)}
-            className="h-7 text-xs"
-          />
-          <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={handleHubSave} disabled={!hubUrl}>
-            {hubSaved ? t('common.saved') : t('hub.settings.save')}
-          </Button>
-          {needsConfig && (
-            <p className="text-[11px] text-destructive">{t('hub.status.notConfigured')}</p>
-          )}
-        </div>
-      )}
 
       {showCreate && (
         <div className="mb-2 space-y-1.5">
@@ -227,6 +182,7 @@ export function HubDashboard() {
                   )}
                 </span>
                 <span className="truncate flex-1">{room.name}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground/60 truncate max-w-[90px]" title={room.owner_id}>{room.owner_id}</span>
                 {room.isOwner ? (
                   <button
                     onClick={(e) => {
@@ -237,10 +193,11 @@ export function HubDashboard() {
                       });
                     }}
                     className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                    title={t('hub.room.dissolve')}
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
-                ) : (
+                ) : room.isMember ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -248,8 +205,20 @@ export function HubDashboard() {
                       if (selectedRoomId === room.id) setSelectedRoomId(undefined);
                     }}
                     className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                    title={t('hub.room.leave')}
                   >
                     <LogOut className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      joinRoom.mutate({ roomId: room.id });
+                    }}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-primary transition-all"
+                    title={t('hub.room.join')}
+                  >
+                    <LogIn className="h-3 w-3" />
                   </button>
                 )}
               </div>
@@ -297,18 +266,11 @@ export function HubDashboard() {
         <p className="mt-1.5 text-[11px] text-destructive truncate" title={error}>{error}</p>
       )}
 
-      {roomsError && !needsConfig && (
+      {roomsError && (
         <p className="mt-1.5 text-[11px] text-destructive">{(roomsError as Error).message}</p>
       )}
     </TooltipProvider>
   );
-
-  const sidebarFooter = !showConfig && needsConfig ? (
-    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowConfig(true)}>
-      <Server className="h-3 w-3 mr-1.5" />
-      {t('hub.settings.title')}
-    </Button>
-  ) : undefined;
 
   const content = selectedRoomId ? (
     <div className="flex h-full flex-col">
@@ -343,9 +305,14 @@ export function HubDashboard() {
                 {t('hub.tab.agents')}
               </button>
             </div>
-            <Badge variant="secondary" className="ml-auto text-[11px] font-mono">
-              {selectedRoomId.slice(0, 8)}
-            </Badge>
+            <div className="ml-auto flex items-center gap-2">
+              {selectedRoom?.owner_id && (
+                <span className="text-[11px] text-muted-foreground">{t('hub.room.owner')}: {selectedRoom.owner_id}</span>
+              )}
+              <Badge variant="secondary" className="text-[11px] font-mono">
+                {selectedRoomId.slice(0, 8)}
+              </Badge>
+            </div>
           </div>
 
           <div className="flex-1 overflow-hidden">
@@ -374,7 +341,6 @@ export function HubDashboard() {
   return (
     <PageLayout
       sidebar={sidebar}
-      sidebarFooter={sidebarFooter}
       contentClassName="h-full p-0"
     >
       {content}

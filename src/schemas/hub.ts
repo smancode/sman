@@ -33,6 +33,7 @@ export const RoomSchema = z.object({
   max_agents: z.number().default(10),
   created_at: z.string(),
   isOwner: z.boolean().optional().default(false),
+  isMember: z.boolean().optional().default(false),
 }).passthrough();
 
 export const RoomMemberSchema = z.object({

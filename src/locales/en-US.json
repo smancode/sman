@@ -2923,9 +2923,17 @@
     "text": "Leave",
     "context": "Leave project group button"
   },
+  "hub.room.dissolve": {
+    "text": "Dissolve",
+    "context": "Dissolve project group button"
+  },
   "hub.room.empty": {
     "text": "No project groups yet",
     "context": "No project groups hint"
+  },
+  "hub.room.owner": {
+    "text": "Owner",
+    "context": "Project group owner label"
   },
   "hub.room.prevPage": {
     "text": "Prev",
