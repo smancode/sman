@@ -920,7 +920,6 @@ const server = http.createServer((req, res) => {
         }
 
         if (toolType === 'path') {
-          // Execute path (non-streaming for now)
           const path = smartPathStore.get(toolId, workspace);
           if (!path) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -929,27 +928,24 @@ const server = http.createServer((req, res) => {
           }
 
           try {
-            // Run path execution and wait for completion
-            await smartPathEngine.run(
-              toolId,
-              workspace,
-              (stepIndex, delta) => {
-                // Progress callback (ignored for HTTP API)
-              },
-              (stepIndex, result) => {
-                // Step result callback (ignored for HTTP API)
-              },
-              (data) => {
-                // Progress callback (ignored for HTTP API)
-              },
+            const args = parameters as string | undefined;
+            const { stepResults, blueprint } = await smartPathEngine.runWithResults(
+              toolId, workspace, args, () => {},
             );
 
             const p = smartPathStore.get(toolId, workspace);
             const refs = smartPathStore.listReferences(workspace, toolId);
+            let steps: Array<{ name?: string; userInput: string }>;
+            try { steps = JSON.parse(path.steps || '[]'); } catch { steps = []; }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               status: 'success',
-              result: `Path "${p?.name || toolId}" completed successfully`,
+              result: `Path "${p?.name || toolId}" completed`,
+              goal: blueprint.goal,
+              steps: steps.map((s, i) => ({
+                name: s.name || s.userInput,
+                result: stepResults[i]?.slice(0, 500) || '',
+              })),
               pathId: toolId,
               referencesCount: refs.length,
             }));
