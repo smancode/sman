@@ -195,6 +195,31 @@ export class SmartPathEngine {
     onProgress?: (data: { stepIndex: number; totalSteps: number; status: string }) => void,
     args?: string,
   ): Promise<void> {
+    const result = await this.runWithResults(
+      pathId, workspace, args,
+      (stepIndex, delta) => {
+        onStepProgress(stepIndex, delta);
+        if (stepIndex === -1) onProgress?.({ stepIndex: -1, totalSteps: 0, status: 'analyzing' });
+      },
+    );
+    // 路径页面需要逐步回调
+    let steps: SmartPathStep[];
+    try { steps = JSON.parse(this.store.get(pathId, workspace)!.steps); } catch { steps = []; }
+    steps.forEach((_, i) => {
+      if (result.stepResults[i]) {
+        onStepResult(i, result.stepResults[i]);
+        onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
+      }
+    });
+  }
+
+  /** 核心执行：主编分析 + 每步独立 session（task），返回结果 */
+  async runWithResults(
+    pathId: string,
+    workspace: string,
+    args: string | undefined,
+    onStepProgress: (stepIndex: number, delta: string) => void,
+  ): Promise<{ stepResults: string[]; blueprint: PathBlueprint }> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
@@ -212,8 +237,7 @@ export class SmartPathEngine {
     const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
 
     try {
-      // ── Phase 1: 主编分析 ──
-      onProgress?.({ stepIndex: -1, totalSteps: steps.length, status: 'analyzing' });
+      // 主编分析
       let blueprint: PathBlueprint;
       try {
         blueprint = await this.orchestrate(smartPath, steps, referencesContext, workspace, args, abortController, sessionIds, onStepProgress);
@@ -222,7 +246,7 @@ export class SmartPathEngine {
         blueprint = buildDefaultBlueprint(steps);
       }
 
-      // ── Phase 2: 逐步执行（每步独立 session = 子 agent） ──
+      // 逐步执行（每步独立 session）
       const stepResults: string[] = [];
       const keyOutputs: string[] = [];
 
@@ -259,10 +283,6 @@ export class SmartPathEngine {
             this.store.saveReference(workspace, pathId, ref.fileName, ref.content);
           }
 
-          onStepResult(i, stepResult);
-          onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
-
-          // 提炼关键信息传给后续步骤
           if (i < steps.length - 1) {
             const summary = await this.extractKeyOutputs(
               stepResult, plan.expectedOutputs, workspace, abortController, sessionIds,
@@ -275,28 +295,23 @@ export class SmartPathEngine {
         }
       }
 
-      // ── Phase 3: 完成报告 + 经验沉淀 ──
+      // 完成报告 + 经验沉淀
       this.store.update(pathId, workspace, { status: 'completed' });
-
       const reportFileName = this.store.createReport(
         workspace, pathId, smartPath.name, steps, stepResults, run.id,
         'completed', run.startedAt, isoNow(),
       );
-      const reportBasename = path.basename(reportFileName);
-
       this.store.updateRun(run.id, workspace, pathId, {
         status: 'completed',
         stepResults: JSON.stringify(stepResults),
         finishedAt: isoNow(),
-        reportFileName: reportBasename,
+        reportFileName: path.basename(reportFileName),
       });
-
       await this.updateRunGuide(workspace, pathId, steps, stepResults, blueprint);
 
-      this.log.info(`Path ${pathId} completed`);
+      return { stepResults, blueprint };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const isAborted = abortController.signal.aborted;
       this.store.updateRun(run.id, workspace, pathId, {
         status: 'failed',
         errorMessage: msg,
@@ -304,7 +319,6 @@ export class SmartPathEngine {
         finishedAt: isoNow(),
       });
       this.store.update(pathId, workspace, { status: 'failed' });
-      this.log.error(`Path ${pathId} ${isAborted ? 'aborted' : 'failed'}: ${msg}`);
       throw err;
     } finally {
       this.activeRuns.delete(pathId);

@@ -8,6 +8,7 @@ import {
   Trash,
   Copy,
   Server,
+  Route,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -133,7 +134,11 @@ const SessionItem = memo(function SessionItem({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+      {(session.label?.startsWith('[路径]')) ? (
+        <Route className="h-3.5 w-3.5 shrink-0 text-primary" />
+      ) : (
+        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+      )}
       <span className="truncate flex-1 min-w-0">{session.label || t('session.newSession')}</span>
       <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'hidden')}>
         {!isChatbot && (

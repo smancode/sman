@@ -1308,26 +1308,49 @@ wss.on('connection', (ws: WebSocket) => {
                 || paths.find(p => p.name.toLowerCase() === pathName.toLowerCase());
               if (matchedPath) {
                 const argsToUse = pathArgs || matchedPath.defaultArgs || '';
-                const pathDir = `.sman/paths/${matchedPath.id}`;
-                const wrappedContent = [
-                  `[用户发起了一个执行path的请求，path为${pathDir}，参数为"${argsToUse}"，请按照path.md并参考run.md执行该path]`,
-                  '',
-                  '执行要求：',
-                  `1. 先读取 ${pathDir}/path.md 获取步骤定义`,
-                  `2. 如果 ${pathDir}/references/run.md 存在，读取作为参考`,
-                  `3. 按步骤逐一执行，前一步结果作为下一步上下文`,
-                  `4. 用户参数为:{${argsToUse}}，请根据任务需要使用`,
-                  '5. 直接执行，不要询问用户，给出简洁结果',
-                ].join('\n');
-
-                // Save friendly user message to session (show path name, not pathId)
+                const runPathId = matchedPath.id;
+                const runWorkspace = matchedPath.workspace;
                 const displayContent = argsToUse ? `/${matchedPath.name} ${argsToUse}` : `/${matchedPath.name}`;
-                store.addMessage(chatSessionId, { role: 'user', content: displayContent });
 
-                // Send wrapped prompt via normal sendMessage with retryCount=1 to skip double-saving
-                // This preserves session context, enables multi-turn follow-up
-                const media = (msg as any).media as import('./chatbot/types.js').MediaAttachment[] | undefined;
-                await sessionManager.sendMessage(chatSessionId, wrappedContent, wsSend, media, 1);
+                // Save user message
+                store.addMessage(chatSessionId, { role: 'user', content: displayContent });
+                wsSend(JSON.stringify({ type: 'chat.start', sessionId: chatSessionId }));
+
+                try {
+                  // Run via engine: orchestrator + per-step independent sessions (tasks)
+                  const { stepResults: engineResults, blueprint: engineBlueprint } = await smartPathEngine.runWithResults(
+                    runPathId, runWorkspace, argsToUse,
+                    (stepIndex, delta) => {
+                      const stepLabel = stepIndex === -1 ? '分析' : `步骤${stepIndex + 1}`;
+                      wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: `\n### ${stepLabel}\n${delta}` } }));
+                    },
+                  );
+
+                  // Summary
+                  const summaryParts: string[] = [`\n---\n**路径「${matchedPath.name}」执行完成**`];
+                  summaryParts.push(`\n目标: ${engineBlueprint.goal}`);
+                  const steps: Array<{ name?: string; userInput: string }> = JSON.parse(matchedPath.steps || '[]');
+                  steps.forEach((s, i) => {
+                    if (engineResults[i]) {
+                      summaryParts.push(`\n**步骤${i + 1}: ${s.name || s.userInput}**`);
+                      summaryParts.push(engineResults[i].slice(0, 500));
+                    }
+                  });
+                  wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: summaryParts.join('') } }));
+                  // Save summary as assistant message for multi-turn follow-up
+                  store.addMessage(chatSessionId, { role: 'assistant', content: summaryParts.join('') });
+                  // Update session label to mark as path execution
+                  const pathLabel = `[路径] ${matchedPath.name}`;
+                  store.updateLabel(chatSessionId, pathLabel);
+                  broadcast(JSON.stringify({ type: 'session.labelUpdated', sessionId: chatSessionId, label: pathLabel }));
+                  wsSend(JSON.stringify({ type: 'chat.done', sessionId: chatSessionId }));
+                } catch (err) {
+                  const errMsg = err instanceof Error ? err.message : String(err);
+                  const failMsg = `\n路径执行失败: ${errMsg}`;
+                  wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: failMsg } }));
+                  store.addMessage(chatSessionId, { role: 'assistant', content: failMsg });
+                  wsSend(JSON.stringify({ type: 'chat.done', sessionId: chatSessionId }));
+                }
                 break;
               }
             }
