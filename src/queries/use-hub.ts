@@ -20,7 +20,12 @@ import {
 } from '@/schemas/hub';
 import type { Room, Agent, Task, TaskEvent, EvaluationReport, TaskAssignment } from '@/schemas/hub';
 
-async function hubFetch(path: string, init?: RequestInit & { throwOnNetworkError?: true }): Promise<unknown> {
+interface HubFetchResult {
+  data: unknown;
+  unreachable: boolean;
+}
+
+async function hubFetch(path: string, init?: RequestInit & { throwOnNetworkError?: true }): Promise<HubFetchResult> {
   const token = localStorage.getItem('sman-backend-token') || '';
   const { throwOnNetworkError, ...restInit } = init ?? {};
   const controller = new AbortController();
@@ -38,10 +43,13 @@ async function hubFetch(path: string, init?: RequestInit & { throwOnNetworkError
 
   if (!res) {
     if (throwOnNetworkError) throw new Error('Hub server unreachable');
-    return null;
+    return { data: null, unreachable: true };
   }
   if (!res.ok) {
-    if (!throwOnNetworkError && (res.status === 503 || res.status === 502)) return null;
+    if (res.status === 503 || res.status === 502) {
+      if (throwOnNetworkError) throw new Error('Hub server unreachable');
+      return { data: null, unreachable: true };
+    }
     const body = await res.text().catch(() => '');
     let msg = `Hub error: ${res.status}`;
     try {
@@ -52,7 +60,13 @@ async function hubFetch(path: string, init?: RequestInit & { throwOnNetworkError
     }
     throw new Error(msg);
   }
-  return res.json();
+  return { data: await res.json(), unreachable: false };
+}
+
+async function hubMutate(path: string, init?: RequestInit): Promise<unknown> {
+  const { data, unreachable } = await hubFetch(path, { ...init, throwOnNetworkError: true });
+  if (unreachable) throw new Error('Hub server unreachable');
+  return data;
 }
 
 // ---- Room hooks ----
@@ -66,13 +80,13 @@ export function useRooms(search?: string, offset = 0, limit = 10) {
   return useQuery({
     queryKey: ['hub', 'rooms', search, offset, limit] as const,
     queryFn: async () => {
-      const raw = await hubFetch('/rooms', { method: 'POST', body: JSON.stringify({ search: search || undefined, offset, limit }) });
-      if (!raw) return { rooms: EMPTY_ROOMS, total: 0 } as RoomListResult;
+      const { data: raw, unreachable } = await hubFetch('/rooms', { method: 'POST', body: JSON.stringify({ search: search || undefined, offset, limit }) });
+      if (unreachable) return { rooms: EMPTY_ROOMS, total: 0, unreachable: true } as RoomListResult & { unreachable: boolean };
       const data = raw as { rooms?: unknown[]; total?: number } | null;
       const rooms = Array.isArray(raw) ? raw : data?.rooms ?? [];
       const total = data?.total ?? (Array.isArray(rooms) ? rooms.length : 0);
       const parsed = parseWithFallback({ type: 'room.list.update', rooms }, RoomListUpdateSchema, { rooms: EMPTY_ROOMS }, 'room.list');
-      return { rooms: parsed.rooms ?? EMPTY_ROOMS, total } as RoomListResult;
+      return { rooms: parsed.rooms ?? EMPTY_ROOMS, total, unreachable: false } as RoomListResult & { unreachable: boolean };
     },
     staleTime: 15_000,
   });
@@ -83,7 +97,8 @@ export function useRoom(roomId: string | undefined) {
     queryKey: ['hub', 'rooms', roomId] as const,
     queryFn: async () => {
       if (!roomId) return null;
-      const raw = await hubFetch(`/rooms/${roomId}`);
+      const { data: raw, unreachable } = await hubFetch(`/rooms/${roomId}`);
+      if (unreachable) return null;
       const parsed = parseWithFallback(raw, RoomInfoUpdateSchema, {
         room: null as unknown as Room,
         members: [],
@@ -99,7 +114,7 @@ export function useCreateRoom() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { name: string; description?: string; maxAgents?: number; visibility?: 'public' | 'private' }) =>
-      hubFetch('/rooms', { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate('/rooms', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
@@ -108,7 +123,7 @@ export function useJoinRoom() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { roomId: string; clientId?: string; displayName?: string }) =>
-      hubFetch(`/rooms/${params.roomId}/join`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop', displayName: params.displayName }), throwOnNetworkError: true }),
+      hubMutate(`/rooms/${params.roomId}/join`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop', displayName: params.displayName }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
@@ -117,7 +132,7 @@ export function useLeaveRoom() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { roomId: string; clientId?: string }) =>
-      hubFetch(`/rooms/${params.roomId}/leave`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop' }), throwOnNetworkError: true }),
+      hubMutate(`/rooms/${params.roomId}/leave`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop' }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
@@ -129,8 +144,8 @@ export function useRoomAgents(roomId: string | undefined) {
     queryKey: ['hub', 'rooms', roomId, 'agents'] as const,
     queryFn: async () => {
       if (!roomId) return EMPTY_AGENTS;
-      const raw = await hubFetch(`/rooms/${roomId}/agents`, { method: 'POST', body: JSON.stringify({ roomId }) });
-      if (!raw) return EMPTY_AGENTS;
+      const { data: raw, unreachable } = await hubFetch(`/rooms/${roomId}/agents`, { method: 'POST', body: JSON.stringify({ roomId }) });
+      if (unreachable) return EMPTY_AGENTS;
       const agents = Array.isArray(raw) ? raw : [];
       const parsed = parseWithFallback({ type: 'agent.list.update', roomId, agents }, AgentListUpdateSchema, { agents: EMPTY_AGENTS }, 'agent.list');
       return parsed.agents ?? EMPTY_AGENTS;
@@ -143,7 +158,7 @@ export function useRegisterAgent() {
   const qc = useQueryClient();
   return useMutation<unknown, Error, { roomId: string; workspace: string; capabilities: { skills: string[]; techStack: string[]; projectType: string }; maxConcurrent?: number }>({
     mutationFn: (params) =>
-      hubFetch('/agents', { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate('/agents', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['hub', 'rooms', vars.roomId, 'agents'] }),
   });
 }
@@ -155,8 +170,8 @@ export function useRoomTasks(roomId: string | undefined) {
     queryKey: ['hub', 'rooms', roomId, 'tasks'] as const,
     queryFn: async () => {
       if (!roomId) return EMPTY_TASKS;
-      const raw = await hubFetch(`/tasks?roomId=${roomId}`);
-      if (!raw) return EMPTY_TASKS;
+      const { data: raw, unreachable } = await hubFetch(`/tasks?roomId=${roomId}`);
+      if (unreachable) return EMPTY_TASKS;
       const tasks = Array.isArray(raw) ? raw : [];
       const parsed = parseWithFallback({ type: 'task.list.update', roomId, tasks }, TaskListUpdateSchema, { tasks: EMPTY_TASKS }, 'task.list');
       return parsed.tasks ?? EMPTY_TASKS;
@@ -177,8 +192,8 @@ export function useTaskDetail(taskId: string | undefined) {
     queryKey: ['hub', 'tasks', taskId] as const,
     queryFn: async () => {
       if (!taskId) return null;
-      const raw = await hubFetch(`/tasks/${taskId}`);
-      if (!raw) return null;
+      const { data: raw, unreachable } = await hubFetch(`/tasks/${taskId}`);
+      if (unreachable) return null;
       const parsed = parseWithFallback(raw, TaskDetailUpdateSchema, {
         task: null as unknown as Task,
         events: EMPTY_EVENTS,
@@ -207,7 +222,7 @@ export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation<unknown, Error, CreateTaskParams>({
     mutationFn: (params) =>
-      hubFetch('/tasks', { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate('/tasks', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: (_data, vars) => qc.invalidateQueries({ queryKey: ['hub', 'rooms', vars.roomId, 'tasks'] }),
   });
 }
@@ -216,7 +231,7 @@ export function useCancelTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { taskId: string }) =>
-      hubFetch(`/tasks/${params.taskId}/cancel`, { method: 'POST', throwOnNetworkError: true }),
+      hubMutate(`/tasks/${params.taskId}/cancel`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -225,7 +240,7 @@ export function useStopTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { taskId: string }) =>
-      hubFetch(`/tasks/${params.taskId}/stop`, { method: 'POST', throwOnNetworkError: true }),
+      hubMutate(`/tasks/${params.taskId}/stop`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -234,7 +249,7 @@ export function useDissolveRoom() {
   const qc = useQueryClient();
   return useMutation<unknown, Error, { roomId: string }>({
     mutationFn: (params) =>
-      hubFetch(`/rooms/${params.roomId}/dissolve`, { method: 'POST', body: JSON.stringify({}), throwOnNetworkError: true }),
+      hubMutate(`/rooms/${params.roomId}/dissolve`, { method: 'POST', body: JSON.stringify({}) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
@@ -243,7 +258,7 @@ export function useConfirmTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { taskId: string }) =>
-      hubFetch(`/tasks/${params.taskId}/confirm`, { method: 'POST', throwOnNetworkError: true }),
+      hubMutate(`/tasks/${params.taskId}/confirm`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -252,7 +267,7 @@ export function useRejectTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { taskId: string; reason?: string }) =>
-      hubFetch(`/tasks/${params.taskId}/reject`, { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate(`/tasks/${params.taskId}/reject`, { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -269,7 +284,7 @@ export function useDispatchTask() {
         instructions?: string;
       }>;
     }) =>
-      hubFetch(`/tasks/${params.taskId}/dispatch`, { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate(`/tasks/${params.taskId}/dispatch`, { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -281,8 +296,8 @@ export function useEvaluationReports(taskId: string | undefined) {
     queryKey: ['hub', 'tasks', taskId, 'evaluations'] as const,
     queryFn: async () => {
       if (!taskId) return EMPTY_EVALUATIONS;
-      const raw = await hubFetch('/evaluations', { method: 'POST', body: JSON.stringify({ taskId }) });
-      if (!raw) return EMPTY_EVALUATIONS;
+      const { data: raw, unreachable } = await hubFetch('/evaluations', { method: 'POST', body: JSON.stringify({ taskId }) });
+      if (unreachable) return EMPTY_EVALUATIONS;
       const reports = Array.isArray(raw) ? raw : [];
       return reports as EvaluationReport[];
     },
@@ -294,7 +309,7 @@ export function useApproveReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { reportId: string }) =>
-      hubFetch(`/evaluations/${params.reportId}/approve`, { method: 'POST', throwOnNetworkError: true }),
+      hubMutate(`/evaluations/${params.reportId}/approve`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
@@ -303,35 +318,7 @@ export function useRejectReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { reportId: string; comment?: string }) =>
-      hubFetch(`/evaluations/${params.reportId}/reject`, { method: 'POST', body: JSON.stringify(params), throwOnNetworkError: true }),
+      hubMutate(`/evaluations/${params.reportId}/reject`, { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
-  });
-}
-
-// ---- Health check ----
-
-export function useHubReachable(hubUrl?: string) {
-  return useQuery({
-    queryKey: ['hub', 'health'] as const,
-    queryFn: async () => {
-      if (!hubUrl) return false;
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
-        const res = await fetch(`/api/hub/rooms`, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        clearTimeout(timeout);
-        return res.ok;
-      } catch {
-        return false;
-      }
-    },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    enabled: !!hubUrl,
   });
 }

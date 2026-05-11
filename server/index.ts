@@ -505,6 +505,8 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
   // /api/hub/rooms → /api/hub/rooms, /api/hub/tasks?roomId=x → /api/hub/tasks?roomId=x
   const targetPath = urlObj.pathname.replace('/api/hub', '/api/hub') + urlObj.search;
   const targetUrl = `${hubUrl}${targetPath}`;
+  const startTime = Date.now();
+  log.info(`[hub-proxy] → ${req.method} ${targetUrl}`);
 
   try {
     // Read body from frontend
@@ -548,9 +550,13 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
         body: JSON.stringify(encrypted),
         signal: controller.signal,
       });
-    } finally {
+    } catch (fetchErr) {
       clearTimeout(fetchTimeout);
+      log.warn(`[hub-proxy] ✗ ${targetUrl} fetch error after ${Date.now() - startTime}ms: ${(fetchErr as Error).message}`);
+      throw fetchErr;
     }
+    clearTimeout(fetchTimeout);
+    log.info(`[hub-proxy] ← ${fetchRes.status} from ${targetUrl} in ${Date.now() - startTime}ms`);
 
     const responseBody = await fetchRes.text();
 
@@ -605,6 +611,7 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
       res.end(responseBody);
     }
   } catch (err) {
+    log.error(`[hub-proxy] proxy error: ${(err as Error).message}`);
     res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `Hub proxy error: ${(err as Error).message}` }));
   }

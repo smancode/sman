@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
-import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useDissolveRoom, useRoomAgents, useHubReachable } from '@/queries/use-hub';
+import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useDissolveRoom, useRoomAgents } from '@/queries/use-hub';
 import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
@@ -31,7 +31,6 @@ export function HubDashboard() {
   const client = useWsConnection((s) => s.client);
 
   const hub = settings?.hub;
-  const { data: hubReachable, isLoading: hubHealthLoading } = useHubReachable(hub?.serverUrl);
   const [showConfig, setShowConfig] = useState(false);
   const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
   const [hubSaved, setHubSaved] = useState(false);
@@ -49,6 +48,7 @@ export function HubDashboard() {
   const { data: roomResult, error: roomsError, isLoading } = useRooms(appliedSearch, page * PAGE_SIZE, PAGE_SIZE);
   const rooms = roomResult?.rooms;
   const totalRooms = roomResult?.total ?? 0;
+  const hubUnreachable = roomResult?.unreachable === true;
   const totalPages = Math.max(1, Math.ceil(totalRooms / PAGE_SIZE));
 
   const createRoom = useCreateRoom();
@@ -98,7 +98,7 @@ export function HubDashboard() {
         <ChevronLeft className="h-4 w-4" />
         {t('cron.back')}
       </button>
-      {!hubHealthLoading && hub?.serverUrl && hubReachable === false && (
+      {hubUnreachable && hub?.serverUrl && (
         <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] text-yellow-600 dark:text-yellow-400">
           {t('hub.status.serverUnreachable')}
         </div>
@@ -357,7 +357,7 @@ export function HubDashboard() {
         </>
       )}
     </div>
-  ) : !hubHealthLoading && hub?.serverUrl && hubReachable === false ? (
+  ) : hubUnreachable && hub?.serverUrl ? (
     <FeedbackState
       state="error"
       title={t('hub.status.serverUnreachable')}
