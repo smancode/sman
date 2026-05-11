@@ -13,7 +13,7 @@ export function StardomEntry() {
   const { data: devMode, isError, isFetched } = useStardomDevMode();
   const [phase, setPhase] = useState<Phase>('checking');
   const [showMessage, setShowMessage] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Inject @keyframes for breathe animation on mount
   useEffect(() => {
