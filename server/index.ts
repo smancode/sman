@@ -1309,19 +1309,34 @@ wss.on('connection', (ws: WebSocket) => {
               if (matchedPath) {
                 const argsToUse = pathArgs || matchedPath.defaultArgs || '';
                 const runPathId = matchedPath.id;
-                const runWorkspace = matchedPath.workspace;
+                // Resolve actual workspace (same logic as smartpath.run)
+                const runAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+                const pathToRun = smartPathStore.get(runPathId, workspace, runAllWs);
+                const runWorkspace = pathToRun?.workspace || matchedPath.workspace;
                 const displayContent = argsToUse ? `/${matchedPath.name} ${argsToUse}` : `/${matchedPath.name}`;
+
+                // Prevent parallel execution
+                if (smartPathEngine.isRunning(runPathId)) {
+                  store.addMessage(chatSessionId, { role: 'user', content: displayContent });
+                  store.addMessage(chatSessionId, { role: 'assistant', content: '路径正在执行中，请等待完成后再试。' });
+                  wsSend(JSON.stringify({ type: 'chat.start', sessionId: chatSessionId }));
+                  wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: '路径正在执行中，请等待完成后再试。' } }));
+                  wsSend(JSON.stringify({ type: 'chat.done', sessionId: chatSessionId }));
+                  break;
+                }
 
                 // Save user message
                 store.addMessage(chatSessionId, { role: 'user', content: displayContent });
                 wsSend(JSON.stringify({ type: 'chat.start', sessionId: chatSessionId }));
+                // Immediate feedback
+                wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: `正在执行路径「${matchedPath.name}」...\n\n` } }));
 
                 try {
                   // Run via engine: orchestrator + per-step independent sessions (tasks)
                   const { stepResults: engineResults, blueprint: engineBlueprint } = await smartPathEngine.runWithResults(
                     runPathId, runWorkspace, argsToUse,
                     (stepIndex, delta) => {
-                      const stepLabel = stepIndex === -1 ? '分析' : `步骤${stepIndex + 1}`;
+                      const stepLabel = stepIndex === -1 ? '📋 分析' : `▶️ 步骤${stepIndex + 1}`;
                       wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: `\n### ${stepLabel}\n${delta}` } }));
                     },
                   );
@@ -1339,10 +1354,14 @@ wss.on('connection', (ws: WebSocket) => {
                   wsSend(JSON.stringify({ type: 'chat.delta', sessionId: chatSessionId, delta: { type: 'text_delta', text: summaryParts.join('') } }));
                   // Save summary as assistant message for multi-turn follow-up
                   store.addMessage(chatSessionId, { role: 'assistant', content: summaryParts.join('') });
-                  // Update session label to mark as path execution
+                  // Update session label
                   const pathLabel = `[路径] ${matchedPath.name}`;
                   store.updateLabel(chatSessionId, pathLabel);
                   broadcast(JSON.stringify({ type: 'session.labelUpdated', sessionId: chatSessionId, label: pathLabel }));
+                  // Notify path page that execution completed
+                  const updatedPath = smartPathStore.get(runPathId, runWorkspace);
+                  const refs = smartPathStore.listReferences(runWorkspace, runPathId);
+                  broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: runPathId, path: updatedPath, references: refs }));
                   wsSend(JSON.stringify({ type: 'chat.done', sessionId: chatSessionId }));
                 } catch (err) {
                   const errMsg = err instanceof Error ? err.message : String(err);

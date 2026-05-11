@@ -187,6 +187,10 @@ export class SmartPathEngine {
     this.log.info(`Path ${pathId} aborted by user`);
   }
 
+  isRunning(pathId: string): boolean {
+    return this.activeRuns.has(pathId);
+  }
+
   async run(
     pathId: string,
     workspace: string,
