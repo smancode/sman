@@ -322,3 +322,20 @@ export function useRejectReport() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hub'] }),
   });
 }
+
+export function useStardomDevMode() {
+  return useQuery({
+    queryKey: ['stardom-dev-mode'],
+    queryFn: async () => {
+      const { data: raw } = await hubFetch('/stardom-dev-mode', {
+        method: 'POST',
+        body: JSON.stringify({}),
+        throwOnNetworkError: true,
+      });
+      if (!raw || typeof raw !== 'object') return false;
+      return (raw as { enabled?: boolean }).enabled === true;
+    },
+    staleTime: 0,
+    retry: false,
+  });
+}
