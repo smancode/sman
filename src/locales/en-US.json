@@ -1199,6 +1199,10 @@
     "text": "Running",
     "context": "Executing status"
   },
+  "smartpath.analyzing": {
+    "text": "Analyzing workflow...",
+    "context": "Orchestration analysis phase status"
+  },
   "smartpath.execute": {
     "text": "Run",
     "context": "Execute button"

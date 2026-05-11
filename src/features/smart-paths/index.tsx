@@ -148,7 +148,7 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                   {executing ? t('smartpath.executionProcess') : t('smartpath.executionResult')}
                 </div>
                 <div ref={executing ? streamRef : undefined}
-                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
+                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
                   {executing && !executionStream ? (
                     <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
                   ) : (
@@ -198,7 +198,7 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
               ) : t("smartpath.executionResult")}
             </div>
             <div ref={executing ? streamRef : undefined}
-              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto">
+              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
               {executing && !executionStream ? (
                 <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
               ) : (
@@ -291,7 +291,7 @@ function ReportViewer({ content, onClose }: { content: string; onClose: () => vo
       </div>
       <Card>
         <CardContent className="p-4">
-          <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[500px] overflow-y-auto">
+          <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[500px] overflow-y-auto whitespace-pre-wrap">
             <Streamdown mode="static" controls={{ code: true, table: true }}>
               {content}
             </Streamdown>
@@ -476,6 +476,21 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
 
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">{t("smartpath.stepLabel")}</Label>
+        {running && stepExecutionStatus[-1] === 'running' && (
+          <div className="px-3 py-2 border rounded-md bg-primary/5 border-primary/20 mb-2 text-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span className="text-primary">{t('smartpath.analyzing')}</span>
+            </div>
+            {stepExecutionStream[-1] && (
+              <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+                <Streamdown mode='static' controls={{ code: true, table: true }}>
+                  {stepExecutionStream[-1]}
+                </Streamdown>
+              </div>
+            )}
+          </div>
+        )}
         {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">{t("smartpath.noStepsView")}</div>
           : <div className="space-y-0">{steps.map((s, i) => (
             <StepViewCard key={i} step={s} index={i} total={steps.length}
@@ -513,7 +528,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                           <span className="text-sm font-medium">{ref.fileName}</span>
                           <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>{t("common.close")}</Button>
                         </div>
-                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto">
+                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap">
                           <Streamdown mode="static" controls={{ code: true, table: true }}>
                             {currentReference}
                           </Streamdown>

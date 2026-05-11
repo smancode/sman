@@ -14,8 +14,8 @@ const STAR_COLOR = '#00ff41';
 const TRAIL_ALPHA = 0.15;
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+=~';
 const CHAR_COUNT = CHARS.length;
-const ATLAS_FONT_SIZE = 20;
-const ATLAS_CELL = 24;
+const ATLAS_FONT_SIZE = 28;
+const ATLAS_CELL = 32;
 
 function buildAtlas(): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -103,7 +103,7 @@ export function StarfieldCanvas() {
         }
 
         const progress = 1 - star.z / 2;
-        const size = Math.max(4, Math.min(14, progress * 16));
+        const size = Math.max(6, Math.min(20, progress * 22));
         const alpha = Math.min(1, progress * 1.5);
 
         ctx.globalAlpha = alpha;

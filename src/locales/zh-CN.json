@@ -1199,6 +1199,10 @@
     "text": "执行中",
     "context": "执行中状态"
   },
+  "smartpath.analyzing": {
+    "text": "分析工作流中...",
+    "context": "主编分析阶段状态"
+  },
   "smartpath.execute": {
     "text": "执行",
     "context": "执行按钮"
