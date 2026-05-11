@@ -538,11 +538,19 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
 
     const encrypted = buildEncryptedRequest(payload);
 
-    const fetchRes = await fetch(targetUrl, {
-      method: req.method === 'GET' ? 'POST' : req.method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(encrypted),
-    });
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 3000);
+    let fetchRes: Response;
+    try {
+      fetchRes = await fetch(targetUrl, {
+        method: req.method === 'GET' ? 'POST' : req.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(encrypted),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(fetchTimeout);
+    }
 
     const responseBody = await fetchRes.text();
 

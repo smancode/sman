@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
-import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useDissolveRoom, useRoomAgents } from '@/queries/use-hub';
+import { useRooms, useCreateRoom, useJoinRoom, useLeaveRoom, useDissolveRoom, useRoomAgents, useHubReachable } from '@/queries/use-hub';
 import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
@@ -31,6 +31,7 @@ export function HubDashboard() {
   const client = useWsConnection((s) => s.client);
 
   const hub = settings?.hub;
+  const { data: hubReachable, isLoading: hubHealthLoading } = useHubReachable(hub?.serverUrl);
   const [showConfig, setShowConfig] = useState(false);
   const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
   const [hubSaved, setHubSaved] = useState(false);
@@ -97,6 +98,11 @@ export function HubDashboard() {
         <ChevronLeft className="h-4 w-4" />
         {t('cron.back')}
       </button>
+      {!hubHealthLoading && hub?.serverUrl && hubReachable === false && (
+        <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] text-yellow-600 dark:text-yellow-400">
+          {t('hub.status.serverUnreachable')}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
           {t('hub.tab.rooms')}
@@ -351,6 +357,12 @@ export function HubDashboard() {
         </>
       )}
     </div>
+  ) : !hubHealthLoading && hub?.serverUrl && hubReachable === false ? (
+    <FeedbackState
+      state="error"
+      title={t('hub.status.serverUnreachable')}
+      description={t('hub.status.serverUnreachableDesc')}
+    />
   ) : (
     <FeedbackState
       state={isLoading ? 'loading' : rooms && rooms.length === 0 ? 'empty' : 'empty'}

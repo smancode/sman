@@ -2887,6 +2887,14 @@
     "text": "Not connected",
     "context": "Team not connected hint"
   },
+  "hub.status.serverUnreachable": {
+    "text": "Server connection error, re-entering will auto-retry",
+    "context": "Hub server unreachable hint"
+  },
+  "hub.status.serverUnreachableDesc": {
+    "text": "Hub server is temporarily unreachable, local usage is not affected",
+    "context": "Hub server unreachable description"
+  },
   "hub.room.create": {
     "text": "Create Project Group",
     "context": "Create project group button"

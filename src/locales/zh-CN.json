@@ -2887,6 +2887,14 @@
     "text": "未连接",
     "context": "组队未连接提示"
   },
+  "hub.status.serverUnreachable": {
+    "text": "服务端连接异常，重新进入会自动重试",
+    "context": "Hub 服务端不可达提示"
+  },
+  "hub.status.serverUnreachableDesc": {
+    "text": "组队服务端暂时无法连接，不影响本地使用",
+    "context": "Hub 服务端不可达详细说明"
+  },
   "hub.room.create": {
     "text": "创建项目组",
     "context": "创建项目组按钮"
