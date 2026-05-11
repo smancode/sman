@@ -15,7 +15,7 @@ import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2, KeyRound, Shield,
+  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2, KeyRound, Shield, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -45,6 +45,7 @@ export function HubDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [joinPasswordRoom, setJoinPasswordRoom] = useState<{ roomId: string; inline?: boolean } | null>(null);
   const [joinPasswordValue, setJoinPasswordValue] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const { data: roomResult, error: roomsError, isLoading } = useRooms(appliedSearch, page * PAGE_SIZE, PAGE_SIZE);
   const rooms = roomResult?.rooms;
@@ -60,13 +61,17 @@ export function HubDashboard() {
 
   const handleCreate = () => {
     if (!newName.trim()) return;
+    if (newPassword.length > 0 && newPassword.length !== 4) {
+      setError(t('hub.room.passwordPlaceholder'));
+      return;
+    }
     setError('');
     createRoom.mutate({
       name: newName.trim(),
       description: newDesc.trim() || undefined,
       maxAgents: newMaxAgents,
       visibility: newRoomPublic ? 'public' : 'private',
-      password: newPassword.trim() || undefined,
+      password: newPassword.length === 4 ? newPassword : undefined,
     }, {
       onSuccess: () => {
         setNewName(''); setNewDesc(''); setNewMaxAgents(10); setNewPassword('');
@@ -418,7 +423,19 @@ export function HubDashboard() {
               {selectedRoom.hasPassword && (
                 <span className="flex items-center gap-0.5 shrink-0 text-amber-500">
                   <Shield className="h-3 w-3" />
-                  {t('hub.room.hasPassword')}
+                  {selectedRoom.isOwner && selectedRoom.password ? (
+                    <>
+                      <span className="font-mono">{showPassword ? selectedRoom.password : '****'}</span>
+                      <button
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="ml-0.5 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </button>
+                    </>
+                  ) : (
+                    t('hub.room.hasPassword')
+                  )}
                 </span>
               )}
               <span className="shrink-0 flex items-center gap-0.5">

@@ -572,7 +572,7 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
       const encRes = JSON.parse(responseBody);
       if (encRes.payload) {
         const decrypted = decrypt(encRes.payload) as unknown;
-        // Tag isOwner on room list responses
+        // Tag isOwner on room list responses, keep password for owner only
         if (targetPath.startsWith('/api/hub/rooms') && req.method === 'POST') {
           const rooms = Array.isArray(decrypted)
             ? decrypted
@@ -580,10 +580,22 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
           if (Array.isArray(rooms)) {
             const cid = getClientId();
             const cidUser = cid.split('@')[0];
-            for (const room of rooms as { owner_id?: string; isOwner?: boolean }[]) {
+            for (const room of rooms as { owner_id?: string; isOwner?: boolean; password?: string; hasPassword?: boolean }[]) {
               const ownerUser = (room.owner_id ?? '').split('@')[0];
               room.isOwner = room.owner_id === cid || ownerUser === cidUser;
+              if (!room.isOwner) delete room.password;
             }
+          }
+        }
+        // Room detail: keep password for owner, strip for others
+        if (/^\/api\/hub\/rooms\/[^/]+$/.test(targetPath) && req.method === 'POST') {
+          const detail = decrypted as { room?: { owner_id?: string; password?: string } } | null;
+          if (detail?.room) {
+            const cid = getClientId();
+            const cidUser = cid.split('@')[0];
+            const ownerUser = (detail.room.owner_id ?? '').split('@')[0];
+            const isOwner = detail.room.owner_id === cid || ownerUser === cidUser;
+            if (!isOwner) delete detail.room.password;
           }
         }
         // After creating a room via REST, join via WS and register agents

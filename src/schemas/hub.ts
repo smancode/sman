@@ -35,6 +35,7 @@ export const RoomSchema = z.object({
   isOwner: z.boolean().optional().default(false),
   isMember: z.boolean().optional().default(false),
   hasPassword: z.boolean().optional().default(false),
+  password: z.string().optional(),
 }).passthrough();
 
 export const RoomMemberSchema = z.object({
