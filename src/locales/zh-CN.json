@@ -2915,6 +2915,14 @@
     "text": "输入项目组 ID",
     "context": "加入项目组 ID 输入框占位符"
   },
+  "hub.room.joinNotFound": {
+    "text": "项目组不存在",
+    "context": "加入不存在的项目组错误提示"
+  },
+  "hub.room.joinFull": {
+    "text": "项目组已满",
+    "context": "项目组成员已满错误提示"
+  },
   "hub.room.namePlaceholder": {
     "text": "项目组名称",
     "context": "创建项目组名称输入框占位符"

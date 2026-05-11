@@ -67,7 +67,12 @@ export function HubDashboard() {
     setError('');
     joinRoom.mutate({ roomId: joinId.trim() }, {
       onSuccess: () => setJoinId(''),
-      onError: (err) => setError(err.message),
+      onError: (err) => {
+        const msg = err.message;
+        if (msg.includes('not found') || msg.includes('404')) setError(t('hub.room.joinNotFound'));
+        else if (msg.includes('full') || msg.includes('409')) setError(t('hub.room.joinFull'));
+        else setError(msg);
+      },
     });
   };
 

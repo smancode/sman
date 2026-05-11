@@ -2915,6 +2915,14 @@
     "text": "Enter project group ID",
     "context": "Join project group ID input placeholder"
   },
+  "hub.room.joinNotFound": {
+    "text": "Project group not found",
+    "context": "Join non-existent group error"
+  },
+  "hub.room.joinFull": {
+    "text": "Project group is full",
+    "context": "Group full error"
+  },
   "hub.room.namePlaceholder": {
     "text": "Project group name",
     "context": "Create project group name input placeholder"
