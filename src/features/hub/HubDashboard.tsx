@@ -15,7 +15,7 @@ import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2,
+  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2, KeyRound, Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +40,11 @@ export function HubDashboard() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
   const [newRoomPublic, setNewRoomPublic] = useState(false);
+  const [newDesc, setNewDesc] = useState('');
+  const [newMaxAgents, setNewMaxAgents] = useState(10);
+  const [newPassword, setNewPassword] = useState('');
+  const [joinPasswordRoom, setJoinPasswordRoom] = useState<{ roomId: string; inline?: boolean } | null>(null);
+  const [joinPasswordValue, setJoinPasswordValue] = useState('');
 
   const { data: roomResult, error: roomsError, isLoading } = useRooms(appliedSearch, page * PAGE_SIZE, PAGE_SIZE);
   const rooms = roomResult?.rooms;
@@ -56,24 +61,43 @@ export function HubDashboard() {
   const handleCreate = () => {
     if (!newName.trim()) return;
     setError('');
-    createRoom.mutate({ name: newName.trim(), visibility: newRoomPublic ? 'public' : 'private' }, {
-      onSuccess: () => { setNewName(''); setShowCreate(false); setNewRoomPublic(false); },
+    createRoom.mutate({
+      name: newName.trim(),
+      description: newDesc.trim() || undefined,
+      maxAgents: newMaxAgents,
+      visibility: newRoomPublic ? 'public' : 'private',
+      password: newPassword.trim() || undefined,
+    }, {
+      onSuccess: () => {
+        setNewName(''); setNewDesc(''); setNewMaxAgents(10); setNewPassword('');
+        setShowCreate(false); setNewRoomPublic(false);
+      },
       onError: (err) => setError(err.message),
     });
   };
 
-  const handleJoin = () => {
-    if (!joinId.trim()) return;
+  const handleJoin = (roomId: string, password?: string) => {
     setError('');
-    joinRoom.mutate({ roomId: joinId.trim() }, {
-      onSuccess: () => setJoinId(''),
+    joinRoom.mutate({ roomId, password }, {
+      onSuccess: () => { setJoinId(''); setJoinPasswordRoom(null); setJoinPasswordValue(''); },
       onError: (err) => {
         const msg = err.message;
         if (msg.includes('not found') || msg.includes('404')) setError(t('hub.room.joinNotFound'));
         else if (msg.includes('full') || msg.includes('409')) setError(t('hub.room.joinFull'));
+        else if (msg.includes('Wrong password') || msg.includes('403')) setError(t('hub.room.wrongPassword'));
         else setError(msg);
       },
     });
+  };
+
+  const handleJoinById = () => {
+    if (!joinId.trim()) return;
+    handleJoin(joinId.trim());
+  };
+
+  const handleJoinWithPassword = () => {
+    if (!joinPasswordRoom) return;
+    handleJoin(joinPasswordRoom.roomId, joinPasswordValue.trim());
   };
 
   if (status !== 'connected') {
@@ -115,29 +139,58 @@ export function HubDashboard() {
 
       {showCreate && (
         <div className="mb-2 space-y-1.5">
-          <div className="flex gap-1.5">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={t('hub.room.namePlaceholder')}
-              className="h-7 text-xs flex-1"
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              autoFocus
-            />
-            <Button size="sm" className="h-7 px-2.5 text-xs shrink-0" onClick={handleCreate} disabled={!newName.trim()}>
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={t('hub.room.namePlaceholder')}
+            className="h-7 text-xs"
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            autoFocus
+          />
+          <textarea
+            value={newDesc}
+            onChange={(e) => setNewDesc(e.target.value)}
+            placeholder={t('hub.room.descriptionPlaceholder')}
+            className="w-full rounded-md border bg-transparent px-2 py-1 text-xs resize-none h-14 focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <div className="flex gap-1.5 items-center">
+            <div className="flex items-center gap-1 flex-1">
+              <span className="text-[11px] text-muted-foreground shrink-0">{t('hub.room.maxAgents')}</span>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={newMaxAgents}
+                onChange={(e) => setNewMaxAgents(Number(e.target.value) || 10)}
+                className="h-6 w-14 text-xs text-center"
+              />
+            </div>
+            <div className="flex items-center gap-1 flex-1">
+              <KeyRound className="h-3 w-3 text-muted-foreground shrink-0" />
+              <Input
+                value={newPassword}
+                onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setNewPassword(v); }}
+                placeholder={t('hub.room.passwordPlaceholder')}
+                className="h-6 w-16 text-xs"
+                maxLength={4}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setNewRoomPublic(!newRoomPublic)}
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors',
+                newRoomPublic ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {newRoomPublic ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+              {newRoomPublic ? t('hub.room.public') : t('hub.room.private')}
+            </button>
+            <Button size="sm" className="h-7 px-2.5 text-xs" onClick={handleCreate} disabled={!newName.trim()}>
               {t('common.confirm')}
             </Button>
           </div>
-          <button
-            onClick={() => setNewRoomPublic(!newRoomPublic)}
-            className={cn(
-              'flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors',
-              newRoomPublic ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
-            )}
-          >
-            {newRoomPublic ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-            {newRoomPublic ? t('hub.room.public') : t('hub.room.private')}
-          </button>
         </div>
       )}
 
@@ -179,8 +232,10 @@ export function HubDashboard() {
                     : 'text-foreground hover:bg-muted'
                 )}
               >
-                <span className="shrink-0">
-                  {room.visibility === 'public' ? (
+                <span className="shrink-0 flex items-center gap-0.5">
+                  {room.hasPassword ? (
+                    <KeyRound className="h-3 w-3 text-amber-500" />
+                  ) : room.visibility === 'public' ? (
                     <Globe className="h-3 w-3 text-muted-foreground" />
                   ) : (
                     <Lock className="h-3 w-3 text-muted-foreground" />
@@ -218,7 +273,12 @@ export function HubDashboard() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      joinRoom.mutate({ roomId: room.id });
+                      if (room.hasPassword) {
+                        setJoinPasswordRoom({ roomId: room.id });
+                        setJoinPasswordValue('');
+                      } else {
+                        handleJoin(room.id);
+                      }
                     }}
                     className="shrink-0 opacity-0 group-hover:opacity-100 rounded p-0.5 text-muted-foreground hover:text-primary transition-all"
                     title={t('hub.room.join')}
@@ -259,9 +319,9 @@ export function HubDashboard() {
           onChange={(e) => setJoinId(e.target.value)}
           placeholder={t('hub.room.joinId')}
           className="h-7 text-xs flex-1"
-          onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+          onKeyDown={(e) => e.key === 'Enter' && handleJoinById()}
         />
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={handleJoin} disabled={!joinId.trim()}>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs shrink-0" onClick={handleJoinById} disabled={!joinId.trim()}>
           <LogIn className="h-3 w-3 mr-1" />
           {t('hub.room.join')}
         </Button>
@@ -273,6 +333,35 @@ export function HubDashboard() {
 
       {roomsError && (
         <p className="mt-1.5 text-[11px] text-destructive">{(roomsError as Error).message}</p>
+      )}
+
+      {joinPasswordRoom && (
+        <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 space-y-1.5">
+          <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+            <KeyRound className="h-3 w-3" />
+            {t('hub.room.inputPassword')}
+          </div>
+          <div className="flex gap-1.5">
+            <Input
+              value={joinPasswordValue}
+              onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setJoinPasswordValue(v); }}
+              placeholder={t('hub.room.passwordPlaceholder')}
+              className="h-7 text-xs flex-1"
+              maxLength={4}
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && handleJoinWithPassword()}
+            />
+            <Button size="sm" className="h-7 px-2 text-xs shrink-0" onClick={handleJoinWithPassword} disabled={joinPasswordValue.length < 4}>
+              {t('hub.room.join')}
+            </Button>
+          </div>
+          <button
+            onClick={() => { setJoinPasswordRoom(null); setJoinPasswordValue(''); }}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
       )}
     </TooltipProvider>
   );
@@ -319,6 +408,25 @@ export function HubDashboard() {
               </Badge>
             </div>
           </div>
+
+          {selectedRoom && (
+            <div className="flex items-center gap-3 border-b px-6 py-2 text-[11px] text-muted-foreground">
+              {selectedRoom.description && (
+                <span className="truncate" title={selectedRoom.description ?? undefined}>{selectedRoom.description}</span>
+              )}
+              <span className="shrink-0">{t('hub.room.maxAgents')}: {selectedRoom.max_agents}</span>
+              {selectedRoom.hasPassword && (
+                <span className="flex items-center gap-0.5 shrink-0 text-amber-500">
+                  <Shield className="h-3 w-3" />
+                  {t('hub.room.hasPassword')}
+                </span>
+              )}
+              <span className="shrink-0 flex items-center gap-0.5">
+                {selectedRoom.visibility === 'public' ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                {selectedRoom.visibility === 'public' ? t('hub.room.public') : t('hub.room.private')}
+              </span>
+            </div>
+          )}
 
           <div className="flex-1 overflow-hidden">
             {rightTab === 'tasks' && (

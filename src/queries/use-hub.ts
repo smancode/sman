@@ -113,7 +113,7 @@ export function useRoom(roomId: string | undefined) {
 export function useCreateRoom() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: { name: string; description?: string; maxAgents?: number; visibility?: 'public' | 'private' }) =>
+    mutationFn: (params: { name: string; description?: string; maxAgents?: number; visibility?: 'public' | 'private'; password?: string }) =>
       hubMutate('/rooms', { method: 'POST', body: JSON.stringify(params) }),
     onSuccess: () => qc.refetchQueries({ queryKey: ['hub', 'rooms'] }),
   });
@@ -122,9 +122,9 @@ export function useCreateRoom() {
 export function useJoinRoom() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: { roomId: string; clientId?: string; displayName?: string }) =>
-      hubMutate(`/rooms/${params.roomId}/join`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop', displayName: params.displayName }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hub', 'rooms'] }),
+    mutationFn: (params: { roomId: string; clientId?: string; displayName?: string; password?: string }) =>
+      hubMutate(`/rooms/${params.roomId}/join`, { method: 'POST', body: JSON.stringify({ clientId: params.clientId || 'desktop', displayName: params.displayName, password: params.password }) }),
+    onSuccess: () => qc.refetchQueries({ queryKey: ['hub', 'rooms'] }),
   });
 }
 
