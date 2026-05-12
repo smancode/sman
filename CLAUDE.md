@@ -26,11 +26,12 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 
 1. **新建会话** → 选择项目目录 → 开始对话 → 按目录分组显示会话
 2. **协作星图** → 多 Agent 协作网络（仪表盘 + 像素世界）
-3. **定时任务** → Cron 表达式驱动的自动化任务
-4. **地球路径** → 多步骤自动化工作流（逐步骤执行，前一步结果作为下一步上下文）
-5. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
-6. **代码查看器** → 集成在聊天界面右侧，文件树浏览、代码读取、符号搜索
-7. **Git 面板** → 集成在聊天界面右侧，状态查看、Diff 对比、提交推送
+3. **组队** → 多人协作空间（项目组、任务看板、Agent 管理）
+4. **定时任务** → Cron 表达式驱动的自动化任务
+5. **地球路径** → 多步骤自动化工作流（逐步骤执行，前一步结果作为下一步上下文）
+6. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
+7. **代码查看器** → 集成在聊天界面右侧，文件树浏览、代码读取、符号搜索
+8. **Git 面板** → 集成在聊天界面右侧，状态查看、Diff 对比、提交推送
 
 ## 快速开始
 
@@ -52,6 +53,15 @@ pnpm build         # 构建前端 + 后端
 pnpm build:electron # 编译 Electron 主进程
 pnpm electron:build # 一键构建+打包 (build + build:electron + electron-builder)
 ```
+
+### macOS 打包
+
+```bash
+bash build-mac.sh              # 完整打包 → release/Sman-<version>-arm64.dmg
+bash build-mac.sh --skip-deps  # 跳过依赖安装
+```
+
+自动设置日期版本号 (YY.MMDD.HH)，重编译 better-sqlite3 / node-screenshots 为 Electron ABI。可选 `.env.build` 注入企业版地址。
 
 ### 运行测试
 
@@ -85,6 +95,7 @@ pnpm test:watch    # 监视模式
 - **后端**: Node.js + TypeScript + Express + WebSocket (ws)
 - **桌面**: Electron + electron-vite
 - **数据库**: SQLite (better-sqlite3)
+- **截图**: electron-screenshots (跨平台截图 + 标注，底层 node-screenshots / Rust XCap)
 - **AI**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` v0.2.110 + `@anthropic-ai/claude-code` v2.1.110)
 - **渲染**: Shiki + Streamdown
 - **Schema 校验**: Zod
@@ -127,6 +138,7 @@ pnpm test:watch    # 监视模式
 5. **Auth 边界**: 只有 `/api/` 路径需要 Bearer auth，静态文件直接放行
 6. **环境隔离**: `getCleanEnv()` 清除 `ANTHROPIC_*/OPENAI_*/CLAUDE_*` 环境变量，使用隔离的 `CLAUDE_CONFIG_DIR`
 7. **消息排队**: SDK 不支持打断正在执行的 turn，后端通过 `await streamDone` 排队
+8. **原生模块打包**: `better-sqlite3` 和 `node-screenshots` 必须在 `asarUnpack` 中声明，打包前需用 `node-gyp` 重编译为 Electron ABI
 
 ## 时区处理规范
 
@@ -274,6 +286,7 @@ const MENU_ITEMS = [
 - **设置**: `settings.get/update`, `skills.list`
 - **Cron/Batch**: `cron.*`, `batch.*`
 - **星域**: `stardom.*`
+- **组队**: `hub.*`
 - **地球路径**: `smartpath.*`
 - **代码查看器**: `code.*`（listDir, readFile, searchSymbols, saveFile, searchFiles）
 - **Git 操作**: `git.*`（status, diff, commit, push, log, checkout, fetch 等）
