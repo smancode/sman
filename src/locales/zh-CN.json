@@ -2371,6 +2371,14 @@
     "text": "刷新",
     "context": "刷新按钮"
   },
+  "chat.screenshot": {
+    "text": "截图",
+    "context": "截图按钮"
+  },
+  "chat.screenshot.hideWindow": {
+    "text": "隐藏窗口截图",
+    "context": "隐藏主窗口后截图"
+  },
   "session.local": {
     "text": "本机",
     "context": "本机标签"

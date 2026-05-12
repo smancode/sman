@@ -2371,6 +2371,14 @@
     "text": "Refresh",
     "context": "Refresh button"
   },
+  "chat.screenshot": {
+    "text": "Screenshot",
+    "context": "Screenshot button"
+  },
+  "chat.screenshot.hideWindow": {
+    "text": "Capture with window hidden",
+    "context": "Hide main window then capture"
+  },
   "session.local": {
     "text": "Local",
     "context": "Local label"

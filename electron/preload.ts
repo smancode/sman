@@ -34,6 +34,16 @@ contextBridge.exposeInMainWorld('sman', {
   // Git
   getGitBranch: (dirPath: string) => ipcRenderer.invoke('git:getBranch', dirPath),
 
+  // Screenshot
+  startCapture: (options?: { hideWindow?: boolean }) => ipcRenderer.invoke('screen:startCapture', options),
+  onCaptureResult: (callback: (dataUrl: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, dataUrl: string) => callback(dataUrl);
+    ipcRenderer.on('screen:captureResult', handler);
+    return () => ipcRenderer.removeListener('screen:captureResult', handler);
+  },
+  completeCapture: (dataUrl: string) => ipcRenderer.invoke('screen:captureComplete', dataUrl),
+  cancelCapture: () => ipcRenderer.invoke('screen:captureCancel'),
+
   // Auto-updater
   updater: {
     check: () => ipcRenderer.invoke('updater:check'),

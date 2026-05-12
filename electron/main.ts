@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, dialog, shell, screen, desktopCapturer, nativeImage, Display } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import http from 'http';
@@ -9,6 +9,268 @@ const { autoUpdater } = electronUpdater;
 let mainWindow: BrowserWindow | null = null;
 let serverModule: any = null;
 let serverStopping = false;
+
+interface WindowSource {
+  name: string;
+  id: string;
+  thumbnailDataUrl: string;
+  thumbnailWidth: number;
+  thumbnailHeight: number;
+}
+
+function buildScreenshotHtml(
+  screenPng: string,
+  screenWidth: number,
+  screenHeight: number,
+  windows: WindowSource[],
+  _displays: { bounds: { x: number; y: number; width: number; height: number }; scaleFactor: number; isPrimary: boolean }[],
+): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; cursor: crosshair; user-select: none; }
+#bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+#overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); }
+#selection { position: absolute; border: 2px solid #3b82f6; background: transparent; pointer-events: none; display: none; z-index: 10; }
+#selection .dimension { position: absolute; bottom: -24px; right: 0; background: rgba(0,0,0,0.7); color: white; font: 11px/1 monospace; padding: 2px 6px; border-radius: 3px; white-space: nowrap; }
+#highlight { position: absolute; border: 2px solid #3b82f6; background: rgba(59,130,246,0.08); pointer-events: none; display: none; z-index: 5; }
+#highlight .label { position: absolute; top: -22px; left: 0; background: #3b82f6; color: white; font: 11px/1.2 system-ui, sans-serif; padding: 2px 8px; border-radius: 3px 3px 0 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toolbar { position: absolute; display: none; z-index: 20; background: rgba(0,0,0,0.8); border-radius: 6px; padding: 4px; gap: 4px; }
+#toolbar button { border: none; background: transparent; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font: 13px/1 system-ui, sans-serif; }
+#toolbar button:hover { background: rgba(255,255,255,0.15); }
+#toolbar .confirm { background: #3b82f6; }
+#toolbar .confirm:hover { background: #2563eb; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="overlay"></div>
+<div id="highlight"><span class="label"></span></div>
+<div id="selection"><span class="dimension"></span></div>
+<div id="toolbar">
+  <button class="confirm" id="btn-confirm">✓ OK</button>
+  <button id="btn-cancel">✕ Cancel</button>
+</div>
+<script>
+const screenPng = ${JSON.stringify(screenPng)};
+const screenWidth = ${screenWidth};
+const screenHeight = ${screenHeight};
+const windows = ${JSON.stringify(windows)};
+
+const canvas = document.getElementById('bg');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const highlight = document.getElementById('highlight');
+const selectionEl = document.getElementById('selection');
+const toolbar = document.getElementById('toolbar');
+const dimensionEl = selectionEl.querySelector('.dimension');
+const highlightLabel = highlight.querySelector('.label');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+overlay.style.width = window.innerWidth + 'px';
+overlay.style.height = window.innerHeight + 'px';
+
+const bgImg = new Image();
+bgImg.onload = () => { ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height); };
+bgImg.src = screenPng;
+
+let mode = 'idle'; // idle | window-detect | selecting | selected
+let startX = 0, startY = 0;
+let selRect = { x: 0, y: 0, w: 0, h: 0 };
+let detectedWin = null;
+let mouseMovedDist = 0;
+let lastMouseX = 0, lastMouseY = 0;
+
+function getWindowBoundsAtScreen(win) {
+  const thumb = new Image();
+  thumb.src = win.thumbnailDataUrl;
+  return new Promise(resolve => {
+    thumb.onload = () => {
+      const ratio = thumb.naturalWidth / thumb.naturalHeight;
+      let w = Math.min(thumb.naturalWidth * 0.7, canvas.width * 0.6);
+      let h = w / ratio;
+      resolve({ x: Math.round((canvas.width - w) / 2), y: Math.round((canvas.height - h) / 2), w: Math.round(w), h: Math.round(h) });
+    };
+    thumb.onerror = () => resolve(null);
+  });
+}
+
+const windowBoundsCache = [];
+async function cacheWindowBounds() {
+  for (const win of windows) {
+    const bounds = await getWindowBoundsAtScreen(win);
+    if (bounds) windowBoundsCache.push({ ...bounds, name: win.name, id: win.id, thumbDataUrl: win.thumbnailDataUrl });
+  }
+}
+cacheWindowBounds();
+
+function findWindowAt(x, y) {
+  for (let i = windowBoundsCache.length - 1; i >= 0; i--) {
+    const b = windowBoundsCache[i];
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+  }
+  return null;
+}
+
+function showHighlight(b) {
+  highlight.style.display = 'block';
+  highlight.style.left = b.x + 'px';
+  highlight.style.top = b.y + 'px';
+  highlight.style.width = b.w + 'px';
+  highlight.style.height = b.h + 'px';
+  highlightLabel.textContent = b.name;
+}
+
+function hideHighlight() { highlight.style.display = 'none'; }
+
+function showSelection(x, y, w, h) {
+  selectionEl.style.display = 'block';
+  selectionEl.style.left = x + 'px';
+  selectionEl.style.top = y + 'px';
+  selectionEl.style.width = w + 'px';
+  selectionEl.style.height = h + 'px';
+  dimensionEl.textContent = w + ' x ' + h;
+}
+
+function hideSelection() { selectionEl.style.display = 'none'; }
+
+function showToolbar(x, y, w, h) {
+  toolbar.style.display = 'flex';
+  let tx = x + w;
+  let ty = y + h + 8;
+  if (tx + 160 > window.innerWidth) tx = x + w - 160;
+  if (ty + 40 > window.innerHeight) ty = y - 44;
+  toolbar.style.left = tx + 'px';
+  toolbar.style.top = ty + 'px';
+}
+function hideToolbar() { toolbar.style.display = 'none'; }
+
+function clearOverlayArea(x, y, w, h) {
+  overlay.style.clipPath = \`polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 0% \${y}px, \${x}px \${y}px, \${x}px \${y+h}px, \${x+w}px \${y+h}px, \${x+w}px \${y}px, 0% \${y}px)\`;
+}
+
+function resetOverlay() { overlay.style.clipPath = 'none'; }
+
+function captureSelection() {
+  const r = selRect;
+  if (r.w < 5 || r.h < 5) return;
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = r.w;
+  tempCanvas.height = r.h;
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCtx.drawImage(bgImg, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  const dataUrl = tempCanvas.toDataURL('image/png');
+  window.sman.completeCapture(dataUrl);
+}
+
+document.addEventListener('mousemove', (e) => {
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+
+  if (mode === 'idle' || mode === 'window-detect') {
+    if (mode === 'idle') {
+      mouseMovedDist = 0;
+      mode = 'window-detect';
+    }
+    mouseMovedDist += Math.abs(e.movementX) + Math.abs(e.movementY);
+
+    if (mouseMovedDist > 10) {
+      hideHighlight();
+      const win = findWindowAt(e.clientX, e.clientY);
+      if (win) {
+        detectedWin = win;
+        showHighlight(win);
+      } else {
+        detectedWin = null;
+      }
+    }
+  } else if (mode === 'selecting') {
+    const x = Math.min(startX, e.clientX);
+    const y = Math.min(startY, e.clientY);
+    const w = Math.abs(e.clientX - startX);
+    const h = Math.abs(e.clientY - startY);
+    selRect = { x, y, w, h };
+    showSelection(x, y, w, h);
+    clearOverlayArea(x, y, w, h);
+  }
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (mode === 'idle' || mode === 'window-detect') {
+    if (detectedWin && mouseMovedDist <= 10) {
+      // Click on detected window without moving → do nothing, wait for dblclick
+      return;
+    }
+    if (mouseMovedDist > 10) {
+      // Mouse moved → switch to free selection mode
+      mode = 'selecting';
+      startX = e.clientX;
+      startY = e.clientY;
+      hideHighlight();
+      hideToolbar();
+      hideSelection();
+    }
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (mode === 'selecting') {
+    if (selRect.w > 5 && selRect.h > 5) {
+      mode = 'selected';
+      showToolbar(selRect.x, selRect.y, selRect.w, selRect.h);
+    } else {
+      mode = 'idle';
+      resetOverlay();
+      hideSelection();
+    }
+  }
+});
+
+document.addEventListener('dblclick', (e) => {
+  if (mode === 'window-detect' && detectedWin) {
+    e.preventDefault();
+    const b = detectedWin;
+    selRect = { x: b.x, y: b.y, w: b.w, h: b.h };
+    mode = 'selected';
+    hideHighlight();
+    showSelection(b.x, b.y, b.w, b.h);
+    clearOverlayArea(b.x, b.y, b.w, b.h);
+    // Immediately capture
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = b.w;
+    tempCanvas.height = b.h;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(bgImg, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+    const dataUrl = tempCanvas.toDataURL('image/png');
+    window.sman.completeCapture(dataUrl);
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    window.sman.cancelCapture();
+  } else if (e.key === 'Enter' && mode === 'selected') {
+    captureSelection();
+  }
+});
+
+document.getElementById('btn-confirm').addEventListener('click', (e) => {
+  e.stopPropagation();
+  captureSelection();
+});
+document.getElementById('btn-cancel').addEventListener('click', (e) => {
+  e.stopPropagation();
+  window.electronAPI.cancelCapture();
+});
+</script>
+</body>
+</html>`;
+}
 
 // Windows GPU compatibility: only disable hardware acceleration in remote/VDI sessions
 // where GPU drivers are known to cause white-screen issues. Local Windows machines
@@ -228,6 +490,125 @@ function registerIpcHandlers(): void {
 
   autoUpdater.on('error', (err) => {
     mainWindow?.webContents.send('updater:error', { message: err?.message || 'Unknown error' });
+  });
+
+  // Screenshot capture
+  let screenshotOverlay: BrowserWindow | null = null;
+
+  ipcMain.handle('screen:startCapture', async (_event, options: { hideWindow?: boolean }) => {
+    if (screenshotOverlay) return null;
+
+    const hideWindow = options?.hideWindow === true;
+    const wasVisible = mainWindow?.isVisible() ?? false;
+
+    if (hideWindow && mainWindow) {
+      mainWindow.hide();
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    try {
+      const primaryDisplay = screen.getPrimaryDisplay();
+      const { width, height } = primaryDisplay.size;
+      const scaleFactor = primaryDisplay.scaleFactor;
+
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: Math.round(width * scaleFactor), height: Math.round(height * scaleFactor) },
+        fetchWindowIcons: false,
+      });
+
+      const screenSource = sources.find(s => s.id.startsWith('screen:'));
+      if (!screenSource) return null;
+
+      const screenPng = screenSource.thumbnail.toDataURL('image/png');
+
+      const windows = sources
+        .filter(s => s.id.startsWith('window:') && s.name && s.name !== 'Sman')
+        .map(s => ({
+          name: s.name,
+          id: s.id,
+          thumbnailDataUrl: s.thumbnail.toDataURL('image/png'),
+          thumbnailWidth: s.thumbnail.getSize().width,
+          thumbnailHeight: s.thumbnail.getSize().height,
+        }));
+
+      const displays = screen.getAllDisplays().map(d => ({
+        bounds: d.bounds,
+        scaleFactor: d.scaleFactor,
+        isPrimary: d.id === primaryDisplay.id,
+      }));
+
+      screenshotOverlay = new BrowserWindow({
+        width,
+        height,
+        x: 0,
+        y: 0,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        hasShadow: false,
+        show: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          preload: path.join(__dirname, '../preload/preload.cjs'),
+        },
+      });
+
+      screenshotOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      if (process.platform === 'darwin') {
+        screenshotOverlay.setFullScreen(true);
+      }
+
+      screenshotOverlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildScreenshotHtml(screenPng, width, height, windows, displays))}`);
+      screenshotOverlay.once('ready-to-show', () => {
+        screenshotOverlay?.show();
+        screenshotOverlay?.focus();
+      });
+
+      screenshotOverlay.on('closed', () => {
+        screenshotOverlay = null;
+        if (hideWindow && wasVisible && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+
+      return { started: true };
+    } catch (err) {
+      console.error('[Screenshot] Failed:', err);
+      if (hideWindow && wasVisible && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+      }
+      return null;
+    }
+  });
+
+  ipcMain.handle('screen:captureComplete', (_event, dataUrl: string) => {
+    if (screenshotOverlay && !screenshotOverlay.isDestroyed()) {
+      screenshotOverlay.close();
+      screenshotOverlay = null;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('screen:captureResult', dataUrl);
+    }
+    return true;
+  });
+
+  ipcMain.handle('screen:captureCancel', () => {
+    if (screenshotOverlay && !screenshotOverlay.isDestroyed()) {
+      screenshotOverlay.close();
+      screenshotOverlay = null;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 }
 

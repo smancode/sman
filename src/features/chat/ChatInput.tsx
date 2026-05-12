@@ -6,10 +6,16 @@
  * Type "/" to open skill picker.
  */
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { SendHorizontal, RefreshCw, Brain, FileUp, X, Square, Zap } from 'lucide-react';
+import { SendHorizontal, RefreshCw, Brain, FileUp, X, Square, Zap, Scissors, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useChatStore, sendingSessions } from '@/stores/chat';
 import { SkillPicker, type PickerItem } from '@/components/SkillPicker';
@@ -184,6 +190,22 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
 
   const removeStagedMedia = useCallback((index: number) => {
     setStagedMedia((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Screenshot capture (Electron only)
+  const startScreenshot = useCallback(async (hideWindow: boolean) => {
+    if (!window.sman?.startCapture) return;
+    const unsub = window.sman.onCaptureResult((dataUrl: string) => {
+      unsub();
+      if (!dataUrl.startsWith('data:image/png;base64,')) return;
+      const base64Data = dataUrl.split(',')[1];
+      setStagedMedia((prev) => [...prev, {
+        fileName: `screenshot-${Date.now()}.png`,
+        mimeType: 'image/png',
+        base64Data,
+      }]);
+    });
+    await window.sman.startCapture({ hideWindow });
   }, []);
 
   // Drag-and-drop state
@@ -514,6 +536,45 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
               <p>{t('chat.uploadFile')}</p>
             </TooltipContent>
           </Tooltip>
+
+          {/* Screenshot Button */}
+          {window.sman?.startCapture && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-lg rounded-r-none pr-0.5"
+                      onClick={() => startScreenshot(false)}
+                      disabled={disabled}
+                    >
+                      <Scissors className="h-[18px] w-[18px] -rotate-90" />
+                    </Button>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 rounded-lg rounded-l-none pl-0 w-5"
+                        disabled={disabled}
+                      >
+                        <ChevronDown className="h-2.5 w-2.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{t('chat.screenshot')}</p>
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => startScreenshot(true)}>
+                  {t('chat.screenshot.hideWindow')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Brain Toggle */}
           <Tooltip>
