@@ -1,4 +1,6 @@
 import Database from 'better-sqlite3';
+import path from 'node:path';
+import os from 'node:os';
 import { createLogger, type Logger } from './utils/logger.js';
 
 export interface Session {
@@ -311,12 +313,13 @@ export class SessionStore {
     return row.c;
   }
 
-  /** Get distinct active workspaces (excluding deleted and cron sessions) */
+  /** Get distinct active workspaces (excluding deleted, cron, and iterate/collect-bot sessions) */
   getActiveWorkspaces(): string[] {
     const rows = this.db.prepare(
       'SELECT DISTINCT workspace FROM sessions WHERE deleted_at IS NULL AND (is_cron = 0 OR is_cron IS NULL) ORDER BY workspace'
     ).all() as Array<{ workspace: string }>;
-    return rows.map(r => r.workspace);
+    const iterateDir = path.join(os.homedir(), '.sman', 'iterate');
+    return rows.map(r => r.workspace).filter(ws => !ws.startsWith(iterateDir));
   }
 
   updateTokenUsage(id: string, inputTokens: number, outputTokens: number): void {
