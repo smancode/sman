@@ -2559,6 +2559,14 @@
     "text": "View details",
     "context": "View details"
   },
+  "chat.reportError": {
+    "text": "Report error",
+    "context": "Report error button on error card"
+  },
+  "chat.errorReported": {
+    "text": "Reported",
+    "context": "Error report submitted hint"
+  },
   "ask.answered": {
     "text": "Answered",
     "context": "Answered"

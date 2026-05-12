@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo, memo } from 'react';
-import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info, SendHorizonal } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS, freezeLiveText, getStreamingBlocks, clearStreamingBlocks, sendingSessions, cleanupStream } from '@/stores/chat';
@@ -640,6 +640,19 @@ function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => vo
   const Icon = style.icon;
   const suggestion = ERROR_SUGGESTIONS[error.errorCode];
   const isWarning = style.severity === 'warning';
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
+
+  const handleReport = () => {
+    if (reporting || reported) return;
+    setReporting(true);
+    useChatStore.getState().reportError();
+    // Wait briefly for ack or just mark as done
+    setTimeout(() => {
+      setReporting(false);
+      setReported(true);
+    }, 1000);
+  };
 
   return (
     <div className={cn(
@@ -672,12 +685,27 @@ function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => vo
               )}
             </div>
           </div>
-          <button
-            onClick={onDismiss}
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-foreground/5"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={handleReport}
+              disabled={reporting || reported}
+              className={cn(
+                'text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-foreground/5',
+                (reporting || reported) && 'opacity-50 cursor-default',
+              )}
+              title={reported ? t('chat.errorReported') : t('chat.reportError')}
+            >
+              {reporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
+               reported ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> :
+               <SendHorizonal className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={onDismiss}
+              className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-foreground/5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

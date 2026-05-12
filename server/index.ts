@@ -2380,6 +2380,68 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'error.report': {
+          const hubUrl = settingsManager.getConfig().hub?.serverUrl;
+          const llmConfig = settingsManager.getConfig().llm;
+          const report = {
+            clientId: getClientId(),
+            sessionId: msg.sessionId,
+            errorCode: msg.errorCode,
+            errorMessage: msg.errorMessage,
+            rawError: msg.rawError,
+            workspace: msg.workspace,
+            lastUserMessage: msg.lastUserMessage,
+            llmModel: llmConfig.model || undefined,
+            llmBaseUrl: llmConfig.baseUrl || undefined,
+            osInfo: `${os.platform()} ${os.release()} ${os.arch()}`,
+          };
+          // Push to sman-server if hub configured
+          if (hubUrl) {
+            try {
+              const encrypted = buildEncryptedRequest(report);
+              const controller = new AbortController();
+              const tid = setTimeout(() => controller.abort(), 10_000);
+              fetch(`${hubUrl}/api/error-report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(encrypted),
+                signal: controller.signal,
+              }).then(res => {
+                clearTimeout(tid);
+                if (res.ok) {
+                  log.info(`Error report pushed to hub`);
+                  ws.send(JSON.stringify({ type: 'error.report.ack', success: true }));
+                } else {
+                  log.warn(`Error report push failed: ${res.status}`);
+                  ws.send(JSON.stringify({ type: 'error.report.ack', success: false, error: `HTTP ${res.status}` }));
+                }
+              }).catch(fetchErr => {
+                clearTimeout(tid);
+                log.warn(`Error report push failed: ${fetchErr}`);
+                ws.send(JSON.stringify({ type: 'error.report.ack', success: false, error: String(fetchErr) }));
+              });
+            } catch (encryptErr) {
+              log.error(`Error report encrypt failed: ${encryptErr}`);
+              ws.send(JSON.stringify({ type: 'error.report.ack', success: false, error: String(encryptErr) }));
+            }
+          } else {
+            // No hub configured — save locally as fallback
+            const reportDir = path.join(getHomeDir(), 'logs');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            const reportPath = path.join(reportDir, `error-${ts}.json`);
+            try {
+              fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf-8');
+              log.info(`Error report saved locally: ${reportPath}`);
+              ws.send(JSON.stringify({ type: 'error.report.ack', success: true, path: reportPath }));
+            } catch (writeErr) {
+              log.error(`Failed to save error report: ${writeErr}`);
+              ws.send(JSON.stringify({ type: 'error.report.ack', success: false, error: String(writeErr) }));
+            }
+          }
+          break;
+        }
+
         default:
           if (msg.type?.startsWith('stardom.')) {
             const bridge = getStardomBridge();

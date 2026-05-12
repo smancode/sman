@@ -2559,6 +2559,14 @@
     "text": "查看详情",
     "context": "查看详情"
   },
+  "chat.reportError": {
+    "text": "上报错误",
+    "context": "错误卡片上的上报按钮"
+  },
+  "chat.errorReported": {
+    "text": "已上报",
+    "context": "错误上报成功提示"
+  },
   "ask.answered": {
     "text": "已回答",
     "context": "已回答"

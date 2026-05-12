@@ -160,6 +160,7 @@ interface ChatState {
   preheatSession: () => void;
   abortRun: () => void;
   clearError: () => void;
+  reportError: () => void;
   toggleThinking: () => void;
   toggleAutoConfirm: () => void;
   clearContextWarning: () => void;
@@ -1352,6 +1353,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  reportError: () => {
+    const { error, currentSessionId, messages } = get();
+    if (!error) return;
+    const client = getWsClient();
+    if (!client) return;
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    client.send({
+      type: 'error.report',
+      sessionId: currentSessionId,
+      errorCode: error.errorCode,
+      errorMessage: error.message,
+      rawError: error.rawError,
+      lastUserMessage: lastUserMsg?.content?.slice(0, 200),
+    });
+  },
 
   answerAskUser: (askId, answers) => {
     const { currentSessionId } = get();
