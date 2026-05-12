@@ -148,21 +148,28 @@ generate_icon() {
 rebuild_native() {
   info "重编译 better-sqlite3 为 Electron ABI..."
 
-  local SQLITE_DIR
-  SQLITE_DIR=$(find node_modules/.pnpm -path "*/better-sqlite3@*/better-sqlite3" -maxdepth 6 -type d 2>/dev/null | head -1)
-
-  if [[ -z "$SQLITE_DIR" ]]; then
-    err "未找到 better-sqlite3 模块目录"
-    exit 1
-  fi
-
   # 获取 Electron 版本
   local ELECTRON_VERSION
   ELECTRON_VERSION=$(node -e "console.log(require('electron/package.json').version)")
   info "Electron 版本: ${ELECTRON_VERSION}"
 
-  # 用 electron-rebuild 重编译
-  npx electron-rebuild -v "$ELECTRON_VERSION" -m "$SQLITE_DIR" -w better-sqlite3
+  # 找到 pnpm store 中的实际路径（pnpm 用 symlink，必须改真实路径）
+  local SQLITE_DIR
+  SQLITE_DIR=$(realpath "node_modules/better-sqlite3")
+  if [[ ! -d "$SQLITE_DIR" ]]; then
+    err "未找到 better-sqlite3 模块目录"
+    exit 1
+  fi
+  info "模块路径: ${SQLITE_DIR}"
+
+  # 用 node-gyp 直接重编译，指定 Electron 的头文件
+  pushd "$SQLITE_DIR" > /dev/null
+  npx -y node-gyp@latest rebuild \
+    --target="${ELECTRON_VERSION}" \
+    --dist-url="https://electronjs.org/headers" \
+    --runtime=electron \
+    --target_arch=arm64
+  popd > /dev/null
 
   local NODE_FILE="$SQLITE_DIR/build/Release/better_sqlite3.node"
   if [[ ! -f "$NODE_FILE" ]]; then

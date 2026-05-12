@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "26.511.21",
+  "version": "26.512.13",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -59,6 +59,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cron-parser": "^5.5.0",
+    "electron-screenshots": "^0.6.1",
     "electron-updater": "^6.8.3",
     "express": "^4.21.0",
     "gray-matter": "^4.0.3",
@@ -110,12 +111,14 @@
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "esbuild",
-      "electron"
+      "electron",
+      "electron-screenshots"
     ]
   },
   "build": {
     "appId": "com.smanbase.app",
     "productName": "Sman",
+    "npmRebuild": false,
     "publish": {
       "provider": "generic",
       "url": "https://update.example.com/sman"
@@ -143,6 +146,11 @@
       "!node_modules/.pnpm/**/node-gyp/**/*",
       "!node_modules/.pnpm/**/cmake-js/**/*",
       "!node_modules/.pnpm/**/source-map/**/*",
+      "!node_modules/.pnpm/**/node-screenshots-win32-ia32-msvc/**/*",
+      "!node_modules/.pnpm/**/node-screenshots-linux-x64-gnu/**/*",
+      "!node_modules/.pnpm/**/node-screenshots-linux-x64-musl/**/*",
+      "!node_modules/.pnpm/**/node-screenshots-linux-arm64-gnu/**/*",
+      "!node_modules/.pnpm/**/node-screenshots-linux-loong64-gnu/**/*",
       "!node_modules/**/*.d.ts",
       "!node_modules/**/*.md",
       "!node_modules/**/*.ts",
@@ -224,6 +232,9 @@
     "asarUnpack": [
       "node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/**/*",
       "node_modules/better-sqlite3/**/*",
+      "node_modules/.pnpm/node-screenshots@*/node_modules/node-screenshots/**/*",
+      "node_modules/.pnpm/node-screenshots-*/node_modules/node-screenshots-*/**/*",
+      "node_modules/electron-screenshots/**/*",
       "plugins/**/*"
     ],
     "directories": {

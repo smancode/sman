@@ -19,8 +19,6 @@ declare global {
       getGitBranch: (dirPath: string) => Promise<string | null>;
       startCapture: (options?: { hideWindow?: boolean }) => Promise<{ started: boolean } | null>;
       onCaptureResult: (callback: (dataUrl: string) => void) => () => void;
-      completeCapture: (dataUrl: string) => Promise<true>;
-      cancelCapture: () => Promise<void>;
       updater?: {
         check: () => Promise<{ status: string; version?: string; message?: string }>;
         install: () => Promise<void>;

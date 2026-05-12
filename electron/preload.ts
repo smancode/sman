@@ -41,8 +41,6 @@ contextBridge.exposeInMainWorld('sman', {
     ipcRenderer.on('screen:captureResult', handler);
     return () => ipcRenderer.removeListener('screen:captureResult', handler);
   },
-  completeCapture: (dataUrl: string) => ipcRenderer.invoke('screen:captureComplete', dataUrl),
-  cancelCapture: () => ipcRenderer.invoke('screen:captureCancel'),
 
   // Auto-updater
   updater: {
