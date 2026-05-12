@@ -127,6 +127,7 @@ function TaskCreateForm({ roomId, onSubmit, onCancel }: {
       description: description.trim() || undefined,
       acceptanceCriteria: acceptanceCriteria.trim() || undefined,
       gitBranch: gitBranch.trim() || undefined,
+      autoExecute: true,
       subtasks: subtasks.filter(st => st.name.trim()).length > 0
         ? subtasks.filter(st => st.name.trim()).map(st => ({ id: st.id, name: st.name.trim(), description: st.description.trim() || undefined }))
         : undefined,

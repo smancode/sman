@@ -29,8 +29,8 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
 
   const { task, events, evaluations, assignments } = detail;
   const subtasks = parseSubtasks(task.subtasks);
-  const canConfirm = task.status === 'evaluating' && evaluations.length > 0;
-  const canDispatch = task.status === 'confirmed';
+  const canConfirm = task.status === 'evaluating' && evaluations.length > 0 && !task.auto_execute;
+  const canDispatch = task.status === 'confirmed' && !task.auto_execute;
   const canReject = task.status === 'evaluating';
   const canStop = task.status === 'dispatched' || task.status === 'running';
 
@@ -120,6 +120,7 @@ export function TaskDetail({ taskId, agents, onBack }: TaskDetailProps) {
                       report={report}
                       subtasks={subtasks}
                       agents={agents}
+                      autoExecute={!!task.auto_execute}
                     />
                   ))}
                 </div>
@@ -262,10 +263,11 @@ function SubtaskRow({ subtask, evaluations, assignments }: {
   );
 }
 
-function EvaluationCard({ report, subtasks, agents }: {
+function EvaluationCard({ report, subtasks, agents, autoExecute }: {
   report: EvaluationReport;
   subtasks: Subtask[];
   agents: Agent[];
+  autoExecute: boolean;
 }) {
   const approveReport = useApproveReport();
   const rejectReport = useRejectReport();
@@ -318,7 +320,7 @@ function EvaluationCard({ report, subtasks, agents }: {
         <p className="text-xs text-muted-foreground whitespace-pre-wrap">{report.approach}</p>
       )}
 
-      {report.status === 'pending' && (
+      {report.status === 'pending' && !autoExecute && (
         <div className="flex gap-1.5 pt-1">
           <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" onClick={() => approveReport.mutate({ reportId: report.id })}>
             <Check className="h-2.5 w-2.5 mr-0.5" />
