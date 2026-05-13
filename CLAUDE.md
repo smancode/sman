@@ -54,6 +54,15 @@ pnpm build:electron # 编译 Electron 主进程
 pnpm electron:build # 一键构建+打包 (build + build:electron + electron-builder)
 ```
 
+### Windows 打包
+
+```bash
+bash build-win.sh              # 完整打包 → release/Sman-Setup-<version>.exe (NSIS)
+bash build-win.sh --skip-deps  # 跳过依赖安装
+```
+
+自动设置日期版本号 (YY.MMDD.HH)，清理无效 rollup 符号链接，输出 NSIS 安装包。可选 `.env.build` 注入企业版地址。
+
 ### macOS 打包
 
 ```bash
