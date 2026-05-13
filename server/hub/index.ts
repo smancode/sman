@@ -15,6 +15,7 @@ import { readInitMd } from './init-reader.js';
 import { loadPsk } from './crypto.js';
 import { createLogger } from '../utils/logger.js';
 import { getClientId } from '../utils/network.js';
+import { getServerBaseUrl, resolveServerBaseUrl, invalidateServerBaseUrlCache } from '../server-url.js';
 
 const log = createLogger('Hub');
 
@@ -35,15 +36,13 @@ function getVersion(): string {
   return 'unknown';
 }
 
-function getServerUrl(sm: SettingsManager): string {
-  return process.env.SMAN_HUB_URL || sm.getConfig().hub?.serverUrl || '';
-}
-
 function getPsk(): string {
   return loadPsk();
 }
 
 function isHubEnabled(sm: SettingsManager): boolean {
+  const url = getServerBaseUrl(sm);
+  if (url) return true;
   if (process.env.SMAN_HUB_URL) return true;
   return sm.getConfig().hub?.enabled ?? false;
 }
@@ -54,13 +53,14 @@ function buildAgentId(clientId: string, workspace: string): string {
   return `${hostname}:${hash}`;
 }
 
-export function initHub(
+export async function initHub(
   settingsManager: SettingsManager,
   sessionStore: SessionStore,
   broadcastStore: BroadcastStore,
   sessionManager?: ClaudeSessionManager,
-): void {
-  const serverUrl = getServerUrl(settingsManager);
+): Promise<void> {
+  // Resolve serverBaseUrl: read config → probe if missing
+  const serverUrl = await resolveServerBaseUrl(settingsManager);
   const enabled = isHubEnabled(settingsManager);
   log.info(`initHub: enabled=${enabled}, serverUrl=${serverUrl || '(empty)'}`);
 
@@ -71,7 +71,7 @@ export function initHub(
 
   // HTTP client for heartbeat/broadcast
   hubClient = new HubClient({
-    getServerUrl: () => getServerUrl(settingsManager),
+    getServerUrl: () => getServerBaseUrl(settingsManager),
     getEnabled: () => isHubEnabled(settingsManager),
     getVersion,
     sessionStore,
@@ -94,7 +94,7 @@ export function initHub(
   let joinedRoomId: string | undefined;
 
   hubWsClient = new HubWsClient({
-    getServerUrl: () => getServerUrl(settingsManager),
+    getServerUrl: () => getServerBaseUrl(settingsManager),
     getPsk: () => getPsk(),
     getClientId: () => getClientId(),
     sessionStore,
@@ -194,11 +194,11 @@ export function getEvaluationHandler(): EvaluationHandler | null {
   return evaluationHandler;
 }
 
-export function getHubStatus(): Record<string, unknown> {
+export function getHubStatus(sm: SettingsManager): Record<string, unknown> {
   return {
     initialized: hubClient !== null,
     wsConnected: hubWsClient?.isConnected() ?? false,
-    SMAN_HUB_URL: process.env.SMAN_HUB_URL || '(not set)',
+    serverBaseUrl: getServerBaseUrl(sm) || '(not resolved)',
     SMAN_PSK: process.env.SMAN_PSK ? '(set, ' + process.env.SMAN_PSK.length + ' chars)' : '(not set, will use bundled hub.key)',
   };
 }

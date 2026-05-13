@@ -3210,6 +3210,8 @@
   "hub.settings.title": { "text": "连接配置" },
   "hub.settings.serverUrl": { "text": "服务器地址" },
   "hub.settings.serverUrlHint": { "text": "sman-server 的地址（如 http://192.168.1.100:5882）" },
+  "hub.settings.fallbackUrl": { "text": "内网服务器地址" },
+  "hub.settings.fallbackUrlHint": { "text": "外网 smancode.com 自动探测，内网不通时尝试此地址（如 http://10.0.0.1:5882）" },
   "hub.settings.adminToken": { "text": "Admin Token" },
   "hub.settings.adminTokenPlaceholder": { "text": "sman-server 的 ADMIN_TOKEN" },
   "hub.settings.save": { "text": "保存 Hub 配置" }

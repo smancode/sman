@@ -75,8 +75,10 @@ export interface SmanConfig {
   };
   stardom?: StardomConfig;
   hub?: {
-    serverUrl: string;
-    updateUrl: string;
+    serverUrl: string;       // @deprecated 向后兼容，优先读 serverBaseUrl
+    updateUrl: string;       // @deprecated 向后兼容，统一用 serverBaseUrl
+    serverBaseUrl?: string;  // 统一服务器地址（更新、心跳、组队、错误上报共用）
+    fallbackUrl?: string;    // 内网备用地址，外网不通时探测
     enabled: boolean;
     adminToken: string;
   };

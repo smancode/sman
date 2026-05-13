@@ -51,11 +51,13 @@ let backendPort = DEFAULT_PORT;
 const INJECTED_UPDATE_URL = process.env.SMAN_UPDATE_URL;
 const INJECTED_HUB_URL = process.env.SMAN_HUB_URL;
 const INJECTED_PSK = process.env.SMAN_PSK;
+const INJECTED_FALLBACK_URL = process.env.SMAN_FALLBACK_URL;
 
 // Propagate to process.env so server-side code (loaded at runtime) can also read them.
 if (INJECTED_UPDATE_URL) process.env.SMAN_UPDATE_URL = INJECTED_UPDATE_URL;
 if (INJECTED_HUB_URL) process.env.SMAN_HUB_URL = INJECTED_HUB_URL;
 if (INJECTED_PSK) process.env.SMAN_PSK = INJECTED_PSK;
+if (INJECTED_FALLBACK_URL) process.env.SMAN_FALLBACK_URL = INJECTED_FALLBACK_URL;
 
 // Auto-updater: silent download, never auto-install
 autoUpdater.autoDownload = true;
@@ -332,24 +334,27 @@ async function ensureHubConfig(homeDir: string): Promise<void> {
     // config.json doesn't exist yet, server will create it
   }
 
-  // Enterprise build: auto-enable hub when HUB_URL is injected (PSK has built-in fallback)
+  // Enterprise build: auto-enable hub when HUB_URL is injected
   if (INJECTED_HUB_URL) {
-    if (!config.hub?.enabled) {
-      config.hub = { ...config.hub, serverUrl: INJECTED_HUB_URL, enabled: true };
+    if (!config.hub?.serverBaseUrl || config.hub.serverBaseUrl !== INJECTED_HUB_URL) {
+      config.hub = {
+        ...config.hub,
+        serverBaseUrl: INJECTED_HUB_URL,
+        serverUrl: INJECTED_HUB_URL,
+        enabled: true,
+      };
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
     }
-  } else if (!config.hub || !config.hub.serverUrl) {
-    config.hub = { serverUrl: '', updateUrl: '', enabled: false };
-    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
   }
 
-  // Priority: build-time injection > config.hub.updateUrl > package.json default
-  const updateUrl = INJECTED_UPDATE_URL || config.hub?.updateUrl;
+  // Set autoUpdater feed URL from serverBaseUrl (update endpoint is a sub-path)
+  // Priority: INJECTED_UPDATE_URL > serverBaseUrl + '/updates/sman' > config.hub.updateUrl
+  const baseUrl = INJECTED_HUB_URL || config.hub?.serverBaseUrl || config.hub?.serverUrl;
+  const updateUrl = INJECTED_UPDATE_URL
+    || (baseUrl ? `${baseUrl}/updates/sman` : '')
+    || config.hub?.updateUrl;
   if (updateUrl) {
     autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
-  }
-  if (INJECTED_UPDATE_URL) {
-    autoUpdater.setFeedURL({ provider: 'generic', url: INJECTED_UPDATE_URL });
   }
 }
 

@@ -118,7 +118,7 @@ export function HubDashboard() {
         <ChevronLeft className="h-4 w-4" />
         {t('cron.back')}
       </button>
-      {hubUnreachable && hub?.serverUrl && (
+      {hubUnreachable && (hub?.serverBaseUrl || hub?.serverUrl) && (
         <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] text-yellow-600 dark:text-yellow-400">
           {t('hub.status.serverUnreachable')}
         </div>
@@ -454,7 +454,7 @@ export function HubDashboard() {
         </>
       )}
     </div>
-  ) : hubUnreachable && hub?.serverUrl ? (
+  ) : hubUnreachable && (hub?.serverBaseUrl || hub?.serverUrl) ? (
     <FeedbackState
       state="error"
       title={t('hub.status.serverUnreachable')}

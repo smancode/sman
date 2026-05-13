@@ -20,7 +20,7 @@ export function StardomSettings({ id }: { id?: string }) {
   const [mode, setMode] = useState<string>(stardom?.mode ?? 'notify');
   const [maxSlots, setMaxSlots] = useState(stardom?.maxConcurrentTasks ?? 3);
   const hub = settings?.hub;
-  const [hubUrl, setHubUrl] = useState(hub?.serverUrl ?? '');
+  const [fallbackUrl, setFallbackUrl] = useState(hub?.fallbackUrl ?? '');
   const [hubSaved, setHubSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -40,7 +40,14 @@ export function StardomSettings({ id }: { id?: string }) {
   const handleHubSave = () => {
     client?.send({
       type: 'settings.update',
-      hub: { serverUrl: hubUrl, enabled: !!hubUrl, updateUrl: hub?.updateUrl ?? '', adminToken: '' },
+      hub: {
+        serverBaseUrl: '',
+        serverUrl: '',
+        fallbackUrl,
+        enabled: false,
+        updateUrl: '',
+        adminToken: '',
+      },
     });
     setHubSaved(true);
     setTimeout(() => setHubSaved(false), 2000);
@@ -116,15 +123,15 @@ export function StardomSettings({ id }: { id?: string }) {
         <div className="pt-4 border-t space-y-3">
           <h4 className="text-sm font-semibold">{t('hub.settings.title')}</h4>
           <div className="space-y-2">
-            <Label>{t('hub.settings.serverUrl')}</Label>
+            <Label>{t('hub.settings.fallbackUrl')}</Label>
             <Input
-              placeholder="http://localhost:5882"
-              value={hubUrl}
-              onChange={(e) => setHubUrl(e.target.value)}
+              placeholder="http://10.0.0.1:5882"
+              value={fallbackUrl}
+              onChange={(e) => setFallbackUrl(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">{t('hub.settings.serverUrlHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('hub.settings.fallbackUrlHint')}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleHubSave} disabled={!hubUrl}>
+          <Button variant="outline" size="sm" onClick={handleHubSave}>
             <Save className="h-4 w-4 mr-2" />
             {hubSaved ? t('common.saved') : t('hub.settings.save')}
           </Button>

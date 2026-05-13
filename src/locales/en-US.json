@@ -3210,6 +3210,8 @@
   "hub.settings.title": { "text": "Connection" },
   "hub.settings.serverUrl": { "text": "Server URL" },
   "hub.settings.serverUrlHint": { "text": "sman-server address (e.g. http://192.168.1.100:5882)" },
+  "hub.settings.fallbackUrl": { "text": "Internal Server URL" },
+  "hub.settings.fallbackUrlHint": { "text": "Auto-probes smancode.com for external; tries this address when unreachable (e.g. http://10.0.0.1:5882)" },
   "hub.settings.adminToken": { "text": "Admin Token" },
   "hub.settings.adminTokenPlaceholder": { "text": "sman-server ADMIN_TOKEN" },
   "hub.settings.save": { "text": "Save Hub Config" }

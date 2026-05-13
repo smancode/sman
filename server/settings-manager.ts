@@ -30,6 +30,8 @@ const DEFAULT_CONFIG: SmanConfig = {
   hub: {
     serverUrl: '',
     updateUrl: '',
+    serverBaseUrl: '',
+    fallbackUrl: '',
     enabled: false,
     adminToken: '',
   },

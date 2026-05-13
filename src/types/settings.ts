@@ -89,8 +89,10 @@ export interface SmanSettings {
   stardomEnabled?: boolean;
   stardom?: StardomSettingsConfig;
   hub?: {
-    serverUrl: string;
-    updateUrl: string;
+    serverUrl: string;       // @deprecated 向后兼容
+    updateUrl: string;       // @deprecated 向后兼容
+    serverBaseUrl?: string;  // 统一服务器地址
+    fallbackUrl?: string;    // 内网备用地址
     enabled: boolean;
     adminToken: string;
   };

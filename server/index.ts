@@ -49,6 +49,7 @@ import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { getClientId } from './utils/network.js';
+import { getServerBaseUrl, resolveServerBaseUrl } from './server-url.js';
 import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -495,7 +496,11 @@ function verifyHttpAuth(req: http.IncomingMessage): boolean {
 }
 
 async function handleHubProxy(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-  const hubUrl = settingsManager.getConfig().hub?.serverUrl;
+  let hubUrl = getServerBaseUrl(settingsManager);
+  if (!hubUrl) {
+    // Try resolving on-demand
+    hubUrl = await resolveServerBaseUrl(settingsManager);
+  }
   if (!hubUrl) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Hub not configured' }));
@@ -666,7 +671,7 @@ const server = http.createServer((req, res) => {
   // Public: hub diagnostics (no auth, for debugging)
   if (req.url === '/api/hub-status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getHubStatus()));
+    res.end(JSON.stringify(getHubStatus(settingsManager)));
     return;
   }
 
@@ -2376,12 +2381,12 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'hub:status': {
-          ws.send(JSON.stringify({ type: 'hub:status', data: getHubStatus() }));
+          ws.send(JSON.stringify({ type: 'hub:status', data: getHubStatus(settingsManager) }));
           break;
         }
 
         case 'error.report': {
-          const hubUrl = settingsManager.getConfig().hub?.serverUrl;
+          const hubUrl = getServerBaseUrl(settingsManager);
           const llmConfig = settingsManager.getConfig().llm;
           const report = {
             clientId: getClientId(),
@@ -2566,8 +2571,8 @@ export { server, homeDir };
 /** Called by Electron's startServerInProcess() after listen().
  *  server/index.ts only calls initHub() inside the isMainModule block,
  *  which is false when loaded via dynamic import(). */
-export function startHub(): void {
-  initHub(settingsManager, store, broadcastStore, sessionManager);
+export async function startHub(): Promise<void> {
+  await initHub(settingsManager, store, broadcastStore, sessionManager);
 }
 
 // Stardom Bridge（独立模块，未配置时无副作用）
@@ -2675,8 +2680,9 @@ if (isMainModule) {
     log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
     log.info(`Health check: http://${HOST}:${PORT}/api/health`);
 
-    initHub(settingsManager, store, broadcastStore, sessionManager);
-    log.info('Hub initialized');
+    initHub(settingsManager, store, broadcastStore, sessionManager).then(() => {
+      log.info('Hub initialized');
+    });
   });
 
   // Auto-setup office-skills dependencies (non-blocking)
