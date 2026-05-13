@@ -1011,17 +1011,20 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
     if (committing || stagedArray.length === 0) return;
 
     if (message.trim()) {
-      commit(message.trim(), stagedArray);
+      // 先让 UI 渲染转圈，再执行 commit
+      setTimeout(() => commit(message.trim(), stagedArray), 0);
       setMessage('');
       return;
     }
 
     // Empty message → AI generate then commit
     if (generating) return;
-    generateCommit((generated) => {
-      commit(generated, stagedArray);
-      setMessage('');
-    }, stagedArray);
+    setTimeout(() => {
+      generateCommit((generated) => {
+        commit(generated, stagedArray);
+        setMessage('');
+      }, stagedArray);
+    }, 0);
   }, [message, committing, stagedArray, generating, commit, generateCommit]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -1033,12 +1036,14 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
 
   const handleAutoGenerate = useCallback(() => {
     if (generating || stagedArray.length === 0) return;
-    generateCommit((generated) => setMessage(generated), stagedArray);
+    setTimeout(() => {
+      generateCommit((generated) => setMessage(generated), stagedArray);
+    }, 0);
   }, [generating, generateCommit, stagedArray]);
 
   const handlePush = useCallback(() => {
     if (pushing) return;
-    push();
+    setTimeout(() => push(), 0);
   }, [pushing, push]);
 
   const isBusy = committing || generating || pushing || stagedArray.length === 0;
@@ -1086,7 +1091,7 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
           className={cn(
             'flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-md border transition-colors',
             generating
-              ? 'text-amber-500 border-amber-400'
+              ? 'text-amber-500 border-amber-400 cursor-wait'
               : 'text-muted-foreground hover:text-[hsl(var(--foreground))] disabled:opacity-40 disabled:cursor-not-allowed',
           )}
           title={t("git.aiGenerateTitle")}
@@ -1111,8 +1116,11 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
           disabled={isBusy}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md border transition-colors',
-            'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+            committing || generating
+              ? 'cursor-wait text-blue-500 border-blue-400 bg-blue-500/10'
+              : pushing
+                ? 'cursor-wait text-green-500 border-green-400 bg-green-500/10'
+                : 'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed',
           )}
           title={t("git.commitTitle")}
         >
@@ -1124,8 +1132,9 @@ const CommitSection = memo(function CommitSection({ fileCount, files }: { fileCo
           disabled={pushing || (!hasAheadCommits && fileCount === 0)}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md border transition-colors',
-            'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+            pushing
+              ? 'cursor-wait text-green-500 border-green-400 bg-green-500/10'
+              : 'text-muted-foreground hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-40 disabled:cursor-not-allowed',
           )}
           title={t("git.smartPushTitle")}
         >
