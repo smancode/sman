@@ -6,7 +6,7 @@ const log = createLogger('ServerUrl');
 const PROBE_TIMEOUT_MS = 3000;
 
 /** External server — hardcoded. */
-const DEFAULT_EXTERNAL_URL = 'https://smancode.com/server';
+const DEFAULT_EXTERNAL_URL = 'https://www.smancode.com/server';
 
 /** Cached base URL after successful probe or config read. */
 let cachedBaseUrl: string | null = null;
@@ -131,6 +131,16 @@ export async function resolveServerBaseUrl(sm: SettingsManager): Promise<string>
 export function getServerBaseUrl(sm: SettingsManager): string {
   if (cachedBaseUrl) return cachedBaseUrl;
   return readFromConfig(sm);
+}
+
+/**
+ * Re-probe if serverBaseUrl is empty.
+ * Call this at key moments: settings page, hub entry, stardom entry.
+ * If already resolved (config or cache), returns immediately.
+ */
+export async function ensureServerBaseUrl(sm: SettingsManager): Promise<string> {
+  if (getServerBaseUrl(sm)) return getServerBaseUrl(sm);
+  return resolveServerBaseUrl(sm);
 }
 
 /**

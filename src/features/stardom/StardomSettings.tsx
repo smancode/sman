@@ -41,12 +41,7 @@ export function StardomSettings({ id }: { id?: string }) {
     client?.send({
       type: 'settings.update',
       hub: {
-        serverBaseUrl: '',
-        serverUrl: '',
         fallbackUrl,
-        enabled: false,
-        updateUrl: '',
-        adminToken: '',
       },
     });
     setHubSaved(true);

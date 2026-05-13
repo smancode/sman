@@ -6,6 +6,7 @@ import type { BroadcastStore } from '../broadcast-store.js';
 import type { BroadcastMessage, ReportPayload, BroadcastQueryPayload } from './types.js';
 import { buildEncryptedRequest, decrypt } from './crypto.js';
 import { createLogger } from '../utils/logger.js';
+import { getLocalIp } from '../utils/network.js';
 
 const log = createLogger('Hub');
 const TIMEOUT_MS = 5000;
@@ -50,35 +51,9 @@ export class HubClient {
     }
   }
 
-  private getClientId(): string {
+  private async getClientId(): Promise<string> {
     const hostname = os.hostname();
-    const nets = os.networkInterfaces();
-    let ip = '127.0.0.1';
-
-    // Prefer non-VPN, non-virtual NIC IPs: 10.x (enterprise), 192.168.x, 172.16-31.x
-    // Skip VPN/tunnel addresses (172.x where x < 16 or > 31), APIPA (169.254.x), virtual adapters
-    const candidates: { address: string; priority: number }[] = [];
-    const skipNames = /^(tun|tap|veth|vEthernet|docker|br-|vnic|vmware|vbox|hyper-v|wsl)/i;
-
-    for (const [name, interfaces] of Object.entries(nets)) {
-      if (skipNames.test(name)) continue;
-      for (const net of interfaces || []) {
-        if (net.family !== 'IPv4' || net.internal) continue;
-        const addr = net.address;
-        if (addr.startsWith('169.254.')) continue; // APIPA
-        let priority = 0;
-        if (addr.startsWith('10.')) priority = 3;           // Enterprise LAN
-        else if (addr.startsWith('192.168.')) priority = 2; // Home/office LAN
-        else if (/^172\.(1[6-9]|2\d|3[01])\./.test(addr)) priority = 1; // RFC1918 172.16-31
-        else priority = 0; // Public IP or other
-        candidates.push({ address: addr, priority });
-      }
-    }
-
-    if (candidates.length > 0) {
-      candidates.sort((a, b) => b.priority - a.priority);
-      ip = candidates[0].address;
-    }
+    const ip = await getLocalIp();
     return `${hostname}@${ip}`;
   }
 
@@ -92,7 +67,7 @@ export class HubClient {
 
   private async reportHeartbeat(): Promise<void> {
     try {
-      const clientId = this.getClientId();
+      const clientId = await this.getClientId();
       const payload: ReportPayload = {
         clientId,
         version: this.deps.getVersion(),
@@ -129,7 +104,7 @@ export class HubClient {
 
   private async fetchBroadcasts(): Promise<void> {
     try {
-      const clientId = this.getClientId();
+      const clientId = await this.getClientId();
       const payload: BroadcastQueryPayload = {
         clientId,
         since: new Date(0).toISOString(),

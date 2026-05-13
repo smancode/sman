@@ -49,7 +49,7 @@ import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { getClientId } from './utils/network.js';
-import { getServerBaseUrl, resolveServerBaseUrl } from './server-url.js';
+import { getServerBaseUrl, ensureServerBaseUrl } from './server-url.js';
 import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
@@ -499,7 +499,7 @@ async function handleHubProxy(req: http.IncomingMessage, res: http.ServerRespons
   let hubUrl = getServerBaseUrl(settingsManager);
   if (!hubUrl) {
     // Try resolving on-demand
-    hubUrl = await resolveServerBaseUrl(settingsManager);
+    hubUrl = await ensureServerBaseUrl(settingsManager);
   }
   if (!hubUrl) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -1410,6 +1410,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         // ── Settings ──
         case 'settings.get': {
+          await ensureServerBaseUrl(settingsManager);
           const config = settingsManager.getConfig();
           ws.send(JSON.stringify({ type: 'settings.get', config }));
           break;
@@ -2374,6 +2375,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'hub:query': {
+          await ensureServerBaseUrl(settingsManager);
           const broadcasts = broadcastStore.getRecent(7);
           log.info(`hub:query from WS client, returning ${broadcasts.length} broadcast(s)`);
           ws.send(JSON.stringify({ type: 'hub:broadcasts', data: broadcasts }));
@@ -2381,6 +2383,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'hub:status': {
+          await ensureServerBaseUrl(settingsManager);
           ws.send(JSON.stringify({ type: 'hub:status', data: getHubStatus(settingsManager) }));
           break;
         }
@@ -2449,6 +2452,7 @@ wss.on('connection', (ws: WebSocket) => {
 
         default:
           if (msg.type?.startsWith('stardom.')) {
+            await ensureServerBaseUrl(settingsManager);
             const bridge = getStardomBridge();
             if (bridge) {
               bridge.handleFrontendMessage(msg.type, (msg.payload ?? msg) as Record<string, unknown>, ws);

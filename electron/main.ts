@@ -390,12 +390,14 @@ async function startServerInProcess(): Promise<void> {
           await ensureHubConfig(serverModule.homeDir);
           if (typeof serverModule.startHub === 'function') {
             try {
-              serverModule.startHub();
+              await serverModule.startHub();
               console.log('[Electron] Hub initialized');
             } catch (err) {
               console.error('[Electron] startHub failed:', err);
             }
           }
+          // Re-check after hub init (probe may have resolved serverBaseUrl)
+          await ensureHubConfig(serverModule.homeDir);
           resolve();
         }).on('error', (err: NodeJS.ErrnoException) => {
           if (err.code === 'EADDRINUSE' && attempts > 0) {
