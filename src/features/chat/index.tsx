@@ -540,9 +540,12 @@ function WelcomeScreen() {
   return (
     <div className="relative flex flex-col items-center justify-center text-center h-full overflow-hidden">
       <div className="relative z-10 text-center px-8">
-        <h1 className="text-4xl md:text-5xl tracking-wide">
+        <h1 className="text-4xl md:text-5xl tracking-wide flex items-center justify-center gap-2">
           <span className="font-light italic text-foreground/80">{t('chat.welcome2')}</span>{' '}
-          <span className="font-black not-italic text-foreground">Sman</span>
+          <span className="not-italic inline-flex items-center">
+            <img src="/images/sman-logo-dark.png" alt="Sman" className="h-8 md:h-10 block dark:hidden" />
+            <img src="/images/sman-logo-white.png" alt="Sman" className="h-8 md:h-10 hidden dark:block" />
+          </span>
         </h1>
         <div className="flex items-center justify-center gap-2 mt-6">
           <span className="hint-chip">{t('chat.selectSystem2')}</span>

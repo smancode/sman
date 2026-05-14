@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./public/favicon.png" alt="Sman" width="80" />
+<img src="./public/images/sman-logo-dark.png" alt="Sman" width="280" />
 
 # Sman
 
