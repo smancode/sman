@@ -1,29 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" width="520" height="120">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#A78BFA;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <!-- Icon: simplified scan-face from favicon -->
-  <g transform="translate(10, 10) scale(0.19)">
-    <rect x="0" y="0" width="100" height="100" rx="20" fill="url(#grad)"/>
-    <!-- Top-left corner -->
-    <path d="M20,45 L20,20 L45,20" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
-    <!-- Top-right corner -->
-    <path d="M55,20 L80,20 L80,45" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
-    <!-- Bottom-left corner -->
-    <path d="M20,55 L20,80 L45,80" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
-    <!-- Bottom-right corner -->
-    <path d="M55,80 L80,80 L80,55" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
-    <!-- Eyes -->
-    <rect x="30" y="40" width="10" height="18" rx="3" fill="white"/>
-    <rect x="60" y="40" width="10" height="18" rx="3" fill="white"/>
-    <!-- Mouth -->
-    <rect x="38" y="68" width="24" height="6" rx="3" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120" width="600" height="120">
+  <style>
+    .logo-icon { fill: #1a1a2e; }
+    @media (prefers-color-scheme: dark) {
+      .logo-icon { fill: #e2e8f0; }
+    }
+    .logo-text { fill: #1a1a2e; }
+    @media (prefers-color-scheme: dark) {
+      .logo-text { fill: #f1f5f9; }
+    }
+  </style>
+  <!-- Icon from favicon.svg, scaled down -->
+  <g class="logo-icon" transform="translate(0, 0) scale(0.0234)">
+    <path d="M960 4560 l0 -400 200 0 200 0 0 200 0 200 1200 0 1200 0 0 -200 0 -200 200 0 200 0 0 400 0 400 -1600 0 -1600 0 0 -400z"/>
+    <path d="M960 3360 l0 -400 200 0 200 0 0 400 0 400 -200 0 -200 0 0 -400z"/>
+    <path d="M1760 3160 l0 -600 200 0 200 0 0 600 0 600 -200 0 -200 0 0 -600z"/>
+    <path d="M2960 3160 l0 -600 200 0 200 0 0 600 0 600 -200 0 -200 0 0 -600z"/>
+    <path d="M3760 3360 l0 -400 200 0 200 0 0 400 0 400 -200 0 -200 0 0 -400z"/>
+    <path d="M960 2160 l0 -400 200 0 200 0 0 400 0 400 -200 0 -200 0 0 -400z"/>
+    <path d="M3760 2160 l0 -400 200 0 200 0 0 400 0 400 -200 0 -200 0 0 -400z"/>
+    <path d="M1760 1560 l0 -200 800 0 800 0 0 200 0 200 -800 0 -800 0 0 -200z"/>
+    <path d="M960 760 l0 -600 1600 0 1600 0 0 600 0 600 -200 0 -200 0 0 -400 0 -400 -1200 0 -1200 0 0 400 0 400 -200 0 -200 0 0 -600z"/>
   </g>
   <!-- Text: Sman -->
-  <text x="130" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="68" font-weight="700" fill="#1a1a2e" letter-spacing="-2">
-    S<tspan fill="url(#grad)">man</tspan>
-  </text>
+  <text class="logo-text" x="130" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-1.5">Sman</text>
 </svg>
