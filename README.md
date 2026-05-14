@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="./public/images/sman-logo.svg" alt="Sman" width="320" />
+<img src="./public/favicon.png" alt="Sman" width="80" />
+
+# Sman
 
 **Your AI Pair Programmer That Actually Reads Your Code.**
 
