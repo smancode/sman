@@ -1,146 +1,284 @@
+<div align="center">
+
 # Sman
 
-**选个文件夹，你的项目就多了个 AI 搭档。**
+**Your AI Pair Programmer That Actually Reads Your Code.**
 
-官网：[https://www.smancode.com](https://www.smancode.com)
+Pick a folder. Start talking. Your project just got an AI partner that understands your codebase, automates your browser, runs batch tasks, and collaborates with other AI agents.
 
-不是聊天机器人，是真正能读懂你代码、操作你浏览器、替你跑批量任务、还能跟其他 AI Agent 组队打怪的全栈 AI 工作台。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/smancode/sman?style=social)](https://github.com/smancode/sman/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/smancode/sman)](https://github.com/smancode/sman/issues)
 
-桌面端 / 企业微信 / 飞书 / 微信，四端同步，走到哪聊到哪。
+[Getting Started](#getting-started) · [Features](#features) · [Architecture](#architecture) · [Development](#development) · [Contributing](./CONTRIBUTING.md) · [Website](https://www.smancode.com)
 
----
-
-## 为什么选 Sman？
-
-### 1. 开箱即用，零门槛
-
-选个项目目录，开始对话。完事儿。
-
-不需要配 API Key 的弯弯绕绕，不需要写 Prompt 模板，不需要理解什么是 MCP、什么是 Agent。Sman 自动分析你的项目结构，自动加载合适的技能，自动把上下文喂给 AI。
-
-**你只管提需求，AI 自己找工具干活。**
-
-### 2. 会"长记忆"的 AI，越用越懂你
-
-普通 AI 助手聊完就忘。Sman 不一样——
-
-- **自动记笔记**：每次对话结束，AI 自动提取业务规则、代码约定、技术细节，沉淀成知识库
-- **团队知识共享**：你的经验推到 git，同事拉下来他的 AI 也懂了。新人入职第一天，AI 就像老员工一样靠谱
-- **用户画像自学习**：AI 悄悄记住你的编码风格和偏好，下次对话直接按你的习惯来
-
-**用一个月，你的 AI 比你同事还了解你的项目。**
-
-### 3. 四端无缝切换，消息永不错乱
-
-在电脑上聊了一半，手机上企业微信继续。同一套会话，同一个 AI，上下文完全一致。
-
-桌面端、企业微信、飞书、微信——不是四个独立机器人，是同一个 AI 助手的四个入口。
-
-支持文字、图片、语音、文件，企业 IM 里能发的它都能处理。
-
-### 4. 浏览器也能帮你操作
-
-不用再手动登录系统查数据、填表单了。
-
-Sman 通过 Chrome DevTools Protocol 直接控制浏览器，AI 能：
-- 自动继承你的 SSO 登录态，不需要重复登录
-- 操作网页、填表单、抓数据
-- 记住你常去的系统 URL，下次说"帮我查 ITSM"就行
-
-**"帮我把这个报表导出来"——一句话搞定。**
-
-### 5. 批量任务 + 定时任务，AI 帮你打工
-
-写个 markdown 描述你要干啥，AI 自动生成脚本、测试、执行。
-
-- **批量引擎**：并发控制、暂停/恢复/取消、失败重试，像操作下载管理器一样操作 AI 任务
-- **Cron 定时任务**：定期巡检、自动报告、知识刷新，7×24 小时待命
-- **地球路径**：用大白话编排多步骤流程，AI 自动生成实现方案，串行并行都行
-
-**让 AI 做那些重复枯燥的事，你专注有创造力的工作。**
-
-### 6. 协作星球——AI Agent 组队，1+1>2
-
-这是 Sman 最有意思的功能。
-
-你的 Claude 是一颗"星"，同事的 Claude 也是一颗"星"。当你的 AI 遇到不熟悉的领域，它可以自动在星球上搜索最合适的 Agent，发起实时协作。
-
-**举个例子**：你的项目是支付系统，同事的项目是库存系统。当你问"这个退款流程会不会影响库存锁定"，你的 AI 会直接找同事的 AI 确认，几秒钟给你答案。
-
-- **协作星图**：实时可视化所有 Agent 的状态和协作关系，像看星空一样直观
-- **声望系统**：帮别人解决问题获得声望，五级称号从"新晋节点"到"战略中枢"
-- **经验沉淀**：每次协作自动积累经验，老搭档优先匹配，越合作越默契
-- **进化仓**：自动分析你的团队能力分布，哪些适合 AI 全自动、哪些需要人机协同，一目了然
-
-**一个 AI 强？十个 AI 组队更强。协作星球的化学反应是无限的。**
+</div>
 
 ---
 
-## 核心能力一览
+## Why Sman?
 
-| 能力 | 一句话说明 |
-|------|-----------|
-| 零配置启动 | 选目录 → 开始聊，AI 自动搞定一切 |
-| 四端接入 | 桌面端 / 企微 / 飞书 / 微信，同一个 AI 四个入口 |
-| 代码查看 | 内置代码编辑器，文件树浏览、符号搜索、多语言高亮 |
-| Git 面板 | 状态查看、Diff 对比、提交推送，AI 自动生成提交消息 |
-| 知识沉淀 | 对话自动提取业务知识，团队共享，新人秒上手 |
-| 协作星球 | AI Agent 去中心化协作，声望进化，经验沉淀 |
-| 浏览器操控 | AI 直接操作 Chrome，继承登录态，帮你跑网页操作 |
-| 批量任务 | markdown 描述需求，AI 生成脚本自动执行 |
-| 定时任务 | Cron 定时触发，定期巡检/报告/刷新 |
-| 地球路径 | 大白话编排多步骤流程，AI 自动生成实现 |
-| Capabilities | Office 技能、PPT 生成等能力按需激活 |
-| 多语言 | 中文 / English 双语，自动切换 |
-| 私有化部署 | 内网模型 + 本地数据，数据不出门 |
+Most AI coding assistants are just chatbots bolted onto an editor. Sman is different — it's a **full-stack AI workstation** that meets you where you already work.
+
+| | Sman | Typical AI Assistant |
+|---|---|---|
+| Setup | Pick a folder, done | Configure API keys, plugins, prompts |
+| Context | Reads your entire project automatically | You paste code in manually |
+| Access | Desktop / WeCom / Feishu / WeChat | One platform only |
+| Browser | AI controls Chrome for you | Not supported |
+| Collaboration | AI agents team up across projects | Single agent only |
+| Memory | Auto-learns your project conventions | Forgets everything |
 
 ---
 
-## 多语言支持
+## Features
 
-Sman 支持 **中文 / English 双语**，根据系统设置自动切换：
+### Zero-Config Startup
 
-- **桌面端**：跟随操作系统语言（需重启应用生效）
-- **浏览器**：跟随浏览器语言设置
-- **聊天界面**：会话开始时自动检测，支持会话级切换
+No API keys to wrangle. No prompt templates. No MCP configuration. Select your project directory and start talking — Sman auto-analyzes your codebase, loads the right skills, and feeds context to AI.
 
-> 开发者注意：所有用户可见文本禁止硬编码，使用 `t('key')` 函数。详见 [CLAUDE.md - 多语言强制规范](./CLAUDE.md)。
+### AI That Remembers
+
+Every conversation, Sman auto-extracts business rules, code conventions, and technical details into a shared knowledge base. Push to git, and your entire team's AI gets smarter.
+
+- Auto note-taking from every session
+- Team knowledge sharing via git
+- User profile self-learning for personalized coding style
+
+### Four Platforms, One AI
+
+Continue the same conversation across Desktop, WeCom, Feishu, and WeChat. Not four separate bots — one AI assistant with four entry points.
+
+Supports text, images, voice, and files.
+
+### Browser Automation
+
+Sman controls Chrome directly via DevTools Protocol — your AI can:
+
+- Inherit your SSO session automatically
+- Fill forms, scrape data, navigate workflows
+- Remember your frequently used system URLs
+
+### Batch & Cron Tasks
+
+Describe what you want in markdown. AI generates scripts, tests them, and executes.
+
+- **Batch Engine**: Concurrent control, pause/resume/cancel, retry on failure
+- **Cron Jobs**: Scheduled inspections, auto-reports, knowledge refresh
+- **Smart Paths**: Plain-language multi-step workflows, serial or parallel
+
+### Collaboration Stardom
+
+Your Claude is a "star." Your teammate's Claude is a "star." When your AI hits unfamiliar territory, it automatically searches the stardom network and collaborates with the best-matched agent in real time.
+
+<div align="center">
+
+```
+Your AI (Payment System) ←→ Teammate's AI (Inventory System)
+         "Will this refund affect stock locks?"
+                    ↕
+         Instant cross-project answer
+```
+
+</div>
+
+### Built-in Dev Tools
+
+| Tool | What It Does |
+|------|-------------|
+| Code Viewer | File tree, syntax highlighting, symbol search (CodeMirror 6) |
+| Git Panel | Status, diff, commit, push — AI auto-generates commit messages |
+| Smart Paths | Multi-step workflow automation with plain language |
 
 ---
 
-## 快速开始
+## Architecture
+
+```
+User (Desktop / WeCom / Feishu / WeChat)
+        │
+        ▼
+   Sman Backend (Express + WebSocket)
+        │
+        ▼
+   Claude Agent SDK (V2 Session)
+        │
+        ▼
+   Project Directory + MCP Servers + Plugins + Capabilities
+        │
+        ▼
+   Stardom (Multi-Agent Collaboration Network)
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js 22 LTS](https://nodejs.org/)
+- [pnpm](https://pnpm.io/)
+
+### Install & Run
 
 ```bash
+git clone https://github.com/smancode/sman.git
+cd sman
 pnpm install
 ./dev.sh
 ```
 
-启动后：
-1. 点击「新建会话」→ 选择项目目录
-2. 开始对话，AI 自动分析你的代码
-3. 在企业微信 / 飞书 / 微信里也能随时跟 AI 聊
+Then:
 
-## 在 IM 里切换项目
+1. Click **New Session** → select your project directory
+2. Start talking — AI auto-analyzes your code
+3. Access from WeCom / Feishu / WeChat anytime
+
+### Switching Projects in IM
 
 ```
-//cd my-project     # 切换到项目目录
-//pwd               # 看看当前在哪
-//status            # 查看连接状态
-//help              # 帮助信息
+//cd my-project     # Switch project directory
+//pwd               # Where am I?
+//status            # Connection status
+//help              # Help
 ```
-
-## 技术栈
-
-React 19 + TypeScript + TailwindCSS + Zustand + CodeMirror 6 | Node.js + Express + WebSocket | Electron | SQLite | Claude Agent SDK | Shiki + Streamdown
-
-## 设计理念
-
-> **让用户只做一件事——选目录。剩下的 AI 来。**
-
-不追求功能堆砌，追求每个功能都能被普通用户理解和使用。越简单越好。
 
 ---
 
+## Development
+
+### Dev Mode
+
+```bash
+./dev.sh              # All-in-one (frontend + backend + Electron)
+
+# Or start separately:
+pnpm dev              # Frontend (port 5881)
+pnpm dev:server       # Backend (port 5880)
+```
+
+### Production Build
+
+```bash
+pnpm build            # Build frontend + backend
+pnpm build:electron   # Compile Electron main process
+pnpm electron:build   # Full build + package
+```
+
+### Platform Packaging
+
+```bash
+# macOS
+bash build-mac.sh              # → release/Sman-<version>-arm64.dmg
+
+# Windows
+bash build-win.sh              # → release/Sman-Setup-<version>.exe (NSIS)
+bash build-win.sh --skip-deps  # Skip dependency install
+```
+
+### Run Tests
+
+```bash
+pnpm test          # All tests
+pnpm test:watch    # Watch mode
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| Frontend | React 19, TypeScript, TailwindCSS, Radix UI, Zustand, CodeMirror 6 |
+| Backend | Node.js, Express, WebSocket (ws), SQLite (better-sqlite3) |
+| Desktop | Electron, electron-vite |
+| AI | Claude Agent SDK |
+| Rendering | Shiki, Streamdown |
+| Validation | Zod |
+
+---
+
+## Capabilities Overview
+
+| Capability | Description |
+|-----------|-------------|
+| Code Analysis | Auto-scan project structure, load context-aware skills |
+| Browser Control | Chrome DevTools Protocol — navigate, fill, scrape |
+| Git Integration | Status, diff, commit, push with AI-generated messages |
+| Knowledge Base | Auto-extract conventions, share across team via git |
+| Batch Tasks | Markdown-driven, concurrent, resumable |
+| Cron Scheduler | Time-based automation for inspections and reports |
+| Smart Paths | Multi-step workflows with plain-language descriptions |
+| Collaboration Stardom | Multi-agent networking with reputation system |
+| Multi-Platform | Desktop + WeCom + Feishu + WeChat |
+| i18n | Chinese & English, auto-detection |
+| Private Deployment | Intranet models + local data, zero data egress |
+
+---
+
+## Project Structure
+
+```
+sman/
+├── electron/           # Electron main process
+├── server/             # Express + WebSocket backend
+│   ├── init/           # Session initialization pipeline
+│   └── services/       # Business logic services
+├── src/                # React frontend
+│   ├── components/     # UI components
+│   ├── locales/        # i18n (zh-CN.json, en-US.json)
+│   ├── stores/         # Zustand state management
+│   └── ...
+├── tests/              # Test files
+├── docs/               # Documentation
+└── scripts/            # Build & utility scripts
+```
+
+---
+
+## Ports
+
+| Port | Purpose |
+|------|---------|
+| 5880 | HTTP + WebSocket (production) |
+| 5881 | Vite dev server (development only) |
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `5880` | HTTP server port |
+| `SMANBASE_HOME` | `~/.sman` | User data directory |
+
+---
+
+## Contributing
+
+We welcome contributions! Check out [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+
+- Development setup guide
+- Coding guidelines
+- PR submission process
+- Project structure overview
+
+## Security
+
+Found a vulnerability? Please see [SECURITY.md](./SECURITY.md) for responsible disclosure.
+
 ## License
 
-MIT
+Sman is released under the [MIT License](./LICENSE).
+
+---
+
+<div align="center">
+
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=smancode/sman&type=Date)](https://star-history.com/#smancode/sman&Date)
+
+**[⭐ Star us on GitHub](https://github.com/smancode/sman/stargazers)** — it motivates us a lot!
+
+</div>
