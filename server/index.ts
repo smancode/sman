@@ -1,4 +1,5 @@
 import http from 'http';
+import crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
@@ -1058,7 +1059,10 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ status: 'accepted', workspace, toolId }));
 
         // Execute in background
-        const tempSessionId = sessionManager.createEphemeralSession(workspace);
+        const tempSessionId = `ephemeral-${crypto.randomUUID()}`;
+        // Create session record in SQLite for foreign key constraints
+        store.createSession({ id: tempSessionId, systemId: tempSessionId, workspace, isCron: true });
+        sessionManager.createEphemeralSessionWithId(workspace, tempSessionId);
         const abort = new AbortController();
         const prompt = parameters ? `/${toolId} ${parameters}` : `/${toolId}`;
         sessionManager.sendMessageForCron(tempSessionId, prompt, abort, () => {})
