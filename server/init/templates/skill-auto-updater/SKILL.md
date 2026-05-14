@@ -12,7 +12,7 @@ description: |
 ## 目标
 
 保持项目的 `.claude/skills/` 与项目当前状态同步：
-1. **首次全量扫描** — 新项目首次运行时，并行扫描生成完整知识体系
+1. **首次全量扫描** — 新项目首次运行时，生成完整知识体系
 2. **增量更新** — 后续运行只更新变更部分
 3. **辩证聚合** — 团队知识去伪存真
 
@@ -21,15 +21,16 @@ description: |
 - **可靠优先**：knowledge skill 是开发者直接依赖的知识库，每条知识必须经得起验证
 - **宁缺毋滥**：只有真正对项目长期有价值的知识才值得变成 skill
 - **已有优先**：已有 skill 能覆盖的内容，只更新不新增
-- **绝不删除**：不删除用户手动创建的 skill，不删除核心 skill（project-structure、project-apis、project-external-calls、database-schema、knowledge-business、knowledge-conventions、knowledge-technical）
-- **已有优先**：已有 skill 能覆盖的内容，只更新不新增
+- **绝不删除**：不删除用户手动创建的 skill，不删除核心 skill
+- **上下文隔离**：每个 phase/扫描任务独立上下文，通过文件系统传递结果，避免上下文爆炸
+- **最多 2 个子 agent 并行**：LLM 并发能力有限，超过 2 个并行容易报错
 
 ## 模式判断
 
 ```
 读取 .sman/INIT.md
   → project-structure SKILL.md 的 _scanned.commitHash 为 null？
-    → 是：首次全量扫描模式（Phase 0-5）
+    → 是：首次全量扫描模式
     → 否：增量更新模式（Step 一-四）
 ```
 
@@ -37,13 +38,50 @@ description: |
 
 ## 首次全量扫描模式
 
-用于新项目/新人入职，一次性生成完整知识体系。
+用于新项目/新人入职，生成完整知识体系。
 
-### Phase 0: 项目识别
+**关键约束**：Cron 任务有 10 分钟工具超时和 30 分钟僵尸检测。必须正确评估项目规模，大项目分批执行。
+
+### Phase 0: 项目识别与规模评估
+
+**本阶段必须快速完成，不使用子 agent。**
 
 1. 读取 `CLAUDE.md`（如存在）提取项目基本信息
 2. 扫描项目根目录结构（构建文件、配置文件、源码目录）
-3. 识别技术栈特征：
+3. 识别技术栈（同下方特征文件表）
+4. 识别架构特征（同下方架构特征表）
+5. **评估项目规模**：
+
+```bash
+# 统计源码文件数（排除 node_modules/.git/target/dist/build）
+find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.java" -o -name "*.go" -o -name "*.py" -o -name "*.rs" \) \
+  -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/target/*" -not -path "*/dist/*" -not -path "*/build/*" | wc -l
+```
+
+6. **根据规模选择执行策略**：
+
+| 规模 | 源码文件数 | 执行策略 |
+|------|-----------|---------|
+| 小型 | < 200 | 单次执行，Phase 1 用 2 个子 agent 并行 |
+| 中型 | 200 ~ 1000 | 分 2-3 轮，每轮独立上下文，中间结果写文件 |
+| 大型 | > 1000 | 分 3-5 轮，每轮独立上下文，大项目降级策略 |
+
+7. **将评估结果写入** `.sman/scan-plan.json`（供后续 phase 读取）：
+
+```json
+{
+  "scale": "small|medium|large",
+  "sourceFileCount": 1234,
+  "techStack": ["TypeScript", "React"],
+  "architecture": "三层/MVC",
+  "hasDatabase": true,
+  "phases": ["knowledge", "database", "project", "rules"],
+  "startedAt": "2026-01-01T00:00:00Z",
+  "completedPhases": []
+}
+```
+
+#### 特征文件 → 技术栈
 
 | 特征文件 | 推断技术栈 |
 |----------|-----------|
@@ -54,7 +92,7 @@ description: |
 | `Cargo.toml` | Rust |
 | `*.sln` / `*.csproj` | .NET |
 
-4. 识别架构特征：
+#### 架构特征
 
 | 特征 | 推断架构 |
 |------|----------|
@@ -64,70 +102,147 @@ description: |
 | serverless.yml / template.yaml | Serverless |
 | Dockerfile / docker-compose | 容器化部署 |
 
-### Phase 1: 并行扫描（3 个 Agent）
+---
 
-**Agent A: 编码规范扫描** → `knowledge-conventions`
+### Phase 0.5: INIT.md 深度总结
 
-| 扫描项 | Java | Node.js | Go | Python |
-|--------|------|---------|-----|--------|
-| 枚举/常量 | enums/ + 常量类 | constants/ + enums/ | const 定义 | constants/ |
-| 命名规范 | 包/类/方法命名 | 文件/函数命名 | 包/函数命名 | 模块/函数命名 |
-| 配置管理 | application.yml + Spring 配置 | .env + config/ | config.yaml | settings.py |
-| SQL 规范 | MyBatis XML / JPA | ORM / raw SQL | sqlc / GORM | SQLAlchemy / raw |
-| 反模式 | magic number、硬编码 | magic string、any 类型 | 硬编码 error | 魔法值 |
+**目标**：将 INIT.md 中的粗糙信息（如 "java 项目"、"GRADLE, SH, MD"）升级为有意义的 Summary、Description 和 TechStack。
 
-**Agent B: 技术横切面扫描** → `knowledge-technical`
+**执行步骤**：
 
-| 扫描项 | 通用关注点 |
-|--------|-----------|
-| 事务/一致性 | 事务管理器、传播行为、隔离级别 |
-| 缓存 | 缓存框架、Key 规范、TTL 策略 |
-| 通信 | HTTP/RPC/MQ 通信框架、超时配置、重试策略 |
-| 并发控制 | 锁机制（Redis/DB/分布式）、并发安全 |
-| 线程/协程 | 线程池配置、异步框架、调度机制 |
-| 安全 | 认证鉴权、加密、审计日志 |
+1. **读取 CLAUDE.md**（如存在）— 提取项目的核心定位、功能描述、技术栈信息
+2. **读取当前 INIT.md** — 获取现有字段
+3. **基于 CLAUDE.md 内容总结**（由主 agent 直接执行，不用子 agent）：
 
-**Agent C: 业务链路扫描** → `knowledge-business`
+| 字段 | 当前问题 | 升级要求 |
+|------|---------|---------|
+| Summary | "java 项目" 等泛泛描述 | 一句具体的话说明项目是什么、做什么 |
+| Description | 跟 Summary 重复 | 2-3 句话描述项目目的、核心功能、关键特性 |
+| TechStack | 文件扩展名（GRADLE, SH, MD） | 框架/库级别（Spring Boot, React, Express） |
 
-1. 找到所有入口点（Controller/Handler/RPC Service/消息消费者）
-2. 按业务域分组，统计 Handler 数量
-3. 选取 Top 3-5 高频业务域，追踪完整链路：入口 → Service → 外部调用 → 数据访问
-4. 提取跨域公共机制（如记账、冻结、状态机）
+4. **无 CLAUDE.md 时的降级策略**：
+   - 从项目目录结构、入口文件、配置文件中推断
+   - 读取 `README.md`（如存在）作为补充来源
+   - 读取 `package.json` 的 description 字段 / `pom.xml` 的 name+description
+5. **回写 INIT.md** — 只更新 Summary、Description、TechStack 三个字段，保留其他字段不变
 
-### Phase 2: 数据库扫描 → `database-schema`
+**示例**：
 
-按数据访问层自适应扫描：
+升级前：
+```
+**Summary:** java 项目
+**Description:** java 项目
+**Tech Stack:** GRADLE, SH, MD, JAR, PROPERTIES, BAT, SQL
+```
 
-| 技术栈 | 扫描方式 |
-|--------|---------|
-| MyBatis | Entity 类 + Mapper XML |
-| JPA/Hibernate | Entity 类 + Repository |
-| Prisma | schema.prisma |
-| SQLAlchemy | models.py |
-| GORM | model 结构体 |
-| better-sqlite3 / sqlite3 | TypeScript/JavaScript 中的 `CREATE TABLE` 语句（`*-store.ts`、`*-repository.ts` 等文件） |
-| 原生 SQL | migration 文件 / SQL 脚本 / 代码内嵌 SQL |
+升级后：
+```
+**Summary:** 基于 Spring Boot 的交易风控系统，支持实时反欺诈检测和交易限额管理
+**Description:** 核心交易风控平台，提供规则引擎驱动的实时反欺诈检测、多维度交易限额管理、风险事件告警和审计追踪。支持与核心银行系统的实时对接，日均处理百万级交易风控决策。
+**Tech Stack:** Spring Boot, MyBatis, Redis, Kafka, MySQL, Gradle
+```
 
-> **注意**：很多项目不使用 ORM，而是在代码中直接写 SQL（如 better-sqlite3 的 `db.exec(CREATE TABLE ...)`）。必须 grep `CREATE TABLE` 关键词定位所有建表语句，不能只找 migration 文件。找不到 migration 文件不代表没有数据库。
+**注意事项**：
+- Summary 不超过 50 字
+- Description 不超过 150 字
+- TechStack 用框架/库名，不超过 8 个
+- 不确定的技术栈不要猜，宁可少写
 
-提取内容：
-- 核心表结构（Top 15-20 表）
-- 表间关联关系（通过字段名推测）
-- 索引策略
-- 分区/分表策略
+---
 
-无数据库的项目（纯前端、CLI 工具等）跳过本阶段，不生成 database-schema skill。
+### Phase 1-3: 扫描执行（根据规模分批）
 
-### Phase 3: Project Knowledge 扫描
+**核心规则：每个扫描任务是一个独立 Task，分配给子 agent 执行。最多 2 个子 agent 并行。**
 
-执行下方「二、Project Knowledge Skills 更新」的全部内容，生成：
-- `project-structure`
-- `project-apis`
-- `project-external-calls`
+#### 小型项目（< 200 文件）
+
+单次执行，Phase 1 用最多 2 个子 agent 并行：
+
+| Task | 目标 Skill | 子 agent 说明 |
+|------|-----------|-------------|
+| Task 1 | knowledge-conventions | 编码规范扫描 |
+| Task 2 | knowledge-technical | 技术横切面扫描 |
+| （Task 1/2 完成后） | knowledge-business | 业务链路扫描（单 agent） |
+| 数据库扫描 | database-schema | 如有数据库 |
+| project 扫描 | project-structure + project-apis + project-external-calls | 单 agent 串行 |
+
+#### 中型项目（200 ~ 1000 文件）
+
+分 2-3 轮执行，每轮完成后结果写文件，下一轮从文件读取上下文：
+
+**第 1 轮**（最多 2 个子 agent 并行）：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| Agent A | knowledge-conventions + knowledge-technical | 规范 + 技术横切面（轻量，合并到一个 agent） |
+| Agent B | project-structure | 项目结构（为后续提供模块索引） |
+
+**第 2 轮**（读取第 1 轮产出的 project-structure references）：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| Agent A | knowledge-business | 业务链路（基于 project-structure 定位入口） |
+| Agent B | project-apis + project-external-calls | API 端点 + 外部依赖 |
+
+**第 3 轮**（如有数据库）：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| 单 agent | database-schema | 数据库扫描 |
+
+#### 大型项目（> 1000 文件）
+
+分 3-5 轮，**启用降级策略**：
+
+**降级规则**：
+- 业务链路：只追踪 Top 3 核心链路，不深挖每个 Handler
+- API 扫描：只记录端点清单（Method + Path + 简述），不追踪每个端点的完整调用链
+- 数据库：只记录核心表（Top 15），不追踪索引/分区细节
+- 规范扫描：只提取 Top 5 最显著的编码规范
+
+**第 1 轮**：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| Agent A | project-structure | 项目结构全景（为后续所有扫描提供索引） |
+| Agent B | knowledge-conventions | 编码规范（降级：Top 5 规范） |
+
+**第 2 轮**（基于 project-structure 的模块索引）：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| Agent A | project-apis | API 端点清单（降级：不追踪完整调用链） |
+| Agent B | project-external-calls | 外部依赖清单 |
+
+**第 3 轮**：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| Agent A | knowledge-technical | 技术横切面 |
+| Agent B | knowledge-business | 业务链路（降级：Top 3 核心链路） |
+
+**第 4 轮**（如有数据库）：
+
+| 子 agent | 目标 Skill | 说明 |
+|----------|-----------|------|
+| 单 agent | database-schema | 数据库全景（降级：Top 15 表） |
+
+#### 子 agent 执行规范
+
+每个子 agent 必须遵循以下规范：
+
+1. **Task 描述**：明确目标 skill、扫描范围、降级规则（如适用）、输出文件路径
+2. **独立上下文**：子 agent 不继承主 agent 的对话历史，通过文件传递信息
+   - 输入：读取 `.sman/scan-plan.json`、`project-structure/references/`（如已有）
+   - 输出：写入对应的 `.claude/skills/{skill-name}/SKILL.md` 和 `references/`
+3. **完成后标记**：每个 skill 扫描完成后，更新 `.sman/scan-plan.json` 的 `completedPhases` 数组
+4. **错误隔离**：某个子 agent 失败不影响其他，记录失败并继续
+
+---
 
 ### Phase 4: 规则提取
 
-从扫描结果中提取关键规则，写入 `.claude/rules/`（无目录先创建）：
+从已完成的扫描结果中提取关键规则，写入 `.claude/rules/`（无目录先创建）：
 
 - `coding-standards.md` — 编码规范（5-15 条，每条 1-2 行）
 - `architecture-rules.md` — 架构决策（如有）
@@ -141,7 +256,8 @@ description: |
 
 1. 逐个 Skill 检查：SKILL.md 行数 ≤ 80，references/ 文件内容完整
 2. 更新 `.sman/INIT.md` 时间戳，记录首次扫描完成
-3. 输出扫描报告：
+3. 清理 `.sman/scan-plan.json`（扫描完成后删除）
+4. 输出扫描报告：
 
 ```markdown
 ## 项目初始化报告
@@ -149,6 +265,7 @@ description: |
 ### 项目基本信息
 - 技术栈：xxx
 - 架构模式：xxx
+- 规模：small/medium/large（源码文件数）
 - 入口点数量：xxx
 - 外部依赖数量：xxx
 
@@ -180,6 +297,8 @@ description: |
 ### 二、Project Knowledge Skills 更新
 
 检查以下 4 个 skill 的 `_scanned.commitHash` 是否与当前 `git rev-parse HEAD` 一致。不一致或尚未扫描时，执行对应扫描并覆写 SKILL.md 和 references/。
+
+**增量更新也遵循最多 2 个子 agent 并行的限制。** 每个扫描任务作为独立 Task 分配给子 agent。
 
 #### project-structure
 
@@ -221,7 +340,7 @@ description: |
 - **references/{table-name}.md**（每个 < 100 行）— 每张核心表：
   - CREATE TABLE DDL、Column detail（Name | Type | Nullable | Description）、Indexes、Foreign keys、Source file location
 
-扫描方法：根据项目技术栈自适应（同首次全量扫描 Phase 2 的扫描方式表）。必须先 grep `CREATE TABLE`、`@Table`、`@Entity` 等关键词确认项目有数据库，找不到不代表没有数据库——也可能是代码内嵌 SQL。
+扫描方法：根据项目技术栈自适应（同首次全量扫描 Phase 0 的识别结果）。必须先 grep `CREATE TABLE`、`@Table`、`@Entity` 等关键词确认项目有数据库。
 
 无数据库的项目跳过此 skill，不生成空文件。
 
@@ -231,7 +350,7 @@ description: |
 
 #### 目标
 
-生成的 knowledge skill 是开发者可以直接依赖的可靠知识库。源文件（`.sman/knowledge/*.md`）是快速变动的原始素材，可能包含错误、过时信息、个人误解。你的职责是去伪存真，生成经得起验证的知识。
+生成的 knowledge skill 是开发者可以直接依赖的可靠知识库。
 
 #### 3.1 扫描来源
 
@@ -240,21 +359,19 @@ description: |
 - `conventions-*.md` → knowledge-conventions skill
 - `technical-*.md` → knowledge-technical skill
 
-每个文件名中的 `*` 部分即用户名。
-
 #### 3.2 辩证聚合
 
 对每个类别的所有知识条目，执行以下处理：
 
 **验证**：用 Read/Grep 工具查代码，确认每条知识是否仍然成立。
 
-**冲突处理**：多个用户对同一问题有不同说法时，以代码实际情况为准。保留所有方的说法，标注代码实际的实现。
+**冲突处理**：多个用户对同一问题有不同说法时，以代码实际情况为准。
 
 **变迁处理**：如果源文件中可观察到方案变迁（A→B），记录变迁过程。
 
 **存疑处理**：无法通过代码验证的知识，保留但标记待验证。
 
-**淘汰**：已验证为过时或错误的条目（代码中已不存在对应实现），不写入 skill。
+**淘汰**：已验证为过时或错误的条目，不写入 skill。
 
 **上限**：每次验证最多处理 30 条知识条目。超出部分留到下一轮。
 
@@ -264,7 +381,7 @@ description: |
 
 | 标记 | 含义 | 用法 |
 |------|------|------|
-| `✅ [已验证]` | 代码确认成立 | 后附代码位置，如 `src/auth.ts:L42` |
+| `✅ [已验证]` | 代码确认成立 | 后附代码位置 |
 | `⚠️ [冲突]` | 多用户说法不同 | 列出各方说法，以代码实际为准 |
 | `🔄 [变迁]` | 方案发生过变化 | 记录旧方案→新方案 |
 | `❓ [待验证]` | 无法通过代码验证 | 保留但提醒使用者 |
@@ -287,30 +404,15 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 > by {贡献者} | 验证: {YYYY-MM}
 ✅ [已验证] src/path/file.ts:L42
 - 具体内容
-
-## 有冲突的知识点
-> by {用户A}, {用户B} | 验证: {YYYY-MM}
-⚠️ [冲突] {用户A}: 方案A; {用户B}: 方案B → 代码实际: 方案A
-- 具体内容
-
-## 方案已变更的知识点
-> by {贡献者} | 验证: {YYYY-MM}
-🔄 [变迁] 旧: 方案A → 新: 方案B
-- 具体内容
-
-## 存疑的知识点
-> by {贡献者} | 验证: {YYYY-MM}
-❓ [待验证] 未找到对应代码实现
-- 具体内容
 ```
 
 #### 3.5 源文件清理
 
-**安全约束**：只在 skill 文件写入成功后才清理源文件。如果写入失败，不清理。
+**安全约束**：只在 skill 文件写入成功后才清理源文件。
 
-对每个 `.sman/knowledge/{category}-{user}.md`，删除已被处理的 hash 条目（`<!-- hash: xxx --> ... <!-- end: xxx -->` 整段移除）。只保留尚未处理的新条目，作为下一轮的素材。
+对每个 `.sman/knowledge/{category}-{user}.md`，删除已被处理的 hash 条目。只保留尚未处理的新条目。
 
-如果清理后文件为空或只剩标题，保留文件但清空内容（下次 KnowledgeExtractor 会重新填充）。
+如果清理后文件为空或只剩标题，保留文件但清空内容。
 
 #### 3.6 边界条件
 
@@ -343,6 +445,10 @@ description: "{描述}。经代码验证，由 skill-auto-updater 聚合。"
 ---
 name: {skill-name}
 description: "一句话描述。TRIGGER: 关键词1/关键词2"
+_scanned:
+  commitHash: {git hash}
+  scannedAt: "{ISO date}"
+  branch: "{branch name}"
 ---
 
 # 标题
@@ -381,11 +487,14 @@ description: "一句话描述。TRIGGER: 关键词1/关键词2"
 7. Reference 文件 < 100 行，只写关键信息
 8. 输出语言：English（节省 token）
 9. SKILL.md frontmatter 必须设置 `_scanned` 字段（commitHash、scannedAt、branch）
+10. **最多 2 个子 agent 并行**，超过容易导致 LLM 报错
+11. 每个子 agent 是独立上下文，不继承主 agent 对话历史
+12. 通过文件系统（`.sman/scan-plan.json`、references/）在 phase 间传递状态
 
 ## 边界条件
 
 - 如果 `.sman/INIT.md` 不存在，跳过 capability 更新，但仍然执行 project knowledge 扫描
 - 如果没有显著变化且 project skills 的 commit hash 未变，跳过本次执行
 - 不要删除用户手动添加的 skills，只更新和补充
-- 首次全量扫描的 Phase 1 应并行执行 3 个 Agent，提升效率
 - 首次扫描优先级：规范 > 技术横切面 > 业务链路 > 数据库
+- 项目规模评估在 Phase 0 完成，后续 phase 严格按评估结果执行

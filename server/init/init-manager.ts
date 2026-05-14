@@ -330,7 +330,7 @@ export class InitManager {
       `**Type:** ${scanResult.types.join(', ')}`,
       `**Tech Stack:** ${matchResult.techStack.join(', ')}`,
       `**Summary:** ${matchResult.projectSummary}`,
-      `**Description:** ${matchResult.projectSummary}`,
+      `**Description:** ${matchResult.projectDescription}`,
       `**Files:** ${scanResult.fileCount}`,
       `**Git:** ${scanResult.isGitRepo ? 'yes' : 'no'}`,
       `**CLAUDE.md:** ${scanResult.hasClaudeMd ? 'existing' : claudeMdGenerated ? 'generated' : 'missing'}`,

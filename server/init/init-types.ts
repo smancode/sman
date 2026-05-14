@@ -11,6 +11,10 @@ export interface WorkspaceScanResult {
   fileCount: number;
   isGitRepo: boolean;
   hasClaudeMd: boolean;
+  /** First 150 lines of CLAUDE.md content (if exists) */
+  claudeMdContent?: string;
+  /** Top-level subdirectory names with their file counts (lightweight structure overview) */
+  dirStructure?: Array<{ name: string; fileCount: number; subDirs: string[] }>;
 }
 
 export interface CapabilityMatch {
@@ -21,6 +25,8 @@ export interface CapabilityMatch {
 export interface CapabilityMatchResult {
   matches: CapabilityMatch[];
   projectSummary: string;
+  /** Detailed project description (distinct from summary) */
+  projectDescription: string;
   techStack: string[];
 }
 

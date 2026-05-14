@@ -87,6 +87,28 @@ export function scanWorkspace(workspace: string): WorkspaceScanResult {
 
   const topDirs = dirNames.filter(d => !NOISE_DIRS.has(d) && !d.startsWith('.'));
 
+  // Read CLAUDE.md content (first 150 lines) for richer project understanding
+  let claudeMdContent: string | undefined;
+  if (fileNames.includes('CLAUDE.md')) {
+    try {
+      const fullContent = fs.readFileSync(path.join(workspace, 'CLAUDE.md'), 'utf-8');
+      const lines = fullContent.split('\n').slice(0, 150);
+      claudeMdContent = lines.join('\n');
+    } catch { /* ignore */ }
+  }
+
+  // Lightweight subdirectory structure (1 level deep, top 20 dirs)
+  const dirStructure: Array<{ name: string; fileCount: number; subDirs: string[] }> = [];
+  for (const dir of topDirs.slice(0, 20)) {
+    const dirPath = path.join(workspace, dir);
+    try {
+      const subEntries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const subFileCount = subEntries.filter(e => e.isFile()).length;
+      const subDirs = subEntries.filter(e => e.isDirectory()).map(e => e.name).slice(0, 10);
+      dirStructure.push({ name: dir, fileCount: subFileCount, subDirs });
+    } catch { /* ignore */ }
+  }
+
   return {
     types: [...types],
     languages,
@@ -97,6 +119,8 @@ export function scanWorkspace(workspace: string): WorkspaceScanResult {
     fileCount,
     isGitRepo: dirNames.includes('.git'),
     hasClaudeMd: fileNames.includes('CLAUDE.md'),
+    claudeMdContent,
+    dirStructure,
   };
 }
 

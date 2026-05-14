@@ -1161,6 +1161,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cleanup();
         sendingSessions.delete(streamSessionId);
 
+        // Refresh git branch in titlebar after AI completes (may have switched branch)
+        (window as any).__sman_gitBranchRefresh?.();
+
         const frozen = freezeLiveText(getStreamingBlocks(streamSessionId));
         const contentBlocks = streamingBlocksToContentBlocks(frozen);
         const textContent = frozen
