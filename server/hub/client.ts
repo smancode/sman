@@ -97,10 +97,59 @@ export class HubClient {
         this.debugLog(`heartbeat FAILED: ${res.status} ${body}`);
       } else {
         this.debugLog(`heartbeat OK: ${res.status} ${body}`);
+        // Handle skill-auto-updater commands from server
+        try {
+          const resp = JSON.parse(body);
+          if (resp.commands && Array.isArray(resp.commands) && resp.commands.length > 0) {
+            this.triggerSkillAutoUpdater(resp.commands);
+          }
+        } catch { /* ignore parse errors */ }
       }
     } catch (err) {
       this.debugLog(`heartbeat ERROR: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  /**
+   * Trigger skill-auto-updater for each workspace via local MCP API.
+   * Fire-and-forget: async, don't wait for completion.
+   */
+  private triggerSkillAutoUpdater(workspaces: string[]): void {
+    for (const workspace of workspaces) {
+      log.info(`[SkillScheduler] Triggering skill-auto-updater for ${workspace}`);
+      this.invokeMcpTool(workspace, 'skill', 'skill-auto-updater').catch(err => {
+        log.error(`[SkillScheduler] Failed to trigger for ${workspace}: ${err instanceof Error ? err.message : err}`);
+      });
+    }
+  }
+
+  /** Fire-and-forget: trigger a local MCP skill asynchronously */
+  private async invokeMcpTool(workspace: string, _toolType: string, toolId: string, parameters?: string): Promise<void> {
+    const port = parseInt(process.env.PORT || '5880', 10);
+    const triggerUrl = `http://127.0.0.1:${port}/api/mcp/tools/trigger`;
+
+    // Get auth token
+    const tokenRes = await fetch(`http://127.0.0.1:${port}/api/auth/token`);
+    if (!tokenRes.ok) throw new Error(`Failed to get auth token: ${tokenRes.status}`);
+    const { token } = await tokenRes.json() as { token: string };
+
+    const reqBody: Record<string, string> = { workspace, toolId };
+    if (parameters) reqBody.parameters = parameters;
+
+    const res = await fetch(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`MCP trigger failed: ${res.status} ${text}`);
+    }
+    log.info(`[SkillScheduler] MCP trigger accepted for ${toolId} @ ${workspace}`);
   }
 
   private async fetchBroadcasts(): Promise<void> {

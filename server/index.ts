@@ -1027,6 +1027,55 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Async skill trigger — returns immediately, executes in background
+  if (req.url === '/api/mcp/tools/trigger' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const { workspace, toolId, parameters } = JSON.parse(body);
+        if (!workspace || !toolId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing required parameters: workspace, toolId' }));
+          return;
+        }
+
+        const skill = skillsRegistry.getSkill(toolId);
+        let found = !!skill;
+        if (!found) {
+          const projectSkills = skillsRegistry.getProjectSkills(workspace);
+          found = projectSkills.some(s => s.id === toolId);
+        }
+
+        if (!found) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Skill not found: ${toolId}` }));
+          return;
+        }
+
+        // Ack immediately
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'accepted', workspace, toolId }));
+
+        // Execute in background
+        const tempSessionId = sessionManager.createEphemeralSession(workspace);
+        const abort = new AbortController();
+        const prompt = parameters ? `/${toolId} ${parameters}` : `/${toolId}`;
+        sessionManager.sendMessageForCron(tempSessionId, prompt, abort, () => {})
+          .catch(err => log.error(`[AsyncTrigger] ${toolId} failed: ${err instanceof Error ? err.message : err}`))
+          .finally(() => {
+            sessionManager.closeV2Session(tempSessionId);
+            sessionManager.removeEphemeralSession(tempSessionId);
+          });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: errorMessage }));
+      }
+    });
+    return;
+  }
+
   // WebSocket upgrade path — let WSS handle it
   if (req.url?.startsWith('/ws')) {
     res.writeHead(426);
