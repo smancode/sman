@@ -10,6 +10,7 @@ export interface ReportPayload {
   ip: string;
   reportTime: string;
   activeSessions: number;
+  workspaces?: string[];
 }
 
 export interface BroadcastQueryPayload {

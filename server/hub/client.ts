@@ -10,7 +10,7 @@ import { getLocalIp } from '../utils/network.js';
 
 const log = createLogger('Hub');
 const TIMEOUT_MS = 5000;
-const REPORT_INTERVAL_MS = 60 * 60 * 1000;
+const REPORT_INTERVAL_MS = 15 * 60 * 1000;
 
 interface HubDeps {
   getServerUrl: () => string;
@@ -75,6 +75,7 @@ export class HubClient {
         ip: clientId.split('@')[1],
         reportTime: new Date().toISOString(),
         activeSessions: this.deps.sessionStore.getActiveSessionCount(),
+        workspaces: this.deps.sessionStore.getActiveWorkspaces(),
       };
 
       const serverUrl = this.deps.getServerUrl();
