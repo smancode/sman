@@ -402,6 +402,17 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
 
 后续运行时只更新变更部分。
 
+**核心要求：增量更新绝不是简单罗列 git diff 改动点，必须分析关联影响。**
+
+> 差的增量更新："新增了 UserService.java，包含 login 和 register 方法"
+> 好的增量更新："新增 UserService 替代了旧的 AuthService 登录逻辑，AuthController 仍引用 AuthService（已标记废弃），建议后续迁移。Session 表结构未变但 login 接口入参新增了 deviceId 字段"
+
+增量扫描时，必须：
+1. **看改动了什么** — git diff 识别变更文件
+2. **分析影响了什么** — 改动涉及哪些模块、接口、数据结构
+3. **推断连锁反应** — 哪些依赖此模块的地方可能受影响、是否需要同步更新
+4. **标记风险点** — 接口签名变更、数据库字段变更、删除的公共方法等高风险改动
+
 ### 一、Capability Skills 更新
 
 1. **读取基线** — 读取 `.sman/INIT.md` 获取上次扫描结果
@@ -413,6 +424,23 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
 检查以下 4 个 skill 的 `_scanned.commitHash` 是否与当前 `git rev-parse HEAD` 一致。不一致或尚未扫描时，执行对应扫描并覆写 SKILL.md 和 references/。
 
 **增量更新也遵循最多 2 个子 agent 并行的限制。** 每个扫描任务作为独立 Task 分配给子 agent。
+
+**增量扫描的深度要求**：
+
+对于每个需要更新的 skill，不能只看变更文件本身，必须分析关联影响：
+
+| 扫描维度 | 不只是... | 还要分析... |
+|---------|----------|-----------|
+| project-structure | "新增了 user/ 目录" | 此目录与哪些现有模块交互、依赖关系变化 |
+| project-apis | "新增了 POST /api/users" | 此接口替代了哪个旧接口？影响哪些调用方？参数变更是否破坏兼容性？ |
+| project-external-calls | "新增了 Redis 调用" | 为什么加？是替代了某个旧缓存方案？还是全新功能？配置从哪来？ |
+| database-schema | "新增了 user_devices 表" | 与哪些表关联？是否影响现有查询？是否需要迁移旧数据？ |
+
+**必须标记的风险信号**：
+- `⚠️ BREAKING`：接口签名变更、删除了公共方法、数据库字段删除/改名
+- `⚠️ MIGRATION`：数据库变更需要数据迁移
+- `⚠️ DEPRECATED`：代码标记了 @Deprecated 但仍有调用方
+- `⚠️ ORPHAN`：代码/配置找不到任何调用方（可能是死代码或遗漏）
 
 #### project-structure
 
