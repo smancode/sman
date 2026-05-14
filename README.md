@@ -1,8 +1,12 @@
 <div align="center">
 
-<img src="./public/images/sman-logo-dark.png" alt="Sman" width="280" />
+<img src="./public/favicon.png" alt="Sman" width="80" />
 
-# Sman
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./public/images/sman-logo-white.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./public/images/sman-logo-dark.png" />
+  <img alt="Sman" width="240" />
+</picture>
 
 **Business-Native AI Agent Collaboration Platform.**
 
