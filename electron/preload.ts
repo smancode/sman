@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('sman', {
     check: () => ipcRenderer.invoke('updater:check'),
     install: () => ipcRenderer.invoke('updater:install'),
     setFeedURL: (url: string) => ipcRenderer.invoke('updater:setFeedURL', url),
+    probeServer: (url: string) => ipcRenderer.invoke('updater:probeServer', url) as Promise<{ ok: boolean; error?: string }>,
     onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { version: string; releaseNotes?: string }) => callback(data);
       ipcRenderer.on('updater:available', handler);

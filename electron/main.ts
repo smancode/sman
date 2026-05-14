@@ -219,6 +219,20 @@ function registerIpcHandlers(): void {
     autoUpdater.setFeedURL({ provider: 'generic', url });
   });
 
+  ipcMain.handle('updater:probeServer', async (_event, url: string) => {
+    if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid URL' };
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 5000);
+      const healthUrl = url.replace(/\/+$/, '') + '/health';
+      const res = await fetch(healthUrl, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(tid);
+      return { ok: res.ok };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Connection failed' };
+    }
+  });
+
   // Forward autoUpdater events to renderer
   autoUpdater.on('update-available', (info) => {
     updateInfo = { version: info.version };

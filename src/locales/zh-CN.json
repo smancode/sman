@@ -2796,8 +2796,20 @@
     "context": "更新服务器URL输入框占位符"
   },
   "update.settings.serverUrlSaved": {
-    "text": "更新服务器地址已保存",
-    "context": "保存更新服务器地址成功"
+    "text": "保存成功",
+    "context": "保存更新服务器地址成功，绿色提示"
+  },
+  "update.settings.serverUrlProbeFailed": {
+    "text": "服务器连接失败，请检查地址是否正确",
+    "context": "探测更新服务器失败的告警提示"
+  },
+  "update.settings.serverUrlProbing": {
+    "text": "正在探测服务器...",
+    "context": "正在探测服务器可用性"
+  },
+  "update.settings.serverUrlSaveButton": {
+    "text": "保存",
+    "context": "保存服务器地址按钮"
   },
   "update.settings.retryButton": {
     "text": "重试",

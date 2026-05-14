@@ -2796,8 +2796,20 @@
     "context": "Update server URL input placeholder"
   },
   "update.settings.serverUrlSaved": {
-    "text": "Update server URL saved",
-    "context": "Update server URL saved successfully"
+    "text": "Saved successfully",
+    "context": "Update server URL saved successfully, green prompt"
+  },
+  "update.settings.serverUrlProbeFailed": {
+    "text": "Server connection failed, please check the URL",
+    "context": "Alert when update server probe fails"
+  },
+  "update.settings.serverUrlProbing": {
+    "text": "Probing server...",
+    "context": "Probing server availability"
+  },
+  "update.settings.serverUrlSaveButton": {
+    "text": "Save",
+    "context": "Save server URL button"
   },
   "update.settings.retryButton": {
     "text": "Retry",
