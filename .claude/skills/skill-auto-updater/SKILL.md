@@ -34,6 +34,120 @@ description: |
     → 否：增量更新模式（Step 一-四）
 ```
 
+## 前置步骤：是否需要更新？
+
+在执行任何扫描之前，先判断本次是否真的需要更新。
+
+### 0.1 分支日期检查（有 git 时）
+
+**场景**：很多项目用日期命名分支（如 `release/20260511`、`hotfix-0511`、`v20260511`），这类分支上线后就不动了，继续扫描是浪费资源。
+
+**判断逻辑**：
+
+```bash
+# 提取当前分支名中的日期（格式：YYYYMMDD）
+BRANCH=$(git branch --show-current)
+
+# 用正则提取分支中的 8 位日期
+# 匹配模式：20260511、2026-05-11、26-05-11、0511 等
+```
+
+提取分支日期后，与今天日期比较：
+
+| 分支日期 vs 今天 | 判断 | 动作 |
+|-----------------|------|------|
+| 分支日期 < 今天（已过期） | 分支可能已封版 | 检查是否有**实际代码改动**（见下方） |
+| 分支日期 ≥ 今天（当天或未来） | 分支仍在开发中 | 正常执行更新 |
+| 无法提取日期 | 非日期分支 | 正常执行更新 |
+
+**已过期分支的实际代码改动检查**：
+
+```bash
+# 检查分支日期之后是否有代码提交（排除 .claude/ .sman/ 的自动提交）
+# 分支日期为 2026-05-11，检查 0511 之后是否有非 skill 的代码提交
+git log --after="2026-05-11" --oneline -- . ':!.claude' ':!.sman' | head -5
+
+# 如果有输出 → 还有代码在动 → 正常更新
+# 如果无输出 → 代码已封版 → 跳过本次更新
+```
+
+**跳过时输出**：
+
+```
+⏭️ 分支 {branch} 已过期（{date}），且无实际代码改动，跳过本次更新。
+```
+
+### 0.2 增量更新的变更检测
+
+**有 git 的项目**：检查 `_scanned.commitHash` 是否与 `git rev-parse HEAD` 一致：
+- 一致 → 无代码变更 → 跳过扫描（除非 `.sman/knowledge/` 有新的团队知识需要聚合）
+- 不一致 → 有代码变更 → 继续执行
+
+**无 git 的项目**：检查 `_scanned.scannedAt` 时间：
+- 距今 < 24 小时 → 跳过（避免频繁扫描）
+- 距今 ≥ 24 小时 → 继续执行
+
+### 0.3 断点续扫（首次全量扫描中断后恢复）
+
+如果 `.sman/scan-plan.json` 存在但 `completedPhases` 不完整，说明上次扫描中断了：
+
+1. 读取 `scan-plan.json`，对比 `completedPhases` 与 `phases`
+2. 跳过已完成的 phase，从第一个未完成的 phase 继续
+3. 如果已完成的 skill 对应的 SKILL.md 文件存在且完整（行数 > 5），保留它；否则标记为需要重扫
+
+**清理规则**：
+- 扫描全部完成（Phase 5）→ 删除 `scan-plan.json`
+- 扫描中断 → 保留 `scan-plan.json`，下次自动续扫
+- `scan-plan.json` 超过 7 天未完成 → 删除并重新开始（避免永久残留）
+
+## 前置步骤：Git 同步
+
+执行任何扫描之前，先尝试同步 git 仓库。**只在项目有 git 时执行，无 git 则跳过。**
+
+```bash
+# 1. 检查是否有 git
+git rev-parse --is-inside-work-tree 2>/dev/null || echo "NOT_GIT"
+
+# 2. 如果有 git，拉取最新代码（只 stash 非 .claude/.sman 的文件，避免冲突）
+git stash push --include-untracked -m "skill-auto-updater auto stash" -- . ':!.claude' ':!.sman'
+git pull --rebase || true  # pull 失败不影响后续执行
+git stash pop 2>/dev/null || true  # stash pop 冲突也不影响，用当前状态扫描
+```
+
+**原则**：
+- stash 时**排除 `.claude/` 和 `.sman/`**，避免用户的 skill 编辑和扫描结果互相覆盖
+- git 操作失败**不阻塞**扫描执行。pull 失败就用本地代码扫描，下次再同步
+- 不强制 push，只在扫描完成后的"后置步骤"中尝试
+
+## 后置步骤：Git 提交与推送
+
+扫描完成并写入所有 skill 文件后，尝试将变更提交到 git。**只在项目有 git 时执行。**
+
+```bash
+# 1. 检查 .claude/ 和 .sman/ 下是否有变更
+git diff --name-only -- .claude/ .sman/
+# 无变更 → 跳过
+
+# 2. 有变更 → 尝试推送（先 push 测试权限，再 commit）
+git push --dry-run 2>&1
+# push --dry-run 失败（无权限/保护分支/网络不通）→ 放弃提交，回退
+#   → git checkout -- .claude/ .sman/
+#   → 输出: ⏭️ 无 push 权限或分支受保护，放弃提交
+# push --dry-run 成功 → 继续
+
+# 3. 正式提交并推送
+git add .claude/ .sman/
+git commit -m "chore(skill): auto-update project skills [skip ci]"
+git push
+```
+
+**原则**：
+- 只提交 `.claude/` 和 `.sman/` 目录，不碰其他文件
+- `[skip ci]` 避免触发 CI 流水线
+- **先 `push --dry-run` 测试权限**，无权限则不 commit，直接回退工作区变更
+- 管控分支（master/main 受保护）直接放弃，不留脏状态
+- **绝不 force push**
+
 ---
 
 ## 首次全量扫描模式
