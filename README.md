@@ -1,10 +1,10 @@
 <div align="center">
 
-# Sman
+<img src="./public/images/sman-logo.svg" alt="Sman" width="320" />
 
 **Your AI Pair Programmer That Actually Reads Your Code.**
 
-Pick a folder. Start talking. Your project just got an AI partner that understands your codebase, automates your browser, runs batch tasks, and collaborates with other AI agents.
+🌐 [smancode.com](https://www.smancode.com) · Pick a folder. Start talking. Your project just got an AI partner that understands your codebase, automates your browser, runs batch tasks, and collaborates with other AI agents.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/smancode/sman?style=social)](https://github.com/smancode/sman/stargazers)
