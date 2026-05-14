@@ -4,9 +4,9 @@
 
 # Sman
 
-**Your AI Pair Programmer That Actually Reads Your Code.**
+**Business-Native AI Agent Collaboration Platform.**
 
-🌐 [smancode.com](https://www.smancode.com) · Pick a folder. Start talking. Your project just got an AI partner that understands your codebase, automates your browser, runs batch tasks, and collaborates with other AI agents.
+🌐 [smancode.com](https://www.smancode.com) · 基于业务的AI原生Agent协作平台
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/smancode/sman?style=social)](https://github.com/smancode/sman/stargazers)
