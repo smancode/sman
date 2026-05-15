@@ -116,6 +116,14 @@ function stopFileRefresh() {
 // In-flight loadDir promises to prevent duplicate requests for the same path
 const _dirInFlight = new Map<string, Promise<DirEntry[]>>();
 
+// ── Navigation History ──
+
+export interface NavLocation {
+  filePath: string;
+  line: number | null;
+  column: number | null;
+}
+
 // ── Store State & Actions ──
 
 interface CodeViewerState {
@@ -148,6 +156,13 @@ interface CodeViewerState {
   fileSearching: boolean;
   fileSearchSourceOnly: boolean;
 
+  // Navigation history
+  navHistory: NavLocation[];
+  navIndex: number;
+
+  // Follow file (tree tracks right panel)
+  followFile: boolean;
+
   // Edit
   editable: boolean;
   dirty: boolean;
@@ -170,6 +185,10 @@ interface CodeViewerState {
   setEditable: (editable: boolean) => void;
   markDirty: () => void;
   saveFile: () => void;
+  pushNav: (filePath: string, line?: number | null, column?: number | null) => void;
+  goBack: () => void;
+  goForward: () => void;
+  setFollowFile: (follow: boolean) => void;
 }
 
 export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
@@ -202,6 +221,13 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   fileSearching: false,
   fileSearchSourceOnly: true,
 
+  // Navigation history
+  navHistory: [],
+  navIndex: -1,
+
+  // Follow file
+  followFile: typeof window !== 'undefined' ? localStorage.getItem('sman:codeFollowFile') !== 'false' : true,
+
   // Edit
   editable: false,
   dirty: false,
@@ -222,6 +248,8 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       error: null,
       dirCache: {},
       fileCache: new Map<string, FileCacheEntry>(),
+      navHistory: [],
+      navIndex: -1,
     });
     get().loadFile(filePath);
 
@@ -261,6 +289,8 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       searchResults: [],
       searching: false,
       searchSymbol: '',
+      navHistory: [],
+      navIndex: -1,
     });
   },
 
@@ -518,5 +548,38 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
       filePath: resolvedPath,
       content: (currentFile as FileContent).content,
     });
+  },
+
+  pushNav(filePath: string, line?: number | null, column?: number | null) {
+    const { navHistory, navIndex } = get();
+    const location: NavLocation = { filePath, line: line ?? null, column: column ?? null };
+
+    const newHistory = navHistory.slice(0, navIndex + 1);
+    newHistory.push(location);
+
+    set({ navHistory: newHistory, navIndex: newHistory.length - 1 });
+  },
+
+  goBack() {
+    const { navIndex, navHistory } = get();
+    if (navIndex <= 0) return;
+    const newIndex = navIndex - 1;
+    const loc = navHistory[newIndex];
+    set({ navIndex: newIndex, lineNumber: loc.line });
+    get().loadFile(loc.filePath);
+  },
+
+  goForward() {
+    const { navIndex, navHistory } = get();
+    if (navIndex >= navHistory.length - 1) return;
+    const newIndex = navIndex + 1;
+    const loc = navHistory[newIndex];
+    set({ navIndex: newIndex, lineNumber: loc.line });
+    get().loadFile(loc.filePath);
+  },
+
+  setFollowFile(follow: boolean) {
+    localStorage.setItem('sman:codeFollowFile', String(follow));
+    set({ followFile: follow });
   },
 }));

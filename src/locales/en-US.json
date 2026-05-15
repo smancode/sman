@@ -1103,6 +1103,22 @@
     "text": "Current",
     "context": "Current location marker"
   },
+  "codeviewer.navBack": {
+    "text": "Previous location",
+    "context": "Navigation history: go back"
+  },
+  "codeviewer.navForward": {
+    "text": "Next location",
+    "context": "Navigation history: go forward"
+  },
+  "codeviewer.follow": {
+    "text": "Follow",
+    "context": "File tree follow toggle"
+  },
+  "codeviewer.followTitle": {
+    "text": "File tree follows the right editor selection",
+    "context": "Follow feature description"
+  },
   "cron.back": {
     "text": "Back",
     "context": "Back button"

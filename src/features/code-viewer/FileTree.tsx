@@ -179,6 +179,8 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
   const fileSearching = useCodeViewerStore((s) => s.fileSearching);
   const sourceOnly = useCodeViewerStore((s) => s.fileSearchSourceOnly);
   const setFileSearchSourceOnly = useCodeViewerStore((s) => s.setFileSearchSourceOnly);
+  const followFile = useCodeViewerStore((s) => s.followFile);
+  const setFollowFile = useCodeViewerStore((s) => s.setFollowFile);
 
   const handleChange = useCallback((value: string) => {
     setQuery(value);
@@ -243,6 +245,15 @@ function FileSearchInput({ onSelect }: { onSelect: (filePath: string) => void })
           />
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">{t("codeviewer.sourceOnly")}</span>
         </label>
+        <label className="flex items-center gap-1 shrink-0 cursor-pointer select-none" title={t("codeviewer.followTitle")}>
+          <input
+            type="checkbox"
+            checked={followFile}
+            onChange={(e) => setFollowFile(e.target.checked)}
+            className="w-3 h-3 accent-[hsl(var(--primary))]"
+          />
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{t("codeviewer.follow")}</span>
+        </label>
       </div>
       {showResults && (
         <ScrollArea className="max-h-[200px]">
@@ -287,13 +298,17 @@ interface FileTreeProps {
 export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: FileTreeProps) {
   const loadDir = useCodeViewerStore((s) => s.loadDir);
   const dirCache = useCodeViewerStore((s) => s.dirCache);
+  const followFile = useCodeViewerStore((s) => s.followFile);
   const [rootEntries, setRootEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Effective active file: only highlight when followFile is on
+  const effectiveActive = followFile ? activeFilePath : '';
+
   // Scroll active file into view when it changes or dirCache updates (tree expands)
   useEffect(() => {
-    if (!activeFilePath) return;
+    if (!effectiveActive) return;
     const timer = setTimeout(() => {
       const el = document.querySelector('[data-file-active="true"]');
       if (el) {
@@ -301,7 +316,7 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [activeFilePath, dirCache]);
+  }, [effectiveActive, dirCache]);
 
   // Load root dir on mount or workspace change
   useEffect(() => {
@@ -374,7 +389,7 @@ export function FileTree({ workspace, activeFilePath, onSelectFile, onClose }: F
                 type={entry.type}
                 relativePath={entry.name}
                 depth={0}
-                activeFilePath={activeFilePath}
+                activeFilePath={effectiveActive}
                 onSelect={onSelectFile}
               />
             ))

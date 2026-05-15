@@ -1103,6 +1103,22 @@
     "text": "当前位置",
     "context": "当前位置标记"
   },
+  "codeviewer.navBack": {
+    "text": "上一个位置",
+    "context": "导航历史：后退"
+  },
+  "codeviewer.navForward": {
+    "text": "下一个位置",
+    "context": "导航历史：前进"
+  },
+  "codeviewer.follow": {
+    "text": "跟随",
+    "context": "文件树跟随开关"
+  },
+  "codeviewer.followTitle": {
+    "text": "文件树跟随右侧编辑器选中文件",
+    "context": "跟随功能说明"
+  },
   "cron.back": {
     "text": "返回",
     "context": "返回按钮"

@@ -1,3 +1,5 @@
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 <div align="center">
 
 <picture>
@@ -8,7 +10,7 @@
 
 **Business-Native AI Agent Collaboration Platform.**
 
-🌐 [smancode.com](https://www.smancode.com) · 基于业务的AI原生Agent协作平台
+🌐 [smancode.com](https://www.smancode.com) · Business-Native AI Agent Collaboration Platform
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/smancode/sman?style=social)](https://github.com/smancode/sman/stargazers)

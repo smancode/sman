@@ -25,7 +25,7 @@ import type { Extension } from '@codemirror/state';
 import { search, highlightSelectionMatches } from '@codemirror/search';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
-import { Loader2, AlertTriangle, FileQuestion, Pencil, Save, Eye, ZoomIn, ZoomOut, Code2 } from 'lucide-react';
+import { Loader2, AlertTriangle, FileQuestion, Pencil, Save, Eye, ZoomIn, ZoomOut, Code2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCodeViewerStore, type FileContent, type BinaryFileInfo } from '@/stores/code-viewer';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/lib/auth';
@@ -73,8 +73,19 @@ const highlightLineDeco = EditorView.decorations.compute([highlightLineField], (
   const line = state.field(highlightLineField);
   if (line === null || line < 1 || line > state.doc.lines) return Decoration.none;
   const lineInfo = state.doc.line(line);
-  const lineDeco = Decoration.line({ class: 'cm-activeLineBackground' });
+  const lineDeco = Decoration.line({ class: 'cm-navHighlight' });
   return Decoration.set([lineDeco.range(lineInfo.from)]);
+});
+
+const navHighlightTheme = EditorView.baseTheme({
+  '.cm-navHighlight': {
+    backgroundColor: 'rgba(255, 166, 0, 0.18) !important',
+    borderLeft: '2px solid rgba(255, 166, 0, 0.6)',
+  },
+  '&dark .cm-navHighlight': {
+    backgroundColor: 'rgba(255, 166, 0, 0.22) !important',
+    borderLeft: '2px solid rgba(255, 166, 0, 0.7)',
+  },
 });
 
 // ── Ctrl/Cmd+Click to search symbol ──────────────────────────────
@@ -92,6 +103,33 @@ function findIdentifierAt(text: string, offset: number): string | null {
   return null;
 }
 
+function clickNavExtension() {
+  return EditorView.domEventHandlers({
+    mouseup(event, view) {
+      // Only plain clicks (no modifier keys, left button)
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.button !== 0) return false;
+
+      const pos = view.posAtCoords(event);
+      if (pos == null) return false;
+
+      const state = useCodeViewerStore.getState();
+      if (!state.filePath) return false;
+
+      const line = view.state.doc.lineAt(pos);
+      const col = pos - line.from;
+
+      // Don't record if same as current position
+      const lastLoc = state.navHistory[state.navIndex];
+      if (lastLoc && lastLoc.filePath === state.filePath && lastLoc.line === line.number && lastLoc.column === col) {
+        return false;
+      }
+
+      state.pushNav(state.filePath, line.number, col);
+      return false;
+    },
+  });
+}
+
 function ctrlClickSearchExtension(workspace: string) {
   return EditorView.domEventHandlers({
     mousedown(event, view) {
@@ -105,16 +143,9 @@ function ctrlClickSearchExtension(workspace: string) {
       const symbol = findIdentifierAt(line.text, lineOffset);
       if (!symbol) return false;
 
-      // Determine file extension from the language
-      const fileExt = view.state.facet(EditorState.readOnly) !== undefined
-        ? undefined // let the backend use default extensions
-        : undefined;
+      useCodeViewerStore.getState().searchSymbols(symbol);
 
-      useCodeViewerStore.getState().searchSymbols(symbol, fileExt);
-
-      // Highlight the clicked line
-      const lineNum = line.number;
-      view.dispatch({ effects: setHighlightLine.of(lineNum) });
+      view.dispatch({ effects: setHighlightLine.of(line.number) });
 
       return true;
     },
@@ -363,6 +394,10 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
   const setEditable = useCodeViewerStore((s) => s.setEditable);
   const markDirty = useCodeViewerStore((s) => s.markDirty);
   const saveFile = useCodeViewerStore((s) => s.saveFile);
+  const navIndex = useCodeViewerStore((s) => s.navIndex);
+  const navHistoryLen = useCodeViewerStore((s) => s.navHistory.length);
+  const goBack = useCodeViewerStore((s) => s.goBack);
+  const goForward = useCodeViewerStore((s) => s.goForward);
 
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -426,6 +461,13 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
           setHighlightLine.of(highlightLine),
         ],
       });
+      // Clear highlight after 3 seconds
+      const timer = setTimeout(() => {
+        if (cmRef.current?.view) {
+          cmRef.current.view.dispatch({ effects: setHighlightLine.of(null) });
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
     }
   }, [highlightLine]);
 
@@ -474,6 +516,7 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
       highlightLineField,
       highlightLineDeco,
       EditorView.lineWrapping,
+      navHighlightTheme,
       EditorState.readOnly.of(!editable),
       keymap.of([
         {
@@ -491,6 +534,9 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
 
     // Ctrl/Cmd+Click to search symbol
     exts.push(ctrlClickSearchExtension(workspace));
+
+    // Plain click to record navigation position
+    exts.push(clickNavExtension());
 
     return exts;
   }, [language, editable, dirty, saveFile, workspace]);
@@ -534,6 +580,10 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
         isMarkdown={isMarkdown}
         showSource={showSource}
         onToggleSource={() => setShowSource(!showSource)}
+        navIndex={navIndex}
+        navHistoryLen={navHistoryLen}
+        goBack={goBack}
+        goForward={goForward}
       />
 
       {/* Body area */}
@@ -616,6 +666,10 @@ interface FileHeaderProps {
   isMarkdown?: boolean;
   showSource?: boolean;
   onToggleSource?: () => void;
+  navIndex: number;
+  navHistoryLen: number;
+  goBack: () => void;
+  goForward: () => void;
 }
 
 const FileHeader = memo(function FileHeader({
@@ -631,12 +685,17 @@ const FileHeader = memo(function FileHeader({
   isMarkdown,
   showSource,
   onToggleSource,
+  navIndex,
+  navHistoryLen,
+  goBack,
+  goForward,
 }: FileHeaderProps) {
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
-      <span className="text-[13px] text-[hsl(var(--foreground))] font-medium truncate flex-1 min-w-0">
-        {filePath}
-      </span>
+    <div className="border-b border-[hsl(var(--border))] shrink-0 bg-[hsl(var(--card))]">
+      <div className="flex items-center gap-2 px-4 py-2">
+        <span className="text-[13px] text-[hsl(var(--foreground))] font-medium truncate flex-1 min-w-0">
+          {filePath}
+        </span>
       <span className="text-[11px] text-muted-foreground/60 shrink-0">
         {language}
       </span>
@@ -697,5 +756,29 @@ const FileHeader = memo(function FileHeader({
         )}
       </div>
     </div>
+
+    {/* Navigation history bar */}
+    {navHistoryLen > 1 && (
+      <div className="flex items-center gap-1 px-4 py-1 border-t border-[hsl(var(--border))]/50">
+        <button
+          onClick={goBack}
+          className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] rounded hover:bg-[hsl(var(--muted))] transition-colors text-muted-foreground"
+          title={t('codeviewer.navBack')}
+        >
+          <ChevronLeft className="h-3 w-3" />
+        </button>
+        <span className="text-[11px] text-muted-foreground/50">
+          {navIndex + 1}/{navHistoryLen}
+        </span>
+        <button
+          onClick={goForward}
+          className="flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] rounded hover:bg-[hsl(var(--muted))] transition-colors text-muted-foreground"
+          title={t('codeviewer.navForward')}
+        >
+          <ChevronRight className="h-3 w-3" />
+        </button>
+      </div>
+    )}
+  </div>
   );
 });
