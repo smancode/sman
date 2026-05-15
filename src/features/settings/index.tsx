@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Store, Users, Star, Languages, Download } from 'lucide-react';
+import { ChevronLeft, Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -9,6 +9,7 @@ import { ChatbotSettings } from './ChatbotSettings';
 import { BackendSettings } from './BackendSettings';
 import { LanguageSettings } from './LanguageSettings';
 import { UpdateSettings } from './UpdateSettings';
+import { AboutSettings } from './AboutSettings';
 import { StardomSettings } from '@/features/stardom/StardomSettings';
 import { useSettingsStore } from '@/stores/settings';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
@@ -100,9 +101,10 @@ const SECTIONS = [
   { id: 'backend', icon: Wifi },
   { id: 'chatbot', icon: Bot },
   { id: 'websearch', icon: Search },
-  { id: 'stardom', icon: Store },
+  { id: 'stardom', icon: Sparkles },
   { id: 'language', icon: Languages },
   { id: 'update', icon: Download },
+  { id: 'about', icon: Info },
   { id: 'community', icon: Users },
 ] as const;
 
@@ -114,6 +116,7 @@ const SECTION_LABELS: Record<string, string> = {
   stardom: 'settings.stardom.title',
   language: 'settings.language.title',
   update: 'settings.sections.update',
+  about: 'settings.about.title',
   community: 'settings.about.community',
 };
 
@@ -178,6 +181,7 @@ export function Settings() {
       <StardomSettings id="settings-stardom" />
       <LanguageSettings id="settings-language" />
       <UpdateSettings id="settings-update" />
+      <AboutSettings id="settings-about" />
       <Card id="settings-community">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

@@ -72,7 +72,7 @@
     "context": "设置页面标题"
   },
   "settings.llm.title": {
-    "text": "LLM 设置",
+    "text": "LLM 大模型",
     "context": "LLM 配置区域标题"
   },
   "settings.llm.description": {
@@ -204,7 +204,7 @@
     "context": "删除配置确认对话框文字"
   },
   "settings.webSearch.title": {
-    "text": "网络搜索设置",
+    "text": "网络搜索",
     "context": "网络搜索配置区域标题"
   },
   "settings.webSearch.description": {
@@ -288,7 +288,7 @@
     "context": "关闭错误消息按钮文字"
   },
   "settings.chatbot.title": {
-    "text": "Bot机器人配置",
+    "text": "机器人",
     "context": "Chatbot 配置区域标题"
   },
   "settings.chatbot.description": {
@@ -504,11 +504,11 @@
     "context": "本地服务器显示名称"
   },
   "settings.stardom.title": {
-    "text": "协作星图设置",
+    "text": "协作星图",
     "context": "协作星图配置区域标题"
   },
   "settings.language.title": {
-    "text": "语言设置",
+    "text": "语言",
     "context": "语言设置区域标题"
   },
   "settings.language.label": {
@@ -556,8 +556,32 @@
     "context": "GitHub star 数量显示，{count} 是数字"
   },
   "settings.about.title": {
-    "text": "关于",
-    "context": "关于区域标题"
+    "text": "开源许可",
+    "context": "开源许可区域标题"
+  },
+  "settings.about.licenses": {
+    "text": "开源许可证",
+    "context": "许可证列表标题"
+  },
+  "settings.about.licenses.intro": {
+    "text": "本应用使用了若干开源软件组件。我们感谢这些开源项目及其贡献者。",
+    "context": "许可证介绍文字"
+  },
+  "settings.about.licenses.licensedUnder": {
+    "text": "授权协议：",
+    "context": "许可证条目中的'授权协议'标签"
+  },
+  "settings.about.licenses.oss": {
+    "text": "开源组件",
+    "context": "开源许可证分组标题"
+  },
+  "settings.about.licenses.proprietary": {
+    "text": "专有组件",
+    "context": "专有许可证分组标题"
+  },
+  "settings.about.licenses.disclaimer": {
+    "text": "以上开源组件各自遵循其原始许可证。所有第三方软件的版权归其原作者所有。完整许可证信息请参见各项目仓库。",
+    "context": "许可证免责声明"
   },
   "settings.about.version": {
     "text": "版本",

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Wifi } from 'lucide-react';
 import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from '@/stores/chat';
@@ -190,7 +191,10 @@ export function BackendSettings({ id }: { id?: string }) {
   return (
     <Card id={id}>
       <CardHeader>
-        <CardTitle>{t('settings.backend.title')}</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Wifi className="h-5 w-5" />
+          {t('settings.backend.title')}
+        </CardTitle>
         <CardDescription>
           {t('settings.backend.description')}
         </CardDescription>

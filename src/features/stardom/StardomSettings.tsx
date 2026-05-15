@@ -1,6 +1,6 @@
 // src/features/stardom/StardomSettings.tsx
 import { useState } from 'react';
-import { Server, User, Shield, Save } from 'lucide-react';
+import { Sparkles, User, Shield, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,8 +52,8 @@ export function StardomSettings({ id }: { id?: string }) {
     <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Server className="h-5 w-5" />
-          {t("stardom.settings.title")}
+          <Sparkles className="h-5 w-5" />
+          {t('settings.stardom.title')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

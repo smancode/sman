@@ -72,7 +72,7 @@
     "context": "Settings page title"
   },
   "settings.llm.title": {
-    "text": "LLM Settings",
+    "text": "LLM",
     "context": "LLM configuration section title"
   },
   "settings.llm.description": {
@@ -204,7 +204,7 @@
     "context": "Delete profile confirmation dialog text"
   },
   "settings.webSearch.title": {
-    "text": "Web Search Settings",
+    "text": "Web Search",
     "context": "Web search configuration section title"
   },
   "settings.webSearch.description": {
@@ -288,7 +288,7 @@
     "context": "Close error message button text"
   },
   "settings.chatbot.title": {
-    "text": "Bot Settings",
+    "text": "Chatbot",
     "context": "Chatbot configuration section title"
   },
   "settings.chatbot.description": {
@@ -504,11 +504,11 @@
     "context": "Local server display name"
   },
   "settings.stardom.title": {
-    "text": "Stardom Settings",
+    "text": "Stardom",
     "context": "Stardom configuration section title"
   },
   "settings.language.title": {
-    "text": "Language Settings",
+    "text": "Language",
     "context": "Language settings section title"
   },
   "settings.language.label": {
@@ -556,8 +556,32 @@
     "context": "GitHub star count display, {count} is the number"
   },
   "settings.about.title": {
-    "text": "About",
-    "context": "About section title"
+    "text": "Open Source Licenses",
+    "context": "Open source licenses section title"
+  },
+  "settings.about.licenses": {
+    "text": "Open Source Licenses",
+    "context": "Licenses list title"
+  },
+  "settings.about.licenses.intro": {
+    "text": "This application uses several open source software components. We thank these open source projects and their contributors.",
+    "context": "License intro text"
+  },
+  "settings.about.licenses.licensedUnder": {
+    "text": "Licensed under the ",
+    "context": "Label before license type in each entry"
+  },
+  "settings.about.licenses.oss": {
+    "text": "Open Source",
+    "context": "Open source licenses group title"
+  },
+  "settings.about.licenses.proprietary": {
+    "text": "Proprietary",
+    "context": "Proprietary licenses group title"
+  },
+  "settings.about.licenses.disclaimer": {
+    "text": "Each open source component is governed by its original license. All third-party software copyrights belong to their respective authors. For complete license information, please refer to each project's repository.",
+    "context": "License disclaimer"
   },
   "settings.about.version": {
     "text": "Version",

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageCircle, Eye, EyeOff, Save, AlertCircle, QrCode, Loader2, CheckCircle2, XCircle, Unplug } from 'lucide-react';
+import { MessageCircle, Eye, EyeOff, Save, AlertCircle, QrCode, Loader2, CheckCircle2, XCircle, Unplug, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -157,7 +157,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
     <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
+          <Bot className="h-5 w-5" />
           {t('settings.chatbot.title')}
         </CardTitle>
         <CardDescription>{t('settings.chatbot.description')}</CardDescription>

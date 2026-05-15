@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, ChevronDown, Globe } from 'lucide-react';
+import { Bot, Eye, EyeOff, Loader2, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, ChevronDown, Globe, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -235,7 +235,7 @@ export function LLMSettings({ id }: { id?: string }) {
     <Card id={id}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Bot className="h-5 w-5" />
+          <Cpu className="h-5 w-5" />
           {t('settings.llm.title')}
         </CardTitle>
         <CardDescription>{t('settings.llm.description')}</CardDescription>
