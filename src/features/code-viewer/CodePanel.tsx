@@ -77,6 +77,50 @@ const highlightLineDeco = EditorView.decorations.compute([highlightLineField], (
   return Decoration.set([lineDeco.range(lineInfo.from)]);
 });
 
+// ── Ctrl/Cmd+Click to search symbol ──────────────────────────────
+
+const IDENTIFIER_RE = /[\w]+/g;
+
+function findIdentifierAt(text: string, offset: number): string | null {
+  IDENTIFIER_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = IDENTIFIER_RE.exec(text)) !== null) {
+    if (offset >= m.index && offset <= m.index + m[0].length) {
+      return m[0];
+    }
+  }
+  return null;
+}
+
+function ctrlClickSearchExtension(workspace: string) {
+  return EditorView.domEventHandlers({
+    mousedown(event, view) {
+      if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+
+      const pos = view.posAtCoords(event);
+      if (pos == null) return false;
+
+      const line = view.state.doc.lineAt(pos);
+      const lineOffset = pos - line.from;
+      const symbol = findIdentifierAt(line.text, lineOffset);
+      if (!symbol) return false;
+
+      // Determine file extension from the language
+      const fileExt = view.state.facet(EditorState.readOnly) !== undefined
+        ? undefined // let the backend use default extensions
+        : undefined;
+
+      useCodeViewerStore.getState().searchSymbols(symbol, fileExt);
+
+      // Highlight the clicked line
+      const lineNum = line.number;
+      view.dispatch({ effects: setHighlightLine.of(lineNum) });
+
+      return true;
+    },
+  });
+}
+
 // ── CodePanel (top-level) ──────────────────────────────────────────
 
 interface CodePanelProps {
@@ -445,8 +489,11 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
     const langExt = getLanguageExtension(language);
     if (langExt) exts.push(langExt as Extension);
 
+    // Ctrl/Cmd+Click to search symbol
+    exts.push(ctrlClickSearchExtension(workspace));
+
     return exts;
-  }, [language, editable, dirty, saveFile]);
+  }, [language, editable, dirty, saveFile, workspace]);
 
   const handleChange = useCallback((value: string) => {
     const currentFile = useCodeViewerStore.getState().currentFile;

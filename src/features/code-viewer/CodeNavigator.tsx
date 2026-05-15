@@ -16,11 +16,6 @@ export function CodeNavigator({ workspace, currentFilePath }: CodeNavigatorProps
   const clearSearch = useCodeViewerStore((s) => s.clearSearch);
   const loadFile = useCodeViewerStore((s) => s.loadFile);
 
-  // Nothing to show
-  if (!searching && searchResults.length === 0 && !searchSymbol) {
-    return null;
-  }
-
   const handleMatchClick = useCallback(
     (match: SearchMatch) => {
       useCodeViewerStore.setState({ lineNumber: match.line });
@@ -28,6 +23,11 @@ export function CodeNavigator({ workspace, currentFilePath }: CodeNavigatorProps
     },
     [loadFile],
   );
+
+  // Nothing to show
+  if (!searching && searchResults.length === 0 && !searchSymbol) {
+    return null;
+  }
 
   const hasSearched = searchSymbol !== '' && !searching && searchResults.length === 0;
 

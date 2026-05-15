@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -279,15 +280,152 @@ export function handleSaveFile(workspace: string, filePath: string, content: str
   }
 }
 
+// ── ripgrep detection ──────────────────────────────────────────────
+
+let _rgAvailable: boolean | null = null;
+
+function isRgAvailable(): boolean {
+  if (_rgAvailable !== null) return _rgAvailable;
+  try {
+    execFileSync('rg', ['--version'], { timeout: 3000, stdio: 'pipe' });
+    _rgAvailable = true;
+  } catch {
+    _rgAvailable = false;
+  }
+  return _rgAvailable;
+}
+
+function searchWithRg(
+  workspace: string,
+  symbol: string,
+  fileExt?: string,
+  maxResults: number = 20,
+): SearchMatch[] | null {
+  if (!isRgAvailable()) return null;
+
+  const cleanSymbol = symbol.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!cleanSymbol) return null;
+
+  const args = [
+    '--no-heading',
+    '--line-number',
+    '--color= ' + 'never',
+    '--max-count', String(maxResults),
+    '-C', '2',
+    '--word-regexp',
+    '--regexp', cleanSymbol,
+  ];
+
+  if (fileExt) {
+    const ext = fileExt.startsWith('.') ? fileExt : '.' + fileExt;
+    args.push('--glob', '*' + ext);
+  } else {
+    args.push('--type-add', 'src:*.ts', '--type-add', 'src:*.tsx',
+      '--type-add', 'src:*.js', '--type-add', 'src:*.jsx',
+      '--type-add', 'src:*.py', '--type-add', 'src:*.java',
+      '--type-add', 'src:*.go', '--type-add', 'src:*.rs',
+      '--type-add', 'src:*.c', '--type-add', 'src:*.cpp',
+      '--type-add', 'src:*.h', '--type-add', 'src:*.hpp',
+      '--type-add', 'src:*.rb', '--type-add', 'src:*.php',
+      '--type-add', 'src:*.vue', '--type-add', 'src:*.svelte',
+      '--type', 'src');
+  }
+
+  let stdout: string;
+  try {
+    stdout = execFileSync('rg', args, {
+      cwd: path.resolve(workspace),
+      timeout: 10000,
+      maxBuffer: 5 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+    });
+  } catch {
+    return null;
+  }
+
+  // Parse ripgrep output: "filePath:lineNum:lineContent" or "filePath-lineNum-lineContent" for context lines
+  const lines = stdout.split('\n').filter(Boolean);
+  const matches: SearchMatch[] = [];
+  const fileLineMap = new Map<string, { line: number; content: string }[]>();
+
+  for (const line of lines) {
+    // Matched line (colon after filename): "path/to/file.ts:42:const foo = bar"
+    // Context line (dash after filename): "path/to/file.ts-40-prev line"
+    const matchLine = line.match(/^(.+?):(\d+):(.*)$/);
+    const contextLine = line.match(/^(.+?)-(\d+)-(.*)$/);
+    const parsed = matchLine || contextLine;
+    if (!parsed) continue;
+
+    const [, filePath, lineNum, content] = parsed;
+    const ln = parseInt(lineNum, 10);
+
+    if (!fileLineMap.has(filePath)) {
+      fileLineMap.set(filePath, []);
+    }
+    fileLineMap.get(filePath)!.push({ line: ln, content });
+  }
+
+  // Build matches with context from grouped lines
+  const seen = new Set<string>();
+  for (const [filePath, fileLines] of fileLineMap) {
+    // Find the actual match lines (not context lines) — lines that appear with colon separator
+    const matchLines = lines
+      .filter(l => { const m = l.match(/^(.+?):(\d+):/); return m && m[1] === filePath; })
+      .map(l => { const m = l.match(/^.+?:(\d+):(.*)$/)!; return { line: parseInt(m[1], 10), content: m[2] }; });
+
+    for (const ml of matchLines) {
+      if (matches.length >= maxResults) break;
+      const key = `${filePath}:${ml.line}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Gather context lines around this match from the parsed data
+      const contextLines: string[] = [];
+      for (const fl of fileLines) {
+        if (fl.line >= ml.line - 2 && fl.line <= ml.line + 2) {
+          contextLines.push(fl.content);
+        }
+      }
+
+      matches.push({
+        filePath: toPosix(filePath),
+        line: ml.line,
+        lineContent: ml.content,
+        context: contextLines.join('\n') || ml.content,
+      });
+    }
+    if (matches.length >= maxResults) break;
+  }
+
+  return matches;
+}
+
 export function handleSearchSymbols(
   workspace: string,
   symbol: string,
   fileExt?: string,
   maxResults: number = 20,
 ): SearchResult {
-  // Sanitize symbol: keep only alphanumeric and underscore, collapse consecutive
   const cleanSymbol = symbol.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!cleanSymbol) return { symbol: '', matches: [] };
 
+  // Try ripgrep first
+  const rgMatches = searchWithRg(workspace, cleanSymbol, fileExt, maxResults);
+  if (rgMatches !== null) {
+    return { symbol: cleanSymbol, matches: rgMatches };
+  }
+
+  // Fallback: Node.js implementation
+  return handleSearchSymbolsFallback(workspace, cleanSymbol, fileExt, maxResults);
+}
+
+function handleSearchSymbolsFallback(
+  workspace: string,
+  cleanSymbol: string,
+  fileExt?: string,
+  maxResults: number = 20,
+): SearchResult {
   const regex = new RegExp(`\\b${escapeRegExp(cleanSymbol)}\\b`);
 
   const extSet = fileExt
