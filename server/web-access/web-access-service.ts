@@ -123,12 +123,12 @@ export class WebAccessService {
     return this.requireEngine().screenshot(tabId);
   }
 
-  async click(tabId: string, selector: string): Promise<PageSnapshot> {
-    return this.requireEngine().click(tabId, selector);
+  async click(tabId: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot> {
+    return this.requireEngine().click(tabId, options);
   }
 
-  async fill(tabId: string, selector: string, value: string): Promise<PageSnapshot> {
-    return this.requireEngine().fill(tabId, selector, value);
+  async fill(tabId: string, value: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot> {
+    return this.requireEngine().fill(tabId, value, options);
   }
 
   async pressKey(tabId: string, key: string): Promise<PageSnapshot> {

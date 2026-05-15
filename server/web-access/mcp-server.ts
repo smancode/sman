@@ -152,16 +152,21 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
 
   const clickTool = tool(
     'web_access_click',
-    'Click an element on the page by CSS selector.',
+    'Click an element on the page. Prefer ref from accessibility tree snapshot; use CSS selector as fallback.',
     {
       tab_id: z.string().describe('Tab ID'),
-      selector: z.string().describe('CSS selector of the element to click'),
+      ref: z.string().optional().describe('Element ref from accessibility tree (e.g. "e5"). Preferred over selector.'),
+      selector: z.string().optional().describe('CSS selector of the element to click. Fallback when ref is unavailable.'),
     },
     withEngineCheck(service, async (args: any) => {
-      const snapshot = await service.click(args.tab_id, args.selector);
+      if (!args.ref && !args.selector) {
+        return errorResult('Must provide either ref or selector');
+      }
+      const snapshot = await service.click(args.tab_id, { ref: args.ref, selector: args.selector });
       return textResult(JSON.stringify({
         title: snapshot.title,
         url: snapshot.url,
+        accessibilityTree: snapshot.accessibilityTree,
         isLoginPage: snapshot.isLoginPage,
       }));
     }),
@@ -169,17 +174,22 @@ export function createWebAccessMcpServer(service: WebAccessService): McpSdkServe
 
   const fillTool = tool(
     'web_access_fill',
-    'Fill a form field with a value.',
+    'Fill a form field with a value. Prefer ref from accessibility tree snapshot; use CSS selector as fallback.',
     {
       tab_id: z.string().describe('Tab ID'),
-      selector: z.string().describe('CSS selector of the input field'),
+      ref: z.string().optional().describe('Element ref from accessibility tree (e.g. "e5"). Preferred over selector.'),
+      selector: z.string().optional().describe('CSS selector of the input field. Fallback when ref is unavailable.'),
       value: z.string().describe('Value to fill in'),
     },
     withEngineCheck(service, async (args: any) => {
-      const snapshot = await service.fill(args.tab_id, args.selector, args.value);
+      if (!args.ref && !args.selector) {
+        return errorResult('Must provide either ref or selector');
+      }
+      const snapshot = await service.fill(args.tab_id, args.value, { ref: args.ref, selector: args.selector });
       return textResult(JSON.stringify({
         title: snapshot.title,
         url: snapshot.url,
+        accessibilityTree: snapshot.accessibilityTree,
         isLoginPage: snapshot.isLoginPage,
       }));
     }),

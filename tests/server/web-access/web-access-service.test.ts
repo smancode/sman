@@ -126,8 +126,8 @@ describe('WebAccessService', () => {
       (service as any).engine = mockEngine;
       (service as any).engineType = 'cdp';
 
-      await service.click('tab-1', '#btn');
-      expect(mockEngine.click).toHaveBeenCalledWith('tab-1', '#btn');
+      await service.click('tab-1', { selector: '#btn' });
+      expect(mockEngine.click).toHaveBeenCalledWith('tab-1', { selector: '#btn' });
     });
 
     it('should proxy fill to engine', async () => {
@@ -135,8 +135,8 @@ describe('WebAccessService', () => {
       (service as any).engine = mockEngine;
       (service as any).engineType = 'cdp';
 
-      await service.fill('tab-1', '#input', 'value');
-      expect(mockEngine.fill).toHaveBeenCalledWith('tab-1', '#input', 'value');
+      await service.fill('tab-1', 'value', { selector: '#input' });
+      expect(mockEngine.fill).toHaveBeenCalledWith('tab-1', 'value', { selector: '#input' });
     });
 
     it('should proxy screenshot to engine', async () => {

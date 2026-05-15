@@ -54,6 +54,8 @@ export class CdpEngine implements BrowserEngine {
   private chromePid: number | null = null;
   private launchedByUs = false;
   private launchingPromise: Promise<void> | null = null;
+  /** Cached AX nodes per tab for ref-based element lookup */
+  private cachedAxNodes = new Map<string, AxNode[]>();
 
   constructor(opts?: CdpEngineOptions) {
     this.defaultTimeoutMs = opts?.defaultTimeoutMs ?? 30_000;
@@ -637,7 +639,7 @@ export class CdpEngine implements BrowserEngine {
 
   /**
    * Serialize AX nodes into a compact indented string.
-   * Each line: [role] "name" = "value" [key=value, ...]
+   * Each line: [role] "name" = "value" [key=value, ...] ref=<nodeId>
    */
   static serializeAxTree(nodes: AxNode[], maxNodes = 150, maxDepth = 10): string {
     const nodeMap = new Map<string, AxNode>();
@@ -706,6 +708,10 @@ export class CdpEngine implements BrowserEngine {
       if (placeholder) extras.push(`placeholder="${placeholder}"`);
 
       if (extras.length) line += ` [${extras.join(', ')}]`;
+      // Attach ref for interactive elements and named semantic elements
+      if (node.nodeId && (CdpEngine.INTERACTIVE_ROLES.has(role) || name)) {
+        line += ` ref=${node.nodeId}`;
+      }
       return line;
     }
 
@@ -759,6 +765,11 @@ export class CdpEngine implements BrowserEngine {
 
     const serialized = CdpEngine.serializeAxTree(axNodes);
 
+    // Cache AX nodes for ref-based element operations
+    if (axNodes.length > 0) {
+      this.cachedAxNodes.set(targetId, axNodes);
+    }
+
     const snapshot: PageSnapshot = {
       title: parsed.title || '',
       url: parsed.url || '',
@@ -773,6 +784,61 @@ export class CdpEngine implements BrowserEngine {
 
     this.updateTabContext(targetId, snapshot);
     return snapshot;
+  }
+
+  // --- Ref-based element operations ---
+
+  /** Resolve an AX ref (nodeId) to a CDP RemoteObject via backendDOMNodeId */
+  private async resolveAxRef(tabId: string, ref: string): Promise<{ objectId: string; sessionId: string }> {
+    const axNodes = this.cachedAxNodes.get(tabId);
+    if (!axNodes?.length) {
+      throw new BrowserConnectionError('No cached accessibility tree. Call snapshot or navigate first.');
+    }
+    const node = axNodes.find(n => n.nodeId === ref);
+    if (!node) {
+      throw new BrowserConnectionError(`ref "${ref}" not found in cached accessibility tree. Refresh with snapshot.`);
+    }
+    if (!node.backendDOMNodeId) {
+      throw new BrowserConnectionError(`ref "${ref}" has no backend DOM node (virtual element).`);
+    }
+    const sessionId = await this.ensureSession(tabId);
+    const resolveResp = await this.sendCDP('DOM.resolveNode', {
+      backendNodeId: node.backendDOMNodeId,
+    }, sessionId);
+    if (!resolveResp.result?.object?.objectId) {
+      throw new BrowserConnectionError(`Failed to resolve ref "${ref}" to DOM element.`);
+    }
+    return { objectId: resolveResp.result.object.objectId, sessionId };
+  }
+
+  /** Click an element by AX ref */
+  private async clickByRef(tabId: string, ref: string): Promise<PageSnapshot> {
+    await this.ensureConnected();
+    const { objectId, sessionId } = await this.resolveAxRef(tabId, ref);
+    const clickFn = `(el) => { el.scrollIntoView({ block: 'center' }); el.click(); return true; }`;
+    await this.sendCDP('Runtime.callFunctionOn', {
+      functionDeclaration: clickFn,
+      objectId,
+      returnByValue: true,
+    }, sessionId);
+    await this.waitForDomStable(tabId, CdpEngine.ACTION_STABLE_OPTS).catch(() => { /* non-fatal */ });
+    return this.takeFullSnapshot(tabId);
+  }
+
+  /** Fill a form field by AX ref */
+  private async fillByRef(tabId: string, ref: string, value: string): Promise<PageSnapshot> {
+    await this.ensureConnected();
+    const { objectId, sessionId } = await this.resolveAxRef(tabId, ref);
+    const valueJson = JSON.stringify(value);
+    const fillFn = `(el) => { el.focus(); el.value = ${valueJson}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; }`;
+    await this.sendCDP('Runtime.callFunctionOn', {
+      functionDeclaration: fillFn,
+      objectId,
+      returnByValue: true,
+      arguments: [],
+    }, sessionId);
+    await this.waitForDomStable(tabId, CdpEngine.ACTION_STABLE_OPTS).catch(() => { /* non-fatal */ });
+    return this.takeFullSnapshot(tabId);
   }
 
   /** Lightweight snapshot — only title/url, no AX tree */
@@ -940,33 +1006,41 @@ export class CdpEngine implements BrowserEngine {
     return this.takeLightSnapshot(tabId);
   }
 
-  async click(tabId: string, selector: string): Promise<PageSnapshot> {
-    await this.ensureConnected();
-    const selectorJson = JSON.stringify(selector);
-    const js = `(() => {
-      const el = document.querySelector(${selectorJson});
-      if (!el) return { error: 'Element not found: ' + ${selectorJson} };
-      el.scrollIntoView({ block: 'center' });
-      el.click();
-      return { clicked: true, tag: el.tagName };
-    })()`;
-    return this.execAndLightSnapshot(tabId, js);
+  async click(tabId: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot> {
+    if (options.ref) return this.clickByRef(tabId, options.ref);
+    if (options.selector) {
+      await this.ensureConnected();
+      const selectorJson = JSON.stringify(options.selector);
+      const js = `(() => {
+        const el = document.querySelector(${selectorJson});
+        if (!el) return { error: 'Element not found: ' + ${selectorJson} };
+        el.scrollIntoView({ block: 'center' });
+        el.click();
+        return { clicked: true, tag: el.tagName };
+      })()`;
+      return this.execAndLightSnapshot(tabId, js);
+    }
+    throw new Error('click requires either ref or selector');
   }
 
-  async fill(tabId: string, selector: string, value: string): Promise<PageSnapshot> {
-    await this.ensureConnected();
-    const selectorJson = JSON.stringify(selector);
-    const valueJson = JSON.stringify(value);
-    const js = `(() => {
-      const el = document.querySelector(${selectorJson});
-      if (!el) return { error: 'Element not found: ' + ${selectorJson} };
-      el.focus();
-      el.value = ${valueJson};
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      return { filled: true };
-    })()`;
-    return this.execAndLightSnapshot(tabId, js);
+  async fill(tabId: string, value: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot> {
+    if (options.ref) return this.fillByRef(tabId, options.ref, value);
+    if (options.selector) {
+      await this.ensureConnected();
+      const selectorJson = JSON.stringify(options.selector);
+      const valueJson = JSON.stringify(value);
+      const js = `(() => {
+        const el = document.querySelector(${selectorJson});
+        if (!el) return { error: 'Element not found: ' + ${selectorJson} };
+        el.focus();
+        el.value = ${valueJson};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { filled: true };
+      })()`;
+      return this.execAndLightSnapshot(tabId, js);
+    }
+    throw new Error('fill requires either ref or selector');
   }
 
   async pressKey(tabId: string, key: string): Promise<PageSnapshot> {
@@ -1049,6 +1123,7 @@ export class CdpEngine implements BrowserEngine {
     await this.sendCDP('Target.closeTarget', { targetId: tabId });
     this.tabs.delete(tabId);
     this.sessions.delete(tabId);
+    this.cachedAxNodes.delete(tabId);
   }
 
   async dispose(): Promise<void> {
@@ -1061,6 +1136,7 @@ export class CdpEngine implements BrowserEngine {
     }
     this.tabs.clear();
     this.sessions.clear();
+    this.cachedAxNodes.clear();
     this.cdpEventHandlers.clear();
     // Clear pending
     for (const { timer } of this.pending.values()) {

@@ -102,7 +102,7 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      const snapshot = await engine.click(TAB_ID, '#create-issue');
+      const snapshot = await engine.click(TAB_ID, { selector: '#create-issue' });
       expect(snapshot.title).toBe('Create Issue');
     });
   });
@@ -121,7 +121,7 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      const snapshot = await engine.fill(TAB_ID, '#summary', 'Fix login bug');
+      const snapshot = await engine.fill(TAB_ID, 'Fix login bug', { selector: '#summary' });
       expect(snapshot).toBeDefined();
       expect(snapshot.title).toBe('Create Issue');
     });
@@ -429,7 +429,7 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      await engine.click(TAB_ID, '#btn');
+      await engine.click(TAB_ID, { selector: '#btn' });
       expect(domStableSpy).toHaveBeenCalledWith(TAB_ID, expect.objectContaining({
         timeoutMs: 5000,
       }));
@@ -450,10 +450,78 @@ describe('CdpEngine', () => {
         return { result: {} };
       });
 
-      await engine.fill(TAB_ID, '#input', 'hello');
+      await engine.fill(TAB_ID, 'hello', { selector: '#input' });
       expect(domStableSpy).toHaveBeenCalledWith(TAB_ID, expect.objectContaining({
         timeoutMs: 5000,
       }));
+    });
+  });
+
+  describe('click/fill ref-based operations', () => {
+    const AX_NODES_WITH_REFS: AxNode[] = [
+      { nodeId: 'root', role: { type: 'role', value: 'WebArea' }, name: { type: 'string', value: '' }, childIds: ['btn1', 'input1'] },
+      { nodeId: 'btn1', role: { type: 'role', value: 'button' }, name: { type: 'string', value: 'Submit' }, backendDOMNodeId: 100, childIds: [] },
+      { nodeId: 'input1', role: { type: 'role', value: 'textbox' }, name: { type: 'string', value: 'Email' }, backendDOMNodeId: 200, childIds: [] },
+    ];
+
+    it('should click element by ref using DOM.resolveNode', async () => {
+      const engine = setupEngineWithTab();
+      // Pre-populate AX node cache
+      (engine as any).cachedAxNodes.set(TAB_ID, AX_NODES_WITH_REFS);
+
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string) => {
+        if (method === 'DOM.resolveNode') return { result: { object: { objectId: 'obj-100' } } };
+        if (method === 'Runtime.callFunctionOn') return { result: { result: { value: true } } };
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: AX_NODES_WITH_REFS } };
+        if (method === 'Runtime.evaluate') return { result: { result: { value: '{"title":"Clicked","url":"https://example.com"}' } } };
+        return { result: {} };
+      });
+
+      const snapshot = await engine.click(TAB_ID, { ref: 'btn1' });
+      expect(snapshot.title).toBe('Clicked');
+    });
+
+    it('should fill element by ref using DOM.resolveNode', async () => {
+      const engine = setupEngineWithTab();
+      (engine as any).cachedAxNodes.set(TAB_ID, AX_NODES_WITH_REFS);
+
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string) => {
+        if (method === 'DOM.resolveNode') return { result: { object: { objectId: 'obj-200' } } };
+        if (method === 'Runtime.callFunctionOn') return { result: { result: { value: true } } };
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: AX_NODES_WITH_REFS } };
+        if (method === 'Runtime.evaluate') return { result: { result: { value: '{"title":"Filled","url":"https://example.com"}' } } };
+        return { result: {} };
+      });
+
+      const snapshot = await engine.fill(TAB_ID, 'test@example.com', { ref: 'input1' });
+      expect(snapshot.title).toBe('Filled');
+    });
+
+    it('should throw when ref not found in cache', async () => {
+      const engine = setupEngineWithTab();
+      // No cached AX nodes
+
+      await expect(engine.click(TAB_ID, { ref: 'nonexistent' })).rejects.toThrow('No cached accessibility tree');
+    });
+
+    it('should throw when neither ref nor selector provided', async () => {
+      const engine = setupEngineWithTab();
+
+      await expect(engine.click(TAB_ID, {})).rejects.toThrow('click requires either ref or selector');
+      await expect(engine.fill(TAB_ID, 'val', {})).rejects.toThrow('fill requires either ref or selector');
+    });
+
+    it('should fall back to selector when ref not provided', async () => {
+      const engine = setupEngineWithTab();
+      vi.spyOn(engine as any, 'sendCDP').mockImplementation(async (method: string, params: any) => {
+        if (method === 'Accessibility.getFullAXTree') return { result: { nodes: EMPTY_AX_NODES } };
+        if (params?.expression?.includes('click')) return { result: { result: { value: { clicked: true, tag: 'BUTTON' } } } };
+        if (params?.expression?.includes('document.title')) return { result: { result: { value: '{"title":"OK","url":"https://example.com"}' } } };
+        return { result: {} };
+      });
+
+      const snapshot = await engine.click(TAB_ID, { selector: '#btn' });
+      expect(snapshot.title).toBe('OK');
     });
   });
 
@@ -465,8 +533,8 @@ describe('CdpEngine', () => {
         { nodeId: 'btn', role: { type: 'role', value: 'button' }, name: { type: 'string', value: 'Submit' }, childIds: [] },
       ];
       const result = CdpEngine.serializeAxTree(nodes);
-      expect(result).toContain('[heading] "Hello" [level=1]');
-      expect(result).toContain('[button] "Submit"');
+      expect(result).toContain('[heading] "Hello" [level=1] ref=h1');
+      expect(result).toContain('[button] "Submit" ref=btn');
     });
 
     it('should skip generic and StaticText nodes', () => {
@@ -479,7 +547,7 @@ describe('CdpEngine', () => {
       const result = CdpEngine.serializeAxTree(nodes);
       expect(result).not.toContain('generic');
       expect(result).not.toContain('StaticText');
-      expect(result).toContain('[link] "Click here" [url="https://example.com"]');
+      expect(result).toContain('[link] "Click here" [url="https://example.com"] ref=link1');
     });
 
     it('should show textbox with inputType property', () => {
@@ -488,7 +556,7 @@ describe('CdpEngine', () => {
         { nodeId: 'search', role: { type: 'role', value: 'textbox' }, name: { type: 'string', value: 'Search' }, properties: [{ name: 'inputType', value: { type: 'string', value: 'search' } }], childIds: [] },
       ];
       const result = CdpEngine.serializeAxTree(nodes);
-      expect(result).toContain('[textbox] "Search" [type=search]');
+      expect(result).toContain('[textbox] "Search" [type=search] ref=search');
     });
 
     it('should respect maxNodes limit', () => {

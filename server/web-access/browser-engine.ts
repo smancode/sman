@@ -93,11 +93,11 @@ export interface BrowserEngine {
   /** 截图 */
   screenshot(tabId: string): Promise<Buffer>;
 
-  /** 点击元素 */
-  click(tabId: string, selector: string): Promise<PageSnapshot>;
+  /** 点击元素 — ref 优先，selector 兜底 */
+  click(tabId: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot>;
 
-  /** 填写表单字段 */
-  fill(tabId: string, selector: string, value: string): Promise<PageSnapshot>;
+  /** 填写表单字段 — ref 优先，selector 兜底 */
+  fill(tabId: string, value: string, options: { ref?: string; selector?: string }): Promise<PageSnapshot>;
 
   /** 按键 */
   pressKey(tabId: string, key: string): Promise<PageSnapshot>;
