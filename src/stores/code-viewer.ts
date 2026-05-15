@@ -557,8 +557,12 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     const { navHistory, navIndex } = get();
     const location: NavLocation = { filePath, line: line ?? null, column: column ?? null };
 
-    const newHistory = navHistory.slice(0, navIndex + 1);
+    let newHistory = navHistory.slice(0, navIndex + 1);
     newHistory.push(location);
+    // Cap at 200 entries
+    if (newHistory.length > 200) {
+      newHistory = newHistory.slice(newHistory.length - 200);
+    }
 
     set({ navHistory: newHistory, navIndex: newHistory.length - 1 });
   },

@@ -19,8 +19,8 @@ import { sql } from '@codemirror/lang-sql';
 import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { EditorView, Decoration, keymap } from '@codemirror/view';
-import { EditorState, StateField, StateEffect } from '@codemirror/state';
+import { EditorView, Decoration, type DecorationSet, ViewPlugin, type ViewUpdate, keymap } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { search, highlightSelectionMatches } from '@codemirror/search';
 import { Streamdown } from 'streamdown';
@@ -56,26 +56,71 @@ function getLanguageExtension(lang: string) {
   return map[lang]?.() ?? undefined;
 }
 
-// ── Effects for line highlight ────────────────────────────────────
+// ── Line highlight via ViewPlugin (survives doc re-creation) ──────
 
-const setHighlightLine = StateEffect.define<number | null>();
-const highlightLineField = StateField.define<number | null>({
-  create: () => null,
-  update: (val, tr) => {
-    for (const e of tr.effects) {
-      if (e.is(setHighlightLine)) return e.value;
+const navHighlightDeco = Decoration.line({ class: 'cm-navHighlight' });
+
+const navHighlightPlugin = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+  highlightLine: number | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  destroyed: boolean;
+
+  constructor() {
+    this.decorations = Decoration.none;
+    this.highlightLine = null;
+    this.timer = null;
+    this.destroyed = false;
+  }
+
+  setHighlight(line: number | null, view: EditorView) {
+    if (this.destroyed) return;
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    this.highlightLine = line;
+    if (line == null || line < 1 || line > view.state.doc.lines) {
+      this.decorations = Decoration.none;
+      this.highlightLine = null;
+    } else {
+      const info = view.state.doc.line(line);
+      this.decorations = Decoration.set([navHighlightDeco.range(info.from)]);
     }
-    return val;
-  },
+    // Clear after 10 seconds
+    if (line != null) {
+      this.timer = setTimeout(() => {
+        if (this.destroyed) return;
+        this.highlightLine = null;
+        this.decorations = Decoration.none;
+        try { view.dispatch({}); } catch { /* view may be destroyed */ }
+      }, 10000);
+    }
+  }
+
+  update(update: ViewUpdate) {
+    if (this.destroyed) return;
+    // Re-apply decoration if doc changed but we still have a highlight line
+    if (update.docChanged && this.highlightLine != null) {
+      const line = this.highlightLine;
+      if (line < 1 || line > update.state.doc.lines) {
+        this.decorations = Decoration.none;
+        this.highlightLine = null;
+      } else {
+        const info = update.state.doc.line(line);
+        this.decorations = Decoration.set([navHighlightDeco.range(info.from)]);
+      }
+    }
+  }
+
+  destroy() {
+    this.destroyed = true;
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+  }
+}, {
+  decorations: (v) => v.decorations,
 });
 
-const highlightLineDeco = EditorView.decorations.compute([highlightLineField], (state) => {
-  const line = state.field(highlightLineField);
-  if (line === null || line < 1 || line > state.doc.lines) return Decoration.none;
-  const lineInfo = state.doc.line(line);
-  const lineDeco = Decoration.line({ class: 'cm-navHighlight' });
-  return Decoration.set([lineDeco.range(lineInfo.from)]);
-});
+function getHighlightPlugin(view: EditorView) {
+  return view.plugin(navHighlightPlugin);
+}
 
 const navHighlightTheme = EditorView.baseTheme({
   '.cm-navHighlight': {
@@ -109,7 +154,7 @@ function clickNavExtension() {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.button !== 0) return false;
       try {
         const pos = view.posAtCoords(event);
-        if (pos == null || pos < 0 || pos >= view.state.doc.length) return false;
+        if (pos == null || pos < 0 || view.state.doc.length === 0 || pos >= view.state.doc.length) return false;
 
         const state = useCodeViewerStore.getState();
         if (!state.filePath) return false;
@@ -137,7 +182,7 @@ function ctrlClickSearchExtension(workspace: string) {
       if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
       try {
         const pos = view.posAtCoords(event);
-        if (pos == null || pos < 0 || pos >= view.state.doc.length) return false;
+        if (pos == null || pos < 0 || view.state.doc.length === 0 || pos >= view.state.doc.length) return false;
 
         const line = view.state.doc.lineAt(pos);
         const lineOffset = pos - line.from;
@@ -145,7 +190,7 @@ function ctrlClickSearchExtension(workspace: string) {
         if (!symbol) return false;
 
         useCodeViewerStore.getState().searchSymbols(symbol);
-        view.dispatch({ effects: setHighlightLine.of(line.number) });
+        getHighlightPlugin(view)?.setHighlight(line.number, view);
       } catch {
         // Never crash on Ctrl+Click search
       }
@@ -451,27 +496,37 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
     setShowSource(false);
   }, [filePath]);
 
-  // Scroll to highlight line
+  // Scroll to highlight line — use a ViewUpdate listener instead of raw dispatch
+  // so we only operate after CodeMirror has fully updated its document.
+  const pendingHighlightRef = useRef<number | null>(null);
+
+  // Sync pending highlight from props to ref
   useEffect(() => {
-    if (!highlightLine || !cmRef.current?.view) return;
-    const view = cmRef.current.view;
-    if (highlightLine <= view.state.doc.lines) {
-      const pos = view.state.doc.line(highlightLine).from;
-      view.dispatch({
-        effects: [
-          EditorView.scrollIntoView(pos, { y: 'center' }),
-          setHighlightLine.of(highlightLine),
-        ],
-      });
-      // Clear highlight after 3 seconds
-      const timer = setTimeout(() => {
-        if (cmRef.current?.view) {
-          cmRef.current.view.dispatch({ effects: setHighlightLine.of(null) });
-        }
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [highlightLine]);
+    if (!highlightLine) return;
+    pendingHighlightRef.current = highlightLine;
+    // Force a no-op dispatch so the updateListener fires even when doc hasn't changed
+    requestAnimationFrame(() => {
+      try {
+        cmRef.current?.view?.dispatch({});
+      } catch { /* */ }
+    });
+  }, [highlightLine, filePath]);
+
+  // ViewUpdate extension: fires after every CodeMirror state change (doc update, etc.)
+  const highlightUpdateHandler = useMemo(() => {
+    return EditorView.updateListener.of((update) => {
+      const line = pendingHighlightRef.current;
+      if (line == null || line <= 0) return;
+      pendingHighlightRef.current = null;
+      const view = update.view;
+      if (view.state.doc.length === 0 || line > view.state.doc.lines) return;
+      try {
+        const pos = view.state.doc.line(line).from;
+        getHighlightPlugin(view)?.setHighlight(line, view);
+        view.dispatch({ effects: [EditorView.scrollIntoView(pos, { y: 'center' })] });
+      } catch { /* Never crash */ }
+    });
+  }, []);
 
   // Ctrl+S to save
   useEffect(() => {
@@ -515,10 +570,10 @@ function CodeContent({ file, highlightLine, workspace, isMarkdown }: CodeContent
       }),
       search({ top: true }),
       highlightSelectionMatches(),
-      highlightLineField,
-      highlightLineDeco,
+      navHighlightPlugin,
       EditorView.lineWrapping,
       navHighlightTheme,
+      highlightUpdateHandler,
       EditorState.readOnly.of(!editable),
       keymap.of([
         {

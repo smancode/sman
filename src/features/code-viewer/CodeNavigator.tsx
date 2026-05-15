@@ -83,6 +83,13 @@ function MatchItem({ match, isCurrentFile, onClick }: MatchItemProps) {
     onClick(match);
   }, [match, onClick]);
 
+  // Show filename bold + short path (last 2 dirs max)
+  const parts = match.filePath.split('/');
+  const fileName = parts[parts.length - 1];
+  const shortPath = parts.length > 1
+    ? parts.slice(Math.max(0, parts.length - 3), -1).join('/') + '/'
+    : '';
+
   return (
     <button
       className={cn(
@@ -91,10 +98,11 @@ function MatchItem({ match, isCurrentFile, onClick }: MatchItemProps) {
       )}
       onClick={handleClick}
     >
-      {/* File path + line number */}
+      {/* File name + short path + line number */}
       <div className="flex items-center gap-1.5 text-[12px]">
-        <span className="truncate flex-1 min-w-0 text-muted-foreground">
-          {match.filePath}
+        <span className="truncate flex-1 min-w-0" title={match.filePath}>
+          <span className="text-[hsl(var(--foreground))]/90 font-medium">{fileName}</span>
+          {shortPath && <span className="text-muted-foreground/60 ml-1">{shortPath}</span>}
         </span>
         <span className="shrink-0 text-muted-foreground/60">:{match.line}</span>
         {isCurrentFile && (
