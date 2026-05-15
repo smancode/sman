@@ -2254,18 +2254,26 @@ wss.on('connection', (ws: WebSocket) => {
             ws.send(JSON.stringify({ type: 'code.searchSymbols', result: { error: 'Missing workspace or symbol' } }));
             break;
           }
-          try {
-            const result = handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined);
-            ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
-          } catch (err) {
-            ws.send(JSON.stringify({ type: 'code.searchSymbols', result: { error: err instanceof Error ? err.message : String(err) } }));
-          }
+          handleSearchSymbols(String(msg.workspace), String(msg.symbol), msg.fileExt ? String(msg.fileExt) : undefined)
+            .then((result) => {
+              ws.send(JSON.stringify({ type: 'code.searchSymbols', result }));
+            })
+            .catch((err) => {
+              ws.send(JSON.stringify({ type: 'code.searchSymbols', result: { error: err instanceof Error ? err.message : String(err) } }));
+            });
           break;
         }
         case 'code.saveFile': {
-          if (!msg.workspace || !msg.filePath || typeof msg.content !== 'string') throw new Error('Missing workspace, filePath or content');
-          const result = handleSaveFile(String(msg.workspace), String(msg.filePath), String(msg.content));
-          ws.send(JSON.stringify({ type: 'code.saveFile', result }));
+          if (!msg.workspace || !msg.filePath || typeof msg.content !== 'string') {
+            ws.send(JSON.stringify({ type: 'code.saveFile', result: { error: 'Missing workspace, filePath or content' } }));
+            break;
+          }
+          try {
+            const result = handleSaveFile(String(msg.workspace), String(msg.filePath), String(msg.content));
+            ws.send(JSON.stringify({ type: 'code.saveFile', result }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'code.saveFile', result: { error: err instanceof Error ? err.message : String(err) } }));
+          }
           break;
         }
         case 'code.searchFiles': {
@@ -2519,7 +2527,11 @@ wss.on('connection', (ws: WebSocket) => {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      ws.send(JSON.stringify({ type: 'chat.error', sessionId: msg.sessionId, error: errorMessage }));
+      try {
+        ws.send(JSON.stringify({ type: 'chat.error', sessionId: msg.sessionId, error: errorMessage }));
+      } catch {
+        // ws already closed, ignore
+      }
       log.error('Message handling error', { error: errorMessage });
     }
   });

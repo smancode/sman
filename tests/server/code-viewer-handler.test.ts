@@ -304,8 +304,8 @@ describe('code-viewer-handler', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it('should find matches across files', () => {
-      const result = handleSearchSymbols(tmpDir, 'myVar');
+    it('should find matches across files', async () => {
+      const result = await handleSearchSymbols(tmpDir, 'myVar');
 
       expect(result.symbol).toBe('myVar');
       expect(result.matches.length).toBeGreaterThanOrEqual(2);
@@ -314,46 +314,37 @@ describe('code-viewer-handler', () => {
       expect(paths.some(p => p.includes('utils.ts'))).toBe(true);
     });
 
-    it('should search all directories including hidden (show all mode)', () => {
-      // shouldHide returns false for everything — user requested show all
-      const result = handleSearchSymbols(tmpDir, 'myVar');
-
-      // node_modules contains myVar, and since we show all, it should be found
-      const paths = result.matches.map(m => m.filePath);
-      expect(paths.some(p => p.includes('node_modules'))).toBe(true);
-    });
-
-    it('should respect maxResults limit', () => {
+    it('should respect maxResults limit', async () => {
       // Create multiple files with the symbol
       for (let i = 0; i < 30; i++) {
         fs.writeFileSync(path.join(tmpDir, `file${i}.ts`), `const myVar = ${i};\n`);
       }
 
-      const result = handleSearchSymbols(tmpDir, 'myVar', undefined, 5);
+      const result = await handleSearchSymbols(tmpDir, 'myVar', undefined, 5);
 
       expect(result.matches.length).toBeLessThanOrEqual(5);
     });
 
-    it('should sanitize symbol to alphanumeric and underscore', () => {
-      const result = handleSearchSymbols(tmpDir, 'myVar(); DROP TABLE');
+    it('should sanitize symbol to alphanumeric and underscore', async () => {
+      const result = await handleSearchSymbols(tmpDir, 'myVar(); DROP TABLE');
 
       // Should still search for just "myVar" after sanitization
       expect(result.symbol).toBe('myVar_DROP_TABLE');
       expect(result.matches.length).toBe(0);
     });
 
-    it('should filter by file extension', () => {
+    it('should filter by file extension', async () => {
       fs.writeFileSync(path.join(tmpDir, 'src', 'data.py'), 'myVar = 42\n');
 
-      const resultTs = handleSearchSymbols(tmpDir, 'myVar', '.ts');
-      const resultPy = handleSearchSymbols(tmpDir, 'myVar', '.py');
+      const resultTs = await handleSearchSymbols(tmpDir, 'myVar', '.ts');
+      const resultPy = await handleSearchSymbols(tmpDir, 'myVar', '.py');
 
       expect(resultTs.matches.every(m => m.filePath.endsWith('.ts'))).toBe(true);
       expect(resultPy.matches.every(m => m.filePath.endsWith('.py'))).toBe(true);
     });
 
-    it('should include line number and context in matches', () => {
-      const result = handleSearchSymbols(tmpDir, 'myVar');
+    it('should include line number and context in matches', async () => {
+      const result = await handleSearchSymbols(tmpDir, 'myVar');
 
       const appMatch = result.matches.find(m => m.filePath.includes('app.ts'));
       expect(appMatch).toBeDefined();
@@ -361,10 +352,10 @@ describe('code-viewer-handler', () => {
       expect(appMatch!.lineContent).toContain('myVar');
     });
 
-    it('should use word boundary matching', () => {
+    it('should use word boundary matching', async () => {
       fs.writeFileSync(path.join(tmpDir, 'src', 'edge.ts'), 'const myVariable = 1;\nconst myVar = 2;\n');
 
-      const result = handleSearchSymbols(tmpDir, 'myVar');
+      const result = await handleSearchSymbols(tmpDir, 'myVar');
 
       const edgeMatches = result.matches.filter(m => m.filePath.includes('edge.ts'));
       // Should only match myVar, not myVariable

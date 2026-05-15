@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -283,16 +283,25 @@ export function handleSaveFile(workspace: string, filePath: string, content: str
 // ── ripgrep detection ──────────────────────────────────────────────
 
 let _rgAvailable: boolean | null = null;
+let _rgCheckPromise: Promise<boolean> | null = null;
 
-function isRgAvailable(): boolean {
-  if (_rgAvailable !== null) return _rgAvailable;
-  try {
-    execFileSync('rg', ['--version'], { timeout: 3000, stdio: 'pipe' });
-    _rgAvailable = true;
-  } catch {
-    _rgAvailable = false;
-  }
-  return _rgAvailable;
+function isRgAvailable(): Promise<boolean> {
+  if (_rgAvailable !== null) return Promise.resolve(_rgAvailable);
+  if (_rgCheckPromise) return _rgCheckPromise;
+
+  _rgCheckPromise = new Promise<boolean>((resolve) => {
+    const child = execFile('rg', ['--version'], { timeout: 3000 }, (err) => {
+      _rgAvailable = !err;
+      _rgCheckPromise = null;
+      resolve(_rgAvailable);
+    });
+    child.on('error', () => {
+      _rgAvailable = false;
+      _rgCheckPromise = null;
+      resolve(false);
+    });
+  });
+  return _rgCheckPromise;
 }
 
 function searchWithRg(
@@ -300,58 +309,64 @@ function searchWithRg(
   symbol: string,
   fileExt?: string,
   maxResults: number = 20,
-): SearchMatch[] | null {
-  if (!isRgAvailable()) return null;
+): Promise<SearchMatch[] | null> {
+  return new Promise<SearchMatch[] | null>(async (resolve) => {
+    const available = await isRgAvailable();
+    if (!available) { resolve(null); return; }
 
-  const cleanSymbol = symbol.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  if (!cleanSymbol) return null;
+    const cleanSymbol = symbol.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!cleanSymbol) { resolve([]); return; }
 
-  const args = [
-    '--no-heading',
-    '--line-number',
-    '--color= ' + 'never',
-    '--max-count', String(maxResults),
-    '-C', '2',
-    '--word-regexp',
-    '--regexp', cleanSymbol,
-  ];
+    const args = [
+      '--no-heading',
+      '--line-number',
+      '--color=never',
+      '--max-count', String(maxResults),
+      '-C', '2',
+      '--word-regexp',
+      '--max-filesize', '1M',
+      '--regexp', cleanSymbol,
+    ];
 
-  if (fileExt) {
-    const ext = fileExt.startsWith('.') ? fileExt : '.' + fileExt;
-    args.push('--glob', '*' + ext);
-  } else {
-    args.push('--type-add', 'src:*.ts', '--type-add', 'src:*.tsx',
-      '--type-add', 'src:*.js', '--type-add', 'src:*.jsx',
-      '--type-add', 'src:*.py', '--type-add', 'src:*.java',
-      '--type-add', 'src:*.go', '--type-add', 'src:*.rs',
-      '--type-add', 'src:*.c', '--type-add', 'src:*.cpp',
-      '--type-add', 'src:*.h', '--type-add', 'src:*.hpp',
-      '--type-add', 'src:*.rb', '--type-add', 'src:*.php',
-      '--type-add', 'src:*.vue', '--type-add', 'src:*.svelte',
-      '--type', 'src');
-  }
+    if (fileExt) {
+      const ext = fileExt.startsWith('.') ? fileExt : '.' + fileExt;
+      args.push('--glob', '*' + ext);
+    } else {
+      args.push('--type-add', 'src:*.ts', '--type-add', 'src:*.tsx',
+        '--type-add', 'src:*.js', '--type-add', 'src:*.jsx',
+        '--type-add', 'src:*.py', '--type-add', 'src:*.java',
+        '--type-add', 'src:*.go', '--type-add', 'src:*.rs',
+        '--type-add', 'src:*.c', '--type-add', 'src:*.cpp',
+        '--type-add', 'src:*.h', '--type-add', 'src:*.hpp',
+        '--type-add', 'src:*.rb', '--type-add', 'src:*.php',
+        '--type-add', 'src:*.vue', '--type-add', 'src:*.svelte',
+        '--type', 'src');
+    }
 
-  let stdout: string;
-  try {
-    stdout = execFileSync('rg', args, {
+    const child = execFile('rg', args, {
       cwd: path.resolve(workspace),
-      timeout: 10000,
+      timeout: 5000,
       maxBuffer: 5 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
+    }, (err, stdout) => {
+      if (err || !stdout) { resolve(null); return; }
+      try {
+        resolve(parseRgOutput(stdout, maxResults));
+      } catch {
+        resolve(null);
+      }
     });
-  } catch {
-    return null;
-  }
 
-  // Parse ripgrep output: "filePath:lineNum:lineContent" or "filePath-lineNum-lineContent" for context lines
+    child.on('error', () => resolve(null));
+  });
+}
+
+function parseRgOutput(stdout: string, maxResults: number): SearchMatch[] {
   const lines = stdout.split('\n').filter(Boolean);
   const matches: SearchMatch[] = [];
   const fileLineMap = new Map<string, { line: number; content: string }[]>();
 
   for (const line of lines) {
-    // Matched line (colon after filename): "path/to/file.ts:42:const foo = bar"
-    // Context line (dash after filename): "path/to/file.ts-40-prev line"
     const matchLine = line.match(/^(.+?):(\d+):(.*)$/);
     const contextLine = line.match(/^(.+?)-(\d+)-(.*)$/);
     const parsed = matchLine || contextLine;
@@ -366,10 +381,8 @@ function searchWithRg(
     fileLineMap.get(filePath)!.push({ line: ln, content });
   }
 
-  // Build matches with context from grouped lines
   const seen = new Set<string>();
   for (const [filePath, fileLines] of fileLineMap) {
-    // Find the actual match lines (not context lines) — lines that appear with colon separator
     const matchLines = lines
       .filter(l => { const m = l.match(/^(.+?):(\d+):/); return m && m[1] === filePath; })
       .map(l => { const m = l.match(/^.+?:(\d+):(.*)$/)!; return { line: parseInt(m[1], 10), content: m[2] }; });
@@ -380,7 +393,6 @@ function searchWithRg(
       if (seen.has(key)) continue;
       seen.add(key);
 
-      // Gather context lines around this match from the parsed data
       const contextLines: string[] = [];
       for (const fl of fileLines) {
         if (fl.line >= ml.line - 2 && fl.line <= ml.line + 2) {
@@ -401,22 +413,24 @@ function searchWithRg(
   return matches;
 }
 
-export function handleSearchSymbols(
+export async function handleSearchSymbols(
   workspace: string,
   symbol: string,
   fileExt?: string,
   maxResults: number = 20,
-): SearchResult {
+): Promise<SearchResult> {
   const cleanSymbol = symbol.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
   if (!cleanSymbol) return { symbol: '', matches: [] };
 
-  // Try ripgrep first
-  const rgMatches = searchWithRg(workspace, cleanSymbol, fileExt, maxResults);
-  if (rgMatches !== null) {
-    return { symbol: cleanSymbol, matches: rgMatches };
+  try {
+    const rgMatches = await searchWithRg(workspace, cleanSymbol, fileExt, maxResults);
+    if (rgMatches !== null) {
+      return { symbol: cleanSymbol, matches: rgMatches };
+    }
+  } catch {
+    // rg failed, fall through to Node.js implementation
   }
 
-  // Fallback: Node.js implementation
   return handleSearchSymbolsFallback(workspace, cleanSymbol, fileExt, maxResults);
 }
 
@@ -433,9 +447,11 @@ function handleSearchSymbolsFallback(
     : DEFAULT_SEARCH_EXTENSIONS;
 
   const matches: SearchMatch[] = [];
+  let filesScanned = 0;
+  const MAX_FILES_FALLBACK = 5000;
 
   function walk(dir: string, relativeTo: string): void {
-    if (matches.length >= maxResults) return;
+    if (matches.length >= maxResults || filesScanned >= MAX_FILES_FALLBACK) return;
 
     let entries: fs.Dirent[];
     try {
@@ -445,8 +461,8 @@ function handleSearchSymbolsFallback(
     }
 
     for (const entry of entries) {
-      if (matches.length >= maxResults) return;
-      if (shouldHide(entry.name)) continue;
+      if (matches.length >= maxResults || filesScanned >= MAX_FILES_FALLBACK) return;
+      if (HIDDEN_DIRS.has(entry.name)) continue;
 
       const fullPath = path.join(dir, entry.name);
       const relPath = toPosix(path.join(relativeTo, entry.name));
@@ -457,7 +473,10 @@ function handleSearchSymbolsFallback(
         const ext = path.extname(entry.name).toLowerCase();
         if (!extSet.has(ext)) continue;
 
+        filesScanned++;
         try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > MAX_FILE_SIZE) continue;
           const content = fs.readFileSync(fullPath, 'utf-8');
           const lines = content.split('\n');
           for (let i = 0; i < lines.length; i++) {

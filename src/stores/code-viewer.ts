@@ -439,19 +439,22 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
     const unsub = wrapHandler(client, 'code.searchSymbols', (msg) => {
       unsub();
+      try {
+        if (msg.error) {
+          set({ searching: false });
+          return;
+        }
 
-      if (msg.error) {
-        set({ searching: false, error: msg.error as string });
-        return;
+        const result = msg.result as { matches?: SearchMatch[]; error?: string } | undefined;
+        if (result?.error) {
+          set({ searching: false });
+          return;
+        }
+        const results = result?.matches || [];
+        set({ searchResults: results, searching: false });
+      } catch {
+        set({ searching: false, searchResults: [] });
       }
-
-      const result = msg.result as { matches?: SearchMatch[]; error?: string } | undefined;
-      if (result?.error) {
-        set({ searching: false, error: result.error });
-        return;
-      }
-      const results = result?.matches || [];
-      set({ searchResults: results, searching: false });
     });
 
     client.send({
@@ -562,20 +565,30 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
   goBack() {
     const { navIndex, navHistory } = get();
-    if (navIndex <= 0) return;
+    if (navIndex <= 0 || navIndex >= navHistory.length) return;
     const newIndex = navIndex - 1;
     const loc = navHistory[newIndex];
-    set({ navIndex: newIndex, lineNumber: loc.line });
-    get().loadFile(loc.filePath);
+    if (!loc) return;
+    try {
+      set({ navIndex: newIndex, lineNumber: loc.line });
+      get().loadFile(loc.filePath);
+    } catch {
+      // Never crash on navigation
+    }
   },
 
   goForward() {
     const { navIndex, navHistory } = get();
-    if (navIndex >= navHistory.length - 1) return;
+    if (navIndex < 0 || navIndex >= navHistory.length - 1) return;
     const newIndex = navIndex + 1;
     const loc = navHistory[newIndex];
-    set({ navIndex: newIndex, lineNumber: loc.line });
-    get().loadFile(loc.filePath);
+    if (!loc) return;
+    try {
+      set({ navIndex: newIndex, lineNumber: loc.line });
+      get().loadFile(loc.filePath);
+    } catch {
+      // Never crash on navigation
+    }
   },
 
   setFollowFile(follow: boolean) {

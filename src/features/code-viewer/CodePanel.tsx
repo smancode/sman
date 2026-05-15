@@ -106,25 +106,26 @@ function findIdentifierAt(text: string, offset: number): string | null {
 function clickNavExtension() {
   return EditorView.domEventHandlers({
     mouseup(event, view) {
-      // Only plain clicks (no modifier keys, left button)
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.button !== 0) return false;
+      try {
+        const pos = view.posAtCoords(event);
+        if (pos == null || pos < 0 || pos >= view.state.doc.length) return false;
 
-      const pos = view.posAtCoords(event);
-      if (pos == null) return false;
+        const state = useCodeViewerStore.getState();
+        if (!state.filePath) return false;
 
-      const state = useCodeViewerStore.getState();
-      if (!state.filePath) return false;
+        const line = view.state.doc.lineAt(pos);
+        const col = pos - line.from;
 
-      const line = view.state.doc.lineAt(pos);
-      const col = pos - line.from;
+        const lastLoc = state.navHistory[state.navIndex];
+        if (lastLoc && lastLoc.filePath === state.filePath && lastLoc.line === line.number && lastLoc.column === col) {
+          return false;
+        }
 
-      // Don't record if same as current position
-      const lastLoc = state.navHistory[state.navIndex];
-      if (lastLoc && lastLoc.filePath === state.filePath && lastLoc.line === line.number && lastLoc.column === col) {
-        return false;
+        state.pushNav(state.filePath, line.number, col);
+      } catch {
+        // Never crash on click recording
       }
-
-      state.pushNav(state.filePath, line.number, col);
       return false;
     },
   });
@@ -134,19 +135,20 @@ function ctrlClickSearchExtension(workspace: string) {
   return EditorView.domEventHandlers({
     mousedown(event, view) {
       if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+      try {
+        const pos = view.posAtCoords(event);
+        if (pos == null || pos < 0 || pos >= view.state.doc.length) return false;
 
-      const pos = view.posAtCoords(event);
-      if (pos == null) return false;
+        const line = view.state.doc.lineAt(pos);
+        const lineOffset = pos - line.from;
+        const symbol = findIdentifierAt(line.text, lineOffset);
+        if (!symbol) return false;
 
-      const line = view.state.doc.lineAt(pos);
-      const lineOffset = pos - line.from;
-      const symbol = findIdentifierAt(line.text, lineOffset);
-      if (!symbol) return false;
-
-      useCodeViewerStore.getState().searchSymbols(symbol);
-
-      view.dispatch({ effects: setHighlightLine.of(line.number) });
-
+        useCodeViewerStore.getState().searchSymbols(symbol);
+        view.dispatch({ effects: setHighlightLine.of(line.number) });
+      } catch {
+        // Never crash on Ctrl+Click search
+      }
       return true;
     },
   });
