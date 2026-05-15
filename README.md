@@ -1,12 +1,8 @@
 <div align="center">
 
-<img src="./public/favicon.png" alt="Sman" width="80" />
-
-<br/>
-
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./public/images/sman-logo-white.png" />
-  <source media="(prefers-color-scheme: light)" srcset="./public/images/sman-logo-dark.png" />
+  <source media="(prefers-color-scheme: dark)" srcset="./public/images/sman-logo-full-white.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./public/images/sman-logo-full-dark.png" />
   <img alt="Sman" width="240" />
 </picture>
 
