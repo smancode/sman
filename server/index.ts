@@ -47,7 +47,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler } from './hub/index.js';
+import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler, setActualPort } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { getClientId } from './utils/network.js';
 import { getServerBaseUrl, ensureServerBaseUrl } from './server-url.js';
@@ -55,6 +55,9 @@ import { BroadcastStore } from './broadcast-store.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
+
+/** Actual port the server is listening on (may differ from PORT after fallback) */
+export let actualPort = PORT;
 
 function getHomeDir(): string {
   const env = process.env.SMANBASE_HOME;
@@ -462,10 +465,7 @@ const MIME: Record<string, string> = {
 // ── CORS & Auth Helpers ──
 
 const ALLOWED_ORIGINS = [
-  'http://localhost:5880',
-  'http://localhost:5881',
-  'http://127.0.0.1:5880',
-  'http://127.0.0.1:5881',
+  // Dynamic: actual port is added after listen() resolves
   ...(process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
         .map(s => s.trim())
@@ -477,7 +477,9 @@ const ALLOWED_ORIGINS = [
 
 function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): void {
   const origin = req.headers.origin || '';
-  if (ALLOWED_ORIGINS.includes(origin)) {
+  // Allow any localhost/127.0.0.1 origin (port may change after fallback)
+  const isLocalOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+  if (isLocalOrigin || ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -1126,10 +1128,13 @@ const wss = new WebSocketServer({
   path: '/ws',
   verifyClient: (info, callback) => {
     const origin = info.origin || '';
-    // Allow connections with no origin (non-browser clients) or from allowed origins
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-      callback(false, 403, 'Forbidden: invalid origin');
-      return;
+    // Allow connections with no origin (non-browser clients) or from local origins
+    if (origin) {
+      const isLocalOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+      if (!isLocalOrigin && !ALLOWED_ORIGINS.includes(origin)) {
+        callback(false, 403, 'Forbidden: invalid origin');
+        return;
+      }
     }
     callback(true);
   },
@@ -2743,16 +2748,43 @@ if (isMainModule) {
   });
 
   const HOST = process.env.HOST || '127.0.0.1';
-  server.listen(PORT, HOST, () => {
-    log.info(`Sman server running on ${HOST}:${PORT}`);
-    log.info(`Home directory: ${homeDir}`);
-    log.info(`WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
-    log.info(`Health check: http://${HOST}:${PORT}/api/health`);
 
-    initHub(settingsManager, store, broadcastStore, sessionManager).then(() => {
-      log.info('Hub initialized');
+  // Well-known ports to skip (common dev tools, databases, caches, etc.)
+  const SKIP_PORTS = new Set([
+    3000, 3306, 4000, 5432, 5672, 6379, 7890, 8000, 8080, 8443, 8888, 9000, 9090, 9200, 9300, 27017,
+  ]);
+  const PORT_STEP = 100;
+  const MAX_PORT_ATTEMPTS = 10;
+
+  const tryListen = (port: number, attempts: number) => {
+    server.listen(port, HOST, () => {
+      const resolved = (server.address() as any)?.port ?? port;
+      actualPort = resolved;
+      setActualPort(resolved);
+      if (resolved !== PORT) {
+        log.warn(`Port ${PORT} in use, using ${resolved} instead`);
+      }
+      log.info(`Sman server running on ${HOST}:${resolved}`);
+      log.info(`Home directory: ${homeDir}`);
+      log.info(`WebSocket endpoint: ws://${HOST}:${resolved}/ws`);
+      log.info(`Health check: http://${HOST}:${resolved}/api/health`);
+
+      initHub(settingsManager, store, broadcastStore, sessionManager).then(() => {
+        log.info('Hub initialized');
+      });
+    }).on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE' && attempts > 0) {
+        let nextPort = port + PORT_STEP;
+        while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
+        log.warn(`Port ${port} in use, trying ${nextPort}...`);
+        tryListen(nextPort, attempts - 1);
+      } else {
+        log.error(`Failed to listen on ${HOST}:${port}: ${err.message}`);
+        process.exit(1);
+      }
     });
-  });
+  };
+  tryListen(PORT, MAX_PORT_ATTEMPTS);
 
   // Auto-setup office-skills dependencies (non-blocking)
   setupOfficeSkills();

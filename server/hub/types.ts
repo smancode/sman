@@ -8,6 +8,7 @@ export interface ReportPayload {
   version: string;
   hostname: string;
   ip: string;
+  port: number;
   reportTime: string;
   activeSessions: number;
   workspaces?: string[];

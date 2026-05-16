@@ -16,6 +16,7 @@ interface HubDeps {
   getServerUrl: () => string;
   getEnabled: () => boolean;
   getVersion: () => string;
+  getPort: () => number;
   sessionStore: SessionStore;
   broadcastStore: BroadcastStore;
 }
@@ -73,6 +74,7 @@ export class HubClient {
         version: this.deps.getVersion(),
         hostname: os.hostname(),
         ip: clientId.split('@')[1],
+        port: this.deps.getPort(),
         reportTime: new Date().toISOString(),
         activeSessions: this.deps.sessionStore.getActiveSessionCount(),
         workspaces: this.deps.sessionStore.getActiveWorkspaces(),
@@ -125,7 +127,7 @@ export class HubClient {
 
   /** Fire-and-forget: trigger a local MCP skill asynchronously */
   private async invokeMcpTool(workspace: string, _toolType: string, toolId: string, parameters?: string): Promise<void> {
-    const port = parseInt(process.env.PORT || '5880', 10);
+    const port = this.deps.getPort();
     const triggerUrl = `http://127.0.0.1:${port}/api/mcp/tools/trigger`;
 
     // Get auth token

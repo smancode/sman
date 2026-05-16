@@ -395,10 +395,16 @@ async function startServerInProcess(): Promise<void> {
       backendPort = PORT_ENV;
     }
 
+    const SKIP_PORTS = new Set([
+      3000, 3306, 4000, 5432, 5672, 6379, 7890, 8000, 8080, 8443, 8888, 9000, 9090, 9200, 9300, 27017,
+    ]);
+    const PORT_STEP = 100;
+
     await new Promise<void>((resolve, reject) => {
       const tryListen = (port: number, attempts: number) => {
         serverModule.server.listen(port, HOST, async () => {
           backendPort = port;
+          serverModule.actualPort = port;
           console.log(`[Electron] Server listening on ${HOST}:${port}`);
           console.log(`[Electron] Home: ${serverModule.homeDir}`);
           await ensureHubConfig(serverModule.homeDir);
@@ -415,8 +421,10 @@ async function startServerInProcess(): Promise<void> {
           resolve();
         }).on('error', (err: NodeJS.ErrnoException) => {
           if (err.code === 'EADDRINUSE' && attempts > 0) {
-            console.log(`[Electron] Port ${port} in use, trying ${port + 1}...`);
-            tryListen(port + 1, attempts - 1);
+            let nextPort = port + PORT_STEP;
+            while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
+            console.log(`[Electron] Port ${port} in use, trying ${nextPort}...`);
+            tryListen(nextPort, attempts - 1);
           } else {
             reject(err);
           }

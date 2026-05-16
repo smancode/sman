@@ -17,6 +17,11 @@ import { createLogger } from '../utils/logger.js';
 import { getClientId } from '../utils/network.js';
 import { getServerBaseUrl, resolveServerBaseUrl, invalidateServerBaseUrlCache } from '../server-url.js';
 
+/** Get the actual port the HTTP server is listening on. Set by server/index.ts after listen(). */
+let _actualPort = 5880;
+export function setActualPort(port: number): void { _actualPort = port; }
+export function getActualPort(): number { return _actualPort; }
+
 const log = createLogger('Hub');
 
 let hubClient: HubClient | null = null;
@@ -74,6 +79,7 @@ export async function initHub(
     getServerUrl: () => getServerBaseUrl(settingsManager),
     getEnabled: () => isHubEnabled(settingsManager),
     getVersion,
+    getPort: () => getActualPort(),
     sessionStore,
     broadcastStore,
   });
