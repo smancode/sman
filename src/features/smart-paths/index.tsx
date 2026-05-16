@@ -218,11 +218,26 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
     }
   }, [executionStream, executing]);
 
+  const stepCompleted = stepping && !!stepResult;
+  const stepRunning = executing;
+
+  let circleClass = 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0';
+  let circleContent: React.ReactNode = index + 1;
+  if (stepCompleted) {
+    circleClass += ' bg-green-500/15 text-green-600';
+    circleContent = <CheckCircle className="h-4 w-4" />;
+  } else if (stepRunning) {
+    circleClass += ' bg-primary/10 text-primary';
+    circleContent = <Loader2 className="h-4 w-4 animate-spin" />;
+  } else {
+    circleClass += ' bg-primary/10 text-primary';
+  }
+
   return (
     <div className="flex items-start gap-3">
       <div className="flex flex-col items-center">
-        <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">{index + 1}</div>
-        {index < total - 1 && <div className="w-px flex-1 min-h-[16px] bg-border mt-1" />}
+        <div className={circleClass}>{circleContent}</div>
+        {index < total - 1 && <div className={cn('w-px flex-1 min-h-[16px] mt-1', stepCompleted ? 'bg-green-500/30' : 'bg-border')} />}
       </div>
       <div className="flex-1 pb-3">
         {step.name && <p className="text-sm font-medium break-words">{step.name}</p>}
