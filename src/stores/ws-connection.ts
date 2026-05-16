@@ -60,7 +60,7 @@ export function recreateClient(): WsClient {
   const token = getStoredToken();
 
   singletonClient = new WsClient({
-    port: 5880,
+    port: parseInt(window.location.port) || 5880,
     url,
     token,
   });
