@@ -496,19 +496,21 @@ function waitForFrontend(): Promise<void> {
   });
 }
 
-// Single instance lock — prevent second instance from conflicting on port
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    // User tried to run a second instance, focus the existing window
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
-  });
+// Single instance lock — only for production builds.
+// Dev mode (via dev.sh) must coexist with an installed Sman instance.
+if (!isDev) {
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    app.quit();
+  } else {
+    app.on('second-instance', () => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        if (win.isMinimized()) win.restore();
+        win.focus();
+      }
+    });
+  }
 }
 
 app.whenReady().then(async () => {
