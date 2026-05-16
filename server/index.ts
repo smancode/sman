@@ -2125,8 +2125,8 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'smartpath.orchestrate': {
-          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
           try {
+            if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
             const oPathId = msg.pathId as string;
             const oWorkspace = msg.workspace as string;
             const oAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
@@ -2149,10 +2149,10 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'smartpath.runStep': {
-          if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || msg.stepIndex === undefined) {
-            throw new Error('Missing required: pathId, workspace, runId, blueprint, stepIndex');
-          }
           try {
+            if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || msg.stepIndex === undefined) {
+              throw new Error('Missing required: pathId, workspace, runId, blueprint, stepIndex');
+            }
             const rsPathId = msg.pathId as string;
             const rsWorkspace = msg.workspace as string;
             const rsRunId = msg.runId as string;
@@ -2182,10 +2182,10 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         case 'smartpath.finalize': {
-          if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || !msg.stepResults) {
-            throw new Error('Missing required: pathId, workspace, runId, blueprint, stepResults');
-          }
           try {
+            if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || !msg.stepResults) {
+              throw new Error('Missing required: pathId, workspace, runId, blueprint, stepResults');
+            }
             const fPathId = msg.pathId as string;
             const fWorkspace = msg.workspace as string;
             const fRunId = msg.runId as string;

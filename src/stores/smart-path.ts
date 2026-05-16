@@ -72,7 +72,7 @@ interface SmartPathState {
   updateStepResult: (index: number, value: string) => void;
   updateStepDescription: (index: number, value: string) => void;
   finalizeStepping: (pathId: string, workspace: string) => Promise<void>;
-  cancelStepping: () => void;
+  cancelStepping: (pathId: string) => void;
 }
 
 export const useSmartPathStore = create<SmartPathState>((set) => ({
@@ -376,7 +376,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
     return new Promise<void>((resolve, reject) => {
       const unsubOrchestrated = wrapHandler(client, 'smartpath.orchestrated', (data) => {
-        unsubOrchestrated(); unsubErr();
+        unsubOrchestrated(); unsubErr(); unsubProgress();
         set({
           stepBlueprint: data.blueprint as PathBlueprint,
           stepRunId: data.runId as string,
@@ -385,12 +385,11 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         resolve();
       });
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
-        unsubOrchestrated(); unsubErr();
+        unsubOrchestrated(); unsubErr(); unsubProgress();
         set({ stepping: false, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
-
-      wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+      const unsubProgress = wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
         if (data.pathId === pathId && (data as any).stepIndex === -1) {
           const delta = String(data.delta || '');
           set((s) => ({
@@ -573,7 +572,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     });
   },
 
-  cancelStepping: () => {
+  cancelStepping: (pathId) => {
+    const client = getWsClient();
+    if (client && pathId) client.send({ type: 'smartpath.abort', pathId });
     set({
       stepping: false,
       stepBlueprint: null,

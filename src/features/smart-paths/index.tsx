@@ -244,7 +244,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
               <Input
-                value={stepDesc ?? step.userInput}
+                value={stepDesc || step.userInput}
                 onChange={(e) => onDescChange?.(e.target.value)}
                 className="h-6 text-xs"
                 placeholder={t('smartpath.stepDescPlaceholder')}
@@ -516,7 +516,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
         <div className="flex gap-1.5 shrink-0">
           <Button variant="outline" size="sm" onClick={onEdit} disabled={running || stepping}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
           {stepping ? (
-            <Button variant="outline" size="sm" onClick={cancelStepping}>
+            <Button variant="outline" size="sm" onClick={() => cancelStepping(path.id)}>
               {t('smartpath.cancelStepExec')}
             </Button>
           ) : !running && (
