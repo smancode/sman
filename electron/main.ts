@@ -406,7 +406,28 @@ async function startServerInProcess(): Promise<void> {
 
     await new Promise<void>((resolve, reject) => {
       const tryListen = (port: number, attempts: number) => {
-        serverModule.server.listen(port, HOST, async () => {
+        let handled = false;
+        const httpServer = serverModule.server;
+        const onError = (err: NodeJS.ErrnoException) => {
+          if (handled) return;
+          handled = true;
+          httpServer.removeListener('error', onError);
+          if (err.code === 'EADDRINUSE' && attempts > 0) {
+            let nextPort = port + PORT_STEP;
+            while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
+            console.log(`[Electron] Port ${port} in use, trying ${nextPort}...`);
+            httpServer.close(() => {
+              tryListen(nextPort, attempts - 1);
+            });
+          } else {
+            reject(err);
+          }
+        };
+        httpServer.on('error', onError);
+        httpServer.listen(port, HOST, async () => {
+          if (handled) return;
+          handled = true;
+          httpServer.removeListener('error', onError);
           backendPort = port;
           if (typeof serverModule.setActualPort === 'function') {
             serverModule.setActualPort(port);
@@ -425,15 +446,6 @@ async function startServerInProcess(): Promise<void> {
           // Re-check after hub init (probe may have resolved serverBaseUrl)
           await ensureHubConfig(serverModule.homeDir);
           resolve();
-        }).on('error', (err: NodeJS.ErrnoException) => {
-          if (err.code === 'EADDRINUSE' && attempts > 0) {
-            let nextPort = port + PORT_STEP;
-            while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
-            console.log(`[Electron] Port ${port} in use, trying ${nextPort}...`);
-            tryListen(nextPort, attempts - 1);
-          } else {
-            reject(err);
-          }
         });
       };
       tryListen(backendPort, 10);

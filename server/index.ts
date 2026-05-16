@@ -2764,7 +2764,32 @@ if (isMainModule) {
   const MAX_PORT_ATTEMPTS = 10;
 
   const tryListen = (port: number, attempts: number) => {
+    let handled = false;
+    const onError = (err: NodeJS.ErrnoException) => {
+      if (handled) return;
+      handled = true;
+      server.removeListener('error', onError);
+      wss.removeListener('error', onError);
+      if (err.code === 'EADDRINUSE' && attempts > 0) {
+        let nextPort = port + PORT_STEP;
+        while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
+        log.warn(`Port ${port} in use, trying ${nextPort}...`);
+        server.close(() => {
+          tryListen(nextPort, attempts - 1);
+        });
+      } else {
+        log.error(`Failed to listen on ${HOST}:${port}: ${err.message}`);
+        process.exit(1);
+      }
+    };
+    // Register on BOTH server and wss — ws re-emits http server errors on WebSocketServer
+    server.on('error', onError);
+    wss.on('error', onError);
     server.listen(port, HOST, () => {
+      if (handled) return;
+      handled = true;
+      server.removeListener('error', onError);
+      wss.removeListener('error', onError);
       const resolved = (server.address() as any)?.port ?? port;
       setActualPort(resolved);
       if (resolved !== PORT) {
@@ -2778,16 +2803,6 @@ if (isMainModule) {
       initHub(settingsManager, store, broadcastStore, sessionManager).then(() => {
         log.info('Hub initialized');
       });
-    }).on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE' && attempts > 0) {
-        let nextPort = port + PORT_STEP;
-        while (SKIP_PORTS.has(nextPort)) nextPort += PORT_STEP;
-        log.warn(`Port ${port} in use, trying ${nextPort}...`);
-        tryListen(nextPort, attempts - 1);
-      } else {
-        log.error(`Failed to listen on ${HOST}:${port}: ${err.message}`);
-        process.exit(1);
-      }
     });
   };
   tryListen(PORT, MAX_PORT_ATTEMPTS);
