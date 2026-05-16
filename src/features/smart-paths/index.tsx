@@ -228,7 +228,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
         {step.name && <p className="text-sm font-medium break-words">{step.name}</p>}
         <p className="text-sm leading-relaxed text-muted-foreground break-words">{step.userInput}</p>
 
-        {(executing || executionStream) && (
+        {(executing || (executionStream && !(stepping && stepResult))) && (
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
             <div className="text-xs text-muted-foreground mb-1.5 font-medium">
               {executing ? (
