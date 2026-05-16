@@ -166,11 +166,40 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
   );
 }
 
+// ── Step control bar (step-by-step mode) ──
+
+function StepControlBar({ stepIndex, isLastStep, onRedo, onContinue, onFinalize }: {
+  stepIndex: number; isLastStep: boolean;
+  onRedo: () => void; onContinue: () => void; onFinalize: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onRedo}>
+        <Play className="h-3 w-3" /> {t('smartpath.redoStep')}
+      </Button>
+      {isLastStep ? (
+        <Button size="sm" className="h-7 text-xs gap-1" onClick={onFinalize}>
+          <CheckCircle className="h-3 w-3" /> {t('smartpath.finalizeStep')}
+        </Button>
+      ) : (
+        <Button size="sm" className="h-7 text-xs gap-1" onClick={onContinue}>
+          {t('smartpath.continueStep')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
+  stepping?: boolean;
+  stepResult?: string; stepDesc?: string;
+  onResultChange?: (v: string) => void;
+  onDescChange?: (v: string) => void;
+  onRedo?: () => void; onContinue?: () => void; onFinalize?: () => void;
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
 
@@ -207,6 +236,36 @@ function StepViewCard({ step, index, total, executionStream, executing }: {
                 </Streamdown>
               )}
             </div>
+          </div>
+        )}
+
+        {stepping && stepResult && !executing && (
+          <div className="mt-2 space-y-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
+              <Input
+                value={stepDesc ?? step.userInput}
+                onChange={(e) => onDescChange?.(e.target.value)}
+                className="h-6 text-xs"
+                placeholder={t('smartpath.stepDescPlaceholder')}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('smartpath.editResult')}</Label>
+              <Textarea
+                value={stepResult}
+                onChange={(e) => onResultChange?.(e.target.value)}
+                className="min-h-[80px] text-xs resize-none"
+                placeholder={t('smartpath.stepResultPlaceholder')}
+              />
+            </div>
+            <StepControlBar
+              stepIndex={index}
+              isLastStep={index === total - 1}
+              onRedo={() => onRedo?.()}
+              onContinue={() => onContinue?.()}
+              onFinalize={() => onFinalize?.()}
+            />
           </div>
         )}
       </div>
@@ -407,6 +466,16 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const stepExecutionStream = useSmartPathStore((s) => s.stepExecutionStream);
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
   const running = useSmartPathStore((s) => s.running);
+  const stepping = useSmartPathStore((s) => s.stepping);
+  const stepResults = useSmartPathStore((s) => s.stepResults);
+  const stepDescriptions = useSmartPathStore((s) => s.stepDescriptions);
+  const startStepping = useSmartPathStore((s) => s.startStepping);
+  const runStepContinue = useSmartPathStore((s) => s.runStepContinue);
+  const runStepRedo = useSmartPathStore((s) => s.runStepRedo);
+  const updateStepResult = useSmartPathStore((s) => s.updateStepResult);
+  const updateStepDescription = useSmartPathStore((s) => s.updateStepDescription);
+  const finalizeStepping = useSmartPathStore((s) => s.finalizeStepping);
+  const cancelStepping = useSmartPathStore((s) => s.cancelStepping);
   const fetchReport = useSmartPathStore((s) => s.fetchReport);
   const currentReport = useSmartPathStore((s) => s.currentReport);
   const references = useSmartPathStore((s) => s.references);
@@ -445,17 +514,26 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
           </div>
         </div>
         <div className="flex gap-1.5 shrink-0">
-          <Button variant="outline" size="sm" onClick={onEdit} disabled={running}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
+          <Button variant="outline" size="sm" onClick={onEdit} disabled={running || stepping}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
+          {stepping ? (
+            <Button variant="outline" size="sm" onClick={cancelStepping}>
+              {t('smartpath.cancelStepExec')}
+            </Button>
+          ) : !running && (
+            <Button variant="outline" size="sm" onClick={() => startStepping(path.id, path.workspace, path.defaultArgs)}>
+              <Play className="h-3.5 w-3.5 mr-1" /> {t('smartpath.stepExec')}
+            </Button>
+          )}
           {running ? (
             <Button variant="destructive" size="sm" onClick={onAbort}>
               <Square className="h-3.5 w-3.5 mr-1" /> {t("smartpath.stop")}
             </Button>
-          ) : (
+          ) : !stepping && (
             <Button size="sm" onClick={onRun}>
               <Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={running}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={running || stepping}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
         </div>
       </div>
 
@@ -476,11 +554,15 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
 
       <div className="space-y-0">
         <Label className="text-sm font-medium mb-3 block">{t("smartpath.stepLabel")}</Label>
-        {running && stepExecutionStatus[-1] === 'running' && (
+        {(running || stepping) && (stepExecutionStatus[-1] === 'running' || stepExecutionStream[-1]) && (
           <div className="px-3 py-2 border rounded-md bg-primary/5 border-primary/20 mb-2 text-sm">
             <div className="flex items-center gap-2 mb-1">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              <span className="text-primary">{t('smartpath.analyzing')}</span>
+              {stepExecutionStatus[-1] === 'running' ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <span className="text-primary">{stepping ? t('smartpath.orchestrating') : t('smartpath.analyzing')}</span></>
+              ) : (
+                <span className="text-primary">{t('smartpath.stepCompleted')}</span>
+              )}
             </div>
             {stepExecutionStream[-1] && (
               <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
@@ -492,11 +574,24 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
           </div>
         )}
         {steps.length === 0 ? <div className="text-sm text-muted-foreground py-4">{t("smartpath.noStepsView")}</div>
-          : <div className="space-y-0">{steps.map((s, i) => (
-            <StepViewCard key={i} step={s} index={i} total={steps.length}
-              executionStream={stepExecutionStream[i] || ''}
-              executing={stepExecutionStatus[i] === 'running'} />
-          ))}</div>}
+          : <div className="space-y-0">{steps.map((s, i) => {
+            const isStepCompleted = stepping && i < stepResults.length;
+            const isCurrentStep = stepping && i === stepResults.length;
+            return (
+              <StepViewCard key={i} step={s} index={i} total={steps.length}
+                executionStream={stepExecutionStream[i] || ''}
+                executing={stepExecutionStatus[i] === 'running'}
+                stepping={stepping && (isStepCompleted || isCurrentStep)}
+                stepResult={stepping ? stepResults[i] : undefined}
+                stepDesc={stepping ? stepDescriptions[i] : undefined}
+                onResultChange={stepping ? (v) => updateStepResult(i, v) : undefined}
+                onDescChange={stepping ? (v) => updateStepDescription(i, v) : undefined}
+                onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}
+                onContinue={stepping ? () => runStepContinue(path.id, path.workspace, path.defaultArgs) : undefined}
+                onFinalize={stepping ? () => finalizeStepping(path.id, path.workspace) : undefined}
+              />
+            );
+          })}</div>}
       </div>
 
       {/* Reusable resources */}
