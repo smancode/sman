@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "26.516.22",
+  "version": "26.516.23",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -235,6 +235,8 @@
       "node_modules/.pnpm/node-screenshots@*/node_modules/node-screenshots/**/*",
       "node_modules/.pnpm/node-screenshots-*/node_modules/node-screenshots-*/**/*",
       "node_modules/electron-screenshots/**/*",
+      "node_modules/@anthropic-ai/claude-code/**/*",
+      "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "plugins/**/*"
     ],
     "directories": {

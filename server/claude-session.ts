@@ -564,6 +564,11 @@ export class ClaudeSessionManager {
 
     const claudeCodePath = this.getClaudeCodePath();
 
+    // Electron: spawn uses process.execPath as 'node', needs ELECTRON_RUN_AS_NODE=1
+    // so it behaves as Node.js instead of launching GUI
+    if (process.env.SMAN_ELECTRON) {
+      env['ELECTRON_RUN_AS_NODE'] = '1';
+    }
 
     // root/sudo cannot use --dangerously-skip-permissions (claude CLI rejects it).
     // Use environment variable bypass instead.
@@ -639,6 +644,8 @@ export class ClaudeSessionManager {
       model: cliModel,
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
+      // Electron: system 'node' may not exist. Use Electron's built-in Node binary.
+      ...(process.env.SMAN_ELECTRON ? { executable: process.execPath } : {}),
       cwd: workspace,
       // root/sudo: claude CLI rejects --permission-mode bypassPermissions.
       // Use CLAUDE_BYPASS_PERMISSIONS env var instead (set above).
@@ -777,6 +784,10 @@ export class ClaudeSessionManager {
 
     const claudeCodePath = this.getClaudeCodePath();
 
+    if (process.env.SMAN_ELECTRON) {
+      env['ELECTRON_RUN_AS_NODE'] = '1';
+    }
+
     const isRoot = process.getuid?.() === 0;
     if (isRoot) {
       env['CLAUDE_BYPASS_PERMISSIONS'] = '1';
@@ -789,6 +800,7 @@ export class ClaudeSessionManager {
       model: this.resolveCliModel(this.config.llm.model),
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
+      ...(process.env.SMAN_ELECTRON ? { executable: process.execPath } : {}),
       cwd: workspace,
       ...(isRoot ? {} : {
         permissionMode: 'bypassPermissions',
