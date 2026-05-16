@@ -3269,7 +3269,7 @@
   "hub.settings.save": { "text": "Save Hub Config" },
   "smartpath.stepExec": { "text": "Step-by-Step", "context": "Step-by-step execution button" },
   "smartpath.redoStep": { "text": "Re-execute", "context": "Re-execute current step button" },
-  "smartpath.continueStep": { "text": "Continue", "context": "Continue to next step button" },
+  "smartpath.continueStep": { "text": "Next Step", "context": "Next step button" },
   "smartpath.editResult": { "text": "Edit Result", "context": "Edit step result button" },
   "smartpath.editDesc": { "text": "Edit Description", "context": "Edit step description button" },
   "smartpath.stepResultPlaceholder": { "text": "Step result (editable)...", "context": "Step result editable area placeholder" },

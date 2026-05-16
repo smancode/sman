@@ -248,20 +248,6 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
           </div>
         )}
 
-        {stepping && !executing && !stepResult && onContinue && (
-          <div className="mt-2">
-            <StepControlBar
-              stepIndex={index}
-              isLastStep={index === total - 1}
-              hasResult={false}
-              executing={executing}
-              onRedo={() => onRedo?.()}
-              onContinue={() => onContinue?.()}
-              onFinalize={() => onFinalize?.()}
-            />
-          </div>
-        )}
-
         {stepping && stepResult && !executing && (
           <div className="mt-2 space-y-2">
             {step.deliveryCheck && stepDeliveryCheck && stepDeliveryCheck.passed === true && (

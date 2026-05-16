@@ -3269,7 +3269,7 @@
   "hub.settings.save": { "text": "保存 Hub 配置" },
   "smartpath.stepExec": { "text": "逐步执行", "context": "逐步执行按钮" },
   "smartpath.redoStep": { "text": "重新执行", "context": "重新执行当前步骤按钮" },
-  "smartpath.continueStep": { "text": "继续", "context": "继续下一步按钮" },
+  "smartpath.continueStep": { "text": "下一步", "context": "下一步按钮" },
   "smartpath.editResult": { "text": "编辑结果", "context": "编辑步骤结果按钮" },
   "smartpath.editDesc": { "text": "编辑描述", "context": "编辑步骤描述按钮" },
   "smartpath.stepResultPlaceholder": { "text": "步骤执行结果（可编辑）...", "context": "步骤结果编辑区占位符" },
