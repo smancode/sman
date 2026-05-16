@@ -296,6 +296,10 @@ batchEngine.start();
 // SmartPath
 const smartPathStore = new SmartPathStore();
 const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
+// 服务启动时重置上次异常退出的 running 状态
+const allWorkspaces = [...new Set(store.listSessions().map(s => s.workspace))];
+const resetCount = smartPathStore.resetRunningStatuses(allWorkspaces);
+if (resetCount > 0) log.info(`Reset ${resetCount} path(s) from running to failed (previous crash)`);
 const smartPathScheduler = new SmartPathScheduler(smartPathStore, smartPathEngine);
 smartPathScheduler.setOnProgress((pathId, data) => {
   broadcast(JSON.stringify({ type: 'smartpath.scheduledRun', pathId, ...data }));

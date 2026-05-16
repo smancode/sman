@@ -212,6 +212,20 @@ export class SmartPathStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  /** 服务启动时将所有 running 状态的 path 重置为 failed（上次异常退出） */
+  resetRunningStatuses(workspaces: string[]): number {
+    let count = 0;
+    for (const ws of workspaces) {
+      for (const p of this.list(ws)) {
+        if (p.status === 'running') {
+          this.update(p.id, ws, { status: 'failed' });
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
   /**
    * 跨 workspace 查找路径：先用传入的 ws 定位，找不到则遍历所有 workspace。
    * 解决跨平台场景（如 Windows 创建的路径在 macOS 上编辑）。
