@@ -37,6 +37,12 @@ const STEP_SYSTEM_PROMPT = [
   '3. 能用 skill/tool 完成就用，不能的直接实现。',
   '4. 最后用「执行结果：」开头总结。',
   '5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。',
+  '',
+  '临时文件规则：',
+  '1. 每个步骤的临时输出必须放在 tmp/ 目录（相对于工作区根目录）',
+  '2. tmp/ 里的文件不在步骤间复用，每次运行开始时自动清空',
+  '3. 要跨步骤复用的文件必须保存到 references/ 目录，用 [REFERENCE:filename] 标记',
+  '4. 脚本、配置文件等可复用资源必须放到 references/，禁止放 tmp/',
 ].join('\n');
 
 const SUMMARY_SYSTEM_PROMPT = `从步骤结果中提炼关键信息给后续步骤。只保留关键信息，去掉冗余，不超过200字。直接输出提炼结果。`;
@@ -200,6 +206,129 @@ export class SmartPathEngine {
         onProgress?.({ stepIndex: i, totalSteps: steps.length, status: 'completed' });
       }
     });
+  }
+
+  /** 协调阶段：主编分析 → 返回蓝图 + 创建 run + 清空 tmp */
+  async orchestrateOnly(
+    pathId: string,
+    workspace: string,
+    args: string | undefined,
+    onStepProgress: (stepIndex: number, delta: string) => void,
+  ): Promise<{ blueprint: PathBlueprint; runId: string }> {
+    const smartPath = this.store.get(pathId, workspace);
+    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
+
+    let steps: SmartPathStep[];
+    try { steps = JSON.parse(smartPath.steps); } catch { throw new Error('Invalid steps JSON'); }
+    if (!Array.isArray(steps) || steps.length === 0) throw new Error('Path has no steps');
+
+    const run = this.store.createRun(pathId, workspace);
+    this.store.update(pathId, workspace, { status: 'running' });
+    this.store.clearTmpDir(workspace, pathId);
+
+    const abortController = new AbortController();
+    const sessionIds: string[] = [];
+    this.activeRuns.set(pathId, { abortController, sessionIds });
+
+    const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
+
+    let blueprint: PathBlueprint;
+    try {
+      blueprint = await this.orchestrate(smartPath, steps, referencesContext, workspace, args, abortController, sessionIds, onStepProgress);
+    } catch (err) {
+      this.log.warn(`Orchestration failed, using default blueprint: ${err}`);
+      blueprint = buildDefaultBlueprint(steps);
+    }
+
+    return { blueprint, runId: run.id };
+  }
+
+  /** 单步执行：接收蓝图、步骤索引、前序结果，返回步骤结果 */
+  async runSingleStep(
+    pathId: string,
+    workspace: string,
+    runId: string,
+    blueprint: PathBlueprint,
+    stepIndex: number,
+    totalSteps: number,
+    priorResults: string[],
+    args: string | undefined,
+    onStepProgress: (stepIndex: number, delta: string) => void,
+  ): Promise<string> {
+    const smartPath = this.store.get(pathId, workspace);
+    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
+
+    const plan = blueprint.stepPlans[stepIndex] || blueprint.stepPlans[0];
+    const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
+
+    const prompt = buildStepPrompt(
+      plan, blueprint.goal, stepIndex, totalSteps,
+      priorResults, referencesContext,
+      stepIndex === 0 ? args : undefined,
+    );
+
+    const active = this.activeRuns.get(pathId);
+    const abortController = active?.abortController || new AbortController();
+    const sessionIds = active?.sessionIds || [];
+
+    const sessionId = `smartpath-ephemeral-${runId}-step-${stepIndex}-${Date.now()}`;
+    this.sessionManager.createEphemeralSessionWithId(workspace, sessionId);
+    sessionIds.push(sessionId);
+
+    let stepFullContent = '';
+    try {
+      const stepReturned = await this.sessionManager.sendMessageForStep(
+        sessionId, prompt, abortController,
+        (delta) => {
+          stepFullContent += delta;
+          onStepProgress(stepIndex, delta);
+        },
+        STEP_SYSTEM_PROMPT,
+      );
+
+      const stepResult = (stepReturned || stepFullContent).trim();
+
+      const refs = extractReferences(stepResult);
+      for (const ref of refs) {
+        this.store.saveReference(workspace, pathId, ref.fileName, ref.content);
+      }
+
+      return stepResult;
+    } finally {
+      this.sessionManager.closeV2Session(sessionId);
+      this.sessionManager.removeEphemeralSession(sessionId);
+    }
+  }
+
+  /** 收尾：生成报告 + 更新 run.md + 更新状态 */
+  async finalize(
+    pathId: string,
+    workspace: string,
+    runId: string,
+    blueprint: PathBlueprint,
+    stepResults: string[],
+  ): Promise<void> {
+    const smartPath = this.store.get(pathId, workspace);
+    if (!smartPath) throw new Error(`Path not found: ${pathId}`);
+
+    let steps: SmartPathStep[];
+    try { steps = JSON.parse(smartPath.steps); } catch { throw new Error('Invalid steps JSON'); }
+
+    this.store.update(pathId, workspace, { status: 'completed' });
+    const reportFileName = this.store.createReport(
+      workspace, pathId, smartPath.name, steps, stepResults, runId,
+      'completed', isoNow(), isoNow(),
+    );
+    this.store.updateRun(runId, workspace, pathId, {
+      status: 'completed',
+      stepResults: JSON.stringify(stepResults),
+      finishedAt: isoNow(),
+      reportFileName: path.basename(reportFileName),
+    });
+
+    await this.updateRunGuide(workspace, pathId, steps, stepResults, blueprint);
+
+    this.activeRuns.delete(pathId);
   }
 
   /** 核心执行：主编分析 + 每步独立 session（task），返回结果 */
@@ -435,7 +564,7 @@ export class SmartPathEngine {
       '执行摘要:',
       ...steps.map((s, i) => `${i + 1}. ${s.userInput} → ${(results[i] || '').slice(0, 200)}`),
       '',
-      '输出 run.md 完整内容，包含：# 复用指南与经验沉淀 → 路径概述 → 执行策略 → 步骤修正记录 → 可复用资源 → 注意事项 → 最佳实践。简洁实用。',
+      '输出 run.md 完整内容，包含：# 复用指南与经验沉淀 → 路径概述 → 执行策略 → 步骤修正记录 → 可复用资源（必须列出每个文件的完整路径 .sman/paths/{pathId}/references/{filename} 和用途说明）→ 注意事项 → 最佳实践。简洁实用。',
     ].join('\n');
 
     const sessionId = `smartpath-ref-${pathId}-${Date.now()}`;
