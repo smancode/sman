@@ -200,10 +200,10 @@ function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, o
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, finalizing, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
-  stepping?: boolean;
+  stepping?: boolean; finalizing?: boolean;
   stepResult?: string; stepDesc?: string;
   stepDeliveryCheck?: { passed?: boolean; reason?: string; retried?: boolean };
   onResultChange?: (v: string) => void;
@@ -287,7 +287,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               stepIndex={index}
               isLastStep={index === total - 1}
               hasResult={!!stepResult}
-              executing={executing}
+              executing={executing || finalizing}
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
@@ -493,6 +493,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const stepExecutionStatus = useSmartPathStore((s) => s.stepExecutionStatus);
   const running = useSmartPathStore((s) => s.running);
   const stepping = useSmartPathStore((s) => s.stepping);
+  const finalizing = useSmartPathStore((s) => s.finalizing);
   const stepResults = useSmartPathStore((s) => s.stepResults);
   const anyStepExecuting = Object.values(stepExecutionStatus).some((s) => s === 'running');
   const stepDescriptions = useSmartPathStore((s) => s.stepDescriptions);
@@ -616,6 +617,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                 stepResult={stepping ? stepResults[i] : undefined}
                 stepDesc={stepping ? stepDescriptions[i] : undefined}
                 stepDeliveryCheck={stepping ? stepDeliveryChecks[i] : undefined}
+                finalizing={stepping && finalizing}
                 onResultChange={stepping ? (v) => updateStepResult(i, v) : undefined}
                 onDescChange={stepping ? (v) => updateStepDescription(i, v) : undefined}
                 onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}

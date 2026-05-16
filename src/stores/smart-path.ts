@@ -60,6 +60,7 @@ interface SmartPathState {
 
   // 逐步执行模式
   stepping: boolean;
+  finalizing: boolean;
   stepBlueprint: PathBlueprint | null;
   stepRunId: string | null;
   stepResults: string[];
@@ -93,6 +94,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   currentReference: null,
 
   stepping: false,
+  finalizing: false,
   stepBlueprint: null,
   stepRunId: null,
   stepResults: [],
@@ -553,6 +555,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
     if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
 
+    set({ finalizing: true });
     return new Promise<void>((resolve, reject) => {
       const unsubComplete = wrapHandler(client, 'smartpath.completed', (data) => {
         if (data.pathId === pathId) {
@@ -561,6 +564,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
           const refs = (data.references as SmartPathReference[]) || [];
           set((s) => ({
             stepping: false,
+            finalizing: false,
             stepBlueprint: null,
             stepRunId: null,
             running: false,
@@ -572,7 +576,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       });
       const unsubErr = wrapHandler(client, 'chat.error', (data) => {
         unsubComplete(); unsubErr();
-        set({ stepping: false, error: String(data.error) });
+        set({ stepping: false, finalizing: false, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
 
@@ -588,6 +592,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     if (client && pathId) client.send({ type: 'smartpath.abort', pathId });
     set({
       stepping: false,
+      finalizing: false,
       stepBlueprint: null,
       stepRunId: null,
       stepResults: [],
