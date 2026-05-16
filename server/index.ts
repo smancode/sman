@@ -2124,6 +2124,89 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'smartpath.orchestrate': {
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          try {
+            const oPathId = msg.pathId as string;
+            const oWorkspace = msg.workspace as string;
+            const oAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const oPath = smartPathStore.get(oPathId, oWorkspace, oAllWs);
+            const oActualWs = oPath?.workspace || oWorkspace;
+            const oArgs = (msg.args as string) || oPath?.defaultArgs || '';
+
+            const { blueprint, runId } = await smartPathEngine.orchestrateOnly(
+              oPathId, oActualWs, oArgs,
+              (stepIndex, delta) => {
+                broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: oPathId, stepIndex, delta }));
+              },
+            );
+
+            ws.send(JSON.stringify({ type: 'smartpath.orchestrated', pathId: oPathId, blueprint, runId }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'smartpath.runStep': {
+          if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || msg.stepIndex === undefined) {
+            throw new Error('Missing required: pathId, workspace, runId, blueprint, stepIndex');
+          }
+          try {
+            const rsPathId = msg.pathId as string;
+            const rsWorkspace = msg.workspace as string;
+            const rsRunId = msg.runId as string;
+            const rsBlueprint = msg.blueprint as import('./types.js').PathBlueprint;
+            const rsStepIndex = msg.stepIndex as number;
+            const rsPriorResults = (msg.priorResults as string[]) || [];
+            const rsArgs = msg.args as string | undefined;
+
+            const rsAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const rsPath = smartPathStore.get(rsPathId, rsWorkspace, rsAllWs);
+            const rsActualWs = rsPath?.workspace || rsWorkspace;
+
+            const rsResult = await smartPathEngine.runSingleStep(
+              rsPathId, rsActualWs, rsRunId, rsBlueprint,
+              rsStepIndex, rsBlueprint.stepPlans.length,
+              rsPriorResults, rsArgs,
+              (stepIndex, delta) => {
+                broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: rsPathId, stepIndex, delta }));
+              },
+            );
+
+            broadcast(JSON.stringify({ type: 'smartpath.stepExecutionResult', pathId: rsPathId, stepIndex: rsStepIndex, result: rsResult }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'smartpath.finalize': {
+          if (!msg.pathId || !msg.workspace || !msg.runId || !msg.blueprint || !msg.stepResults) {
+            throw new Error('Missing required: pathId, workspace, runId, blueprint, stepResults');
+          }
+          try {
+            const fPathId = msg.pathId as string;
+            const fWorkspace = msg.workspace as string;
+            const fRunId = msg.runId as string;
+            const fBlueprint = msg.blueprint as import('./types.js').PathBlueprint;
+            const fStepResults = msg.stepResults as string[];
+
+            const fAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const fPath = smartPathStore.get(fPathId, fWorkspace, fAllWs);
+            const fActualWs = fPath?.workspace || fWorkspace;
+
+            await smartPathEngine.finalize(fPathId, fActualWs, fRunId, fBlueprint, fStepResults);
+
+            const p = smartPathStore.get(fPathId, fActualWs);
+            const refs = smartPathStore.listReferences(fActualWs, fPathId);
+            broadcast(JSON.stringify({ type: 'smartpath.completed', pathId: fPathId, path: p, references: refs }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
         // ── WeChat Personal Bot ──
         case 'chatbot.weixin.qr.request': {
           log.info('Received chatbot.weixin.qr.request');
