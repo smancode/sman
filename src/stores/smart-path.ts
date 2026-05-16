@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathStep, SmartPathReference } from '@/types/settings';
+import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathStep, SmartPathReference, PathBlueprint } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -57,6 +57,22 @@ interface SmartPathState {
   clearError: () => void;
   fetchReferences: (pathId: string, workspace: string) => Promise<void>;
   fetchReference: (pathId: string, workspace: string, fileName: string) => Promise<void>;
+
+  // 逐步执行模式
+  stepping: boolean;
+  stepBlueprint: PathBlueprint | null;
+  stepRunId: string | null;
+  stepResults: string[];
+  stepDescriptions: string[];
+  currentStepIndex: number;
+
+  startStepping: (pathId: string, workspace: string, args?: string) => Promise<void>;
+  runStepContinue: (pathId: string, workspace: string, args?: string) => Promise<void>;
+  runStepRedo: (pathId: string, workspace: string, stepIndex: number, args?: string) => Promise<void>;
+  updateStepResult: (index: number, value: string) => void;
+  updateStepDescription: (index: number, value: string) => void;
+  finalizeStepping: (pathId: string, workspace: string) => Promise<void>;
+  cancelStepping: () => void;
 }
 
 export const useSmartPathStore = create<SmartPathState>((set) => ({
@@ -74,6 +90,13 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   references: [],
   currentReference: null,
+
+  stepping: false,
+  stepBlueprint: null,
+  stepRunId: null,
+  stepResults: [],
+  stepDescriptions: [],
+  currentStepIndex: -1,
 
   fetchPaths: async (workspaces) => {
     const client = getWsClient();
@@ -338,6 +361,226 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         resolve();
       });
       client.send({ type: 'smartpath.reference.read', pathId, workspace, fileName });
+    });
+  },
+
+  startStepping: async (pathId, workspace, args) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    set({
+      stepping: true, error: null,
+      stepExecutionStream: {}, stepExecutionStatus: {},
+      stepResults: [], stepDescriptions: [],
+      currentStepIndex: -1,
+    });
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubOrchestrated = wrapHandler(client, 'smartpath.orchestrated', (data) => {
+        unsubOrchestrated(); unsubErr();
+        set({
+          stepBlueprint: data.blueprint as PathBlueprint,
+          stepRunId: data.runId as string,
+          stepExecutionStatus: { [-1]: 'completed' } as Record<number, StepExecStatus>,
+        });
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubOrchestrated(); unsubErr();
+        set({ stepping: false, error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+
+      wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+        if (data.pathId === pathId && (data as any).stepIndex === -1) {
+          const delta = String(data.delta || '');
+          set((s) => ({
+            stepExecutionStatus: { ...s.stepExecutionStatus, [-1]: 'running' as StepExecStatus },
+            stepExecutionStream: {
+              ...s.stepExecutionStream,
+              [-1]: (s.stepExecutionStream[-1] || '') + delta,
+            },
+          }));
+        }
+      });
+
+      client.send({ type: 'smartpath.orchestrate', pathId, workspace, args });
+    });
+  },
+
+  runStepContinue: async (pathId, workspace, args) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
+
+    const nextIndex = stepResults.length;
+    set((s) => ({
+      currentStepIndex: nextIndex,
+      stepExecutionStream: { ...s.stepExecutionStream, [nextIndex]: '' },
+      stepExecutionStatus: { ...s.stepExecutionStatus, [nextIndex]: 'running' as StepExecStatus },
+    }));
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubProgress = wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+        if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+          const idx = data.stepIndex as number;
+          const delta = String(data.delta || '');
+          set((s) => ({
+            stepExecutionStream: {
+              ...s.stepExecutionStream,
+              [idx]: (s.stepExecutionStream[idx] || '') + delta,
+            },
+          }));
+        }
+      });
+      const unsubResult = wrapHandler(client, 'smartpath.stepExecutionResult', (data) => {
+        if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+          unsubProgress(); unsubResult(); unsubErr();
+          const idx = data.stepIndex as number;
+          const result = String(data.result || '');
+          set((s) => ({
+            stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'completed' as StepExecStatus },
+            stepResults: [...s.stepResults, result],
+            stepDescriptions: [...s.stepDescriptions, ''],
+          }));
+          resolve();
+        }
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubProgress(); unsubResult(); unsubErr();
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [nextIndex]: 'failed' as StepExecStatus },
+          error: String(data.error),
+        }));
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({
+        type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
+        blueprint: stepBlueprint, stepIndex: nextIndex,
+        priorResults: stepResults, args,
+      });
+    });
+  },
+
+  runStepRedo: async (pathId, workspace, stepIndex, args) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
+
+    const priorResults = stepResults.slice(0, stepIndex);
+    set((s) => ({
+      stepResults: priorResults,
+      stepDescriptions: s.stepDescriptions.slice(0, stepIndex),
+      stepExecutionStream: { ...s.stepExecutionStream, [stepIndex]: '' },
+      stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'running' as StepExecStatus },
+      currentStepIndex: stepIndex,
+    }));
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubProgress = wrapHandler(client, 'smartpath.stepExecutionProgress', (data) => {
+        if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+          const idx = data.stepIndex as number;
+          const delta = String(data.delta || '');
+          set((s) => ({
+            stepExecutionStream: {
+              ...s.stepExecutionStream,
+              [idx]: (s.stepExecutionStream[idx] || '') + delta,
+            },
+          }));
+        }
+      });
+      const unsubResult = wrapHandler(client, 'smartpath.stepExecutionResult', (data) => {
+        if (data.pathId === pathId && typeof data.stepIndex === 'number') {
+          unsubProgress(); unsubResult(); unsubErr();
+          const idx = data.stepIndex as number;
+          const result = String(data.result || '');
+          set((s) => ({
+            stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'completed' as StepExecStatus },
+            stepResults: [...priorResults, result],
+            stepDescriptions: [...s.stepDescriptions.slice(0, stepIndex), ''],
+          }));
+          resolve();
+        }
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubProgress(); unsubResult(); unsubErr();
+        set((s) => ({
+          stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'failed' as StepExecStatus },
+          error: String(data.error),
+        }));
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({
+        type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
+        blueprint: stepBlueprint, stepIndex,
+        priorResults, args,
+      });
+    });
+  },
+
+  updateStepResult: (index, value) => {
+    set((s) => {
+      const results = [...s.stepResults];
+      results[index] = value;
+      return { stepResults: results };
+    });
+  },
+
+  updateStepDescription: (index, value) => {
+    set((s) => {
+      const descs = [...s.stepDescriptions];
+      descs[index] = value;
+      return { stepDescriptions: descs };
+    });
+  },
+
+  finalizeStepping: async (pathId, workspace) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubComplete = wrapHandler(client, 'smartpath.completed', (data) => {
+        if (data.pathId === pathId) {
+          unsubComplete(); unsubErr();
+          const p = data.path as SmartPath;
+          const refs = (data.references as SmartPathReference[]) || [];
+          set((s) => ({
+            stepping: false,
+            stepBlueprint: null,
+            stepRunId: null,
+            running: false,
+            paths: s.paths.map((x) => x.id === pathId ? { ...x, ...p } : x),
+            references: refs,
+          }));
+          resolve();
+        }
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubComplete(); unsubErr();
+        set({ stepping: false, error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({
+        type: 'smartpath.finalize', pathId, workspace, runId: stepRunId,
+        blueprint: stepBlueprint, stepResults,
+      });
+    });
+  },
+
+  cancelStepping: () => {
+    set({
+      stepping: false,
+      stepBlueprint: null,
+      stepRunId: null,
+      stepResults: [],
+      stepDescriptions: [],
+      currentStepIndex: -1,
     });
   },
 }));
