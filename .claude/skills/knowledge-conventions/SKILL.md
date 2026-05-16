@@ -1,69 +1,122 @@
 ---
-name: knowledge-conventions
-description: "开发规范：编码约定、命名规则、架构决策、项目特定规则。经代码验证，由 skill-auto-updater 聚合。"
-_scanned:
-  commitHash: "4db35f24f89dda0c11aa6aad83ba7bb7f8df368a"
-  scannedAt: "2026-05-06T00:00:00.000Z"
-  branch: "master"
+_scanned.commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
 ---
 
-# Development Conventions
+# 开发规范
 
-> 贡献者: nasakim | 验证时间: 2026-05-06
+Top 7 conventions from incremental scan (commit 57e98c308c1cd0fc5693b3ebab5282836e02a241).
 
-**注意**：当前 conventions-nasakim.md 文件为空，暂无用户提交的规范。
+## 1. Zustand Store Pattern
 
-## 已发现的编码规范（从代码中提取）
+All client state uses Zustand with WebSocket sync pattern:
+- Export `useXxxStore` from `src/stores/xxx.ts`
+- State interface includes data + async actions + loading/error states
+- Get WebSocket client via `useWsConnection.getState().client`
+- Wrap event handlers with `wrapHandler()` for type safety
+- Store initialization in `src/lib/query-client.ts`
 
-### TypeScript/JavaScript 规范
-- **ESM 模块**：服务端使用 ESM (`"type": "module"`)
-- **__dirname 替代**：服务端用 `path.dirname(fileURLToPath(import.meta.url))` 替代 `__dirname`
-- **类型安全**：使用 TypeScript strict mode
-- **Zod 验证**：所有外部输入使用 Zod schema 验证
+## 2. Feature Directory Structure
 
-### 架构规范
-- **消息隔离**：所有 server 端的 Map 以 sessionId 为 key，防止跨会话串扰
-- **消息排队**：SDK 不支持打断，后端通过 `await streamDone` 排队消息
-- **Auth 边界**：只有 `/api/` 路径需要 Bearer auth，静态文件直接放行
+Each feature is self-contained under `src/features/`:
+```
+src/features/{feature-name}/
+  ├── index.tsx           # Main feature component (exports default)
+  ├── {Feature}Panel.tsx  # Feature-specific UI (if complex)
+  └── sub-components.tsx  # Supporting components
+```
+Feature components are routed in `src/app/routes.tsx` and rendered in layout.
 
-### 文件命名
-- **测试文件**：`tests/server/{module-name}.test.ts`
-- **类型文件**：`types.ts` 或 `{module}-types.ts`
-- **技能文件**：`.claude/skills/{skill-name}/SKILL.md`
+## 3. Server Handler Pattern
 
-### Git 规范
-- **Commit 消息**：使用 Co-Authored-By 标记 Claude 贡献
-- **分支策略**：master 主分支 + 功能分支
+Server modules in `server/` follow consistent patterns:
+- Handler files: `{module}-handler.ts` (e.g., `git-handler.ts`, `code-viewer-handler.ts`)
+- Store files: `{module}-store.ts` (e.g., `session-store.ts`, `settings-manager.ts`)
+- Engine files: `{module}-engine.ts` for business logic (e.g., `batch-engine.ts`, `smart-path-engine.ts`)
+- Use `createLogger()` from `./utils/logger.js` for logging
+- Database operations use `better-sqlite3` with prepared statements
 
-### 日志规范
-- **使用 utils/logger.ts**：统一日志接口
-- **日志级别**：debug, info, warn, error
+## 4. TypeScript Interface Exports
 
-## 待补充的规范
-- 参数校验规范（CODING_RULES.md）
-- 错误处理规范
-- SQL 编写规范
-- WebSocket 消息格式规范
+All modules export explicit TypeScript interfaces:
+- Server: define interfaces at top of handler files (e.g., `GitStatusResult`, `ListDirResult`)
+- Client: export interfaces from `src/types/` (e.g., `ChatSession`, `SmanSettings`)
+- Props: define `export interface XxxProps` for React components
+- Use JSDoc comments for complex types (e.g., `ContentBlock`, `StreamingBlock`)
 
-## 消息推送必须基于会话订阅精确路由
-> by nasakim | 验证: 2026-05
-✅ [已验证] server/index.ts:L146-214
-- 禁止遍历所有已认证客户端广播消息，必须通过 client↔session 双向映射精确定位接收者
-- 每条 WebSocket 消息只能发给订阅了对应会话的客户端，防止消息错发到其他标签页
-- 核心函数：`subscribeClientToSession`, `unsubscribeClientFromSession`, `getSessionClients`, `sendToSessionClients`
-- 客户端断开时必须双向清理映射，防止内存泄漏和幽灵订阅
+## 5. Async Error Handling
 
-## CLAUDE.md 精简原则：只保留框架，详情指向 skill
-> by nasakim | 验证: 2026-05
-✅ [已验证] CLAUDE.md (已从 622 行精简到约 200 行)
-- CLAUDE.md 定位：基础信息、构建/测试方法、不知道就无法继续的关键信息、特别声明
-- 具体项目信息（详细目录结构、API 列表、注意事项详解等）不内联，通过 skill 按需加载，CLAUDE.md 中仅指向对应 skill
-- 目标行数控制在 200 行左右，避免膨胀（曾有 622 行的教训）
+Consistent error handling patterns across codebase:
+- `try { ... } catch { /* silent or fallback */ }` for optional operations
+- `try { ... } catch (err: unknown) { const e = err as { code?: string }; ... }` for typed errors
+- Throw `Error` with code assignment: `throw Object.assign(new Error('msg'), { code: 'PATH_TRAVERSAL' })`
+- Server handlers wrap errors in try-catch and return via WebSocket
+- Client stores set `error: string | null` in state for UI display
 
-## 设计哲学：大模型越强，产品自动变强
-> by nasakim | 验证: 2026-05
-✅ [已验证] server/claude-session.ts:L312,324,359
-- 不搞强制的计数、阈值、降级机制等硬编码兜底，只通过提示词（user prompt）说清楚期望的执行逻辑
-- 信任 LLM 的判断能力，AUTO 模式下如果用户搞不定会自己关掉
-- 用户 prompt 修改行为指令放 user prompt（`[Sman 行为要求]`区块），不动 system prompt
-- AUTO 模式规则覆盖所有 skill 中的"等用户确认"要求
+## 6. 常量数组国际化模式
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] src/types/settings.ts:WEB_SEARCH_PROVIDER_OPTIONS
+
+所有用户可见的常量数组必须使用 `labelKey` 模式，禁止硬编码中文：
+
+**❌ 错误示例**（当前代码待修复）：
+```typescript
+// src/types/settings.ts
+export const WEB_SEARCH_PROVIDER_OPTIONS = [
+  { value: 'baidu', label: '百度搜索', description: '百度 AI 搜索 API' },
+  { value: 'brave', label: 'Brave Search', description: 'API Key 搜索引擎' },
+];
+```
+
+**✅ 正确示例**（已在 smart-paths/index.tsx 使用）：
+```typescript
+const STATUS_CONFIG = {
+  draft: { labelKey: 'smartpath.status.draft', variant: 'secondary' },
+  running: { labelKey: 'smartpath.executing', variant: 'default' },
+};
+
+// 渲染时
+<Badge>{t(sc.labelKey)}</Badge>
+```
+
+**改造要点**：
+- 常量定义用 `labelKey` 存储 i18n key
+- 组件内调用 `t(labelKey)` 渲染
+- 搜索替换时要覆盖所有常量文件（如 `src/types/`）
+- 非设置页面（Git、CodeViewer）也不能遗漏
+
+## 7. 国际化函数调用约束
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] CLAUDE.md:多语言规范
+
+- **用户界面文本**：禁止硬编码，必须通过 `t()` 函数
+- **日志/调试信息**：可硬编码（开发者可见，非用户界面）
+- **模块顶层禁止**：不能在模块顶层调用 `t()`（locale 未初始化）
+- **动态拼接**：翻译文件用完整句子 + 参数插值，禁止拼接片段
+
+**错误示例**：
+```typescript
+// ❌ 模块顶层调用
+const MENU_ITEMS = [
+  { label: t('menu.new'), key: 'new' }
+];
+
+// ❌ 动态拼接
+t('file.count') + ': ' + count
+```
+
+**正确示例**：
+```typescript
+// ✅ 常量用 labelKey
+const MENU_ITEMS = [
+  { labelKey: 'menu.new', key: 'new' }
+];
+{MENU_ITEMS.map(item => <MenuItem>{t(item.labelKey)}</MenuItem>)}
+
+// ✅ 翻译文件用参数插值
+// zh-CN.json: "file.count": { "text": "共 {count} 个文件" }
+t('file.count', { count })
+```
+
+## References
+
+See `references/conventions.md` for detailed examples and rationale.

@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL,
   rating INTEGER,
   created_at TEXT NOT NULL,
-  completed_at TEXT
+  completed_at TEXT,
+  deadline TEXT
 );
 ```
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 | rating | INTEGER | YES | Collaboration rating (1-5) |
 | created_at | TEXT | NO | Task creation timestamp |
 | completed_at | TEXT | YES | Task completion timestamp |
+| deadline | TEXT | YES | Task timeout deadline |
 
 ## Indexes
 None (primary key lookup)
@@ -46,6 +48,8 @@ None
 - Agent matchmaking: helper/requester pairing
 - Rating system: post-task quality feedback
 - Active tasks: `status IN ('chatting', 'matched')`
+- ⚠️ **MIGRATION**: Added `deadline` column for task timeout tracking
+- ⚠️ **MIGRATION**: Added `feedback` column for post-task text feedback (not in legacy DDL)
 
 ## Source File
 `/Users/nasakim/projects/sman/server/stardom/stardom-store.ts`

@@ -1,45 +1,18 @@
-# Smart Path Engine (server/smart-path-engine.ts)
+# Smart Path Engine Reference
 
-Executes "Earth Path" workflows step-by-step with result passing.
+> Earth Path step-by-step execution engine with orchestration
 
-## Path Format
+## Purpose
+Execute multi-step automated workflows with step-by-step UI, result editing, and progress tracking.
 
-Markdown file with frontmatter + steps:
-```yaml
-name: "Daily Deploy"
-steps:
-  - name: "Run tests"
-    prompt: "Run all tests and report failures"
-  - name: "Build"
-    prompt: "Build the project"
-```
+## Key Changes (v26.517.1)
+**MAJOR REFACTOR**: Split monolithic execution into three methods:
+1. `orchestrate()`: Analyze path, prepare steps, generate blueprint
+2. `runStep(stepId)`: Execute single step with LLM
+3. `finalize()`: Generate final report and cleanup
 
-## Execution Model
-
-**Step-by-step**: Each step completes before next starts
-**Result passing**: Previous step's output becomes context for next
-**Manual approval**: User can approve/reject each step
-**Rerun from step**: Can jump to any step and resume
-
-## Key Methods
-
-- `executePath()`: Run path from beginning
-- `executeStep()`: Run single step
-- `rerunFromStep()`: Jump to step and continue
-
-## Persistence
-
-Paths stored as files in `{workspace}/.sman/paths/{pathId}/`
-Run history in `runs/` directory
-
-## Report Generation
-
-After execution, generates markdown report with:
-- Step results
-- Output summaries
-- Artifacts generated
-- Total execution time
-
-## Important
-
-Paths are version-controlled (git). Team can share and collaborate on workflows.
+## Key Files
+- **server/smart-path-engine.ts**: Core execution engine (orchestrate/runStep/finalize)
+- **server/smart-path-store.ts**: SQLite storage for paths/runs/references
+- **src/stores/smart-path.ts**: Frontend state management
+- **src/features/smart-paths/index.tsx**: Step-by-step execution UI

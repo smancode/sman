@@ -88,3 +88,37 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 - ✅ technical-nasakim.md — 已清理（4 个条目已处理）
 
 **下次扫描**：增量更新模式（检查 commit hash 变更）
+
+### 2026-05-17 — 增量更新
+**Commit**: 57e98c308c1cd0fc5693b3ebab5282836e02a241
+**Mode**: 增量更新（自上次扫描 4db35f24f89dda0c11aa6aad83ba7bb7f8df368a）
+**规模**: 大型项目（3923 源码文件），分 4 轮扫描
+
+**Project Knowledge Skills 更新**：
+- ✅ project-structure — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ project-apis — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ project-external-calls — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ knowledge-conventions — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ knowledge-technical — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ knowledge-business — 已更新（commitHash: 4db35f2 → 57e98c3）
+- ✅ database-schema — 已更新（commitHash: 4db35f2 → 57e98c3）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ knowledge-business — 已聚合（新增 10 个知识点，来源：nasakim）
+- ✅ knowledge-conventions — 已聚合（新增 2 个知识点，来源：nasakim）
+- ✅ knowledge-technical — 已聚合（新增 7 个知识点，来源：nasakim）
+
+**知识源文件清理**：
+- ✅ business-nasakim.md — 已清理（10 个条目已处理）
+- ✅ conventions-nasakim.md — 已清理（7 个条目已处理）
+- ✅ technical-nasakim.md — 已清理（8 个条目已处理）
+
+**关键发现**：
+- ⭐ NEW: Hub 多 Agent 协作平台
+- ⭐ MAJOR REFACTOR: Smart Path 逐步执行工作流
+- ⭐ NEW: Chatbot 多 Bot 会话隔离与并发控制
+- ⭐ NEW: TanStack Query 集成
+- ⚠️ MIGRATION: chatbot_sessions.bot_label 字段（向后兼容）
+- ⚠️ MIGRATION: stardom_tasks.deadline/feedback 字段（向后兼容）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）

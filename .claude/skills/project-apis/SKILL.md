@@ -4,8 +4,8 @@ name: API 端点目录
 description: smanbase API endpoints catalog. Consult when modifying or adding endpoints.
 category: api
 _scanned:
-  commitHash: "4db35f24f89dda0c11aa6aad83ba7bb7f8df368a"
-  scannedAt: "2026-05-06T00:00:00.000Z"
+  commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
+  scannedAt: "2026-05-17T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -21,17 +21,16 @@ _scanned:
 | Type | Direction | Description |
 |------|-----------|-------------|
 | `session.create` | Client→Server | Create session (params: workspace) |
-| `session.list` | Client→Server | List all sessions |
+| `session.list` | Client→Server | List all sessions (includes bot sessions with mode) |
 | `session.delete` | Client→Server | Delete session (params: sessionId) |
 | `session.history` | Client→Server | Get session history (params: sessionId) |
 | `session.preheat` | Client→Server | Preheat session (lazy init) |
 | `session.updateLabel` | Client→Server | Update label (params: sessionId, label) |
 | `session.created` | Server→Client | Session created event |
-| `session.list` | Server→Client | Session list response |
+| `session.list` | Server→Client | Session list response (local + bot sessions) |
 | `session.deleted` | Server→Client | Session deleted event |
-| `session.history` | Server→Client | Session history response |
+| `session.history` | Server→Client | Session history response (with token usage) |
 | `session.labelUpdated` | Server→Client | Label updated broadcast |
-| `session.chatbotCreated` | Server→Client | Chatbot session created broadcast |
 
 ## Chat
 
@@ -72,7 +71,7 @@ _scanned:
 | `skills.list` | Client→Server | List all global skills |
 | `skills.list` | Server→Client | Skills list response |
 | `skills.listProject` | Client→Server | List project skills (params: sessionId) |
-| `skills.listProject` | Server→Client | Project skills response |
+| `skills.listProject` | Server→Client | Project skills response (with paths) |
 
 ## Cron Tasks
 
@@ -80,11 +79,11 @@ _scanned:
 |------|-----------|-------------|
 | `cron.workspaces` | Client→Server | Get all workspaces |
 | `cron.workspaces` | Server→Client | Workspaces list |
-| `cron.skills` | Client→Server | Get skills for workspace (params: workspace) |
-| `cron.skills` | Server→Client | Skills list (with workspace) |
+| `cron.skills` | Client→Server | Get skills for workspace (params: workspace, cached) |
+| `cron.skills` | Server→Client | Skills list (with cronExpression) |
 | `cron.list` | Client→Server | List cron tasks |
-| `cron.list` | Server→Client | Cron tasks list |
-| `cron.create` | Client→Server | Create cron task |
+| `cron.list` | Server→Client | Cron tasks list (with latestRun, nextRunAt) |
+| `cron.create` | Client→Server | Create cron task (params: workspace, skillName, cronExpression) |
 | `cron.created` | Server→Client | Cron task created |
 | `cron.update` | Client→Server | Update cron task (params: taskId, updates) |
 | `cron.updated` | Server→Client | Cron task updated |
@@ -95,8 +94,7 @@ _scanned:
 | `cron.runs` | Client→Server | List cron runs (params: taskId, limit?) |
 | `cron.runs` | Server→Client | Cron runs list |
 | `cron.scan` | Client→Server | Scan workspace for crontab.md files |
-| `cron.scanned` | Server→Client | Scan results (created, updated, deleted) |
-| `cron.runStatusChanged` | Server→Client | Run status changed broadcast |
+| `cron.scanned` | Server→Client | Scan results (created, updated, deleted, tasks) |
 | `cron.changed` | Server→Client | Cron task changed broadcast |
 
 ## Batch Tasks
@@ -108,24 +106,30 @@ _scanned:
 | `batch.get` | Client→Server | Get batch task (params: taskId) |
 | `batch.get` | Server→Client | Batch task details |
 | `batch.create` | Client→Server | Create batch task (params: workspace, skillName, mdContent, execTemplate) |
-| `batch.create` | Server→Client | Batch task created |
+| `batch.created` | Server→Client | Batch task created |
 | `batch.update` | Client→Server | Update batch task (params: taskId, updates) |
-| `batch.update` | Server→Client | Batch task updated |
+| `batch.updated` | Server→Client | Batch task updated |
 | `batch.delete` | Client→Server | Delete batch task (params: taskId) |
-| `batch.delete` | Server→Client | Batch task deleted |
-| `batch.generate` | Client→Server | Generate batch tasks (params: taskSpec) |
-| `batch.generate` | Server→Client | Generated tasks (with validation) |
-| `batch.test` | Client→Server | Test single task (params: task, workspace) |
-| `batch.test` | Server→Client | Test result (with output) |
-| `batch.save` | Client→Server | Save batch tasks (params: name, workspace, tasks) |
-| `batch.save` | Server→Client | Batch saved |
-| `batch.execute` | Client→Server | Run batch tasks (params: batchId) |
-| `batch.pause` | Client→Server | Pause batch (params: batchId) |
-| `batch.resume` | Client→Server | Resume batch (params: batchId) |
-| `batch.cancel` | Client→Server | Cancel batch (params: batchId) |
-| `batch.items` | Client→Server | List batch items (params: batchId) |
+| `batch.deleted` | Server→Client | Batch task deleted |
+| `batch.generate` | Client→Server | Generate execution code (params: taskId) |
+| `batch.generated` | Server→Client | Generated code |
+| `batch.test` | Client→Server | Test single task (params: taskId) |
+| `batch.tested` | Server→Client | Test result (with output) |
+| `batch.save` | Client→Server | Save batch tasks to disk (params: taskId) |
+| `batch.saved` | Server→Client | Batch saved |
+| `batch.execute` | Client→Server | Run batch tasks (params: taskId) |
+| `batch.started` | Server→Client | Batch execution started |
+| `batch.pause` | Client→Server | Pause batch (params: taskId) |
+| `batch.paused` | Server→Client | Batch paused |
+| `batch.resume` | Client→Server | Resume batch (params: taskId) |
+| `batch.resumed` | Server→Client | Batch resumed |
+| `batch.cancel` | Client→Server | Cancel batch (params: taskId) |
+| `batch.cancelled` | Server→Client | Batch cancelled |
+| `batch.items` | Client→Server | List batch items (params: taskId, status?, offset?, limit?) |
 | `batch.items` | Server→Client | Batch items list |
-| `batch.retry` | Client→Server | Retry failed tasks (params: batchId) |
+| `batch.retry` | Client→Server | Retry failed tasks (params: taskId) |
+| `batch.retrying` | Server→Client | Batch retry started |
+| `batch.completed` | Server→Client | Batch completed broadcast |
 | `batch.progress` | Server→Client | Batch progress broadcast |
 
 ## Smart Paths (Earth Paths)
@@ -133,14 +137,22 @@ _scanned:
 | Type | Direction | Description |
 |------|-----------|-------------|
 | `smartpath.list` | Client→Server | List paths (params: workspaces[]) |
-| `smartpath.list` | Server→Client | Paths list |
-| `smartpath.create` | Client→Server | Create path (params: name, workspace, steps) |
-| `smartpath.create` | Server→Client | Path created |
+| `smartpath.list` | Server→Client | Paths list (with nextRunAt) |
+| `smartpath.create` | Client→Server | Create path (params: name, description?, workspace, steps) |
+| `smartpath.created` | Server→Client | Path created |
 | `smartpath.update` | Client→Server | Update path (params: pathId, workspace, ...updates) |
-| `smartpath.update` | Server→Client | Path updated |
+| `smartpath.updated` | Server→Client | Path updated (with nextRunAt) |
 | `smartpath.delete` | Client→Server | Delete path (params: pathId, workspace) |
-| `smartpath.delete` | Server→Client | Path deleted |
-| `smartpath.run` | Client→Server | Run path (params: pathId, workspace, input?) |
+| `smartpath.deleted` | Server→Client | Path deleted |
+| `smartpath.abort` | Client→Server | Abort running path (params: pathId) |
+| `smartpath.aborted` | Server→Client | Path aborted |
+| `smartpath.run` | Client→Server | Run path (params: pathId, workspace, args?) |
+| `smartpath.running` | Server→Client | Path running |
+| `smartpath.completed` | Server→Client | Path completed broadcast |
+| `smartpath.failed` | Server→Client | Path failed broadcast |
+| `smartpath.stepExecutionProgress` | Server→Client | Step execution progress (delta) |
+| `smartpath.stepExecutionResult` | Server→Client | Step execution result |
+| `smartpath.progress` | Server→Client | Path progress (state, step, message) |
 | `smartpath.runs` | Client→Server | Get run history (params: pathId, workspace) |
 | `smartpath.runs` | Server→Client | Runs list |
 | `smartpath.report` | Client→Server | Get report (params: pathId, workspace, fileName) |
@@ -148,14 +160,20 @@ _scanned:
 | `smartpath.references` | Client→Server | Get references (params: pathId, workspace) |
 | `smartpath.references` | Server→Client | References list |
 | `smartpath.reference.read` | Client→Server | Read reference file (params: pathId, workspace, fileName) |
-| `smartpath.reference.read` | Server→Client | File content |
+| `smartpath.reference.content` | Server→Client | File content |
 | `smartpath.generateStep` | Client→Server | AI generate/execute step (params: userInput, workspace, previousSteps, execute?, pathId?, stepIndex?) |
-| `smartpath.scheduledRun` | Server→Client | Scheduled run started broadcast |
+| `smartpath.stepGenerated` | Server→Client | Step generated (generatedContent) |
+| `smartpath.stepExecutionCompleted` | Server→Client | Step executed (result) |
+| `smartpath.orchestrate` | Client→Server | Orchestrate only (params: pathId, workspace, args?) |
+| `smartpath.orchestrated` | Server→Client | Orchestration complete (blueprint, runId) |
+| `smartpath.runStep` | Client→Server | Run single step (params: pathId, workspace, runId, blueprint, stepIndex, priorResults?, args?) |
+| `smartpath.finalize` | Client→Server | Finalize run (params: pathId, workspace, runId, blueprint, stepResults) |
 
-## Stardom
+## Stardom (Collaboration)
 
 | Type | Direction | Description |
 |------|-----------|-------------|
+| `stardom.*` | Client→Server | Forwarded to Stardom bridge (if configured) |
 | `stardom.status` | Server→Client | Connection status (connected/disconnected) |
 | `stardom.task.list` | Client→Server | Get collaboration tasks |
 | `stardom.task.list.update` | Server→Client | Tasks list update |
@@ -187,13 +205,28 @@ _scanned:
 
 | Type | Direction | Description |
 |------|-----------|-------------|
-| `chatbot.weixin.status` | Server→Client | Weixin bot connection status |
+| `chatbot.message` | Server→Server | Incoming bot message (WeCom/Feishu/Weixin → backend) |
 | `chatbot.weixin.qr.request` | Client→Server | Request QR code for login |
-| `chatbot.weixin.qr.response` | Server→Client | QR code response |
+| `chatbot.weixin.qr.response` | Server→Client | QR code response (qrcodeUrl, sessionKey) |
 | `chatbot.weixin.qr.poll` | Client→Server | Poll login status |
-| `chatbot.weixin.qr.status` | Server→Client | Login status update |
+| `chatbot.weixin.qr.status` | Server→Client | Login status update (status, connected?, message?) |
+| `chatbot.weixin.qr.error` | Server→Client | QR code error |
 | `chatbot.weixin.disconnect` | Client→Server | Disconnect Weixin bot |
 | `chatbot.weixin.getStatus` | Client→Server | Get current connection status |
+| `chatbot.weixin.status` | Server→Client | Weixin bot connection status |
+| `chatbot.listWorkspaceSkills` | Client→Server | List skills in workspace (params: workspace) |
+| `chatbot.listWorkspaceSkills` | Server→Client | Skills list |
+| `chatbot.getCollectFiles` | Client→Server | Get collect bot files (params: botProfileId) |
+| `chatbot.getCollectFiles` | Server→Client | Collect files list |
+
+## Hub (Multi-Agent Coordination)
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `hub:query` | Client→Server | Query recent broadcasts |
+| `hub:broadcasts` | Server→Client | Broadcasts response |
+| `hub:status` | Client→Server | Get hub connection status |
+| `hub:status` | Server→Client | Hub status response |
 
 ## Auth
 
@@ -215,7 +248,7 @@ _scanned:
 | `code.searchSymbols` | Server→Client | Search results |
 | `code.saveFile` | Client→Server | Save file (params: workspace, filePath, content) |
 | `code.saveFile` | Server→Client | Save result |
-| `code.searchFiles` | Client→Server | Search files (params: workspace, query) |
+| `code.searchFiles` | Client→Server | Search files (params: workspace, query, sourceOnly?) |
 | `code.searchFiles` | Server→Client | File search results |
 
 ## Git
@@ -246,7 +279,7 @@ _scanned:
 | `git.fetch` | Server→Client | Fetch result |
 | `git.remoteDiff` | Client→Server | Get remote diff (params: workspace) |
 | `git.remoteDiff` | Server→Client | Remote diff |
-| `git.generateCommit` | Client→Server | AI generate commit message (params: workspace, template?) |
+| `git.generateCommit` | Client→Server | AI generate commit message (params: workspace, template?, files?) |
 | `git.generateCommit` | Server→Client | Generated commit message |
 | `git.push` | Client→Server | Push to remote (params: workspace) |
 | `git.push` | Server→Client | Push result |
@@ -258,6 +291,8 @@ _scanned:
 | Path | Method | Description |
 |------|--------|-------------|
 | `/api/health` | GET | Health check |
+| `/api/hub-status` | GET | Hub diagnostics |
+| `/api/language` | GET | Get language setting |
 | `/api/searxng/test` | POST | Test SearXNG connectivity |
 | `/api/open-external` | POST | Open URL in system browser |
 | `/api/auth/token` | GET | Get auth token (loopback only) |
@@ -266,9 +301,9 @@ _scanned:
 
 | Path | Method | Description |
 |------|--------|-------------|
-| `/api/directory/read` | GET | Read directory contents |
-| `/api/directory/home` | GET | Get user home directory |
+| `/api/hub/*` | *ANY* | Hub proxy (forwards to sman-server) |
 | `/api/code/image` | GET | Serve image files from workspace |
+| `/api/directory/read` | GET | Read directory contents |
 
 ### Static Files
 
@@ -277,17 +312,21 @@ _scanned:
 | `/` | Frontend static files (production) |
 | `/*` | SPA fallback |
 
-## Error
+## Error Reporting
 
 | Type | Direction | Description |
 |------|-----------|-------------|
+| `error.report` | Client→Server | Report error to hub or local file |
+| `error.report.ack` | Server→Client | Error report acknowledgment |
 | `error` | Server→Client | Generic error (params: error) |
 
 ## Notes
-- All WebSocket messages require a `type` field
-- Auth: First message must be `auth.verify` with Bearer token
-- Broadcast: Some messages (like `session.labelUpdated`) are sent to subscribed clients only
-- Session isolation: Session-specific messages are sent to subscribed clients to avoid cross-session leakage
-- Backpressure: Streaming messages (`chat.delta`, `batch.progress`) may be dropped when client buffer is full
-- Cron scan: Auto-discovers Skills with `crontab.md` files in workspaces
-- SmartPath steps: Execution creates ephemeral sessions (not persisted to SQLite)
+- **Protocol**: WebSocket messages are JSON with `type` field
+- **Auth**: First message must be `auth.verify` with Bearer token from settings
+- **Session isolation**: Session-specific messages sent to subscribed clients only (multi-tab support)
+- **Bot sessions**: Bot sessions (WeCom/Feishu/Weixin) include `botLabel` and `botMode` (full/query/collect)
+- **Backpressure**: Streaming messages (`chat.delta`, `batch.progress`) may be dropped when client buffer is full
+- **Cron scan**: Auto-discovers Skills with `crontab.md` files in workspaces
+- **SmartPath execution**: Steps create ephemeral sessions (not persisted to SQLite)
+- **Path commands**: `/pathName` syntax in chat triggers path execution
+- **Stardom**: All `stardom.*` messages forwarded to bridge if hub configured

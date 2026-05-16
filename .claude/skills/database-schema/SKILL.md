@@ -1,11 +1,11 @@
 ---
 id: database-schema
 name: 数据库全景知识
-description: 数据库全景知识（首次扫描）。包含核心表结构、关联关系、索引策略。
+description: Database schema knowledge (incremental scan). Core tables, relationships, and index strategies.
 category: database
 _scanned:
-  commitHash: "4db35f24f89dda0c11aa6aad83ba7bb7f8df368a"
-  scannedAt: "2026-05-06T00:00:00.000Z"
+  commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
+  scannedAt: "2026-05-17T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -14,10 +14,10 @@ _scanned:
 Sman uses SQLite (better-sqlite3) as the primary database engine, with database files stored in `~/.sman/sman.db`. The system employs WAL (Write-Ahead Logging) mode for better concurrency and crash recovery.
 
 - **Engine**: SQLite 3 (better-sqlite3)
-- **Table Count**: 15 core tables across 7 stores
-- **Key Relationships**: Sessions → Messages (CASCADE DELETE), Batch Tasks → Items (CASCADE DELETE), Cron Tasks → Runs (CASCADE DELETE)
+- **Table Count**: 18+ core tables across 8 stores
+- **Key Relationships**: Sessions → Messages (CASCADE DELETE), Batch Tasks → Items (CASCADE DELETE), Cron Tasks → Runs (CASCADE DELETE), Chatbot Sessions → Bot Profile (foreign key)
 
-## Core Tables
+## Core Tables (Top 15)
 
 | Table | Columns | Purpose | Reference File |
 |-------|---------|---------|----------------|
@@ -28,14 +28,14 @@ Sman uses SQLite (better-sqlite3) as the primary database engine, with database 
 | `cron_tasks` | 8 | Cron task definitions (workspace, skill, expression, source) | `server/cron-task-store.ts` |
 | `cron_runs` | 7 | Cron execution records (status, timing, error tracking) | `server/cron-task-store.ts` |
 | `chatbot_users` | 3 | Chatbot user state (current workspace, last active) | `server/chatbot/chatbot-store.ts` |
-| `chatbot_sessions` | 6 | Chatbot session mapping (user_key → workspace → session_id) | `server/chatbot/chatbot-store.ts` |
+| `chatbot_sessions` | 7 | Chatbot session mapping (user_key → workspace → session_id, bot_label) | `server/chatbot/chatbot-store.ts` |
 | `chatbot_workspaces` | 3 | Registered workspace paths for chatbot access | `server/chatbot/chatbot-store.ts` |
 | `knowledge_extraction_progress` | 4 | Incremental knowledge extraction tracking | `server/knowledge-extractor-store.ts` |
+| `hub_broadcasts` | 4 | Hub broadcast messages (title, body, created_at) | `server/broadcast-store.ts` |
 | `stardom_identity` | 5 | Local agent identity registration | `server/stardom/stardom-store.ts` |
-| `stardom_tasks` | 10 | Multi-agent task collaboration (direction, status, rating) | `server/stardom/stardom-store.ts` |
+| `stardom_tasks` | 11 | Multi-agent task collaboration (direction, status, rating, deadline) | `server/stardom/stardom-store.ts` |
 | `stardom_chat_messages` | 4 | Chat messages for agent collaboration | `server/stardom/stardom-store.ts` |
-| `stardom_learned_routes` | 5 | Capability-to-agent routing cache | `server/stardom/stardom-store.ts` |
-| `stardom_pair_history` | 6 | Agent collaboration history (task count, ratings) | `server/stardom/stardom-store.ts` |
+| `stardom_learned_routes` | 5 | Capability-to-agent routing cache with experience | `server/stardom/stardom-store.ts` |
 
 ## Key Design Patterns
 
@@ -47,6 +47,8 @@ Sman uses SQLite (better-sqlite3) as the primary database engine, with database 
 6. **Token Tracking**: Sessions store `input_tokens` and `output_tokens` for cost monitoring
 7. **Retry Logic**: Batch items track `retries` count for failure recovery
 8. **Foreign Keys**: All stores enable `PRAGMA foreign_keys = ON`
+9. **Multi-Bot Support**: Chatbot sessions use `bot_label` column to distinguish different bot profiles
+10. **Hub Integration**: Broadcasts stored locally for offline viewing, synced from remote hub server
 
 ## Index Strategy
 
@@ -56,6 +58,7 @@ Sman uses SQLite (better-sqlite3) as the primary database engine, with database 
 - `cron_runs`: `idx_cron_runs_task`, `idx_cron_runs_started` (DESC)
 - `stardom_chat_messages`: `idx_chat_task` on task_id
 - `stardom_learned_routes`: `idx_learned_capability` on capability
+- `stardom_tasks`: `idx_tasks_requester`, `idx_tasks_helper`, `idx_tasks_status` (agent collaboration)
 
 ## Migration Strategy
 
@@ -63,9 +66,25 @@ All stores use runtime ALTER TABLE migrations with try-catch blocks:
 - Check column existence before adding
 - Log migration success/failure
 - Support zero-downtime upgrades
+- Examples: `chatbot_sessions.bot_label`, `sessions.input_tokens`, `messages.is_partial`
+
+## Recent Changes (Since Last Scan)
+
+⚠️ **NEW TABLES**:
+- `hub_broadcasts`: Local cache of hub broadcast messages (4 columns)
+- `stardom_pair_history`: Agent collaboration tracking (6 columns)
+- `stardom_cached_results`: Async task delivery cache (4 columns)
+
+⚠️ **MODIFIED TABLES**:
+- `chatbot_sessions`: Added `bot_label` column for multi-bot support
+- `stardom_tasks`: Added `deadline` column for task timeout tracking
+- `stardom_learned_routes`: Added `experience` column for agent expertise
+
+⚠️ **MIGRATION REQUIRED**: No breaking changes - all additions are backward compatible
 
 ## Notable Exclusions
 
 - **SmartPath**: File-based storage (`{workspace}/.sman/paths/{pathId}/`) - not in SQLite
 - **Settings**: File-based (`~/.sman/config.json`) - not in SQLite
 - **Registry**: File-based (`~/.sman/registry.json`) - not in SQLite
+- **Hub Remote Server**: Separate service with own SQLite database (`clients`, `reports`, `broadcasts`, `read_log`)
