@@ -174,15 +174,17 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
 
 // ── Step control bar (step-by-step mode) ──
 
-function StepControlBar({ stepIndex, isLastStep, onRedo, onContinue, onFinalize }: {
-  stepIndex: number; isLastStep: boolean;
+function StepControlBar({ stepIndex, isLastStep, hasResult, onRedo, onContinue, onFinalize }: {
+  stepIndex: number; isLastStep: boolean; hasResult?: boolean;
   onRedo: () => void; onContinue: () => void; onFinalize: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 mt-2">
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onRedo}>
-        <Play className="h-3 w-3" /> {t('smartpath.redoStep')}
-      </Button>
+      {hasResult && (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onRedo}>
+          <Play className="h-3 w-3" /> {t('smartpath.redoStep')}
+        </Button>
+      )}
       {isLastStep ? (
         <Button size="sm" className="h-7 text-xs gap-1" onClick={onFinalize}>
           <CheckCircle className="h-3 w-3" /> {t('smartpath.finalizeStep')}
@@ -246,6 +248,19 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
           </div>
         )}
 
+        {stepping && !executing && !stepResult && onContinue && (
+          <div className="mt-2">
+            <StepControlBar
+              stepIndex={index}
+              isLastStep={index === total - 1}
+              hasResult={false}
+              onRedo={() => onRedo?.()}
+              onContinue={() => onContinue?.()}
+              onFinalize={() => onFinalize?.()}
+            />
+          </div>
+        )}
+
         {stepping && stepResult && !executing && (
           <div className="mt-2 space-y-2">
             {step.deliveryCheck && stepDeliveryCheck && stepDeliveryCheck.passed === true && (
@@ -284,6 +299,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
             <StepControlBar
               stepIndex={index}
               isLastStep={index === total - 1}
+              hasResult={!!stepResult}
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
