@@ -3277,5 +3277,12 @@
   "smartpath.finalizeStep": { "text": "Finish", "context": "Finish last step button" },
   "smartpath.cancelStepExec": { "text": "Cancel", "context": "Cancel step-by-step execution button" },
   "smartpath.stepCompleted": { "text": "Completed", "context": "Step completed status" },
-  "smartpath.orchestrating": { "text": "Analyzing workflow...", "context": "Orchestrator analysis phase" }
+  "smartpath.orchestrating": { "text": "Analyzing workflow...", "context": "Orchestrator analysis phase" },
+  "smartpath.deliveryCheck": { "text": "Delivery Check", "context": "Step delivery check label" },
+  "smartpath.deliveryCheckPlaceholder": { "text": "Describe deliverable criteria (e.g., must generate complete runnable code)...", "context": "Delivery check input placeholder" },
+  "smartpath.deliveryCheckFailed": { "text": "Delivery check failed, manual intervention required", "context": "Delivery check failed alert" },
+  "smartpath.deliveryChecking": { "text": "Checking delivery...", "context": "Delivery check in progress" },
+  "smartpath.deliveryCheckPassed": { "text": "Delivery check passed", "context": "Delivery check passed" },
+  "smartpath.deliveryCheckRetry": { "text": "Delivery check failed, retrying...", "context": "Delivery check retry" },
+  "smartpath.deliveryCheckReason": { "text": "Reason: {reason}", "context": "Delivery check failure reason" }
 }

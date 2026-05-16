@@ -2165,6 +2165,12 @@ wss.on('connection', (ws: WebSocket) => {
             const rsPath = smartPathStore.get(rsPathId, rsWorkspace, rsAllWs);
             const rsActualWs = rsPath?.workspace || rsWorkspace;
 
+            let rsDeliveryCheck: string | undefined;
+            try {
+              const rsSteps = JSON.parse(rsPath?.steps || '[]') as Array<{ deliveryCheck?: string }>;
+              rsDeliveryCheck = rsSteps[rsStepIndex]?.deliveryCheck;
+            } catch { /* no delivery check */ }
+
             const rsResult = await smartPathEngine.runSingleStep(
               rsPathId, rsActualWs, rsRunId, rsBlueprint,
               rsStepIndex, rsBlueprint.stepPlans.length,
@@ -2172,9 +2178,16 @@ wss.on('connection', (ws: WebSocket) => {
               (stepIndex, delta) => {
                 broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: rsPathId, stepIndex, delta }));
               },
+              rsDeliveryCheck,
             );
 
-            broadcast(JSON.stringify({ type: 'smartpath.stepExecutionResult', pathId: rsPathId, stepIndex: rsStepIndex, result: rsResult }));
+            broadcast(JSON.stringify({
+              type: 'smartpath.stepExecutionResult', pathId: rsPathId, stepIndex: rsStepIndex,
+              result: rsResult.result,
+              deliveryCheckPassed: rsResult.deliveryCheckPassed,
+              deliveryCheckReason: rsResult.deliveryCheckReason,
+              retried: rsResult.retried,
+            }));
           } catch (err) {
             ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
           }

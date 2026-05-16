@@ -3277,5 +3277,12 @@
   "smartpath.finalizeStep": { "text": "完成", "context": "完成最后一步按钮" },
   "smartpath.cancelStepExec": { "text": "取消", "context": "取消逐步执行按钮" },
   "smartpath.stepCompleted": { "text": "已完成", "context": "步骤已完成状态" },
-  "smartpath.orchestrating": { "text": "主编分析中...", "context": "主编分析阶段提示" }
+  "smartpath.orchestrating": { "text": "主编分析中...", "context": "主编分析阶段提示" },
+  "smartpath.deliveryCheck": { "text": "交付检查", "context": "步骤交付检查标签" },
+  "smartpath.deliveryCheckPlaceholder": { "text": "描述交付物检查目标（如：必须生成完整可运行的代码）...", "context": "交付检查输入占位符" },
+  "smartpath.deliveryCheckFailed": { "text": "交付检查不通过，需要人工干预", "context": "交付检查失败告警" },
+  "smartpath.deliveryChecking": { "text": "交付检查中...", "context": "交付检查进行中" },
+  "smartpath.deliveryCheckPassed": { "text": "交付检查通过", "context": "交付检查通过" },
+  "smartpath.deliveryCheckRetry": { "text": "交付检查未通过，自动重试中...", "context": "交付检查重试" },
+  "smartpath.deliveryCheckReason": { "text": "原因：{reason}", "context": "交付检查失败原因" }
 }

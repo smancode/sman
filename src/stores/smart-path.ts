@@ -64,6 +64,7 @@ interface SmartPathState {
   stepRunId: string | null;
   stepResults: string[];
   stepDescriptions: string[];
+  stepDeliveryChecks: Array<{ passed?: boolean; reason?: string; retried?: boolean }>;
   currentStepIndex: number;
 
   startStepping: (pathId: string, workspace: string, args?: string) => Promise<void>;
@@ -96,6 +97,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   stepRunId: null,
   stepResults: [],
   stepDescriptions: [],
+  stepDeliveryChecks: [],
   currentStepIndex: -1,
 
   fetchPaths: async (workspaces) => {
@@ -370,7 +372,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     set({
       stepping: true, error: null,
       stepExecutionStream: {}, stepExecutionStatus: {},
-      stepResults: [], stepDescriptions: [],
+      stepResults: [], stepDescriptions: [], stepDeliveryChecks: [],
       currentStepIndex: -1,
     });
 
@@ -437,10 +439,14 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
           unsubProgress(); unsubResult(); unsubErr();
           const idx = data.stepIndex as number;
           const result = String(data.result || '');
+          const checkPassed = data.deliveryCheckPassed as boolean | undefined;
+          const checkReason = data.deliveryCheckReason as string | undefined;
+          const retried = data.retried as boolean | undefined;
           set((s) => ({
             stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'completed' as StepExecStatus },
             stepResults: [...s.stepResults, result],
             stepDescriptions: [...s.stepDescriptions, ''],
+            stepDeliveryChecks: [...s.stepDeliveryChecks, { passed: checkPassed, reason: checkReason, retried }],
           }));
           resolve();
         }
@@ -472,6 +478,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     set((s) => ({
       stepResults: priorResults,
       stepDescriptions: s.stepDescriptions.slice(0, stepIndex),
+      stepDeliveryChecks: s.stepDeliveryChecks.slice(0, stepIndex),
       stepExecutionStream: { ...s.stepExecutionStream, [stepIndex]: '' },
       stepExecutionStatus: { ...s.stepExecutionStatus, [stepIndex]: 'running' as StepExecStatus },
       currentStepIndex: stepIndex,
@@ -495,10 +502,14 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
           unsubProgress(); unsubResult(); unsubErr();
           const idx = data.stepIndex as number;
           const result = String(data.result || '');
+          const checkPassed = data.deliveryCheckPassed as boolean | undefined;
+          const checkReason = data.deliveryCheckReason as string | undefined;
+          const retried = data.retried as boolean | undefined;
           set((s) => ({
             stepExecutionStatus: { ...s.stepExecutionStatus, [idx]: 'completed' as StepExecStatus },
             stepResults: [...priorResults, result],
             stepDescriptions: [...s.stepDescriptions.slice(0, stepIndex), ''],
+            stepDeliveryChecks: [...s.stepDeliveryChecks.slice(0, stepIndex), { passed: checkPassed, reason: checkReason, retried }],
           }));
           resolve();
         }
@@ -581,6 +592,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       stepRunId: null,
       stepResults: [],
       stepDescriptions: [],
+      stepDeliveryChecks: [],
       currentStepIndex: -1,
     });
   },

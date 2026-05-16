@@ -141,6 +141,12 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
           <Textarea value={step.userInput} onChange={(e) => onChange({ ...step, userInput: e.target.value })}
             placeholder={t("smartpath.stepInput")} className="min-h-[56px] text-sm resize-none" />
 
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">{t('smartpath.deliveryCheck')}</Label>
+            <Input value={step.deliveryCheck || ''} onChange={(e) => onChange({ ...step, deliveryCheck: e.target.value })}
+              placeholder={t('smartpath.deliveryCheckPlaceholder')} className="h-6 text-xs" />
+          </div>
+
           {(executing || hasResult) && (
             <Card className="border border-muted-foreground/20">
               <CardContent className="p-3">
@@ -192,11 +198,12 @@ function StepControlBar({ stepIndex, isLastStep, onRedo, onContinue, onFinalize 
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
   stepping?: boolean;
   stepResult?: string; stepDesc?: string;
+  stepDeliveryCheck?: { passed?: boolean; reason?: string; retried?: boolean };
   onResultChange?: (v: string) => void;
   onDescChange?: (v: string) => void;
   onRedo?: () => void; onContinue?: () => void; onFinalize?: () => void;
@@ -241,6 +248,21 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
 
         {stepping && stepResult && !executing && (
           <div className="mt-2 space-y-2">
+            {step.deliveryCheck && stepDeliveryCheck && stepDeliveryCheck.passed === true && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 border border-green-500/20 text-green-600 text-xs">
+                <CheckCircle className="h-3.5 w-3.5" /> {t('smartpath.deliveryCheckPassed')}
+              </div>
+            )}
+            {step.deliveryCheck && stepDeliveryCheck && stepDeliveryCheck.passed === false && (
+              <div className="px-3 py-2 rounded bg-destructive/10 border border-destructive/30">
+                <div className="flex items-center gap-1.5 text-destructive text-xs font-semibold">
+                  <XCircle className="h-3.5 w-3.5" /> {t('smartpath.deliveryCheckFailed')}
+                </div>
+                {stepDeliveryCheck.reason && (
+                  <p className="text-xs text-destructive/80 mt-1">{t('smartpath.deliveryCheckReason').replace('{reason}', stepDeliveryCheck.reason)}</p>
+                )}
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
               <Input
@@ -469,6 +491,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const stepping = useSmartPathStore((s) => s.stepping);
   const stepResults = useSmartPathStore((s) => s.stepResults);
   const stepDescriptions = useSmartPathStore((s) => s.stepDescriptions);
+  const stepDeliveryChecks = useSmartPathStore((s) => s.stepDeliveryChecks);
   const startStepping = useSmartPathStore((s) => s.startStepping);
   const runStepContinue = useSmartPathStore((s) => s.runStepContinue);
   const runStepRedo = useSmartPathStore((s) => s.runStepRedo);
@@ -584,6 +607,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                 stepping={stepping && (isStepCompleted || isCurrentStep)}
                 stepResult={stepping ? stepResults[i] : undefined}
                 stepDesc={stepping ? stepDescriptions[i] : undefined}
+                stepDeliveryCheck={stepping ? stepDeliveryChecks[i] : undefined}
                 onResultChange={stepping ? (v) => updateStepResult(i, v) : undefined}
                 onDescChange={stepping ? (v) => updateStepDescription(i, v) : undefined}
                 onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}

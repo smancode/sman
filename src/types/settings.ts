@@ -199,6 +199,7 @@ export interface SmartPathStep {
   name?: string;
   userInput: string;
   generatedContent?: string;
+  deliveryCheck?: string;
 }
 
 export interface SmartPath {

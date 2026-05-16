@@ -10,6 +10,13 @@ import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SmartPathStep, StepPlan, PathBlueprint } from './types.js';
+
+export interface StepExecutionResult {
+  result: string;
+  deliveryCheckPassed?: boolean;
+  deliveryCheckReason?: string;
+  retried?: boolean;
+}
 import path from 'path';
 
 function isoNow(): string {
@@ -69,6 +76,7 @@ function buildOrchestratorPrompt(
   steps.forEach((s, i) => {
     parts.push(`步骤 ${i + 1}: ${s.name || '(未命名)'}`);
     parts.push(`  用户输入: ${s.userInput}`);
+    if (s.deliveryCheck) parts.push(`  交付检查: ${s.deliveryCheck}`);
   });
 
   parts.push('');
@@ -78,7 +86,7 @@ function buildOrchestratorPrompt(
 
 function buildStepPrompt(
   stepPlan: StepPlan, globalGoal: string, stepIndex: number, totalSteps: number,
-  priorKeyOutputs: string[], referencesContext: string, args?: string,
+  priorKeyOutputs: string[], referencesContext: string, args?: string, deliveryCheck?: string,
 ): string {
   const parts: string[] = [];
 
@@ -101,6 +109,13 @@ function buildStepPrompt(
 
   parts.push('[执行指令]');
   parts.push(stepPlan.revisedInput);
+
+  if (deliveryCheck) {
+    parts.push('');
+    parts.push('[交付检查 — 你的执行结果必须满足以下要求]');
+    parts.push(deliveryCheck);
+    parts.push('执行完成后请自行对照检查，确保交付物符合以上要求。');
+  }
 
   if (stepIndex === 0 && args) {
     parts.push(`\n用户参数为:{${args}}，请根据任务需要使用。`);
@@ -254,7 +269,8 @@ export class SmartPathEngine {
     priorResults: string[],
     args: string | undefined,
     onStepProgress: (stepIndex: number, delta: string) => void,
-  ): Promise<string> {
+    deliveryCheck?: string,
+  ): Promise<StepExecutionResult> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
@@ -265,6 +281,7 @@ export class SmartPathEngine {
       plan, blueprint.goal, stepIndex, totalSteps,
       priorResults, referencesContext,
       stepIndex === 0 ? args : undefined,
+      deliveryCheck,
     );
 
     const active = this.activeRuns.get(pathId);
@@ -293,7 +310,60 @@ export class SmartPathEngine {
         this.store.saveReference(workspace, pathId, ref.fileName, ref.content);
       }
 
-      return stepResult;
+      // 交付检查
+      if (deliveryCheck) {
+        const checkResult = await this.runDeliveryCheck(
+          stepResult, deliveryCheck, workspace, pathId, runId, stepIndex,
+          abortController, onStepProgress,
+        );
+
+        if (!checkResult.passed) {
+          // 自动重试一次
+          onStepProgress(stepIndex, '\n\n[交付检查未通过，自动重试...]\n');
+          const retrySessionId = `smartpath-ephemeral-${runId}-step-${stepIndex}-retry-${Date.now()}`;
+          this.sessionManager.createEphemeralSessionWithId(workspace, retrySessionId);
+
+          let retryContent = '';
+          try {
+            const retryPrompt = `${prompt}\n\n[重要提示：上次执行未通过交付检查]\n检查标准：${deliveryCheck}\n未通过原因：${checkResult.reason}\n请根据以上反馈重新执行，确保满足交付检查要求。`;
+            const retryReturned = await this.sessionManager.sendMessageForStep(
+              retrySessionId, retryPrompt, abortController,
+              (delta) => {
+                retryContent += delta;
+                onStepProgress(stepIndex, delta);
+              },
+              STEP_SYSTEM_PROMPT,
+            );
+            const retryResult = (retryReturned || retryContent).trim();
+
+            // 重试后再检查一次
+            const retryCheckResult = await this.runDeliveryCheck(
+              retryResult, deliveryCheck, workspace, pathId, runId, stepIndex,
+              abortController, onStepProgress,
+            );
+
+            const retryRefs = extractReferences(retryResult);
+            for (const ref of retryRefs) {
+              this.store.saveReference(workspace, pathId, ref.fileName, ref.content);
+            }
+
+            return {
+              result: retryResult,
+              deliveryCheckPassed: retryCheckResult.passed,
+              deliveryCheckReason: retryCheckResult.passed ? undefined : retryCheckResult.reason,
+              retried: true,
+            };
+          } finally {
+            this.sessionManager.closeV2Session(retrySessionId);
+            this.sessionManager.removeEphemeralSession(retrySessionId);
+          }
+        }
+      }
+
+      return {
+        result: stepResult,
+        deliveryCheckPassed: deliveryCheck ? true : undefined,
+      };
     } finally {
       this.sessionManager.closeV2Session(sessionId);
       this.sessionManager.removeEphemeralSession(sessionId);
@@ -372,10 +442,12 @@ export class SmartPathEngine {
         if (abortController.signal.aborted) throw new Error('用户中止执行');
 
         const plan = blueprint.stepPlans[i] || blueprint.stepPlans[0];
+        const stepDeliveryCheck = steps[i]?.deliveryCheck;
         const prompt = buildStepPrompt(
           plan, blueprint.goal, i, steps.length,
           keyOutputs, referencesContext,
           i === 0 ? args : undefined,
+          stepDeliveryCheck,
         );
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;
@@ -393,7 +465,36 @@ export class SmartPathEngine {
             STEP_SYSTEM_PROMPT,
           );
 
-          const stepResult = (stepReturned || stepFullContent).trim();
+          let stepResult = (stepReturned || stepFullContent).trim();
+
+          // 交付检查（自动执行模式）
+          if (stepDeliveryCheck) {
+            const checkResult = await this.runDeliveryCheck(
+              stepResult, stepDeliveryCheck, workspace, pathId, run.id, i,
+              abortController, onStepProgress,
+            );
+
+            if (!checkResult.passed) {
+              // 自动重试一次
+              onStepProgress(i, '\n\n[交付检查未通过，自动重试...]\n');
+              const retrySessionId = `smartpath-ephemeral-${run.id}-step-${i}-retry`;
+              this.sessionManager.createEphemeralSessionWithId(workspace, retrySessionId);
+              let retryContent = '';
+              try {
+                const retryPrompt = `${prompt}\n\n[重要提示：上次执行未通过交付检查]\n检查标准：${stepDeliveryCheck}\n未通过原因：${checkResult.reason}\n请根据以上反馈重新执行，确保满足交付检查要求。`;
+                const retryReturned = await this.sessionManager.sendMessageForStep(
+                  retrySessionId, retryPrompt, abortController,
+                  (delta) => { retryContent += delta; onStepProgress(i, delta); },
+                  STEP_SYSTEM_PROMPT,
+                );
+                stepResult = (retryReturned || retryContent).trim();
+              } finally {
+                this.sessionManager.closeV2Session(retrySessionId);
+                this.sessionManager.removeEphemeralSession(retrySessionId);
+              }
+            }
+          }
+
           stepResults.push(stepResult);
 
           const refs = extractReferences(stepResult);
@@ -471,6 +572,58 @@ export class SmartPathEngine {
     } finally {
       this.sessionManager.closeV2Session(sessionId);
       this.sessionManager.removeEphemeralSession(sessionId);
+    }
+  }
+
+  /** 交付检查：用 LLM 核对步骤结果是否满足交付标准 */
+  private async runDeliveryCheck(
+    stepResult: string,
+    deliveryCheck: string,
+    workspace: string,
+    pathId: string,
+    runId: string,
+    stepIndex: number,
+    abortController: AbortController,
+    onStepProgress: (stepIndex: number, delta: string) => void,
+  ): Promise<{ passed: boolean; reason?: string }> {
+    const checkSessionId = `smartpath-check-${runId}-step-${stepIndex}-${Date.now()}`;
+    this.sessionManager.createEphemeralSessionWithId(workspace, checkSessionId);
+
+    try {
+      const checkPrompt = [
+        '你是交付检查员。请严格核对以下执行结果是否满足交付检查标准。',
+        '',
+        '## 交付检查标准',
+        deliveryCheck,
+        '',
+        '## 步骤执行结果',
+        stepResult,
+        '',
+        '请判断结果是否满足交付标准。输出格式（严格遵守）：',
+        '- 如果满足：只输出 PASS',
+        '- 如果不满足：输出 FAIL: 后面跟具体不满足的原因',
+      ].join('\n');
+
+      let checkContent = '';
+      const checkReturned = await this.sessionManager.sendMessageForStep(
+        checkSessionId, checkPrompt, abortController,
+        (delta) => { checkContent += delta; },
+        '你是严格的交付检查员，只根据标准判断通过或不通过。',
+      );
+
+      const checkResponse = (checkReturned || checkContent).trim();
+
+      if (checkResponse.startsWith('FAIL:') || checkResponse.toUpperCase().startsWith('FAIL')) {
+        const reason = checkResponse.replace(/^FAIL:\s*/i, '').trim();
+        return { passed: false, reason: reason || '未通过交付检查' };
+      }
+
+      return { passed: true };
+    } catch {
+      return { passed: true };
+    } finally {
+      this.sessionManager.closeV2Session(checkSessionId);
+      this.sessionManager.removeEphemeralSession(checkSessionId);
     }
   }
 
