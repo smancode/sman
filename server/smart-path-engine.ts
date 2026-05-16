@@ -44,13 +44,19 @@ const STEP_SYSTEM_PROMPT = [
   '3. 能用 skill/tool 完成就用，不能的直接实现。',
   '4. 最后用「执行结果：」开头总结。',
   '5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。',
-  '',
-  '临时文件规则：',
-  '1. 每个步骤的临时输出必须放在 tmp/ 目录（相对于工作区根目录）',
-  '2. tmp/ 里的文件不在步骤间复用，每次运行开始时自动清空',
-  '3. 要跨步骤复用的文件必须保存到 references/ 目录，用 [REFERENCE:filename] 标记',
-  '4. 脚本、配置文件等可复用资源必须放到 references/，禁止放 tmp/',
 ].join('\n');
+
+function buildTmpRules(workspace: string, pathId: string): string {
+  const basePath = `.sman/paths/${pathId}`;
+  return [
+    '',
+    '临时文件规则：',
+    `1. 每个步骤的临时输出必须放在 ${basePath}/tmp/ 目录（相对于工作区根目录）`,
+    '2. tmp/ 里的文件不在步骤间复用，每次运行开始时自动清空',
+    `3. 要跨步骤复用的文件必须保存到 ${basePath}/references/ 目录，用 [REFERENCE:filename] 标记`,
+    `4. 脚本、配置文件等可复用资源必须放到 ${basePath}/references/，禁止放 tmp/`,
+  ].join('\n');
+}
 
 const SUMMARY_SYSTEM_PROMPT = `从步骤结果中提炼关键信息给后续步骤。只保留关键信息，去掉冗余，不超过200字。直接输出提炼结果。`;
 
@@ -87,6 +93,7 @@ function buildOrchestratorPrompt(
 function buildStepPrompt(
   stepPlan: StepPlan, globalGoal: string, stepIndex: number, totalSteps: number,
   priorKeyOutputs: string[], referencesContext: string, args?: string, deliveryCheck?: string,
+  workspace?: string, pathId?: string,
 ): string {
   const parts: string[] = [];
 
@@ -115,6 +122,10 @@ function buildStepPrompt(
     parts.push('[交付检查 — 你的执行结果必须满足以下要求]');
     parts.push(deliveryCheck);
     parts.push('执行完成后请自行对照检查，确保交付物符合以上要求。');
+  }
+
+  if (workspace && pathId) {
+    parts.push(buildTmpRules(workspace, pathId));
   }
 
   if (stepIndex === 0 && args) {
@@ -282,6 +293,7 @@ export class SmartPathEngine {
       priorResults, referencesContext,
       stepIndex === 0 ? args : undefined,
       deliveryCheck,
+      workspace, pathId,
     );
 
     const active = this.activeRuns.get(pathId);
@@ -448,6 +460,7 @@ export class SmartPathEngine {
           keyOutputs, referencesContext,
           i === 0 ? args : undefined,
           stepDeliveryCheck,
+          workspace, pathId,
         );
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;
