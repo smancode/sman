@@ -197,3 +197,16 @@ export interface SmartPathReference {
   fileName: string;
   updatedAt: string;
 }
+
+export interface StepPlan {
+  revisedInput: string;
+  roleDescription: string;
+  expectedOutputs: string;
+  dependenciesOnPrior: string;
+}
+
+export interface PathBlueprint {
+  goal: string;
+  stepPlans: StepPlan[];
+  modifications: Array<{ step: number; original: string; revised: string; reason: string }>;
+}

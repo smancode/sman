@@ -445,6 +445,16 @@ export class SmartPathStore {
     this.saveReference(ws, pathId, 'run.md', content);
   }
 
+  /** 清空并重建 tmp/ 目录 */
+  clearTmpDir(ws: string, pathId: string): void {
+    const tmpDir = path.join(this.pathDir(ws, pathId), 'tmp');
+    if (fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true });
+    }
+    fs.mkdirSync(tmpDir, { recursive: true });
+    this.log.info(`Cleared tmp dir: ${tmpDir}`);
+  }
+
   /** 只保留最近 MAX_RUNS 次执行记录，删除更早的 runs 和对应 reports */
   private cleanupOldRuns(ws: string, pathId: string, maxRuns = 5): void {
     try {

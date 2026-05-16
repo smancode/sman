@@ -9,26 +9,11 @@
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
-import type { SmartPathStep } from './types.js';
+import type { SmartPathStep, StepPlan, PathBlueprint } from './types.js';
 import path from 'path';
 
 function isoNow(): string {
   return new Date().toISOString();
-}
-
-// ── 类型 ──
-
-interface StepPlan {
-  revisedInput: string;
-  roleDescription: string;
-  expectedOutputs: string;
-  dependenciesOnPrior: string;
-}
-
-interface PathBlueprint {
-  goal: string;
-  stepPlans: StepPlan[];
-  modifications: Array<{ step: number; original: string; revised: string; reason: string }>;
 }
 
 // ── 常量 ──
