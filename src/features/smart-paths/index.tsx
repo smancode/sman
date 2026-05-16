@@ -174,24 +174,24 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
 
 // ── Step control bar (step-by-step mode) ──
 
-function StepControlBar({ stepIndex, isLastStep, hasResult, onRedo, onContinue, onFinalize }: {
-  stepIndex: number; isLastStep: boolean; hasResult?: boolean;
+function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, onContinue, onFinalize }: {
+  stepIndex: number; isLastStep: boolean; hasResult?: boolean; executing?: boolean;
   onRedo: () => void; onContinue: () => void; onFinalize: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 mt-2">
       {hasResult && (
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onRedo}>
-          <Play className="h-3 w-3" /> {t('smartpath.redoStep')}
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onRedo}>
+          {executing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} {t('smartpath.redoStep')}
         </Button>
       )}
       {isLastStep ? (
-        <Button size="sm" className="h-7 text-xs gap-1" onClick={onFinalize}>
-          <CheckCircle className="h-3 w-3" /> {t('smartpath.finalizeStep')}
+        <Button size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onFinalize}>
+          {executing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />} {t('smartpath.finalizeStep')}
         </Button>
       ) : (
-        <Button size="sm" className="h-7 text-xs gap-1" onClick={onContinue}>
-          {t('smartpath.continueStep')}
+        <Button size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onContinue}>
+          {executing ? <Loader2 className="h-3 w-3 animate-spin" /> : null} {executing ? t('smartpath.executing') : t('smartpath.continueStep')}
         </Button>
       )}
     </div>
@@ -254,6 +254,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               stepIndex={index}
               isLastStep={index === total - 1}
               hasResult={false}
+              executing={executing}
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
@@ -300,6 +301,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               stepIndex={index}
               isLastStep={index === total - 1}
               hasResult={!!stepResult}
+              executing={executing}
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
@@ -506,6 +508,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const running = useSmartPathStore((s) => s.running);
   const stepping = useSmartPathStore((s) => s.stepping);
   const stepResults = useSmartPathStore((s) => s.stepResults);
+  const anyStepExecuting = Object.values(stepExecutionStatus).some((s) => s === 'running');
   const stepDescriptions = useSmartPathStore((s) => s.stepDescriptions);
   const stepDeliveryChecks = useSmartPathStore((s) => s.stepDeliveryChecks);
   const startStepping = useSmartPathStore((s) => s.startStepping);
@@ -555,11 +558,14 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
         <div className="flex gap-1.5 shrink-0">
           <Button variant="outline" size="sm" onClick={onEdit} disabled={running || stepping}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
           {stepping ? (
-            <Button variant="outline" size="sm" onClick={() => cancelStepping(path.id)}>
+            <Button variant="outline" size="sm" disabled={anyStepExecuting} onClick={() => cancelStepping(path.id)}>
               {t('smartpath.cancelStepExec')}
             </Button>
           ) : !running && (
-            <Button variant="outline" size="sm" onClick={() => startStepping(path.id, path.workspace, path.defaultArgs)}>
+            <Button variant="outline" size="sm" onClick={async () => {
+              await startStepping(path.id, path.workspace, path.defaultArgs);
+              runStepContinue(path.id, path.workspace, path.defaultArgs).catch(() => {});
+            }}>
               <Play className="h-3.5 w-3.5 mr-1" /> {t('smartpath.stepExec')}
             </Button>
           )}
