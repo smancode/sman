@@ -42,7 +42,7 @@ if (!app.isPackaged) {
 }
 
 const isDev = !app.isPackaged;
-const DEFAULT_PORT = 5880;
+const DEFAULT_PORT = 5883;
 let backendPort = DEFAULT_PORT;
 
 // Build-time enterprise injection.
@@ -383,6 +383,10 @@ async function startServerInProcess(): Promise<void> {
   console.log('[Electron] process.resourcesPath:', process.resourcesPath);
 
   try {
+    // Signal to server that it's being imported by Electron, not run directly.
+    // Server checks this to skip its own server.listen() call.
+    process.env.SMAN_ELECTRON = '1';
+
     // Use file:// URL for dynamic import() — required on Windows
     const serverUrl = 'file:///' + serverPath.replace(/\\/g, '/');
     serverModule = await import(serverUrl);
@@ -404,7 +408,9 @@ async function startServerInProcess(): Promise<void> {
       const tryListen = (port: number, attempts: number) => {
         serverModule.server.listen(port, HOST, async () => {
           backendPort = port;
-          serverModule.actualPort = port;
+          if (typeof serverModule.setActualPort === 'function') {
+            serverModule.setActualPort(port);
+          }
           console.log(`[Electron] Server listening on ${HOST}:${port}`);
           console.log(`[Electron] Home: ${serverModule.homeDir}`);
           await ensureHubConfig(serverModule.homeDir);
@@ -475,6 +481,21 @@ function waitForFrontend(): Promise<void> {
       clearInterval(check);
       resolve();
     }, 30000);
+  });
+}
+
+// Single instance lock — prevent second instance from conflicting on port
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // User tried to run a second instance, focus the existing window
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
   });
 }
 

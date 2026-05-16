@@ -47,7 +47,7 @@ import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
 import { InitManager } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
-import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler, setActualPort } from './hub/index.js';
+import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler, setActualPort as _setActualPort } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { getClientId } from './utils/network.js';
 import { getServerBaseUrl, ensureServerBaseUrl } from './server-url.js';
@@ -2642,6 +2642,12 @@ async function setupOfficeSkills(): Promise<void> {
 export { shutdown as stopServer };
 export { server, homeDir };
 
+/** Set the actual port after listen resolves. Called by both server and Electron. */
+export function setActualPort(port: number): void {
+  actualPort = port;
+  _setActualPort(port);
+}
+
 /** Called by Electron's startServerInProcess() after listen().
  *  server/index.ts only calls initHub() inside the isMainModule block,
  *  which is false when loaded via dynamic import(). */
@@ -2727,11 +2733,12 @@ function buildStepSystemPrompt(): string {
   ].join('\n');
 }
 
-const isMainModule = !process.env.ELECTRON_RUN_AS_NODE &&
-                     (process as any).type === undefined &&
+const isMainModule = !process.env.SMAN_ELECTRON &&
+                     !process.env.ELECTRON_RUN_AS_NODE &&
                      (process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||
                       process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.js') ||
                       process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/index.js') ||
+                      process.argv[1]?.replace(/\\/g, '/').endsWith('dist/server/server/index.js') ||
                       process.argv[1]?.replace(/\\/g, '/').endsWith('app/index.js'));
 
 if (isMainModule) {
@@ -2759,7 +2766,6 @@ if (isMainModule) {
   const tryListen = (port: number, attempts: number) => {
     server.listen(port, HOST, () => {
       const resolved = (server.address() as any)?.port ?? port;
-      actualPort = resolved;
       setActualPort(resolved);
       if (resolved !== PORT) {
         log.warn(`Port ${PORT} in use, using ${resolved} instead`);

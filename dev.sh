@@ -33,35 +33,37 @@ fi
 HOME_DIR="${SMANBASE_HOME:-$HOME/.sman}"
 mkdir -p "$HOME_DIR"
 
-# ── 2. 端口冲突检测与清理 ──────────────────────────────────
+# ── 2. 端口检测 ──────────────────────────────────────────
 
-kill_port() {
+# Kill only our own stale dev processes (by command name), not production Sman
+kill_our_stale() {
   local port=$1
+  shift
   local pids=$(lsof -i :"$port" -sTCP:LISTEN -t 2>/dev/null | tr '\n' ' ')
-  if [ -n "$pids" ]; then
-    echo -e "${YELLOW}Port $port in use, sending SIGTERM to $pids...${NC}"
-    echo "$pids" | xargs kill -15 2>/dev/null
-    # Wait up to 5s for graceful shutdown
-    for i in $(seq 1 10); do
-      if ! lsof -i :"$port" -sTCP:LISTEN > /dev/null 2>&1; then
-        break
-      fi
-      sleep 0.5
-    done
-    # Force kill if still alive
-    local remaining=$(lsof -i :"$port" -sTCP:LISTEN -t 2>/dev/null | tr '\n' ' ')
-    if [ -n "$remaining" ]; then
-      echo -e "${RED}Force killing remaining $remaining...${NC}"
-      echo "$remaining" | xargs kill -9 2>/dev/null
-      sleep 0.3
-    fi
+  if [ -z "$pids" ]; then
+    return
   fi
+  for pid in $pids; do
+    local cmd=$(ps -p "$pid" -o comm= 2>/dev/null || true)
+    for match in "$@"; do
+      if echo "$cmd" | grep -qi "$match"; then
+        echo -e "${YELLOW}Killing stale dev process on port $port (pid=$pid, cmd=$cmd)${NC}"
+        kill -15 "$pid" 2>/dev/null || true
+        for i in $(seq 1 6); do
+          if ! kill -0 "$pid" 2>/dev/null; then break; fi
+          sleep 0.5
+        done
+        kill -9 "$pid" 2>/dev/null || true
+        return
+      fi
+    done
+  done
 }
 
 echo -e "${CYAN}Checking ports...${NC}"
-kill_port 5880
-kill_port 5881
-echo -e "${GREEN}Ports 5880 and 5881 are ready.${NC}"
+kill_our_stale 5880 tsx node
+kill_our_stale 5881 vite node
+echo -e "${GREEN}Ports checked.${NC}"
 
 # ── 3. 构建 ──────────────────────────────────────────
 
@@ -98,12 +100,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 启动后端 (5880)
+# 启动后端
 echo -e "${CYAN}[3/5] Starting backend on port 5880...${NC}"
 pnpm dev:server &
 BACKEND_PID=$!
 
-# 启动前端 Vite (5881)
+# 启动前端 Vite
 echo -e "${CYAN}[4/5] Starting frontend on port 5881...${NC}"
 pnpm dev &
 FRONTEND_PID=$!
