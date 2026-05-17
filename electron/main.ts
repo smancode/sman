@@ -211,6 +211,59 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('updater:install', async () => {
     if (!updateInfo) return;
+
+    // macOS: unsigned/ad-hoc-signed apps fail signature validation in quitAndInstall().
+    // Manually replace the app bundle from the cached update zip and restart.
+    if (process.platform === 'darwin') {
+      try {
+        const cachedDir = path.join(app.getPath('userData'), '..');
+        const shipItDir = path.join(cachedDir, 'com.smanbase.app.ShipIt');
+        const { readdir } = await import('fs/promises');
+        let entries: string[];
+        try {
+          entries = await readdir(shipItDir);
+        } catch {
+          entries = [];
+        }
+        // Find the update directory (random suffix)
+        const updateDir = entries
+          .filter(e => e.startsWith('update.'))
+          .map(e => path.join(shipItDir, e))
+          .find(p => { try { require('fs').statSync(path.join(p, 'Sman.app')); return true; } catch { return false; } });
+
+        if (!updateDir) {
+          // Fallback to standard quitAndInstall if we can't find the extracted app
+          autoUpdater.quitAndInstall();
+          return;
+        }
+
+        const newApp = path.join(updateDir, 'Sman.app');
+        const currentApp = app.getAppPath().replace(/\/Contents\/Resources\/app\.asar$/, '');
+        // For apps in /Applications, the path is /Applications/Sman.app
+        const installedApp = path.dirname(path.dirname(currentApp));
+        const targetApp = installedApp.endsWith('.app') ? installedApp : '/Applications/Sman.app';
+
+        const { execFileSync } = require('child_process');
+        // Ad-hoc sign the new app to ensure consistent signature state
+        try {
+          execFileSync('codesign', ['--force', '--deep', '--sign', '-', newApp], { timeout: 30000 });
+        } catch (e) {
+          console.warn('[updater] ad-hoc signing failed, proceeding anyway:', e);
+        }
+        // Remove old app and copy new one
+        execFileSync('rm', ['-rf', targetApp], { timeout: 10000 });
+        execFileSync('cp', ['-R', newApp, targetApp], { timeout: 60000 });
+        // Restart
+        app.relaunch({ execPath: path.join(targetApp, 'Contents', 'MacOS', 'Sman') });
+        app.exit(0);
+      } catch (e) {
+        console.error('[updater] macOS manual install failed:', e);
+        // Last resort fallback
+        autoUpdater.quitAndInstall();
+      }
+      return;
+    }
+
     autoUpdater.quitAndInstall();
   });
 

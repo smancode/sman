@@ -58,7 +58,9 @@ _V_MAJOR=$(date +%y)
 _V_MINOR=$((10#$(date +%m) * 100 + 10#$(date +%d)))
 _V_PATCH=$((10#$(date +%H)))
 DATE_VERSION="${_V_MAJOR}.${_V_MINOR}.${_V_PATCH}"
-info "设置版本号: ${DATE_VERSION}"
+# Save original version to restore after build
+_ORIGINAL_VERSION=$(node -e "console.log(require('./package.json').version)")
+info "设置版本号: ${DATE_VERSION} (原始: ${_ORIGINAL_VERSION})"
 node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${DATE_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 VERSION="${DATE_VERSION}"
 info "Sman v${VERSION} — macOS arm64 打包开始"
@@ -188,11 +190,11 @@ package_mac() {
   export CSC_IDENTITY_AUTO_DISCOVERY=false
 
   # 清理旧产物
-  rm -rf release/Sman-*.dmg release/Sman-*.dmg.blockmap release/mac release/*.yaml 2>/dev/null || true
+  rm -rf release/Sman-*.dmg release/Sman-*.zip release/Sman-*.dmg.blockmap release/mac release/*.yaml 2>/dev/null || true
 
-  # electron-builder 会根据 mac.target 配置自动打包 DMG
+  # electron-builder 同时打包 DMG（手动安装）和 ZIP（自动更新）
   # npmRebuild=false 因为我们已手动 rebuild
-  npx electron-builder --mac dmg --arm64
+  npx electron-builder --mac dmg zip --arm64
 
   ok "macOS 打包完成!"
 }
@@ -202,7 +204,6 @@ verify_output() {
   info "验证打包产物..."
 
   local installer=""
-  # electron-builder DMG 默认命名: Sman-{version}-arm64.dmg 或 Sman-{version}.dmg
   for f in release/Sman-*.dmg; do
     if [ -f "$f" ]; then
       installer="$f"
@@ -216,15 +217,32 @@ verify_output() {
     exit 1
   fi
 
-  local dmg_size
+  local zip_file=""
+  for f in release/Sman-*.zip; do
+    if [ -f "$f" ]; then
+      zip_file="$f"
+      break
+    fi
+  done
+
+  local dmg_size zip_size
   dmg_size=$(du -sh "$installer" | cut -f1)
+  zip_size=""
+  if [[ -n "$zip_file" ]]; then
+    zip_size=$(du -sh "$zip_file" | cut -f1)
+  fi
 
   echo ""
   echo "============================================================"
   echo -e "  ${GREEN}Sman v${VERSION} macOS arm64 打包成功!${NC}"
   echo "============================================================"
   echo ""
-  echo "  安装包: ${installer} (${dmg_size})"
+  echo "  DMG (手动安装): ${installer} (${dmg_size})"
+  if [[ -n "$zip_file" ]]; then
+    echo "  ZIP (自动更新): ${zip_file} (${zip_size})"
+  else
+    echo -e "  ${YELLOW}警告: 未找到 ZIP 包，自动更新将不可用${NC}"
+  fi
   echo ""
   echo "  安装方式:"
   echo "  1. 双击 DMG 文件"
@@ -266,6 +284,10 @@ main() {
   info "恢复 better-sqlite3 为 Node.js ABI..."
   npm rebuild better-sqlite3
   ok "better-sqlite3 已恢复为 Node.js ABI，dev.sh 可正常使用"
+
+  # Restore original version in package.json so git doesn't show diffs
+  node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${_ORIGINAL_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+  info "已恢复 package.json 版本号为 ${_ORIGINAL_VERSION}"
 }
 
 main "$@"

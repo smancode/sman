@@ -1,6 +1,6 @@
 {
   "name": "smanbase",
-  "version": "26.517.1",
+  "version": "26.517.18",
   "private": true,
   "type": "module",
   "main": "electron/dist/main/main.js",
@@ -188,6 +188,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64"
           ]

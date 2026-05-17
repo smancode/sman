@@ -50,7 +50,8 @@ _V_MAJOR=$(date +%y)
 _V_MINOR=$((10#$(date +%m) * 100 + 10#$(date +%d)))
 _V_PATCH=$((10#$(date +%H)))
 DATE_VERSION="${_V_MAJOR}.${_V_MINOR}.${_V_PATCH}"
-info "设置版本号: ${DATE_VERSION}"
+_ORIGINAL_VERSION=$(node -e "console.log(require('./package.json').version)")
+info "设置版本号: ${DATE_VERSION} (原始: ${_ORIGINAL_VERSION})"
 node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${DATE_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
 VERSION="${DATE_VERSION}"
 info "Sman v${VERSION} — Windows x64 打包开始"
@@ -217,6 +218,10 @@ main() {
   rebuild_native
   package_win
   verify_output
+
+  # Restore original version in package.json so git doesn't show diffs
+  node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='${_ORIGINAL_VERSION}';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+  info "已恢复 package.json 版本号为 ${_ORIGINAL_VERSION}"
 }
 
 main "$@"
