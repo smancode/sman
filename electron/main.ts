@@ -291,12 +291,16 @@ function registerIpcHandlers(): void {
     // Bypass by downloading the zip manually, then using our own install logic.
     if (process.platform === 'darwin') {
       try {
-        const feedUrl = (autoUpdater as any).updateInfoAndProvider?.provider?.configuration?.url;
-        const files: any[] = (info as any).files;
-        const zipFile = files?.find((f: any) => f.url?.toString().endsWith('.zip'));
-        if (!feedUrl || !zipFile) return;
+        // Resolve zip URL from feed URL + files info
+        const provider = (autoUpdater as any).updateInfoAndProvider?.provider;
+        const baseUrl: string | undefined = provider?.baseUrl?.href || provider?.configuration?.url;
+        const files: any[] = info.files;
+        const zipEntry = files?.find((f: any) => String(f.url).endsWith('.zip'));
+        if (!baseUrl || !zipEntry) return;
 
-        const zipUrl = new URL(zipFile.url.toString(), feedUrl).href;
+        // zipEntry.url is relative (e.g. "Sman-Setup-26.518.22.zip"), resolve against baseUrl
+        const zipUrl = new URL(String(zipEntry.url), baseUrl).href;
+        console.log('[updater] macOS manual download:', zipUrl);
         const { tmpdir } = await import('os');
         const { writeFileSync } = await import('fs');
         const zipPath = path.join(tmpdir(), `sman-update-${info.version}.zip`);
@@ -324,10 +328,6 @@ function registerIpcHandlers(): void {
 
   autoUpdater.on('error', (err) => {
     if (process.platform === 'darwin') return; // Squirrel.Mac signature errors expected for unsigned apps
-    mainWindow?.webContents.send('updater:error', { message: err?.message || 'Unknown error' });
-  });
-
-  autoUpdater.on('error', (err) => {
     mainWindow?.webContents.send('updater:error', { message: err?.message || 'Unknown error' });
   });
 
