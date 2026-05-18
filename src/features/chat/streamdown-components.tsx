@@ -124,9 +124,10 @@ export function applyCodeBlockCollapse(container: HTMLElement | null) {
 
 /**
  * React hook that applies code block collapse behavior to a container ref.
- * Uses a debounced MutationObserver to avoid DOM storm during streaming.
+ * @param streaming If true, keeps a debounced MutationObserver running for live updates.
+ *                  If false (static messages), only runs once on mount — no ongoing observer.
  */
-export function useCodeBlockCollapse<T extends HTMLElement = HTMLDivElement>() {
+export function useCodeBlockCollapse<T extends HTMLElement = HTMLDivElement>(streaming = false) {
   const ref = useRef<T>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,10 +135,12 @@ export function useCodeBlockCollapse<T extends HTMLElement = HTMLDivElement>() {
     const container = ref.current;
     if (!container) return;
 
-    // Initial pass
+    // Initial pass — always needed
     applyCodeBlockCollapse(container);
 
-    // Debounced observer: batch mutations and only apply collapse after streaming pauses
+    if (!streaming) return;
+
+    // Only for streaming: debounced observer to batch DOM mutations
     const observer = new MutationObserver(() => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -159,7 +162,7 @@ export function useCodeBlockCollapse<T extends HTMLElement = HTMLDivElement>() {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, []);
+  }, [streaming]);
 
   return ref;
 }

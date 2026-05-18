@@ -21,9 +21,9 @@ import { t, useLocale } from '@/locales';
 // key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
 const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
 
-// ── LazyMessage: IntersectionObserver-based lazy rendering ──
-// Renders a cheap placeholder until the message scrolls near the viewport.
-// Always renders the last N messages (user likely looking at recent content).
+// ── LazyMessage: deferred mounting — mount once when near viewport, never unmount ──
+// This preserves scroll height so scroll restoration works reliably.
+// Performance is handled by eliminating MutationObservers on static messages.
 const LAZY_ALWAYS_RENDER_COUNT = 6;
 const LAZY_ROOT_MARGIN = '800px 0px';
 
@@ -194,7 +194,7 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {/* Render messages — lazy load off-screen */}
+              {/* Render messages — deferred mounting */}
               {messages.map((msg, i) => (
                 <LazyMessage
                   key={msg.id}
@@ -324,7 +324,7 @@ const StreamingBlocksRenderer = memo(function StreamingBlocksRenderer({
 
 function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming: boolean }) {
   const codePlugin = useCodePlugin();
-  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>(isStreaming);
 
   if (!text.trim()) return null;
 
@@ -712,7 +712,6 @@ const ChatInputWrapper = memo(function ChatInputWrapper({
   disabled,
 }: {
   disabled: boolean;
-  onSend: (text: string, attachments?: unknown, targetAgentId?: unknown, media?: StagedMedia[]) => void;
 }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isEmpty = useChatStore((s) => s.messages.length === 0 && !s.sending);

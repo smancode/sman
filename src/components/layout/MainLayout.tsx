@@ -29,7 +29,6 @@ export function MainLayout() {
   // Returns a stable boolean via shallow comparison.
   const hasMessages = useChatStore(
     (s) => s.messages.length > 0,
-    (a, b) => a === b,
   );
   const inChat = location.pathname === '/chat';
   const isStardom = location.pathname === '/stardom';

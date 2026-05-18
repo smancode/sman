@@ -380,7 +380,7 @@ function MessageBubble({
   }
 
   // Assistant message: no bubble — plain text rendering
-  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>(false);
 
   return (
     <div className="w-full" ref={collapseRef}>
@@ -428,7 +428,7 @@ function removeThinkingTimer(): void {
 function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
   const codePlugin = useCodePlugin();
-  const collapseRef = useCodeBlockCollapse<HTMLDivElement>();
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>(false);
   const [summary, setSummary] = useState('');
   const prevLenRef = useRef(0);
 
