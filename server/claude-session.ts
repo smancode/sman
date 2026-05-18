@@ -544,6 +544,9 @@ export class ClaudeSessionManager {
     env['CLAUDE_CODE_REMOTE'] = 'true';
     env['CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING'] = '1';
     env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
+    // Omit attribution header in system prompt to avoid breaking prompt caching
+    // on third-party gateways that don't strip it (Anthropic API strips it automatically)
+    env['CLAUDE_CODE_ATTRIBUTION_HEADER'] = '0';
 
     // For non-Anthropic proxies: disable CLI behaviors that amplify rate limiting.
     // Third-party proxies (Zhipu, Kimi, MiniMax, enterprise internal) have stricter
@@ -774,6 +777,7 @@ export class ClaudeSessionManager {
     env['CLAUDE_CODE_REMOTE'] = 'true';
     env['CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING'] = '1';
     env['CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK'] = '1';
+    env['CLAUDE_CODE_ATTRIBUTION_HEADER'] = '0';
     if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
       env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
       env['CLAUDE_CODE_MAX_RETRIES'] = '0';
