@@ -200,6 +200,7 @@ export interface SmartPathStep {
   userInput: string;
   generatedContent?: string;
   deliveryCheck?: string;
+  skills?: string[];
 }
 
 export interface SmartPath {

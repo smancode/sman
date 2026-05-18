@@ -163,6 +163,7 @@ export interface SmartPathStep {
   userInput: string;
   generatedContent?: string;
   deliveryCheck?: string;
+  skills?: string[];
 }
 
 /** Runtime step with execution result — used in Run records and reports, NOT in path.md */

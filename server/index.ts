@@ -2061,6 +2061,7 @@ wss.on('connection', (ws: WebSocket) => {
           const workspace = msg.workspace as string;
           const previousSteps = msg.previousSteps as Array<{ userInput: string; generatedContent?: string; executionResult?: string }>;
           const execute = msg.execute as boolean | undefined;
+          const stepSkills = msg.skills as string[] | undefined;
           if (!userInput?.trim()) throw new Error('Missing userInput');
           if (!workspace?.trim()) throw new Error('Missing workspace');
 
@@ -2071,7 +2072,7 @@ wss.on('connection', (ws: WebSocket) => {
               const abort = new AbortController();
               const pId = msg.pathId as string | undefined;
               const refsContext = buildWsReferencesContext(smartPathStore, workspace, pId);
-              const prompt = buildStepExecutionPrompt(userInput, previousSteps, refsContext);
+              const prompt = buildStepExecutionPrompt(userInput, previousSteps, refsContext, workspace, stepSkills);
 
               const stepIdx = msg.stepIndex as number | undefined;
               let result = '';
@@ -2182,9 +2183,11 @@ wss.on('connection', (ws: WebSocket) => {
             const rsActualWs = rsPath?.workspace || rsWorkspace;
 
             let rsDeliveryCheck: string | undefined;
+            let rsSkills: string[] | undefined;
             try {
-              const rsSteps = JSON.parse(rsPath?.steps || '[]') as Array<{ deliveryCheck?: string }>;
+              const rsSteps = JSON.parse(rsPath?.steps || '[]') as Array<{ deliveryCheck?: string; skills?: string[] }>;
               rsDeliveryCheck = rsSteps[rsStepIndex]?.deliveryCheck;
+              rsSkills = rsSteps[rsStepIndex]?.skills;
             } catch { /* no delivery check */ }
 
             const rsResult = await smartPathEngine.runSingleStep(
@@ -2196,6 +2199,7 @@ wss.on('connection', (ws: WebSocket) => {
               },
               rsDeliveryCheck,
               msg.useRefs === true,
+              rsSkills,
             );
 
             broadcast(JSON.stringify({
@@ -2750,6 +2754,8 @@ function buildStepExecutionPrompt(
   userInput: string,
   previousSteps: Array<{ userInput: string; generatedContent?: string; executionResult?: string }>,
   referencesContext?: string,
+  workspace?: string,
+  skills?: string[],
 ): string {
   const parts: string[] = [];
   if (referencesContext) {
@@ -2770,7 +2776,25 @@ function buildStepExecutionPrompt(
   parts.push('4. 输出要简洁：执行了什么 + 结果。不要冗长解释。');
   parts.push('5. 最后用一行明确总结结果（以「执行结果：」开头）。');
   parts.push('6. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。');
-  parts.push('7. 不使用 workspace/.claude/skills 中的 skill，除非本步骤指令中显式指定了要使用某个 skill。');
+  if (skills && skills.length > 0 && workspace) {
+    const skillsParts: string[] = [];
+    for (const skillId of skills) {
+      const skillMdPath = path.join(workspace, '.claude', 'skills', skillId, 'SKILL.md');
+      try {
+        if (fs.existsSync(skillMdPath)) {
+          const content = fs.readFileSync(skillMdPath, 'utf-8');
+          skillsParts.push(`### Skill: ${skillId}\n${content}`);
+        }
+      } catch { /* ignore */ }
+    }
+    if (skillsParts.length > 0) {
+      parts.push('');
+      parts.push('[可使用的 Skills — 严格按以下 skill 的指令执行]');
+      parts.push(skillsParts.join('\n\n'));
+    }
+  } else {
+    parts.push('7. 不使用 workspace/.claude/skills 中的 skill。');
+  }
   parts.push('8. [REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。');
   return parts.join('\n');
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
+  ChevronLeft, ChevronDown, ChevronRight, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil, Square,
   Clock, FileText, FileCode, BookOpen, Ban,
 } from 'lucide-react';
@@ -110,6 +110,44 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
   const hasResult = executionCompleted || !!executionStream;
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
+  const [availableSkills, setAvailableSkills] = useState<string[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+
+  const loadSkills = useCallback(() => {
+    if (!workspace) { setAvailableSkills([]); return; }
+    const client = useWsConnection.getState().client;
+    if (!client) return;
+    setSkillsLoading(true);
+    const handler = (...args: unknown[]) => {
+      const msg = args[0] as Record<string, unknown>;
+      if (msg.skills) {
+        setAvailableSkills(msg.skills as string[]);
+      }
+      setSkillsLoading(false);
+      client.off('chatbot.listWorkspaceSkills', handler);
+    };
+    client.on('chatbot.listWorkspaceSkills', handler);
+    client.send({ type: 'chatbot.listWorkspaceSkills', workspace });
+    setTimeout(() => {
+      setSkillsLoading(false);
+      client.off('chatbot.listWorkspaceSkills', handler);
+    }, 10_000);
+  }, [workspace]);
+
+  const toggleSkill = useCallback((skillId: string) => {
+    const current = step.skills || [];
+    const next = current.includes(skillId)
+      ? current.filter((s) => s !== skillId)
+      : [...current, skillId];
+    onChange({ ...step, skills: next });
+  }, [step, onChange]);
+
+  useEffect(() => {
+    if (skillsExpanded && availableSkills.length === 0 && !skillsLoading) {
+      loadSkills();
+    }
+  }, [skillsExpanded, availableSkills.length, skillsLoading, loadSkills]);
 
   useEffect(() => {
     if (executing && streamRef.current) {
@@ -145,6 +183,45 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
             <Label className="text-xs text-muted-foreground">{t('smartpath.deliveryCheck')}</Label>
             <Input value={step.deliveryCheck || ''} onChange={(e) => onChange({ ...step, deliveryCheck: e.target.value })}
               placeholder={t('smartpath.deliveryCheckPlaceholder')} className="h-6 text-xs" />
+          </div>
+
+          {/* Skill 选择器 — 可展开/折叠 */}
+          <div className="space-y-1">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+              onClick={() => setSkillsExpanded((v) => !v)}
+            >
+              {skillsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              <span>{t('smartpath.stepSkills')}</span>
+              {step.skills && step.skills.length > 0 && (
+                <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">{step.skills.length}</Badge>
+              )}
+            </button>
+            {skillsExpanded && (
+              <div className="ml-1">
+                <p className="text-[11px] text-muted-foreground mb-1.5">{t('smartpath.stepSkillsHint')}</p>
+                {skillsLoading ? (
+                  <p className="text-xs text-muted-foreground">{t('smartpath.loadingSkills')}</p>
+                ) : availableSkills.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t('smartpath.noSkillsAvailable')}</p>
+                ) : (
+                  <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
+                    {availableSkills.map((skill) => (
+                      <label key={skill} className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={(step.skills || []).includes(skill)}
+                          onChange={() => toggleSkill(skill)}
+                          className="rounded"
+                        />
+                        <span>{skill}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {(executing || hasResult) && (
@@ -441,7 +518,6 @@ function PathEditor({ path, onSave, onCancel }: {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <p className="text-xs text-muted-foreground">{t('smartpath.noWorkspaceSkills')}</p>
       <div className="flex items-center gap-2">
         <Route className="h-5 w-5 text-primary" />
         <Input value={name} onChange={(e) => setName(e.target.value)}

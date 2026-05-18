@@ -335,6 +335,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         userInput: step.userInput,
         previousSteps,
         execute: true,
+        skills: step.skills,
       });
     });
   },

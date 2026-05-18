@@ -6,10 +6,36 @@
  * 2. 逐步执行：每步用独立 ephemeral session（子 agent），包含全局目标 + 修正指令 + 前序关键信息
  * 3. 经验沉淀：把主编分析 + 执行结果 + 修正记录写入 run.md
  */
+import fs from 'fs';
+import path from 'path';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SmartPathStep, StepPlan, PathBlueprint } from './types.js';
+
+function readSkillContent(workspace: string, skillId: string): string | null {
+  const skillMdPath = path.join(workspace, '.claude', 'skills', skillId, 'SKILL.md');
+  try {
+    if (fs.existsSync(skillMdPath)) {
+      return fs.readFileSync(skillMdPath, 'utf-8');
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function buildSkillsContext(workspace: string, skills: string[] | undefined): string {
+  if (!skills || skills.length === 0) return '';
+  const parts: string[] = [];
+  for (const skillId of skills) {
+    const content = readSkillContent(workspace, skillId);
+    if (content) {
+      parts.push(`### Skill: ${skillId}\n${content}`);
+    }
+  }
+  return parts.length > 0
+    ? `[可使用的 Skills — 严格按以下 skill 的指令执行]\n${parts.join('\n\n')}`
+    : '';
+}
 
 export interface StepExecutionResult {
   result: string;
@@ -17,7 +43,6 @@ export interface StepExecutionResult {
   deliveryCheckReason?: string;
   retried?: boolean;
 }
-import path from 'path';
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -95,7 +120,7 @@ function buildOrchestratorPrompt(
 function buildStepPrompt(
   stepPlan: StepPlan, globalGoal: string, stepIndex: number, totalSteps: number,
   priorKeyOutputs: string[], referencesContext: string, args?: string, deliveryCheck?: string,
-  workspace?: string, pathId?: string,
+  workspace?: string, pathId?: string, skills?: string[],
 ): string {
   const parts: string[] = [];
 
@@ -126,7 +151,15 @@ function buildStepPrompt(
   parts.push('3. 能用 tool 完成就用，不能的直接实现。');
   parts.push('4. 最后用「执行结果：」开头总结。');
   parts.push('5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。');
-  parts.push('6. 不使用 workspace/.claude/skills 中的 skill，除非本步骤指令中显式指定了要使用某个 skill。');
+  if (skills && skills.length > 0) {
+    const skillsCtx = buildSkillsContext(workspace || '', skills);
+    if (skillsCtx) {
+      parts.push('');
+      parts.push(skillsCtx);
+    }
+  } else {
+    parts.push('6. 不使用 workspace/.claude/skills 中的 skill。');
+  }
   parts.push('7. [REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。');
 
   if (deliveryCheck) {
@@ -300,6 +333,7 @@ export class SmartPathEngine {
     onStepProgress: (stepIndex: number, delta: string) => void,
     deliveryCheck?: string,
     useRefs?: boolean,
+    skills?: string[],
   ): Promise<StepExecutionResult> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
@@ -312,7 +346,7 @@ export class SmartPathEngine {
       priorResults, referencesContext,
       stepIndex === 0 ? args : undefined,
       deliveryCheck,
-      workspace, pathId,
+      workspace, pathId, skills,
     );
 
     const active = this.activeRuns.get(pathId);
@@ -475,12 +509,13 @@ export class SmartPathEngine {
 
         const plan = blueprint.stepPlans[i] || blueprint.stepPlans[0];
         const stepDeliveryCheck = steps[i]?.deliveryCheck;
+        const stepSkills = steps[i]?.skills;
         const prompt = buildStepPrompt(
           plan, blueprint.goal, i, steps.length,
           keyOutputs, referencesContext,
           i === 0 ? args : undefined,
           stepDeliveryCheck,
-          workspace, pathId,
+          workspace, pathId, stepSkills,
         );
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;

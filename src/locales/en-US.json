@@ -3291,5 +3291,10 @@
   "smartpath.deliveryCheckReason": { "text": "Reason: {reason}", "context": "Delivery check failure reason" },
   "smartpath.useReferences": { "text": "Reuse Experience", "context": "Reuse experience toggle button" },
   "smartpath.useReferencesHint": { "text": "When enabled, injects existing references and run.md during execution", "context": "Reuse experience toggle hint" },
-  "smartpath.noWorkspaceSkills": { "text": "Workspace skills are not used by default. Reference them explicitly in step instructions if needed", "context": "Editor notice" }
+  "smartpath.noWorkspaceSkills": { "text": "Workspace skills are not used by default. Reference them explicitly in step instructions if needed", "context": "Editor notice" },
+  "smartpath.stepSkills": { "text": "Available Skills", "context": "Skill selector title in step editor" },
+  "smartpath.stepSkillsHint": { "text": "Selected Skills will be injected into step execution context", "context": "Skill selector hint" },
+  "smartpath.loadingSkills": { "text": "Loading...", "context": "Skills loading" },
+  "smartpath.noSkillsAvailable": { "text": "No Skills available in this project", "context": "No skills available" },
+  "smartpath.selectedSkills": { "text": "{count} Skill(s) selected", "context": "Selected skills count" }
 }
