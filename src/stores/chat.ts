@@ -1161,6 +1161,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cleanup();
         sendingSessions.delete(streamSessionId);
 
+        // Refresh session list to update ordering (lastActiveAt changed on server)
+        get().loadSessions();
+
         // Refresh git branch in titlebar after AI completes (may have switched branch)
         (window as any).__sman_gitBranchRefresh?.();
 
@@ -1333,6 +1336,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         msg.media = media;
       }
       client.send(msg);
+
+      // Move current session to top of list (lastActiveAt will be updated on server)
+      const curSessions = get().sessions;
+      const idx = curSessions.findIndex(s => s.key === streamSessionId);
+      if (idx > 0) {
+        const next = [...curSessions];
+        next.splice(idx, 1);
+        next.unshift(curSessions[idx]);
+        set({ sessions: next });
+      }
     } catch (err) {
       sendingSessions.delete(streamSessionId);
       syncSending();
