@@ -23,7 +23,17 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
-// ── 常量 ──
+// ── 脚本文件扩展名白名单 ──
+const SCRIPT_EXTENSIONS = new Set([
+  '.py', '.sh', '.bash', '.zsh', '.js', '.ts', '.mjs', '.cjs',
+  '.bat', '.cmd', '.ps1', '.sql', '.r', '.rb', '.go', '.java',
+  '.pl', '.lua', '.php', '.rs', '.dart', '.kt', '.scala', '.clj',
+]);
+
+function isScriptFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  return SCRIPT_EXTENSIONS.has(ext);
+}
 
 const ORCHESTRATOR_SYSTEM_PROMPT = `你是一个自动化工作流的"主编"。
 1. 理解整个工作流的目标
@@ -44,6 +54,8 @@ const STEP_SYSTEM_PROMPT = [
   '3. 能用 skill/tool 完成就用，不能的直接实现。',
   '4. 最后用「执行结果：」开头总结。',
   '5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。',
+  '6. 默认不使用 workspace/.claude/skills 中的 skill，除非步骤指令中显式指定了要使用某个 skill。',
+  '7. references/ 中只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。',
 ].join('\n');
 
 function buildTmpRules(workspace: string, pathId: string): string {
@@ -140,7 +152,10 @@ function extractReferences(text: string): Array<{ fileName: string; content: str
   const regex = /\[REFERENCE:([^\]]+)\]\s*\n```\s*\n([\s\S]*?)```/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
-    refs.push({ fileName: match[1].trim(), content: match[2].trim() });
+    const fileName = match[1].trim();
+    if (isScriptFile(fileName)) {
+      refs.push({ fileName, content: match[2].trim() });
+    }
   }
   return refs;
 }
@@ -215,6 +230,7 @@ export class SmartPathEngine {
     onStepResult: (stepIndex: number, result: string) => void,
     onProgress?: (data: { stepIndex: number; totalSteps: number; status: string }) => void,
     args?: string,
+    useRefs?: boolean,
   ): Promise<void> {
     const result = await this.runWithResults(
       pathId, workspace, args,
@@ -222,6 +238,7 @@ export class SmartPathEngine {
         onStepProgress(stepIndex, delta);
         if (stepIndex === -1) onProgress?.({ stepIndex: -1, totalSteps: 0, status: 'analyzing' });
       },
+      useRefs,
     );
     // 路径页面需要逐步回调
     let steps: SmartPathStep[];
@@ -240,6 +257,7 @@ export class SmartPathEngine {
     workspace: string,
     args: string | undefined,
     onStepProgress: (stepIndex: number, delta: string) => void,
+    useRefs?: boolean,
   ): Promise<{ blueprint: PathBlueprint; runId: string }> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
@@ -256,7 +274,7 @@ export class SmartPathEngine {
     const sessionIds: string[] = [];
     this.activeRuns.set(pathId, { abortController, sessionIds });
 
-    const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
+    const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
 
     let blueprint: PathBlueprint;
     try {
@@ -281,12 +299,13 @@ export class SmartPathEngine {
     args: string | undefined,
     onStepProgress: (stepIndex: number, delta: string) => void,
     deliveryCheck?: string,
+    useRefs?: boolean,
   ): Promise<StepExecutionResult> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
     const plan = blueprint.stepPlans[stepIndex] || blueprint.stepPlans[0];
-    const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
+    const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
 
     const prompt = buildStepPrompt(
       plan, blueprint.goal, stepIndex, totalSteps,
@@ -419,6 +438,7 @@ export class SmartPathEngine {
     workspace: string,
     args: string | undefined,
     onStepProgress: (stepIndex: number, delta: string) => void,
+    useRefs?: boolean,
   ): Promise<{ stepResults: string[]; blueprint: PathBlueprint }> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
@@ -434,7 +454,7 @@ export class SmartPathEngine {
     const sessionIds: string[] = [];
     this.activeRuns.set(pathId, { abortController, sessionIds });
 
-    const referencesContext = this.buildReferencesContext(workspace, smartPath.id);
+    const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
 
     try {
       // 主编分析

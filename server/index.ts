@@ -56,6 +56,17 @@ import { BroadcastStore } from './broadcast-store.js';
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
 
+/** references 只允许保存脚本文件 */
+const SCRIPT_EXTENSIONS = new Set([
+  '.py', '.sh', '.bash', '.zsh', '.js', '.ts', '.mjs', '.cjs',
+  '.bat', '.cmd', '.ps1', '.sql', '.r', '.rb', '.go', '.java',
+  '.pl', '.lua', '.php', '.rs', '.dart', '.kt', '.scala', '.clj',
+]);
+function isScriptFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  return SCRIPT_EXTENSIONS.has(ext);
+}
+
 /** Actual port the server is listening on (may differ from PORT after fallback) */
 export let actualPort = PORT;
 
@@ -1989,6 +2000,7 @@ wss.on('connection', (ws: WebSocket) => {
                 broadcast(JSON.stringify({ type: 'smartpath.progress', pathId: runPathId, ...data }));
               },
               runArgs,
+              msg.useRefs === true,
             ).then(() => {
               const p = smartPathStore.get(runPathId, actualRunWs);
               const refs = smartPathStore.listReferences(actualRunWs, runPathId);
@@ -2075,11 +2087,12 @@ wss.on('connection', (ws: WebSocket) => {
                   stepSystemPrompt,
                 );
 
-                // 提取并保存 reference 文件
+                // 提取并保存 reference 文件（仅脚本文件）
                 const refRegex = /\[REFERENCE:([^\]]+)\]\s*\n```\s*\n([\s\S]*?)```/g;
                 let refMatch;
                 while ((refMatch = refRegex.exec(result)) !== null) {
-                  if (pId) smartPathStore.saveReference(workspace, pId, refMatch[1].trim(), refMatch[2].trim());
+                  const refFileName = refMatch[1].trim();
+                  if (pId && isScriptFile(refFileName)) smartPathStore.saveReference(workspace, pId, refFileName, refMatch[2].trim());
                 }
               } finally {
                 // 清理内存中的临时会话和 V2 进程
@@ -2143,6 +2156,7 @@ wss.on('connection', (ws: WebSocket) => {
               (stepIndex, delta) => {
                 broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: oPathId, stepIndex, delta }));
               },
+              msg.useRefs === true,
             );
 
             ws.send(JSON.stringify({ type: 'smartpath.orchestrated', pathId: oPathId, blueprint, runId }));
@@ -2183,6 +2197,7 @@ wss.on('connection', (ws: WebSocket) => {
                 broadcast(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: rsPathId, stepIndex, delta }));
               },
               rsDeliveryCheck,
+              msg.useRefs === true,
             );
 
             broadcast(JSON.stringify({
@@ -2794,6 +2809,8 @@ function buildStepSystemPrompt(): string {
     '   文件内容',
     '   ```',
     '   可以标注多个文件。这些文件会被保存到复用资源库，下次执行时可以直接复用。',
+    '7. 默认不使用 workspace/.claude/skills 中的 skill，除非步骤指令中显式指定了要使用某个 skill。',
+    '8. references/ 中只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。',
   ].join('\n');
 }
 

@@ -3284,5 +3284,8 @@
   "smartpath.deliveryChecking": { "text": "交付检查中...", "context": "交付检查进行中" },
   "smartpath.deliveryCheckPassed": { "text": "交付检查通过", "context": "交付检查通过" },
   "smartpath.deliveryCheckRetry": { "text": "交付检查未通过，自动重试中...", "context": "交付检查重试" },
-  "smartpath.deliveryCheckReason": { "text": "原因：{reason}", "context": "交付检查失败原因" }
+  "smartpath.deliveryCheckReason": { "text": "原因：{reason}", "context": "交付检查失败原因" },
+  "smartpath.useReferences": { "text": "复用经验", "context": "复用经验开关按钮" },
+  "smartpath.useReferencesHint": { "text": "开启后执行时注入已有的 references 和 run.md", "context": "复用经验开关提示" },
+  "smartpath.noWorkspaceSkills": { "text": "默认不使用项目 Skills，需在步骤指令中显式引用", "context": "编辑界面说明" }
 }

@@ -46,7 +46,7 @@ interface SmartPathState {
   createPath: (input: { name: string; description?: string; workspace: string; steps: string }) => Promise<SmartPath>;
   updatePath: (pathId: string, workspace: string, updates: Partial<SmartPath>) => Promise<void>;
   deletePath: (pathId: string, workspace: string) => Promise<void>;
-  runPath: (pathId: string, workspace: string, args?: string) => Promise<void>;
+  runPath: (pathId: string, workspace: string, args?: string, useRefs?: boolean) => Promise<void>;
   abortPath: (pathId: string) => void;
   fetchRuns: (pathId: string, workspace: string) => Promise<void>;
   fetchReport: (pathId: string, workspace: string, fileName: string) => Promise<void>;
@@ -67,9 +67,10 @@ interface SmartPathState {
   stepDescriptions: string[];
   stepDeliveryChecks: Array<{ passed?: boolean; reason?: string; retried?: boolean }>;
   currentStepIndex: number;
+  stepUseRefs: boolean;
 
-  startStepping: (pathId: string, workspace: string, args?: string) => Promise<void>;
-  runStepContinue: (pathId: string, workspace: string, args?: string) => Promise<void>;
+  startStepping: (pathId: string, workspace: string, args?: string, useRefs?: boolean) => Promise<void>;
+  runStepContinue: (pathId: string, workspace: string, args?: string, useRefs?: boolean) => Promise<void>;
   runStepRedo: (pathId: string, workspace: string, stepIndex: number, args?: string) => Promise<void>;
   updateStepResult: (index: number, value: string) => void;
   updateStepDescription: (index: number, value: string) => void;
@@ -101,6 +102,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   stepDescriptions: [],
   stepDeliveryChecks: [],
   currentStepIndex: -1,
+  stepUseRefs: false,
 
   fetchPaths: async (workspaces) => {
     const client = getWsClient();
@@ -178,7 +180,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     });
   },
 
-  runPath: async (pathId, workspace, args) => {
+  runPath: async (pathId, workspace, args, useRefs = false) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
     set({ running: true, error: null, stepExecutionStream: {}, stepExecutionStatus: {} });
@@ -229,7 +231,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         set({ running: false, error: String(data.error) });
         reject(new Error(String(data.error)));
       });
-      client.send({ type: 'smartpath.run', pathId, workspace, args });
+      client.send({ type: 'smartpath.run', pathId, workspace, args, useRefs });
     });
   },
 
@@ -368,14 +370,14 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
     });
   },
 
-  startStepping: async (pathId, workspace, args) => {
+  startStepping: async (pathId, workspace, args, useRefs = false) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
     set({
       stepping: true, error: null,
       stepExecutionStream: {}, stepExecutionStatus: {},
       stepResults: [], stepDescriptions: [], stepDeliveryChecks: [],
-      currentStepIndex: -1,
+      currentStepIndex: -1, stepUseRefs: useRefs,
     });
 
     return new Promise<void>((resolve, reject) => {
@@ -406,11 +408,11 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         }
       });
 
-      client.send({ type: 'smartpath.orchestrate', pathId, workspace, args });
+      client.send({ type: 'smartpath.orchestrate', pathId, workspace, args, useRefs });
     });
   },
 
-  runStepContinue: async (pathId, workspace, args) => {
+  runStepContinue: async (pathId, workspace, args, useRefs = false) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
     const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
@@ -465,7 +467,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       client.send({
         type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
         blueprint: stepBlueprint, stepIndex: nextIndex,
-        priorResults: stepResults, args,
+        priorResults: stepResults, args, useRefs,
       });
     });
   },
@@ -473,7 +475,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   runStepRedo: async (pathId, workspace, stepIndex, args) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
-    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    const { stepBlueprint, stepRunId, stepResults, stepUseRefs } = useSmartPathStore.getState();
     if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
 
     const priorResults = stepResults.slice(0, stepIndex);
@@ -528,7 +530,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       client.send({
         type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
         blueprint: stepBlueprint, stepIndex,
-        priorResults, args,
+        priorResults, args, useRefs: stepUseRefs,
       });
     });
   },

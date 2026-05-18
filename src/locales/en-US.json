@@ -3284,5 +3284,8 @@
   "smartpath.deliveryChecking": { "text": "Checking delivery...", "context": "Delivery check in progress" },
   "smartpath.deliveryCheckPassed": { "text": "Delivery check passed", "context": "Delivery check passed" },
   "smartpath.deliveryCheckRetry": { "text": "Delivery check failed, retrying...", "context": "Delivery check retry" },
-  "smartpath.deliveryCheckReason": { "text": "Reason: {reason}", "context": "Delivery check failure reason" }
+  "smartpath.deliveryCheckReason": { "text": "Reason: {reason}", "context": "Delivery check failure reason" },
+  "smartpath.useReferences": { "text": "Reuse Experience", "context": "Reuse experience toggle button" },
+  "smartpath.useReferencesHint": { "text": "When enabled, injects existing references and run.md during execution", "context": "Reuse experience toggle hint" },
+  "smartpath.noWorkspaceSkills": { "text": "Workspace skills are not used by default. Reference them explicitly in step instructions if needed", "context": "Editor notice" }
 }

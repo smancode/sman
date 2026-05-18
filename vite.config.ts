@@ -42,5 +42,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['electron'],
+    include: ['shiki', 'shiki/engine/javascript'],
   },
 })

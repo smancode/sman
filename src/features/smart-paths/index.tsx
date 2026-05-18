@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil, Square,
-  Clock, FileText, FileCode,
+  Clock, FileText, FileCode, BookOpen, Ban,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -441,6 +441,7 @@ function PathEditor({ path, onSave, onCancel }: {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <p className="text-xs text-muted-foreground">{t('smartpath.noWorkspaceSkills')}</p>
       <div className="flex items-center gap-2">
         <Route className="h-5 w-5 text-primary" />
         <Input value={name} onChange={(e) => setName(e.target.value)}
@@ -500,7 +501,7 @@ function PathEditor({ path, onSave, onCancel }: {
 function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   path: SmartPath; runs: SmartPathRun[];
   reports: Array<{ fileName: string; createdAt: string }>;
-  onEdit: () => void; onRun: () => void; onAbort: () => void; onDelete: () => void;
+  onEdit: () => void; onRun: (useRefs: boolean) => void; onAbort: () => void; onDelete: () => void;
 }) {
   const steps = useMemo<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } }, [path.steps]);
   const sc = STATUS_CONFIG[path.status];
@@ -527,6 +528,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const fetchReference = useSmartPathStore((s) => s.fetchReference);
   const [viewingReport, setViewingReport] = useState<string | null>(null);
   const [viewingRef, setViewingRef] = useState<string | null>(null);
+  const [useRefs, setUseRefs] = useState(false);
 
   const handleViewReport = async (fileName: string) => {
     if (viewingReport === fileName) {
@@ -559,14 +561,26 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
         </div>
         <div className="flex gap-1.5 shrink-0">
           <Button variant="outline" size="sm" onClick={onEdit} disabled={running || stepping}><Pencil className="h-3.5 w-3.5 mr-1" /> {t("smartpath.edit")}</Button>
+          {!running && !stepping && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={useRefs ? '' : 'text-muted-foreground/50'}
+              onClick={() => setUseRefs(!useRefs)}
+              title={t('smartpath.useReferencesHint')}
+            >
+              {useRefs ? <CheckCircle className="h-3.5 w-3.5 mr-1" /> : <Ban className="h-3.5 w-3.5 mr-1" />}
+              {t('smartpath.useReferences')}
+            </Button>
+          )}
           {stepping ? (
             <Button variant="outline" size="sm" disabled={anyStepExecuting} onClick={() => cancelStepping(path.id)}>
               {t('smartpath.cancelStepExec')}
             </Button>
           ) : !running && (
             <Button variant="outline" size="sm" onClick={async () => {
-              await startStepping(path.id, path.workspace, path.defaultArgs);
-              runStepContinue(path.id, path.workspace, path.defaultArgs).catch(() => {});
+              await startStepping(path.id, path.workspace, path.defaultArgs, useRefs);
+              runStepContinue(path.id, path.workspace, path.defaultArgs, useRefs).catch(() => {});
             }}>
               <Play className="h-3.5 w-3.5 mr-1" /> {t('smartpath.stepExec')}
             </Button>
@@ -576,7 +590,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
               <Square className="h-3.5 w-3.5 mr-1" /> {t("smartpath.stop")}
             </Button>
           ) : !stepping && (
-            <Button size="sm" onClick={onRun}>
+            <Button size="sm" onClick={() => onRun(useRefs)}>
               <Play className="h-3.5 w-3.5 mr-1" /> {t("smartpath.execute")}
             </Button>
           )}
@@ -830,7 +844,7 @@ export function SmartPathPage() {
           ) : currentPath ? (
             <PathDetail path={currentPath} runs={runs} reports={reports}
               onEdit={() => setEditing(true)}
-              onRun={() => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs)}
+              onRun={(useRefs) => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs, useRefs)}
               onAbort={() => abortPath(currentPath.id)}
               onDelete={() => { deletePath(currentPath.id, currentPath.workspace); setCurrentPath(null); }} />
           ) : (
