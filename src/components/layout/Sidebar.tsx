@@ -26,7 +26,7 @@ export function Sidebar() {
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
   const shouldBlur = !['/chat', '/stardom', '/hub'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const [pinned, setPinned] = useState(() => localStorage.getItem('sman-sidebar-pinned') === 'true');
   const [hovering, setHovering] = useState(false);
   const expanded = pinned || hovering;
   const blurSession = shouldBlur && !dismissed;
@@ -226,7 +226,7 @@ export function Sidebar() {
               'h-7 w-7 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-md transition-opacity duration-150',
               hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
             )}
-            onClick={() => setPinned((p) => !p)}
+            onClick={() => setPinned((p) => { const next = !p; localStorage.setItem('sman-sidebar-pinned', String(next)); return next; })}
             title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
           >
             <Pin
