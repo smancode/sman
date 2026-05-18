@@ -12,11 +12,17 @@ interface DirectoryEntry {
   isDirectory: boolean;
 }
 
+interface Workspace {
+  workspace: string;
+  name: string;
+}
+
 interface DirectorySelectorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (dirPath: string) => void;
   initialPath?: string;
+  recentWorkspaces?: Workspace[];
 }
 
 /**
@@ -43,6 +49,7 @@ export function DirectorySelectorDialog({
   onOpenChange,
   onSelect,
   initialPath = '/Users',
+  recentWorkspaces = [],
 }: DirectorySelectorDialogProps) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
@@ -169,6 +176,28 @@ export function DirectorySelectorDialog({
             ✕
           </Button>
         </div>
+
+        {/* Quick create from recent workspaces */}
+        {recentWorkspaces.length > 0 && (
+          <div className="px-4 py-2 space-y-1.5 border-b bg-muted/20">
+            <p className="text-[10px] text-muted-foreground/50 px-0.5 leading-tight">
+              {t('session.quickNew')}
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {recentWorkspaces.map((ws) => (
+                <button
+                  key={ws.workspace}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md bg-[hsl(var(--muted))] hover:bg-[hsl(var(--accent))] text-muted-foreground hover:text-foreground transition-colors max-w-[140px]"
+                  onClick={() => onSelect(ws.workspace)}
+                  title={ws.workspace}
+                >
+                  <FolderOpen className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{ws.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Address bar */}
         <div className="flex items-center gap-1.5 px-4 py-1.5 bg-muted/30 border-b">

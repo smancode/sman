@@ -2943,6 +2943,10 @@
     "text": "No records yet",
     "context": "Empty state when no feedback files exist"
   },
+  "session.quickNew": {
+    "text": "Click the copy button next to an existing session to quickly create a new one",
+    "context": "Hint text below the new session button"
+  },
   "session.botSessions": {
     "text": "Bot Sessions",
     "context": "Bot sessions group title"

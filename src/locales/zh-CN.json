@@ -2943,6 +2943,10 @@
     "text": "暂无收集记录",
     "context": "没有反馈文件时的提示"
   },
+  "session.quickNew": {
+    "text": "点击已有会话右侧的复制按钮快速新建",
+    "context": "新建会话按钮下方的提示文字"
+  },
   "session.botSessions": {
     "text": "Bot 会话",
     "context": "Bot 会话分组标题"
