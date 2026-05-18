@@ -415,42 +415,6 @@ export function SessionTree() {
     }
   };
 
-  // Cmd/Ctrl+C copies current session workspace, Cmd/Ctrl+V creates new session with it
-  const copiedWorkspaceRef = useRef<string | null>(null);
-  const handleCopyPaste = useCallback((e: KeyboardEvent) => {
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    // Don't intercept when user is typing in an input/textarea
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
-
-    if (e.key === 'c' && currentSessionId) {
-      const session = sessions.find((s) => s.key === currentSessionId);
-      if (session?.workspace) {
-        e.preventDefault();
-        copiedWorkspaceRef.current = session.workspace;
-        navigator.clipboard.writeText(session.workspace).catch(() => {});
-      }
-    } else if (e.key === 'v' && copiedWorkspaceRef.current) {
-      e.preventDefault();
-      const ws = copiedWorkspaceRef.current;
-      copiedWorkspaceRef.current = null;
-      createSessionWithWorkspace(ws)
-        .then((id) => {
-          switchSession(id);
-          navigate('/chat');
-          loadSessions();
-        })
-        .catch((err) => {
-          console.error('[SessionTree] Cmd+V create failed:', err);
-        });
-    }
-  }, [currentSessionId, sessions, createSessionWithWorkspace, switchSession, navigate, loadSessions]);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleCopyPaste);
-    return () => window.removeEventListener('keydown', handleCopyPaste);
-  }, [handleCopyPaste]);
 
   const handleNewSession = () => {
     setShowDirSelector(true);
