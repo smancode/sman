@@ -1,122 +1,192 @@
 ---
-_scanned.commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
+_scanned.commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
+_scanned.scannedAt: "2026-05-19T00:00:00.000Z"
+_scanned.branch: "master"
 ---
 
 # 开发规范
 
-Top 7 conventions from incremental scan (commit 57e98c308c1cd0fc5693b3ebab5282836e02a241).
+Top 6 conventions from incremental scan (commit 1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c).
 
-## 1. Zustand Store Pattern
+## 1. Git 操作必须异步化
 
-All client state uses Zustand with WebSocket sync pattern:
-- Export `useXxxStore` from `src/stores/xxx.ts`
-- State interface includes data + async actions + loading/error states
-- Get WebSocket client via `useWsConnection.getState().client`
-- Wrap event handlers with `wrapHandler()` for type safety
-- Store initialization in `src/lib/query-client.ts`
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/git-handler.ts: 所有导出函数
 
-## 2. Feature Directory Structure
+所有 Git 操作必须使用异步 `execFile` 而非同步 `execSync`，避免阻塞事件循环：
 
-Each feature is self-contained under `src/features/`:
-```
-src/features/{feature-name}/
-  ├── index.tsx           # Main feature component (exports default)
-  ├── {Feature}Panel.tsx  # Feature-specific UI (if complex)
-  └── sub-components.tsx  # Supporting components
-```
-Feature components are routed in `src/app/routes.tsx` and rendered in layout.
-
-## 3. Server Handler Pattern
-
-Server modules in `server/` follow consistent patterns:
-- Handler files: `{module}-handler.ts` (e.g., `git-handler.ts`, `code-viewer-handler.ts`)
-- Store files: `{module}-store.ts` (e.g., `session-store.ts`, `settings-manager.ts`)
-- Engine files: `{module}-engine.ts` for business logic (e.g., `batch-engine.ts`, `smart-path-engine.ts`)
-- Use `createLogger()` from `./utils/logger.js` for logging
-- Database operations use `better-sqlite3` with prepared statements
-
-## 4. TypeScript Interface Exports
-
-All modules export explicit TypeScript interfaces:
-- Server: define interfaces at top of handler files (e.g., `GitStatusResult`, `ListDirResult`)
-- Client: export interfaces from `src/types/` (e.g., `ChatSession`, `SmanSettings`)
-- Props: define `export interface XxxProps` for React components
-- Use JSDoc comments for complex types (e.g., `ContentBlock`, `StreamingBlock`)
-
-## 5. Async Error Handling
-
-Consistent error handling patterns across codebase:
-- `try { ... } catch { /* silent or fallback */ }` for optional operations
-- `try { ... } catch (err: unknown) { const e = err as { code?: string }; ... }` for typed errors
-- Throw `Error` with code assignment: `throw Object.assign(new Error('msg'), { code: 'PATH_TRAVERSAL' })`
-- Server handlers wrap errors in try-catch and return via WebSocket
-- Client stores set `error: string | null` in state for UI display
-
-## 6. 常量数组国际化模式
-
-> by nasakim | 验证: 2026-05 | ✅ [已验证] src/types/settings.ts:WEB_SEARCH_PROVIDER_OPTIONS
-
-所有用户可见的常量数组必须使用 `labelKey` 模式，禁止硬编码中文：
-
-**❌ 错误示例**（当前代码待修复）：
+**❌ 错误示例**（旧实现）：
 ```typescript
-// src/types/settings.ts
-export const WEB_SEARCH_PROVIDER_OPTIONS = [
-  { value: 'baidu', label: '百度搜索', description: '百度 AI 搜索 API' },
-  { value: 'brave', label: 'Brave Search', description: 'API Key 搜索引擎' },
-];
+function git(workspace: string, args: string): string {
+  return execSync(`git --no-pager ${args}`, { cwd: workspace, encoding: 'utf-8' }).trim();
+}
 ```
 
-**✅ 正确示例**（已在 smart-paths/index.tsx 使用）：
+**✅ 正确示例**（新实现）：
 ```typescript
-const STATUS_CONFIG = {
-  draft: { labelKey: 'smartpath.status.draft', variant: 'secondary' },
-  running: { labelKey: 'smartpath.executing', variant: 'default' },
-};
+const execFileAsync = promisify(execFile);
 
-// 渲染时
-<Badge>{t(sc.labelKey)}</Badge>
+async function git(workspace: string, args: string, timeout = 10000): Promise<string> {
+  const { stdout } = await execFileAsync('git', ['--no-pager', ...args.split(' ')], {
+    cwd: workspace,
+    encoding: 'utf-8',
+    timeout,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return stdout.trim();
+}
 ```
 
-**改造要点**：
-- 常量定义用 `labelKey` 存储 i18n key
-- 组件内调用 `t(labelKey)` 渲染
-- 搜索替换时要覆盖所有常量文件（如 `src/types/`）
-- 非设置页面（Git、CodeViewer）也不能遗漏
+**关键点**：
+- 使用 `promisify(execFile)` 包装成 Promise
+- 参数拆分数组传入，避免 shell 注入
+- 所有导出函数改为 `async`：`handleGitStatus`, `handleGitDiff`, `handleGitCommit` 等
+- WebSocket 处理器用 `.then()/.catch()` 处理异步结果
 
-## 7. 国际化函数调用约束
+## 2. 脚本文件扩展名白名单
 
-> by nasakim | 验证: 2026-05 | ✅ [已验证] CLAUDE.md:多语言规范
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/index.ts: SCRIPT_EXTENSIONS, smart-path-engine.ts: SCRIPT_EXTENSIONS
 
-- **用户界面文本**：禁止硬编码，必须通过 `t()` 函数
-- **日志/调试信息**：可硬编码（开发者可见，非用户界面）
-- **模块顶层禁止**：不能在模块顶层调用 `t()`（locale 未初始化）
-- **动态拼接**：翻译文件用完整句子 + 参数插值，禁止拼接片段
+Reference 文件只能保存脚本文件，禁止保存数据文件：
 
-**错误示例**：
 ```typescript
-// ❌ 模块顶层调用
-const MENU_ITEMS = [
-  { label: t('menu.new'), key: 'new' }
-];
+const SCRIPT_EXTENSIONS = new Set([
+  '.py', '.sh', '.bash', '.zsh', '.js', '.ts', '.mjs', '.cjs',
+  '.bat', '.cmd', '.ps1', '.sql', '.r', '.rb', '.go', '.java',
+  '.pl', '.lua', '.php', '.rs', '.dart', '.kt', '.scala', '.clj',
+]);
 
-// ❌ 动态拼接
-t('file.count') + ': ' + count
+function isScriptFile(fileName: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  return SCRIPT_EXTENSIONS.has(ext);
+}
 ```
 
-**正确示例**：
+**应用场景**：
+- Smart Path 提取 `[REFERENCE:filename.ext]` 时过滤：`if (isScriptFile(refFileName)) saveReference(...)`
+- Earth Path 步骤规则明确：只能保存 `.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1` 等脚本
+- 禁止保存 `.json, .csv, .txt, .xlsx, .xml, .yaml, .yml` 等数据文件
+
+**设计原因**：脚本可复用，数据文件应放在 `tmp/` 中避免耦合
+
+## 3. Smart Path 规则放在 User Prompt
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/smart-path-engine.ts: buildStepPrompt
+
+Smart Path 的步骤执行规则必须放在 **user prompt** 的 `[规则]` 段落，**绝对不能**修改 system prompt：
+
+**✅ 正确做法**：
 ```typescript
-// ✅ 常量用 labelKey
-const MENU_ITEMS = [
-  { labelKey: 'menu.new', key: 'new' }
-];
-{MENU_ITEMS.map(item => <MenuItem>{t(item.labelKey)}</MenuItem>)}
+function buildStepPrompt(..., skills?: string[]): string {
+  const parts: string[] = [];
+  // ... 构建指令内容 ...
 
-// ✅ 翻译文件用参数插值
-// zh-CN.json: "file.count": { "text": "共 {count} 个文件" }
-t('file.count', { count })
+  parts.push('');
+  parts.push('[规则]');
+  parts.push('1. 直接执行，给出简洁结果。不要询问用户。');
+  parts.push('2. 专注于本步骤目标，不要越界。');
+  parts.push('3. 能用 tool 完成就用，不能的直接实现。');
+
+  if (skills && skills.length > 0) {
+    parts.push(buildSkillsContext(workspace, skills)); // 注入 skill 内容
+  } else {
+    parts.push('6. 不使用 workspace/.claude/skills 中的 skill。');
+  }
+
+  return parts.join('\n');
+}
 ```
 
-## References
+**关键点**：
+- `STEP_SYSTEM_PROMPT` 设为空字符串，规则全部移到 user prompt
+- System prompt 是 session 级的，path 不应该污染它
+- 步骤级别的限制（workspace skills 限制、脚本文件限制等）放在 user prompt 的 `[规则]` 段落
 
-See `references/conventions.md` for detailed examples and rationale.
+## 4. 步骤级 Skills 注入
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/smart-path-engine.ts: buildSkillsContext
+
+Smart Path 步骤可以指定需要使用的 skills，动态注入到 prompt 中：
+
+```typescript
+function buildSkillsContext(workspace: string, skills: string[] | undefined): string {
+  if (!skills || skills.length === 0) return '';
+  const parts: string[] = [];
+  for (const skillId of skills) {
+    const content = readSkillContent(workspace, skillId);
+    if (content) {
+      parts.push(`### Skill: ${skillId}\n${content}`);
+    }
+  }
+  return parts.length > 0
+    ? `[可使用的 Skills — 严格按以下 skill 的指令执行]\n${parts.join('\n\n')}`
+    : '';
+}
+```
+
+**使用方式**：
+- 步骤定义中新增 `skills?: string[]` 字段
+- 执行时读取 `workspace/.claude/skills/{skillId}/SKILL.md` 内容
+- 直接注入到 user prompt 的 `[规则]` 段落之后
+- 未指定 skills 时明确告知：`不使用 workspace/.claude/skills 中的 skill`
+
+## 5. WebSocket 异步消息处理
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/index.ts: Git 消息处理
+
+WebSocket 消息处理器必须使用 Promise 模式，避免阻塞事件循环：
+
+**✅ 正确示例**：
+```typescript
+case 'git.status': {
+  if (!msg.workspace) {
+    ws.send(JSON.stringify({ type: 'git.status', result: { error: 'Missing workspace' } }));
+    break;
+  }
+  handleGitStatus(String(msg.workspace))
+    .then(result => ws.send(JSON.stringify({ type: 'git.status', result })))
+    .catch(err => ws.send(JSON.stringify({ type: 'git.status', result: { error: err instanceof Error ? err.message : String(err) } })));
+  break;
+}
+```
+
+**关键点**：
+- 所有 Git 处理函数改为 async（Convention #1）
+- 不使用 try-catch 包裹，改用 `.then()/.catch()` 链式处理
+- 错误信息统一格式：`{ error: string }`
+- 注释标注：`// ── Git (all async — never blocks the event loop) ───────`
+
+## 6. 目录展开安全限制
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] server/git-handler.ts: expandDirFiles
+
+Git status 中展开未跟踪目录时，必须限制深度和文件数量：
+
+```typescript
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt', 'target', 'vendor', '__pycache__', '.venv', 'venv', 'Pods', '.gradle', '.idea', '.cache', 'coverage']);
+const MAX_EXPAND_DEPTH = 3;
+const MAX_EXPAND_FILES = 500;
+
+function expandDirFiles(workspace: string, dirPath: string, out: GitFileStatus[], depth = 0): void {
+  if (depth > MAX_EXPAND_DEPTH || out.length >= MAX_EXPAND_FILES) return;
+
+  // ... 遍历目录 ...
+
+  for (const entry of entries) {
+    if (out.length >= MAX_EXPAND_FILES) break;
+    if (entry.name.startsWith('.')) continue;
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) {
+        out.push({ path: `${rel}/`, status: 'untracked', staged: false });
+        continue;
+      }
+      expandDirFiles(workspace, rel, out, depth + 1);
+    }
+  }
+}
+```
+
+**关键点**：
+- 跳过常见大型目录（`node_modules`, `dist`, `build` 等）
+- 限制递归深度最多 3 层
+- 限制展开文件总数最多 500 个
+- 达到限制时直接返回，不抛异常

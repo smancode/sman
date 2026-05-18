@@ -4,18 +4,16 @@ name: 数据库全景知识
 description: Database schema knowledge (incremental scan). Core tables, relationships, and index strategies.
 category: database
 _scanned:
-  commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
-  scannedAt: "2026-05-17T00:00:00.000Z"
+  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
+  scannedAt: "2026-05-19T00:00:00.000Z"
   branch: "master"
 ---
 
 # Database Overview
 
-Sman uses SQLite (better-sqlite3) as the primary database engine, with database files stored in `~/.sman/sman.db`. The system employs WAL (Write-Ahead Logging) mode for better concurrency and crash recovery.
+SQLite (better-sqlite3) at `~/.sman/sman.db` with WAL mode. 18+ tables across 8 stores.
 
-- **Engine**: SQLite 3 (better-sqlite3)
-- **Table Count**: 18+ core tables across 8 stores
-- **Key Relationships**: Sessions → Messages (CASCADE DELETE), Batch Tasks → Items (CASCADE DELETE), Cron Tasks → Runs (CASCADE DELETE), Chatbot Sessions → Bot Profile (foreign key)
+**Key Relationships**: Sessions→Messages (CASCADE), Batch→Items (CASCADE), Cron→Runs (CASCADE), Chatbot→Bot Profile
 
 ## Core Tables (Top 15)
 
@@ -37,18 +35,9 @@ Sman uses SQLite (better-sqlite3) as the primary database engine, with database 
 | `stardom_chat_messages` | 4 | Chat messages for agent collaboration | `server/stardom/stardom-store.ts` |
 | `stardom_learned_routes` | 5 | Capability-to-agent routing cache with experience | `server/stardom/stardom-store.ts` |
 
-## Key Design Patterns
+## Design Patterns
 
-1. **Soft Delete**: Sessions use `deleted_at` for soft deletion (knowledge extraction requires deleted sessions)
-2. **Cascade Deletes**: Messages, batch_items, and cron_runs use CASCADE on parent deletion
-3. **Composite Primary Keys**: `knowledge_extraction_progress` uses (workspace, session_id)
-4. **JSON Columns**: Content blocks, batch item data stored as TEXT (JSON)
-5. **Streaming Support**: `messages.is_partial` tracks in-progress assistant messages
-6. **Token Tracking**: Sessions store `input_tokens` and `output_tokens` for cost monitoring
-7. **Retry Logic**: Batch items track `retries` count for failure recovery
-8. **Foreign Keys**: All stores enable `PRAGMA foreign_keys = ON`
-9. **Multi-Bot Support**: Chatbot sessions use `bot_label` column to distinguish different bot profiles
-10. **Hub Integration**: Broadcasts stored locally for offline viewing, synced from remote hub server
+Soft delete (sessions), CASCADE deletes, composite PKs, JSON columns, streaming support, token tracking, retry logic, foreign keys, multi-bot support, hub broadcasts
 
 ## Index Strategy
 
@@ -60,27 +49,17 @@ Sman uses SQLite (better-sqlite3) as the primary database engine, with database 
 - `stardom_learned_routes`: `idx_learned_capability` on capability
 - `stardom_tasks`: `idx_tasks_requester`, `idx_tasks_helper`, `idx_tasks_status` (agent collaboration)
 
-## Migration Strategy
+## Migration
 
-All stores use runtime ALTER TABLE migrations with try-catch blocks:
-- Check column existence before adding
-- Log migration success/failure
-- Support zero-downtime upgrades
-- Examples: `chatbot_sessions.bot_label`, `sessions.input_tokens`, `messages.is_partial`
+Runtime ALTER TABLE with try-catch, check before add, log success/fail. Examples: `chatbot_sessions.bot_label`, `sessions.input_tokens`, `messages.is_partial`
 
-## Recent Changes (Since Last Scan)
+## Recent Changes (Since 57e98c3)
 
-⚠️ **NEW TABLES**:
-- `hub_broadcasts`: Local cache of hub broadcast messages (4 columns)
-- `stardom_pair_history`: Agent collaboration tracking (6 columns)
-- `stardom_cached_results`: Async task delivery cache (4 columns)
+**NEW TABLES**: `hub_broadcasts` (4 cols), `stardom_pair_history` (6 cols), `stardom_cached_results` (4 cols)
 
-⚠️ **MODIFIED TABLES**:
-- `chatbot_sessions`: Added `bot_label` column for multi-bot support
-- `stardom_tasks`: Added `deadline` column for task timeout tracking
-- `stardom_learned_routes`: Added `experience` column for agent expertise
+**MODIFIED TABLES**: `chatbot_sessions.bot_label`, `stardom_tasks.deadline`, `stardom_learned_routes.experience`
 
-⚠️ **MIGRATION REQUIRED**: No breaking changes - all additions are backward compatible
+**MIGRATION**: No breaking changes - all additions backward compatible
 
 ## Notable Exclusions
 

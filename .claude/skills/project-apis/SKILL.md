@@ -4,8 +4,8 @@ name: API 端点目录
 description: smanbase API endpoints catalog. Consult when modifying or adding endpoints.
 category: api
 _scanned:
-  commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
-  scannedAt: "2026-05-17T00:00:00.000Z"
+  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
+  scannedAt: "2026-05-19T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -146,7 +146,7 @@ _scanned:
 | `smartpath.deleted` | Server→Client | Path deleted |
 | `smartpath.abort` | Client→Server | Abort running path (params: pathId) |
 | `smartpath.aborted` | Server→Client | Path aborted |
-| `smartpath.run` | Client→Server | Run path (params: pathId, workspace, args?) |
+| `smartpath.run` | Client→Server | Run path (params: pathId, workspace, args?, useRefs?) 🔄 |
 | `smartpath.running` | Server→Client | Path running |
 | `smartpath.completed` | Server→Client | Path completed broadcast |
 | `smartpath.failed` | Server→Client | Path failed broadcast |
@@ -161,12 +161,12 @@ _scanned:
 | `smartpath.references` | Server→Client | References list |
 | `smartpath.reference.read` | Client→Server | Read reference file (params: pathId, workspace, fileName) |
 | `smartpath.reference.content` | Server→Client | File content |
-| `smartpath.generateStep` | Client→Server | AI generate/execute step (params: userInput, workspace, previousSteps, execute?, pathId?, stepIndex?) |
+| `smartpath.generateStep` | Client→Server | AI generate/execute step (params: userInput, workspace, previousSteps, execute?, pathId?, stepIndex?, skills?) 🔄 |
 | `smartpath.stepGenerated` | Server→Client | Step generated (generatedContent) |
 | `smartpath.stepExecutionCompleted` | Server→Client | Step executed (result) |
-| `smartpath.orchestrate` | Client→Server | Orchestrate only (params: pathId, workspace, args?) |
+| `smartpath.orchestrate` | Client→Server | Orchestrate only (params: pathId, workspace, args?, useRefs?) 🔄 |
 | `smartpath.orchestrated` | Server→Client | Orchestration complete (blueprint, runId) |
-| `smartpath.runStep` | Client→Server | Run single step (params: pathId, workspace, runId, blueprint, stepIndex, priorResults?, args?) |
+| `smartpath.runStep` | Client→Server | Run single step (params: pathId, workspace, runId, blueprint, stepIndex, priorResults?, args?, useRefs?) 🔄 |
 | `smartpath.finalize` | Client→Server | Finalize run (params: pathId, workspace, runId, blueprint, stepResults) |
 
 ## Stardom (Collaboration)
@@ -255,29 +255,29 @@ _scanned:
 
 | Type | Direction | Description |
 |------|-----------|-------------|
-| `git.status` | Client→Server | Get git status (params: workspace) |
+| `git.status` | Client→Server | Get git status (params: workspace) 🔄 |
 | `git.status` | Server→Client | Git status |
-| `git.diff` | Client→Server | Get diff (params: workspace, filePath?, staged?) |
+| `git.diff` | Client→Server | Get diff (params: workspace, filePath?, staged?) 🔄 |
 | `git.diff` | Server→Client | Diff output |
-| `git.diffFile` | Client→Server | Get single file diff (params: workspace, filePath) |
+| `git.diffFile` | Client→Server | Get single file diff (params: workspace, filePath) 🔄 |
 | `git.diffFile` | Server→Client | File diff |
-| `git.commit` | Client→Server | Commit (params: workspace, message, files?) |
+| `git.commit` | Client→Server | Commit (params: workspace, message, files?) 🔄 |
 | `git.commit` | Server→Client | Commit result |
-| `git.log` | Client→Server | Get commit log (params: workspace, maxCount?) |
+| `git.log` | Client→Server | Get commit log (params: workspace, maxCount?) 🔄 |
 | `git.log` | Server→Client | Commit log |
-| `git.logGraph` | Client→Server | Get graph log (params: workspace, maxCount?) |
+| `git.logGraph` | Client→Server | Get graph log (params: workspace, maxCount?) 🔄 |
 | `git.logGraph` | Server→Client | Graph log |
-| `git.logSearch` | Client→Server | Search commits (params: workspace, query) |
+| `git.logSearch` | Client→Server | Search commits (params: workspace, query) 🔄 |
 | `git.logSearch` | Server→Client | Search results |
-| `git.aheadCommits` | Client→Server | Get ahead commits (params: workspace) |
+| `git.aheadCommits` | Client→Server | Get ahead commits (params: workspace) 🔄 |
 | `git.aheadCommits` | Server→Client | Ahead commits |
-| `git.branchList` | Client→Server | List branches (params: workspace) |
+| `git.branchList` | Client→Server | List branches (params: workspace) 🔄 |
 | `git.branchList` | Server→Client | Branch list |
-| `git.checkout` | Client→Server | Checkout branch (params: workspace, branch) |
+| `git.checkout` | Client→Server | Checkout branch (params: workspace, branch) 🔄 |
 | `git.checkout` | Server→Client | Checkout result |
-| `git.fetch` | Client→Server | Fetch from remote (params: workspace) |
+| `git.fetch` | Client→Server | Fetch from remote (params: workspace) 🔄 |
 | `git.fetch` | Server→Client | Fetch result |
-| `git.remoteDiff` | Client→Server | Get remote diff (params: workspace) |
+| `git.remoteDiff` | Client→Server | Get remote diff (params: workspace) 🔄 |
 | `git.remoteDiff` | Server→Client | Remote diff |
 | `git.generateCommit` | Client→Server | AI generate commit message (params: workspace, template?, files?) |
 | `git.generateCommit` | Server→Client | Generated commit message |
@@ -330,3 +330,32 @@ _scanned:
 - **SmartPath execution**: Steps create ephemeral sessions (not persisted to SQLite)
 - **Path commands**: `/pathName` syntax in chat triggers path execution
 - **Stardom**: All `stardom.*` messages forwarded to bridge if hub configured
+- **Git async**: All Git operations now async (non-blocking) to prevent event loop stalls
+- **Reference files**: Only script files (.py, .sh, .js, .ts, .bat, .sql, etc.) can be saved as references
+
+## Recent Changes (since 57e98c3)
+
+### 🔄 MODIFIED - Smart Path Messages (Reference Support)
+- **`smartpath.run`**: Added `useRefs?: boolean` parameter - enables reference file injection from previous runs
+- **`smartpath.orchestrate`**: Added `useRefs?: boolean` parameter - controls whether to include reference context in step execution
+- **`smartpath.runStep`**: Added `useRefs?: boolean` parameter - per-step reference control during stepping mode
+- **`smartpath.generateStep`**: Added `skills?: string[]` parameter - restrict available workspace skills for step execution
+
+### 🔄 MODIFIED - Git Operations (Async Refactoring)
+- **All `git.*` handlers**: Converted from synchronous to async (Promise-based)
+- **Impact**: No breaking API changes - message signatures remain identical
+- **Internal**: Changed from `execSync()` to `execFileAsync()` to prevent event loop blocking
+- **Performance**: Parallel git operations where possible (e.g., `handleGitStatus` runs `git rev-parse` and `git status` concurrently)
+- **Error handling**: Maintains same error response format (`{ error: string }`)
+
+### 🆕 ENHANCED - Smart Path Reference File Restrictions
+- **Script-only whitelist**: Reference files now restricted to script extensions (.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1, etc.)
+- **Data files blocked**: .json, .csv, .txt, .xlsx, .xml, .yaml, .yml files explicitly rejected
+- **Reason**: Prevent data coupling in scripts - data should be in `tmp/` directory
+- **Validation**: Server-side `isScriptFile()` function enforces whitelist
+
+### 🔄 MODIFIED - Smart Path Step Skills Support
+- **Step-level skills**: Steps can now specify `skills?: string[]` array in path.md
+- **Skill injection**: When executing step, specified skills loaded from `workspace/.claude/skills/{skillId}/SKILL.md`
+- **Context building**: Skills appended to step prompt as `[可使用的 Skills]` section
+- **Fallback**: If no skills specified, step instructed to NOT use workspace skills

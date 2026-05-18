@@ -2,14 +2,14 @@
 name: knowledge-business
 description: "业务知识：产品需求、用户流程、业务规则、领域术语。经代码验证，由 skill-auto-updater 聚合。"
 _scanned:
-  commitHash: "57e98c308c1cd0fc5693b3ebab5282836e02a241"
-  scannedAt: "2026-05-17T00:00:00.000Z"
+  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
+  scannedAt: "2026-05-19T00:00:00.000Z"
   branch: "master"
 ---
 
 # 业务知识
 
-> 贡献者: nasakim | 验证时间: 2026-05-17
+> 贡献者: nasakim | 验证时间: 2026-05-19
 
 ## 核心产品定位
 > by nasakim | 验证: 2026-05
@@ -28,11 +28,15 @@ _scanned:
 - **解决痛点**：多人协作场景下的任务分配不透明、执行进度不可控、结果难以追溯
 
 ### 2. 地球路径逐步执行工作流
-> by nasakim | 验证: 2026-05-17
-✅ [已验证] server/smart-path-engine.ts, docs/superpowers/specs/2026-05-16-step-by-step-execution-design.md
+> by nasakim | 验证: 2026-05-19
+✅ [已验证] server/smart-path-engine.ts, src/features/smart-paths/index.tsx
 - **用户工作流**：创建路径（多步骤） → 点"逐步执行" → 主编分析产出蓝图 → 逐步骤执行 → 每步完成后暂停 → 可编辑结果/描述 → 重试或继续 → 自动交付检查 → 生成报告
-- **业务规则**：tmp/ 目录存放临时输出（每次清空），references/ 目录存放可复用资源（用 [REFERENCE:filename] 标记），每步独立 ephemeral session，交付检查不通过自动重试 1 次
-- **解决痛点**：长流程执行中间出错需全部重跑、无法人工干预和调整、资源复用混乱
+- **业务规则**：
+  - **经验复用开关**：用户可开启"复用经验"，执行时注入已有 references/ 和 run.md，加速后续执行
+  - **步骤级 Skills**：每步可选择性加载项目 Skills（workspace/.claude/skills/），未选中则默认不使用，避免污染上下文
+  - **脚本文件白名单**：[REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件
+  - tmp/ 目录存放临时输出（每次清空），references/ 目录存放可复用资源（用 [REFERENCE:filename.ext] 标记），每步独立 ephemeral session，交付检查不通过自动重试 1 次
+- **解决痛点**：长流程执行中间出错需全部重跑、无法人工干预和调整、资源复用混乱、脚本与数据混淆
 
 ### 3. Chatbot 多 Bot 会话隔离与并发控制流
 > by nasakim | 验证: 2026-05-17
@@ -52,7 +56,7 @@ _scanned:
 ## 侧边栏核心功能
 > by nasakim | 验证: 2026-05
 ✅ [已验证] CLAUDE.md:L30-36
-1. **新建会话** → 选择项目目录 → 开始对话
+1. **新建会话** → 选择项目目录 → 开始对话（**新增快速创建**：显示最近工作空间，点击即创建新会话）
 2. **协作星图** → 多 Agent 协作网络
 3. **组队** → 多人协作空间（项目组、任务看板、Agent 管理）
 4. **定时任务** → Cron 表达式驱动的自动化任务
@@ -123,7 +127,7 @@ _scanned:
 > by nasakim | 验证: 2026-05-17
 ✅ [已验证] server/skills-registry.ts
 - 全局 skills：`~/.sman/skills/`（用户通用技能）
-- 项目级 skills：`{workspace}/.sman/skills/`（项目特定技能）
+- 项目级 skills：`{workspace}/.claude/skills/`（项目特定技能）
 - 已有的 `.claude/skills/` 中的 skill 保留不迁移，新的往 `.sman/skills/` 写
 - `skill-auto-updater` 需从 `.claude` 迁移到 `.sman` 体系下，是自我进化的核心能力
 
@@ -183,3 +187,47 @@ _scanned:
 - README.md 已增加"多语言支持"章节和核心能力表格中的条目，说明 zh-CN/en-US 双语及自动切换机制
 - 桌面端跟随 OS 语言（需重启），浏览器端跟随浏览器语言，聊天界面会话级自动检测
 - 开发者注意事项：引用 CLAUDE.md 多语言规范，所有 UI 文本禁止硬编码
+
+---
+
+## 新增业务知识（2026-05-19）
+
+### 快速工作空间创建体验
+> by nasakim | 验证: 2026-05-19
+✅ [已验证] src/components/DirectorySelectorDialog.tsx
+- **用户工作流**：点击"新建会话" → 弹出目录选择器 → 顶部显示"快速创建"区域 → 展示最近使用的 3 个工作空间 → 点击即创建新会话
+- **业务规则**：快速创建按钮显示工作空间名称（截断超长文本），Hover 显示完整路径，点击后直接调用 onSelect 创建会话
+- **解决痛点**：用户频繁在不同项目间切换，每次都要重新浏览目录树选择项目路径
+
+### Git 状态查询性能优化
+> by nasakim | 验证: 2026-05-19
+✅ [已验证] server/git-handler.ts
+- **用户工作流**：打开 Git 面板 → 并发查询 branch 和 status → 展示文件变更
+- **业务规则**：
+  - Git 命令改用 `execFile` 异步执行（原 `execSync` 阻塞），支持并发提升性能
+  - 展开未跟踪目录时跳过常见大目录（node_modules, .git, dist, build 等 15 个目录名）
+  - 最大展开深度 3 层，最多展开 500 个文件，防止大型项目卡死
+- **解决痛点**：大型 Git 仓库状态查询慢、未跟踪目录展开导致界面卡顿
+
+### macOS 开发版自动更新特殊处理
+> by nasakim | 验证: 2026-05-19
+✅ [已验证] electron/main.ts
+- **用户工作流**：检测到更新 → macOS 手动下载 zip → 解压到临时目录 → ad-hoc 签名 → 替换旧应用 → 重启
+- **业务规则**：
+  - Squirrel.Mac 要求代码签名，开发版（unsigned/ad-hoc）无法通过验证
+  - 绕过方案：`update-available` 事件中手动下载 zip，`updater:install` 中解压并 ad-hoc 签名，手动替换应用
+  - Windows/Linux 仍用原生 `autoDownload` 和 `quitAndInstall`
+- **解决痛点**：开发版 macOS 无法自动更新，开发者需手动下载安装
+
+---
+
+## Hub 任务分配详细机制（2026-05-19）
+> 详见 [references/hub-task-disposable.md](references/hub-task-disposable.md)
+
+### 组合功能（Group）- 未提交代码
+> by nasakim | 验证: 2026-05-19
+⚠️ [未提交代码] server/group-store.ts, src/schemas/group.ts, src/stores/group.ts
+- **用户工作流**：点击"新建组合" → 填写组合名称并多选已有 workspace → 组合项显示在左侧栏 → 悬浮显示操作按钮 → 新建任务需填入任务名称、描述、细节、交付标准
+- **业务规则**：右侧顶部可切换 workspace，切换后代码目录和 git 分支联动，条件充分后自动给有任务的 workspace 发起 session
+- **状态**：代码已实现但未提交到 git（untracked files）
+- **详见**：[references/hub-group-feature.md](references/hub-group-feature.md)
