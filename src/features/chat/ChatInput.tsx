@@ -132,12 +132,15 @@ export const ChatInput = memo(function ChatInput({ onSend, disabled = false, isE
     prevSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea — use rAF to avoid forced reflow on every keystroke
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
+    const el = textareaRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    });
+    return () => cancelAnimationFrame(raf);
   }, [input]);
 
   // Focus textarea on mount

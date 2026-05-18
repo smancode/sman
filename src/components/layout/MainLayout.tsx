@@ -24,7 +24,13 @@ export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [isMaximized, setIsMaximized] = useState(false);
   const location = useLocation();
-  const hasMessages = useChatStore((s) => s.messages.length > 0);
+  // Stable selector: only triggers re-render when messages go from 0→N or N→0,
+  // not on every streaming delta (which creates a new messages array reference).
+  // Returns a stable boolean via shallow comparison.
+  const hasMessages = useChatStore(
+    (s) => s.messages.length > 0,
+    (a, b) => a === b,
+  );
   const inChat = location.pathname === '/chat';
   const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
@@ -122,12 +128,14 @@ function CandyBlobs({ active }: { active: boolean }) {
     const blobs = Array.from({ length: 5 }, (_, i) => randomBlob(-(i / 5) * PERIOD));
     let rafId: number;
     let running = true;
+    let paused = !active;
 
     function step(ts: number) {
-      if (!running || !canvas || !ctx) return;
+      if (!running) return;
+      if (paused) { rafId = requestAnimationFrame(step); return; }
+      if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
-      // 清空画布，只保留色块（不画不透明底色）
       ctx.clearRect(0, 0, W, H);
 
       for (const b of blobs) {
@@ -172,18 +180,20 @@ function CandyBlobs({ active }: { active: boolean }) {
       rafId = requestAnimationFrame(step);
     }
 
-    if (active) {
-      rafId = requestAnimationFrame(step);
-    }
+    // Visibility-based pause: stop drawing when tab/window not visible
+    const onVisibility = () => { paused = !active || document.hidden; };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    rafId = requestAnimationFrame(step);
     window.addEventListener('resize', resize);
     return () => {
       running = false;
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [active]);
 
-  // 当 active=false 时，清空 canvas 避免残留
   useEffect(() => {
     if (active) return;
     const canvas = canvasRef.current;
@@ -233,12 +243,14 @@ function NebulaFlow({ active }: { active: boolean }) {
     const nebulas = Array.from({ length: 6 }, (_, i) => randomNebula(-(i / 6) * PERIOD));
     let rafId: number;
     let running = true;
+    let paused = !active;
 
     function step(ts: number) {
-      if (!running || !canvas || !ctx) return;
+      if (!running) return;
+      if (paused) { rafId = requestAnimationFrame(step); return; }
+      if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
-      // 清空画布，只保留星云色块
       ctx.clearRect(0, 0, W, H);
 
       for (const n of nebulas) {
@@ -285,18 +297,19 @@ function NebulaFlow({ active }: { active: boolean }) {
       rafId = requestAnimationFrame(step);
     }
 
-    if (active) {
-      rafId = requestAnimationFrame(step);
-    }
+    const onVisibility = () => { paused = !active || document.hidden; };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    rafId = requestAnimationFrame(step);
     window.addEventListener('resize', resize);
     return () => {
       running = false;
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [active]);
 
-  // 当 active=false 时，清空 canvas 避免残留
   useEffect(() => {
     if (active) return;
     const canvas = canvasRef.current;

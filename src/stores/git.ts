@@ -185,7 +185,7 @@ export const useGitStore = create<GitState>((set, get) => ({
   },
 
   closePanel() {
-    set({ open: false, status: null, diffFiles: [], selectedFile: null, log: [], logGraph: [], branches: [], remoteDiff: [] });
+    set({ open: false });
   },
 
   fetchStatus() {

@@ -84,7 +84,6 @@ export function Chat() {
   const error = useChatStore((s) => s.error);
   const contextWarning = useChatStore((s) => s.contextWarning);
   const waitingHint = useChatStore((s) => s.waitingHint);
-  const sendMessage = useChatStore((s) => s.sendMessage);
   const clearError = useChatStore((s) => s.clearError);
   const clearContextWarning = useChatStore((s) => s.clearContextWarning);
 
@@ -140,16 +139,6 @@ export function Chat() {
       container.scrollTop = container.scrollHeight;
     });
   }, [messages.length, streamingBlocks.length, sending]);
-
-  const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
-    const mediaForWs = media?.map(m => ({
-      type: 'document' as const,
-      mimeType: m.mimeType,
-      base64Data: m.base64Data,
-      fileName: m.fileName,
-    }));
-    sendMessage(_text, mediaForWs);
-  }, [sendMessage]);
 
   // Load history on initial connect or reconnect.
   // Reset sending state on disconnect to prevent stuck streaming UI.
@@ -250,10 +239,10 @@ export function Chat() {
         />
       )}
 
-      {/* Input */}
+      {/* Input — isolated from streaming re-renders via its own store subscriptions */}
       {hasActiveSession && (
         <div className="mt-auto w-full mx-auto max-w-4xl px-2">
-          <ChatInput onSend={handleSend} disabled={!isConnected} isEmpty={isEmpty} />
+          <ChatInputWrapper disabled={!isConnected} />
         </div>
       )}
 
@@ -273,7 +262,7 @@ export function Chat() {
 
 // ── Streaming blocks renderer: shows text/tool_use/thinking in chronological order ──
 
-function StreamingBlocksRenderer({
+const StreamingBlocksRenderer = memo(function StreamingBlocksRenderer({
   blocks,
   showThinking,
 }: {
@@ -329,7 +318,7 @@ function StreamingBlocksRenderer({
       </div>
     </div>
   );
-}
+});
 
 // ── Streaming text bubble (frozen or live) ──
 
@@ -714,5 +703,31 @@ function ErrorCard({ error, onDismiss }: { error: ChatError; onDismiss: () => vo
     </div>
   );
 }
+
+// ── ChatInputWrapper — breaks the re-render cascade from streaming ──
+// Only subscribes to stable selectors. isEmpty is stable during streaming
+// (false === false) so streaming deltas never re-render the input area.
+
+const ChatInputWrapper = memo(function ChatInputWrapper({
+  disabled,
+}: {
+  disabled: boolean;
+  onSend: (text: string, attachments?: unknown, targetAgentId?: unknown, media?: StagedMedia[]) => void;
+}) {
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const isEmpty = useChatStore((s) => s.messages.length === 0 && !s.sending);
+
+  const handleSend = useCallback((_text: string, _attachments?: unknown, _targetAgentId?: unknown, media?: StagedMedia[]) => {
+    const mediaForWs = media?.map(m => ({
+      type: 'document' as const,
+      mimeType: m.mimeType,
+      base64Data: m.base64Data,
+      fileName: m.fileName,
+    }));
+    sendMessage(_text, mediaForWs);
+  }, [sendMessage]);
+
+  return <ChatInput onSend={handleSend} disabled={disabled} isEmpty={isEmpty} />;
+});
 
 export default Chat;

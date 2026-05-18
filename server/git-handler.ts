@@ -1,7 +1,10 @@
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import { validatePath } from './code-viewer-handler.js';
+
+const execFileAsync = promisify(execFile);
 
 function isDirectory(workspace: string, filePath: string): boolean {
   try {
@@ -18,14 +21,15 @@ export function setSessionManagerForPush(sm: any): void {
   _sessionManager = sm;
 }
 
-function git(workspace: string, args: string, timeout = 10000): string {
+async function git(workspace: string, args: string, timeout = 10000): Promise<string> {
   try {
-    return execSync(`git --no-pager ${args}`, {
+    const { stdout } = await execFileAsync('git', ['--no-pager', ...args.split(' ')], {
       cwd: workspace,
       encoding: 'utf-8',
       timeout,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-    }).trim();
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return stdout.trim();
   } catch (err: unknown) {
     const e = err as { stderr?: string; message?: string };
     const msg = e.stderr?.trim() || e.message || String(err);
@@ -93,14 +97,16 @@ export interface GitBranch {
   name: string;
   current: boolean;
   remote: boolean;
-  remoteName?: string; // e.g. "origin/main"
+  remoteName?: string;
 }
 
 // ── Handlers ───────────────────────────────────────────────────────
 
-export function handleGitStatus(workspace: string): GitStatusResult {
-  const branch = git(workspace, 'rev-parse --abbrev-ref HEAD');
-  const porcelain = git(workspace, 'status --porcelain=v2 --branch');
+export async function handleGitStatus(workspace: string): Promise<GitStatusResult> {
+  const [branch, porcelain] = await Promise.all([
+    git(workspace, 'rev-parse --abbrev-ref HEAD'),
+    git(workspace, 'status --porcelain=v2 --branch'),
+  ]);
   const lines = porcelain.split('\n');
 
   const files: GitFileStatus[] = [];
@@ -120,7 +126,6 @@ export function handleGitStatus(workspace: string): GitStatusResult {
     }
 
     if (line.startsWith('1 ') || line.startsWith('2 ') || line.startsWith('u ')) {
-      // Ordinary/staged entry
       const parts = line.split(' ');
       const xy = parts.length > 1 ? parts[1] : '';
       const filePath = parts[parts.length - 1];
@@ -132,7 +137,6 @@ export function handleGitStatus(workspace: string): GitStatusResult {
     }
   }
 
-  // Expand untracked directories into individual files
   const expandedFiles: GitFileStatus[] = [];
   for (const f of files) {
     if (f.status === 'untracked' && isDirectory(workspace, f.path)) {
@@ -145,7 +149,13 @@ export function handleGitStatus(workspace: string): GitStatusResult {
   return { branch, files: expandedFiles, ahead, behind, hasUpstream };
 }
 
-function expandDirFiles(workspace: string, dirPath: string, out: GitFileStatus[]): void {
+// Skip common large directories when expanding untracked
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt', 'target', 'vendor', '__pycache__', '.venv', 'venv', 'Pods', '.gradle', '.idea', '.cache', 'coverage']);
+const MAX_EXPAND_DEPTH = 3;
+const MAX_EXPAND_FILES = 500;
+
+function expandDirFiles(workspace: string, dirPath: string, out: GitFileStatus[], depth = 0): void {
+  if (depth > MAX_EXPAND_DEPTH || out.length >= MAX_EXPAND_FILES) return;
   const resolved = path.resolve(workspace, dirPath);
   let entries: fs.Dirent[];
   try {
@@ -154,10 +164,15 @@ function expandDirFiles(workspace: string, dirPath: string, out: GitFileStatus[]
     return;
   }
   for (const entry of entries) {
+    if (out.length >= MAX_EXPAND_FILES) break;
     if (entry.name.startsWith('.')) continue;
     const rel = dirPath ? `${dirPath}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
-      expandDirFiles(workspace, rel, out);
+      if (SKIP_DIRS.has(entry.name)) {
+        out.push({ path: `${rel}/`, status: 'untracked', staged: false });
+        continue;
+      }
+      expandDirFiles(workspace, rel, out, depth + 1);
     } else if (entry.isFile()) {
       out.push({ path: rel, status: 'untracked', staged: false });
     }
@@ -176,37 +191,27 @@ function parseStatusXY(filePath: string, xy: string): GitFileStatus {
   return { path: filePath, status: 'modified', staged: x !== '.' || y !== '.' };
 }
 
-export function handleGitDiff(workspace: string, filePath?: string, staged?: boolean): GitDiffFile[] {
+export async function handleGitDiff(workspace: string, filePath?: string, staged?: boolean): Promise<GitDiffFile[]> {
   let args = 'diff';
   if (staged) args += ' --cached';
   if (filePath) {
-    // Validate the file path is within workspace
     validatePath(workspace, filePath);
     args += ' -- ' + filePath;
   }
   args += ' --no-color -U3';
 
-  const raw = git(workspace, args, 30000);
+  const raw = await git(workspace, args, 30000);
   if (raw) return parseDiffOutput(raw);
 
-  // Fallback for files with no standard diff output (untracked, deleted)
   if (!filePath) return [];
   return buildFullFileDiff(workspace, filePath);
 }
 
-/**
- * Build a synthetic diff for files where `git diff` returns nothing:
- * - Untracked/added files: show all lines as added (green)
- * - Deleted files: show all lines as removed (red)
- */
 function buildFullFileDiff(workspace: string, filePath: string): GitDiffFile[] {
   const resolved = validatePath(workspace, filePath);
-
-  // Check if file exists on disk (added/untracked) or only in git (deleted)
   const existsOnDisk = fs.existsSync(resolved);
 
   if (existsOnDisk) {
-    // Added or untracked file — show entire content as added lines
     const content = fs.readFileSync(resolved, 'utf-8');
     if (!content) return [];
     const lines = content.split('\n');
@@ -228,39 +233,15 @@ function buildFullFileDiff(workspace: string, filePath: string): GitDiffFile[] {
     }];
   }
 
-  // Deleted file — show git HEAD content as removed lines
-  let headContent = '';
-  try {
-    headContent = git(workspace, `show HEAD:"${filePath}"`, 10000);
-  } catch {
-    return [];
-  }
-  if (!headContent) return [];
-  const lines = headContent.split('\n');
-  const diffLines: GitDiffLine[] = lines.map((line, i) => ({
-    type: 'removed',
-    content: line,
-    oldLineNo: i + 1,
-    newLineNo: null,
-  }));
-  const totalLines = lines.length;
-  return [{
-    path: filePath,
-    hunks: [{
-      header: `@@ -1,${totalLines} +0,0 @@`,
-      oldStart: 1, oldLines: totalLines,
-      newStart: 0, newLines: 0,
-      lines: diffLines,
-    }],
-  }];
+  return [];
 }
 
-export function handleGitDiffFile(workspace: string, filePath: string): { oldContent: string; newContent: string } {
+export async function handleGitDiffFile(workspace: string, filePath: string): Promise<{ oldContent: string; newContent: string }> {
   validatePath(workspace, filePath);
 
   let oldContent = '';
   try {
-    oldContent = git(workspace, `show HEAD:"${filePath}"`, 10000);
+    oldContent = await git(workspace, `show HEAD:"${filePath}"`, 10000);
   } catch {
     // New file — no old content
   }
@@ -276,26 +257,26 @@ export function handleGitDiffFile(workspace: string, filePath: string): { oldCon
   return { oldContent, newContent };
 }
 
-export function handleGitCommit(workspace: string, message: string, files?: string[]): { hash: string } {
+export async function handleGitCommit(workspace: string, message: string, files?: string[]): Promise<{ hash: string }> {
   if (!message.trim()) throw new Error('Commit message is empty');
 
   if (files && files.length > 0) {
     for (const f of files) {
       validatePath(workspace, f);
-      git(workspace, `add -- "${f}"`);
+      await git(workspace, `add -- "${f}"`);
     }
   } else {
-    git(workspace, 'add -A');
+    await git(workspace, 'add -A');
   }
 
-  const hash = git(workspace, `commit -m ${JSON.stringify(message)}`);
+  const hash = await git(workspace, `commit -m ${JSON.stringify(message)}`);
   const match = hash.match(/\[[\w-]+ ([a-f0-9]+)\]/);
   return { hash: match?.[1] || hash.split('\n').pop()?.slice(0, 7) || 'unknown' };
 }
 
-export function handleGitLog(workspace: string, maxCount = 20): GitLogEntry[] {
+export async function handleGitLog(workspace: string, maxCount = 20): Promise<GitLogEntry[]> {
   const format = '%H%n%h%n%s%n%an%n%aI%n%D%n---END---';
-  const raw = git(workspace, `log --max-count=${maxCount} --pretty=format:"${format}"`);
+  const raw = await git(workspace, `log --max-count=${maxCount} --pretty=format:"${format}"`);
 
   return raw.split('---END---')
     .map(block => {
@@ -313,11 +294,9 @@ export function handleGitLog(workspace: string, maxCount = 20): GitLogEntry[] {
     .filter(Boolean) as GitLogEntry[];
 }
 
-export function handleGitLogGraph(workspace: string, maxCount = 200): GitLogGraphNode[] {
-  // Use --graph with custom format to get both graph prefix and commit data
-  // %x00 (NUL) separates graph prefix from commit data, %x01 separates fields
+export async function handleGitLogGraph(workspace: string, maxCount = 200): Promise<GitLogGraphNode[]> {
   const format = '%x00%H%x01%h%x01%s%x01%an%x01%aI%x01%D';
-  const raw = git(workspace, `log --graph --all --decorate --max-count=${maxCount} --pretty=format:"${format}"`);
+  const raw = await git(workspace, `log --graph --all --decorate --max-count=${maxCount} --pretty=format:"${format}"`);
   if (!raw) return [];
 
   const lines = raw.split('\n');
@@ -325,10 +304,7 @@ export function handleGitLogGraph(workspace: string, maxCount = 200): GitLogGrap
 
   for (const line of lines) {
     const sepIdx = line.indexOf('\0');
-    if (sepIdx === -1) {
-      // Pure graph line (merge continuation), skip
-      continue;
-    }
+    if (sepIdx === -1) continue;
 
     const graphLine = line.slice(0, sepIdx);
     const dataPart = line.slice(sepIdx + 1);
@@ -350,27 +326,20 @@ export function handleGitLogGraph(workspace: string, maxCount = 200): GitLogGrap
   return result;
 }
 
-export function handleGitLogSearch(workspace: string, query: string, maxCount = 50): GitLogGraphNode[] {
+export async function handleGitLogSearch(workspace: string, query: string, maxCount = 50): Promise<GitLogGraphNode[]> {
   if (!query || !query.trim()) return [];
 
   const q = query.trim();
   const format = '%H%x01%h%x01%s%x01%an%x01%aI%x01%D';
   const args: string[] = ['log', '--all', '--decorate', `--max-count=${maxCount}`, `--pretty=format:${format}`];
 
-  // Split query into terms for multi-field matching
-  // If query looks like a hash (hex chars), search by hash prefix
   if (/^[0-9a-f]{4,}$/i.test(q)) {
     args.push(q);
   } else {
-    // Search message (--grep) OR author (--author) — use --grep for message, we filter author on our side
-    // git doesn't support OR across --grep and --author easily, so we use --grep for message
-    // and do a broader search then filter. Simpler: just use --grep for message, add --author too.
-    // Actually: --all-match with both would be AND. We want OR.
-    // Strategy: search with --grep (case-insensitive), results include author match filtered client-side
     args.push(`--grep=${q}`, '-i');
   }
 
-  const raw = git(workspace, args.join(' '));
+  const raw = await git(workspace, args.join(' '));
   if (!raw) return [];
 
   const lines = raw.split('\n');
@@ -388,7 +357,6 @@ export function handleGitLogSearch(workspace: string, query: string, maxCount = 
     const date = fields[4];
     const refs = fields[5] || '';
 
-    // If not hash search, also accept author matches
     if (!/^[0-9a-f]{4,}$/i.test(q)) {
       const ql = q.toLowerCase();
       if (!message.toLowerCase().includes(ql) && !author.toLowerCase().includes(ql) && !shortHash.toLowerCase().startsWith(ql)) {
@@ -402,9 +370,9 @@ export function handleGitLogSearch(workspace: string, query: string, maxCount = 
   return result;
 }
 
-export function handleGitAheadCommits(workspace: string): { hash: string; shortHash: string; message: string; author: string; date: string }[] {
+export async function handleGitAheadCommits(workspace: string): Promise<{ hash: string; shortHash: string; message: string; author: string; date: string }[]> {
   const format = '%H%x01%h%x01%s%x01%an%x01%aI';
-  const raw = git(workspace, `log --pretty=format:"${format}" @{upstream}..HEAD`, 10000);
+  const raw = await git(workspace, `log --pretty=format:"${format}" @{upstream}..HEAD`, 10000);
   if (!raw) return [];
 
   return raw.split('\n').filter(Boolean).map(line => {
@@ -419,8 +387,8 @@ export function handleGitAheadCommits(workspace: string): { hash: string; shortH
   });
 }
 
-export function handleGitBranchList(workspace: string): GitBranch[] {
-  const raw = git(workspace, 'branch -a --no-color');
+export async function handleGitBranchList(workspace: string): Promise<GitBranch[]> {
+  const raw = await git(workspace, 'branch -a --no-color');
   return raw.split('\n')
     .map(line => line.trim())
     .filter(Boolean)
@@ -433,28 +401,26 @@ export function handleGitBranchList(workspace: string): GitBranch[] {
     });
 }
 
-export function handleGitCheckout(workspace: string, branch: string): { success: boolean; message: string } {
+export async function handleGitCheckout(workspace: string, branch: string): Promise<{ success: boolean; message: string }> {
   if (!/^[a-zA-Z0-9\/_.@-]+$/.test(branch)) {
     throw new Error('Invalid branch name');
   }
 
   if (branch.startsWith('remotes/')) {
-    // Remote branch: extract local name and create tracking branch
-    // remotes/origin/feature_x -> feature_x
     const withoutRemote = branch.replace(/^remotes\/[^/]+\//, '');
     if (!withoutRemote || withoutRemote === branch) {
       throw new Error(`Cannot parse branch name from: ${branch}`);
     }
-    const result = git(workspace, `checkout -b ${withoutRemote} ${branch}`);
+    const result = await git(workspace, `checkout -b ${withoutRemote} ${branch}`);
     return { success: true, message: result || `Checked out ${withoutRemote} tracking ${branch}` };
   }
 
-  const result = git(workspace, `checkout ${branch}`);
+  const result = await git(workspace, `checkout ${branch}`);
   return { success: true, message: result };
 }
 
-export function handleGitFetch(workspace: string): { success: boolean; message: string } {
-  const result = git(workspace, 'fetch --all --prune', 30000);
+export async function handleGitFetch(workspace: string): Promise<{ success: boolean; message: string }> {
+  const result = await git(workspace, 'fetch --all --prune', 30000);
   return { success: true, message: result || 'Fetch completed' };
 }
 
@@ -463,35 +429,30 @@ export async function handleGitPush(workspace: string): Promise<{ success: boole
     throw new Error('Session manager not initialized');
   }
 
-  const branch = git(workspace, 'rev-parse --abbrev-ref HEAD');
-  const hasUpstream = (() => {
-    try { git(workspace, `rev-parse --abbrev-ref ${branch}@{upstream}`); return true; } catch { return false; }
-  })();
+  const branch = await git(workspace, 'rev-parse --abbrev-ref HEAD');
+  let hasUpstream = false;
+  try { await git(workspace, `rev-parse --abbrev-ref ${branch}@{upstream}`); hasUpstream = true; } catch { hasUpstream = false; }
 
-  // If no upstream, set one and push
   if (!hasUpstream) {
     try {
-      const pushResult = git(workspace, `push -u origin ${branch}`, 60000);
+      const pushResult = await git(workspace, `push -u origin ${branch}`, 60000);
       return { success: true, message: pushResult || 'Push completed (set upstream)' };
     } catch (err) {
       throw new Error(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  // Try simple pull --rebase first
   try {
-    const pullResult = git(workspace, 'pull --rebase', 60000);
-    const pushResult = git(workspace, 'push', 60000);
+    const pullResult = await git(workspace, 'pull --rebase', 60000);
+    const pushResult = await git(workspace, 'push', 60000);
     return { success: true, message: `${pullResult}\n${pushResult}`.trim() || 'Pull + Push completed' };
   } catch (pullErr: unknown) {
     const errMsg = pullErr instanceof Error ? pullErr.message : String(pullErr);
 
-    // Check for merge conflicts
     if (!errMsg.includes('conflict') && !errMsg.includes('CONFLICT')) {
       throw new Error(`Push failed: ${errMsg}`);
     }
 
-    // Has conflicts — use Claude Agent SDK to resolve
     const pushPrompt = [
       `You are resolving git merge conflicts in the workspace: ${workspace}`,
       '',
@@ -511,7 +472,6 @@ export async function handleGitPush(workspace: string): Promise<{ success: boole
     try {
       const tempSessionId = _sessionManager.createEphemeralSession(workspace);
       const abort = new AbortController();
-      let fullResponse = '';
 
       await _sessionManager.sendMessageForStep(
         tempSessionId,
@@ -524,8 +484,7 @@ export async function handleGitPush(workspace: string): Promise<{ success: boole
       _sessionManager.closeV2Session(tempSessionId);
       _sessionManager.removeEphemeralSession(tempSessionId);
 
-      // Verify push succeeded
-      const status = handleGitStatus(workspace);
+      const status = await handleGitStatus(workspace);
       if (status.ahead > 0) {
         return { success: false, message: `AI resolved conflicts but push may not have completed. Ahead: ${status.ahead}` };
       }
@@ -537,30 +496,27 @@ export async function handleGitPush(workspace: string): Promise<{ success: boole
   }
 }
 
-export function handleGitRemoteDiff(workspace: string): GitDiffFile[] {
-  // First ensure we have fetched
+export async function handleGitRemoteDiff(workspace: string): Promise<GitDiffFile[]> {
   try {
-    git(workspace, 'fetch --all --prune', 30000);
+    await git(workspace, 'fetch --all --prune', 30000);
   } catch {
     // Fetch might fail if no remote, continue anyway
   }
 
-  // Try to diff against upstream
-  const branch = git(workspace, 'rev-parse --abbrev-ref HEAD');
+  const branch = await git(workspace, 'rev-parse --abbrev-ref HEAD');
   let upstream: string;
   try {
-    upstream = git(workspace, `rev-parse --abbrev-ref ${branch}@{upstream}`);
+    upstream = await git(workspace, `rev-parse --abbrev-ref ${branch}@{upstream}`);
   } catch {
-    // No upstream set, try origin/HEAD or origin/<branch>
     try {
-      const remote = git(workspace, 'remote').split('\n')[0];
-      upstream = `${remote}/${branch}`;
+      const remote = await git(workspace, 'remote');
+      upstream = `${remote.split('\n')[0]}/${branch}`;
     } catch {
       return [];
     }
   }
 
-  const raw = git(workspace, `diff HEAD...${upstream} --no-color -U3`, 30000);
+  const raw = await git(workspace, `diff HEAD...${upstream} --no-color -U3`, 30000);
   if (!raw) return [];
   return parseDiffOutput(raw);
 }
@@ -576,7 +532,7 @@ export async function handleGitGenerateCommit(
     throw new Error('Session manager not initialized');
   }
 
-  const diffSummary = buildDiffSummary(workspace, files);
+  const diffSummary = await buildDiffSummary(workspace, files);
   if (!diffSummary) {
     return { message: template || 'chore: update files' };
   }
@@ -615,10 +571,9 @@ Rules:
   }
 }
 
-function buildDiffSummary(workspace: string, files?: string[]): string {
+async function buildDiffSummary(workspace: string, files?: string[]): Promise<string> {
   try {
-    // Get file status summary
-    const status = handleGitStatus(workspace);
+    const status = await handleGitStatus(workspace);
     if (status.files.length === 0) return '';
 
     const fileSet = files && files.length > 0 ? new Set(files) : null;
@@ -627,7 +582,6 @@ function buildDiffSummary(workspace: string, files?: string[]): string {
 
     const parts: string[] = [];
 
-    // File changes summary
     const byStatus: Record<string, string[]> = {};
     for (const f of targetFiles) {
       if (!byStatus[f.status]) byStatus[f.status] = [];
@@ -637,24 +591,23 @@ function buildDiffSummary(workspace: string, files?: string[]): string {
       parts.push(`${s}: ${paths.join(', ')}`);
     }
 
-    // Get actual diff content (limited) — only for selected files
     const diffPaths = fileSet ? [...fileSet] : undefined;
 
     if (diffPaths) {
       for (const p of diffPaths) {
-        const diffContent = git(workspace, `diff --no-color -U1 -- "${p}"`, 15000);
+        const diffContent = await git(workspace, `diff --no-color -U1 -- "${p}"`, 15000);
         if (diffContent) {
           const truncated = diffContent.length > 2000 ? diffContent.slice(0, 2000) + '\n... (truncated)' : diffContent;
           parts.push(`\n${p}:\n${truncated}`);
         }
       }
     } else {
-      const diffRaw = git(workspace, 'diff --stat --no-color', 10000);
+      const diffRaw = await git(workspace, 'diff --stat --no-color', 10000);
       if (diffRaw) {
         parts.push('\nDiff stats:\n' + diffRaw);
       }
 
-      const diffContent = git(workspace, 'diff --no-color -U1', 15000);
+      const diffContent = await git(workspace, 'diff --no-color -U1', 15000);
       if (diffContent) {
         const truncated = diffContent.length > 3000 ? diffContent.slice(0, 3000) + '\n... (truncated)' : diffContent;
         parts.push('\nDiff content:\n' + truncated);
@@ -711,7 +664,6 @@ function parseDiffOutput(raw: string): GitDiffFile[] {
         } else if (dl.startsWith(' ')) {
           hunk.lines.push({ type: 'context', content: dl.slice(1), oldLineNo: oldLine++, newLineNo: newLine++ });
         }
-        // Skip \ No newline at end of file
       }
 
       hunks.push(hunk);
