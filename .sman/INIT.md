@@ -89,6 +89,37 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 
 **下次扫描**：增量更新模式（检查 commit hash 变更）
 
+### 2026-05-19 — 增量更新
+**Commit**: e55a98c (本地提交，推送失败)
+**Mode**: 增量更新（自上次扫描 57e98c308c1cd0fc5693b3ebab5282836e02a241）
+**变更文件**: 26 个文件（634+ 行新增，321- 行删除）
+
+**Project Knowledge Skills 更新**：
+- ✅ knowledge-conventions — 已更新（commitHash: 57e98c3 → 1ddac60，新增 6 条规范）
+- ✅ project-structure — 已更新（commitHash: 57e98c3 → 1ddac60）
+- ✅ project-apis — 已更新（commitHash: 57e98c3 → 1ddac60）
+- ✅ project-external-calls — 已更新（commitHash: 57e98c3 → 1ddac60）
+- ✅ knowledge-technical — 已更新（commitHash: 57e98c3 → 1ddac60）
+- ✅ knowledge-business — 已更新（commitHash: 57e98c3 → 1ddac60）
+- ✅ database-schema — 已更新（commitHash: 57e98c3 → 1ddac60，无 schema 变更）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ knowledge-business — 已聚合（新增 4 个条目：Group 功能、Hub 任务分配机制）
+- ✅ knowledge-conventions — 已聚合（0 个新条目）
+- ✅ knowledge-technical — 已聚合（新增 2 个条目：Group 数据结构、前端组件）
+
+**知识源文件清理**：
+- ✅ business-nasakim.md — 已清理（4 个条目已处理）
+- ✅ conventions-nasakim.md — 已清理（0 个新条目）
+- ✅ technical-nasakim.md — 已清理（2 个条目已处理）
+
+**关键发现**：
+- ⭐ MAJOR: Git 操作从同步 execSync 迁移到异步 execFile（15+ handlers 并行性能优化）
+- ⭐ NEW: Smart Path 步骤级 skills 限制与 reference 文件白名单安全机制
+- ⚠️ [未提交代码] Group 组合功能已实现但未 commit（server/group-store.ts + 前端组件）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）
+
 ### 2026-05-17 — 增量更新
 **Commit**: 57e98c308c1cd0fc5693b3ebab5282836e02a241
 **Mode**: 增量更新（自上次扫描 4db35f24f89dda0c11aa6aad83ba7bb7f8df368a）
