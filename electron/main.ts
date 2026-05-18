@@ -60,9 +60,9 @@ if (INJECTED_PSK) process.env.SMAN_PSK = INJECTED_PSK;
 if (INJECTED_FALLBACK_URL) process.env.SMAN_FALLBACK_URL = INJECTED_FALLBACK_URL;
 
 // Auto-updater: silent download, never auto-install
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = process.platform !== 'darwin'; // macOS downloads manually to bypass Squirrel.Mac signature check
 autoUpdater.autoInstallOnAppQuit = false;
-autoUpdater.autoRunAppAfterInstall = true;
+autoUpdater.autoRunAppAfterInstall = false;
 function getFrontendUrl(): string {
   return isDev ? 'http://localhost:5881' : `http://localhost:${backendPort}`;
 }
@@ -212,39 +212,36 @@ function registerIpcHandlers(): void {
   ipcMain.handle('updater:install', async () => {
     if (!updateInfo) return;
 
-    // macOS: unsigned/ad-hoc-signed apps fail signature validation in quitAndInstall().
-    // Manually replace the app bundle from the cached update zip and restart.
+    // macOS: unsigned/ad-hoc-signed apps fail Squirrel.Mac signature validation.
+    // Extract from manually downloaded zip, ad-hoc sign, replace, and restart.
     if (process.platform === 'darwin') {
       try {
-        const cachedDir = path.join(app.getPath('userData'), '..');
-        const shipItDir = path.join(cachedDir, 'com.smanbase.app.ShipIt');
-        const { readdir } = await import('fs/promises');
-        let entries: string[];
-        try {
-          entries = await readdir(shipItDir);
-        } catch {
-          entries = [];
-        }
-        // Find the update directory (random suffix)
-        const updateDir = entries
-          .filter(e => e.startsWith('update.'))
-          .map(e => path.join(shipItDir, e))
-          .find(p => { try { require('fs').statSync(path.join(p, 'Sman.app')); return true; } catch { return false; } });
-
-        if (!updateDir) {
-          // Fallback to standard quitAndInstall if we can't find the extracted app
+        const zipPath = (updateInfo as any).zipPath;
+        if (!zipPath) {
           autoUpdater.quitAndInstall();
           return;
         }
 
-        const newApp = path.join(updateDir, 'Sman.app');
         const currentApp = app.getAppPath().replace(/\/Contents\/Resources\/app\.asar$/, '');
-        // For apps in /Applications, the path is /Applications/Sman.app
         const installedApp = path.dirname(path.dirname(currentApp));
         const targetApp = installedApp.endsWith('.app') ? installedApp : '/Applications/Sman.app';
 
         const { execFileSync } = require('child_process');
-        // Ad-hoc sign the new app to ensure consistent signature state
+        const { mkdtempSync } = require('fs');
+        const { tmpdir } = require('os');
+
+        // Extract zip to temp dir
+        const extractDir = mkdtempSync(path.join(tmpdir(), 'sman-update-'));
+        execFileSync('unzip', ['-o', '-q', zipPath, '-d', extractDir], { timeout: 60000 });
+
+        // Find the .app bundle inside extracted dir
+        const { readdirSync } = require('fs');
+        const extractedApp = readdirSync(extractDir)
+          .find((e: string) => e.endsWith('.app'));
+        if (!extractedApp) throw new Error('No .app found in update zip');
+        const newApp = path.join(extractDir, extractedApp);
+
+        // Ad-hoc sign the new app
         try {
           execFileSync('codesign', ['--force', '--deep', '--sign', '-', newApp], { timeout: 30000 });
         } catch (e) {
@@ -258,7 +255,6 @@ function registerIpcHandlers(): void {
         app.exit(0);
       } catch (e) {
         console.error('[updater] macOS manual install failed:', e);
-        // Last resort fallback
         autoUpdater.quitAndInstall();
       }
       return;
@@ -287,9 +283,33 @@ function registerIpcHandlers(): void {
   });
 
   // Forward autoUpdater events to renderer
-  autoUpdater.on('update-available', (info) => {
+  autoUpdater.on('update-available', async (info) => {
     updateInfo = { version: info.version };
     mainWindow?.webContents.send('updater:available', { version: info.version, releaseNotes: info.releaseNotes });
+
+    // macOS: Squirrel.Mac validates code signatures and fails for unsigned apps.
+    // Bypass by downloading the zip manually, then using our own install logic.
+    if (process.platform === 'darwin') {
+      try {
+        const feedUrl = (autoUpdater as any).updateInfoAndProvider?.provider?.configuration?.url;
+        const files: any[] = (info as any).files;
+        const zipFile = files?.find((f: any) => f.url?.toString().endsWith('.zip'));
+        if (!feedUrl || !zipFile) return;
+
+        const zipUrl = new URL(zipFile.url.toString(), feedUrl).href;
+        const { tmpdir } = await import('os');
+        const { writeFileSync } = await import('fs');
+        const zipPath = path.join(tmpdir(), `sman-update-${info.version}.zip`);
+        const res = await fetch(zipUrl);
+        if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+        writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+        (updateInfo as any).zipPath = zipPath;
+        mainWindow?.webContents.send('updater:downloaded', { version: info.version });
+      } catch (e) {
+        console.error('[updater] macOS manual download failed:', e);
+        mainWindow?.webContents.send('updater:error', { message: (e as Error)?.message || 'Download failed' });
+      }
+    }
   });
 
   autoUpdater.on('update-not-available', () => {
@@ -297,8 +317,14 @@ function registerIpcHandlers(): void {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    if (process.platform === 'darwin') return; // handled above in update-available
     updateInfo = { version: info.version };
     mainWindow?.webContents.send('updater:downloaded', { version: info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (process.platform === 'darwin') return; // Squirrel.Mac signature errors expected for unsigned apps
+    mainWindow?.webContents.send('updater:error', { message: err?.message || 'Unknown error' });
   });
 
   autoUpdater.on('error', (err) => {
