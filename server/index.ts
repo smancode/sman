@@ -2072,7 +2072,6 @@ wss.on('connection', (ws: WebSocket) => {
               const pId = msg.pathId as string | undefined;
               const refsContext = buildWsReferencesContext(smartPathStore, workspace, pId);
               const prompt = buildStepExecutionPrompt(userInput, previousSteps, refsContext);
-              const stepSystemPrompt = buildStepSystemPrompt();
 
               const stepIdx = msg.stepIndex as number | undefined;
               let result = '';
@@ -2084,7 +2083,6 @@ wss.on('connection', (ws: WebSocket) => {
                   (delta) => {
                     ws.send(JSON.stringify({ type: 'smartpath.stepExecutionProgress', pathId: pId, stepIndex: stepIdx, delta }));
                   },
-                  stepSystemPrompt,
                 );
 
                 // 提取并保存 reference 文件（仅脚本文件）
@@ -2764,6 +2762,16 @@ function buildStepExecutionPrompt(
     parts.push(`上个步骤执行结果：「${last.executionResult}」`);
   }
   parts.push(`本步骤输入：「${userInput}」`);
+  parts.push('');
+  parts.push('[规则]');
+  parts.push('1. 直接执行任务，给出简洁结果。不要询问用户，不要等待用户输入。');
+  parts.push('2. 不要调用 dev-workflow 或任何需要多轮交互的流程。');
+  parts.push('3. 能使用现有 tool 直接完成就使用，不能的直接实现。');
+  parts.push('4. 输出要简洁：执行了什么 + 结果。不要冗长解释。');
+  parts.push('5. 最后用一行明确总结结果（以「执行结果：」开头）。');
+  parts.push('6. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。');
+  parts.push('7. 不使用 workspace/.claude/skills 中的 skill，除非本步骤指令中显式指定了要使用某个 skill。');
+  parts.push('8. [REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。');
   return parts.join('\n');
 }
 
@@ -2793,27 +2801,6 @@ function buildWsReferencesContext(store: SmartPathStore, workspace: string, path
 /**
  * 步骤执行的精简 system prompt
  */
-function buildStepSystemPrompt(): string {
-  return [
-    '[步骤执行模式 - 必须遵守]',
-    '',
-    '你正在执行一个自动化工作流的步骤。规则：',
-    '1. 直接执行任务，给出简洁结果。不要询问用户，不要等待用户输入。',
-    '2. 不要调用 dev-workflow 或任何需要多轮交互的流程。',
-    '3. 能使用现有 skill/tool 直接完成就使用，不能的直接实现。',
-    '4. 输出要简洁：执行了什么 + 结果。不要冗长解释。',
-    '5. 最后用一行明确总结结果（以「执行结果：」开头）。',
-    '6. 如果执行过程中生成了可复用的脚本或文档，在结果末尾用以下格式标注：',
-    '   [REFERENCE:filename.ext]',
-    '   ```',
-    '   文件内容',
-    '   ```',
-    '   可以标注多个文件。这些文件会被保存到复用资源库，下次执行时可以直接复用。',
-    '7. 默认不使用 workspace/.claude/skills 中的 skill，除非步骤指令中显式指定了要使用某个 skill。',
-    '8. references/ 中只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。',
-  ].join('\n');
-}
-
 const isMainModule = !process.env.SMAN_ELECTRON &&
                      !process.env.ELECTRON_RUN_AS_NODE &&
                      (process.argv[1]?.replace(/\\/g, '/').endsWith('server/index.ts') ||

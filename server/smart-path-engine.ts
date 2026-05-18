@@ -46,17 +46,7 @@ const ORCHESTRATOR_SYSTEM_PROMPT = `你是一个自动化工作流的"主编"。
 
 规则：已清晰的步骤 revisedInput 可不变；第一步 dependenciesOnPrior 填"无"；modifications 只记录实际修正的。`;
 
-const STEP_SYSTEM_PROMPT = [
-  '[步骤执行模式]',
-  '你正在执行自动化工作流的一个步骤。规则：',
-  '1. 直接执行，给出简洁结果。不要询问用户。',
-  '2. 专注于本步骤目标，不要越界。',
-  '3. 能用 skill/tool 完成就用，不能的直接实现。',
-  '4. 最后用「执行结果：」开头总结。',
-  '5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。',
-  '6. 默认不使用 workspace/.claude/skills 中的 skill，除非步骤指令中显式指定了要使用某个 skill。',
-  '7. references/ 中只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。',
-].join('\n');
+const STEP_SYSTEM_PROMPT = '';
 
 function buildTmpRules(workspace: string, pathId: string): string {
   const basePath = `.sman/paths/${pathId}`;
@@ -128,6 +118,16 @@ function buildStepPrompt(
 
   parts.push('[执行指令]');
   parts.push(stepPlan.revisedInput);
+
+  parts.push('');
+  parts.push('[规则]');
+  parts.push('1. 直接执行，给出简洁结果。不要询问用户。');
+  parts.push('2. 专注于本步骤目标，不要越界。');
+  parts.push('3. 能用 tool 完成就用，不能的直接实现。');
+  parts.push('4. 最后用「执行结果：」开头总结。');
+  parts.push('5. 可复用文件用 [REFERENCE:filename.ext] 包裹内容标注。');
+  parts.push('6. 不使用 workspace/.claude/skills 中的 skill，除非本步骤指令中显式指定了要使用某个 skill。');
+  parts.push('7. [REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件。脚本中不能耦合数据，数据应放在 tmp/ 中。');
 
   if (deliveryCheck) {
     parts.push('');

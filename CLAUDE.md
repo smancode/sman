@@ -148,6 +148,7 @@ pnpm test:watch    # 监视模式
 6. **环境隔离**: `getCleanEnv()` 清除 `ANTHROPIC_*/OPENAI_*/CLAUDE_*` 环境变量，使用隔离的 `CLAUDE_CONFIG_DIR`
 7. **消息排队**: SDK 不支持打断正在执行的 turn，后端通过 `await streamDone` 排队
 8. **原生模块打包**: `better-sqlite3` 和 `node-screenshots` 必须在 `asarUnpack` 中声明，打包前需用 `node-gyp` 重编译为 Electron ABI
+9. **Smart Path 不改 system prompt**: 地球路径的步骤执行规则（workspace skills 限制、脚本文件限制等）全部放在 user prompt 的 `[规则]` 段落中，**绝对不能**修改 `STEP_SYSTEM_PROMPT` 或 `buildStepSystemPrompt`。system prompt 是 session 级的，path 不应该污染它。
 
 ## 时区处理规范
 
