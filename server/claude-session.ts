@@ -38,6 +38,15 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
+ * On macOS + Electron, spawning process.execPath (Sman.app/Contents/MacOS/Sman)
+ * causes macOS to show a second Dock icon. Use Electron Helper instead — it lives
+ * in Frameworks/ and is invisible to the Dock, but still supports ELECTRON_RUN_AS_NODE.
+ */
+const electronExecutable = process.env.SMAN_ELECTRON && process.platform === 'darwin'
+  ? path.join(path.dirname(process.execPath), '..', 'Frameworks', 'Electron Helper.app', 'Contents', 'MacOS', 'Electron Helper')
+  : process.env.SMAN_ELECTRON ? process.execPath : undefined;
+
+/**
  * Normalize workspace path to canonical form.
  * Uses realpathSync to resolve symlinks and get OS-level canonical casing.
  * On Windows: resolves UNC paths, drive letter case, 8.3 short names.
@@ -567,8 +576,11 @@ export class ClaudeSessionManager {
 
     const claudeCodePath = this.getClaudeCodePath();
 
-    // Electron: spawn uses process.execPath as 'node', needs ELECTRON_RUN_AS_NODE=1
-    // so it behaves as Node.js instead of launching GUI
+    // Electron: use Electron Helper (not the main app binary) as 'node'.
+    // The main binary (Sman.app/Contents/MacOS/Sman) is registered as the app's
+    // principal executable — macOS shows a second Dock icon for every spawn.
+    // Electron Helper lives in Frameworks/ and is invisible to the Dock.
+    // Both support ELECTRON_RUN_AS_NODE=1 for headless Node.js mode.
     if (process.env.SMAN_ELECTRON) {
       env['ELECTRON_RUN_AS_NODE'] = '1';
     }
@@ -647,8 +659,9 @@ export class ClaudeSessionManager {
       model: cliModel,
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
-      // Electron: system 'node' may not exist. Use Electron's built-in Node binary.
-      ...(process.env.SMAN_ELECTRON ? { executable: process.execPath } : {}),
+      // Electron: system 'node' may not exist. Use Electron Helper (not the main
+      // binary) to avoid showing a second Dock icon on macOS.
+      ...(electronExecutable ? { executable: electronExecutable } : {}),
       cwd: workspace,
       // root/sudo: claude CLI rejects --permission-mode bypassPermissions.
       // Use CLAUDE_BYPASS_PERMISSIONS env var instead (set above).
@@ -804,7 +817,7 @@ export class ClaudeSessionManager {
       model: this.resolveCliModel(this.config.llm.model),
       env,
       pathToClaudeCodeExecutable: claudeCodePath,
-      ...(process.env.SMAN_ELECTRON ? { executable: process.execPath } : {}),
+      ...(electronExecutable ? { executable: electronExecutable } : {}),
       cwd: workspace,
       ...(isRoot ? {} : {
         permissionMode: 'bypassPermissions',
