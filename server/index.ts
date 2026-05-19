@@ -2259,8 +2259,8 @@ wss.on('connection', (ws: WebSocket) => {
 
         case 'smartpath.guideChat': {
           try {
-            if (!msg.pathId || !msg.workspace || msg.stepIndex === undefined || !msg.stepResult) {
-              throw new Error('Missing required: pathId, workspace, stepIndex, stepResult');
+            if (!msg.pathId || !msg.workspace || msg.stepIndex === undefined) {
+              throw new Error('Missing required: pathId, workspace, stepIndex');
             }
             const gcPathId = msg.pathId as string;
             const gcWorkspace = msg.workspace as string;
