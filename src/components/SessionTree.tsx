@@ -238,6 +238,7 @@ export function SessionTree() {
   useLocale();
   const navigate = useNavigate();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const sidebarScrollRestored = useRef(false);
   const wsStatus = useWsConnection((s) => s.status);
   const [showDirSelector, setShowDirSelector] = useState(false);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
@@ -283,6 +284,42 @@ export function SessionTree() {
     if (wsStatus !== 'connected') return;
     loadGroups();
   }, [wsStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save scroll position on scroll
+  useEffect(() => {
+    const container = scrollAreaRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      localStorage.setItem('sman-sidebar-scroll', String(container.scrollTop));
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Scroll to bottom on initial load — after sessions render
+  useEffect(() => {
+    if (sidebarScrollRestored.current) return;
+    if (sessions.length === 0 && groups.length === 0) return;
+    setTimeout(() => {
+      const el = document.getElementById('sman-sidebar-scroll');
+      if (!el) return;
+      console.log('[SessionTree] scroll attempt:', {
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        children: el.children.length,
+        innerHTML_len: el.innerHTML.length,
+      });
+      el.scrollTop = el.scrollHeight;
+      console.log('[SessionTree] after scrollTop:', el.scrollTop);
+    }, 0);
+    sidebarScrollRestored.current = true;
+  }, [sessions.length, groups.length]);
+
+  // Auto-expand all groups when they load
+  useEffect(() => {
+    if (groups.length === 0) return;
+    setExpandedGroups(new Set(groups.map(g => g.id)));
+  }, [groups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-navigate when a new group task is created
   useEffect(() => {
@@ -615,7 +652,7 @@ export function SessionTree() {
       <BackendStatusBar />
 
       {/* Tree — native scroll for performance with many sessions */}
-      <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+      <div ref={scrollAreaRef} id="sman-sidebar-scroll" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
           <div className="p-2 pt-1">
             {groups.length === 0 && localSystems.length === 0 && botGroups.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">

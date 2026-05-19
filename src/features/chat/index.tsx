@@ -65,30 +65,6 @@ export function Chat() {
     prevSessionIdRef.current = currentSessionId;
   }
 
-  // 恢复滚动位置
-  useLayoutEffect(() => {
-    if (restoredRef.current) return;
-    const container = scrollRef.current;
-    if (!container || !currentSessionId) return;
-    if (messages.length === 0) return;
-
-    const saved = scrollMemory.get(currentSessionId);
-    if (!saved) {
-      // 首次进入滚到底
-      anchorRef.current?.scrollIntoView({ behavior: 'instant' });
-      restoredRef.current = true;
-      return;
-    }
-
-    if (saved.atBottom) {
-      anchorRef.current?.scrollIntoView({ behavior: 'instant' });
-    } else {
-      // 恢复比例位置仍需用 scrollTop（虚拟滚动下 scrollHeight = getTotalSize）
-      container.scrollTop = Math.round(saved.ratio * container.scrollHeight);
-    }
-    restoredRef.current = true;
-  }, [messages, currentSessionId]);
-
   // Track whether user is near bottom (within 150px) for smart auto-scroll
   useEffect(() => {
     const container = scrollRef.current;
@@ -100,12 +76,6 @@ export function Chat() {
     container.addEventListener('scroll', onScroll, { passive: true });
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
-
-  // Auto-scroll during streaming: only if user is already at bottom, use scrollIntoView to avoid forced reflow
-  useEffect(() => {
-    if (!sending || !userAtBottomRef.current) return;
-    anchorRef.current?.scrollIntoView({ behavior: 'instant' });
-  }, [messages.length, sending]);
 
   // Load history on initial connect or reconnect.
   // Reset sending state on disconnect to prevent stuck streaming UI.
@@ -162,6 +132,36 @@ export function Chat() {
     overscan: 5,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
+
+  // 恢复滚动位置
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (!currentSessionId || messages.length === 0) return;
+
+    const saved = scrollMemory.get(currentSessionId);
+    if (!saved) {
+      // 首次进入：用虚拟列表 API 滚到最后一条消息底部
+      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+      restoredRef.current = true;
+      return;
+    }
+
+    if (saved.atBottom) {
+      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+    } else {
+      const container = scrollRef.current;
+      if (container) {
+        container.scrollTop = Math.round(saved.ratio * virtualizer.getTotalSize());
+      }
+    }
+    restoredRef.current = true;
+  }, [messages, currentSessionId, virtualizer]);
+
+  // Auto-scroll during streaming: only if user is already at bottom
+  useEffect(() => {
+    if (!sending || !userAtBottomRef.current || messages.length === 0) return;
+    virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+  }, [messages.length, sending, virtualizer]);
 
   // Group task card state — subscribe to raw data, derive via useMemo
   // Key insight: only subscribe to primitive values or stable references from the store
