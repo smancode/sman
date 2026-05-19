@@ -482,8 +482,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               <Textarea
                 value={stepDesc || step.userInput}
                 onChange={(e) => onDescChange?.(e.target.value)}
-                className="min-h-[2em] max-h-[20em] text-xs resize-none"
-                rows={2}
+                className="min-h-[3.2em] max-h-[20lh] text-xs resize-y overflow-auto"
                 placeholder={t('smartpath.stepDescPlaceholder')}
               />
             </div>
@@ -492,8 +491,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               <Textarea
                 value={stepResult}
                 onChange={(e) => onResultChange?.(e.target.value)}
-                className="min-h-[2em] max-h-[20em] text-xs resize-none"
-                rows={2}
+                className="min-h-[3.2em] max-h-[20lh] text-xs resize-y overflow-auto"
                 placeholder={t('smartpath.stepResultPlaceholder')}
               />
             </div>
