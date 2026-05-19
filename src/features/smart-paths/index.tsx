@@ -231,7 +231,7 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                   {executing ? t('smartpath.executionProcess') : t('smartpath.executionResult')}
                 </div>
                 <div ref={executing ? streamRef : undefined}
-                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap">
+                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[800px] overflow-y-auto whitespace-pre-wrap">
                   {executing && !executionStream ? (
                     <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
                   ) : (
@@ -469,7 +469,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               ) : t("smartpath.executionResult")}
             </div>
             <div ref={executing ? streamRef : undefined}
-              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap">
+              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[800px] overflow-y-auto whitespace-pre-wrap">
               {executing && !executionStream ? (
                 <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
               ) : (
@@ -907,7 +907,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                           <span className="text-sm font-medium">{ref.fileName}</span>
                           <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>{t("common.close")}</Button>
                         </div>
-                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap">
+                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[800px] overflow-y-auto whitespace-pre-wrap">
                           <Streamdown mode="static" controls={{ code: true, table: true }}>
                             {currentReference}
                           </Streamdown>
