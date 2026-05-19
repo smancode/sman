@@ -398,9 +398,7 @@ export class WeComBotConnection {
       start() { started = true; },
       sendThinking(content: string) {
         if (!started) return;
-        // Truncate each thinking line to 80 chars for display
-        const line = content.length > 80 ? content.substring(0, 80) + '...' : content;
-        thinkingLines.push(`💭 ${line}`);
+        thinkingLines.push(`💭 ${content}`);
         scheduleFlush();
       },
       sendToolStatus(toolName: string, status: 'start' | 'end') {
