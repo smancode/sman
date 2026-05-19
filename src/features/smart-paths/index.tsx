@@ -231,7 +231,7 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
                   {executing ? t('smartpath.executionProcess') : t('smartpath.executionResult')}
                 </div>
                 <div ref={executing ? streamRef : undefined}
-                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
+                  className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:whitespace-pre-wrap [&_code]:break-words">
                   {executing && !executionStream ? (
                     <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
                   ) : (
@@ -251,20 +251,15 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
 
 // ── Step control bar (step-by-step mode) ──
 
-function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, onContinue, onFinalize, onGuide }: {
+function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, onContinue, onFinalize }: {
   stepIndex: number; isLastStep: boolean; hasResult?: boolean; executing?: boolean;
-  onRedo: () => void; onContinue: () => void; onFinalize: () => void; onGuide?: () => void;
+  onRedo: () => void; onContinue: () => void; onFinalize: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 mt-2">
       {hasResult && (
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onRedo}>
           {executing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} {t('smartpath.redoStep')}
-        </Button>
-      )}
-      {hasResult && onGuide && (
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onGuide}>
-          <BookOpen className="h-3 w-3" /> {t('smartpath.generateGuide')}
         </Button>
       )}
       {isLastStep ? (
@@ -349,8 +344,13 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }, [handleSend]);
 
-  // Not opened yet — show trigger button
-  if (!open) return null;
+  if (!open) {
+    return (
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleStart} disabled={loading}>
+        <BookOpen className="h-3 w-3" /> {t('smartpath.generateGuide')}
+      </Button>
+    );
+  }
 
   return (
     <div className="rounded-md border border-primary/20 bg-primary/5">
@@ -428,18 +428,11 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
 
-  const startGuideChat = useSmartPathStore((s) => s.startGuideChat);
-
   useEffect(() => {
     if (executing && streamRef.current) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight;
     }
   }, [executionStream, executing]);
-
-  const handleGuideStart = useCallback(() => {
-    if (!pathId || !workspace || !stepResult) return;
-    startGuideChat(pathId, workspace, index, stepResult);
-  }, [pathId, workspace, index, stepResult, startGuideChat]);
 
   const stepCompleted = stepping && !!stepResult;
   const stepRunning = executing;
@@ -476,7 +469,7 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               ) : t("smartpath.executionResult")}
             </div>
             <div ref={executing ? streamRef : undefined}
-              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-80 overflow-y-auto whitespace-pre-wrap">
+              className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:whitespace-pre-wrap [&_code]:break-words">
               {executing && !executionStream ? (
                 <span className="text-muted-foreground animate-pulse">{t("smartpath.waitingResponse")}</span>
               ) : (
@@ -529,11 +522,10 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
-              onGuide={showGuidePanel ? handleGuideStart : undefined}
             />
 
             {showGuidePanel && (
-              <GuideChatPanel stepIndex={index} pathId={pathId} workspace={workspace} stepResult={stepResult} />
+              <GuideChatPanel stepIndex={index} pathId={pathId!} workspace={workspace!} stepResult={stepResult} />
             )}
           </div>
         )}
@@ -915,7 +907,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                           <span className="text-sm font-medium">{ref.fileName}</span>
                           <Button variant="ghost" size="sm" onClick={() => setViewingRef(null)}>{t("common.close")}</Button>
                         </div>
-                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap">
+                        <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[400px] overflow-y-auto whitespace-pre-wrap [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_code]:whitespace-pre-wrap [&_code]:break-words">
                           <Streamdown mode="static" controls={{ code: true, table: true }}>
                             {currentReference}
                           </Streamdown>
