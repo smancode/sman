@@ -479,19 +479,29 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
             )}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
-              <Textarea
+              <textarea
                 value={stepDesc || step.userInput}
-                onChange={(e) => onDescChange?.(e.target.value)}
-                className="min-h-[3.2em] max-h-[20lh] text-xs resize-y overflow-auto"
+                onChange={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 400) + 'px';
+                  onDescChange?.(e.target.value);
+                }}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 overflow-auto"
+                style={{ height: '40px', minHeight: '40px', maxHeight: '400px' }}
                 placeholder={t('smartpath.stepDescPlaceholder')}
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editResult')}</Label>
-              <Textarea
+              <textarea
                 value={stepResult}
-                onChange={(e) => onResultChange?.(e.target.value)}
-                className="min-h-[3.2em] max-h-[20lh] text-xs resize-y overflow-auto"
+                onChange={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 400) + 'px';
+                  onResultChange?.(e.target.value);
+                }}
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 overflow-auto"
+                style={{ height: '40px', minHeight: '40px', maxHeight: '400px' }}
                 placeholder={t('smartpath.stepResultPlaceholder')}
               />
             </div>
