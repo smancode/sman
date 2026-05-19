@@ -68,7 +68,7 @@ export function MainLayout() {
         className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-700"
         style={{ opacity: isStardom ? 0 : isWelcome ? 1 : 0.2 }}
       >
-        {isDark ? <NebulaFlow active={!isStardom} /> : <CandyBlobs active={!isStardom} />}
+        {isDark ? <NebulaFlow active={!isStardom} lowFps={!isWelcome} /> : <CandyBlobs active={!isStardom} lowFps={!isWelcome} />}
       </div>
 
       {/* 内容层 - 半透明以透出背景 */}
@@ -95,7 +95,7 @@ export function MainLayout() {
 
 // ── 浅色主题 - 糖果色流动色块 ──────────────────────────────────
 
-function CandyBlobs({ active }: { active: boolean }) {
+function CandyBlobs({ active, lowFps }: { active: boolean; lowFps: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -103,9 +103,12 @@ function CandyBlobs({ active }: { active: boolean }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const SCALE = lowFps ? 0.5 : 1;
+    const FRAME_INTERVAL = lowFps ? 200 : 0; // 5fps when low-opacity, 60fps on welcome
+
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = window.innerWidth * SCALE;
+      canvas.height = window.innerHeight * SCALE;
     };
     resize();
 
@@ -128,10 +131,16 @@ function CandyBlobs({ active }: { active: boolean }) {
     let rafId: number;
     let running = true;
     let paused = !active;
+    let lastFrameTime = 0;
 
     function step(ts: number) {
       if (!running) return;
       if (paused) { rafId = requestAnimationFrame(step); return; }
+      if (FRAME_INTERVAL && ts - lastFrameTime < FRAME_INTERVAL) {
+        rafId = requestAnimationFrame(step);
+        return;
+      }
+      lastFrameTime = ts;
       if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
@@ -179,7 +188,6 @@ function CandyBlobs({ active }: { active: boolean }) {
       rafId = requestAnimationFrame(step);
     }
 
-    // Visibility-based pause: stop drawing when tab/window not visible
     const onVisibility = () => { paused = !active || document.hidden; };
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -191,7 +199,7 @@ function CandyBlobs({ active }: { active: boolean }) {
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [active]);
+  }, [active, lowFps]);
 
   useEffect(() => {
     if (active) return;
@@ -201,12 +209,12 @@ function CandyBlobs({ active }: { active: boolean }) {
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }, [active]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={lowFps ? { imageRendering: 'auto' } : undefined} />;
 }
 
 // ── 深色主题 - 星云流动效果 ────────────────────────────────────
 
-function NebulaFlow({ active }: { active: boolean }) {
+function NebulaFlow({ active, lowFps }: { active: boolean; lowFps: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -214,9 +222,12 @@ function NebulaFlow({ active }: { active: boolean }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const SCALE = lowFps ? 0.5 : 1;
+    const FRAME_INTERVAL = lowFps ? 200 : 0;
+
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = window.innerWidth * SCALE;
+      canvas.height = window.innerHeight * SCALE;
     };
     resize();
 
@@ -243,10 +254,16 @@ function NebulaFlow({ active }: { active: boolean }) {
     let rafId: number;
     let running = true;
     let paused = !active;
+    let lastFrameTime = 0;
 
     function step(ts: number) {
       if (!running) return;
       if (paused) { rafId = requestAnimationFrame(step); return; }
+      if (FRAME_INTERVAL && ts - lastFrameTime < FRAME_INTERVAL) {
+        rafId = requestAnimationFrame(step);
+        return;
+      }
+      lastFrameTime = ts;
       if (!canvas || !ctx) return;
       const W = canvas.width, H = canvas.height;
 
@@ -307,7 +324,7 @@ function NebulaFlow({ active }: { active: boolean }) {
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [active]);
+  }, [active, lowFps]);
 
   useEffect(() => {
     if (active) return;
@@ -317,5 +334,5 @@ function NebulaFlow({ active }: { active: boolean }) {
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }, [active]);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" style={lowFps ? { imageRendering: 'auto' } : undefined} />;
 }
