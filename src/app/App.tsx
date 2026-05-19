@@ -6,6 +6,7 @@ import { router } from './routes';
 import { useWsConnection, recreateClient } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
+import { useGroupStore } from '@/stores/group';
 import { sessionCache } from '@/lib/session-cache';
 import { cronCache } from '@/lib/cron-cache';
 import { registerHubEventHandlers } from '@/lib/hub-event-handler';
@@ -90,6 +91,7 @@ export default function App() {
   const client = useWsConnection((s) => s.client);
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const loadSessions = useChatStore((s) => s.loadSessions);
+  const loadGroups = useGroupStore((s) => s.loadGroups);
 
   useTheme();
   useLanguage();
@@ -104,9 +106,12 @@ export default function App() {
       fetchSettings(),
     ]).then(() => {
       loadSessions();
+      loadGroups();
       registerHubEventHandlers();
     });
-  }, [status, fetchSettings, loadSessions]);
+    // Only run once when connection is established
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   // Listen for chatbot session creation — silently refresh sidebar
   useEffect(() => {

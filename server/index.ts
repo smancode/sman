@@ -2889,8 +2889,8 @@ wss.on('connection', (ws: WebSocket) => {
             broadcastToAllAuthenticated(JSON.stringify({ type: 'group-task.list', groupId, tasks }));
 
             // Fire-and-forget: 发送 task prompt 作为第一条消息
-            const noopWsSend = (_data: string) => {};
-            sessionManager.sendMessage(sessionId, taskPrompt, noopWsSend).catch((err: unknown) => {
+            const broadcastWsSend = (data: string) => { broadcastToAllAuthenticated(data); };
+            sessionManager.sendMessage(sessionId, taskPrompt, broadcastWsSend).catch((err: unknown) => {
               log.error(`[group-task.create] Failed to send task prompt: ${err}`);
             });
           } catch (err) {
@@ -2985,7 +2985,7 @@ wss.on('connection', (ws: WebSocket) => {
               store.setParentTaskId(sessionId, taskId);
 
               // 创建 subtask 记录
-              const subtaskId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+              const subtaskId = crypto.randomUUID();
               groupStore.createSubtask({
                 id: subtaskId,
                 groupTaskId: taskId,
@@ -3015,9 +3015,9 @@ wss.on('connection', (ws: WebSocket) => {
               subPrompt = subPrompt.replace(/\{group_name\}/g, group?.name || '');
               subPrompt = subPrompt.replace(/\{parent_task_title\}/g, task.title);
 
-              // Fire-and-forget 发送 prompt
-              const noopWsSend = (_data: string) => {};
-              sessionManager.sendMessage(sessionId, subPrompt, noopWsSend).catch((err: unknown) => {
+              // Fire-and-forget 发送 prompt — broadcast so frontend can stream in real-time
+              const broadcastWsSend = (data: string) => { broadcastToAllAuthenticated(data); };
+              sessionManager.sendMessage(sessionId, subPrompt, broadcastWsSend).catch((err: unknown) => {
                 log.error(`[group-task.dispatch] Failed to send subtask prompt: ${err}`);
               });
 

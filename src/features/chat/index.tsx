@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo, memo } from 'react';
-import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info, SendHorizonal } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronUp, ChevronRight, Info, SendHorizonal, Layers, FolderOpen } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -15,6 +15,10 @@ import { cn } from '@/lib/utils';
 import { streamdownComponents, useCodeBlockCollapse } from './streamdown-components';
 import { getToolDisplayName, formatToolSummary } from './message-utils';
 import { CodeViewerProvider } from '@/features/code-viewer';
+import { useCodeViewerStore } from '@/stores/code-viewer';
+import { useGroupStore } from '@/stores/group';
+import type { GroupSubtask } from '@/schemas/group';
+import { EMPTY_SUBTASKS } from '@/schemas/group';
 import { t, useLocale } from '@/locales';
 
 
@@ -159,8 +163,122 @@ export function Chat() {
     getItemKey: (index) => messages[index]?.id ?? index,
   });
 
+  // Group task card state — each selector returns a primitive or stable reference
+  // to avoid Zustand Object.is comparison failure (object literals always create new refs)
+  const mappedId = useGroupStore((s) => currentSessionId ? s.taskSessionMap[currentSessionId] : undefined);
+  // Coordinator: mappedId is groupId, and tasks[groupId] contains a task with id === sessionId
+  const isCoordinator = useGroupStore((s) => {
+    if (!mappedId || !currentSessionId) return false;
+    return s.tasks[mappedId]?.some(t => t.id === currentSessionId) ?? false;
+  });
+  // Subtask: mappedId is groupTaskId, find parent task
+  const parentTaskId = useGroupStore((s) => {
+    if (!mappedId || isCoordinator) return undefined;
+    return mappedId; // mappedId is the groupTaskId for subtask sessions
+  });
+  const parentTaskGroupId = useGroupStore((s) => {
+    if (!parentTaskId) return undefined;
+    for (const [gid, tList] of Object.entries(s.tasks)) {
+      if (tList.some(t => t.id === parentTaskId)) return gid;
+    }
+    return undefined;
+  });
+  // Derived display values — all primitives
+  const groupName = useGroupStore((s) => {
+    const gid = isCoordinator ? mappedId : parentTaskGroupId;
+    if (!gid) return undefined;
+    return s.groups.find(g => g.id === gid)?.name;
+  });
+  const taskTitle = useGroupStore((s) => {
+    if (isCoordinator && mappedId && currentSessionId) {
+      return s.tasks[mappedId]?.find(t => t.id === currentSessionId)?.title;
+    }
+    if (parentTaskId) {
+      for (const tList of Object.values(s.tasks)) {
+        const found = tList.find(t => t.id === parentTaskId);
+        if (found) return found.title;
+      }
+    }
+    return undefined;
+  });
+  const taskDescription = useGroupStore((s) => {
+    if (isCoordinator && mappedId && currentSessionId) {
+      return s.tasks[mappedId]?.find(t => t.id === currentSessionId)?.description ?? null;
+    }
+    return null;
+  });
+  // Subtask list for coordinator card — reference-stable (from store state directly)
+  const subtaskList = useGroupStore((s) => {
+    if (!isCoordinator || !currentSessionId) return EMPTY_SUBTASKS;
+    return s.subtasks[currentSessionId] || EMPTY_SUBTASKS;
+  });
+  const isSubtask = !isCoordinator && !!parentTaskId;
+  const [taskCardExpanded, setTaskCardExpanded] = useState(false);
+
   return (
     <div className="relative flex flex-col h-full transition-colors duration-200 bg-transparent">
+      {/* Group task card - coordinator session */}
+      {isCoordinator && taskTitle && (
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 cursor-pointer hover:bg-[hsl(var(--muted))]/50 transition-colors"
+            onClick={() => setTaskCardExpanded(!taskCardExpanded)}
+          >
+            <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="text-[13px] font-medium truncate flex-1 min-w-0">
+              {groupName ? `${groupName} / ` : ''}{taskTitle}
+            </span>
+            {taskCardExpanded ? (
+              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
+          </div>
+          {taskCardExpanded && (
+            <div className="px-4 pb-2 space-y-1.5">
+              {taskDescription && (
+                <p className="text-[12px] text-foreground/60">{taskDescription}</p>
+              )}
+              {subtaskList.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[11px] text-muted-foreground">{t('task.subtasks')}:</span>
+                  {subtaskList.map((sub) => {
+                    const wsName = sub.workspace.split(/[/\\]/).pop() || sub.workspace;
+                    return (
+                      <div
+                        key={sub.id}
+                        className="flex items-center gap-1.5 text-[11px] text-foreground/50 cursor-pointer hover:text-foreground px-1 py-0.5 rounded hover:bg-muted/50 transition-colors"
+                        onClick={() => {
+                          useChatStore.getState().switchSession(sub.sessionId);
+                        }}
+                      >
+                        <FolderOpen className="h-3 w-3" />
+                        <span>{wsName}: {sub.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {/* Subtask session card */}
+      {isSubtask && parentTaskId && (
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+          <div
+            className="flex items-center gap-2 px-4 py-1.5 cursor-pointer hover:bg-[hsl(var(--muted))]/50 transition-colors"
+            onClick={() => {
+              useChatStore.getState().switchSession(parentTaskId);
+            }}
+          >
+            <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="text-[13px] text-foreground/60 truncate flex-1 min-w-0">
+              {t('task.belongsTo', { group: groupName || '', task: taskTitle || '' })}
+            </span>
+          </div>
+        </div>
+      )}
       <InitBanner />
       {/* Messages */}
       <div ref={scrollRef} data-chat-scroll className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>

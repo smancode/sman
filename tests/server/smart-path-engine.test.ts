@@ -60,8 +60,8 @@ describe('SmartPathEngine', () => {
     const runs = store.listRuns(p.id, workspace);
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('completed');
-    // 2 step executions + 1 updateRunGuide call = 3
-    expect(mockSessionManager.sendMessageForStep).toHaveBeenCalledTimes(3);
+    // orchestrate(1) + 2 step executions + updateRunGuide(1) = 4
+    expect(mockSessionManager.sendMessageForStep).toHaveBeenCalledTimes(4);
   });
 
   it('should collect result from session history', async () => {
@@ -84,7 +84,7 @@ describe('SmartPathEngine', () => {
   });
 
   it('should mark path as failed on error', async () => {
-    mockSessionManager.sendMessageForStep.mockRejectedValueOnce(new Error('Send failed'));
+    mockSessionManager.sendMessageForStep.mockRejectedValue(new Error('Send failed'));
 
     const p = store.create({ name: 'Fail', workspace, steps: JSON.stringify([{ userInput: 'step' }]) });
     await expect(engine.run(p.id, workspace, vi.fn(), vi.fn())).rejects.toThrow();

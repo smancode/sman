@@ -1,5 +1,43 @@
 # Business — nasakim
 
-> Last extracted: 2026-05-19T00:00:00.000Z
+> Last extracted: 2026-05-19T03:35:56.749Z
 
-[All entries have been processed and aggregated into .claude/skills/knowledge-business/SKILL.md]
+## Group & GroupTask 功能需求
+<!-- hash: a1b2c3 -->
+- Group（组合）：将多个 workspace 组合在一起进行批量任务管理
+- GroupTask（组合任务）：包含名称、描述、细节、交付标准4个字段，可分发到各 workspace 执行
+- 任务分析流程：使用 AI 分析任务可行性 → 自动拆分到各 workspace → 创建 session 并分发
+<!-- end: a1b2c3 -->
+
+## 新建会话 vs 新建组合的区别
+<!-- hash: 7k8m9n -->
+- 新建会话：单工作区对话，选1个项目目录直接聊天
+- 新建组合：多工作区协作，选多个项目创建任务，AI 自动分析并分配给不同工作区
+- 组合用于跨项目协作场景（如前端+后端+文档项目协同）
+<!-- end: 7k8m9n -->
+
+## 交付标准要求
+<!-- hash: d4e5f6 -->
+- 交付前必须完成编译和测试，交付可直接使用的版本
+- 不接受"由于环境限制无法运行"等借口，缺少工具就安装、找不到就找
+- 用户对半成品交付零容忍
+<!-- end: d4e5f6 -->
+
+## 交付必须用 dev.sh 实际启动验证
+<!-- hash: f2a3b4 -->
+- 仅跑单元测试不够，必须用 dev.sh 实际启动项目验证前后端和 Electron 均能正常编译运行
+- 用户会追问"你怎么测试的"，不接受只跑测试不启动的验证方式
+<!-- end: f2a3b4 -->
+
+## 用户期望自测覆盖核心 CRUD 流程
+<!-- hash: b7c8d9 -->
+- 新建、编辑、删除组合，新建任务等基本操作必须在交付前自测通过
+- 用户对"未自测就交付"反应强烈，认为这是最基本的开发要求
+- 交付时应附带测试清单，逐项确认各核心流程可用
+<!-- end: b7c8d9 -->
+
+## Bug 排查偏好：dev-workflow 与 superpowers
+<!-- hash: e1f2a3 -->
+- 用户遇到问题时倾向于用 dev-workflow 和 superpowers 流程来系统化排查和解决
+- "新建组合不显示"是反复出现的顽固问题，需从前后端全链路彻底排查
+<!-- end: e1f2a3 -->

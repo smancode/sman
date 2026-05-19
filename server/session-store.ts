@@ -9,6 +9,7 @@ export interface Session {
   workspace: string;
   label?: string;
   isCron?: boolean;
+  parentTaskId?: string | null;
   deletedAt?: string | null;
   createdAt: string;
   lastActiveAt: string;
@@ -146,6 +147,14 @@ export class SessionStore {
       this.log.info('Migrated: added is_partial column to messages table');
     }
 
+    // Migration: add parent_task_id column if not exists
+    try {
+      this.db.prepare('SELECT parent_task_id FROM sessions LIMIT 1').get();
+    } catch {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN parent_task_id TEXT DEFAULT NULL');
+      this.log.info('Migrated: added parent_task_id column to sessions table');
+    }
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
@@ -167,21 +176,24 @@ export class SessionStore {
 
   getSession(id: string): Session | undefined {
     const row = this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
+      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, parent_task_id as parentTaskId, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE id = ?'
     ).get(id) as Session | undefined;
     return row;
   }
 
   listSessions(systemId?: string): Session[] {
-    // 默认排除 cron 会话和已软删除的会话
+    const groupBaseDir = path.join(os.homedir(), '.sman', 'group');
+    // 排除 cron 会话、已软删除的会话、group task 会话（workspace 指向 group 目录的）
+    const baseWhere = "(is_cron = 0 OR is_cron IS NULL) AND deleted_at IS NULL AND workspace NOT LIKE ?";
+    const fields = 'id, system_id as systemId, workspace, label, is_cron as isCron, parent_task_id as parentTaskId, created_at as createdAt, last_active_at as lastActiveAt';
     if (systemId) {
       return this.db.prepare(
-        'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE system_id = ? AND (is_cron = 0 OR is_cron IS NULL) AND deleted_at IS NULL ORDER BY last_active_at DESC'
-      ).all(systemId) as Session[];
+        `SELECT ${fields} FROM sessions WHERE system_id = ? AND ${baseWhere} ORDER BY last_active_at DESC`
+      ).all(systemId, `${groupBaseDir}/%`) as Session[];
     }
     return this.db.prepare(
-      'SELECT id, system_id as systemId, workspace, label, is_cron as isCron, created_at as createdAt, last_active_at as lastActiveAt FROM sessions WHERE (is_cron = 0 OR is_cron IS NULL) AND deleted_at IS NULL ORDER BY last_active_at DESC'
-    ).all() as Session[];
+      `SELECT ${fields} FROM sessions WHERE ${baseWhere} ORDER BY last_active_at DESC`
+    ).all(`${groupBaseDir}/%`) as Session[];
   }
 
   addMessage(sessionId: string, input: AddMessageInput): Message {
@@ -210,6 +222,12 @@ export class SessionStore {
     this.db.prepare(
       'UPDATE sessions SET workspace = ?, system_id = ? WHERE id = ?'
     ).run(workspace, workspace, sessionId);
+  }
+
+  setParentTaskId(sessionId: string, parentTaskId: string): void {
+    this.db.prepare(
+      'UPDATE sessions SET parent_task_id = ? WHERE id = ?'
+    ).run(parentTaskId, sessionId);
   }
 
   /**

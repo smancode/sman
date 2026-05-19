@@ -238,6 +238,7 @@ export function SessionTree() {
   useLocale();
   const navigate = useNavigate();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const wsStatus = useWsConnection((s) => s.status);
   const [showDirSelector, setShowDirSelector] = useState(false);
   const [showGroupDialog, setShowGroupDialog] = useState(false);
   const [showTaskDialog, setShowTaskDialog] = useState(false);
@@ -258,27 +259,50 @@ export function SessionTree() {
   // Group store
   const groups = useGroupStore((s) => s.groups);
   const tasks = useGroupStore((s) => s.tasks);
+  const subtasks = useGroupStore((s) => s.subtasks);
   const loadGroups = useGroupStore((s) => s.loadGroups);
   const loadTasks = useGroupStore((s) => s.loadTasks);
+  const loadSubtasks = useGroupStore((s) => s.loadSubtasks);
   const createGroup = useGroupStore((s) => s.createGroup);
   const deleteGroup = useGroupStore((s) => s.deleteGroup);
   const createTask = useGroupStore((s) => s.createTask);
   const deleteTask = useGroupStore((s) => s.deleteTask);
+  const pendingTaskSessionId = useGroupStore((s) => s.pendingTaskSessionId);
+  const clearPendingTask = useGroupStore((s) => s.clearPendingTask);
 
   // Load groups when WebSocket is connected
   useEffect(() => {
-    if (status !== 'connected') return;
+    if (wsStatus !== 'connected') return;
     loadGroups();
-  }, [status]);
+  }, [wsStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load tasks for a group when it's expanded
+  // Auto-navigate when a new group task is created
+  useEffect(() => {
+    if (!pendingTaskSessionId) return;
+    setActiveTaskId(pendingTaskSessionId);
+    switchSession(pendingTaskSessionId);
+    navigate('/chat');
+    clearPendingTask();
+  }, [pendingTaskSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load tasks and subtasks for a group when it's expanded
   useEffect(() => {
     expandedGroups.forEach((groupId) => {
       if (!tasks[groupId] || tasks[groupId].length === 0) {
         loadTasks(groupId);
       }
+      // Load subtasks for each task in the group
+      const groupTasks = tasks[groupId];
+      if (groupTasks) {
+        groupTasks.forEach((task) => {
+          if (!subtasks[task.id]) {
+            loadSubtasks(task.id);
+          }
+        });
+      }
     });
-  }, [expandedGroups, loadTasks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedGroups]);
 
   // Derive local systems and bot groups from sessions
   const { localSystems, botGroups, localSessionsBySystem, botSessionsByGroup } = useMemo(() => {
@@ -449,20 +473,14 @@ export function SessionTree() {
     setShowGroupDialog(true);
   };
 
-  const handleGroupCreated = async (group: { id: string; name: string; workspaceIds: string[] }) => {
-    // Optimistically add to local state
-    await loadGroups();
-  };
-
-  const handleGroupEdit = (group: Group) => {
-    // TODO: Implement edit dialog
-    alert(t('group.editNotImplemented'));
+  const handleGroupCreated = async (_group: { id: string; name: string; workspaceIds: string[] }) => {
+    // Server broadcasts group.list after create — messageHandler in group store will update state
   };
 
   const handleGroupDelete = async (groupId: string) => {
     try {
       await deleteGroup(groupId);
-      await loadGroups();
+      // Server broadcasts group.list after delete — messageHandler will update state
     } catch (err) {
       console.error('[SessionTree] Failed to delete group:', err);
       alert(`${t('group.deleteFail')}: ${err instanceof Error ? err.message : String(err)}`);
@@ -474,24 +492,10 @@ export function SessionTree() {
     setShowTaskDialog(true);
   };
 
-  const handleTaskCreated = async (task: {
-    id: string;
-    groupId: string;
-    title: string;
-    description: string;
-    details: string;
-    acceptanceCriteria: string;
-  }) => {
-    // Reload tasks for the group
-    await loadTasks(task.groupId);
-    // Navigate to task view
-    setActiveTaskId(task.id);
-    navigate(`/group-task/${task.id}`);
-  };
-
   const handleTaskSelect = (taskId: string) => {
     setActiveTaskId(taskId);
-    navigate(`/group-task/${taskId}`);
+    switchSession(taskId);
+    navigate('/chat');
   };
 
   const handleTaskDelete = async (taskId: string) => {
@@ -541,7 +545,6 @@ export function SessionTree() {
       <CreateTaskDialog
         open={showTaskDialog}
         onOpenChange={setShowTaskDialog}
-        onTaskCreated={handleTaskCreated}
         groupId={selectedGroupId || ''}
       />
 
@@ -588,16 +591,20 @@ export function SessionTree() {
                     {groups.map((group) => (
                       <GroupItem
                         key={group.id}
-                        group={group}
+                        name={group.name}
+                        workspaceCount={Array.isArray(group.workspaceIds) ? group.workspaceIds.length : 0}
+                        workspaceNames={(Array.isArray(group.workspaceIds) ? group.workspaceIds : []).map((ws: string) => ws.split(/[/\\]/).pop() || ws)}
                         tasks={tasks[group.id] || []}
+                        subtasks={subtasks}
                         expanded={expandedGroups.has(group.id)}
                         onToggle={() => toggleGroupExpanded(group.id)}
-                        onEdit={handleGroupEdit}
-                        onDelete={handleGroupDelete}
-                        onNewTask={handleNewTask}
+                        onDelete={() => handleGroupDelete(group.id)}
+                        onNewTask={() => handleNewTask(group.id)}
                         onTaskSelect={handleTaskSelect}
                         onTaskDelete={handleTaskDelete}
+                        onSubtaskSelect={(sessionId) => { switchSession(sessionId); navigate('/chat'); }}
                         activeTaskId={activeTaskId}
+                        activeSessionId={currentSessionId}
                       />
                     ))}
                   </>

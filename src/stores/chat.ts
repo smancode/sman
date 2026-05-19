@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useSettingsStore } from '@/stores/settings';
+import { useGroupStore } from '@/stores/group';
 import { sessionCache } from '@/lib/session-cache';
 import { contextUsageCache } from '@/lib/context-usage-cache';
 
@@ -369,22 +370,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!Array.isArray(data.sessions)) return;
         unsub();
 
-        const sessions: ChatSession[] = data.sessions.map((s: Record<string, unknown>) => ({
-          key: String(s.id),
-          label: s.label ? String(s.label) : undefined,
-          workspace: s.workspace ? String(s.workspace) : undefined,
-          createdAt: s.createdAt ? String(s.createdAt) : undefined,
-          lastActiveAt: s.lastActiveAt ? String(s.lastActiveAt) : undefined,
-          source: s.source === 'bot' ? 'bot' : 'local',
-          botLabel: s.botLabel ? String(s.botLabel) : undefined,
-          botMode: (s.botMode === 'query' || s.botMode === 'collect') ? s.botMode : undefined,
-        }));
+        const sessions: ChatSession[] = (data.sessions as Record<string, unknown>[])
+          .filter(s => !s.parentTaskId)
+          .map((s) => ({
+            key: String(s.id),
+            label: s.label ? String(s.label) : undefined,
+            workspace: s.workspace ? String(s.workspace) : undefined,
+            createdAt: s.createdAt ? String(s.createdAt) : undefined,
+            lastActiveAt: s.lastActiveAt ? String(s.lastActiveAt) : undefined,
+            source: (s.source === 'bot' ? 'bot' : 'local') as 'bot' | 'local',
+            botLabel: s.botLabel ? String(s.botLabel) : undefined,
+            botMode: (s.botMode === 'query' || s.botMode === 'collect') ? s.botMode as 'query' | 'collect' : undefined,
+            parentTaskId: undefined,
+          }));
 
         const state = get();
-        // Keep current session if it still exists, otherwise stay empty (show welcome screen)
-        const nextId = sessions.find(s => s.key === state.currentSessionId)
+        // Keep current session if it still exists in list OR is a group task session (not in session.list)
+        const inList = sessions.find(s => s.key === state.currentSessionId);
+        const isGroupTask = !inList && state.currentSessionId
+          ? useGroupStore.getState().isGroupTaskSession(state.currentSessionId)
+          : false;
+        const nextId = inList
           ? state.currentSessionId
-          : '';
+          : (isGroupTask ? state.currentSessionId : '');
 
         set({ sessions, currentSessionId: nextId });
 

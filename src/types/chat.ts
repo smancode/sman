@@ -50,6 +50,7 @@ export interface ChatSession {
   source?: 'local' | 'bot'
   botLabel?: string
   botMode?: 'full' | 'query' | 'collect'
+  parentTaskId?: string | null
 }
 
 export interface ToolStatus {

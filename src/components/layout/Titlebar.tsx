@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Minus, Square, X, Copy, GitBranch } from 'lucide-react';
+import { Minus, Square, X, Copy, GitBranch, ChevronDown, ChevronUp, Layers, FolderOpen } from 'lucide-react';
 import { useChatStore } from '@/stores/chat';
 import { useGitStore } from '@/stores/git';
 import { useCodeViewerStore } from '@/stores/code-viewer';
+import { useGroupStore } from '@/stores/group';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/locales';
 
@@ -38,12 +39,23 @@ export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const isElectron = !!window.sman;
   const isWindows = window.sman?.platform === 'win32';
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
   const workspace = useChatStore((s) => {
     const session = s.sessions.find(ss => ss.key === s.currentSessionId);
     return session?.workspace;
   });
   const location = useLocation();
   const inChat = location.pathname === '/chat';
+
+  // Group task detection — select primitive values to avoid infinite re-render
+  const isGroupTask = useGroupStore((s) => currentSessionId ? currentSessionId in s.taskSessionMap : false);
+  const taskGroupId = useGroupStore((s) => currentSessionId ? s.taskSessionMap[currentSessionId] : undefined);
+  const groupTaskTitle = useGroupStore((s) => {
+    if (!taskGroupId) return '';
+    const tasks = s.tasks[taskGroupId];
+    return tasks?.find(t => t.id === currentSessionId)?.title || '';
+  });
+  const [taskCardExpanded, setTaskCardExpanded] = useState(false);
 
   // Git branch
   const [gitBranch, setGitBranch] = useState<string | null>(null);
@@ -87,8 +99,30 @@ export function Titlebar() {
       {/* Spacer - drag area */}
       <div className="flex-1" />
 
-      {/* Workspace path + git branch - centered, only in chat */}
-      {inChat && workspace && (
+      {/* Workspace info - centered, only in chat */}
+      {inChat && (isGroupTask ? (
+        // Group task card
+        <div
+          className="flex items-center gap-1.5 text-[13px] max-w-[600px]"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate min-w-0 font-medium">
+            {groupTaskTitle}
+          </span>
+          <button
+            className="p-0.5 hover:bg-[hsl(var(--muted))] rounded transition-colors"
+            onClick={() => setTaskCardExpanded(!taskCardExpanded)}
+          >
+            {taskCardExpanded ? (
+              <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            )}
+          </button>
+        </div>
+      ) : workspace ? (
+        // Normal session workspace
         <span className="flex items-center gap-2 text-[13px] font-mono max-w-[500px] text-foreground/70 dark:text-foreground/80" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <span
             className="truncate min-w-0 cursor-pointer hover:text-[hsl(var(--foreground))] transition-colors"
@@ -114,7 +148,7 @@ export function Titlebar() {
             </>
           )}
         </span>
-      )}
+      ) : null)}
 
       {/* Spacer - drag area */}
       <div className="flex-1" />
