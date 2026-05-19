@@ -22,7 +22,6 @@ const NEBULA_COLORS = [
 
 export function MainLayout() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
-  const [isMaximized, setIsMaximized] = useState(false);
   const location = useLocation();
   // Stable selector: only triggers re-render when messages go from 0→N or N→0,
   // not on every streaming delta (which creates a new messages array reference).
@@ -33,7 +32,6 @@ export function MainLayout() {
   const inChat = location.pathname === '/chat';
   const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
-  const isWindows = window.sman?.platform === 'win32';
   const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom', '/hub'].includes(location.pathname);
 
   useEffect(() => {
@@ -42,14 +40,6 @@ export function MainLayout() {
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
-  }, []);
-
-  // Listen for maximize state on Windows (to toggle rounded corners)
-  useEffect(() => {
-    if (!window.sman?.onMaximizeChanged) return;
-    const unsubscribe = window.sman.onMaximizeChanged(setIsMaximized);
-    window.sman.windowIsMaximized?.().then(setIsMaximized);
-    return unsubscribe;
   }, []);
 
   // Initialize auto-updater IPC listeners
@@ -61,7 +51,9 @@ export function MainLayout() {
   return (
     <div className={cn(
       'flex flex-col h-screen overflow-hidden relative bg-background',
-      isWindows && !isMaximized && 'rounded-lg', // Note: rounded corners only render correctly with transparent window (macOS)
+      // Windows 10/11: no rounded corners — frameless window has opaque background,
+      // CSS border-radius would expose the black (#000000) backgroundColor as ugly corners.
+      // macOS: uses titleBarStyle:'hidden' (native window), rounded corners are native.
     )}>
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div
@@ -103,8 +95,9 @@ function CandyBlobs({ active, lowFps }: { active: boolean; lowFps: boolean }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const SCALE = lowFps ? 0.5 : 1;
-    const FRAME_INTERVAL = lowFps ? 200 : 0; // 5fps when low-opacity, 60fps on welcome
+    // Decorative background — cap fps to save CPU/GPU
+    const SCALE = lowFps ? 0.35 : 0.6;
+    const FRAME_INTERVAL = lowFps ? 100 : 33; // ~10fps when dimmed, ~30fps on welcome
 
     const resize = () => {
       canvas.width = window.innerWidth * SCALE;
@@ -222,8 +215,9 @@ function NebulaFlow({ active, lowFps }: { active: boolean; lowFps: boolean }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const SCALE = lowFps ? 0.5 : 1;
-    const FRAME_INTERVAL = lowFps ? 200 : 0;
+    // Decorative background — cap fps to save CPU/GPU
+    const SCALE = lowFps ? 0.35 : 0.6;
+    const FRAME_INTERVAL = lowFps ? 250 : 33;
 
     const resize = () => {
       canvas.width = window.innerWidth * SCALE;
