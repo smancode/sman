@@ -304,7 +304,7 @@ export class WeComBotConnection {
       const mode = this.config.getMode();
       let welcome = '欢迎使用 Sman，输入 //help 查看可用命令。';
       if (mode === 'query') {
-        welcome = '你好，我是答疑助手，有什么问题直接问我就行。';
+        welcome = '你好，我是答疑助手，有什么问题直接问我就行。\n长时间未对话会话会自动重置哦。';
       } else if (mode === 'collect') {
         welcome = '你好，欢迎反馈问题和建议，我会帮你记录。';
       }

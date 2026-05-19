@@ -263,7 +263,7 @@ export class ClaudeSessionManager {
     }
   }
 
-  private buildSmanContext(projectName: string, sessionId?: string): string {
+  private buildSmanContext(projectName: string, sessionId?: string, botName?: string): string {
     const lines: string[] = [];
     const workflowState = sessionId ? this.workflowStates.get(sessionId) : undefined;
     const stepNames = ['约束加载', '需求分析', '写实施计划', '逐任务执行', '集成验证', '代码优化', '总结沉淀'] as const;
@@ -331,7 +331,11 @@ export class ClaudeSessionManager {
     // ── 段 3：身份和行为要求 ──
     lines.push('');
     const lang = this.config?.language === 'en-US' ? 'English' : '简体中文';
-    lines.push(`[Sman Identity - You are Sman intelligent business assistant. Always respond in ${lang}. User profile identity takes priority. Project: ${projectName}. Your session_id: ${sessionId ?? 'unknown'}. Extended capabilities on demand: capability_list discover → capability_load activate.]`);
+    if (botName) {
+      lines.push(`[Identity - 你的名字是 ${botName}。Always respond in ${lang}. Project: ${projectName}.]`);
+    } else {
+      lines.push(`[Sman Identity - You are Sman intelligent business assistant. Always respond in ${lang}. User profile identity takes priority. Project: ${projectName}. Your session_id: ${sessionId ?? 'unknown'}. Extended capabilities on demand: capability_list discover → capability_load activate.]`);
+    }
     lines.push('[Sman 行为要求]');
     lines.push('');
     lines.push('## 进度告知（最重要！）');
@@ -360,6 +364,7 @@ export class ClaudeSessionManager {
     lines.push('2. **获取足够上下文** — 读取必要的文件、了解现有实现，确保有足够信息支撑任务执行');
     lines.push('3. **确认可执行性** — 评估是否具备完成任务的条件（依赖、权限、环境），能交付结果再动手');
     lines.push('4. **不确定就问** — 任何不清楚的地方立即澄清，不要基于模糊假设做决定');
+    lines.push('5. **评估关联影响** — 任何修改前必须梳理会影响哪些调用方、上下游逻辑、边界场景，不确定时先搜索代码确认');
     lines.push('');
     lines.push('## 需求澄清（对话自省）');
     lines.push('当发现用户多次纠正你的理解时（用户说"不对"/"不是这样"/"应该是..."），说明理解有偏差，需要停下来对齐：');
@@ -2441,14 +2446,16 @@ export class ClaudeSessionManager {
       const profilePrefix = this.userProfile?.getProfileForPrompt() ?? '';
       const workspace = session.workspace;
       const projectName = path.basename(workspace);
-      const smanContext = this.buildSmanContext(projectName, sessionId);
+      const smanContext = this.buildSmanContext(projectName, sessionId, botName);
 
       let modePrefix = '';
       if (mode === 'query') {
         const skillList = allowedSkills?.length ? allowedSkills.join(', ') : '全部';
         modePrefix = this.loadBotPrompt('query', { projectName, skillList, botName: botName || '答疑助手' });
+        if (botName) modePrefix += `\n你的名字是 ${botName}。如果用户问你是谁，告诉他们你的名字是 ${botName}。`;
       } else if (mode === 'collect') {
         modePrefix = this.loadBotPrompt('collect', { workspace, botName: botName || '反馈助手' });
+        if (botName) modePrefix += `\n你的名字是 ${botName}。`;
       }
       const messagePrefix = [smanContext, profilePrefix, modePrefix]
         .filter(Boolean).join('\n');
