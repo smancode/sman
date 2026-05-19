@@ -459,6 +459,18 @@ export class SmartPathStore {
     this.saveReference(ws, pathId, 'run.md', content);
   }
 
+  // ── Step Guide ──
+
+  getGuide(ws: string, pathId: string, stepIndex: number): string | null {
+    return this.getReference(ws, pathId, `guide${stepIndex + 1}.md`);
+  }
+
+  saveGuideFile(ws: string, pathId: string, stepIndex: number, content: string): string {
+    const fileName = `guide${stepIndex + 1}.md`;
+    this.saveReference(ws, pathId, fileName, content);
+    return fileName;
+  }
+
   /** 清空并重建 tmp/ 目录 */
   clearTmpDir(ws: string, pathId: string): void {
     const tmpDir = path.join(this.pathDir(ws, pathId), 'tmp');

@@ -76,6 +76,18 @@ interface SmartPathState {
   updateStepDescription: (index: number, value: string) => void;
   finalizeStepping: (pathId: string, workspace: string) => Promise<void>;
   cancelStepping: (pathId: string) => void;
+
+  // 指南对话
+  guideChatOpen: Record<number, boolean>;
+  guideChatMessages: Record<number, Array<{ role: 'user' | 'assistant'; content: string }>>;
+  guideChatSessionIds: Record<number, string>;
+  guideChatLoading: Record<number, boolean>;
+  guideChatStream: Record<number, string>;
+
+  startGuideChat: (pathId: string, workspace: string, stepIndex: number, stepResult: string) => Promise<void>;
+  sendGuideMessage: (pathId: string, workspace: string, stepIndex: number, message: string) => Promise<void>;
+  saveGuide: (pathId: string, workspace: string, stepIndex: number) => Promise<void>;
+  closeGuideChat: (stepIndex: number) => void;
 }
 
 export const useSmartPathStore = create<SmartPathState>((set) => ({
@@ -93,6 +105,12 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   references: [],
   currentReference: null,
+
+  guideChatOpen: {},
+  guideChatMessages: {},
+  guideChatSessionIds: {},
+  guideChatLoading: {},
+  guideChatStream: {},
 
   stepping: false,
   finalizing: false,
@@ -603,5 +621,147 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       stepDeliveryChecks: [],
       currentStepIndex: -1,
     });
+  },
+
+  // ── 指南对话 ──
+
+  startGuideChat: async (pathId, workspace, stepIndex, stepResult) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+
+    set((s) => ({
+      guideChatOpen: { ...s.guideChatOpen, [stepIndex]: true },
+      guideChatMessages: { ...s.guideChatMessages, [stepIndex]: [] },
+      guideChatStream: { ...s.guideChatStream, [stepIndex]: '' },
+      guideChatLoading: { ...s.guideChatLoading, [stepIndex]: true },
+    }));
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubDelta = wrapHandler(client, 'smartpath.guideChat.delta', (data) => {
+        if (typeof (data as any).stepIndex === 'number' && (data as any).stepIndex !== stepIndex) return;
+        const delta = String(data.delta || '');
+        if (delta) {
+          set((s) => ({
+            guideChatStream: { ...s.guideChatStream, [stepIndex]: (s.guideChatStream[stepIndex] || '') + delta },
+          }));
+        }
+      });
+      const unsubComplete = wrapHandler(client, 'smartpath.guideChat.completed', (data) => {
+        if (typeof (data as any).stepIndex === 'number' && (data as any).stepIndex !== stepIndex) return;
+        unsubDelta(); unsubComplete(); unsubErr();
+        const response = String(data.response || '');
+        const sessionId = data.sessionId as string;
+        set((s) => ({
+          guideChatLoading: { ...s.guideChatLoading, [stepIndex]: false },
+          guideChatSessionIds: { ...s.guideChatSessionIds, [stepIndex]: sessionId },
+          guideChatStream: { ...s.guideChatStream, [stepIndex]: '' },
+          guideChatMessages: {
+            ...s.guideChatMessages,
+            [stepIndex]: [...(s.guideChatMessages[stepIndex] || []), { role: 'assistant' as const, content: response }],
+          },
+        }));
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubDelta(); unsubComplete(); unsubErr();
+        set((s) => ({
+          guideChatLoading: { ...s.guideChatLoading, [stepIndex]: false },
+          error: String(data.error),
+        }));
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({ type: 'smartpath.guideChat', pathId, workspace, stepIndex, stepResult });
+    });
+  },
+
+  sendGuideMessage: async (pathId, workspace, stepIndex, message) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    const { guideChatSessionIds } = useSmartPathStore.getState();
+    const sessionId = guideChatSessionIds[stepIndex];
+
+    set((s) => ({
+      guideChatLoading: { ...s.guideChatLoading, [stepIndex]: true },
+      guideChatStream: { ...s.guideChatStream, [stepIndex]: '' },
+      guideChatMessages: {
+        ...s.guideChatMessages,
+        [stepIndex]: [...(s.guideChatMessages[stepIndex] || []), { role: 'user' as const, content: message }],
+      },
+    }));
+
+    return new Promise<void>((resolve, reject) => {
+      const unsubDelta = wrapHandler(client, 'smartpath.guideChat.delta', (data) => {
+        if (typeof (data as any).stepIndex === 'number' && (data as any).stepIndex !== stepIndex) return;
+        const delta = String(data.delta || '');
+        if (delta) {
+          set((s) => ({
+            guideChatStream: { ...s.guideChatStream, [stepIndex]: (s.guideChatStream[stepIndex] || '') + delta },
+          }));
+        }
+      });
+      const unsubComplete = wrapHandler(client, 'smartpath.guideChat.completed', (data) => {
+        if (typeof (data as any).stepIndex === 'number' && (data as any).stepIndex !== stepIndex) return;
+        unsubDelta(); unsubComplete(); unsubErr();
+        const response = String(data.response || '');
+        set((s) => ({
+          guideChatLoading: { ...s.guideChatLoading, [stepIndex]: false },
+          guideChatStream: { ...s.guideChatStream, [stepIndex]: '' },
+          guideChatMessages: {
+            ...s.guideChatMessages,
+            [stepIndex]: [...(s.guideChatMessages[stepIndex] || []), { role: 'assistant' as const, content: response }],
+          },
+        }));
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsubDelta(); unsubComplete(); unsubErr();
+        set((s) => ({
+          guideChatLoading: { ...s.guideChatLoading, [stepIndex]: false },
+          error: String(data.error),
+        }));
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({ type: 'smartpath.guideChat', pathId, workspace, stepIndex, stepResult: '', message, sessionId });
+    });
+  },
+
+  saveGuide: async (pathId, workspace, stepIndex) => {
+    const client = getWsClient();
+    if (!client) throw new Error('Not connected');
+    const { guideChatMessages, guideChatSessionIds } = useSmartPathStore.getState();
+    const messages = guideChatMessages[stepIndex] || [];
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!lastAssistantMsg) throw new Error('No guide content to save');
+    const sessionId = guideChatSessionIds[stepIndex];
+
+    return new Promise<void>((resolve, reject) => {
+      const unsub = wrapHandler(client, 'smartpath.guideSaved', (data) => {
+        unsub(); unsubErr();
+        const refs = (data.references as SmartPathReference[]) || [];
+        set((s) => ({
+          guideChatOpen: { ...s.guideChatOpen, [stepIndex]: false },
+          references: refs,
+        }));
+        resolve();
+      });
+      const unsubErr = wrapHandler(client, 'chat.error', (data) => {
+        unsub(); unsubErr();
+        set({ error: String(data.error) });
+        reject(new Error(String(data.error)));
+      });
+
+      client.send({ type: 'smartpath.guideSave', pathId, workspace, stepIndex, content: lastAssistantMsg.content, sessionId });
+    });
+  },
+
+  closeGuideChat: (stepIndex) => {
+    set((s) => ({
+      guideChatOpen: { ...s.guideChatOpen, [stepIndex]: false },
+      guideChatMessages: { ...s.guideChatMessages, [stepIndex]: [] },
+      guideChatStream: { ...s.guideChatStream, [stepIndex]: '' },
+      guideChatLoading: { ...s.guideChatLoading, [stepIndex]: false },
+    }));
   },
 }));

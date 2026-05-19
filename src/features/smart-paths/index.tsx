@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, ChevronRight, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil, Square,
-  Clock, FileText, FileCode, BookOpen, Ban,
+  Clock, FileText, FileCode, BookOpen, Ban, Send, MessageSquare,
 } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
@@ -251,15 +251,20 @@ function StepEditCard({ step, index, total, onChange, onDelete, onExecute, execu
 
 // ── Step control bar (step-by-step mode) ──
 
-function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, onContinue, onFinalize }: {
+function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, onContinue, onFinalize, onGuide }: {
   stepIndex: number; isLastStep: boolean; hasResult?: boolean; executing?: boolean;
-  onRedo: () => void; onContinue: () => void; onFinalize: () => void;
+  onRedo: () => void; onContinue: () => void; onFinalize: () => void; onGuide?: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 mt-2">
       {hasResult && (
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onRedo}>
           {executing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} {t('smartpath.redoStep')}
+        </Button>
+      )}
+      {hasResult && onGuide && (
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={executing} onClick={onGuide}>
+          <BookOpen className="h-3 w-3" /> {t('smartpath.generateGuide')}
         </Button>
       )}
       {isLastStep ? (
@@ -277,7 +282,7 @@ function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, o
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, finalizing, onResultChange, onDescChange, onRedo, onContinue, onFinalize }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, finalizing, onResultChange, onDescChange, onRedo, onContinue, onFinalize, pathId, workspace }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
   stepping?: boolean; finalizing?: boolean;
@@ -286,14 +291,55 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
   onResultChange?: (v: string) => void;
   onDescChange?: (v: string) => void;
   onRedo?: () => void; onContinue?: () => void; onFinalize?: () => void;
+  pathId?: string; workspace?: string;
 }) {
   const streamRef = useRef<HTMLDivElement>(null);
+  const guideChatRef = useRef<HTMLDivElement>(null);
+
+  const guideChatOpen = useSmartPathStore((s) => s.guideChatOpen[index] || false);
+  const guideChatMessages = useSmartPathStore((s) => s.guideChatMessages[index] || []);
+  const guideChatLoading = useSmartPathStore((s) => s.guideChatLoading[index] || false);
+  const guideChatStream = useSmartPathStore((s) => s.guideChatStream[index] || '');
+  const startGuideChat = useSmartPathStore((s) => s.startGuideChat);
+  const sendGuideMessage = useSmartPathStore((s) => s.sendGuideMessage);
+  const saveGuide = useSmartPathStore((s) => s.saveGuide);
+  const closeGuideChat = useSmartPathStore((s) => s.closeGuideChat);
+  const [guideInput, setGuideInput] = useState('');
 
   useEffect(() => {
     if (executing && streamRef.current) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight;
     }
   }, [executionStream, executing]);
+
+  useEffect(() => {
+    if (guideChatRef.current) {
+      guideChatRef.current.scrollTop = guideChatRef.current.scrollHeight;
+    }
+  }, [guideChatMessages, guideChatStream]);
+
+  const handleGuideStart = useCallback(() => {
+    if (!pathId || !workspace || !stepResult) return;
+    startGuideChat(pathId, workspace, index, stepResult);
+  }, [pathId, workspace, index, stepResult, startGuideChat]);
+
+  const handleGuideSend = useCallback(() => {
+    if (!pathId || !workspace || !guideInput.trim()) return;
+    sendGuideMessage(pathId, workspace, index, guideInput.trim());
+    setGuideInput('');
+  }, [pathId, workspace, index, guideInput, sendGuideMessage]);
+
+  const handleGuideSave = useCallback(() => {
+    if (!pathId || !workspace) return;
+    saveGuide(pathId, workspace, index);
+  }, [pathId, workspace, index, saveGuide]);
+
+  const handleGuideKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleGuideSend();
+    }
+  }, [handleGuideSend]);
 
   const stepCompleted = stepping && !!stepResult;
   const stepRunning = executing;
@@ -383,7 +429,68 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
               onRedo={() => onRedo?.()}
               onContinue={() => onContinue?.()}
               onFinalize={() => onFinalize?.()}
+              onGuide={pathId && workspace ? handleGuideStart : undefined}
             />
+
+            {guideChatOpen && (
+              <div className="rounded-md border border-primary/20 bg-primary/5">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-primary/10">
+                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-medium text-primary">{t('smartpath.guideLabel')}</span>
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => closeGuideChat(index)}>
+                    {t('smartpath.guideChatCancel')}
+                  </Button>
+                </div>
+
+                <div ref={guideChatRef} className="max-h-60 overflow-y-auto px-3 py-2 space-y-2">
+                  {guideChatMessages.length === 0 && guideChatLoading && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> {t('smartpath.guideChatIntro')}
+                    </div>
+                  )}
+                  {guideChatMessages.map((msg, i) => (
+                    <div key={i} className={cn('text-sm leading-relaxed', msg.role === 'user' ? 'text-foreground' : 'text-muted-foreground')}>
+                      <span className="text-xs font-medium mr-1">{msg.role === 'user' ? '👤' : '🤖'}</span>
+                      <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words inline whitespace-pre-wrap">
+                        <Streamdown mode='static' controls={{ code: true, table: true }}>
+                          {msg.content}
+                        </Streamdown>
+                      </div>
+                    </div>
+                  ))}
+                  {guideChatLoading && guideChatStream && (
+                    <div className="text-sm leading-relaxed text-muted-foreground">
+                      <span className="text-xs font-medium mr-1">🤖</span>
+                      <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words inline whitespace-pre-wrap">
+                        <Streamdown mode='static' controls={{ code: true, table: true }}>
+                          {guideChatStream}
+                        </Streamdown>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 px-3 py-2 border-t border-primary/10">
+                  <Input
+                    value={guideInput}
+                    onChange={(e) => setGuideInput(e.target.value)}
+                    onKeyDown={handleGuideKeyDown}
+                    placeholder={t('smartpath.guideChatPlaceholder')}
+                    className="h-7 text-xs flex-1"
+                    disabled={guideChatLoading}
+                  />
+                  <Button size="sm" className="h-7 text-xs gap-1" disabled={guideChatLoading || !guideInput.trim()} onClick={handleGuideSend}>
+                    <Send className="h-3 w-3" /> {t('smartpath.guideChatSend')}
+                  </Button>
+                  {!guideChatLoading && guideChatMessages.length > 0 && (
+                    <Button size="sm" className="h-7 text-xs gap-1" onClick={handleGuideSave}>
+                      <BookOpen className="h-3 w-3" /> {t('smartpath.guideChatConfirm')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -728,6 +835,8 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                 onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}
                 onContinue={stepping ? () => runStepContinue(path.id, path.workspace, path.defaultArgs) : undefined}
                 onFinalize={stepping ? () => finalizeStepping(path.id, path.workspace) : undefined}
+                pathId={path.id}
+                workspace={path.workspace}
               />
             );
           })}</div>}

@@ -120,7 +120,7 @@ function buildOrchestratorPrompt(
 function buildStepPrompt(
   stepPlan: StepPlan, globalGoal: string, stepIndex: number, totalSteps: number,
   priorKeyOutputs: string[], referencesContext: string, args?: string, deliveryCheck?: string,
-  workspace?: string, pathId?: string, skills?: string[],
+  workspace?: string, pathId?: string, skills?: string[], guideContent?: string,
 ): string {
   const parts: string[] = [];
 
@@ -138,6 +138,12 @@ function buildStepPrompt(
   if (referencesContext) {
     parts.push('[可复用资源 — 优先使用这些资源，不要重新生成]');
     parts.push(referencesContext);
+    parts.push('');
+  }
+
+  if (guideContent) {
+    parts.push('[步骤操作指南 — 必须严格按此指南执行]');
+    parts.push(guideContent);
     parts.push('');
   }
 
@@ -340,13 +346,14 @@ export class SmartPathEngine {
 
     const plan = blueprint.stepPlans[stepIndex] || blueprint.stepPlans[0];
     const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
+    const guideContent = this.store.getGuide(workspace, pathId, stepIndex) || undefined;
 
     const prompt = buildStepPrompt(
       plan, blueprint.goal, stepIndex, totalSteps,
       priorResults, referencesContext,
       stepIndex === 0 ? args : undefined,
       deliveryCheck,
-      workspace, pathId, skills,
+      workspace, pathId, skills, guideContent,
     );
 
     const active = this.activeRuns.get(pathId);
@@ -466,6 +473,72 @@ export class SmartPathEngine {
     this.activeRuns.delete(pathId);
   }
 
+  /** 指南对话：初始确认或后续多轮调整 */
+  async guideChat(
+    workspace: string,
+    stepIndex: number,
+    stepResult: string,
+    sessionId: string,
+    userMessage: string | undefined,
+    pathName: string,
+    stepInput: string,
+    existingGuide: string | null,
+    onDelta: (delta: string) => void,
+  ): Promise<string> {
+    let prompt: string;
+    if (!userMessage) {
+      // 初始消息：确认结果并生成指南
+      const guideSection = existingGuide
+        ? `\n已有指南:\n${existingGuide}\n\n请在已有指南基础上优化。`
+        : '';
+      prompt = [
+        `# 步骤操作指南生成`,
+        ``,
+        `工作流步骤: ${stepInput}`,
+        guideSection ? `步骤名称: ${pathName}` : '',
+        ``,
+        `步骤执行结果:`,
+        stepResult,
+        ``,
+        `请确认以上步骤执行结果是否正确，然后生成一份详细的操作指南。`,
+        guideSection,
+        ``,
+        `指南要求：`,
+        `1. 包含具体的操作步骤和参数`,
+        `2. 包含注意事项和常见问题`,
+        `3. 格式为 Markdown`,
+        `4. 简洁实用，方便后续自动执行参考`,
+        ``,
+        `直接输出操作指南内容，不需要确认。`,
+      ].filter(Boolean).join('\n');
+    } else {
+      // 多轮对话：用户调整
+      prompt = userMessage;
+    }
+
+    let fullContent = '';
+    const stepReturned = await this.sessionManager.sendMessageForStep(
+      sessionId, prompt, new AbortController(),
+      (delta) => {
+        fullContent += delta;
+        onDelta(delta);
+      },
+      STEP_SYSTEM_PROMPT,
+    );
+
+    return (stepReturned || fullContent).trim();
+  }
+
+  /** 保存指南到 references/guide{n}.md */
+  saveGuide(
+    pathId: string,
+    workspace: string,
+    stepIndex: number,
+    guideContent: string,
+  ): string {
+    return this.store.saveGuideFile(workspace, pathId, stepIndex, guideContent);
+  }
+
   /** 核心执行：主编分析 + 每步独立 session（task），返回结果 */
   async runWithResults(
     pathId: string,
@@ -510,12 +583,13 @@ export class SmartPathEngine {
         const plan = blueprint.stepPlans[i] || blueprint.stepPlans[0];
         const stepDeliveryCheck = steps[i]?.deliveryCheck;
         const stepSkills = steps[i]?.skills;
+        const guideContent = this.store.getGuide(workspace, pathId, i) || undefined;
         const prompt = buildStepPrompt(
           plan, blueprint.goal, i, steps.length,
           keyOutputs, referencesContext,
           i === 0 ? args : undefined,
           stepDeliveryCheck,
-          workspace, pathId, stepSkills,
+          workspace, pathId, stepSkills, guideContent,
         );
 
         const sessionId = `smartpath-ephemeral-${run.id}-step-${i}`;

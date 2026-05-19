@@ -2447,6 +2447,258 @@
     "text": "点击上方按钮创建新会话",
     "context": "创建会话引导"
   },
+  "group.new": {
+    "text": "新建组合",
+    "context": "新建组合按钮"
+  },
+  "group.createTitle": {
+    "text": "创建组合",
+    "context": "新建组合对话框标题"
+  },
+  "group.createDescription": {
+    "text": "选择多个工作区组合，方便跨项目协作",
+    "context": "新建组合对话框描述"
+  },
+  "group.nameLabel": {
+    "text": "组合名称",
+    "context": "组合名称标签"
+  },
+  "group.namePlaceholder": {
+    "text": "例如：电商平台核心业务",
+    "context": "组合名称占位符"
+  },
+  "group.nameRequired": {
+    "text": "请输入组合名称",
+    "context": "组合名称校验错误"
+  },
+  "group.selectWorkspaces": {
+    "text": "选择工作区",
+    "context": "工作区选择标签"
+  },
+  "group.selectAtLeastOne": {
+    "text": "请至少选择一个工作区",
+    "context": "工作区选择校验"
+  },
+  "group.noWorkspaces": {
+    "text": "暂无可用工作区，请先创建会话",
+    "context": "无工作区提示"
+  },
+  "group.selectedCount": {
+    "text": "已选择 ${count} 个工作区",
+    "context": "已选工作区计数"
+  },
+  "group.edit": {
+    "text": "编辑",
+    "context": "编辑按钮"
+  },
+  "group.delete": {
+    "text": "删除",
+    "context": "删除按钮"
+  },
+  "group.deleteConfirm": {
+    "text": "确定删除此组合？所有关联的任务也将被删除。",
+    "context": "删除组合确认"
+  },
+  "group.deleteFail": {
+    "text": "删除组合失败",
+    "context": "删除失败提示"
+  },
+  "group.createFail": {
+    "text": "创建组合失败",
+    "context": "创建失败提示"
+  },
+  "group.notConnected": {
+    "text": "未连接到服务器",
+    "context": "连接错误"
+  },
+  "group.editNotImplemented": {
+    "text": "编辑功能即将上线",
+    "context": "编辑功能未实现"
+  },
+  "group.workspaces": {
+    "text": "工作区",
+    "context": "组合下的工作区列表标题"
+  },
+  "task.new": {
+    "text": "新建任务",
+    "context": "新建任务按钮"
+  },
+  "task.createTitle": {
+    "text": "创建任务",
+    "context": "新建任务对话框标题"
+  },
+  "task.createDescription": {
+    "text": "描述您的任务需求，AI 将自动分析并分配给合适的工作区",
+    "context": "新建任务对话框描述"
+  },
+  "task.titleLabel": {
+    "text": "任务名称",
+    "context": "任务名称标签"
+  },
+  "task.titlePlaceholder": {
+    "text": "例如：优化用户登录性能",
+    "context": "任务名称占位符"
+  },
+  "task.titleRequired": {
+    "text": "请输入任务名称",
+    "context": "任务名称校验"
+  },
+  "task.descriptionLabel": {
+    "text": "任务描述",
+    "context": "任务描述标签"
+  },
+  "task.descriptionPlaceholder": {
+    "text": "简要描述任务目标和背景...",
+    "context": "任务描述占位符"
+  },
+  "task.detailsLabel": {
+    "text": "任务细节",
+    "context": "任务细节标签"
+  },
+  "task.detailsPlaceholder": {
+    "text": "详细描述任务的技术细节、依赖关系、注意事项等...",
+    "context": "任务细节占位符"
+  },
+  "task.acceptanceLabel": {
+    "text": "交付标准",
+    "context": "交付标准标签"
+  },
+  "task.acceptancePlaceholder": {
+    "text": "定义任务完成的验收标准...",
+    "context": "交付标准占位符"
+  },
+  "task.delete": {
+    "text": "删除",
+    "context": "删除按钮"
+  },
+  "task.deleteConfirm": {
+    "text": "确定删除此任务？",
+    "context": "删除任务确认"
+  },
+  "task.deleteFail": {
+    "text": "删除任务失败",
+    "context": "删除失败提示"
+  },
+  "task.createFail": {
+    "text": "创建任务失败",
+    "context": "创建失败提示"
+  },
+  "task.notConnected": {
+    "text": "未连接到服务器",
+    "context": "连接错误"
+  },
+  "task.autoDispatch": {
+    "text": "自动执行（跳过确认）",
+    "context": "自动执行模式开关"
+  },
+  "task.subtasks": {
+    "text": "子任务",
+    "context": "子任务列表标题"
+  },
+  "task.belongsTo": {
+    "text": "属于：{group} / {task}",
+    "context": "子任务归属信息"
+  },
+  "common.creating": {
+    "text": "创建中...",
+    "context": "创建中状态"
+  },
+  "common.confirm": {
+    "text": "确认",
+    "context": "确认按钮"
+  },
+  "common.cancel": {
+    "text": "取消",
+    "context": "取消按钮"
+  },
+  "common.back": {
+    "text": "返回",
+    "context": "返回按钮"
+  },
+  "task.notFound": {
+    "text": "任务不存在",
+    "context": "任务未找到"
+  },
+  "task.status.draft": {
+    "text": "草稿",
+    "context": "任务状态：草稿"
+  },
+  "task.status.analyzing": {
+    "text": "分析中",
+    "context": "任务状态：分析中"
+  },
+  "task.status.analyzed": {
+    "text": "已分析",
+    "context": "任务状态：已分析"
+  },
+  "task.status.dispatching": {
+    "text": "分发中",
+    "context": "任务状态：分发中"
+  },
+  "task.status.dispatched": {
+    "text": "已分发",
+    "context": "任务状态：已分发"
+  },
+  "task.status.in_progress": {
+    "text": "进行中",
+    "context": "任务状态：进行中"
+  },
+  "task.status.completed": {
+    "text": "已完成",
+    "context": "任务状态：已完成"
+  },
+  "task.status.failed": {
+    "text": "失败",
+    "context": "任务状态：失败"
+  },
+  "task.startAnalysis": {
+    "text": "开始分析",
+    "context": "开始分析按钮"
+  },
+  "task.confirmDispatch": {
+    "text": "确认并分发",
+    "context": "确认并分发按钮"
+  },
+  "task.details.title": {
+    "text": "任务详情",
+    "context": "任务详情卡片标题"
+  },
+  "task.details.description": {
+    "text": "任务的基本信息和要求",
+    "context": "任务详情卡片描述"
+  },
+  "task.details.taskDescription": {
+    "text": "任务描述",
+    "context": "任务描述标签"
+  },
+  "task.details.taskDetails": {
+    "text": "任务细节",
+    "context": "任务细节标签"
+  },
+  "task.details.acceptanceCriteria": {
+    "text": "交付标准",
+    "context": "交付标准标签"
+  },
+  "task.analysis.title": {
+    "text": "分析结果",
+    "context": "分析结果卡片标题"
+  },
+  "task.analysis.description": {
+    "text": "AI 对任务的分析和拆分",
+    "context": "分析结果卡片描述"
+  },
+  "task.workspaceTasks.title": {
+    "text": "工作区任务",
+    "context": "工作区任务卡片标题"
+  },
+  "task.workspaceTasks.description": {
+    "text": "分配到各个工作区的子任务",
+    "context": "工作区任务卡片描述"
+  },
+  "task.workspaceTasks.pending": {
+    "text": "待分配",
+    "context": "待分配状态"
+  },
   "sidebar.sessions": {
     "text": "会话",
     "context": "会话导航"
@@ -3296,5 +3548,13 @@
   "smartpath.stepSkillsHint": { "text": "选中的 Skill 会注入到步骤执行上下文中", "context": "步骤Skill选择器提示" },
   "smartpath.loadingSkills": { "text": "加载中...", "context": "Skill加载中提示" },
   "smartpath.noSkillsAvailable": { "text": "该项目下暂无 Skills", "context": "无可用Skills提示" },
-  "smartpath.selectedSkills": { "text": "已选 {count} 个 Skill", "context": "已选Skill数量" }
+  "smartpath.selectedSkills": { "text": "已选 {count} 个 Skill", "context": "已选Skill数量" },
+  "smartpath.generateGuide": { "text": "生成指南", "context": "生成步骤操作指南按钮" },
+  "smartpath.guideChatPlaceholder": { "text": "输入你的调整意见...", "context": "指南对话输入框占位符" },
+  "smartpath.guideChatConfirm": { "text": "确认生成指南", "context": "确认保存指南按钮" },
+  "smartpath.guideChatCancel": { "text": "取消", "context": "取消指南对话按钮" },
+  "smartpath.guideChatIntro": { "text": "正在确认步骤结果并生成操作指南...", "context": "指南对话初始提示" },
+  "smartpath.guideSaved": { "text": "指南已保存", "context": "指南保存成功提示" },
+  "smartpath.guideLabel": { "text": "操作指南", "context": "操作指南标签" },
+  "smartpath.guideChatSend": { "text": "发送", "context": "发送对话消息按钮" }
 }

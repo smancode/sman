@@ -2447,6 +2447,258 @@
     "text": "Click the button above to create a new session",
     "context": "Create session guide"
   },
+  "group.new": {
+    "text": "New Group",
+    "context": "New group button"
+  },
+  "group.createTitle": {
+    "text": "Create Group",
+    "context": "Create group dialog title"
+  },
+  "group.createDescription": {
+    "text": "Combine multiple workspaces for cross-project collaboration",
+    "context": "Create group dialog description"
+  },
+  "group.nameLabel": {
+    "text": "Group Name",
+    "context": "Group name label"
+  },
+  "group.namePlaceholder": {
+    "text": "e.g., E-commerce Platform Core",
+    "context": "Group name placeholder"
+  },
+  "group.nameRequired": {
+    "text": "Please enter a group name",
+    "context": "Group name validation"
+  },
+  "group.selectWorkspaces": {
+    "text": "Select Workspaces",
+    "context": "Workspace selection label"
+  },
+  "group.selectAtLeastOne": {
+    "text": "Please select at least one workspace",
+    "context": "Workspace selection validation"
+  },
+  "group.noWorkspaces": {
+    "text": "No available workspaces, please create a session first",
+    "context": "No workspaces hint"
+  },
+  "group.selectedCount": {
+    "text": "${count} workspace(s) selected",
+    "context": "Selected workspace count"
+  },
+  "group.edit": {
+    "text": "Edit",
+    "context": "Edit button"
+  },
+  "group.delete": {
+    "text": "Delete",
+    "context": "Delete button"
+  },
+  "group.deleteConfirm": {
+    "text": "Are you sure you want to delete this group? All associated tasks will also be deleted.",
+    "context": "Delete group confirmation"
+  },
+  "group.deleteFail": {
+    "text": "Failed to delete group",
+    "context": "Delete failed message"
+  },
+  "group.createFail": {
+    "text": "Failed to create group",
+    "context": "Create failed message"
+  },
+  "group.notConnected": {
+    "text": "Not connected to server",
+    "context": "Connection error"
+  },
+  "group.editNotImplemented": {
+    "text": "Edit feature coming soon",
+    "context": "Edit not implemented"
+  },
+  "group.workspaces": {
+    "text": "Workspaces",
+    "context": "Workspaces under a group"
+  },
+  "task.new": {
+    "text": "New Task",
+    "context": "New task button"
+  },
+  "task.createTitle": {
+    "text": "Create Task",
+    "context": "Create task dialog title"
+  },
+  "task.createDescription": {
+    "text": "Describe your task requirements, AI will analyze and assign to appropriate workspaces",
+    "context": "Create task dialog description"
+  },
+  "task.titleLabel": {
+    "text": "Task Title",
+    "context": "Task title label"
+  },
+  "task.titlePlaceholder": {
+    "text": "e.g., Optimize User Login Performance",
+    "context": "Task title placeholder"
+  },
+  "task.titleRequired": {
+    "text": "Please enter a task title",
+    "context": "Task title validation"
+  },
+  "task.descriptionLabel": {
+    "text": "Task Description",
+    "context": "Task description label"
+  },
+  "task.descriptionPlaceholder": {
+    "text": "Briefly describe the task goals and background...",
+    "context": "Task description placeholder"
+  },
+  "task.detailsLabel": {
+    "text": "Task Details",
+    "context": "Task details label"
+  },
+  "task.detailsPlaceholder": {
+    "text": "Describe technical details, dependencies, notes, etc...",
+    "context": "Task details placeholder"
+  },
+  "task.acceptanceLabel": {
+    "text": "Acceptance Criteria",
+    "context": "Acceptance criteria label"
+  },
+  "task.acceptancePlaceholder": {
+    "text": "Define acceptance criteria for task completion...",
+    "context": "Acceptance criteria placeholder"
+  },
+  "task.delete": {
+    "text": "Delete",
+    "context": "Delete button"
+  },
+  "task.deleteConfirm": {
+    "text": "Are you sure you want to delete this task?",
+    "context": "Delete task confirmation"
+  },
+  "task.deleteFail": {
+    "text": "Failed to delete task",
+    "context": "Delete failed message"
+  },
+  "task.createFail": {
+    "text": "Failed to create task",
+    "context": "Create failed message"
+  },
+  "task.notConnected": {
+    "text": "Not connected to server",
+    "context": "Connection error"
+  },
+  "task.autoDispatch": {
+    "text": "Auto execute (skip confirmation)",
+    "context": "Auto dispatch toggle"
+  },
+  "task.subtasks": {
+    "text": "Subtasks",
+    "context": "Subtask list heading"
+  },
+  "task.belongsTo": {
+    "text": "Part of: {group} / {task}",
+    "context": "Subtask ownership info"
+  },
+  "common.creating": {
+    "text": "Creating...",
+    "context": "Creating status"
+  },
+  "common.confirm": {
+    "text": "Confirm",
+    "context": "Confirm button"
+  },
+  "common.cancel": {
+    "text": "Cancel",
+    "context": "Cancel button"
+  },
+  "common.back": {
+    "text": "Back",
+    "context": "Back button"
+  },
+  "task.notFound": {
+    "text": "Task not found",
+    "context": "Task not found"
+  },
+  "task.status.draft": {
+    "text": "Draft",
+    "context": "Task status: draft"
+  },
+  "task.status.analyzing": {
+    "text": "Analyzing",
+    "context": "Task status: analyzing"
+  },
+  "task.status.analyzed": {
+    "text": "Analyzed",
+    "context": "Task status: analyzed"
+  },
+  "task.status.dispatching": {
+    "text": "Dispatching",
+    "context": "Task status: dispatching"
+  },
+  "task.status.dispatched": {
+    "text": "Dispatched",
+    "context": "Task status: dispatched"
+  },
+  "task.status.in_progress": {
+    "text": "In Progress",
+    "context": "Task status: in progress"
+  },
+  "task.status.completed": {
+    "text": "Completed",
+    "context": "Task status: completed"
+  },
+  "task.status.failed": {
+    "text": "Failed",
+    "context": "Task status: failed"
+  },
+  "task.startAnalysis": {
+    "text": "Start Analysis",
+    "context": "Start analysis button"
+  },
+  "task.confirmDispatch": {
+    "text": "Confirm & Dispatch",
+    "context": "Confirm and dispatch button"
+  },
+  "task.details.title": {
+    "text": "Task Details",
+    "context": "Task details card title"
+  },
+  "task.details.description": {
+    "text": "Basic information and requirements",
+    "context": "Task details card description"
+  },
+  "task.details.taskDescription": {
+    "text": "Description",
+    "context": "Task description label"
+  },
+  "task.details.taskDetails": {
+    "text": "Details",
+    "context": "Task details label"
+  },
+  "task.details.acceptanceCriteria": {
+    "text": "Acceptance Criteria",
+    "context": "Acceptance criteria label"
+  },
+  "task.analysis.title": {
+    "text": "Analysis Result",
+    "context": "Analysis result card title"
+  },
+  "task.analysis.description": {
+    "text": "AI analysis and breakdown",
+    "context": "Analysis result card description"
+  },
+  "task.workspaceTasks.title": {
+    "text": "Workspace Tasks",
+    "context": "Workspace tasks card title"
+  },
+  "task.workspaceTasks.description": {
+    "text": "Subtasks assigned to each workspace",
+    "context": "Workspace tasks card description"
+  },
+  "task.workspaceTasks.pending": {
+    "text": "Pending",
+    "context": "Pending assignment status"
+  },
   "sidebar.sessions": {
     "text": "Sessions",
     "context": "Sessions nav"
@@ -3296,5 +3548,13 @@
   "smartpath.stepSkillsHint": { "text": "Selected Skills will be injected into step execution context", "context": "Skill selector hint" },
   "smartpath.loadingSkills": { "text": "Loading...", "context": "Skills loading" },
   "smartpath.noSkillsAvailable": { "text": "No Skills available in this project", "context": "No skills available" },
-  "smartpath.selectedSkills": { "text": "{count} Skill(s) selected", "context": "Selected skills count" }
+  "smartpath.selectedSkills": { "text": "{count} Skill(s) selected", "context": "Selected skills count" },
+  "smartpath.generateGuide": { "text": "Generate Guide", "context": "Generate step guide button" },
+  "smartpath.guideChatPlaceholder": { "text": "Enter your adjustments...", "context": "Guide chat input placeholder" },
+  "smartpath.guideChatConfirm": { "text": "Confirm Guide", "context": "Confirm save guide button" },
+  "smartpath.guideChatCancel": { "text": "Cancel", "context": "Cancel guide chat button" },
+  "smartpath.guideChatIntro": { "text": "Confirming step result and generating guide...", "context": "Guide chat initial prompt" },
+  "smartpath.guideSaved": { "text": "Guide saved", "context": "Guide saved success message" },
+  "smartpath.guideLabel": { "text": "Step Guide", "context": "Step guide label" },
+  "smartpath.guideChatSend": { "text": "Send", "context": "Send chat message button" }
 }

@@ -21,6 +21,7 @@ function resolveProjectRoot(): string {
 }
 
 import { SessionStore } from './session-store.js';
+import { GroupStore } from './group-store.js';
 import { SkillsRegistry } from './skills-registry.js';
 import { ClaudeSessionManager, normalizeWorkspacePath } from './claude-session.js';
 import { WebAccessService } from './web-access/index.js';
@@ -138,6 +139,7 @@ const skillsRegistry = new SkillsRegistry(homeDir);
 const sessionManager = new ClaudeSessionManager(store);
 setSessionManagerForPush(sessionManager);
 const settingsManager = new SettingsManager(homeDir);
+const groupStore = new GroupStore(store.getDatabase());
 
 // User profile manager
 const userProfileManager = new UserProfileManager(homeDir, settingsManager.getConfig());
@@ -273,6 +275,14 @@ function broadcast(data: string): void {
           // Not JSON — send anyway (likely shouldn't happen)
         }
       }
+      client.send(data);
+    }
+  }
+}
+
+function broadcastToAllAuthenticated(data: string): void {
+  for (const client of authenticatedClients) {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(data);
     }
   }
@@ -1254,15 +1264,19 @@ wss.on('connection', (ws: WebSocket) => {
 
           const localSessions = allLocalSessions
             .filter(s => !botSessionIds.has(s.id))
-            .map(s => ({
-              id: s.id,
-              workspace: s.workspace,
-              label: s.label,
-              createdAt: s.createdAt,
-              lastActiveAt: s.lastActiveAt,
-              source: 'local' as const,
-              botLabel: null as string | null,
-            }));
+            .map(s => {
+              const dbSession = store.getSession(s.id);
+              return {
+                id: s.id,
+                workspace: s.workspace,
+                label: s.label,
+                createdAt: s.createdAt,
+                lastActiveAt: s.lastActiveAt,
+                parentTaskId: dbSession?.parentTaskId || null,
+                source: 'local' as const,
+                botLabel: null as string | null,
+              };
+            });
 
           const sessions = [...localSessions, ...botSessions];
           ws.send(JSON.stringify({ type: 'session.list', sessions }));
@@ -2241,6 +2255,95 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'smartpath.guideChat': {
+          try {
+            if (!msg.pathId || !msg.workspace || msg.stepIndex === undefined || !msg.stepResult) {
+              throw new Error('Missing required: pathId, workspace, stepIndex, stepResult');
+            }
+            const gcPathId = msg.pathId as string;
+            const gcWorkspace = msg.workspace as string;
+            const gcStepIndex = msg.stepIndex as number;
+            const gcStepResult = msg.stepResult as string;
+            const gcSessionId = msg.sessionId as string | undefined;
+            const gcUserMessage = msg.message as string | undefined;
+
+            const gcAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const gcPath = smartPathStore.get(gcPathId, gcWorkspace, gcAllWs);
+            const gcActualWs = gcPath?.workspace || gcWorkspace;
+
+            let steps: Array<{ userInput: string; name?: string }> = [];
+            try { steps = JSON.parse(gcPath?.steps || '[]'); } catch { /* ignore */ }
+
+            const stepInput = steps[gcStepIndex]?.userInput || '';
+            const pathName = gcPath?.name || '';
+            const existingGuide = smartPathStore.getGuide(gcActualWs, gcPathId, gcStepIndex);
+
+            // 创建或复用 ephemeral session
+            const sessionId = gcSessionId || `smartpath-guide-${gcPathId}-step-${gcStepIndex}-${Date.now()}`;
+            if (!gcSessionId) {
+              sessionManager.createEphemeralSessionWithId(gcActualWs, sessionId);
+            }
+
+            const aiResponse = await smartPathEngine.guideChat(
+              gcActualWs, gcStepIndex, gcStepResult, sessionId,
+              gcUserMessage, pathName, stepInput, existingGuide,
+              (delta) => {
+                ws.send(JSON.stringify({ type: 'smartpath.guideChat.delta', pathId: gcPathId, stepIndex: gcStepIndex, delta }));
+              },
+            );
+
+            ws.send(JSON.stringify({
+              type: 'smartpath.guideChat.completed',
+              pathId: gcPathId,
+              stepIndex: gcStepIndex,
+              response: aiResponse,
+              sessionId,
+            }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'smartpath.guideSave': {
+          try {
+            if (!msg.pathId || !msg.workspace || msg.stepIndex === undefined || !msg.content) {
+              throw new Error('Missing required: pathId, workspace, stepIndex, content');
+            }
+            const gsPathId = msg.pathId as string;
+            const gsWorkspace = msg.workspace as string;
+            const gsStepIndex = msg.stepIndex as number;
+            const gsContent = msg.content as string;
+            const gsSessionId = msg.sessionId as string | undefined;
+
+            const gsAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
+            const gsPath = smartPathStore.get(gsPathId, gsWorkspace, gsAllWs);
+            const gsActualWs = gsPath?.workspace || gsWorkspace;
+
+            // 关闭 ephemeral session
+            if (gsSessionId) {
+              try {
+                sessionManager.closeV2Session(gsSessionId);
+                sessionManager.removeEphemeralSession(gsSessionId);
+              } catch { /* ignore */ }
+            }
+
+            const fileName = smartPathEngine.saveGuide(gsPathId, gsActualWs, gsStepIndex, gsContent);
+            const refs = smartPathStore.listReferences(gsActualWs, gsPathId);
+
+            ws.send(JSON.stringify({
+              type: 'smartpath.guideSaved',
+              pathId: gsPathId,
+              stepIndex: gsStepIndex,
+              fileName,
+              references: refs,
+            }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'chat.error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
         // ── WeChat Personal Bot ──
         case 'chatbot.weixin.qr.request': {
           log.info('Received chatbot.weixin.qr.request');
@@ -2594,6 +2697,352 @@ wss.on('connection', (ws: WebSocket) => {
               ws.send(JSON.stringify({ type: 'error.report.ack', success: false, error: String(writeErr) }));
             }
           }
+          break;
+        }
+
+        // Group operations
+        case 'group.create': {
+          if (!msg.groupId || !msg.name || !Array.isArray(msg.workspaceIds)) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId, name, or workspaceIds' }));
+            break;
+          }
+          try {
+            const workspaceIds = msg.workspaceIds.map(String);
+            const group = groupStore.createGroup({
+              id: String(msg.groupId),
+              name: String(msg.name),
+              workspaceIds,
+            });
+            groupStore.ensureGroupDir(String(msg.groupId), workspaceIds);
+            // Broadcast to all clients with parsed workspaceIds
+            const groups = groupStore.listGroups();
+            const parsedGroups = groups.map(g => ({
+              ...g,
+              workspaceIds: JSON.parse(g.workspaceIds || '[]')
+            }));
+            broadcastToAllAuthenticated(JSON.stringify({
+              type: 'group.list',
+              groups: parsedGroups,
+            }));
+            ws.send(JSON.stringify({ type: 'group.created', group }));
+          } catch (err) {
+            log.error(`[group.create] Error: ${err}`);
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'group.list': {
+          const groups = groupStore.listGroups();
+          const parsedGroups = groups.map(g => ({
+            ...g,
+            workspaceIds: JSON.parse(g.workspaceIds || '[]')
+          }));
+          ws.send(JSON.stringify({ type: 'group.list', groups: parsedGroups }));
+          break;
+        }
+
+        case 'group.update': {
+          if (!msg.groupId) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId' }));
+            break;
+          }
+          try {
+            const updates: Partial<{ name: string; workspaceIds: string; status: string }> = {};
+            if (msg.name !== undefined) updates.name = String(msg.name);
+            if (msg.workspaceIds !== undefined && Array.isArray(msg.workspaceIds)) {
+              updates.workspaceIds = JSON.stringify(msg.workspaceIds);
+            }
+            if (msg.status !== undefined) updates.status = String(msg.status);
+
+            const group = groupStore.updateGroup(String(msg.groupId), updates);
+            if (!group) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Group not found' }));
+              break;
+            }
+
+            // Broadcast to all clients
+            const updatedGroups = groupStore.listGroups().map(g => ({
+              ...g,
+              workspaceIds: JSON.parse(g.workspaceIds || '[]')
+            }));
+            broadcastToAllAuthenticated(JSON.stringify({
+              type: 'group.list',
+              groups: updatedGroups,
+            }));
+            ws.send(JSON.stringify({ type: 'group.updated', group }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'group.delete': {
+          if (!msg.groupId) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId' }));
+            break;
+          }
+          try {
+            const groupId = String(msg.groupId);
+            // 级联清理：先清理所有 task 和 subtask 关联的 session
+            const tasks = groupStore.listGroupTasks(groupId);
+            for (const task of tasks) {
+              // 清理子任务
+              const subtasks = groupStore.listSubtasks(task.id);
+              for (const sub of subtasks) {
+                try {
+                  sessionManager.abort(sub.sessionId);
+                  sessionManager.closeV2Session(sub.sessionId);
+                  store.deleteSession(sub.sessionId);
+                  const taskFilePath = path.join(sub.workspace, '.sman', 'group', `task${sub.id}.md`);
+                  try { fs.unlinkSync(taskFilePath); } catch { /* ignore */ }
+                } catch (e) {
+                  log.error(`[group.delete] Failed to cleanup subtask session ${sub.sessionId}: ${e}`);
+                }
+              }
+              // 清理协调者 session
+              try {
+                sessionManager.abort(task.id);
+                sessionManager.closeV2Session(task.id);
+                store.deleteSession(task.id);
+              } catch (e) {
+                log.error(`[group.delete] Failed to cleanup task session ${task.id}: ${e}`);
+              }
+            }
+            // 删除 group 目录
+            groupStore.deleteGroupDir(groupId);
+            // 删除 group 数据库记录（group_tasks 通过 FK CASCADE 自动删除）
+            const deleted = groupStore.deleteGroup(groupId);
+            if (!deleted) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Group not found' }));
+              break;
+            }
+
+            // Broadcast to all clients
+            const deletedGroups = groupStore.listGroups().map(g => ({
+              ...g,
+              workspaceIds: JSON.parse(g.workspaceIds || '[]')
+            }));
+            broadcastToAllAuthenticated(JSON.stringify({
+              type: 'group.list',
+              groups: deletedGroups,
+            }));
+            broadcastToAllAuthenticated(JSON.stringify({
+              type: 'group-task.list',
+              groupId,
+              tasks: [],
+            }));
+            ws.send(JSON.stringify({ type: 'group.deleted', groupId }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        // Group task operations
+        case 'group-task.create': {
+          if (!msg.groupId || !msg.title) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId or title' }));
+            break;
+          }
+          try {
+            const groupId = String(msg.groupId);
+            const group = groupStore.getGroup(groupId);
+            if (!group) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Group not found' }));
+              break;
+            }
+
+            const workspaceIds = JSON.parse(group.workspaceIds || '[]');
+            const groupDir = groupStore.getGroupDir(groupId);
+            groupStore.ensureGroupDir(groupId, workspaceIds);
+
+            // 创建 session（workspace 指向 group 目录）
+            const sessionId = sessionManager.createSession(groupDir);
+
+            // 读取 task prompt 模板
+            const templatePath = path.join(__dirname, 'templates', 'group-task-prompt.md');
+            let taskPrompt = fs.readFileSync(templatePath, 'utf-8');
+            taskPrompt = taskPrompt.replace(/\{title\}/g, String(msg.title));
+            taskPrompt = taskPrompt.replace(/\{description\}/g, msg.description ? String(msg.description) : '');
+            const confirmInstruction = msg.autoDispatch
+              ? '方案确定后直接开始执行，不需要等待用户确认。'
+              : '将方案展示给用户，等待用户确认后再执行。如果用户没有明确指示，不要自动开始执行。';
+            taskPrompt = taskPrompt.replace(/\{confirm_instruction\}/g, confirmInstruction);
+            const workspacePaths = workspaceIds.join('\n');
+            taskPrompt = taskPrompt.replace(/\{workspace_paths\}/g, workspacePaths);
+
+            // 创建 group_task 记录（id = sessionId）
+            const task = groupStore.createGroupTask({
+              id: sessionId,
+              groupId,
+              title: String(msg.title),
+              description: msg.description ? String(msg.description) : undefined,
+              autoDispatch: msg.autoDispatch ? 1 : 0,
+            });
+
+            // 回复前端
+            ws.send(JSON.stringify({ type: 'group-task.created', taskId: sessionId, sessionId }));
+
+            // 广播更新后的任务列表
+            const tasks = groupStore.listGroupTasks(groupId);
+            broadcastToAllAuthenticated(JSON.stringify({ type: 'group-task.list', groupId, tasks }));
+
+            // Fire-and-forget: 发送 task prompt 作为第一条消息
+            const noopWsSend = (_data: string) => {};
+            sessionManager.sendMessage(sessionId, taskPrompt, noopWsSend).catch((err: unknown) => {
+              log.error(`[group-task.create] Failed to send task prompt: ${err}`);
+            });
+          } catch (err) {
+            log.error(`[group-task.create] Error: ${err}`);
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'group-task.list': {
+          if (!msg.groupId) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing groupId' }));
+            break;
+          }
+          const tasks = groupStore.listGroupTasks(String(msg.groupId));
+          ws.send(JSON.stringify({ type: 'group-task.list', groupId: String(msg.groupId), tasks }));
+          break;
+        }
+
+        case 'group-task.delete': {
+          if (!msg.taskId) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing taskId' }));
+            break;
+          }
+          try {
+            const taskId = String(msg.taskId);
+            const task = groupStore.getGroupTask(taskId);
+            if (!task) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Task not found' }));
+              break;
+            }
+
+            // 清理关联 session
+            try {
+              sessionManager.abort(taskId);
+              sessionManager.closeV2Session(taskId);
+            } catch (e) {
+              log.error(`[group-task.delete] Failed to cleanup session ${taskId}: ${e}`);
+            }
+            store.deleteSession(taskId);
+
+            // 清理子任务 sessions 和进度文件
+            const subtasks = groupStore.listSubtasks(taskId);
+            for (const sub of subtasks) {
+              try {
+                sessionManager.abort(sub.sessionId);
+                sessionManager.closeV2Session(sub.sessionId);
+                store.deleteSession(sub.sessionId);
+              } catch (e) {
+                log.error(`[group-task.delete] Failed to cleanup subtask session ${sub.sessionId}: ${e}`);
+              }
+              // 删除进度文件
+              const taskFilePath = path.join(sub.workspace, '.sman', 'group', `task${sub.id}.md`);
+              try { fs.unlinkSync(taskFilePath); } catch { /* ignore */ }
+            }
+
+            // 删除 group_task 记录
+            groupStore.deleteGroupTask(taskId);
+
+            // 广播更新后的任务列表
+            const tasks = groupStore.listGroupTasks(task.groupId);
+            broadcastToAllAuthenticated(JSON.stringify({ type: 'group-task.list', groupId: task.groupId, tasks }));
+
+            ws.send(JSON.stringify({ type: 'group-task.deleted', taskId }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'group-task.dispatch': {
+          if (!msg.taskId || !Array.isArray(msg.subtasks)) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing taskId or subtasks' }));
+            break;
+          }
+          try {
+            const taskId = String(msg.taskId);
+            const task = groupStore.getGroupTask(taskId);
+            if (!task) {
+              ws.send(JSON.stringify({ type: 'error', error: 'Task not found' }));
+              break;
+            }
+            const group = groupStore.getGroup(task.groupId);
+
+            const createdSubtasks: Array<{ id: string; sessionId: string; workspace: string; title: string }> = [];
+
+            for (const sub of msg.subtasks as Array<{ workspace: string; title: string; description?: string }>) {
+              if (!sub.workspace || !sub.title) continue;
+
+              // 创建真实 workspace session
+              const sessionId = sessionManager.createSession(sub.workspace);
+              store.setParentTaskId(sessionId, taskId);
+
+              // 创建 subtask 记录
+              const subtaskId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+              groupStore.createSubtask({
+                id: subtaskId,
+                groupTaskId: taskId,
+                sessionId,
+                workspace: sub.workspace,
+                title: sub.title,
+                description: sub.description,
+              });
+
+              // 写入进度文件
+              const taskDir = path.join(sub.workspace, '.sman', 'group');
+              fs.mkdirSync(taskDir, { recursive: true });
+              const taskFilePath = path.join(taskDir, `task${subtaskId}.md`);
+              // 从 description 中解析步骤（按换行分割）
+              const lines = (sub.description || sub.title).split('\n').filter(l => l.trim());
+              const todoItems = lines.length > 0
+                ? lines.map(l => `- [ ] ${l.trim()}`).join('\n')
+                : `- [ ] ${sub.title}`;
+              fs.writeFileSync(taskFilePath, `# ${sub.title}\n\n${todoItems}\n`);
+
+              // 构建子任务 prompt
+              const subPromptPath = path.join(__dirname, 'templates', 'group-subtask-prompt.md');
+              let subPrompt = fs.readFileSync(subPromptPath, 'utf-8');
+              subPrompt = subPrompt.replace(/\{title\}/g, sub.title);
+              subPrompt = subPrompt.replace(/\{description\}/g, sub.description || '');
+              subPrompt = subPrompt.replace(/\{task_file_path\}/g, taskFilePath);
+              subPrompt = subPrompt.replace(/\{group_name\}/g, group?.name || '');
+              subPrompt = subPrompt.replace(/\{parent_task_title\}/g, task.title);
+
+              // Fire-and-forget 发送 prompt
+              const noopWsSend = (_data: string) => {};
+              sessionManager.sendMessage(sessionId, subPrompt, noopWsSend).catch((err: unknown) => {
+                log.error(`[group-task.dispatch] Failed to send subtask prompt: ${err}`);
+              });
+
+              createdSubtasks.push({ id: subtaskId, sessionId, workspace: sub.workspace, title: sub.title });
+            }
+
+            // 广播子任务列表
+            const subtasks = groupStore.listSubtasks(taskId);
+            broadcastToAllAuthenticated(JSON.stringify({ type: 'group-subtask.list', taskId, subtasks }));
+
+            ws.send(JSON.stringify({ type: 'group-task.dispatched', taskId, subtasks: createdSubtasks }));
+          } catch (err) {
+            log.error(`[group-task.dispatch] Error: ${err}`);
+            ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : String(err) }));
+          }
+          break;
+        }
+
+        case 'group-subtask.list': {
+          if (!msg.taskId) {
+            ws.send(JSON.stringify({ type: 'error', error: 'Missing taskId' }));
+            break;
+          }
+          const subtasks = groupStore.listSubtasks(String(msg.taskId));
+          ws.send(JSON.stringify({ type: 'group-subtask.list', taskId: String(msg.taskId), subtasks }));
           break;
         }
 
