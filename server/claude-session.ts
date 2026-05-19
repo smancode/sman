@@ -2842,11 +2842,6 @@ export class ClaudeSessionManager {
     this.sessionTokenUsage.delete(sessionId);
   }
 
-  softDeleteSession(sessionId: string): void {
-    this.store.deleteSession(sessionId);
-    this.sessions.delete(sessionId);
-  }
-
   listSessions(): ActiveSession[] {
     const allSessions = this.store.listSessions();
     return allSessions.map(s => {

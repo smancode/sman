@@ -66,12 +66,10 @@ export class ChatbotSessionManager {
   private resetSession(userKey: string, workspace: string, platform: string, botProfile: WeComBotProfile): void {
     const session = this.store.getSession(userKey, workspace);
     if (session?.sessionId) {
+      // Close SDK process — next message will create a fresh one (empty context)
       this.sessionManager.abort(session.sessionId);
       this.sessionManager.closeV2Session(session.sessionId);
-      this.sessionManager.softDeleteSession(session.sessionId);
     }
-    this.store.deleteSession(userKey, workspace);
-    this.ensureSession(userKey, workspace, platform, botProfile);
     this.store.setIdleReset(userKey, workspace);
   }
 
@@ -456,30 +454,14 @@ export class ChatbotSessionManager {
 
     const oldSession = this.store.getSession(userKey, workspace);
 
-    // Close old V2 session process to release SDK context
+    // Close SDK process — next message will create a fresh one (empty context)
     if (oldSession?.sessionId) {
       this.sessionManager.abort(oldSession.sessionId);
       this.sessionManager.closeV2Session(oldSession.sessionId);
-      this.sessionManager.softDeleteSession(oldSession.sessionId);
     }
-
-    const oldChatType = oldSession?.chatType;
-
-    // Create a new session (ensureSession will overwrite the old mapping)
-    this.store.deleteSession(userKey, workspace);
-
-    const parts = userKey.split(':');
-    const platform = parts[0];
-    const botProfileId = parts[1];
-    const resolvedProfile = botProfile ?? this.getBotProfile(botProfileId);
-    if (!resolvedProfile) {
-      sender.finish('Bot 配置已变更，无法新建会话。请联系管理员。');
-      return;
-    }
-    this.ensureSession(userKey, workspace, platform, resolvedProfile, oldChatType);
 
     const projectName = path.basename(workspace);
-    sender.finish(`已新建会话: ${projectName}\n旧会话的聊天记录仍可在桌面端查看。`);
+    sender.finish(`已清空上下文: ${projectName}`);
   }
 
   // ── Query execution ──
