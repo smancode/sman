@@ -23,6 +23,7 @@ import {
 import { useSmartPathStore } from '@/stores/smart-path';
 import { useCronStore } from '@/stores/cron';
 import { useWsConnection } from '@/stores/ws-connection';
+import { useCodeBlockCollapse } from '@/features/chat/streamdown-components';
 import type { SmartPath, SmartPathRun, SmartPathStep } from '@/types/settings';
 import { t } from '@/locales';
 
@@ -313,6 +314,7 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
   stepIndex: number; pathId: string; workspace: string; stepResult: string;
 }) {
   const chatRef = useRef<HTMLDivElement>(null);
+  const collapseRef = useCodeBlockCollapse<HTMLDivElement>(true);
   const [input, setInput] = useState('');
 
   const messages = useSmartPathStore((s) => s.guideChatMessages[stepIndex] ?? null);
@@ -368,7 +370,7 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
         </Button>
       </div>
 
-      <div ref={chatRef} className="max-h-[800px] overflow-y-auto px-3 py-2 space-y-2">
+      <div ref={(el) => { (chatRef as any).current = el; (collapseRef as any).current = el; }} className="max-h-[800px] overflow-y-auto px-3 py-2 space-y-2">
         {!messages?.length && loading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> {t('smartpath.guideChatIntro')}
