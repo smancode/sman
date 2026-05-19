@@ -298,6 +298,7 @@ describe('ChatbotSessionManager', () => {
         expect.any(Function),
         'full',
         [],
+        'TestBot',
       );
       expect(responses[0]).toBe('Hello! How can I help?');
     });

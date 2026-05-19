@@ -555,6 +555,7 @@ export class ChatbotSessionManager {
         (toolName, status) => sender.sendToolStatus(toolName, status),
         mode,
         botProfile?.allowedSkills,
+        botProfile?.label,
       );
 
       // Strip all "(no content)" placeholders from the final content
@@ -698,13 +699,14 @@ export class ChatbotSessionManager {
       fs.mkdirSync(promptDir, { recursive: true });
     }
 
-    fs.writeFileSync(path.join(promptDir, 'query.md'), `你是一个只读答疑助手，绑定项目: {{projectName}}。
+    fs.writeFileSync(path.join(promptDir, 'query.md'), `你是 {{botName}}，一个只读答疑助手，绑定项目: {{projectName}}。
 
 ## 规则
 - 你可以查阅代码和文档来回答问题，但不能修改任何文件
 - 你可用的技能: {{skillList}}
 - 如果用户要求修改文件或执行命令，告知只有查询权限
 - 不要输出 //help 等命令提示
+- 如果用户问你是谁，你的名字是 {{botName}}
 
 ## 回复风格
 - 直接回答问题，不要铺垫和总结

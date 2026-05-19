@@ -2288,6 +2288,7 @@ export class ClaudeSessionManager {
     onToolStatus?: (toolName: string, status: 'start' | 'end') => void,
     mode: 'full' | 'query' | 'collect' = 'full',
     allowedSkills?: string[],
+    botName?: string,
   ): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
@@ -2383,6 +2384,16 @@ export class ClaudeSessionManager {
           if (READ_BLOCKED_TOOLS.has(params.toolName)) {
             return { behavior: 'deny' as const };
           }
+          if (params.toolName.startsWith('web_access_')) {
+            return { behavior: 'deny' as const };
+          }
+          // Restrict file access to workspace directory only
+          if (params.toolName === 'Read' || params.toolName === 'Glob' || params.toolName === 'Grep') {
+            const targetPath = String(params.input?.file_path || params.input?.path || '');
+            if (targetPath && !targetPath.startsWith(workspace)) {
+              return { behavior: 'deny' as const };
+            }
+          }
           if (allowedSkills && allowedSkills.length > 0) {
             const toolName = params.toolName;
             if (toolName === 'Skill' && params.input?.skill) {
@@ -2402,6 +2413,16 @@ export class ClaudeSessionManager {
           // Block dangerous tools, allow Write for feedback files
           if (READ_BLOCKED_TOOLS.has(params.toolName)) {
             return { behavior: 'deny' as const };
+          }
+          if (params.toolName.startsWith('web_access_')) {
+            return { behavior: 'deny' as const };
+          }
+          // Restrict file access to workspace (iterate) directory only
+          if (params.toolName === 'Read' || params.toolName === 'Glob' || params.toolName === 'Grep') {
+            const targetPath = String(params.input?.file_path || params.input?.path || '');
+            if (targetPath && !targetPath.startsWith(workspace)) {
+              return { behavior: 'deny' as const };
+            }
           }
           // Only allow writing to .md files in the iterate directory
           if (params.toolName === 'Write' || params.toolName === 'Edit') {
@@ -2425,9 +2446,9 @@ export class ClaudeSessionManager {
       let modePrefix = '';
       if (mode === 'query') {
         const skillList = allowedSkills?.length ? allowedSkills.join(', ') : '全部';
-        modePrefix = this.loadBotPrompt('query', { projectName, skillList });
+        modePrefix = this.loadBotPrompt('query', { projectName, skillList, botName: botName || '答疑助手' });
       } else if (mode === 'collect') {
-        modePrefix = this.loadBotPrompt('collect', { workspace });
+        modePrefix = this.loadBotPrompt('collect', { workspace, botName: botName || '反馈助手' });
       }
       const messagePrefix = [smanContext, profilePrefix, modePrefix]
         .filter(Boolean).join('\n');
@@ -2940,7 +2961,7 @@ export class ClaudeSessionManager {
     } catch {
       // Fallback if file missing
       if (mode === 'query') {
-        return `\n[只读答疑模式] 你是一个只读答疑助手，绑定项目: ${vars.projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${vars.skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n`;
+        return `\n[只读答疑模式] 你是 ${vars.botName || '答疑助手'}，一个只读答疑助手，绑定项目: ${vars.projectName}。\n你可以查阅代码和文档来回答问题，但不能修改任何文件。\n你可用的技能: ${vars.skillList}\n如果用户要求修改文件或执行命令，请告知你只有查询权限。\n如果用户问你是谁，你的名字是 ${vars.botName || '答疑助手'}。\n`;
       }
       if (mode === 'collect') {
         return `\n[反馈收集模式] 你是一个专门的反馈收集助手。\n反馈文件路径: ${vars.workspace}/YYYY-MM-DD-iter.md\n请严格遵循 CLAUDE.md 中的格式追加反馈。\n`;
