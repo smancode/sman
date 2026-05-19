@@ -250,6 +250,14 @@ export function SessionTree() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const sessions = useChatStore((s) => s.sessions);
+
+  // Clear activeTaskId when switching away from a group task session
+  const taskSessionMap = useGroupStore((s) => s.taskSessionMap);
+  useEffect(() => {
+    if (currentSessionId && !(currentSessionId in taskSessionMap)) {
+      setActiveTaskId(null);
+    }
+  }, [currentSessionId, taskSessionMap]); // eslint-disable-line react-hooks/exhaustive-deps
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
@@ -592,8 +600,7 @@ export function SessionTree() {
                       <GroupItem
                         key={group.id}
                         name={group.name}
-                        workspaceCount={Array.isArray(group.workspaceIds) ? group.workspaceIds.length : 0}
-                        workspaceNames={(Array.isArray(group.workspaceIds) ? group.workspaceIds : []).map((ws: string) => ws.split(/[/\\]/).pop() || ws)}
+                        workspaceIds={Array.isArray(group.workspaceIds) ? group.workspaceIds : []}
                         tasks={tasks[group.id] || []}
                         subtasks={subtasks}
                         expanded={expandedGroups.has(group.id)}

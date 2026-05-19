@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info } from 'lucide-react';
+import { ChevronLeft, Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -15,6 +15,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { PageLayout } from '@/components/common/PageLayout';
 import { t, useLocale } from '@/locales';
+import { useWsConnection } from '@/stores/ws-connection';
 
 declare const __APP_VERSION__: string;
 const APP_VERSION = __APP_VERSION__;
@@ -105,6 +106,7 @@ const SECTIONS = [
   { id: 'language', icon: Languages },
   { id: 'update', icon: Download },
   { id: 'about', icon: Info },
+  { id: 'feedback', icon: MessageSquare },
   { id: 'community', icon: Users },
 ] as const;
 
@@ -117,8 +119,82 @@ const SECTION_LABELS: Record<string, string> = {
   language: 'settings.language.title',
   update: 'settings.sections.update',
   about: 'settings.about.title',
+  feedback: 'settings.feedback.title',
   community: 'settings.about.community',
 };
+
+function FeedbackForm() {
+  const [text, setText] = useState('');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const lastSubmitRef = useRef(0);
+
+  const handleSubmit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const now = Date.now();
+    if (now - lastSubmitRef.current < 60_000) return;
+
+    const client = useWsConnection.getState().client;
+    if (!client) {
+      setStatus('error');
+      return;
+    }
+
+    lastSubmitRef.current = now;
+    setStatus('submitting');
+
+    const timeout = setTimeout(() => {
+      setStatus('error');
+    }, 3000);
+
+    const handler = (msg: unknown) => {
+      clearTimeout(timeout);
+      const data = msg as Record<string, unknown>;
+      if (data.success) {
+        setStatus('success');
+        setText('');
+        setTimeout(() => setStatus('idle'), 3000);
+      } else {
+        setStatus('error');
+      }
+      client.off('feedback.submit.ack', handler);
+    };
+
+    client.on('feedback.submit.ack', handler);
+    client.send({ type: 'feedback.submit', message: trimmed });
+  };
+
+  const canSubmit = status !== 'submitting' && text.trim().length > 0 && Date.now() - lastSubmitRef.current >= 60_000;
+
+  return (
+    <div className="space-y-3">
+      <textarea
+        className="w-full min-h-[100px] rounded-lg border border-border/60 bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50"
+        placeholder={t('settings.feedback.placeholder')}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        disabled={status === 'submitting'}
+      />
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {status === 'submitting' ? t('common.loading') : t('settings.feedback.submit')}
+        </button>
+        {status === 'success' && (
+          <span className="text-sm text-green-600 dark:text-green-400">{t('settings.feedback.success')}</span>
+        )}
+        {status === 'error' && (
+          <span className="text-sm text-red-500">{t('settings.feedback.error')}</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function Settings() {
   useLocale();
@@ -182,6 +258,17 @@ export function Settings() {
       <LanguageSettings id="settings-language" />
       <UpdateSettings id="settings-update" />
       <AboutSettings id="settings-about" />
+      <Card id="settings-feedback">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            {t('settings.feedback.title')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FeedbackForm />
+        </CardContent>
+      </Card>
       <Card id="settings-community">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

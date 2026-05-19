@@ -599,6 +599,30 @@
     "text": "加入社群",
     "context": "加入社群区域标题"
   },
+  "settings.feedback.title": {
+    "text": "用户反馈",
+    "context": "用户反馈区域标题"
+  },
+  "settings.feedback.placeholder": {
+    "text": "请输入您的建议或反馈...",
+    "context": "反馈输入框占位文字"
+  },
+  "settings.feedback.submit": {
+    "text": "提交",
+    "context": "反馈提交按钮文字"
+  },
+  "settings.feedback.success": {
+    "text": "已提交",
+    "context": "反馈提交成功提示"
+  },
+  "settings.feedback.error": {
+    "text": "提交异常，请稍后重试",
+    "context": "反馈提交失败提示"
+  },
+  "settings.feedback.empty": {
+    "text": "请输入反馈内容",
+    "context": "反馈内容为空提示"
+  },
   "git.title": {
     "text": "Git",
     "context": "Git 面板标题"
@@ -2598,6 +2622,10 @@
   "task.belongsTo": {
     "text": "属于：{group} / {task}",
     "context": "子任务归属信息"
+  },
+  "task.workspaces": {
+    "text": "业务系统",
+    "context": "组合关联的业务系统列表标题"
   },
   "common.creating": {
     "text": "创建中...",

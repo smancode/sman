@@ -14,10 +14,9 @@ import type { GroupTask, GroupSubtask } from '@/schemas/group';
 
 interface GroupItemProps {
   name: string;
-  workspaceCount: number;
-  workspaceNames: string[];
+  workspaceIds: string[];
   tasks: GroupTask[];
-  subtasks: Record<string, GroupSubtask[]>; // taskId -> subtasks
+  subtasks: Record<string, GroupSubtask[]>;
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -99,7 +98,7 @@ const TaskItem = memo(function TaskItem({
           </button>
         </div>
       </div>
-      {/* Subtasks */}
+      {/* Subtasks — show workspace name + title */}
       {expanded && subtasks.map((sub) => {
         const wsName = sub.workspace.split(/[/\\]/).pop() || sub.workspace;
         const isSubActive = sub.sessionId === activeSessionId;
@@ -131,8 +130,7 @@ const TaskItem = memo(function TaskItem({
 
 export const GroupItem = memo(function GroupItem({
   name,
-  workspaceCount,
-  workspaceNames,
+  workspaceIds,
   tasks,
   subtasks,
   expanded,
@@ -147,7 +145,7 @@ export const GroupItem = memo(function GroupItem({
 }: GroupItemProps) {
   useLocale();
   const [hovered, setHovered] = useState(false);
-  const taskCount = tasks.length;
+  const [wsExpanded, setWsExpanded] = useState(false);
   const hasActiveTask = tasks.some((task) => task.id === activeTaskId);
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -159,6 +157,11 @@ export const GroupItem = memo(function GroupItem({
   const handleNewTask = (e: React.MouseEvent) => {
     e.stopPropagation();
     onNewTask();
+  };
+
+  const handleToggleWs = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setWsExpanded(!wsExpanded);
   };
 
   return (
@@ -190,13 +193,15 @@ export const GroupItem = memo(function GroupItem({
           )}
         />
         <span className="text-[13px] font-medium truncate flex-1">{name}</span>
-        <span
-          className="text-[10px] text-muted-foreground/50 bg-muted/50 rounded px-1"
-          title={workspaceNames.join(', ')}
+        {/* Workspace count — clickable to expand */}
+        <button
+          className="text-[10px] text-muted-foreground/50 bg-muted/50 rounded px-1 hover:bg-muted transition-colors"
+          onClick={handleToggleWs}
+          title={workspaceIds.map(ws => ws.split(/[/\\]/).pop() || ws).join(', ')}
         >
-          {workspaceCount}
-        </span>
-        <span className="text-[11px] text-muted-foreground/60 tabular-nums">{taskCount}</span>
+          {workspaceIds.length} ws
+        </button>
+        <span className="text-[11px] text-muted-foreground/60 tabular-nums">{tasks.length}</span>
 
         {hovered && (
           <div className="flex items-center gap-0.5 absolute right-2 bg-background/95 backdrop-blur-sm rounded-lg pl-2 shadow-sm">
@@ -222,9 +227,28 @@ export const GroupItem = memo(function GroupItem({
         )}
       </div>
 
-      {/* Tasks with subtasks */}
+      {/* Expanded content */}
       {expanded && (
         <div className="ml-6 mt-0.5 space-y-0.5">
+          {/* Workspace list — collapsible */}
+          {wsExpanded && (
+            <div className="space-y-0.5 mb-1">
+              {workspaceIds.map((ws) => {
+                const wsName = ws.split(/[/\\]/).pop() || ws;
+                return (
+                  <div
+                    key={ws}
+                    className="flex items-center gap-1.5 pl-2 py-1 text-[11px] text-foreground/40"
+                  >
+                    <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground/30" />
+                    <span className="truncate min-w-0" title={ws}>{wsName}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Tasks */}
           {tasks.map((task) => (
             <TaskItem
               key={task.id}
@@ -243,7 +267,7 @@ export const GroupItem = memo(function GroupItem({
   );
 }, (prev, next) => {
   return prev.name === next.name
-    && prev.workspaceCount === next.workspaceCount
+    && prev.workspaceIds === next.workspaceIds
     && prev.expanded === next.expanded
     && prev.activeTaskId === next.activeTaskId
     && prev.activeSessionId === next.activeSessionId

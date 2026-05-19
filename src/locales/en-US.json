@@ -599,6 +599,30 @@
     "text": "Join Community",
     "context": "Join community section title"
   },
+  "settings.feedback.title": {
+    "text": "Feedback",
+    "context": "User feedback section title"
+  },
+  "settings.feedback.placeholder": {
+    "text": "Enter your suggestions or feedback...",
+    "context": "Feedback input placeholder"
+  },
+  "settings.feedback.submit": {
+    "text": "Submit",
+    "context": "Feedback submit button text"
+  },
+  "settings.feedback.success": {
+    "text": "Submitted",
+    "context": "Feedback submitted successfully message"
+  },
+  "settings.feedback.error": {
+    "text": "Submission failed, please try again later",
+    "context": "Feedback submission failed message"
+  },
+  "settings.feedback.empty": {
+    "text": "Please enter your feedback",
+    "context": "Feedback content empty message"
+  },
   "git.title": {
     "text": "Git",
     "context": "Git panel title"
@@ -2598,6 +2622,10 @@
   "task.belongsTo": {
     "text": "Part of: {group} / {task}",
     "context": "Subtask ownership info"
+  },
+  "task.workspaces": {
+    "text": "Workspaces",
+    "context": "Group associated workspace list heading"
   },
   "common.creating": {
     "text": "Creating...",

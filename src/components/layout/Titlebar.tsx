@@ -47,13 +47,14 @@ export function Titlebar() {
   const location = useLocation();
   const inChat = location.pathname === '/chat';
 
-  // Group task detection — select primitive values to avoid infinite re-render
-  const isGroupTask = useGroupStore((s) => currentSessionId ? currentSessionId in s.taskSessionMap : false);
-  const taskGroupId = useGroupStore((s) => currentSessionId ? s.taskSessionMap[currentSessionId] : undefined);
-  const groupTaskTitle = useGroupStore((s) => {
-    if (!taskGroupId) return '';
-    const tasks = s.tasks[taskGroupId];
-    return tasks?.find(t => t.id === currentSessionId)?.title || '';
+  // Group task detection — single stable-string selector to avoid infinite re-render
+  const groupTaskTitleKey = useGroupStore((s) => {
+    if (!currentSessionId) return '';
+    const mappedId = s.taskSessionMap[currentSessionId];
+    if (!mappedId) return '';
+    const tasks = s.tasks[mappedId];
+    const task = tasks?.find(t => t.id === currentSessionId);
+    return task?.title || '';
   });
   const [taskCardExpanded, setTaskCardExpanded] = useState(false);
 
@@ -100,7 +101,7 @@ export function Titlebar() {
       <div className="flex-1" />
 
       {/* Workspace info - centered, only in chat */}
-      {inChat && (isGroupTask ? (
+      {inChat && (groupTaskTitleKey ? (
         // Group task card
         <div
           className="flex items-center gap-1.5 text-[13px] max-w-[600px]"
@@ -108,7 +109,7 @@ export function Titlebar() {
         >
           <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate min-w-0 font-medium">
-            {groupTaskTitle}
+            {groupTaskTitleKey}
           </span>
           <button
             className="p-0.5 hover:bg-[hsl(var(--muted))] rounded transition-colors"

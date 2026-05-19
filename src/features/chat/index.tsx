@@ -163,56 +163,80 @@ export function Chat() {
     getItemKey: (index) => messages[index]?.id ?? index,
   });
 
-  // Group task card state — each selector returns a primitive or stable reference
-  // to avoid Zustand Object.is comparison failure (object literals always create new refs)
-  const mappedId = useGroupStore((s) => currentSessionId ? s.taskSessionMap[currentSessionId] : undefined);
-  // Coordinator: mappedId is groupId, and tasks[groupId] contains a task with id === sessionId
-  const isCoordinator = useGroupStore((s) => {
-    if (!mappedId || !currentSessionId) return false;
-    return s.tasks[mappedId]?.some(t => t.id === currentSessionId) ?? false;
-  });
-  // Subtask: mappedId is groupTaskId, find parent task
-  const parentTaskId = useGroupStore((s) => {
-    if (!mappedId || isCoordinator) return undefined;
-    return mappedId; // mappedId is the groupTaskId for subtask sessions
-  });
-  const parentTaskGroupId = useGroupStore((s) => {
-    if (!parentTaskId) return undefined;
+  // Group task card state — subscribe to raw data, derive via useMemo
+  // Key insight: only subscribe to primitive values or stable references from the store
+  const groupMappedId = useGroupStore((s) => currentSessionId ? s.taskSessionMap[currentSessionId] : undefined);
+  const groupRawData = useGroupStore((s) => {
+    // Return a stable JSON string of the relevant data — Zustand compares with Object.is
+    // A string is a primitive, so same content = same reference = no re-render
+    const mid = currentSessionId ? s.taskSessionMap[currentSessionId] : undefined;
+    if (!mid) return '';
+    // Coordinator path
+    const coordTasks = s.tasks[mid];
+    const coordTask = coordTasks?.find(t => t.id === currentSessionId);
+    if (coordTask) {
+      const gName = s.groups.find(g => g.id === mid)?.name ?? '';
+      const wsIds = JSON.stringify(s.groups.find(g => g.id === mid)?.workspaceIds ?? []);
+      const subs = JSON.stringify(s.subtasks[currentSessionId] ?? []);
+      return `c|${gName}|${coordTask.title}|${coordTask.description ?? ''}|${wsIds}|${subs}`;
+    }
+    // Subtask path
     for (const [gid, tList] of Object.entries(s.tasks)) {
-      if (tList.some(t => t.id === parentTaskId)) return gid;
-    }
-    return undefined;
-  });
-  // Derived display values — all primitives
-  const groupName = useGroupStore((s) => {
-    const gid = isCoordinator ? mappedId : parentTaskGroupId;
-    if (!gid) return undefined;
-    return s.groups.find(g => g.id === gid)?.name;
-  });
-  const taskTitle = useGroupStore((s) => {
-    if (isCoordinator && mappedId && currentSessionId) {
-      return s.tasks[mappedId]?.find(t => t.id === currentSessionId)?.title;
-    }
-    if (parentTaskId) {
-      for (const tList of Object.values(s.tasks)) {
-        const found = tList.find(t => t.id === parentTaskId);
-        if (found) return found.title;
+      const pt = tList.find(t => t.id === mid);
+      if (pt) {
+        const gName = s.groups.find(g => g.id === gid)?.name ?? '';
+        const wsIds = JSON.stringify(s.groups.find(g => g.id === gid)?.workspaceIds ?? []);
+        return `s|${gName}|${pt.title}|${pt.id}|${wsIds}`;
       }
     }
-    return undefined;
+    return '';
   });
-  const taskDescription = useGroupStore((s) => {
-    if (isCoordinator && mappedId && currentSessionId) {
-      return s.tasks[mappedId]?.find(t => t.id === currentSessionId)?.description ?? null;
+  // Derive display values from the raw data key — only re-compute when the key changes
+  const groupTaskInfo = useMemo(() => {
+    if (!groupMappedId || !groupRawData) return null;
+    const state = useGroupStore.getState();
+    const mid = groupMappedId;
+    const coordTasks = state.tasks[mid];
+    const coordTask = coordTasks?.find(t => t.id === currentSessionId);
+    if (coordTask) {
+      const group = state.groups.find(g => g.id === mid);
+      return {
+        isCoordinator: true,
+        isSubtask: false,
+        groupName: group?.name,
+        taskTitle: coordTask.title,
+        taskDescription: coordTask.description ?? null,
+        subtaskList: state.subtasks[currentSessionId] || EMPTY_SUBTASKS,
+        workspaceIds: (group?.workspaceIds || []) as string[],
+        parentTaskId: undefined as string | undefined,
+      };
+    }
+    for (const [gid, tList] of Object.entries(state.tasks)) {
+      const pt = tList.find(t => t.id === mid);
+      if (pt) {
+        const group = state.groups.find(g => g.id === gid);
+        return {
+          isCoordinator: false,
+          isSubtask: true,
+          groupName: group?.name,
+          taskTitle: pt.title,
+          taskDescription: null as string | null,
+          subtaskList: EMPTY_SUBTASKS as GroupSubtask[],
+          workspaceIds: (group?.workspaceIds || []) as string[],
+          parentTaskId: pt.id,
+        };
+      }
     }
     return null;
-  });
-  // Subtask list for coordinator card — reference-stable (from store state directly)
-  const subtaskList = useGroupStore((s) => {
-    if (!isCoordinator || !currentSessionId) return EMPTY_SUBTASKS;
-    return s.subtasks[currentSessionId] || EMPTY_SUBTASKS;
-  });
-  const isSubtask = !isCoordinator && !!parentTaskId;
+  }, [currentSessionId, groupMappedId, groupRawData]);
+  const isCoordinator = groupTaskInfo?.isCoordinator ?? false;
+  const isSubtask = groupTaskInfo?.isSubtask ?? false;
+  const groupName = groupTaskInfo?.groupName;
+  const taskTitle = groupTaskInfo?.taskTitle;
+  const taskDescription = groupTaskInfo?.taskDescription;
+  const subtaskList = groupTaskInfo?.subtaskList ?? EMPTY_SUBTASKS;
+  const groupWorkspaceIds = groupTaskInfo?.workspaceIds ?? [];
+  const parentTaskId = groupTaskInfo?.parentTaskId;
   const [taskCardExpanded, setTaskCardExpanded] = useState(false);
 
   return (
@@ -239,21 +263,32 @@ export function Chat() {
               {taskDescription && (
                 <p className="text-[12px] text-foreground/60">{taskDescription}</p>
               )}
-              {subtaskList.length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">{t('task.subtasks')}:</span>
-                  {subtaskList.map((sub) => {
-                    const wsName = sub.workspace.split(/[/\\]/).pop() || sub.workspace;
+              {/* Workspaces */}
+              {groupWorkspaceIds.length > 0 && (
+                <div className="space-y-0.5">
+                  <span className="text-[11px] text-muted-foreground">{t('task.workspaces')}:</span>
+                  {groupWorkspaceIds.map((ws) => {
+                    const wsName = ws.split(/[/\\]/).pop() || ws;
+                    // Check if this workspace has a dispatched subtask
+                    const dispatched = subtaskList.find(s => s.workspace === ws);
                     return (
                       <div
-                        key={sub.id}
-                        className="flex items-center gap-1.5 text-[11px] text-foreground/50 cursor-pointer hover:text-foreground px-1 py-0.5 rounded hover:bg-muted/50 transition-colors"
+                        key={ws}
+                        className={cn(
+                          'flex items-center gap-1.5 text-[11px] px-1 py-0.5 rounded transition-colors',
+                          dispatched
+                            ? 'text-foreground/70 cursor-pointer hover:text-foreground hover:bg-muted/50'
+                            : 'text-foreground/40',
+                        )}
                         onClick={() => {
-                          useChatStore.getState().switchSession(sub.sessionId);
+                          if (dispatched) {
+                            useChatStore.getState().switchSession(dispatched.sessionId);
+                          }
                         }}
                       >
                         <FolderOpen className="h-3 w-3" />
-                        <span>{wsName}: {sub.title}</span>
+                        <span>{wsName}</span>
+                        {dispatched && <span className="text-[10px] text-muted-foreground/50">→ {dispatched.title}</span>}
                       </div>
                     );
                   })}

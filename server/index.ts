@@ -2700,6 +2700,66 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
+        case 'feedback.submit': {
+          if (!msg.message || typeof msg.message !== 'string' || msg.message.trim().length === 0) {
+            ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: false, error: 'Empty message' }));
+            break;
+          }
+          const hubUrl = getServerBaseUrl(settingsManager);
+          const llmConfig = settingsManager.getConfig().llm;
+          const feedback = {
+            clientId: getClientId(),
+            message: msg.message.trim(),
+            workspace: msg.workspace,
+            llmModel: llmConfig.model || undefined,
+            llmBaseUrl: llmConfig.baseUrl || undefined,
+            osInfo: `${os.platform()} ${os.release()} ${os.arch()}`,
+          };
+          if (hubUrl) {
+            try {
+              const encrypted = buildEncryptedRequest(feedback);
+              const controller = new AbortController();
+              const tid = setTimeout(() => controller.abort(), 10_000);
+              fetch(`${hubUrl}/api/feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(encrypted),
+                signal: controller.signal,
+              }).then(res => {
+                clearTimeout(tid);
+                if (res.ok) {
+                  log.info(`Feedback pushed to hub`);
+                  ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: true }));
+                } else {
+                  log.warn(`Feedback push failed: ${res.status}`);
+                  ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: false, error: `HTTP ${res.status}` }));
+                }
+              }).catch(fetchErr => {
+                clearTimeout(tid);
+                log.warn(`Feedback push failed: ${fetchErr}`);
+                ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: false, error: String(fetchErr) }));
+              });
+            } catch (encryptErr) {
+              log.error(`Feedback encrypt failed: ${encryptErr}`);
+              ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: false, error: String(encryptErr) }));
+            }
+          } else {
+            const reportDir = path.join(getHomeDir(), 'logs');
+            fs.mkdirSync(reportDir, { recursive: true });
+            const ts = new Date().toISOString().replace(/[:.]/g, '-');
+            const feedbackPath = path.join(reportDir, `feedback-${ts}.json`);
+            try {
+              fs.writeFileSync(feedbackPath, JSON.stringify(feedback, null, 2), 'utf-8');
+              log.info(`Feedback saved locally: ${feedbackPath}`);
+              ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: true, path: feedbackPath }));
+            } catch (writeErr) {
+              log.error(`Failed to save feedback: ${writeErr}`);
+              ws.send(JSON.stringify({ type: 'feedback.submit.ack', success: false, error: String(writeErr) }));
+            }
+          }
+          break;
+        }
+
         // Group operations
         case 'group.create': {
           if (!msg.groupId || !msg.name || !Array.isArray(msg.workspaceIds)) {
@@ -2860,17 +2920,8 @@ wss.on('connection', (ws: WebSocket) => {
             // 创建 session（workspace 指向 group 目录）
             const sessionId = sessionManager.createSession(groupDir);
 
-            // 读取 task prompt 模板
-            const templatePath = path.join(__dirname, 'templates', 'group-task-prompt.md');
-            let taskPrompt = fs.readFileSync(templatePath, 'utf-8');
-            taskPrompt = taskPrompt.replace(/\{title\}/g, String(msg.title));
-            taskPrompt = taskPrompt.replace(/\{description\}/g, msg.description ? String(msg.description) : '');
-            const confirmInstruction = msg.autoDispatch
-              ? '方案确定后直接开始执行，不需要等待用户确认。'
-              : '将方案展示给用户，等待用户确认后再执行。如果用户没有明确指示，不要自动开始执行。';
-            taskPrompt = taskPrompt.replace(/\{confirm_instruction\}/g, confirmInstruction);
-            const workspacePaths = workspaceIds.join('\n');
-            taskPrompt = taskPrompt.replace(/\{workspace_paths\}/g, workspacePaths);
+            // First message to coordinator — concise, the template context is in the group CLAUDE.md
+            const taskPrompt = `开始执行任务：${String(msg.title)}${msg.description ? '\n\n' + String(msg.description) : ''}`;
 
             // 创建 group_task 记录（id = sessionId）
             const task = groupStore.createGroupTask({
@@ -2888,9 +2939,10 @@ wss.on('connection', (ws: WebSocket) => {
             const tasks = groupStore.listGroupTasks(groupId);
             broadcastToAllAuthenticated(JSON.stringify({ type: 'group-task.list', groupId, tasks }));
 
-            // Fire-and-forget: 发送 task prompt 作为第一条消息
-            const broadcastWsSend = (data: string) => { broadcastToAllAuthenticated(data); };
-            sessionManager.sendMessage(sessionId, taskPrompt, broadcastWsSend).catch((err: unknown) => {
+            // Fire-and-forget: send task prompt, use noop wsSend since frontend doesn't have stream handlers
+            // The AI response will be persisted to SQLite and visible when user loads session history
+            const noopWsSend = (_data: string) => {};
+            sessionManager.sendMessage(sessionId, taskPrompt, noopWsSend).catch((err: unknown) => {
               log.error(`[group-task.create] Failed to send task prompt: ${err}`);
             });
           } catch (err) {
