@@ -184,7 +184,7 @@ export class ChatbotSessionManager {
       return;
     }
 
-    const userKey = `${msg.platform}:${botProfile.id}:${msg.userId}`;
+    const userKey = `${msg.platform}:${botProfile.id}:${msg.chatId}`;
     const mode = botProfile.mode;
 
     // Notify user if their previous session was idle-reset

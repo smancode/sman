@@ -104,7 +104,7 @@ describe('ChatbotSessionManager', () => {
 
     it('should handle //pwd with workspace', async () => {
       store.addWorkspace('/data/projectA', 'projectA');
-      store.setUserState('wecom:bot-1:user1', '/data/projectA');
+      store.setUserState('wecom:bot-1:chat-1', '/data/projectA');
       const { sender, responses } = createSender();
       await manager.handleMessage({
         platform: 'wecom',
@@ -271,8 +271,8 @@ describe('ChatbotSessionManager', () => {
       const testDir = path.join(homeDir, 'projectA');
       fs.mkdirSync(testDir, { recursive: true });
       store.addWorkspace(testDir, 'projectA');
-      store.setUserState('wecom:bot-1:user1', testDir);
-      store.setSession('wecom:bot-1:user1', testDir, 'sess-1');
+      store.setUserState('wecom:bot-1:chat-1', testDir);
+      store.setSession('wecom:bot-1:chat-1', testDir, 'sess-1');
 
       mockSendMessageForChatbot.mockResolvedValueOnce('Hello! How can I help?');
 
@@ -307,8 +307,8 @@ describe('ChatbotSessionManager', () => {
       const testDir = path.join(homeDir, 'projectA');
       fs.mkdirSync(testDir, { recursive: true });
       store.addWorkspace(testDir, 'projectA');
-      store.setUserState('feishu:bot-1:ou_123', testDir);
-      store.setSession('feishu:bot-1:ou_123', testDir, 'sess-fs-1');
+      store.setUserState('feishu:bot-1:oc_xxx', testDir);
+      store.setSession('feishu:bot-1:oc_xxx', testDir, 'sess-fs-1');
 
       mockSendMessageForChatbot.mockResolvedValueOnce('Feishu response');
 
