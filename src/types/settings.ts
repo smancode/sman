@@ -86,6 +86,7 @@ export interface SmanSettings {
   currentLlmProfile: string;
   webSearch: WebSearchConfig;
   chatbot: ChatbotConfig;
+  groupEnabled?: boolean;
   stardomEnabled?: boolean;
   stardom?: StardomSettingsConfig;
   hub?: {

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useChatStore } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
 import { useGroupStore } from '@/stores/group';
+import { useSettingsStore } from '@/stores/settings';
 import { cn } from '@/lib/utils';
 import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
 import { CreateGroupDialog } from '@/components/CreateGroupDialog';
@@ -264,6 +265,9 @@ export function SessionTree() {
       setActiveTaskId(null);
     }
   }, [currentSessionId, taskSessionMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Group feature toggle (default: off)
+  const groupEnabled = useSettingsStore((s) => s.settings?.groupEnabled === true);
 
   // Group store
   const groups = useGroupStore((s) => s.groups);
@@ -629,21 +633,23 @@ export function SessionTree() {
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
+          className={`${groupEnabled ? 'flex-1' : 'w-full'} justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"`}
           onClick={handleNewSession}
         >
           <Plus className="h-4 w-4" />
           {t('session.new')}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1 justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
-          onClick={handleNewGroup}
-        >
-          <Layers className="h-4 w-4" />
-          {t('group.new')}
-        </Button>
+        {groupEnabled && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
+            onClick={handleNewGroup}
+          >
+            <Layers className="h-4 w-4" />
+            {t('group.new')}
+          </Button>
+        )}
       </div>
 
 
@@ -654,7 +660,7 @@ export function SessionTree() {
       {/* Tree — native scroll for performance with many sessions */}
       <div ref={scrollAreaRef} id="sman-sidebar-scroll" className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
           <div className="p-2 pt-1">
-            {groups.length === 0 && localSystems.length === 0 && botGroups.length === 0 ? (
+            {(groupEnabled ? groups.length : 0) === 0 && localSystems.length === 0 && botGroups.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
                 <p>{t('session.noSessions')}</p>
                 <p className="text-xs mt-1">{t('session.createHint')}</p>
@@ -662,7 +668,7 @@ export function SessionTree() {
             ) : (
               <>
                 {/* Groups */}
-                {groups.length > 0 && (
+                {groupEnabled && groups.length > 0 && (
                   <>
                     {groups.map((group) => (
                       <GroupItem

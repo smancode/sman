@@ -6,7 +6,7 @@ import { createLogger, type Logger } from '../utils/logger.js';
 import type { ClaudeSessionManager } from '../claude-session.js';
 import { ChatbotStore } from './chatbot-store.js';
 import { parseChatCommand } from './chat-command-parser.js';
-import type { IncomingMessage, ChatResponseSender, WeComBotProfile, ProactiveMessageSender } from './types.js';
+import type { IncomingMessage, ChatResponseSender, WeComBotProfile } from './types.js';
 
 const QUERY_TIMEOUT_MS = 5 * 60 * 1000;
 const IDLE_TIMEOUT_MINUTES = 15;
@@ -22,7 +22,6 @@ export class ChatbotSessionManager {
   private maxBotConcurrency = 2;
   private botQueue: Array<{ userKey: string; sender: ChatResponseSender; execute: () => Promise<void> }> = [];
   private getBotProfile: (botProfileId: string) => WeComBotProfile | undefined;
-  private proactiveSenders = new Map<string, ProactiveMessageSender>();
   private idleCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -37,10 +36,6 @@ export class ChatbotSessionManager {
     this.store = store;
     this.getBotProfile = getBotProfile;
     this.onSessionCreated = onSessionCreated;
-  }
-
-  registerProactiveSender(botProfileId: string, sender: ProactiveMessageSender): void {
-    this.proactiveSenders.set(botProfileId, sender);
   }
 
   startIdleCheck(): void {
@@ -62,18 +57,7 @@ export class ChatbotSessionManager {
 
       if (this.activeQueries.has(session.userKey)) continue;
 
-      const isGroup = session.chatType === 'group';
-      this.log.info(`Idle timeout for ${session.userKey} (last active: ${session.lastActiveAt}, group=${isGroup})`);
-
-      if (!isGroup) {
-        const sender = this.proactiveSenders.get(botProfileId);
-        if (sender) {
-          sender.sendProactiveMessage(
-            parts.slice(2).join(':'),
-            '由于您长时间未响应，会话已自动结束。若您还有问题请重新发送消息。',
-          );
-        }
-      }
+      this.log.info(`Idle timeout for ${session.userKey} (last active: ${session.lastActiveAt})`);
 
       this.resetSession(session.userKey, session.workspace, platform, botProfile);
     }
@@ -84,9 +68,11 @@ export class ChatbotSessionManager {
     if (session?.sessionId) {
       this.sessionManager.abort(session.sessionId);
       this.sessionManager.closeV2Session(session.sessionId);
+      this.sessionManager.softDeleteSession(session.sessionId);
     }
     this.store.deleteSession(userKey, workspace);
     this.ensureSession(userKey, workspace, platform, botProfile);
+    this.store.setIdleReset(userKey, workspace);
   }
 
   // ── Workspace helpers (unified with desktop sessions) ──
@@ -202,6 +188,11 @@ export class ChatbotSessionManager {
 
     const userKey = `${msg.platform}:${botProfile.id}:${msg.userId}`;
     const mode = botProfile.mode;
+
+    // Notify user if their previous session was idle-reset
+    if (mode === 'query' && this.store.consumeIdleReset(userKey)) {
+      sender.sendChunk('[系统提示: 上次会话因长时间未响应已自动结束，当前为新会话]\n\n');
+    }
 
     const parseResult = parseChatCommand(msg.content);
 
@@ -469,6 +460,7 @@ export class ChatbotSessionManager {
     if (oldSession?.sessionId) {
       this.sessionManager.abort(oldSession.sessionId);
       this.sessionManager.closeV2Session(oldSession.sessionId);
+      this.sessionManager.softDeleteSession(oldSession.sessionId);
     }
 
     const oldChatType = oldSession?.chatType;

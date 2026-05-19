@@ -52,6 +52,10 @@ export class ChatbotStore {
       this.db.exec("ALTER TABLE chatbot_sessions ADD COLUMN chat_type TEXT NOT NULL DEFAULT 'single'");
       this.log.info('Migrated chatbot_sessions: added chat_type column');
     }
+    if (!columns.find(c => c.name === 'idle_reset')) {
+      this.db.exec('ALTER TABLE chatbot_sessions ADD COLUMN idle_reset INTEGER NOT NULL DEFAULT 0');
+      this.log.info('Migrated chatbot_sessions: added idle_reset column');
+    }
 
     this.log.info('ChatbotStore initialized');
   }
@@ -132,6 +136,23 @@ export class ChatbotStore {
     this.db.prepare(
       "UPDATE chatbot_sessions SET last_active_at = datetime('now') WHERE user_key = ? AND workspace = ?"
     ).run(userKey, workspace);
+  }
+
+  setIdleReset(userKey: string, workspace: string): void {
+    this.db.prepare(
+      'UPDATE chatbot_sessions SET idle_reset = 1 WHERE user_key = ? AND workspace = ?'
+    ).run(userKey, workspace);
+  }
+
+  consumeIdleReset(userKey: string): boolean {
+    const rows = this.db.prepare(
+      'SELECT workspace FROM chatbot_sessions WHERE user_key = ? AND idle_reset = 1'
+    ).all(userKey) as Array<{ workspace: string }>;
+    if (rows.length === 0) return false;
+    this.db.prepare(
+      'UPDATE chatbot_sessions SET idle_reset = 0 WHERE user_key = ?'
+    ).run(userKey);
+    return true;
   }
 
   getIdleSessions(idleThresholdMinutes: number): Array<{ userKey: string; sessionId: string; workspace: string; chatType: string; lastActiveAt: string }> {

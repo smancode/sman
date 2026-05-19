@@ -73,10 +73,6 @@ export interface MediaAttachment {
   transcription?: string;
 }
 
-export interface ProactiveMessageSender {
-  sendProactiveMessage(userId: string, content: string): void;
-}
-
 export interface IncomingMessage {
   platform: 'wecom' | 'feishu' | 'weixin';
   userId: string;
