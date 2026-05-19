@@ -48,6 +48,10 @@ export class ChatbotStore {
       this.db.exec('ALTER TABLE chatbot_sessions ADD COLUMN bot_label TEXT');
       this.log.info('Migrated chatbot_sessions: added bot_label column');
     }
+    if (!columns.find(c => c.name === 'chat_type')) {
+      this.db.exec("ALTER TABLE chatbot_sessions ADD COLUMN chat_type TEXT NOT NULL DEFAULT 'single'");
+      this.log.info('Migrated chatbot_sessions: added chat_type column');
+    }
 
     this.log.info('ChatbotStore initialized');
   }
@@ -67,19 +71,21 @@ export class ChatbotStore {
 
   getSession(userKey: string, workspace: string): ChatbotSession | undefined {
     return this.db.prepare(
-      'SELECT session_id as sessionId, sdk_session_id as sdkSessionId, created_at as createdAt, last_active_at as lastActiveAt FROM chatbot_sessions WHERE user_key = ? AND workspace = ?'
+      "SELECT session_id as sessionId, sdk_session_id as sdkSessionId, chat_type as chatType, created_at as createdAt, last_active_at as lastActiveAt FROM chatbot_sessions WHERE user_key = ? AND workspace = ?"
     ).get(userKey, workspace) as ChatbotSession | undefined;
   }
 
-  setSession(userKey: string, workspace: string, sessionId: string, botLabel?: string): void {
+  setSession(userKey: string, workspace: string, sessionId: string, botLabel?: string, chatType?: string): void {
+    const ct = chatType || 'single';
     this.db.prepare(
-      `INSERT INTO chatbot_sessions (user_key, workspace, session_id, bot_label, created_at, last_active_at)
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      `INSERT INTO chatbot_sessions (user_key, workspace, session_id, bot_label, chat_type, created_at, last_active_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
        ON CONFLICT(user_key, workspace) DO UPDATE SET
          session_id = excluded.session_id,
          bot_label = excluded.bot_label,
+         chat_type = excluded.chat_type,
          last_active_at = datetime('now')`
-    ).run(userKey, workspace, sessionId, botLabel ?? null);
+    ).run(userKey, workspace, sessionId, botLabel ?? null, ct);
   }
 
   getSessionsWithBotInfo(): Array<{ userKey: string; sessionId: string; botLabel: string | null; workspace: string }> {
@@ -120,6 +126,20 @@ export class ChatbotStore {
     this.db.prepare(
       "UPDATE chatbot_sessions SET sdk_session_id = ?, last_active_at = datetime('now') WHERE user_key = ? AND workspace = ?"
     ).run(sdkSessionId, userKey, workspace);
+  }
+
+  touchSession(userKey: string, workspace: string): void {
+    this.db.prepare(
+      "UPDATE chatbot_sessions SET last_active_at = datetime('now') WHERE user_key = ? AND workspace = ?"
+    ).run(userKey, workspace);
+  }
+
+  getIdleSessions(idleThresholdMinutes: number): Array<{ userKey: string; sessionId: string; workspace: string; chatType: string; lastActiveAt: string }> {
+    return this.db.prepare(
+      `SELECT user_key as userKey, session_id as sessionId, workspace, chat_type as chatType, last_active_at as lastActiveAt
+       FROM chatbot_sessions
+       WHERE last_active_at < datetime('now', '-' || ? || ' minutes')`
+    ).all(idleThresholdMinutes) as Array<{ userKey: string; sessionId: string; workspace: string; chatType: string; lastActiveAt: string }>;
   }
 
   addWorkspace(wsPath: string, name: string): void {

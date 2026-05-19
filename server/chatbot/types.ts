@@ -54,6 +54,7 @@ export interface ChatbotUserState {
 export interface ChatbotSession {
   sessionId: string;
   sdkSessionId?: string;
+  chatType: 'single' | 'group' | 'p2p';
   createdAt: string;
   lastActiveAt: string;
 }
@@ -70,6 +71,10 @@ export interface MediaAttachment {
   mimeType: string;
   base64Data: string;
   transcription?: string;
+}
+
+export interface ProactiveMessageSender {
+  sendProactiveMessage(userId: string, content: string): void;
 }
 
 export interface IncomingMessage {

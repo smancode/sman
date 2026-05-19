@@ -373,6 +373,7 @@ function startChatbotConnections(): void {
         onMessage: (msg, sender) => chatbotManager.handleMessage(msg, sender),
       });
       conn.start();
+      chatbotManager.registerProactiveSender(bot.id, conn);
       wecomConnections.push(conn);
     }
     log.info(`WeCom bot connections started: ${wecomConnections.length} bots`);
@@ -398,6 +399,10 @@ function startChatbotConnections(): void {
     });
     weixinConnection.start();
     log.info('WeChat bot connection initialized');
+  }
+
+  if (wecomConnections.length > 0 || feishuConnection || weixinConnection) {
+    chatbotManager.startIdleCheck();
   }
 }
 

@@ -6,9 +6,11 @@ import { createLogger, type Logger } from '../utils/logger.js';
 import type { ClaudeSessionManager } from '../claude-session.js';
 import { ChatbotStore } from './chatbot-store.js';
 import { parseChatCommand } from './chat-command-parser.js';
-import type { IncomingMessage, ChatResponseSender, WeComBotProfile } from './types.js';
+import type { IncomingMessage, ChatResponseSender, WeComBotProfile, ProactiveMessageSender } from './types.js';
 
 const QUERY_TIMEOUT_MS = 5 * 60 * 1000;
+const IDLE_TIMEOUT_MINUTES = 15;
+const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
 
 export class ChatbotSessionManager {
   private log: Logger;
@@ -20,6 +22,8 @@ export class ChatbotSessionManager {
   private maxBotConcurrency = 2;
   private botQueue: Array<{ userKey: string; sender: ChatResponseSender; execute: () => Promise<void> }> = [];
   private getBotProfile: (botProfileId: string) => WeComBotProfile | undefined;
+  private proactiveSenders = new Map<string, ProactiveMessageSender>();
+  private idleCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private homeDir: string,
@@ -33,6 +37,56 @@ export class ChatbotSessionManager {
     this.store = store;
     this.getBotProfile = getBotProfile;
     this.onSessionCreated = onSessionCreated;
+  }
+
+  registerProactiveSender(botProfileId: string, sender: ProactiveMessageSender): void {
+    this.proactiveSenders.set(botProfileId, sender);
+  }
+
+  startIdleCheck(): void {
+    if (this.idleCheckTimer) return;
+    this.idleCheckTimer = setInterval(() => this.checkIdleSessions(), IDLE_CHECK_INTERVAL_MS);
+    this.log.info(`Idle check started (interval=${IDLE_CHECK_INTERVAL_MS}ms, timeout=${IDLE_TIMEOUT_MINUTES}min)`);
+  }
+
+  private checkIdleSessions(): void {
+    const idleSessions = this.store.getIdleSessions(IDLE_TIMEOUT_MINUTES);
+    for (const session of idleSessions) {
+      const parts = session.userKey.split(':');
+      if (parts.length < 3) continue;
+      const platform = parts[0];
+      const botProfileId = parts[1];
+
+      const botProfile = this.getBotProfile(botProfileId);
+      if (!botProfile || botProfile.mode !== 'query') continue;
+
+      if (this.activeQueries.has(session.userKey)) continue;
+
+      const isGroup = session.chatType === 'group';
+      this.log.info(`Idle timeout for ${session.userKey} (last active: ${session.lastActiveAt}, group=${isGroup})`);
+
+      if (!isGroup) {
+        const sender = this.proactiveSenders.get(botProfileId);
+        if (sender) {
+          sender.sendProactiveMessage(
+            parts.slice(2).join(':'),
+            '由于您长时间未响应，会话已自动结束。若您还有问题请重新发送消息。',
+          );
+        }
+      }
+
+      this.resetSession(session.userKey, session.workspace, platform, botProfile);
+    }
+  }
+
+  private resetSession(userKey: string, workspace: string, platform: string, botProfile: WeComBotProfile): void {
+    const session = this.store.getSession(userKey, workspace);
+    if (session?.sessionId) {
+      this.sessionManager.abort(session.sessionId);
+      this.sessionManager.closeV2Session(session.sessionId);
+    }
+    this.store.deleteSession(userKey, workspace);
+    this.ensureSession(userKey, workspace, platform, botProfile);
   }
 
   // ── Workspace helpers (unified with desktop sessions) ──
@@ -104,7 +158,7 @@ export class ChatbotSessionManager {
   }
 
   /** Ensure a chatbot session exists for this userKey+workspace */
-  private ensureSession(userKey: string, workspacePath: string, platform: string, botProfile: WeComBotProfile): void {
+  private ensureSession(userKey: string, workspacePath: string, platform: string, botProfile: WeComBotProfile, chatType?: 'single' | 'group' | 'p2p'): void {
     let session = this.store.getSession(userKey, workspacePath);
     if (session) {
       // Try to restore soft-deleted session
@@ -120,6 +174,8 @@ export class ChatbotSessionManager {
       }
       // Session was hard-deleted — clean up stale chatbot_sessions record and recreate
       this.log.info(`Session ${session.sessionId} was deleted, recreating...`);
+      // Preserve chatType from old session when resetting
+      if (!chatType) chatType = session.chatType;
       this.store.deleteSession(userKey, workspacePath);
     }
 
@@ -129,7 +185,7 @@ export class ChatbotSessionManager {
     const label = this.buildLabel(platform, userKey, workspacePath);
     this.sessionManager.updateSessionLabel(sessionId, label);
 
-    this.store.setSession(userKey, workspacePath, sessionId, botProfile.label);
+    this.store.setSession(userKey, workspacePath, sessionId, botProfile.label, chatType);
 
     // Notify frontend to refresh sidebar
     this.onSessionCreated?.(sessionId, label);
@@ -201,7 +257,7 @@ export class ChatbotSessionManager {
           sender,
           execute: async () => {
             sender.sendChunk('开始处理你的问题...');
-            await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
+            await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile, msg.chatType);
             resolve();
           },
         });
@@ -210,7 +266,7 @@ export class ChatbotSessionManager {
 
     this.activeBotCount++;
     try {
-      await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile);
+      await this.executeChatQuery(userKey, workspace, msg.content, sender, msg.media, mode, botProfile, msg.chatType);
     } finally {
       this.activeBotCount--;
       this.processQueue();
@@ -278,7 +334,7 @@ export class ChatbotSessionManager {
         this.handleStatus(userKey, sender);
         break;
       case 'new':
-        this.handleNew(userKey, sender);
+        this.handleNew(userKey, sender, mode, botProfile);
         break;
       default:
         sender.finish(`未知命令: //${command.rawCommand}\n使用 //help 查看所有命令。`);
@@ -391,14 +447,22 @@ export class ChatbotSessionManager {
     sender.finish(`状态: ${active}\n工作目录: ${workspace}`);
   }
 
-  private handleNew(userKey: string, sender: ChatResponseSender): void {
-    const state = this.store.getUserState(userKey);
-    if (!state?.currentWorkspace) {
+  private handleNew(userKey: string, sender: ChatResponseSender, mode?: 'full' | 'query' | 'collect', botProfile?: WeComBotProfile): void {
+    // Resolve workspace the same way as handleMessage
+    let workspace: string | undefined;
+    if (mode === 'query' && botProfile?.workspace) {
+      workspace = botProfile.workspace;
+    } else if (mode === 'collect' && botProfile) {
+      workspace = path.join(os.homedir(), '.sman', 'iterate', botProfile.id);
+    } else {
+      workspace = this.store.getUserState(userKey)?.currentWorkspace;
+    }
+
+    if (!workspace) {
       sender.finish('当前未设置工作目录，无需新建会话。');
       return;
     }
 
-    const workspace = state.currentWorkspace;
     const oldSession = this.store.getSession(userKey, workspace);
 
     // Close old V2 session process to release SDK context
@@ -407,17 +471,20 @@ export class ChatbotSessionManager {
       this.sessionManager.closeV2Session(oldSession.sessionId);
     }
 
+    const oldChatType = oldSession?.chatType;
+
     // Create a new session (ensureSession will overwrite the old mapping)
     this.store.deleteSession(userKey, workspace);
 
     const parts = userKey.split(':');
+    const platform = parts[0];
     const botProfileId = parts[1];
-    const botProfile = this.getBotProfile(botProfileId);
-    if (!botProfile) {
+    const resolvedProfile = botProfile ?? this.getBotProfile(botProfileId);
+    if (!resolvedProfile) {
       sender.finish('Bot 配置已变更，无法新建会话。请联系管理员。');
       return;
     }
-    this.ensureSession(userKey, workspace, parts[0], botProfile);
+    this.ensureSession(userKey, workspace, platform, resolvedProfile, oldChatType);
 
     const projectName = path.basename(workspace);
     sender.finish(`已新建会话: ${projectName}\n旧会话的聊天记录仍可在桌面端查看。`);
@@ -433,6 +500,7 @@ export class ChatbotSessionManager {
     media?: import('./types.js').MediaAttachment[],
     mode: 'full' | 'query' | 'collect' = 'full',
     botProfile?: WeComBotProfile,
+    chatType?: 'single' | 'group' | 'p2p',
   ): Promise<void> {
     // In query/collect mode, check if workspace changed and clean up stale sessions
     let workspaceChanged = false;
@@ -453,7 +521,7 @@ export class ChatbotSessionManager {
     if (!session) {
       // Session missing — recreate it
       try {
-        this.ensureSession(userKey, workspace, userKey.split(':')[0], botProfile!);
+        this.ensureSession(userKey, workspace, userKey.split(':')[0], botProfile!, chatType);
       } catch (err) {
         sender.error(`创建会话失败: ${err instanceof Error ? err.message : String(err)}`);
         return;
@@ -466,6 +534,7 @@ export class ChatbotSessionManager {
     const sessionId = this.store.getSession(userKey, workspace)!.sessionId;
     const abortController = new AbortController();
     this.activeQueries.set(userKey, abortController);
+    this.store.touchSession(userKey, workspace);
 
     const timeout = setTimeout(() => {
       abortController.abort();
@@ -505,6 +574,10 @@ export class ChatbotSessionManager {
   }
 
   stop(): void {
+    if (this.idleCheckTimer) {
+      clearInterval(this.idleCheckTimer);
+      this.idleCheckTimer = null;
+    }
     for (const [, controller] of this.activeQueries) {
       controller.abort();
     }

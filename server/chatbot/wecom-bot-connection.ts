@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger, type Logger } from '../utils/logger.js';
-import type { IncomingMessage, ChatResponseSender, MediaAttachment } from './types.js';
+import type { IncomingMessage, ChatResponseSender, MediaAttachment, ProactiveMessageSender } from './types.js';
 import { downloadAndDecrypt, wecomMsgtypeToMediaType } from './wecom-media.js';
 
 interface WeComBotConfig {
@@ -22,7 +22,7 @@ const STREAM_THROTTLE_MS = 1000;
 // WeCom stream message byte limit
 const MAX_CONTENT_BYTES = 20_000;
 
-export class WeComBotConnection {
+export class WeComBotConnection implements ProactiveMessageSender {
   private log: Logger;
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -304,7 +304,7 @@ export class WeComBotConnection {
       const mode = this.config.getMode();
       let welcome = '欢迎使用 Sman，输入 //help 查看可用命令。';
       if (mode === 'query') {
-        welcome = '你好，我是项目答疑助手，有什么问题直接问我就行。';
+        welcome = '你好，我是答疑助手，有什么问题直接问我就行。';
       } else if (mode === 'collect') {
         welcome = '你好，欢迎反馈问题和建议，我会帮你记录。';
       }
@@ -489,6 +489,21 @@ export class WeComBotConnection {
         this.pendingQueue.push(data);
       }
     }
+  }
+
+  /**
+   * Send a proactive (non-reply) markdown message to a user/chat.
+   * Used for system-initiated notifications like idle timeout.
+   */
+  sendProactiveMessage(userId: string, content: string): void {
+    this.send({
+      cmd: 'aibot_respond_msg',
+      headers: { req_id: uuidv4() },
+      body: {
+        msgtype: 'markdown',
+        markdown: { content },
+      },
+    });
   }
 
   private cleanup(): void {
