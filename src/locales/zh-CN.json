@@ -3578,6 +3578,7 @@
   "smartpath.noSkillsAvailable": { "text": "该项目下暂无 Skills", "context": "无可用Skills提示" },
   "smartpath.selectedSkills": { "text": "已选 {count} 个 Skill", "context": "已选Skill数量" },
   "smartpath.generateGuide": { "text": "生成指南", "context": "生成步骤操作指南按钮" },
+  "smartpath.generateGuideHint": { "text": "点击后可多轮对话调整步骤结果", "context": "生成指南按钮旁提示" },
   "smartpath.guideChatPlaceholder": { "text": "输入你的调整意见...", "context": "指南对话输入框占位符" },
   "smartpath.guideChatConfirm": { "text": "确认生成指南", "context": "确认保存指南按钮" },
   "smartpath.guideChatCancel": { "text": "取消", "context": "取消指南对话按钮" },

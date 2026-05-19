@@ -3578,6 +3578,7 @@
   "smartpath.noSkillsAvailable": { "text": "No Skills available in this project", "context": "No skills available" },
   "smartpath.selectedSkills": { "text": "{count} Skill(s) selected", "context": "Selected skills count" },
   "smartpath.generateGuide": { "text": "Generate Guide", "context": "Generate step guide button" },
+  "smartpath.generateGuideHint": { "text": "Click to start multi-turn chat to refine step result", "context": "Generate guide button hint" },
   "smartpath.guideChatPlaceholder": { "text": "Enter your adjustments...", "context": "Guide chat input placeholder" },
   "smartpath.guideChatConfirm": { "text": "Confirm Guide", "context": "Confirm save guide button" },
   "smartpath.guideChatCancel": { "text": "Cancel", "context": "Cancel guide chat button" },

@@ -313,7 +313,6 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
   const chatRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
 
-  const open = useSmartPathStore((s) => !!s.guideChatOpen[stepIndex]);
   const messages = useSmartPathStore((s) => s.guideChatMessages[stepIndex] ?? null);
   const loading = useSmartPathStore((s) => !!s.guideChatLoading[stepIndex]);
   const stream = useSmartPathStore((s) => s.guideChatStream[stepIndex] ?? '');
@@ -322,13 +321,18 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
   const saveGuide = useSmartPathStore((s) => s.saveGuide);
   const closeGuideChat = useSmartPathStore((s) => s.closeGuideChat);
 
+  // 首次渲染时自动发起对话
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (!initialized.current) {
+      initialized.current = true;
+      startGuideChat(pathId, workspace, stepIndex, stepResult);
+    }
+  }, [pathId, workspace, stepIndex, stepResult, startGuideChat]);
+
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, stream]);
-
-  const handleStart = useCallback(() => {
-    startGuideChat(pathId, workspace, stepIndex, stepResult);
-  }, [pathId, workspace, stepIndex, stepResult, startGuideChat]);
 
   const handleSend = useCallback(() => {
     if (!input.trim()) return;
@@ -344,16 +348,8 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }, [handleSend]);
 
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleStart} disabled={loading}>
-        <BookOpen className="h-3 w-3" /> {t('smartpath.generateGuide')}
-      </Button>
-    );
-  }
-
   return (
-    <div className="rounded-md border border-primary/20 bg-primary/5">
+    <div className="rounded-md border border-primary/20 bg-primary/5 mt-1">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-primary/10">
         <MessageSquare className="h-3.5 w-3.5 text-primary" />
         <span className="text-xs font-medium text-primary">{t('smartpath.guideLabel')}</span>
@@ -363,7 +359,7 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
         </Button>
       </div>
 
-      <div ref={chatRef} className="max-h-60 overflow-y-auto px-3 py-2 space-y-2">
+      <div ref={chatRef} className="max-h-[400px] overflow-y-auto px-3 py-2 space-y-2">
         {!messages?.length && loading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> {t('smartpath.guideChatIntro')}
