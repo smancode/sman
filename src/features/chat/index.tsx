@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo, mem
 import { AlertCircle, AlertTriangle, Key, WifiOff, Server, FileWarning, X, Loader2, Wrench, CheckCircle2, ChevronDown, ChevronRight, Info, SendHorizonal } from 'lucide-react';
 import { Streamdown } from 'streamdown';
 import 'streamdown/styles.css';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useChatStore, type StreamingBlock, type ChatError, ERROR_SUGGESTIONS, freezeLiveText, getStreamingBlocks, clearStreamingBlocks, sendingSessions, cleanupStream } from '@/stores/chat';
 import type { Message } from '@/stores/chat';
 import { AskUserCard } from './AskUserCard';
@@ -21,61 +22,6 @@ import { t, useLocale } from '@/locales';
 // key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
 const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
 
-// ── LazyMessage: bidirectional virtual mount — mount near viewport, unmount when far away ──
-const LAZY_ALWAYS_RENDER_COUNT = 8;
-const LAZY_UNMOUNT_MARGIN = '1200px 0px';
-
-const LazyMessage = memo(function LazyMessage({
-  msg,
-  index,
-  total,
-  showThinking,
-}: {
-  msg: Message;
-  index: number;
-  total: number;
-  showThinking: boolean;
-}) {
-  const [visible, setVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Always render first and last N messages
-  const pinned = index >= total - LAZY_ALWAYS_RENDER_COUNT || index < LAZY_ALWAYS_RENDER_COUNT;
-
-  useEffect(() => {
-    if (pinned) {
-      setVisible(true);
-      return;
-    }
-
-    const el = ref.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => { setVisible(entry.isIntersecting); },
-      { rootMargin: LAZY_UNMOUNT_MARGIN },
-    );
-    observer.observe(el);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [pinned]);
-
-  if (pinned || visible) {
-    return (
-      <ChatMessage
-        key={msg.id}
-        id={`msg-${msg.id}`}
-        message={msg}
-        showThinking={showThinking}
-      />
-    );
-  }
-
-  return <div ref={ref} className="min-h-[80px]" />;
-});
-
 export function Chat() {
   useLocale();
   const connectionStatus = useWsConnection((s) => s.status);
@@ -93,6 +39,8 @@ export function Chat() {
   const clearContextWarning = useChatStore((s) => s.clearContextWarning);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const userAtBottomRef = useRef(true);
   const hasActiveSession = !!currentSessionId;
 
   const prevSessionIdRef = useRef(currentSessionId);
@@ -122,27 +70,37 @@ export function Chat() {
 
     const saved = scrollMemory.get(currentSessionId);
     if (!saved) {
-      // 没有保存的位置，首次进入滚到底
-      container.scrollTop = container.scrollHeight;
+      // 首次进入滚到底
+      anchorRef.current?.scrollIntoView({ behavior: 'instant' });
       restoredRef.current = true;
       return;
     }
 
     if (saved.atBottom) {
-      container.scrollTop = container.scrollHeight;
+      anchorRef.current?.scrollIntoView({ behavior: 'instant' });
     } else {
+      // 恢复比例位置仍需用 scrollTop（虚拟滚动下 scrollHeight = getTotalSize）
       container.scrollTop = Math.round(saved.ratio * container.scrollHeight);
     }
     restoredRef.current = true;
   }, [messages, currentSessionId]);
 
-  // 流式输出时自动滚到底部
+  // Track whether user is near bottom (within 150px) for smart auto-scroll
   useEffect(() => {
     const container = scrollRef.current;
-    if (!container || !sending) return;
-    requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
-    });
+    if (!container) return;
+    const onScroll = () => {
+      userAtBottomRef.current =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Auto-scroll during streaming: only if user is already at bottom, use scrollIntoView to avoid forced reflow
+  useEffect(() => {
+    if (!sending || !userAtBottomRef.current) return;
+    anchorRef.current?.scrollIntoView({ behavior: 'instant' });
   }, [messages.length, sending]);
 
   // Load history on initial connect or reconnect.
@@ -188,35 +146,80 @@ export function Chat() {
 
   const isEmpty = messages.length === 0 && !sending;
 
+  // Virtual scroll: only render visible messages
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => {
+      const msg = messages[index];
+      if (!msg) return 100;
+      return msg.role === 'user' ? 80 : 200;
+    },
+    overscan: 5,
+    getItemKey: (index) => messages[index]?.id ?? index,
+  });
+
   return (
-    <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
+    <div className="relative flex flex-col h-full transition-colors duration-200 bg-transparent">
       <InitBanner />
       {/* Messages */}
       <div ref={scrollRef} data-chat-scroll className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
-        <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
-          {isEmpty ? (
+        {isEmpty ? (
+          <div className="relative h-full max-w-4xl mx-auto px-4">
             <WelcomeScreen />
-          ) : (
-            <>
-              {/* Render messages — deferred mounting */}
-              {messages.map((msg, i) => (
-                <LazyMessage
-                  key={msg.id}
-                  msg={msg}
-                  index={i}
-                  total={messages.length}
-                  showThinking={showThinking}
-                />
-              ))}
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto px-4 pt-3 pb-4" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const msg = messages[virtualItem.index];
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  className="pb-4"
+                >
+                  <ChatMessage
+                    id={`msg-${msg.id}`}
+                    message={msg}
+                    showThinking={showThinking}
+                  />
+                </div>
+              );
+            })}
 
-              {/* Streaming content — isolated component subscribes to streamingBlocks directly */}
-              {sending && <StreamingRegion showThinking={showThinking} />}
+            {/* Streaming content — isolated component subscribes to streamingBlocks directly */}
+            {sending && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualizer.getTotalSize()}px)`,
+              }}>
+                <div className="pb-4">
+                  <StreamingRegion showThinking={showThinking} />
+                </div>
 
-              {/* Typing indicator with optional waiting hint */}
-              {sending && <WaitingHintBlock waitingHint={waitingHint} />}
-            </>
-          )}
-        </div>
+                {/* Typing indicator with optional waiting hint */}
+                <WaitingHintBlock waitingHint={waitingHint} />
+
+                {/* Scroll anchor: auto-scroll targets this instead of calculating scrollHeight */}
+                <div ref={anchorRef} data-chat-anchor="" />
+              </div>
+            )}
+
+            {/* Scroll anchor when not streaming */}
+            {!sending && <div ref={anchorRef} data-chat-anchor="" />}
+          </div>
+        )}
       </div>
 
       {/* Error card */}
@@ -260,14 +263,14 @@ function StreamingRegion({ showThinking }: { showThinking: boolean }) {
   const streamingBlocks = useChatStore((s) => s.streamingBlocks);
   const hasStreamingContent = streamingBlocks.length > 0;
 
-  // Auto-scroll on streaming updates
+  // Auto-scroll on streaming updates — only if user is at bottom
   useEffect(() => {
     const container = document.querySelector('[data-chat-scroll]') as HTMLDivElement | null;
-    if (container) {
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
-    }
+    if (!container) return;
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (!nearBottom) return;
+    const anchor = document.querySelector('[data-chat-anchor]');
+    anchor?.scrollIntoView({ behavior: 'instant' });
   }, [streamingBlocks.length]);
 
   if (!hasStreamingContent) return null;

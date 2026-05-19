@@ -61,7 +61,7 @@ export function MainLayout() {
   return (
     <div className={cn(
       'flex flex-col h-screen overflow-hidden relative bg-background',
-      isWindows && !isMaximized && 'rounded-lg',
+      isWindows && !isMaximized && 'rounded-lg', // Note: rounded corners only render correctly with transparent window (macOS)
     )}>
       {/* 全局流动背景 - 覆盖整个 UI */}
       <div

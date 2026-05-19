@@ -330,6 +330,13 @@
   }
 }
 
+/* ── Chat Scroll Performance ── */
+
+/* Scroll container: use GPU compositing */
+[data-chat-scroll] {
+  will-change: scroll-position;
+}
+
 /* Code Block Styles */
 .code-block-wrapper {
   position: relative;
