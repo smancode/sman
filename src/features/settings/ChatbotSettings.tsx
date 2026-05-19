@@ -17,6 +17,7 @@ export function ChatbotSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateChatbot, clearError } = useSettingsStore();
   const [showFeishuSecret, setShowFeishuSecret] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   // WeChat/Weixin state
   const [weixinStatus, setWeixinStatus] = useState<WeixinConnectionStatus>('idle');
@@ -144,8 +145,11 @@ export function ChatbotSettings({ id }: { id?: string }) {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaved(false);
     try {
       await updateChatbot({ enabled, wecom, feishu, weixin });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch {
       // error handled by store
     } finally {
@@ -345,6 +349,12 @@ export function ChatbotSettings({ id }: { id?: string }) {
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
             {t('settings.chatbot.save')}
           </Button>
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {t('common.saved')}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>

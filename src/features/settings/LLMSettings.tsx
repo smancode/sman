@@ -80,6 +80,7 @@ export function LLMSettings({ id }: { id?: string }) {
   // Selected profile name (empty = not from saved list)
   const [selectedProfile, setSelectedProfile] = useState('');
   const [testing, setTesting] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string; capabilities?: DetectedCapabilities } | null>(null);
 
   const savedLlms: LlmProfile[] = settings?.savedLlms ?? [];
@@ -134,6 +135,7 @@ export function LLMSettings({ id }: { id?: string }) {
   const handleTestAndSave = async () => {
     setTesting(true);
     setTestResult(null);
+    setSaved(false);
     try {
       // Trim all inputs before saving
       const apiKey = draftApiKey.trim();
@@ -152,6 +154,8 @@ export function LLMSettings({ id }: { id?: string }) {
       if (result.success) {
         setDraftProfileName(profileName);
         setSelectedProfile(profileName);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
       }
     } catch {
       setTestResult({ success: false, error: t('settings.llm.test.failed') });
@@ -431,7 +435,13 @@ export function LLMSettings({ id }: { id?: string }) {
               ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('settings.llm.testing')}</>
               : <span>{t('settings.llm.save')}</span>}
           </Button>
-          {hasChanges && !testing && (
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {t('common.saved')}
+            </span>
+          )}
+          {hasChanges && !testing && !saved && (
             <span className="text-xs text-muted-foreground">{t('settings.llm.unsavedChanges')}</span>
           )}
         </div>

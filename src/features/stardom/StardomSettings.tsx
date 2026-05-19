@@ -1,6 +1,6 @@
 // src/features/stardom/StardomSettings.tsx
 import { useState } from 'react';
-import { Sparkles, User, Shield, Save } from 'lucide-react';
+import { Sparkles, User, Shield, Save, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,15 +23,18 @@ export function StardomSettings({ id }: { id?: string }) {
   const [fallbackUrl, setFallbackUrl] = useState(hub?.fallbackUrl ?? '');
   const [hubSaved, setHubSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
+    setSaved(false);
     try {
-      // save config to backend via settings.update WS message
       client?.send({
         type: 'settings.update',
         stardom: { server, agentName: agentName || undefined, mode, maxConcurrentTasks: maxSlots },
       });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } finally {
       setSaving(false);
     }
@@ -112,6 +115,12 @@ export function StardomSettings({ id }: { id?: string }) {
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
             {t("stardom.settings.save")}
           </Button>
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {t('common.saved')}
+            </span>
+          )}
         </div>
 
         {/* Hub Connection */}

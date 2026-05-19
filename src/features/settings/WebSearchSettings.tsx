@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Eye, EyeOff, Save, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, Eye, EyeOff, Save, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ export function WebSearchSettings({ id }: { id?: string }) {
   const { settings, loading, error, updateWebSearch, clearError } = useSettingsStore();
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [searxngTesting, setSearxngTesting] = useState(false);
   const [searxngError, setSearxngError] = useState<string | null>(null);
 
@@ -23,8 +24,11 @@ export function WebSearchSettings({ id }: { id?: string }) {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaved(false);
     try {
       await updateWebSearch({ ...ws });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch {
       // error handled by store
     } finally {
@@ -185,6 +189,12 @@ export function WebSearchSettings({ id }: { id?: string }) {
             {saving ? <Save className="h-4 w-4 mr-2 animate-pulse" /> : <Save className="h-4 w-4 mr-2" />}
             {t('settings.webSearch.save')}
           </Button>
+          {saved && (
+            <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {t('common.saved')}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
