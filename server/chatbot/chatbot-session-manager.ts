@@ -459,10 +459,11 @@ export class ChatbotSessionManager {
 
     const oldSession = this.store.getSession(userKey, workspace);
 
-    // Close SDK process — next message will create a fresh one (empty context)
+    // Close SDK process and clear context
     if (oldSession?.sessionId) {
       this.sessionManager.abort(oldSession.sessionId);
       this.sessionManager.closeV2Session(oldSession.sessionId);
+      this.sessionManager.clearSdkSessionId(oldSession.sessionId);
     }
 
     const projectName = path.basename(workspace);
