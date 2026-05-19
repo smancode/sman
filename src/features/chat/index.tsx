@@ -21,11 +21,9 @@ import { t, useLocale } from '@/locales';
 // key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
 const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
 
-// ── LazyMessage: deferred mounting — mount once when near viewport, never unmount ──
-// This preserves scroll height so scroll restoration works reliably.
-// Performance is handled by eliminating MutationObservers on static messages.
-const LAZY_ALWAYS_RENDER_COUNT = 6;
-const LAZY_ROOT_MARGIN = '800px 0px';
+// ── LazyMessage: bidirectional virtual mount — mount near viewport, unmount when far away ──
+const LAZY_ALWAYS_RENDER_COUNT = 8;
+const LAZY_UNMOUNT_MARGIN = '1200px 0px';
 
 const LazyMessage = memo(function LazyMessage({
   msg,
@@ -41,22 +39,30 @@ const LazyMessage = memo(function LazyMessage({
   const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Always render last N messages
-  const nearEnd = index >= total - LAZY_ALWAYS_RENDER_COUNT;
+  // Always render first and last N messages
+  const pinned = index >= total - LAZY_ALWAYS_RENDER_COUNT || index < LAZY_ALWAYS_RENDER_COUNT;
 
   useEffect(() => {
-    if (nearEnd || visible) return;
+    if (pinned) {
+      setVisible(true);
+      return;
+    }
+
     const el = ref.current;
     if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { rootMargin: LAZY_ROOT_MARGIN },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [nearEnd, visible]);
 
-  if (nearEnd || visible) {
+    const observer = new IntersectionObserver(
+      ([entry]) => { setVisible(entry.isIntersecting); },
+      { rootMargin: LAZY_UNMOUNT_MARGIN },
+    );
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [pinned]);
+
+  if (pinned || visible) {
     return (
       <ChatMessage
         key={msg.id}
@@ -79,7 +85,6 @@ export function Chat() {
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
-  const streamingBlocks = useChatStore((s) => s.streamingBlocks);
   const showThinking = useChatStore((s) => s.showThinking);
   const error = useChatStore((s) => s.error);
   const contextWarning = useChatStore((s) => s.contextWarning);
@@ -138,7 +143,7 @@ export function Chat() {
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
     });
-  }, [messages.length, streamingBlocks.length, sending]);
+  }, [messages.length, sending]);
 
   // Load history on initial connect or reconnect.
   // Reset sending state on disconnect to prevent stuck streaming UI.
@@ -181,14 +186,13 @@ export function Chat() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  const hasStreamingContent = streamingBlocks.length > 0;
   const isEmpty = messages.length === 0 && !sending;
 
   return (
     <div className="relative flex flex-col h-full transition-colors duration-500 bg-transparent">
       <InitBanner />
       {/* Messages */}
-      <div ref={scrollRef} className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
+      <div ref={scrollRef} data-chat-scroll className={isEmpty ? 'flex-1' : 'flex-1 overflow-y-auto'}>
         <div className={isEmpty ? 'relative h-full' : 'max-w-4xl mx-auto space-y-4 px-4 pt-3 pb-4'}>
           {isEmpty ? (
             <WelcomeScreen />
@@ -205,22 +209,11 @@ export function Chat() {
                 />
               ))}
 
-              {/* Streaming blocks rendered as sequential segments */}
-              {sending && hasStreamingContent && (
-                <StreamingBlocksRenderer blocks={streamingBlocks} showThinking={showThinking} />
-              )}
+              {/* Streaming content — isolated component subscribes to streamingBlocks directly */}
+              {sending && <StreamingRegion showThinking={showThinking} />}
 
               {/* Typing indicator with optional waiting hint */}
-              {sending && !hasStreamingContent && (
-                <div>
-                  <TypingIndicator />
-                  {waitingHint && (
-                    <p className="text-xs text-muted-foreground/70 mt-2 ml-11 animate-pulse">
-                      {waitingHint}
-                    </p>
-                  )}
-                </div>
-              )}
+              {sending && <WaitingHintBlock waitingHint={waitingHint} />}
             </>
           )}
         </div>
@@ -260,7 +253,27 @@ export function Chat() {
   );
 }
 
-// ── Streaming blocks renderer: shows text/tool_use/thinking in chronological order ──
+// ── Streaming region: isolated from Chat to avoid 50ms re-renders of message tree ──
+
+/** Wrapper that subscribes to streamingBlocks independently — Chat never re-renders on block deltas */
+function StreamingRegion({ showThinking }: { showThinking: boolean }) {
+  const streamingBlocks = useChatStore((s) => s.streamingBlocks);
+  const hasStreamingContent = streamingBlocks.length > 0;
+
+  // Auto-scroll on streaming updates
+  useEffect(() => {
+    const container = document.querySelector('[data-chat-scroll]') as HTMLDivElement | null;
+    if (container) {
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  }, [streamingBlocks.length]);
+
+  if (!hasStreamingContent) return null;
+
+  return <StreamingBlocksRenderer blocks={streamingBlocks} showThinking={showThinking} />;
+}
 
 const StreamingBlocksRenderer = memo(function StreamingBlocksRenderer({
   blocks,
@@ -322,7 +335,7 @@ const StreamingBlocksRenderer = memo(function StreamingBlocksRenderer({
 
 // ── Streaming text bubble (frozen or live) ──
 
-function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+const StreamingTextBubble = memo(function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming: boolean }) {
   const codePlugin = useCodePlugin();
   const collapseRef = useCodeBlockCollapse<HTMLDivElement>(isStreaming);
 
@@ -345,7 +358,7 @@ function StreamingTextBubble({ text, isStreaming }: { text: string; isStreaming:
       )}
     </div>
   );
-}
+});
 
 // ── Global streaming ThinkingBlock update scheduler ──
 const streamThinkingSubscribers = new Set<() => void>();
@@ -369,7 +382,7 @@ function removeStreamThinkingTimer(): void {
 
 // ── Streaming thinking block ──
 
-function ThinkingBlock({ content }: { content: string }) {
+const ThinkingBlock = memo(function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
   const codePlugin = useCodePlugin();
   const [summary, setSummary] = useState('');
@@ -424,9 +437,26 @@ function ThinkingBlock({ content }: { content: string }) {
       )}
     </div>
   );
-}
+});
 
-// ── Streaming tool status (single tool) ──
+/** Isolated waiting hint + typing indicator — re-renders on waitingHint without touching message tree */
+function WaitingHintBlock({ waitingHint }: { waitingHint: string | null }) {
+  const streamingBlocks = useChatStore((s) => s.streamingBlocks);
+  const hasStreamingContent = streamingBlocks.length > 0;
+
+  if (hasStreamingContent) return null;
+
+  return (
+    <div>
+      <TypingIndicator />
+      {waitingHint && (
+        <p className="text-xs text-muted-foreground/70 mt-2 ml-11 animate-pulse">
+          {waitingHint}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function StreamingToolStatus({ tool }: {
   tool: {

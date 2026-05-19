@@ -355,7 +355,7 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
 
 // ── Message Bubble ──────────────────────────────────────────────
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   text,
   isUser,
   isStreaming,
@@ -399,7 +399,7 @@ function MessageBubble({
       )}
     </div>
   );
-}
+});
 
 // ── Global ThinkingBlock update scheduler ───────────────────────
 // Single shared timer across all ThinkingBlock instances to avoid
@@ -425,7 +425,7 @@ function removeThinkingTimer(): void {
 
 // ── Thinking Block ──────────────────────────────────────────────
 
-function ThinkingBlock({ content }: { content: string }) {
+const ThinkingBlock = memo(function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
   const codePlugin = useCodePlugin();
   const collapseRef = useCodeBlockCollapse<HTMLDivElement>(false);
@@ -481,7 +481,7 @@ function ThinkingBlock({ content }: { content: string }) {
       )}
     </div>
   );
-}
+});
 
 // ── File Card (for user-uploaded non-image files) ───────────────
 

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,16 +9,22 @@ import {
   Copy,
   Server,
   Route,
+  Layers,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// ScrollArea removed — native overflow-y-auto for better scroll performance with many sessions
 import { useChatStore } from '@/stores/chat';
 import { useWsConnection } from '@/stores/ws-connection';
+import { useGroupStore } from '@/stores/group';
 import { cn } from '@/lib/utils';
 import { DirectorySelectorDialog } from '@/components/DirectorySelectorDialog';
+import { CreateGroupDialog } from '@/components/CreateGroupDialog';
+import { CreateTaskDialog } from '@/components/CreateTaskDialog';
+import { GroupItem } from '@/components/GroupItem';
 import { t, useLocale } from '@/locales';
 import type { ChatSession } from '@/types/chat';
+import type { Group } from '@/schemas/group';
 
 // Simple local state for expanded systems (no need for a store)
 function useExpandedSystems() {
@@ -97,42 +103,27 @@ const SessionItem = memo(function SessionItem({
   onDuplicate: () => void;
 }) {
   const isChatbot = session.key.startsWith('chatbot-');
-  const [hovered, setHovered] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      onDelete();
-    } catch (err) {
-      console.error('[SessionItem] Failed to delete session:', err);
-      setDeleting(false);
-    }
+    onDelete();
   };
 
   const handleDuplicate = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      onDuplicate();
-    } catch (err) {
-      console.error('[SessionItem] Failed to duplicate session:', err);
-    }
+    onDuplicate();
   };
 
   return (
     <div
       data-session-id={session.key}
       className={cn(
-        'flex items-center gap-2 pl-3 pr-1 py-2 rounded-lg cursor-pointer text-[13px] transition-all duration-200',
+        'group flex items-center gap-2 pl-3 pr-1 py-2 rounded-lg cursor-pointer text-[13px]',
         isActive
           ? 'bg-[hsl(var(--muted))] text-foreground font-semibold'
           : 'hover:bg-[hsl(var(--muted))] text-foreground/60 hover:text-foreground',
       )}
       onClick={onSelect}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {(session.label?.startsWith('/')) ? (
         <Route className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -140,14 +131,10 @@ const SessionItem = memo(function SessionItem({
         <MessageSquare className="h-3.5 w-3.5 shrink-0" />
       )}
       <span className="truncate flex-1 min-w-0">{session.label || t('session.newSession')}</span>
-      <div className={cn('flex items-center gap-0.5 shrink-0', !hovered && !deleting && 'hidden')}>
+      <div className="flex items-center gap-0.5 shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto [transition:opacity_0.15s_0.3s]">
         {!isChatbot && (
           <button
-            className={cn(
-              'shrink-0 p-0.5 rounded transition-all',
-              hovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
-              'text-muted-foreground hover:text-primary',
-            )}
+            className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-primary"
             onClick={handleDuplicate}
             title={t('session.copySession')}
           >
@@ -155,14 +142,8 @@ const SessionItem = memo(function SessionItem({
           </button>
         )}
         <button
-          className={cn(
-            'shrink-0 p-0.5 rounded transition-all',
-            hovered || deleting ? 'opacity-100' : 'opacity-0 pointer-events-none',
-            deleting && 'opacity-40 cursor-not-allowed',
-            'text-muted-foreground hover:text-destructive',
-          )}
+          className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-destructive"
           onClick={handleDelete}
-          disabled={deleting}
           title={t('session.delete')}
         >
           <Trash className="h-3.5 w-3.5" />
@@ -258,7 +239,14 @@ export function SessionTree() {
   const navigate = useNavigate();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showDirSelector, setShowDirSelector] = useState(false);
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
+  const [showTaskDialog, setShowTaskDialog] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const { expanded: expandedSystems, toggle: toggleSystemExpanded } = useExpandedSystems();
+
+  // Custom state for expanded groups (separate from expandedSystems to avoid conflicts)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
@@ -266,6 +254,31 @@ export function SessionTree() {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
+
+  // Group store
+  const groups = useGroupStore((s) => s.groups);
+  const tasks = useGroupStore((s) => s.tasks);
+  const loadGroups = useGroupStore((s) => s.loadGroups);
+  const loadTasks = useGroupStore((s) => s.loadTasks);
+  const createGroup = useGroupStore((s) => s.createGroup);
+  const deleteGroup = useGroupStore((s) => s.deleteGroup);
+  const createTask = useGroupStore((s) => s.createTask);
+  const deleteTask = useGroupStore((s) => s.deleteTask);
+
+  // Load groups when WebSocket is connected
+  useEffect(() => {
+    if (status !== 'connected') return;
+    loadGroups();
+  }, [status]);
+
+  // Load tasks for a group when it's expanded
+  useEffect(() => {
+    expandedGroups.forEach((groupId) => {
+      if (!tasks[groupId] || tasks[groupId].length === 0) {
+        loadTasks(groupId);
+      }
+    });
+  }, [expandedGroups, loadTasks]);
 
   // Derive local systems and bot groups from sessions
   const { localSystems, botGroups, localSessionsBySystem, botSessionsByGroup } = useMemo(() => {
@@ -365,14 +378,12 @@ export function SessionTree() {
     }
 
     requestAnimationFrame(() => {
-      const viewport = scrollAreaRef.current?.querySelector(
-        '[data-radix-scroll-area-viewport]',
-      );
-      const sessionEl = scrollAreaRef.current?.querySelector(
+      const container = scrollAreaRef.current;
+      const sessionEl = container?.querySelector(
         `[data-session-id="${CSS.escape(currentSessionId)}"]`,
       );
-      if (viewport && sessionEl) {
-        const vpRect = viewport.getBoundingClientRect();
+      if (container && sessionEl) {
+        const vpRect = container.getBoundingClientRect();
         const elRect = sessionEl.getBoundingClientRect();
         if (elRect.bottom > vpRect.bottom || elRect.top < vpRect.top) {
           sessionEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -433,6 +444,81 @@ export function SessionTree() {
     }
   };
 
+  // Group handlers
+  const handleNewGroup = () => {
+    setShowGroupDialog(true);
+  };
+
+  const handleGroupCreated = async (group: { id: string; name: string; workspaceIds: string[] }) => {
+    // Optimistically add to local state
+    await loadGroups();
+  };
+
+  const handleGroupEdit = (group: Group) => {
+    // TODO: Implement edit dialog
+    alert(t('group.editNotImplemented'));
+  };
+
+  const handleGroupDelete = async (groupId: string) => {
+    try {
+      await deleteGroup(groupId);
+      await loadGroups();
+    } catch (err) {
+      console.error('[SessionTree] Failed to delete group:', err);
+      alert(`${t('group.deleteFail')}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleNewTask = (groupId: string) => {
+    setSelectedGroupId(groupId);
+    setShowTaskDialog(true);
+  };
+
+  const handleTaskCreated = async (task: {
+    id: string;
+    groupId: string;
+    title: string;
+    description: string;
+    details: string;
+    acceptanceCriteria: string;
+  }) => {
+    // Reload tasks for the group
+    await loadTasks(task.groupId);
+    // Navigate to task view
+    setActiveTaskId(task.id);
+    navigate(`/group-task/${task.id}`);
+  };
+
+  const handleTaskSelect = (taskId: string) => {
+    setActiveTaskId(taskId);
+    navigate(`/group-task/${taskId}`);
+  };
+
+  const handleTaskDelete = async (taskId: string) => {
+    try {
+      await deleteTask(taskId);
+      // Reload tasks for all groups
+      for (const groupId of Object.keys(tasks)) {
+        await loadTasks(groupId);
+      }
+    } catch (err) {
+      console.error('[SessionTree] Failed to delete task:', err);
+      alert(`${t('task.deleteFail')}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const toggleGroupExpanded = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Directory Selector Dialog */}
@@ -443,16 +529,41 @@ export function SessionTree() {
         recentWorkspaces={localSystems.map((s) => ({ workspace: s.workspace, name: s.name }))}
       />
 
-      {/* New session button */}
-      <div className="px-3 pb-2 pt-1">
+      {/* Create Group Dialog */}
+      <CreateGroupDialog
+        open={showGroupDialog}
+        onOpenChange={setShowGroupDialog}
+        onGroupCreated={handleGroupCreated}
+        recentWorkspaces={localSystems.map((s) => ({ workspace: s.workspace, name: s.name }))}
+      />
+
+      {/* Create Task Dialog */}
+      <CreateTaskDialog
+        open={showTaskDialog}
+        onOpenChange={setShowTaskDialog}
+        onTaskCreated={handleTaskCreated}
+        groupId={selectedGroupId || ''}
+      />
+
+      {/* New session & group buttons */}
+      <div className="px-3 pb-2 pt-1 flex gap-1">
         <Button
           variant="outline"
           size="sm"
-          className="w-full justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
+          className="flex-1 justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
           onClick={handleNewSession}
         >
           <Plus className="h-4 w-4" />
           {t('session.new')}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 justify-start gap-2 h-9 text-[13px] font-medium bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted))] border-[hsl(var(--border))]"
+          onClick={handleNewGroup}
+        >
+          <Layers className="h-4 w-4" />
+          {t('group.new')}
         </Button>
       </div>
 
@@ -461,17 +572,37 @@ export function SessionTree() {
       {/* Backend status bar */}
       <BackendStatusBar />
 
-      {/* Tree */}
-      <div ref={scrollAreaRef} className="flex-1 min-h-0">
-        <ScrollArea className="h-full">
+      {/* Tree — native scroll for performance with many sessions */}
+      <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
           <div className="p-2 pt-1">
-            {localSystems.length === 0 && botGroups.length === 0 ? (
+            {groups.length === 0 && localSystems.length === 0 && botGroups.length === 0 ? (
               <div className="text-center py-8 px-4 text-[13px] text-muted-foreground">
                 <p>{t('session.noSessions')}</p>
                 <p className="text-xs mt-1">{t('session.createHint')}</p>
               </div>
             ) : (
               <>
+                {/* Groups */}
+                {groups.length > 0 && (
+                  <>
+                    {groups.map((group) => (
+                      <GroupItem
+                        key={group.id}
+                        group={group}
+                        tasks={tasks[group.id] || []}
+                        expanded={expandedGroups.has(group.id)}
+                        onToggle={() => toggleGroupExpanded(group.id)}
+                        onEdit={handleGroupEdit}
+                        onDelete={handleGroupDelete}
+                        onNewTask={handleNewTask}
+                        onTaskSelect={handleTaskSelect}
+                        onTaskDelete={handleTaskDelete}
+                        activeTaskId={activeTaskId}
+                      />
+                    ))}
+                  </>
+                )}
+
                 {/* Local sessions grouped by workspace */}
                 {localSystems.map((system) => (
                   <SystemGroup
@@ -511,7 +642,6 @@ export function SessionTree() {
               </>
             )}
           </div>
-        </ScrollArea>
       </div>
     </div>
   );
