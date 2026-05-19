@@ -845,7 +845,7 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
               )}
             </div>
             {stepExecutionStream[-1] && (
-              <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap">
+              <div className="markdown-content prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed max-h-[800px] overflow-y-auto whitespace-pre-wrap">
                 <Streamdown mode='static' controls={{ code: true, table: true }}>
                   {stepExecutionStream[-1]}
                 </Streamdown>
