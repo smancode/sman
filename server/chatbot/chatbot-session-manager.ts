@@ -190,9 +190,11 @@ export class ChatbotSessionManager {
     const userKey = `${msg.platform}:${botProfile.id}:${msg.chatId}`;
     const mode = botProfile.mode;
 
-    // Notify user if their previous session was idle-reset
-    if (mode === 'query' && this.store.consumeIdleReset(userKey)) {
+    // Notify user if their previous session was idle-reset (private chat only)
+    if (mode === 'query' && msg.chatType === 'single' && this.store.consumeIdleReset(userKey)) {
       sender.sendChunk('[系统提示: 上次会话因长时间未响应已自动重置，上下文已清空]\n\n');
+    } else if (mode === 'query' && msg.chatType !== 'single') {
+      this.store.consumeIdleReset(userKey); // silently consume, no notification in group
     }
 
     const parseResult = parseChatCommand(msg.content);
