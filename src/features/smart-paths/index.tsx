@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, ChevronRight, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
@@ -280,7 +280,35 @@ function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, o
   );
 }
 
-// ── Step view card ──
+// ── Auto-resize textarea ──
+
+function AutoResizeTextarea({ value, onChange, placeholder, className }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 400) + 'px';
+  }, []);
+
+  useLayoutEffect(resize, [value, resize]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => { onChange(e.target.value); resize(); }}
+      placeholder={placeholder}
+      className={cn(
+        'flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 overflow-auto resize-none min-h-[40px]',
+        className,
+      )}
+    />
+  );
+}
 
 // ── Guide Chat Panel (only rendered when stepping with a result) ──
 
@@ -479,27 +507,17 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
             )}
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
-              <Textarea
+              <AutoResizeTextarea
                 value={stepDesc || step.userInput}
-                onChange={(e) => {
-                  onDescChange?.(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 400) + 'px';
-                }}
-                className="text-xs resize-none overflow-auto min-h-[40px] max-h-[400px]"
+                onChange={(v) => onDescChange?.(v)}
                 placeholder={t('smartpath.stepDescPlaceholder')}
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editResult')}</Label>
-              <Textarea
+              <AutoResizeTextarea
                 value={stepResult}
-                onChange={(e) => {
-                  onResultChange?.(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 400) + 'px';
-                }}
-                className="text-xs resize-none overflow-auto min-h-[40px] max-h-[400px]"
+                onChange={(v) => onResultChange?.(v)}
                 placeholder={t('smartpath.stepResultPlaceholder')}
               />
             </div>
