@@ -340,8 +340,15 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
     setInput('');
   }, [pathId, workspace, stepIndex, input, sendGuideMessage]);
 
+  const [saving, setSaving] = useState(false);
+
   const handleSave = useCallback(() => {
-    saveGuide(pathId, workspace, stepIndex);
+    setSaving(true);
+    saveGuide(pathId, workspace, stepIndex)
+      .catch((err) => {
+        console.error('saveGuide failed:', err);
+      })
+      .finally(() => setSaving(false));
   }, [pathId, workspace, stepIndex, saveGuide]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -400,8 +407,9 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
           <Send className="h-3 w-3" /> {t('smartpath.guideChatSend')}
         </Button>
         {!loading && messages && messages.length > 0 && (
-          <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSave}>
-            <BookOpen className="h-3 w-3" /> {t('smartpath.guideChatConfirm')}
+          <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookOpen className="h-3 w-3" />}
+            {saving ? t('smartpath.guideSaving') : t('smartpath.guideChatConfirm')}
           </Button>
         )}
       </div>

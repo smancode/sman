@@ -3581,6 +3581,7 @@
   "smartpath.generateGuideHint": { "text": "点击后可多轮对话调整步骤结果", "context": "生成指南按钮旁提示" },
   "smartpath.guideChatPlaceholder": { "text": "输入你的调整意见...", "context": "指南对话输入框占位符" },
   "smartpath.guideChatConfirm": { "text": "确认生成指南", "context": "确认保存指南按钮" },
+  "smartpath.guideSaving": { "text": "保存中...", "context": "指南保存中" },
   "smartpath.guideChatCancel": { "text": "取消", "context": "取消指南对话按钮" },
   "smartpath.guideChatIntro": { "text": "正在确认步骤结果并生成操作指南...", "context": "指南对话初始提示" },
   "smartpath.guideSaved": { "text": "指南已保存", "context": "指南保存成功提示" },

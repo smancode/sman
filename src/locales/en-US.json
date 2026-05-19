@@ -3581,6 +3581,7 @@
   "smartpath.generateGuideHint": { "text": "Click to start multi-turn chat to refine step result", "context": "Generate guide button hint" },
   "smartpath.guideChatPlaceholder": { "text": "Enter your adjustments...", "context": "Guide chat input placeholder" },
   "smartpath.guideChatConfirm": { "text": "Confirm Guide", "context": "Confirm save guide button" },
+  "smartpath.guideSaving": { "text": "Saving...", "context": "Guide saving" },
   "smartpath.guideChatCancel": { "text": "Cancel", "context": "Cancel guide chat button" },
   "smartpath.guideChatIntro": { "text": "Confirming step result and generating guide...", "context": "Guide chat initial prompt" },
   "smartpath.guideSaved": { "text": "Guide saved", "context": "Guide saved success message" },
