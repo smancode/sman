@@ -277,8 +277,9 @@ function StepControlBar({ stepIndex, isLastStep, hasResult, executing, onRedo, o
 
 // ── Auto-resize textarea ──
 
-function AutoResizeTextarea({ value, onChange, placeholder, className }: {
+function AutoResizeTextarea({ value, onChange, placeholder, className, onKeyDown }: {
   value: string; onChange: (v: string) => void; placeholder?: string; className?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -296,6 +297,7 @@ function AutoResizeTextarea({ value, onChange, placeholder, className }: {
       ref={ref}
       value={value}
       onChange={(e) => { onChange(e.target.value); resize(); }}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       className={cn(
         'flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 overflow-auto resize-none min-h-[40px]',
@@ -366,7 +368,7 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
         </Button>
       </div>
 
-      <div ref={chatRef} className="max-h-[400px] overflow-y-auto px-3 py-2 space-y-2">
+      <div ref={chatRef} className="max-h-[800px] overflow-y-auto px-3 py-2 space-y-2">
         {!messages?.length && loading && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> {t('smartpath.guideChatIntro')}
@@ -394,16 +396,15 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
         )}
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-primary/10">
-        <Input
+      <div className="flex items-end gap-2 px-3 py-2 border-t border-primary/10">
+        <AutoResizeTextarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={setInput}
           onKeyDown={handleKeyDown}
           placeholder={t('smartpath.guideChatPlaceholder')}
-          className="h-7 text-xs flex-1"
-          disabled={loading}
+          className="flex-1"
         />
-        <Button size="sm" className="h-7 text-xs gap-1" disabled={loading || !input.trim()} onClick={handleSend}>
+        <Button size="sm" className="h-7 text-xs gap-1 shrink-0" disabled={loading || !input.trim()} onClick={handleSend}>
           <Send className="h-3 w-3" /> {t('smartpath.guideChatSend')}
         </Button>
         {!loading && messages && messages.length > 0 && (
