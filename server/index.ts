@@ -1354,6 +1354,8 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chat.send': {
           if (!msg.sessionId) throw new Error('Missing sessionId');
           if (!msg.content && !(msg as any).media?.length) throw new Error('Missing content or media');
+          // Auto-subscribe this client to the session (handles group task sessions not in session.list)
+          subscribeClientToSession(ws, String(msg.sessionId));
           // Sync AUTO mode state from frontend
           if (msg.autoConfirm !== undefined) {
             sessionManager.setAutoMode(msg.sessionId, !!msg.autoConfirm);

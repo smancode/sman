@@ -1217,7 +1217,22 @@ export class ClaudeSessionManager {
    * Send a message via WebSocket (real-time streaming)
    */
   async sendMessage(sessionId: string, content: string, wsSend: WsSend, media?: MediaAttachment[], _retryCount = 0): Promise<void> {
-    const session = this.sessions.get(sessionId);
+    let session = this.sessions.get(sessionId);
+    // Lazy restore: if not in memory but exists in SQLite (e.g. group task session after restart)
+    if (!session) {
+      const dbSession = this.store.getSession(sessionId);
+      if (dbSession) {
+        session = {
+          id: dbSession.id,
+          workspace: dbSession.workspace,
+          label: dbSession.label,
+          createdAt: dbSession.createdAt,
+          lastActiveAt: dbSession.lastActiveAt,
+        };
+        this.sessions.set(sessionId, session);
+        this.log.info(`Lazily restored session ${sessionId} from SQLite`);
+      }
+    }
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
     // Queue behind active query — wait for the current turn to finish before sending.
