@@ -250,6 +250,11 @@ export function SessionTree() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const sessions = useChatStore((s) => s.sessions);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
+  const switchSession = useChatStore((s) => s.switchSession);
+  const deleteSession = useChatStore((s) => s.deleteSession);
+  const loadSessions = useChatStore((s) => s.loadSessions);
+  const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
   // Clear activeTaskId when switching away from a group task session
   const taskSessionMap = useGroupStore((s) => s.taskSessionMap);
@@ -258,11 +263,6 @@ export function SessionTree() {
       setActiveTaskId(null);
     }
   }, [currentSessionId, taskSessionMap]); // eslint-disable-line react-hooks/exhaustive-deps
-  const currentSessionId = useChatStore((s) => s.currentSessionId);
-  const switchSession = useChatStore((s) => s.switchSession);
-  const deleteSession = useChatStore((s) => s.deleteSession);
-  const loadSessions = useChatStore((s) => s.loadSessions);
-  const createSessionWithWorkspace = useChatStore((s) => s.createSessionWithWorkspace);
 
   // Group store
   const groups = useGroupStore((s) => s.groups);
@@ -289,8 +289,39 @@ export function SessionTree() {
     if (!pendingTaskSessionId) return;
     setActiveTaskId(pendingTaskSessionId);
     switchSession(pendingTaskSessionId);
+    // Show loading animation while AI processes the first prompt
+    useChatStore.setState({ sending: true });
+    // Poll for AI response (the prompt is sent fire-and-forget from the server)
+    const pollTimer = setInterval(() => {
+      const sid = useChatStore.getState().currentSessionId;
+      if (sid !== pendingTaskSessionId) {
+        clearInterval(pollTimer);
+        return;
+      }
+      useChatStore.getState().loadHistory();
+    }, 2000);
+    // Stop polling after 2 minutes
+    const maxTimer = setTimeout(() => {
+      clearInterval(pollTimer);
+      // If still no response, stop the sending animation
+      const sid = useChatStore.getState().currentSessionId;
+      if (sid === pendingTaskSessionId) {
+        useChatStore.setState({ sending: false });
+      }
+    }, 120_000);
+    // Watch for messages arriving — stop polling once AI responds
+    const unsub = useChatStore.subscribe((state, prev) => {
+      if (state.currentSessionId !== pendingTaskSessionId) return;
+      if (state.messages.length > prev.messages.length && state.messages.some(m => m.role === 'assistant')) {
+        clearInterval(pollTimer);
+        clearTimeout(maxTimer);
+        useChatStore.setState({ sending: false });
+        unsub();
+      }
+    });
     navigate('/chat');
     clearPendingTask();
+    return () => { clearInterval(pollTimer); clearTimeout(maxTimer); unsub(); };
   }, [pendingTaskSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load tasks and subtasks for a group when it's expanded

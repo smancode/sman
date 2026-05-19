@@ -3067,9 +3067,9 @@ wss.on('connection', (ws: WebSocket) => {
               subPrompt = subPrompt.replace(/\{group_name\}/g, group?.name || '');
               subPrompt = subPrompt.replace(/\{parent_task_title\}/g, task.title);
 
-              // Fire-and-forget 发送 prompt — broadcast so frontend can stream in real-time
-              const broadcastWsSend = (data: string) => { broadcastToAllAuthenticated(data); };
-              sessionManager.sendMessage(sessionId, subPrompt, broadcastWsSend).catch((err: unknown) => {
+              // Fire-and-forget send subtask prompt — noop wsSend since response persists in SQLite
+              const noopWsSend = (_data: string) => {};
+              sessionManager.sendMessage(sessionId, subPrompt, noopWsSend).catch((err: unknown) => {
                 log.error(`[group-task.dispatch] Failed to send subtask prompt: ${err}`);
               });
 
