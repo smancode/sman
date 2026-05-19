@@ -2,14 +2,14 @@
 name: knowledge-business
 description: "业务知识：产品需求、用户流程、业务规则、领域术语。经代码验证，由 skill-auto-updater 聚合。"
 _scanned:
-  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
-  scannedAt: "2026-05-19T00:00:00.000Z"
+  commitHash: "c63e3fcf76ba9e8b362d9d73ebccab934d1d998d"
+  scannedAt: "2026-05-20T00:00:00.000Z"
   branch: "master"
 ---
 
 # 业务知识
 
-> 贡献者: nasakim | 验证时间: 2026-05-19
+> 贡献者: nasakim | 验证时间: 2026-05-20
 
 ## 核心产品定位
 > by nasakim | 验证: 2026-05
@@ -20,30 +20,38 @@ _scanned:
 
 ## Top 3 核心业务流（本次更新）
 
-### 1. 协作星图多 Agent 任务编排流
-> by nasakim | 验证: 2026-05-17
-✅ [已验证] server/hub/index.ts, server/hub/task-worker.ts, src/features/hub/TaskBoard.tsx
-- **用户工作流**：创建任务 → 多 Agent 评估并认领子任务 → 用户确认并分派 → Agent 并发执行 → 实时进度同步 → 任务完成报告
-- **业务规则**：每个 Agent 最多同时执行 2 个任务（MAX_CONCURRENT=2），认领后可停止，支持子任务级别的评估和分派，任务状态机：evaluating → confirmed → dispatched → running → completed/failed
-- **解决痛点**：多人协作场景下的任务分配不透明、执行进度不可控、结果难以追溯
-
-### 2. 地球路径逐步执行工作流
-> by nasakim | 验证: 2026-05-19
-✅ [已验证] server/smart-path-engine.ts, src/features/smart-paths/index.tsx
-- **用户工作流**：创建路径（多步骤） → 点"逐步执行" → 主编分析产出蓝图 → 逐步骤执行 → 每步完成后暂停 → 可编辑结果/描述 → 重试或继续 → 自动交付检查 → 生成报告
+### 1. Group 组合多工作区协作流 ⚠️ NEW
+> by nasakim | 验证: 2026-05-20
+✅ [已验证] server/group-store.ts, src/schemas/group.ts, src/stores/group.ts, src/components/{CreateGroupDialog,CreateTaskDialog,GroupItem}.tsx
+- **用户工作流**：点击"新建组合" → 填写组合名称并多选已有 workspace → 新建任务（名称、描述、细节、交付标准）→ AI 分析任务可行性 → 自动拆分到各 workspace → 创建 session 并分发执行
 - **业务规则**：
-  - **经验复用开关**：用户可开启"复用经验"，执行时注入已有 references/ 和 run.md，加速后续执行
-  - **步骤级 Skills**：每步可选择性加载项目 Skills（workspace/.claude/skills/），未选中则默认不使用，避免污染上下文
-  - **脚本文件白名单**：[REFERENCE:filename.ext] 只保存脚本文件（.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1 等），禁止保存 .json, .csv, .txt, .xlsx, .xml, .yaml, .yml 等数据文件
-  - tmp/ 目录存放临时输出（每次清空），references/ 目录存放可复用资源（用 [REFERENCE:filename.ext] 标记），每步独立 ephemeral session，交付检查不通过自动重试 1 次
-- **解决痛点**：长流程执行中间出错需全部重跑、无法人工干预和调整、资源复用混乱、脚本与数据混淆
+  - 组合用于跨项目协作场景（如前端+后端+文档项目协同）
+  - GroupTask 包含 4 个字段：title、description、details、acceptanceCriteria
+  - WorkspaceTask 关联 sessionId，支持任务跟踪和状态同步
+  - 条件充分后自动给有任务的 workspace 发起 session
+- **解决痛点**：多工作区批量任务管理缺乏统一入口、任务分发手动操作繁琐、跨项目协作状态不透明
 
-### 3. Chatbot 多 Bot 会话隔离与并发控制流
-> by nasakim | 验证: 2026-05-17
-✅ [已验证] server/chatbot/chatbot-session-manager.ts, server/chatbot/types.ts
-- **用户工作流**：用户在企微/飞书/微信发消息 → Bot 解析命令（如 //cd） → 按 userKey+workspace 确保会话隔离 → 队列排队（最多 2 个并发）→ 执行并返回结果
-- **业务规则**：会话 ID 前缀 `chatbot-{botProfileId}-`，同一用户同时只能有 1 个活跃请求，超出则排队，会话恢复机制（soft-delete 可恢复）， workspace 解析支持路径/名称/模糊匹配
-- **解决痛点**：多 Bot 会话串扰、高并发下资源耗尽、会话状态丢失
+### 2. Smart Path 步骤指南生成与固化流 ⚠️ NEW
+> by nasakim | 验证: 2026-05-20
+✅ [已验证] server/smart-path-engine.ts, src/features/smart-paths/index.tsx
+- **用户工作流**：步骤执行完成 → 自动展开指南对话面板 → AI 确认结果并生成操作指南 → 用户多轮调整 → 点击"确认保存" → 固化到 references/guide{n}.md → 下次执行自动加载
+- **业务规则**：
+  - 指南对话仅在步骤完成后自动展开（首次触发）
+  - AI 生成指南时禁止输出大段代码（代码块最多 10 行）
+  - 保存的指南下次执行该步骤时自动注入到 prompt
+  - 指南存储在 references/ 目录（与 run.md 同级），可跨 run 复用
+- **解决痛点**：长流程执行经验无法固化、每次执行都要重新探索、最佳实践难以传承
+
+### 3. Chatbot 会话上下文清理与隔离流 ⚠️ NEW
+> by nasakim | 验证: 2026-05-20
+✅ [已验证] server/chatbot/chatbot-session-manager.ts, server/claude-session.ts
+- **用户工作流**：用户在企微/飞书/微信发消息 → Bot 按 userKey+workspace 隔离会话 → 空闲 15 分钟自动清理 → 清除 SDK session ID → 下次对话从空上下文开始
+- **业务规则**：
+  - 空闲超时（15分钟）触发清理：abort() → closeV2Session() → clearSdkSessionId()
+  - SDK session ID 清除防止下次复用旧上下文（避免"记忆残留"）
+  - 仅 query 模式触发自动清理（full/collect 模式保持上下文）
+  - 会话重置时发送提示消息（仅私聊，群组不发送）
+- **解决痛点**：长时间空闲后对话出现"记忆混乱"、旧对话内容影响新对话、上下文泄露风险
 
 ## 核心功能模块
 > by nasakim | 验证: 2026-05
@@ -57,13 +65,14 @@ _scanned:
 > by nasakim | 验证: 2026-05
 ✅ [已验证] CLAUDE.md:L30-36
 1. **新建会话** → 选择项目目录 → 开始对话（**新增快速创建**：显示最近工作空间，点击即创建新会话）
-2. **协作星图** → 多 Agent 协作网络
-3. **组队** → 多人协作空间（项目组、任务看板、Agent 管理）
-4. **定时任务** → Cron 表达式驱动的自动化任务
-5. **地球路径** → 多步骤自动化工作流
-6. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
-7. **代码查看器** → 集成在聊天界面右侧
-8. **Git 面板** → 集成在聊天界面右侧
+2. **新建组合** → 多选工作区 → 创建跨项目任务（本次新增）
+3. **协作星图** → 多 Agent 协作网络
+4. **组队** → 多人协作空间（项目组、任务看板、Agent 管理）
+5. **定时任务** → Cron 表达式驱动的自动化任务
+6. **地球路径** → 多步骤自动化工作流
+7. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
+8. **代码查看器** → 集成在聊天界面右侧
+9. **Git 面板** → 集成在聊天界面右侧
 
 ## Chatbot 命令
 > by nasakim | 验证: 2026-05
@@ -187,47 +196,3 @@ _scanned:
 - README.md 已增加"多语言支持"章节和核心能力表格中的条目，说明 zh-CN/en-US 双语及自动切换机制
 - 桌面端跟随 OS 语言（需重启），浏览器端跟随浏览器语言，聊天界面会话级自动检测
 - 开发者注意事项：引用 CLAUDE.md 多语言规范，所有 UI 文本禁止硬编码
-
----
-
-## 新增业务知识（2026-05-19）
-
-### 快速工作空间创建体验
-> by nasakim | 验证: 2026-05-19
-✅ [已验证] src/components/DirectorySelectorDialog.tsx
-- **用户工作流**：点击"新建会话" → 弹出目录选择器 → 顶部显示"快速创建"区域 → 展示最近使用的 3 个工作空间 → 点击即创建新会话
-- **业务规则**：快速创建按钮显示工作空间名称（截断超长文本），Hover 显示完整路径，点击后直接调用 onSelect 创建会话
-- **解决痛点**：用户频繁在不同项目间切换，每次都要重新浏览目录树选择项目路径
-
-### Git 状态查询性能优化
-> by nasakim | 验证: 2026-05-19
-✅ [已验证] server/git-handler.ts
-- **用户工作流**：打开 Git 面板 → 并发查询 branch 和 status → 展示文件变更
-- **业务规则**：
-  - Git 命令改用 `execFile` 异步执行（原 `execSync` 阻塞），支持并发提升性能
-  - 展开未跟踪目录时跳过常见大目录（node_modules, .git, dist, build 等 15 个目录名）
-  - 最大展开深度 3 层，最多展开 500 个文件，防止大型项目卡死
-- **解决痛点**：大型 Git 仓库状态查询慢、未跟踪目录展开导致界面卡顿
-
-### macOS 开发版自动更新特殊处理
-> by nasakim | 验证: 2026-05-19
-✅ [已验证] electron/main.ts
-- **用户工作流**：检测到更新 → macOS 手动下载 zip → 解压到临时目录 → ad-hoc 签名 → 替换旧应用 → 重启
-- **业务规则**：
-  - Squirrel.Mac 要求代码签名，开发版（unsigned/ad-hoc）无法通过验证
-  - 绕过方案：`update-available` 事件中手动下载 zip，`updater:install` 中解压并 ad-hoc 签名，手动替换应用
-  - Windows/Linux 仍用原生 `autoDownload` 和 `quitAndInstall`
-- **解决痛点**：开发版 macOS 无法自动更新，开发者需手动下载安装
-
----
-
-## Hub 任务分配详细机制（2026-05-19）
-> 详见 [references/hub-task-disposable.md](references/hub-task-disposable.md)
-
-### 组合功能（Group）- 未提交代码
-> by nasakim | 验证: 2026-05-19
-⚠️ [未提交代码] server/group-store.ts, src/schemas/group.ts, src/stores/group.ts
-- **用户工作流**：点击"新建组合" → 填写组合名称并多选已有 workspace → 组合项显示在左侧栏 → 悬浮显示操作按钮 → 新建任务需填入任务名称、描述、细节、交付标准
-- **业务规则**：右侧顶部可切换 workspace，切换后代码目录和 git 分支联动，条件充分后自动给有任务的 workspace 发起 session
-- **状态**：代码已实现但未提交到 git（untracked files）
-- **详见**：[references/hub-group-feature.md](references/hub-group-feature.md)

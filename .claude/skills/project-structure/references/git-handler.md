@@ -5,11 +5,12 @@
 ## Purpose
 Non-blocking Git operations for status, diff, log, branch management with parallel execution and smart directory expansion.
 
-## Key Changes (v26.519.0)
-**ASYNC MIGRATION**: Migrated from sync `execSync` to async `execFile`:
+## Key Changes (v26.520.0)
+**ASYNC MIGRATION COMPLETE**: All Git operations migrated from sync `execSync` to async `execFile`:
 1. All functions now return `Promise<T>` (e.g., `handleGitStatus()` → `Promise<GitStatusResult>`)
 2. Parallel execution: `Promise.all([git(...), git(...)])` for branch + status
-3. Performance optimizations: Depth limits, directory skipping, max file limits
+3. **NEW: AI-powered conflict resolution** during git push (ephemeral sessions)
+4. Performance optimizations: Depth limits, directory skipping, max file limits
 
 ## Architecture
 ```

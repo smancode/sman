@@ -4,8 +4,8 @@ name: API 端点目录
 description: smanbase API endpoints catalog. Consult when modifying or adding endpoints.
 category: api
 _scanned:
-  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
-  scannedAt: "2026-05-19T00:00:00.000Z"
+  commitHash: "c63e3fcf76ba9e8b362d9d73ebccab934d1d998c"
+  scannedAt: "2026-05-20T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -21,13 +21,13 @@ _scanned:
 | Type | Direction | Description |
 |------|-----------|-------------|
 | `session.create` | Client→Server | Create session (params: workspace) |
-| `session.list` | Client→Server | List all sessions (includes bot sessions with mode) |
+| `session.list` | Client→Server | List all sessions (includes bot sessions with mode) 🔄 |
 | `session.delete` | Client→Server | Delete session (params: sessionId) |
 | `session.history` | Client→Server | Get session history (params: sessionId) |
 | `session.preheat` | Client→Server | Preheat session (lazy init) |
 | `session.updateLabel` | Client→Server | Update label (params: sessionId, label) |
 | `session.created` | Server→Client | Session created event |
-| `session.list` | Server→Client | Session list response (local + bot sessions) |
+| `session.list` | Server→Client | Session list response (local + bot sessions) 🔄 |
 | `session.deleted` | Server→Client | Session deleted event |
 | `session.history` | Server→Client | Session history response (with token usage) |
 | `session.labelUpdated` | Server→Client | Label updated broadcast |
@@ -36,7 +36,7 @@ _scanned:
 
 | Type | Direction | Description |
 |------|-----------|-------------|
-| `chat.send` | Client→Server | Send message (params: sessionId, content, media?, autoConfirm?) |
+| `chat.send` | Client→Server | Send message (params: sessionId, content, media?, autoConfirm?) 🔄 |
 | `chat.abort` | Client→Server | Abort current query (params: sessionId) |
 | `chat.answer_question` | Client→Server | Answer Claude's question (params: sessionId, askId, answers) |
 | `chat.start` | Server→Client | Start streaming response |
@@ -72,6 +72,29 @@ _scanned:
 | `skills.list` | Server→Client | Skills list response |
 | `skills.listProject` | Client→Server | List project skills (params: sessionId) |
 | `skills.listProject` | Server→Client | Project skills response (with paths) |
+
+## Groups (Multi-Workspace Task Management)
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `group.create` | Client→Server | Create group (params: groupId, name, workspaceIds[]) |
+| `group.created` | Server→Client | Group created event |
+| `group.list` | Client→Server | List all groups |
+| `group.list` | Server→Client | Groups list (with parsed workspaceIds[]) |
+| `group.update` | Client→Server | Update group (params: groupId, name?, workspaceIds[]?) |
+| `group.updated` | Server→Client | Group updated event |
+| `group.delete` | Client→Server | Delete group (params: groupId) |
+| `group.deleted` | Server→Client | Group deleted event |
+| `group-task.create` | Client→Server | Create task (params: groupId, title, description?, autoDispatch?) 🆕 |
+| `group-task.created` | Server→Client | Task created event (with taskId, sessionId) |
+| `group-task.list` | Client→Server | List tasks (params: groupId) |
+| `group-task.list` | Server→Client | Tasks list (with status, autoDispatch) |
+| `group-task.delete` | Client→Server | Delete task (params: taskId) |
+| `group-task.deleted` | Server→Client | Task deleted event |
+| `group-task.dispatch` | Client→Server | Dispatch task (params: taskId, subtasks[]) 🆕 |
+| `group-task.dispatched` | Server→Client | Task dispatched event (with created subtasks) |
+| `group-subtask.list` | Client→Server | List subtasks (params: taskId) |
+| `group-subtask.list` | Server→Client | Subtasks list (with sessionId, workspace, title) |
 
 ## Cron Tasks
 
@@ -110,7 +133,7 @@ _scanned:
 | `batch.update` | Client→Server | Update batch task (params: taskId, updates) |
 | `batch.updated` | Server→Client | Batch task updated |
 | `batch.delete` | Client→Server | Delete batch task (params: taskId) |
-| `batch.deleted` | Server→Client | Batch task deleted |
+| `batch.deleted` | Server→Client | Batch deleted |
 | `batch.generate` | Client→Server | Generate execution code (params: taskId) |
 | `batch.generated` | Server→Client | Generated code |
 | `batch.test` | Client→Server | Test single task (params: taskId) |
@@ -168,6 +191,11 @@ _scanned:
 | `smartpath.orchestrated` | Server→Client | Orchestration complete (blueprint, runId) |
 | `smartpath.runStep` | Client→Server | Run single step (params: pathId, workspace, runId, blueprint, stepIndex, priorResults?, args?, useRefs?) 🔄 |
 | `smartpath.finalize` | Client→Server | Finalize run (params: pathId, workspace, runId, blueprint, stepResults) |
+| `smartpath.guideChat` | Client→Server | AI guide for step (params: pathId, workspace, stepIndex, stepResult, sessionId?, message?) 🆕 |
+| `smartpath.guideChat.delta` | Server→Client | Guide chat streaming response |
+| `smartpath.guideChat.completed` | Server→Client | Guide completed (response, sessionId) |
+| `smartpath.guideSave` | Client→Server | Save guide content (params: pathId, workspace, stepIndex, content, sessionId?) 🆕 |
+| `smartpath.guideSaved` | Server→Client | Guide saved (fileName, references) |
 
 ## Stardom (Collaboration)
 
@@ -284,6 +312,13 @@ _scanned:
 | `git.push` | Client→Server | Push to remote (params: workspace) |
 | `git.push` | Server→Client | Push result |
 
+## Feedback
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `feedback.submit` | Client→Server | Submit feedback (params: message, workspace?) 🆕 |
+| `feedback.submit.ack` | Server→Client | Submission acknowledgment (success, error?, path?) |
+
 ## HTTP Endpoints
 
 ### Public (No Auth)
@@ -332,14 +367,38 @@ _scanned:
 - **Stardom**: All `stardom.*` messages forwarded to bridge if hub configured
 - **Git async**: All Git operations now async (non-blocking) to prevent event loop stalls
 - **Reference files**: Only script files (.py, .sh, .js, .ts, .bat, .sql, etc.) can be saved as references
+- **Group tasks**: Sessions linked to group tasks via `parentTaskId` field for hierarchical tracking
 
-## Recent Changes (since 57e98c3)
+## Recent Changes (since 1ddac60)
 
-### 🔄 MODIFIED - Smart Path Messages (Reference Support)
-- **`smartpath.run`**: Added `useRefs?: boolean` parameter - enables reference file injection from previous runs
-- **`smartpath.orchestrate`**: Added `useRefs?: boolean` parameter - controls whether to include reference context in step execution
-- **`smartpath.runStep`**: Added `useRefs?: boolean` parameter - per-step reference control during stepping mode
-- **`smartpath.generateStep`**: Added `skills?: string[]` parameter - restrict available workspace skills for step execution
+### 🆕 NEW - Group Management APIs (12 endpoints)
+- **Groups**: Multi-workspace task containers (create, list, update, delete)
+- **Tasks**: Group-level tasks with auto-dispatch support (create, list, delete, dispatch)
+- **Subtasks**: Individual task execution units (list by taskId)
+- **Database**: New tables `groups`, `group_tasks`, `group_subtasks` with FK cascade delete
+- **Integration**: Group tasks create regular sessions with `parentTaskId` reference
+
+### 🆕 NEW - SmartPath Guide APIs (2 endpoints)
+- **`smartpath.guideChat`**: AI-powered guidance for step execution (creates ephemeral session)
+- **`smartpath.guideSave`**: Save guide content to `{workspace}/.sman/paths/{pathId}/references/guide{n}.md`
+- **Use case**: Interactive step-by-step assistance with context persistence
+
+### 🆕 NEW - Feedback API (1 endpoint)
+- **`feedback.submit`**: User feedback submission (with optional workspace context)
+- **Routing**: Posts to hub server if configured, otherwise saves to `~/.sman/feedback/`
+- **Metadata**: Includes clientId, workspace, LLM model, OS info for diagnostics
+
+### 🔄 MODIFIED - Session Management
+- **`session.list` response**: Added `parentTaskId` field to indicate group task membership
+- **`chat.send` auto-subscribe**: Client now auto-subscribes to session on message send
+- **Impact**: Group task sessions not in local session list still receive updates
+
+### 🔄 MODIFIED - Chatbot Session Manager
+- **Idle timeout**: Auto-reset sessions after 15min of inactivity (query mode only)
+- **SDK session clearing**: New `clearSdkSessionId()` to force fresh context on reset
+- **User notification**: Idle reset notified to user in private chat, silent in group chat
+- **`//new` command**: Now clears SDK context instead of creating new session (semantics change)
+- **Impact**: Prevents stale context accumulation in long-running bot sessions
 
 ### 🔄 MODIFIED - Git Operations (Async Refactoring)
 - **All `git.*` handlers**: Converted from synchronous to async (Promise-based)
@@ -348,8 +407,8 @@ _scanned:
 - **Performance**: Parallel git operations where possible (e.g., `handleGitStatus` runs `git rev-parse` and `git status` concurrently)
 - **Error handling**: Maintains same error response format (`{ error: string }`)
 
-### 🆕 ENHANCED - Smart Path Reference File Restrictions
-- **Script-only whitelist**: Reference files now restricted to script extensions (.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1, etc.)
+### 🔄 MODIFIED - Smart Path Reference File Restrictions
+- **Script-only whitelist**: Reference files restricted to script extensions (.py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1, etc.)
 - **Data files blocked**: .json, .csv, .txt, .xlsx, .xml, .yaml, .yml files explicitly rejected
 - **Reason**: Prevent data coupling in scripts - data should be in `tmp/` directory
 - **Validation**: Server-side `isScriptFile()` function enforces whitelist
@@ -359,3 +418,20 @@ _scanned:
 - **Skill injection**: When executing step, specified skills loaded from `workspace/.claude/skills/{skillId}/SKILL.md`
 - **Context building**: Skills appended to step prompt as `[可使用的 Skills]` section
 - **Fallback**: If no skills specified, step instructed to NOT use workspace skills
+
+### ⚠️ BREAKING - Session Database Schema
+- **New column**: `sessions.parent_task_id TEXT DEFAULT NULL` (auto-migrated)
+- **Migration**: Automatic on startup via `ALTER TABLE sessions ADD COLUMN parent_task_id`
+- **Backward compatible**: Existing sessions have `NULL` parentTaskId
+- **Impact**: Frontend must handle new `parentTaskId` field in session list response
+
+### 🗑️ DEPRECATED - Workspace Tasks Table
+- **Dropped**: `workspace_tasks` table removed from schema (replaced by group tasks)
+- **Migration**: No data migration provided - workspace tasks are ephemeral by design
+- **Impact**: Any code referencing `workspace_tasks` table will fail
+
+### 📌 ORPHAN - Group Task Dispatch Logic
+- **Status**: `group-task.dispatch` creates subtask sessions but execution flow unclear
+- **Issue**: No WebSocket events for subtask execution progress/results
+- **Risk**: Frontend cannot track subtask completion status in real-time
+- **Recommendation**: Add `group-subtask.progress`, `group-subtask.completed` events

@@ -4,14 +4,14 @@ name: 项目结构
 description: smanbase 目录布局、技术栈、模块组织和构建说明
 category: structure
 _scanned:
-  commitHash: "1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c"
-  scannedAt: "2026-05-19T00:00:00.000Z"
+  commitHash: "c63e3fcf76ba9e8b362d9d73ebccab934d1d998c"
+  scannedAt: "2026-05-20T00:00:00.000Z"
   branch: "master"
 ---
 
 # Smanbase — Project Structure
 
-> Desktop AI platform: Claude integration, multi-bot support (WeCom/Feishu/Weixin), multi-agent collaboration (Stardom/Hub).
+> Desktop AI platform: Claude integration, multi-bot support (WeCom/Feishu/Weixin), multi-agent collaboration (Stardom/Hub), group workspace management.
 
 ## Tech Stack
 **Frontend**: React 19 + TypeScript + TailwindCSS + Radix UI + Zustand + TanStack Query + Vite
@@ -29,35 +29,28 @@ server/                  # Node.js backend (WebSocket/HTTP, sessions, SQLite)
   stardom/              # Stardom bridge layer
   web-access/           # Browser automation (CDP engine)
 src/                     # React frontend
-  features/             # Feature modules (chat/settings/cron/batch/smart-paths/git/hub)
-  components/           # Common components (SessionTree, DirectorySelector)
-  stores/               # Zustand state management
+  features/hub/         # 🆕 Group workspace management UI
+  components/           # CreateGroupDialog, GroupItem, SessionTree
+  stores/group.ts       # 🆕 Group state management
 electron/                # Electron main.ts + preload.ts
 plugins/                 # Claude Code plugins
 ```
 
 ## Key Modules
 
-| Module | Path | Purpose | Reference |
-|--------|------|---------|-----------|
-| **Backend Core** | | | |
-| Server Core | server/index.ts | HTTP/WebSocket, all route handlers | server-core.md |
-| Claude Session | server/claude-session.ts | SDK V2 session, lifecycle, idle timeout | claude-session.md |
-| Session Store | server/session-store.ts | SQLite session & message storage | session-store.md |
-| Settings | server/settings-manager.ts | ~/.sman/config.json R/W | settings-manager.md |
-| Skills Registry | server/skills-registry.ts | Skills registration & loading | skills-registry.md |
-| Git Handler | server/git-handler.ts | 🔄 Async Git operations (v26.519) | git-handler.md |
-| **Hub** | | | |
-| Hub Client | server/hub/client.ts | Hub HTTP/WebSocket client | hub-client.md |
-| Task Worker | server/hub/task-worker.ts | Async task execution | hub-task-worker.md |
-| Crypto | server/hub/crypto.ts | PSK encryption | hub-crypto.md |
-| **Chatbot** | | | |
-| Session Manager | server/chatbot/chatbot-session-manager.ts | Message routing, commands | chatbot-session-manager.md |
-| **Frontend** | | | |
-| Chat Feature | src/features/chat/ | Chat UI, streaming, tool use | chat-feature.md |
-| Chat Store | src/stores/chat.ts | Chat state management | chat-store.md |
-| Smart Path Engine | server/smart-path-engine.ts | 🆕 Skills integration (v26.519) | smart-path-engine.md |
-| Smart Path Store | src/stores/smart-path.ts | Frontend state + step UI | smart-path-store.md |
+| Module | Purpose | Reference |
+|--------|---------|-----------|
+| **Backend** | | |
+| server/index.ts | HTTP/WebSocket routes | server-core.md |
+| server/claude-session.ts | V2 SDK lifecycle, idle timeout | claude-session.md |
+| server/git-handler.ts | 🔄 Async Git operations (v26.520) | git-handler.md |
+| server/group-store.ts | 🆕 SQLite groups/tasks/subtasks | group-store.md |
+| server/chatbot/chatbot-session-manager.ts | 🔄 SDK session cleanup (v26.520) | chatbot-session-manager.md |
+| server/smart-path-engine.ts | 🔄 Guide chat + skills (v26.520) | smart-path-engine.md |
+| **Frontend** | | |
+| src/features/chat/ | Chat UI, streaming, tool use | chat-feature.md |
+| src/stores/group.ts | 🆕 Group state (Zustand) | N/A |
+| src/stores/smart-path.ts | Frontend state + step UI | smart-path-store.md |
 
 ## Build & Run
 **Dev**: `./dev.sh` or `pnpm dev` (5881) + `pnpm dev:server` (5880)
@@ -65,23 +58,27 @@ plugins/                 # Claude Code plugins
 **Test**: `pnpm test`
 **Ports**: 5880 (HTTP/WS), 5881 (Vite dev)
 
-## Recent Changes (since 57e98c3)
+## Recent Changes (since 1ddac60)
 
-### 🔄 Git Handler: Async Migration
-- **server/git-handler.ts**: Sync `execSync` → async `execFile` for non-blocking ops
-- Parallel git commands (branch + status), depth limits (MAX=3), dir skipping
-- **Impact**: Better UX for large repos (node_modules, .git excluded)
+### 🆕 Group Workspace Management
+- **server/group-store.ts**: SQLite store for groups/tasks/subtasks (3-table schema, cascade deletes)
+- **src/stores/group.ts**: Zustand store for group state
+- **src/components/CreateGroupDialog.tsx**: Multi-workspace selection UI
+- **src/components/GroupItem.tsx**: Group tree item with expand/collapse
+- **Impact**: Multi-project collaboration within single group workspace
 
-### 🆕 Smart Path: Skills Integration
-- Steps can specify workspace skills to use (`step.skills[]`)
+### 🔄 Git Handler: Async Migration Complete
+- **server/git-handler.ts**: All operations async with `execFile`, AI conflict resolution
+- **Impact**: Non-blocking git ops, better UX for large repos
+
+### 🔄 Chatbot Session: SDK Cleanup Logic
+- **server/chatbot/chatbot-session-manager.ts**: Added `clearSdkSessionId()` calls
+- Idle timeout cleanup: `abort()` → `closeV2Session()` → `clearSdkSessionId()`
+- **Impact**: Prevents stale context leakage between bot sessions
+
+### 🔄 Smart Path: Guide Chat + Skills Integration
+- **server/smart-path-engine.ts**: Added `guideChat()` for step guide generation
+- Guide content persisted to `references/guide{n}.md` and injected into step prompts
+- Steps can specify workspace skills via `step.skills[]`
 - Script file whitelist: .py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1
-- "Use References" toggle for optional context injection
-
-### 🆕 DirectorySelectorDialog: Quick Workspace
-- Recent workspaces quick-select UI (clickable buttons)
-
-### 🔧 Electron: macOS Auto-Updater
-- Manual download + ad-hoc signing (bypasses Squirrel.Mac for unsigned builds)
-
-### 📚 Documentation
-- New knowledge/technical refs: Chatbot multi-bot, Hub integration, Web Access refs
+- **Impact**: Reusable step guides, fine-grained skill control

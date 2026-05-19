@@ -25,6 +25,39 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 - **review**: AI 推荐能力
 ## Skill Auto-Updater History
 
+### 2026-05-20 — 增量更新
+**Commit**: c63e3fcf76ba9e8b362d9d73ebccab934d1d998d
+**Mode**: 增量更新（自上次扫描 1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c）
+**规模**: 大型项目（3923 源码文件），分 3 轮扫描，20 个 commits
+
+**Project Knowledge Skills 更新**：
+- ✅ project-structure — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ project-apis — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ project-external-calls — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ knowledge-conventions — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ knowledge-technical — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ knowledge-business — 已更新（commitHash: 1ddac60 → c63e3fc）
+- ✅ database-schema — 已更新（commitHash: 1ddac60 → c63e3fc）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ knowledge-business — 已聚合（新增 4 个知识点）
+- ✅ knowledge-conventions — 已聚合（0 个新条目）
+- ✅ knowledge-technical — 已聚合（新增 3 个条目）
+
+**知识源文件清理**：
+- ✅ business-nasakim.md — 已清理（5 个条目已处理）
+- ✅ conventions-nasakim.md — 已清理（5 个条目已处理）
+- ✅ technical-nasakim.md — 已清理（9 个条目已处理）
+
+**关键发现**：
+- ⭐ MAJOR: Group 多工作区协作功能完整实现
+- ⭐ MAJOR: Git 操作异步化完成（execSync → execFile）
+- ⭐ NEW: Smart Path 步骤指南生成系统
+- ⭐ NEW: SDK 会话 ID 清除机制
+- ⚠️ MIGRATION: sessions.parent_task_id 字段（向后兼容）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）
+
 ### 2026-05-05 — 增量更新
 **Commit**: 35f8e752359eff2474610cf31f0beaaa40ccbca9
 **Mode**: 增量更新（自上次扫描 31436986727ac0aa3ede77643e017c3a42f71d3c）

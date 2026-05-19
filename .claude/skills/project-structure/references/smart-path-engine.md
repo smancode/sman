@@ -5,12 +5,15 @@
 ## Purpose
 Execute multi-step automated workflows with step-by-step UI, result editing, skill constraints, and progress tracking.
 
-## Key Changes (v26.519.0)
-**SKILLS INTEGRATION**: Steps can now specify workspace skills to use:
-1. `step.skills[]`: Array of skill IDs (e.g., ['database-schema', 'project-apis'])
-2. Skill content injection via `buildSkillsContext()` from `.claude/skills/{skillId}/SKILL.md`
-3. Script file validation: Only allow .py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1
-4. `useRefs` parameter: Optional references context injection
+## Key Changes (v26.520.0)
+**GUIDE CHAT + SKILLS INTEGRATION**: Enhanced step execution with reusable guides and skill constraints:
+1. `guideChat()`: AI generates step operation guides after initial execution
+2. `saveGuide()`: Persist guides to `references/guide{n}.md`
+3. Guide injection: Guides auto-injected into step prompts on subsequent runs
+4. `step.skills[]`: Array of skill IDs (e.g., ['database-schema', 'project-apis'])
+5. Skill content injection via `buildSkillsContext()` from `.claude/skills/{skillId}/SKILL.md`
+6. Script file validation: Only allow .py, .sh, .js, .ts, .bat, .sql, .r, .rb, .go, .java, .ps1
+7. `useRefs` parameter: Optional references context injection
 
 ## Architecture
 ```
