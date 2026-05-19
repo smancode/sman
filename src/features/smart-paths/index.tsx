@@ -286,7 +286,7 @@ function AutoResizeTextarea({ value, onChange, placeholder, className }: {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 400) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 800) + 'px';
   }, []);
 
   useLayoutEffect(resize, [value, resize]);
