@@ -52,10 +52,10 @@ export class ChatbotSessionManager {
       const platform = parts[0];
       const botProfileId = parts[1];
 
+      if (this.activeQueries.has(session.userKey)) continue;
+
       const botProfile = this.getBotProfile(botProfileId);
       if (!botProfile || botProfile.mode !== 'query') continue;
-
-      if (this.activeQueries.has(session.userKey)) continue;
 
       this.log.info(`Idle timeout for ${session.userKey} (last active: ${session.lastActiveAt})`);
 
@@ -66,9 +66,12 @@ export class ChatbotSessionManager {
   private resetSession(userKey: string, workspace: string, platform: string, botProfile: WeComBotProfile): void {
     const session = this.store.getSession(userKey, workspace);
     if (session?.sessionId) {
-      // Close SDK process — next message will create a fresh one (empty context)
+      // Abort any active stream, close V2 SDK process
       this.sessionManager.abort(session.sessionId);
       this.sessionManager.closeV2Session(session.sessionId);
+      // Clear SDK session ID so next getOrCreateV2Session creates a fresh one (empty context)
+      // instead of resuming the old one with stale context
+      this.sessionManager.clearSdkSessionId(session.sessionId);
     }
     this.store.setIdleReset(userKey, workspace);
   }
@@ -189,7 +192,7 @@ export class ChatbotSessionManager {
 
     // Notify user if their previous session was idle-reset
     if (mode === 'query' && this.store.consumeIdleReset(userKey)) {
-      sender.sendChunk('[系统提示: 上次会话因长时间未响应已自动结束，当前为新会话]\n\n');
+      sender.sendChunk('[系统提示: 上次会话因长时间未响应已自动重置，上下文已清空]\n\n');
     }
 
     const parseResult = parseChatCommand(msg.content);

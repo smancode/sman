@@ -1067,6 +1067,13 @@ export class ClaudeSessionManager {
     }
   }
 
+  /** Clear SDK session ID (memory + DB) so next V2 creation starts fresh instead of resuming old context. */
+  clearSdkSessionId(sessionId: string): void {
+    this.sdkSessionIds.delete(sessionId);
+    this.store.clearSdkSessionId(sessionId);
+    this.log.info(`SDK session ID cleared for ${sessionId}, next V2 creation will start fresh`);
+  }
+
   hasActiveStreams(): boolean {
     return this.activeStreams.size > 0;
   }

@@ -324,6 +324,10 @@ export class SessionStore {
     return row?.sdk_session_id;
   }
 
+  clearSdkSessionId(id: string): void {
+    this.db.prepare('UPDATE sessions SET sdk_session_id = NULL WHERE id = ?').run(id);
+  }
+
   getActiveSessionCount(): number {
     const row = this.db.prepare(
       "SELECT COUNT(*) as c FROM sessions WHERE last_active_at > datetime('now', '-1 hour') AND deleted_at IS NULL"
