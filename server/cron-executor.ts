@@ -3,6 +3,7 @@ import path from 'path';
 import { createLogger, type Logger } from './utils/logger.js';
 import type { CronTaskStore } from './cron-task-store.js';
 import type { CronTask } from './types.js';
+import { emitAchievementEvent } from './achievement-events.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import { parseCrontabMd } from './cron-scheduler.js';
 import { SKILL_AUTO_UPDATER } from './init/init-manager.js';
@@ -313,6 +314,7 @@ export class CronExecutor {
       this.taskStore.updateRun(run.id, { status: 'success' });
       this.log.info(`Task ${task.id} completed successfully`);
       this._onRunStatusChange?.(task.id, 'success');
+      emitAchievementEvent({ type: 'cron_executed', data: {} });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (abortController.signal.aborted) {

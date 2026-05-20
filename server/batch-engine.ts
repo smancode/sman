@@ -8,6 +8,7 @@ import type { BatchStore } from './batch-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import { Semaphore, SemaphoreStoppedError } from './semaphore.js';
 import { renderTemplate, detectInterpreter } from './batch-utils.js';
+import { emitAchievementEvent } from './achievement-events.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -307,6 +308,13 @@ export class BatchEngine {
         finishedAt: isoNow(),
         status: exec.cancelled ? 'failed' : 'completed',
       });
+
+      if (!exec.cancelled) {
+        const counts = this.store.getItemCounts(taskId);
+        for (let i = 0; i < (counts.success || 0); i++) {
+          emitAchievementEvent({ type: 'batch_item_completed', data: {} });
+        }
+      }
     }
   }
 

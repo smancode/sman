@@ -12,6 +12,7 @@ import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPathStore } from './smart-path-store.js';
 import type { ClaudeSessionManager } from './claude-session.js';
 import type { SmartPathStep, StepPlan, PathBlueprint } from './types.js';
+import { emitAchievementEvent } from './achievement-events.js';
 
 function readSkillContent(workspace: string, skillId: string): string | null {
   const skillMdPath = path.join(workspace, '.claude', 'skills', skillId, 'SKILL.md');
@@ -468,6 +469,8 @@ export class SmartPathEngine {
       reportFileName: path.basename(reportFileName),
     });
 
+    emitAchievementEvent({ type: 'smartpath_run', data: {} });
+
     await this.updateRunGuide(workspace, pathId, steps, stepResults, blueprint);
 
     this.activeRuns.delete(pathId);
@@ -672,6 +675,7 @@ export class SmartPathEngine {
         finishedAt: isoNow(),
         reportFileName: path.basename(reportFileName),
       });
+      emitAchievementEvent({ type: 'smartpath_run', data: {} });
       await this.updateRunGuide(workspace, pathId, steps, stepResults, blueprint);
 
       return { stepResults, blueprint };

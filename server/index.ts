@@ -53,6 +53,9 @@ import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
 import { getClientId } from './utils/network.js';
 import { getServerBaseUrl, ensureServerBaseUrl } from './server-url.js';
 import { BroadcastStore } from './broadcast-store.js';
+import { AchievementStore } from './achievement-store.js';
+import { AchievementEngine } from './achievement-engine.js';
+import { handleAchievementMessage } from './achievement-ws-handler.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -406,6 +409,13 @@ function startChatbotConnections(): void {
 }
 
 startChatbotConnections();
+
+// Achievement system
+const achievementStore = new AchievementStore(dbPath);
+const achievementEngine = new AchievementEngine(achievementStore);
+achievementEngine.setSessionStore(store);
+achievementEngine.setBroadcast((msg: string) => { broadcast(msg); });
+achievementEngine.start();
 
 // Skills cache: 1-minute TTL to avoid frequent disk reads
 // Key: `${workspace}:${skillType}`, Value: { data: any, expiresAt: number }
@@ -3105,6 +3115,9 @@ wss.on('connection', (ws: WebSocket) => {
         }
 
         default:
+          if (handleAchievementMessage(msg, ws, achievementEngine)) {
+            break;
+          }
           if (msg.type?.startsWith('stardom.')) {
             await ensureServerBaseUrl(settingsManager);
             const bridge = getStardomBridge();

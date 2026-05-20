@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import os from 'node:os';
 import { createLogger, type Logger } from './utils/logger.js';
+import { emitAchievementEvent } from './achievement-events.js';
 
 export interface Session {
   id: string;
@@ -170,6 +171,8 @@ export class SessionStore {
     this.db.prepare(
       'INSERT OR IGNORE INTO sessions (id, system_id, workspace, is_cron) VALUES (?, ?, ?, ?)'
     ).run(id, systemId, workspace, isCronValue);
+
+    emitAchievementEvent({ type: 'session_created', data: { workspace } });
 
     return this.getSession(id)!;
   }

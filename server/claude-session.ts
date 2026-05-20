@@ -34,6 +34,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { fileURLToPath } from 'url';
+import { emitAchievementEvent } from './achievement-events.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -209,8 +210,8 @@ export class ClaudeSessionManager {
 
   private static readonly SESSION_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
   private static readonly CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
-  private static readonly STREAM_STALL_MS = 2 * 60 * 1000; // 2 minutes no data = stalled
-  private static readonly SEND_TIMEOUT_MS = 120 * 1000; // 2 minutes timeout for v2Session.send()
+  private static readonly STREAM_STALL_MS = 5 * 60 * 1000; // 5 minutes no data = stalled
+  private static readonly SEND_TIMEOUT_MS = 240 * 1000; // 4 minutes timeout for v2Session.send()
   private static readonly SESSION_CREATE_TIMEOUT_MS = 60 * 1000; // 1 minute timeout for session creation
   private static readonly TOOL_STALL_MS = 10 * 60 * 1000; // 10 minutes hard limit for tool/sub-agent execution
   private static readonly AUTO_RETRY_ERRORS = new Set(['stall', 'process_dead', 'v2_session_lost', 'session_expired', 'bad_request', 'server_error', 'overloaded', 'network_error']);
@@ -568,14 +569,9 @@ export class ClaudeSessionManager {
     if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
       // Skip model validation (which sends extra API requests)
       env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
-      // Disable 429 retry (CLI defaults to 10 retries — each one consumes quota
-      // and prolongs the rate limit window on shared API keys)
-      env['CLAUDE_CODE_MAX_RETRIES'] = '0';
-      // Skip claude.ai MCP server fetch (hits Anthropic API, not the proxy)
+      env['CLAUDE_CODE_MAX_RETRIES'] = '3';
       env['ENABLE_CLAUDEAI_MCP_SERVERS'] = 'false';
     }
-    // Use isolated config dir to avoid CLI reading ~/.claude/settings.json
-    // which may contain conflicting env vars (ANTHROPIC_AUTH_TOKEN, etc.)
     const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
     env['CLAUDE_CONFIG_DIR'] = path.join(smanHome, 'claude-config');
 
@@ -798,7 +794,7 @@ export class ClaudeSessionManager {
     env['CLAUDE_CODE_ATTRIBUTION_HEADER'] = '0';
     if (!isAnthropicFirstParty(this.config.llm.baseUrl)) {
       env['ANTHROPIC_CUSTOM_MODEL_OPTION'] = this.config.llm.model;
-      env['CLAUDE_CODE_MAX_RETRIES'] = '0';
+      env['CLAUDE_CODE_MAX_RETRIES'] = '3';
       env['ENABLE_CLAUDEAI_MCP_SERVERS'] = 'false';
     }
     const smanHome = process.env.SMANBASE_HOME || path.join(process.env.HOME || '/root', '.sman');
@@ -1300,6 +1296,7 @@ export class ClaudeSessionManager {
         content,
         contentBlocks: userContentBlocks.length > 0 ? userContentBlocks : undefined,
       });
+      emitAchievementEvent({ type: 'message_sent', data: { sessionId } });
     }
 
     const abortController = new AbortController();
@@ -1885,6 +1882,10 @@ export class ClaudeSessionManager {
               inputTokens: totalInputTokens,
               outputTokens: totalOutputTokens,
             });
+
+            if (totalInputTokens + totalOutputTokens > 0) {
+              emitAchievementEvent({ type: 'token_used', data: { tokens: totalInputTokens + totalOutputTokens } });
+            }
 
             // Session expired in SDK result: close V2 session, retry with fresh session + history context
             if (isError && classified?.errorCode === 'session_expired' && _retryCount < 2) {

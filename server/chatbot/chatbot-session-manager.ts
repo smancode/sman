@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createLogger, type Logger } from '../utils/logger.js';
+import { emitAchievementEvent } from '../achievement-events.js';
 import type { ClaudeSessionManager } from '../claude-session.js';
 import { ChatbotStore } from './chatbot-store.js';
 import { parseChatCommand } from './chat-command-parser.js';
@@ -173,6 +174,8 @@ export class ChatbotSessionManager {
     this.sessionManager.updateSessionLabel(sessionId, label);
 
     this.store.setSession(userKey, workspacePath, sessionId, botProfile.label, chatType);
+
+    emitAchievementEvent({ type: 'bot_session_created', data: { platform } });
 
     // Notify frontend to refresh sidebar
     this.onSessionCreated?.(sessionId, label);
@@ -523,6 +526,9 @@ export class ChatbotSessionManager {
 
     try {
       sender.start();
+
+      const platform = userKey.split(':')[0] || 'unknown';
+      emitAchievementEvent({ type: 'bot_message_sent', data: { platform } });
 
       const fullContent = await this.sessionManager.sendMessageForChatbot(
         sessionId,
