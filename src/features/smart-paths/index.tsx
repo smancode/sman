@@ -422,14 +422,16 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, finalizing, onResultChange, onDescChange, onRedo, onContinue, onFinalize, pathId, workspace }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, stepEdit, finalizing, onResultChange, onDescChange, onStepEditChange, onRedo, onContinue, onFinalize, pathId, workspace }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
   stepping?: boolean; finalizing?: boolean;
   stepResult?: string; stepDesc?: string;
   stepDeliveryCheck?: { passed?: boolean; reason?: string; retried?: boolean };
+  stepEdit?: Partial<SmartPathStep>;
   onResultChange?: (v: string) => void;
   onDescChange?: (v: string) => void;
+  onStepEditChange?: (field: keyof SmartPathStep, value: string | string[]) => void;
   onRedo?: () => void; onContinue?: () => void; onFinalize?: () => void;
   pathId?: string; workspace?: string;
 }) {
@@ -465,8 +467,40 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
         {index < total - 1 && <div className={cn('w-px flex-1 min-h-[16px] mt-1', stepCompleted ? 'bg-green-500/30' : 'bg-border')} />}
       </div>
       <div className="flex-1 pb-3">
-        {step.name && <p className="text-sm font-medium break-words">{step.name}</p>}
-        <p className="text-sm leading-relaxed text-muted-foreground break-words">{step.userInput}</p>
+        {stepping && stepResult ? (
+          <div className="space-y-2 mb-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('smartpath.stepName')}</Label>
+              <Input
+                value={stepEdit?.name ?? step.name ?? ''}
+                onChange={(e) => onStepEditChange?.('name', e.target.value)}
+                placeholder={t('smartpath.stepName')}
+                className="h-7 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('smartpath.stepInput')}</Label>
+              <AutoResizeTextarea
+                value={stepEdit?.userInput ?? step.userInput}
+                onChange={(v) => onStepEditChange?.('userInput', v)}
+                placeholder={t('smartpath.stepInput')}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('smartpath.deliveryCheck')}</Label>
+              <AutoResizeTextarea
+                value={stepEdit?.deliveryCheck ?? step.deliveryCheck ?? ''}
+                onChange={(v) => onStepEditChange?.('deliveryCheck', v)}
+                placeholder={t('smartpath.deliveryCheckPlaceholder')}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            {step.name && <p className="text-sm font-medium break-words">{step.name}</p>}
+            <p className="text-sm leading-relaxed text-muted-foreground break-words">{step.userInput}</p>
+          </>
+        )}
 
         {(executing || (executionStream && !(stepping && stepResult))) && (
           <div className="mt-2 rounded-md border border-muted-foreground/20 p-3">
@@ -745,6 +779,8 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const runStepRedo = useSmartPathStore((s) => s.runStepRedo);
   const updateStepResult = useSmartPathStore((s) => s.updateStepResult);
   const updateStepDescription = useSmartPathStore((s) => s.updateStepDescription);
+  const updateStepEdit = useSmartPathStore((s) => s.updateStepEdit);
+  const stepEdits = useSmartPathStore((s) => s.stepEdits);
   const finalizeStepping = useSmartPathStore((s) => s.finalizeStepping);
   const cancelStepping = useSmartPathStore((s) => s.cancelStepping);
   const fetchReport = useSmartPathStore((s) => s.fetchReport);
@@ -872,9 +908,11 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                 stepResult={stepping ? stepResults[i] : undefined}
                 stepDesc={stepping ? stepDescriptions[i] : undefined}
                 stepDeliveryCheck={stepping ? stepDeliveryChecks[i] : undefined}
+                stepEdit={stepping ? stepEdits[i] : undefined}
                 finalizing={stepping && finalizing}
                 onResultChange={stepping ? (v) => updateStepResult(i, v) : undefined}
                 onDescChange={stepping ? (v) => updateStepDescription(i, v) : undefined}
+                onStepEditChange={stepping ? (f, v) => updateStepEdit(i, f, v) : undefined}
                 onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}
                 onContinue={stepping ? () => runStepContinue(path.id, path.workspace, path.defaultArgs) : undefined}
                 onFinalize={stepping ? () => finalizeStepping(path.id, path.workspace) : undefined}

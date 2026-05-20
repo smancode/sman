@@ -24,6 +24,19 @@ function wrapHandler(
 
 type StepExecStatus = 'idle' | 'running' | 'completed' | 'failed';
 
+function applyStepEdits(blueprint: PathBlueprint, stepEdits: Record<number, Partial<SmartPathStep>>): PathBlueprint {
+  if (Object.keys(stepEdits).length === 0) return blueprint;
+  const newBlueprint = { ...blueprint, stepPlans: [...blueprint.stepPlans] };
+  for (const [idxStr, edits] of Object.entries(stepEdits)) {
+    const idx = Number(idxStr);
+    if (idx >= 0 && idx < newBlueprint.stepPlans.length && edits.userInput !== undefined) {
+      const origPlan = newBlueprint.stepPlans[idx];
+      newBlueprint.stepPlans[idx] = { ...origPlan, revisedInput: edits.userInput };
+    }
+  }
+  return newBlueprint;
+}
+
 interface SmartPathState {
   paths: SmartPath[];
   runs: SmartPathRun[];
@@ -66,6 +79,7 @@ interface SmartPathState {
   stepResults: string[];
   stepDescriptions: string[];
   stepDeliveryChecks: Array<{ passed?: boolean; reason?: string; retried?: boolean }>;
+  stepEdits: Record<number, Partial<SmartPathStep>>;
   currentStepIndex: number;
   stepUseRefs: boolean;
 
@@ -74,6 +88,7 @@ interface SmartPathState {
   runStepRedo: (pathId: string, workspace: string, stepIndex: number, args?: string) => Promise<void>;
   updateStepResult: (index: number, value: string) => void;
   updateStepDescription: (index: number, value: string) => void;
+  updateStepEdit: (index: number, field: keyof SmartPathStep, value: string | string[]) => void;
   finalizeStepping: (pathId: string, workspace: string) => Promise<void>;
   cancelStepping: (pathId: string) => void;
 
@@ -119,6 +134,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   stepResults: [],
   stepDescriptions: [],
   stepDeliveryChecks: [],
+  stepEdits: {},
   currentStepIndex: -1,
   stepUseRefs: false,
 
@@ -396,6 +412,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       stepping: true, error: null,
       stepExecutionStream: {}, stepExecutionStatus: {},
       stepResults: [], stepDescriptions: [], stepDeliveryChecks: [],
+      stepEdits: {},
       currentStepIndex: -1, stepUseRefs: useRefs,
     });
 
@@ -434,10 +451,11 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   runStepContinue: async (pathId, workspace, args, useRefs = false) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
-    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    const { stepBlueprint, stepRunId, stepResults, stepEdits } = useSmartPathStore.getState();
     if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
 
     const nextIndex = stepResults.length;
+    const editedBlueprint = applyStepEdits(stepBlueprint, stepEdits);
     set((s) => ({
       currentStepIndex: nextIndex,
       stepExecutionStream: { ...s.stepExecutionStream, [nextIndex]: '' },
@@ -485,8 +503,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
       client.send({
         type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
-        blueprint: stepBlueprint, stepIndex: nextIndex,
+        blueprint: editedBlueprint, stepIndex: nextIndex,
         priorResults: stepResults, args, useRefs,
+        stepEdits: stepEdits[nextIndex],
       });
     });
   },
@@ -494,10 +513,11 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   runStepRedo: async (pathId, workspace, stepIndex, args) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
-    const { stepBlueprint, stepRunId, stepResults, stepUseRefs } = useSmartPathStore.getState();
+    const { stepBlueprint, stepRunId, stepResults, stepUseRefs, stepEdits } = useSmartPathStore.getState();
     if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
 
     const priorResults = stepResults.slice(0, stepIndex);
+    const editedBlueprint = applyStepEdits(stepBlueprint, stepEdits);
     set((s) => ({
       stepResults: priorResults,
       stepDescriptions: s.stepDescriptions.slice(0, stepIndex),
@@ -548,8 +568,9 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
       client.send({
         type: 'smartpath.runStep', pathId, workspace, runId: stepRunId,
-        blueprint: stepBlueprint, stepIndex,
+        blueprint: editedBlueprint, stepIndex,
         priorResults, args, useRefs: stepUseRefs,
+        stepEdits: stepEdits[stepIndex],
       });
     });
   },
@@ -568,6 +589,15 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       descs[index] = value;
       return { stepDescriptions: descs };
     });
+  },
+
+  updateStepEdit: (index, field, value) => {
+    set((s) => ({
+      stepEdits: {
+        ...s.stepEdits,
+        [index]: { ...s.stepEdits[index], [field]: value },
+      },
+    }));
   },
 
   finalizeStepping: async (pathId, workspace) => {

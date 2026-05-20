@@ -2225,6 +2225,11 @@ wss.on('connection', (ws: WebSocket) => {
               rsSkills = rsSteps[rsStepIndex]?.skills;
             } catch { /* no delivery check */ }
 
+            // 前端编辑覆盖 deliveryCheck 和 skills
+            const rsStepEdits = msg.stepEdits as { deliveryCheck?: string; skills?: string[] } | undefined;
+            if (rsStepEdits?.deliveryCheck !== undefined) rsDeliveryCheck = rsStepEdits.deliveryCheck || undefined;
+            if (rsStepEdits?.skills !== undefined) rsSkills = rsStepEdits.skills;
+
             const rsResult = await smartPathEngine.runSingleStep(
               rsPathId, rsActualWs, rsRunId, rsBlueprint,
               rsStepIndex, rsBlueprint.stepPlans.length,
