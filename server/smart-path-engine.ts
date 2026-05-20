@@ -74,8 +74,9 @@ const ORCHESTRATOR_SYSTEM_PROMPT = `你是一个自动化工作流的"主编"。
 
 const STEP_SYSTEM_PROMPT = '';
 
-function buildTmpRules(workspace: string, pathId: string): string {
+function buildTmpRules(workspace: string, pathId: string, stepIndex: number): string {
   const basePath = `.sman/paths/${pathId}`;
+  const stepPrefix = `step${stepIndex + 1}_`;
   return [
     '',
     '临时文件规则：',
@@ -83,6 +84,7 @@ function buildTmpRules(workspace: string, pathId: string): string {
     '2. tmp/ 里的文件不在步骤间复用，每次运行开始时自动清空',
     `3. 要跨步骤复用的文件必须保存到 ${basePath}/references/ 目录，用 [REFERENCE:filename] 标记`,
     `4. 脚本、配置文件等可复用资源必须放到 ${basePath}/references/，禁止放 tmp/`,
+    `5. 所有生成的文件名必须以 ${stepPrefix} 开头（如 ${stepPrefix}data.py、${stepPrefix}config.sh），包括 tmp/ 和 references/ 中的文件，方便按步骤核查`,
   ].join('\n');
 }
 
@@ -177,7 +179,7 @@ function buildStepPrompt(
   }
 
   if (workspace && pathId) {
-    parts.push(buildTmpRules(workspace, pathId));
+    parts.push(buildTmpRules(workspace, pathId, stepIndex));
   }
 
   if (stepIndex === 0 && args) {
