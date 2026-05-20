@@ -46,10 +46,10 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
 
       {/* Name + Category */}
       <h4 className={cn('text-sm font-semibold leading-tight mb-1', isUnlocked ? 'text-foreground' : 'text-muted-foreground')}>
-        {isHidden ? t('achievement.hidden') : t(`achievement.${id}`) !== `achievement.${id}` ? t(`achievement.${id}`) : nameKey}
+        {isHidden ? t('achievement.hidden') : t(nameKey)}
       </h4>
       <p className="text-[11px] text-muted-foreground mb-3">
-        {isHidden ? '???' : t(`achievement.desc.${id}`) !== `achievement.desc.${id}` ? t(`achievement.desc.${id}`) : descKey}
+        {isHidden ? '???' : t(descKey)}
       </p>
 
       {/* Progress bar */}

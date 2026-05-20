@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AchievementUnlockEvent } from '@/stores/achievement';
 import { TIER_COLORS, TIER_ICONS, type Tier } from '@/types/achievement';
+import { t } from '@/locales';
 import { TierBadge } from './TierBadge';
 
 interface AchievementToastProps {
@@ -39,7 +40,7 @@ export function AchievementToast({ unlock, onDismiss }: AchievementToastProps) {
         <span className="text-2xl">{achievement.icon}</span>
         <TierBadge tier={achievement.tier as Tier} icon={TIER_ICONS[achievement.tier as Tier]} size="sm" />
         <div className="flex flex-col">
-          <span className="text-sm font-semibold">{achievement.nameKey}</span>
+          <span className="text-sm font-semibold">{t(achievement.nameKey)}</span>
           <div className="flex items-center gap-2">
             <span className={cn('text-xs font-medium', colors.text)}>+{achievement.points} 分</span>
             <span className="text-[10px] text-muted-foreground">总计 {totalPoints} 分</span>
