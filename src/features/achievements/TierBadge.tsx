@@ -54,9 +54,10 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
         ref={ref}
         className={cn(
           'rounded-full flex items-center justify-center',
-          colors.bg, colors.border, 'border',
+          colors.bg, colors.border, 'border dark:border',
           s.container,
           showLevelList && 'cursor-pointer',
+          size === 'lg' && 'border-2 border-black dark:border shadow-[3px_3px_0_0_#1e293b] dark:shadow-none',
           className,
         )}
         onMouseEnter={() => showLevelList && setShowTooltip(true)}
@@ -67,16 +68,18 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
 
       {showTooltip && pos && (
         <div
-          className="fixed z-50 bg-popover text-popover-foreground border rounded-lg shadow-lg px-3 py-2 text-[12px] min-w-[160px]"
+          className="fixed z-50 bg-white dark:bg-popover text-popover-foreground border-2 border-black dark:border dark:border-border shadow-[4px_4px_0_0_#1e293b] dark:shadow-lg px-3 py-2.5 text-[12px] min-w-[180px]"
           style={{ top: pos.top, left: pos.left }}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
+          <div className="text-[10px] font-bold text-foreground mb-1.5 dark:font-medium uppercase tracking-wide">Level</div>
           {TIER_ORDER.map((tr) => {
             const threshold = TIER_THRESHOLDS[tr];
             const isActive = tr === tier;
             const isUnlocked = currentPoints !== undefined && currentPoints >= threshold;
             const TrIcon = TIER_ICON_MAP[TIER_ICONS[tr]] || Shield;
+            const trColors = TIER_COLORS[tr];
             return (
               <div
                 key={tr}
@@ -87,12 +90,19 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
                 )}
               >
                 <div className="flex items-center gap-1.5">
-                  <TrIcon className={cn('h-3.5 w-3.5 shrink-0', TIER_COLORS[tr].text)} />
-                  <span className={cn(TIER_COLORS[tr].text, isActive && 'font-bold')}>
+                  <TrIcon className={cn('h-3.5 w-3.5 shrink-0', trColors.text)} />
+                  <span className={cn(trColors.text, isActive && 'font-bold')}>
                     {t(`achievement.tier.${tr}`)}
                   </span>
                 </div>
-                <span className="text-muted-foreground">{threshold}+</span>
+                <span className={cn(
+                  'text-[10px] px-1',
+                  isUnlocked
+                    ? 'font-bold bg-black text-white dark:bg-muted/50 dark:text-foreground dark:font-medium'
+                    : 'text-muted-foreground',
+                )}>
+                  {threshold}+
+                </span>
               </div>
             );
           })}

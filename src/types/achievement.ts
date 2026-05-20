@@ -48,11 +48,11 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   hidden: '隐藏',
 };
 
-export const CATEGORY_COLORS: Record<Category, { text: string; bg: string; border: string; bar: string }> = {
-  conversation:  { text: 'text-blue-600 dark:text-blue-400',     bg: 'bg-blue-50 dark:bg-blue-950/20',     border: 'border-blue-300 dark:border-blue-600/40',     bar: 'bg-blue-500' },
-  advanced:      { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/20', border: 'border-violet-300 dark:border-violet-600/40', bar: 'bg-violet-500' },
-  exploration:   { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-300 dark:border-emerald-600/40', bar: 'bg-emerald-500' },
-  collaboration: { text: 'text-amber-600 dark:text-amber-400',   bg: 'bg-amber-50 dark:bg-amber-950/20',   border: 'border-amber-300 dark:border-amber-600/40',   bar: 'bg-amber-500' },
-  bot:           { text: 'text-pink-600 dark:text-pink-400',     bg: 'bg-pink-50 dark:bg-pink-950/20',     border: 'border-pink-300 dark:border-pink-600/40',     bar: 'bg-pink-500' },
-  hidden:        { text: 'text-slate-600 dark:text-slate-400',   bg: 'bg-slate-50 dark:bg-slate-800/20',   border: 'border-slate-300 dark:border-slate-600/40',   bar: 'bg-slate-400' },
+export const CATEGORY_COLORS: Record<Category, { text: string; bg: string; border: string; bar: string; shadow: string }> = {
+  conversation:  { text: 'text-blue-700 dark:text-blue-400',     bg: 'bg-blue-200 dark:bg-blue-950/20',     border: 'border-black dark:border-blue-600/40',     bar: 'bg-blue-600',     shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
+  advanced:      { text: 'text-violet-700 dark:text-violet-400', bg: 'bg-violet-200 dark:bg-violet-950/20', border: 'border-black dark:border-violet-600/40', bar: 'bg-violet-600',   shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
+  exploration:   { text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-200 dark:bg-emerald-950/20', border: 'border-black dark:border-emerald-600/40', bar: 'bg-emerald-600', shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
+  collaboration: { text: 'text-amber-700 dark:text-amber-400',   bg: 'bg-amber-200 dark:bg-amber-950/20',   border: 'border-black dark:border-amber-600/40',   bar: 'bg-amber-600',    shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
+  bot:           { text: 'text-pink-700 dark:text-pink-400',     bg: 'bg-pink-200 dark:bg-pink-950/20',     border: 'border-black dark:border-pink-600/40',     bar: 'bg-pink-600',    shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
+  hidden:        { text: 'text-slate-600 dark:text-slate-400',   bg: 'bg-slate-200 dark:bg-slate-800/20',   border: 'border-black dark:border-slate-600/40',   bar: 'bg-slate-500',    shadow: 'shadow-[3px_3px_0_0_#1e293b] dark:shadow-none' },
 };

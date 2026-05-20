@@ -54,7 +54,11 @@ export function LeaderboardTab() {
   return (
     <div>
       {/* Header row */}
-      <div className="flex items-center gap-3 px-3 py-1.5 text-[10px] text-muted-foreground font-medium border-b border-border/50 mb-1.5">
+      <div className={cn(
+        'flex items-center gap-3 px-3 py-2 text-[10px] font-bold uppercase tracking-wider dark:font-medium dark:tracking-normal',
+        'border-b-2 border-black dark:border-b dark:border-border/50 mb-2',
+        'bg-foreground text-background dark:bg-transparent dark:text-muted-foreground',
+      )}>
         <div className="w-8 shrink-0 text-center">{t('achievement.leaderboard.rankCol')}</div>
         <div className="w-16 shrink-0">{t('achievement.leaderboard.tierCol')}</div>
         <div className="flex-1 min-w-0">{t('achievement.leaderboard.nameCol')}</div>
@@ -63,12 +67,12 @@ export function LeaderboardTab() {
       </div>
 
       {/* Entries */}
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {displayEntries.map((entry, i) => {
           if (entry === 'ellipsis') {
             return (
               <div key={`ellipsis-${i}`} className="flex items-center justify-center py-1">
-                <span className="text-muted-foreground text-[12px]">· · ·</span>
+                <span className="text-muted-foreground text-[12px] font-bold">· · ·</span>
               </div>
             );
           }
@@ -81,9 +85,16 @@ export function LeaderboardTab() {
             <div
               key={entry.rank}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors',
-                isTop3 && 'bg-foreground/[0.03]',
-                isSelf && 'ring-1 ring-foreground/20 bg-foreground/[0.05]',
+                'flex items-center gap-3 px-3 py-2 transition-colors',
+                'dark:rounded-lg',
+                isTop3 && 'border-2 border-black dark:border-0 dark:bg-foreground/[0.03]',
+                isTop3 && entry.rank === 1 && 'bg-yellow-100 dark:bg-foreground/[0.03]',
+                isTop3 && entry.rank === 2 && 'bg-slate-100 dark:bg-foreground/[0.03]',
+                isTop3 && entry.rank === 3 && 'bg-amber-50 dark:bg-foreground/[0.03]',
+                isTop3 && 'shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                !isTop3 && !isSelf && 'dark:bg-transparent',
+                isSelf && !isTop3 && 'border-2 border-black dark:border-0 dark:ring-1 dark:ring-foreground/20 dark:bg-foreground/[0.05] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none bg-white',
+                !isTop3 && !isSelf && 'hover:bg-muted/30',
               )}
             >
               {/* Rank */}
@@ -98,31 +109,45 @@ export function LeaderboardTab() {
                     )}
                   />
                 ) : (
-                  <span className="text-[13px] text-muted-foreground font-mono font-semibold">{entry.rank}</span>
+                  <span className="text-[13px] text-muted-foreground font-mono font-bold dark:font-semibold">{entry.rank}</span>
                 )}
               </div>
 
               {/* Level */}
               <div className="w-16 shrink-0">
-                <span className={cn('text-[11px] font-semibold px-1.5 py-0.5 rounded', tierColors.bg, tierColors.text)}>
+                <span className={cn(
+                  'text-[11px] font-bold dark:font-semibold px-1.5 py-0.5',
+                  tierColors.bg, tierColors.text,
+                  'border border-black dark:border-0 dark:rounded',
+                )}>
                   {t(`achievement.tier.${tier}`)}
                 </span>
               </div>
 
               {/* Name */}
               <div className="flex-1 min-w-0">
-                <span className={cn('text-[13px] font-medium truncate block', isSelf && 'text-foreground')}>
+                <span className={cn(
+                  'text-[13px] truncate block',
+                  isSelf ? 'font-bold dark:font-medium' : 'font-medium',
+                  isTop3 ? 'text-foreground' : '',
+                )}>
                   {entry.agentName}
                 </span>
               </div>
 
               {/* Points */}
-              <div className="text-[12px] text-muted-foreground shrink-0 w-16 text-right">
+              <div className={cn(
+                'text-[12px] shrink-0 w-16 text-right font-bold dark:font-medium',
+                isTop3 ? 'text-foreground' : 'text-muted-foreground',
+              )}>
                 {entry.totalPoints}
               </div>
 
               {/* Unlocked count */}
-              <div className="text-[12px] text-muted-foreground shrink-0 w-16 text-right">
+              <div className={cn(
+                'text-[12px] shrink-0 w-16 text-right font-bold dark:font-medium',
+                isTop3 ? 'text-foreground' : 'text-muted-foreground',
+              )}>
                 {entry.totalUnlocked}
               </div>
             </div>

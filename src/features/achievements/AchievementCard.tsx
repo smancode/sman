@@ -23,10 +23,11 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
   return (
     <div
       className={cn(
-        'group relative rounded-xl border p-4 transition-all duration-200 min-w-0 overflow-hidden',
+        'group relative border p-4 transition-all duration-200 min-w-0 overflow-hidden',
+        'rounded-lg dark:rounded-xl',
         isUnlocked
-          ? cn(catColors.bg, catColors.border, 'border-2', 'shadow-sm hover:shadow-lg hover:-translate-y-1')
-          : 'border-border/60 bg-card dark:border-border/30 dark:bg-card/50 dark:opacity-85 hover:shadow-md hover:-translate-y-0.5',
+          ? cn(catColors.bg, catColors.border, 'border-2 dark:border', catColors.shadow, 'hover:translate-x-[2px] hover:-translate-y-[2px] dark:hover:-translate-y-1 dark:hover:shadow-lg dark:shadow-sm')
+          : 'border-2 border-black/20 dark:border-border/30 bg-white dark:bg-card/50 dark:opacity-85 hover:border-black hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-md dark:hover:-translate-y-0.5',
         isHidden && 'opacity-50',
       )}
       onMouseEnter={() => isUnlocked && setShining(true)}
@@ -67,8 +68,10 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
             <TierBadge tier={tierKey} icon={TIER_ICONS[tierKey]} size="sm" />
           </div>
           <span className={cn(
-            'text-[11px] font-medium px-2 py-0.5 rounded-full',
-            isUnlocked ? cn(catColors.text, catColors.bg, catColors.border, 'border') : 'text-muted-foreground bg-muted/50',
+            'text-[11px] px-2 py-0.5 rounded',
+            isUnlocked
+              ? 'font-bold bg-black text-white dark:font-medium dark:bg-muted/50 dark:text-muted-foreground dark:border dark:border-border'
+              : 'font-medium text-muted-foreground bg-muted/50 rounded-full',
           )}>
             +{points}
           </span>
