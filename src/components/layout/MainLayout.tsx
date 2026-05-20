@@ -75,7 +75,7 @@ export function MainLayout() {
         <div className={cn('flex flex-col flex-1 overflow-hidden', !hideSidebar && 'ml-64')}>
           <Titlebar />
           <UpdateBanner />
-          <main className="flex-1 overflow-y-auto bg-transparent">
+          <main className="flex-1 overflow-y-auto bg-transparent" style={{ scrollbarGutter: 'stable' }}>
             <Outlet />
           </main>
         </div>

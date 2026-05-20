@@ -3853,6 +3853,7 @@
   "achievement.leaderboard.dimensionCol": { "text": "Value", "context": "Leaderboard header - dimension value" },
   "achievement.leaderboard.points": { "text": "${points} pts", "context": "Leaderboard points" },
   "achievement.tabAll": { "text": "All", "context": "Achievement filter - all" },
+  "achievement.tabAchievements": { "text": "Achievements", "context": "Primary tab - achievements" },
   "achievement.tabUnlocked": { "text": "Unlocked", "context": "Achievement filter - unlocked" },
   "achievement.tabLocked": { "text": "Locked", "context": "Achievement filter - locked" },
   "achievement.catConversation": { "text": "Conversation", "context": "Achievement category - conversation" },

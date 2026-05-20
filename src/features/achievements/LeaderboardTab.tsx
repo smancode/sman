@@ -20,22 +20,45 @@ const DIMENSION_OPTIONS: { key: string; labelKey: string }[] = [
   { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens' },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron' },
   { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path' },
-  { key: 'total_skills_used', labelKey: 'achievement.scoreDetail.skill' },
-  { key: 'total_code_views', labelKey: 'achievement.scoreDetail.codeview' },
-  { key: 'total_git_ops', labelKey: 'achievement.scoreDetail.git' },
   { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions' },
   { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages' },
   { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount' },
   { key: 'current_streak', labelKey: 'achievement.scoreDetail.streak' },
 ];
 
+export function LeaderboardDimensions() {
+  useLocale();
+  const { leaderboardDimension, fetchLeaderboard } = useAchievementStore();
+  const activeDimension = leaderboardDimension || 'total';
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {DIMENSION_OPTIONS.map(opt => (
+        <button
+          key={opt.key}
+          onClick={() => fetchLeaderboard(opt.key === 'total' ? undefined : opt.key)}
+          className={cn(
+            'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+            'rounded-none dark:rounded-none',
+            activeDimension === opt.key
+              ? 'bg-muted text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-fuchsia-300 dark:border-fuchsia-500/30 dark:shadow-none'
+              : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+          )}
+        >
+          {t(opt.labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function LeaderboardTab() {
   useLocale();
-  const { leaderboard, leaderboardOnline, leaderboardClientId, leaderboardDimension, fetchLeaderboard } = useAchievementStore();
+  const { leaderboard, leaderboardOnline, leaderboardClientId, leaderboardDimension } = useAchievementStore();
 
   if (!leaderboardOnline && leaderboard.length === 0) {
     return (
-      <div className="text-center py-16 text-muted-foreground/60 text-sm">
+      <div className="w-full text-center py-16 text-muted-foreground/60 text-sm">
         {t('achievement.leaderboard.offline')}
       </div>
     );
@@ -43,7 +66,7 @@ export function LeaderboardTab() {
 
   if (leaderboard.length === 0) {
     return (
-      <div className="text-center py-16 text-muted-foreground/60 text-sm">
+      <div className="w-full text-center py-16 text-muted-foreground/60 text-sm">
         {t('achievement.leaderboard.empty')}
       </div>
     );
@@ -70,26 +93,7 @@ export function LeaderboardTab() {
   }
 
   return (
-    <div>
-      {/* Dimension filter buttons */}
-      <div className="flex flex-wrap gap-1 mb-3">
-        {DIMENSION_OPTIONS.map(opt => (
-          <button
-            key={opt.key}
-            onClick={() => fetchLeaderboard(opt.key === 'total' ? undefined : opt.key)}
-            className={cn(
-              'px-2.5 py-1 text-[11px] font-bold dark:font-medium transition-all duration-200',
-              'rounded-none dark:rounded-none',
-              activeDimension === opt.key
-                ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_8px_rgba(255,0,255,0.3)]'
-                : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
-            )}
-          >
-            {t(opt.labelKey)}
-          </button>
-        ))}
-      </div>
-
+    <div className="w-full">
       {/* Header row */}
       <div className={cn(
         'flex items-center gap-3 px-4 py-2 text-[10px] font-bold dark:font-medium uppercase tracking-wider',

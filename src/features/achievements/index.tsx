@@ -6,7 +6,7 @@ import { TIER_THRESHOLDS } from '@/types/achievement';
 import { TierBadge } from './TierBadge';
 import { AchievementCard } from './AchievementCard';
 import { AchievementToast } from './AchievementToast';
-import { LeaderboardTab } from './LeaderboardTab';
+import { LeaderboardTab, LeaderboardDimensions } from './LeaderboardTab';
 import { t, useLocale } from '@/locales';
 
 type FilterTab = 'all' | Category | 'unlocked' | 'locked' | 'leaderboard';
@@ -36,7 +36,6 @@ const TABS: { key: FilterTab; labelKey: string }[] = [
   { key: 'advanced', labelKey: 'achievement.catAdvanced' },
   { key: 'exploration', labelKey: 'achievement.catExploration' },
   { key: 'collaboration', labelKey: 'achievement.catCollaboration' },
-  { key: 'leaderboard', labelKey: 'achievement.leaderboard' },
 ];
 
 export function AchievementsPage() {
@@ -164,78 +163,77 @@ export function AchievementsPage() {
           )}
         </div>
 
-        {/* Filter tabs */}
-        <div className="mb-6 space-y-1.5">
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.filter((_, i) => i < 3).map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
-                className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                  'rounded-none dark:rounded-none',
-                  activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
-                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
-                )}
-              >
-                {t(tab.labelKey)}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.filter((_, i) => i >= 3 && i < TABS.length - 1).map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
-                className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                  'rounded-none dark:rounded-none',
-                  activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
-                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
-                )}
-              >
-                {t(tab.labelKey)}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.filter((_, i) => i === TABS.length - 1).map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
-                className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                  'rounded-none dark:rounded-none',
-                  activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
-                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
-                )}
-              >
-                {t(tab.labelKey)}
-              </button>
-            ))}
+        {/* Primary tabs: 全部成就 / 排行榜 */}
+        <div className="mb-2">
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={cn(
+                'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                'rounded-none dark:rounded-none',
+                activeTab !== 'leaderboard'
+                  ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
+                  : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+              )}
+            >
+              {t('achievement.tabAchievements')}
+            </button>
+            <button
+              onClick={() => handleTabChange('leaderboard')}
+              className={cn(
+                'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                'rounded-none dark:rounded-none',
+                activeTab === 'leaderboard'
+                  ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
+                  : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+              )}
+            >
+              {t('achievement.leaderboard')}
+            </button>
           </div>
         </div>
 
+        {/* Secondary tabs: 成就筛选 或 排行榜维度 */}
+        <div className="mb-6">
+          {activeTab === 'leaderboard' ? (
+            <LeaderboardDimensions />
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key)}
+                  className={cn(
+                    'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                    'rounded-none dark:rounded-none',
+                    activeTab === tab.key
+                      ? 'bg-muted text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-cyan-300 dark:border-cyan-500/30 dark:shadow-none'
+                      : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+                  )}
+                >
+                  {t(tab.labelKey)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Content */}
-        {activeTab === 'leaderboard' ? (
-          <LeaderboardTab />
-        ) : (
-          <>
+        <div className="min-h-[400px]">
+          {activeTab === 'leaderboard' ? (
+            <LeaderboardTab />
+          ) : filtered.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {filtered.map((a) => (
                 <AchievementCard key={a.id} achievement={a} />
               ))}
             </div>
-            {filtered.length === 0 && (
-              <div className="text-center py-16 text-muted-foreground/60 text-sm">
-                {t('achievement.noResults')}
-              </div>
-            )}
-          </>
-        )}
+          ) : (
+            <div className="text-center py-16 text-muted-foreground/60 text-sm">
+              {t('achievement.noResults')}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

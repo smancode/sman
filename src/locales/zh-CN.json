@@ -3853,6 +3853,7 @@
   "achievement.leaderboard.dimensionCol": { "text": "数值", "context": "排行榜表头-维度数值" },
   "achievement.leaderboard.points": { "text": "${points} 分", "context": "排行榜积分" },
   "achievement.tabAll": { "text": "全部", "context": "成就筛选-全部" },
+  "achievement.tabAchievements": { "text": "成就", "context": "一级标签-成就" },
   "achievement.tabUnlocked": { "text": "已解锁", "context": "成就筛选-已解锁" },
   "achievement.tabLocked": { "text": "未解锁", "context": "成就筛选-未解锁" },
   "achievement.catConversation": { "text": "对话", "context": "成就分类-对话" },
