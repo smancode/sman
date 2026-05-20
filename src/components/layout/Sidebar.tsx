@@ -80,6 +80,8 @@ export function Sidebar() {
             'overflow-hidden transition-all duration-200',
             expanded ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0',
           )}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
         >
           <div className="space-y-0.5 mb-0.5">
             <NavLink
