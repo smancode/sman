@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Pin,
   Users,
+  Trophy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,7 @@ export function Sidebar() {
   const connectionStatus = useWsConnection((s) => s.status);
   const location = useLocation();
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
-  const shouldBlur = !['/chat', '/stardom', '/hub'].includes(location.pathname);
+  const shouldBlur = !['/chat', '/stardom', '/hub', '/achievements'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
   const [pinned, setPinned] = useState(() => localStorage.getItem('sman-sidebar-pinned') === 'true');
   const [hovering, setHovering] = useState(false);
@@ -179,6 +180,31 @@ export function Sidebar() {
                     <Route className="h-[18px] w-[18px]" strokeWidth={2} />
                   </div>
                   <span>{t('menu.smartpath')}</span>
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/achievements"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Trophy className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>{t('menu.achievements')}</span>
                 </>
               )}
             </NavLink>

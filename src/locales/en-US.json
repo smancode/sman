@@ -3239,6 +3239,10 @@
     "text": "Team",
     "context": "Team collaboration menu item"
   },
+  "menu.achievements": {
+    "text": "Achievements",
+    "context": "Achievement system menu item"
+  },
   "hub.tab.rooms": {
     "text": "Project Groups",
     "context": "Hub tab: project group list"

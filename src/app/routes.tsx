@@ -7,6 +7,7 @@ import { BatchTasksPage } from '@/features/batch-tasks';
 import { StardomEntry } from '@/features/stardom/StardomEntry';
 import { SmartPathPage } from '@/features/smart-paths';
 import { HubEntry } from '@/features/hub/HubEntry';
+import { AchievementsPage } from '@/features/achievements';
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: 'smart-paths', element: <SmartPathPage /> },
       { path: 'stardom', element: <StardomEntry /> },
       { path: 'hub', element: <HubEntry /> },
+      { path: 'achievements', element: <AchievementsPage /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/chat" replace /> },
     ],

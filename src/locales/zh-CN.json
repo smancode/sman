@@ -3239,6 +3239,10 @@
     "text": "组队",
     "context": "组队导航菜单项"
   },
+  "menu.achievements": {
+    "text": "成就",
+    "context": "成就系统导航菜单项"
+  },
   "hub.tab.rooms": {
     "text": "项目组",
     "context": "组队 tab：项目组列表"
