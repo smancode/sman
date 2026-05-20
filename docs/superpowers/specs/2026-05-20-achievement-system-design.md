@@ -3,6 +3,7 @@
 > 日期: 2026-05-20
 > 状态: 已确认，待实现
 > Review: v2 - 已修复 4 Critical + 5 Important + 补充 4 Suggestion
+> v3 - 补充 Bot 维度、历史数据回填、sman-server 排行榜服务端
 
 ## 1. 目标
 
@@ -41,6 +42,7 @@ type AchievementEvent = {
       | 'token_used' | 'workspace_added' | 'skill_used'
       | 'code_viewed' | 'git_operation'
       | 'error_occurred' | 'day_active'
+      | 'bot_session_created' | 'bot_message_sent'
   data: Record<string, any>;
 };
 
@@ -93,8 +95,12 @@ class AchievementEngine {
 | `git_operation` | WS handler `git.commit` / `git.push` | git 操作 | |
 | `error_occurred` | WS handler `chat.error` | SDK 执行错误 | 仅限白名单错误类型 |
 | `day_active` | server 启动 + `message_sent` 去重触发 | 活跃天数 | 见下方去重机制 |
+| `bot_session_created` | `ChatbotSessionManager` 创建会话时 | Bot 会话创建 | data 含 platform |
+| `bot_message_sent` | `ChatbotSessionManager` 发消息时 | Bot 对话消息 | data 含 platform |
 
 **`skill_used` 说明**：服务端不直接感知 skill 调用。通过 SDK `tool_use` 回调捕获：当 tool name 匹配 skill 注册表中的名称时 emit。如果 SDK 不暴露 tool_use 回调，则降级为在 `SessionStore` 中通过 session 级别的 skill 使用记录触发。
+
+**Bot 维度说明**：企业微信 Bot（`wecom`）、飞书 Bot（`feishu`）、微信 Bot（`weixin`）三类平台分别统计。通过 `chatbot_sessions.user_key` 前缀区分平台。`bot_session_created` 事件由 `ChatbotSessionManager` 创建/复用会话时触发，`bot_message_sent` 由 Bot 收到用户消息时触发。
 
 **`day_active` 去重机制**：
 - `achievement_stats` 表存储 `last_active_date`（格式 `YYYY-MM-DD`）
@@ -116,7 +122,7 @@ class AchievementEngine {
 ```typescript
 interface AchievementDef {
   id: string;
-  category: 'conversation' | 'advanced' | 'exploration' | 'collaboration' | 'hidden';
+  category: 'conversation' | 'advanced' | 'exploration' | 'collaboration' | 'bot' | 'hidden';
   tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'star' | 'king' | 'legend' | 'epic' | 'eternal';
   nameKey: string;         // i18n key
   descKey: string;         // i18n key
@@ -253,7 +259,23 @@ CREATE TABLE achievement_board (
 | 声望值 | 5 → 10 → 25 → 50 → 100 → 200 → 500 → 1k |
 | 帮助他人 | 1 → 10 → 50 → 200 → 500 |
 
-### 4.5 彩蛋成就（hidden）
+### 4.5 Bot 维度（按三类平台分别统计）
+
+**三类 Bot 平台**：`wecom`（企业微信）/ `feishu`（飞书）/ `weixin`（微信）
+
+**识别方式**：`chatbot_sessions.user_key` 前缀（如 `wecom:bot-sales:zhangsan`），SUBSTR 到第一个 `:` 即为平台标识。
+
+| 线 | 阈值梯度 | 说明 |
+|----|---------|------|
+| Bot 数量（单平台） | 1 → 3 → 5 → 10 → 20 | 某平台的活跃 Bot 数（`COUNT(DISTINCT user_key)` WHERE platform = X） |
+| Bot 数量（全平台） | 1 → 5 → 10 → 20 → 50 → 100 | 全平台活跃 Bot 总数 |
+| Bot 会话数（单平台） | 1 → 10 → 50 → 200 → 1000 | 某平台的会话创建总数 |
+| Bot 会话数（全平台） | 1 → 10 → 50 → 200 → 1000 → 5000 → 10000 | 全平台 Bot 会话总数 |
+| Bot 对话数（单平台） | 10 → 100 → 500 → 2000 → 10000 | 某平台的消息总数 |
+| Bot 对话数（全平台） | 10 → 100 → 500 → 2000 → 10000 → 50000 → 100000 | 全平台 Bot 对话总数 |
+| 多平台运营 | 2 → 3 | 同时使用 2 个 / 3 个平台 |
+
+### 4.6 彩蛋成就（hidden）
 
 | ID | 触发条件 | 实现说明 |
 |----|---------|---------|
@@ -286,11 +308,11 @@ CREATE TABLE achievement_board (
 
 **成就 Tab：**
 - 顶部：总进度条（已解锁/总数 + 百分比）
-- 分类筛选 Tab：全部 / 对话 / 高级功能 / 探索 / 协作 / 彩蛋
+- 分类筛选 Tab：全部 / 对话 / 高级功能 / 探索 / 协作 / Bot / 彩蛋
 - 卡片网格（3-4 列）
 
 **排行榜 Tab：**
-- 维度 Tab：总榜 / 数量 / 对话 / 功能 / 协作 / 周榜
+- 维度 Tab：总榜 / 数量 / 对话 / 功能 / 协作 / Bot / 周榜
 - 列表展示，自己高亮
 - 离线提示：未连接星域时显示"仅显示本地数据"
 
@@ -338,6 +360,11 @@ src/
 │       ├── AchievementCard.tsx   # 卡片组件
 │       ├── AchievementGrid.tsx   # 网格布局
 │       └── assets/               # 内置 badge SVG (10 个等级)
+
+sman-server/src/
+├── db-achievements.ts            # AchievementDB 类（hub.db 新表）
+└── routes/
+    └── achievement-api.ts        # 上报 + 排行榜路由（PSK 加密）
 ```
 
 ### 修改
@@ -351,6 +378,7 @@ src/
 | `server/batch-engine.ts` | emit `batch_item_completed`, `batch_completed` |
 | `server/smart-path-engine.ts` | emit `smartpath_run` |
 | `server/token-counter.ts` | emit `token_used` |
+| `server/chatbot/chatbot-session-manager.ts` | emit `bot_session_created`, `bot_message_sent` |
 | `src/components/layout/Sidebar.tsx` | 添加 NavLink |
 | `src/app/routes.tsx` | 添加路由 |
 | `src/locales/zh-CN.json` | i18n |
@@ -454,7 +482,119 @@ src/
 | 协作榜 | collaboration 维度分 |
 | 本周之星 | 本周新增成就分（周维度重置） |
 
-## 9. 性能考量
+## 9. 历史数据回填（`recalcStatsFromDB()`）
+
+成就系统上线时，用户已有大量历史数据。`AchievementEngine` 启动时必须从现有 SQLite 表重建统计，一次性解锁所有历史成就。
+
+### 回填数据源
+
+| 统计 key | 数据源 SQL | 说明 |
+|---------|-----------|------|
+| `total_sessions` | `SELECT COUNT(*) FROM sessions` | **包含**软删除的会话（不排除 `deleted_at`） |
+| `total_messages` | `SELECT COUNT(*) FROM messages WHERE role = 'user'` | 所有用户消息 |
+| `total_workspaces` | `SELECT COUNT(DISTINCT workspace) FROM sessions` | **包含**所有 workspace（含软删除会话的） |
+| `total_input_tokens` | `SELECT COALESCE(SUM(input_tokens), 0) FROM sessions` | 累计输入 token |
+| `total_output_tokens` | `SELECT COALESCE(SUM(output_tokens), 0) FROM sessions` | 累计输出 token |
+| `total_cron_runs` | `SELECT COUNT(*) FROM cron_runs WHERE status = 'success'` | 成功的 cron 执行 |
+| `total_batch_items` | `SELECT COUNT(*) FROM batch_items WHERE status IN ('completed','partial')` | 成功的 batch items |
+| `total_smartpath_runs` | `SELECT COUNT(*) FROM smart_path_runs WHERE status = 'completed'` | 成功的路径执行 |
+| `bot_sessions_{platform}` | `SELECT COUNT(DISTINCT cs.session_id) FROM chatbot_sessions cs JOIN sessions s ON s.id = cs.session_id WHERE SUBSTR(cs.user_key, 1, INSTR(cs.user_key, ':') - 1) = '{platform}'` | 按 Bot 平台统计会话数 |
+| `bot_messages_{platform}` | 同上 + JOIN messages | 按 Bot 平台统计消息数 |
+| `bot_count_{platform}` | `SELECT COUNT(DISTINCT user_key) FROM chatbot_sessions WHERE SUBSTR(user_key, 1, INSTR(user_key, ':') - 1) = '{platform}'` | 按平台活跃 Bot 数 |
+| `bot_platforms_used` | `SELECT COUNT(DISTINCT SUBSTR(user_key, 1, INSTR(user_key, ':') - 1)) FROM chatbot_sessions` | 使用的平台数 |
+
+### 活跃天数回填
+
+```sql
+-- 统计所有有用户消息的不同日期
+SELECT COUNT(DISTINCT DATE(m.created_at)) AS active_days
+FROM messages m
+WHERE m.role = 'user';
+```
+
+连续天数无法从历史数据精确恢复（中间可能有中断），所以 `streak_current` 设为 0，只回填 `total_active_days` 到 `achievement_stats`。
+
+### 回填流程
+
+```
+1. 启动 AchievementEngine
+2. 检查 achievement_stats 是否已有数据（key = '_initialized'）
+3. 如果没有 → 执行 recalcStatsFromDB()
+   a. 上述所有 SQL 查询写入 achievement_stats
+   b. 遍历所有成就定义，根据 stat 值判断是否解锁
+   c. 解锁的写入 achievement_progress（unlocked_at = NOW）
+   d. 设置 _initialized = 'true'
+4. 如果已有 → 跳过（增量事件会继续更新）
+```
+
+## 10. sman-server 排行榜服务端
+
+排行榜需要 sman-server 提供全局聚合和排名能力。
+
+### 10.1 新增数据库表（sman-server `hub.db`）
+
+```sql
+CREATE TABLE IF NOT EXISTS achievement_leaderboard (
+  client_id TEXT NOT NULL,
+  total_points INTEGER DEFAULT 0,
+  total_unlocked INTEGER DEFAULT 0,
+  dimension_scores TEXT,         -- JSON: {"conversation":50, "advanced":30, ...}
+  tier_counts TEXT,              -- JSON: {"bronze":5, "silver":3, ...}
+  weekly_points INTEGER DEFAULT 0,
+  weekly_reset_at TEXT,
+  updated_at TEXT,
+  PRIMARY KEY (client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_achievement_leaderboard_points
+  ON achievement_leaderboard(total_points DESC);
+```
+
+### 10.2 新增 HTTP API（sman-server）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/hub/achievement-report` | 客户端上报成就数据（PSK 加密） |
+| POST | `/api/hub/achievement-leaderboard` | 查询排行榜（PSK 加密，支持 dimension 参数） |
+
+**`/api/hub/achievement-report`** 请求体（解密后）：
+```typescript
+{
+  clientId: string;
+  totalPoints: number;
+  totalUnlocked: number;
+  dimensionScores: Record<string, number>;
+  tierCounts: Record<string, number>;
+}
+```
+行为：`INSERT OR REPLACE` 到 `achievement_leaderboard`，更新 `weekly_points`（如果超过 `weekly_reset_at` 则重置为 0 并更新 `weekly_reset_at` 为本周结束时间）。
+
+**`/api/hub/achievement-leaderboard`** 请求体（解密后）：
+```typescript
+{
+  clientId: string;
+  dimension?: string;  // 'total' | 'unlocked' | 'conversation' | 'advanced' | 'collaboration' | 'weekly'
+}
+```
+返回：排序后的 leaderboard entries（TOP 100），请求者标记 `isMe`。
+
+### 10.3 新增文件（sman-server）
+
+```
+sman-server/src/
+├── db-achievements.ts          # AchievementDB 类（hub.db 新表）
+└── routes/
+    └── achievement-api.ts      # 上报 + 排行榜路由
+```
+
+### 10.4 同步流程
+
+1. Sman 客户端每次成就变更时，通过 `POST /api/hub/achievement-report` 上报
+2. 上报复用现有的 PSK 加密通道和 `/api/report` 的 clientId 机制
+3. 排行榜查询通过 `POST /api/hub/achievement-leaderboard` 获取
+4. 如果 sman-server 不可达，降级为本地 `achievement_board` 表（仅显示自己）
+
+## 11. 性能考量
 
 - 事件处理用 `setImmediate` 异步，不阻塞主流程
 - 统计表 `INSERT OR REPLACE` 原子操作
