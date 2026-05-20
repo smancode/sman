@@ -339,3 +339,20 @@ export function useStardomDevMode() {
     retry: false,
   });
 }
+
+export function useHubDevMode() {
+  return useQuery({
+    queryKey: ['hub-dev-mode'],
+    queryFn: async () => {
+      const { data: raw } = await hubFetch('/hub-dev-mode', {
+        method: 'POST',
+        body: JSON.stringify({}),
+        throwOnNetworkError: true,
+      });
+      if (!raw || typeof raw !== 'object') return false;
+      return (raw as { enabled?: boolean }).enabled === true;
+    },
+    staleTime: 0,
+    retry: false,
+  });
+}

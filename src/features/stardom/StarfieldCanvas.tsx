@@ -5,31 +5,49 @@ interface Star {
   y: number;
   z: number;
   charIdx: number;
+  colorIdx: number;
+  twinkleOffset: number;
 }
 
-const STAR_COUNT = 75;
-const SPEED = 0.02;
-const BG_COLOR = '#050510';
-const STAR_COLOR = '#00ff41';
-const TRAIL_ALPHA = 0.15;
-const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*+=~';
+const STAR_COUNT = 90;
+const SPEED = 0.015;
+const BG_COLOR = '#ffffff';
+const TRAIL_ALPHA = 0.12;
+const CHARS = '★☆✦✧✶✷✸✹✺✻✼✽✾❋❊❇❈❅❆♠♣♥♦✿❀❁❂❃';
 const CHAR_COUNT = CHARS.length;
-const ATLAS_FONT_SIZE = 28;
-const ATLAS_CELL = 32;
+const ATLAS_FONT_SIZE = 36;
+const ATLAS_CELL = 40;
 
-function buildAtlas(): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_CELL * CHAR_COUNT;
-  canvas.height = ATLAS_CELL;
-  const ctx = canvas.getContext('2d')!;
-  ctx.font = `${ATLAS_FONT_SIZE}px monospace`;
-  ctx.fillStyle = STAR_COLOR;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
-  for (let i = 0; i < CHAR_COUNT; i++) {
-    ctx.fillText(CHARS[i], i * ATLAS_CELL + ATLAS_CELL / 2, ATLAS_CELL / 2);
-  }
-  return canvas;
+const CANDY_COLORS = [
+  '#FF6B9D', // 粉红
+  '#FF8A5C', // 珊瑚橙
+  '#FFD93D', // 柠檬黄
+  '#6BCB77', // 薄荷绿
+  '#4D96FF', // 天蓝
+  '#9B59B6', // 薰衣草紫
+  '#FF6EC7', // 亮粉
+  '#00D2FF', // 冰蓝
+  '#FF4757', // 草莓红
+  '#7BED9F', // 青苹果绿
+  '#ECCC68', // 奶黄
+  '#A29BFE', // 丁香紫
+];
+
+function buildAtlases(): HTMLCanvasElement[] {
+  return CANDY_COLORS.map((color) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = ATLAS_CELL * CHAR_COUNT;
+    canvas.height = ATLAS_CELL;
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = `${ATLAS_FONT_SIZE}px serif`;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < CHAR_COUNT; i++) {
+      ctx.fillText(CHARS[i], i * ATLAS_CELL + ATLAS_CELL / 2, ATLAS_CELL / 2);
+    }
+    return canvas;
+  });
 }
 
 function createStar(width: number, height: number, resetZ = false): Star {
@@ -38,6 +56,8 @@ function createStar(width: number, height: number, resetZ = false): Star {
     y: (Math.random() - 0.5) * height * 2,
     z: resetZ ? Math.random() * 0.01 : Math.random() * 2,
     charIdx: Math.floor(Math.random() * CHAR_COUNT),
+    colorIdx: Math.floor(Math.random() * CANDY_COLORS.length),
+    twinkleOffset: Math.random() * Math.PI * 2,
   };
 }
 
@@ -49,7 +69,7 @@ export function StarfieldCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    const atlas = buildAtlas();
+    const atlases = buildAtlases();
 
     const dpr = window.devicePixelRatio || 1;
     let width = window.innerWidth;
@@ -72,19 +92,11 @@ export function StarfieldCanvas() {
 
     const draw = () => {
       frame++;
-      ctx.fillStyle = `rgba(5, 5, 16, ${TRAIL_ALPHA})`;
+      ctx.fillStyle = `rgba(255, 255, 255, ${TRAIL_ALPHA})`;
       ctx.fillRect(0, 0, width, height);
 
       const cx = width / 2;
       const cy = height / 2;
-
-      const pulse = 0.6 + 0.4 * Math.sin(frame * 0.002);
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120 * pulse);
-      grad.addColorStop(0, `rgba(0, 255, 65, ${0.08 * pulse})`);
-      grad.addColorStop(0.5, `rgba(0, 255, 65, ${0.03 * pulse})`);
-      grad.addColorStop(1, 'rgba(0, 255, 65, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(cx - 150, cy - 150, 300, 300);
 
       for (const star of stars) {
         star.z -= SPEED;
@@ -103,9 +115,22 @@ export function StarfieldCanvas() {
         }
 
         const progress = 1 - star.z / 2;
-        const size = Math.max(6, Math.min(20, progress * 22));
-        const alpha = Math.min(1, progress * 1.5);
+        const size = Math.max(8, Math.min(30, progress * 34));
+        const baseAlpha = Math.min(1, progress * 1.4);
+        const twinkle = 0.6 + 0.4 * Math.sin(frame * 0.008 + star.twinkleOffset);
+        const alpha = baseAlpha * twinkle;
 
+        // 发光层：先画一个更大、更透明的副本作为光晕
+        const glowSize = size * 2.2;
+        ctx.globalAlpha = alpha * 0.25;
+        const atlas = atlases[star.colorIdx];
+        ctx.drawImage(
+          atlas,
+          star.charIdx * ATLAS_CELL, 0, ATLAS_CELL, ATLAS_CELL,
+          sx - glowSize / 2, sy - glowSize / 2, glowSize, glowSize,
+        );
+
+        // 实体层
         ctx.globalAlpha = alpha;
         ctx.drawImage(
           atlas,

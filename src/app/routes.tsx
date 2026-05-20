@@ -6,7 +6,7 @@ import { CronTasksPage } from '@/features/cron-tasks';
 import { BatchTasksPage } from '@/features/batch-tasks';
 import { StardomEntry } from '@/features/stardom/StardomEntry';
 import { SmartPathPage } from '@/features/smart-paths';
-import { HubDashboard } from '@/features/hub/HubDashboard';
+import { HubEntry } from '@/features/hub/HubEntry';
 
 export const router = createBrowserRouter([
   {
@@ -19,7 +19,7 @@ export const router = createBrowserRouter([
       { path: 'batch-tasks', element: <BatchTasksPage /> },
       { path: 'smart-paths', element: <SmartPathPage /> },
       { path: 'stardom', element: <StardomEntry /> },
-      { path: 'hub', element: <HubDashboard /> },
+      { path: 'hub', element: <HubEntry /> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/chat" replace /> },
     ],

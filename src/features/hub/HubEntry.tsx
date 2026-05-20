@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { StarfieldCanvas } from './StarfieldCanvas';
-import { StardomDashboard } from './StardomDashboard';
-import { useStardomDevMode } from '@/queries/use-hub';
-import { useSettingsStore } from '@/stores/settings';
+import { StarfieldCanvas } from '../stardom/StarfieldCanvas';
+import { HubDashboard } from './HubDashboard';
+import { useHubDevMode } from '@/queries/use-hub';
 import { t } from '@/locales';
 
 type Phase = 'checking' | 'locked' | 'unlocking' | 'unlocked';
@@ -12,41 +11,30 @@ type Phase = 'checking' | 'locked' | 'unlocking' | 'unlocked';
 const CHECK_DELAY_MS = 3000;
 const FADE_DURATION_MS = 2000;
 
-export function StardomEntry() {
+export function HubEntry() {
   const navigate = useNavigate();
-  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
-  const settings = useSettingsStore((s) => s.settings);
-  const { data: remoteEnabled, isError, isFetched } = useStardomDevMode();
+  const { data: remoteEnabled, isError, isFetched } = useHubDevMode();
   const [phase, setPhase] = useState<Phase>('checking');
   const [showMessage, setShowMessage] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Refresh settings on mount to pick up manual config.json edits
-  useEffect(() => {
-    fetchSettings().then(() => setSettingsLoaded(true));
-  }, [fetchSettings]);
-
-  // Inject @keyframes for breathe animation on mount
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
-      @keyframes stardom-breathe {
+      @keyframes hub-breathe {
         0%, 100% { opacity: 0.4; }
         50% { opacity: 0.9; }
       }
-      .stardom-coming-soon { animation: stardom-breathe 3s ease-in-out infinite; }
+      .hub-coming-soon { animation: hub-breathe 3s ease-in-out infinite; }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
 
   useEffect(() => {
-    if (!settingsLoaded) return;
     if (!isFetched && !isError) return;
 
-    const localEnabled = settings?.stardomEnabled === true;
-    const enabled = localEnabled || remoteEnabled === true;
+    const enabled = remoteEnabled === true;
 
     timerRef.current = setTimeout(() => {
       if (enabled) {
@@ -63,7 +51,7 @@ export function StardomEntry() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [settingsLoaded, isFetched, isError, settings, remoteEnabled]);
+  }, [isFetched, isError, remoteEnabled]);
 
   const isFading = phase === 'unlocking';
   const showDashboard = phase === 'unlocking' || phase === 'unlocked';
@@ -78,7 +66,6 @@ export function StardomEntry() {
         overflow: 'hidden',
       }}
     >
-      {/* Dashboard layer (behind animation, fades in) */}
       {showDashboard && (
         <div
           style={{
@@ -88,11 +75,10 @@ export function StardomEntry() {
             transition: isFading ? `opacity ${FADE_DURATION_MS}ms ease-in` : undefined,
           }}
         >
-          <StardomDashboard />
+          <HubDashboard />
         </div>
       )}
 
-      {/* Animation layer (in front, fades out) */}
       {phase !== 'unlocked' && (
         <div
           style={{
@@ -140,7 +126,7 @@ export function StardomEntry() {
               }}
             >
               <p
-                className="stardom-coming-soon"
+                className="hub-coming-soon"
                 style={{
                   color: '#4D96FF',
                   fontSize: '1.25rem',
@@ -150,7 +136,7 @@ export function StardomEntry() {
                   margin: 0,
                 }}
               >
-                {t('stardom.entry.comingSoon')}
+                {t('hub.entry.comingSoon')}
               </p>
             </div>
           )}

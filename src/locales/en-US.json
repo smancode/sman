@@ -2083,6 +2083,10 @@
     "text": "Exploring new starlanes... Stay tuned",
     "context": "Stardom entry animation hint text"
   },
+  "hub.entry.comingSoon": {
+    "text": "Team is in closed beta... Stay tuned",
+    "context": "Hub entry animation hint text"
+  },
   "batch.status.draft": {
     "text": "Draft",
     "context": "Batch task status - draft"
