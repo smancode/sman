@@ -38,6 +38,7 @@ export class AchievementEngine {
   private speedWindow: Map<string, number[]> = new Map();
   private sessionIdMessageCount: Map<string, number> = new Map();
   private sessionStore: any = null;
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(store: AchievementStore) {
     this.store = store;
@@ -63,6 +64,12 @@ export class AchievementEngine {
     onAchievementEvent((event) => this.handleEvent(event));
 
     this.checkDayActive();
+
+    // Reconcile with DB every 30 minutes to catch missed events
+    this.reconcileTimer = setInterval(() => {
+      this.log.info('Running periodic DB reconciliation...');
+      this.reconcileWithDB();
+    }, 30 * 60 * 1000);
 
     this.log.info(`Achievement engine started. Level: ${calculateLevel(this.getTotalPoints())}`);
   }
@@ -405,6 +412,55 @@ export class AchievementEngine {
     }
   }
 
+  private reconcileWithDB(): void {
+    const db = this.store.getDatabase();
+    const metricsToUpdate: Set<string> = new Set();
+    try {
+      const reconciliations: [string, string][] = [
+        ['total_sessions', "SELECT COUNT(*) as c FROM sessions"],
+        ['total_messages', "SELECT COUNT(*) as c FROM messages WHERE role = 'user'"],
+        ['total_cron_runs', "SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'"],
+        ['total_batch_items', "SELECT COUNT(*) as c FROM batch_items WHERE status IN ('completed', 'partial')"],
+      ];
+
+      for (const [metric, sql] of reconciliations) {
+        const row = db.prepare(sql).get() as { c: number };
+        const current = parseInt(this.store.getStat(metric) || '0', 10);
+        if (row.c > current) {
+          this.log.info(`Reconciliation: ${metric} ${current} → ${row.c}`);
+          this.store.setStat(metric, String(row.c));
+          metricsToUpdate.add(metric);
+        }
+      }
+
+      // Tokens
+      const inputTokens = (db.prepare('SELECT COALESCE(SUM(input_tokens), 0) as c FROM sessions').get() as { c: number }).c;
+      const outputTokens = (db.prepare('SELECT COALESCE(SUM(output_tokens), 0) as c FROM sessions').get() as { c: number }).c;
+      const dbTokens = inputTokens + outputTokens;
+      const statTokens = parseInt(this.store.getStat('total_tokens') || '0', 10);
+      if (dbTokens > statTokens) {
+        this.log.info(`Reconciliation: total_tokens ${statTokens} → ${dbTokens}`);
+        this.store.setStat('total_tokens', String(dbTokens));
+        metricsToUpdate.add('total_tokens');
+      }
+
+      // Workspaces
+      const wsCount = (db.prepare('SELECT COUNT(DISTINCT workspace) as c FROM sessions').get() as { c: number }).c;
+      const statWs = parseInt(this.store.getStat('total_workspaces') || '0', 10);
+      if (wsCount > statWs) {
+        this.store.setStat('total_workspaces', String(wsCount));
+        metricsToUpdate.add('total_workspaces');
+      }
+
+      if (metricsToUpdate.size > 0) {
+        this.checkMetrics([...metricsToUpdate]);
+        this.log.info(`Reconciliation complete, updated ${metricsToUpdate.size} metrics`);
+      }
+    } catch (err) {
+      this.log.error('Error during DB reconciliation:', { error: String(err) });
+    }
+  }
+
   private getTotalPoints(): number {
     let total = 0;
     for (const def of ACHIEVEMENT_DEFINITIONS) {
@@ -482,6 +538,10 @@ export class AchievementEngine {
   }
 
   close(): void {
+    if (this.reconcileTimer) {
+      clearInterval(this.reconcileTimer);
+      this.reconcileTimer = null;
+    }
     removeAllAchievementListeners();
   }
 }

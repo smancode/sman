@@ -183,31 +183,6 @@ export function Sidebar() {
                 </>
               )}
             </NavLink>
-
-            <NavLink
-              to="/achievements"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Trophy className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.achievements')}</span>
-                </>
-              )}
-            </NavLink>
           </div>
         </div>
 
@@ -242,6 +217,21 @@ export function Sidebar() {
                 <span>{t('menu.settings')}</span>
               </>
             )}
+          </NavLink>
+
+          {/* Achievement icon */}
+          <NavLink
+            to="/achievements"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center justify-center rounded-lg transition-all duration-150',
+                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+              )
+            }
+            title={t('menu.achievements')}
+          >
+            <Trophy className="h-[18px] w-[18px]" strokeWidth={2} />
           </NavLink>
 
           {/* Pin 按钮：悬浮时显示，点击固定展开 */}

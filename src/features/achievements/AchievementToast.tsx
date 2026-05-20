@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AchievementUnlockEvent } from '@/stores/achievement';
-import { TIER_COLORS, type Tier } from '@/types/achievement';
+import { TIER_COLORS, TIER_ICONS, type Tier } from '@/types/achievement';
 import { TierBadge } from './TierBadge';
 
 interface AchievementToastProps {
@@ -37,7 +37,7 @@ export function AchievementToast({ unlock, onDismiss }: AchievementToastProps) {
         colors.border,
       )}>
         <span className="text-2xl">{achievement.icon}</span>
-        <TierBadge tier={achievement.tier as Tier} icon="shield" size="sm" />
+        <TierBadge tier={achievement.tier as Tier} icon={TIER_ICONS[achievement.tier as Tier]} size="sm" />
         <div className="flex flex-col">
           <span className="text-sm font-semibold">{achievement.nameKey}</span>
           <div className="flex items-center gap-2">

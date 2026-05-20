@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { AchievementView } from '@/stores/achievement';
-import { TIER_COLORS, TIER_SCORES, CATEGORY_LABELS, type Tier, type Category } from '@/types/achievement';
+import { TIER_COLORS, TIER_SCORES, TIER_ICONS, CATEGORY_LABELS, type Tier, type Category } from '@/types/achievement';
 import { TierBadge } from './TierBadge';
 import { t } from '@/locales';
 
@@ -20,7 +20,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
   return (
     <div
       className={cn(
-        'group relative rounded-xl border p-4 transition-all duration-200',
+        'group relative rounded-xl border p-4 transition-all duration-200 min-w-0',
         'hover:shadow-md hover:-translate-y-0.5',
         isUnlocked
           ? cn(colors.bg, colors.border, 'shadow-sm')
@@ -34,7 +34,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
           <span className={cn('text-2xl', isUnlocked ? '' : 'grayscale opacity-50')}>
             {isHidden ? '?' : icon}
           </span>
-          <TierBadge tier={tierKey} icon="shield" size="sm" />
+          <TierBadge tier={tierKey} icon={TIER_ICONS[tierKey]} size="sm" />
         </div>
         <span className={cn(
           'text-[11px] font-medium px-2 py-0.5 rounded-full',

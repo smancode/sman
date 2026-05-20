@@ -54,8 +54,8 @@ export function AchievementsPage() {
   const lp = summary.levelProgress;
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-8 py-10">
+    <div className="h-full">
+      <div className="max-w-5xl mx-auto px-6 py-8 w-full">
         {/* Toast notifications */}
         {recentUnlocks.map((unlock, i) => (
           <AchievementToast
