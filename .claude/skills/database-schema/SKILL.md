@@ -4,18 +4,18 @@ name: 数据库全景知识
 description: Database schema knowledge (incremental scan). Core tables, relationships, and index strategies.
 category: database
 _scanned:
-  commitHash: "c63e3fcf76ba9e8b362d9d73ebccab934d1d998d"
-  scannedAt: "2026-05-20T00:00:00.000Z"
+  commitHash: "353989234d641c959d8c0aa37aea150735c4ccd8"
+  scannedAt: "2026-05-21T00:00:00.000Z"
   branch: "master"
 ---
 
 # Database Overview
 
-SQLite (better-sqlite3) at `~/.sman/sman.db` with WAL mode. 21+ tables across 9 stores.
+SQLite (better-sqlite3) at `~/.sman/sman.db` with WAL mode. 25+ tables across 10 stores.
 
 **Key Relationships**: Sessions→Messages (CASCADE), Groups→Tasks→Subtasks (CASCADE), Batch→Items (CASCADE), Cron→Runs (CASCADE), Chatbot→Bot Profile
 
-## Core Tables (Top 18)
+## Core Tables (Top 15)
 
 | Table | Columns | Purpose | Reference File |
 |-------|---------|---------|----------------|
@@ -28,51 +28,43 @@ SQLite (better-sqlite3) at `~/.sman/sman.db` with WAL mode. 21+ tables across 9 
 | `batch_items` | 10 | Individual batch items with status tracking and cost metrics | `server/batch-store.ts` |
 | `cron_tasks` | 8 | Cron task definitions (workspace, skill, expression, source) | `server/cron-task-store.ts` |
 | `cron_runs` | 7 | Cron execution records (status, timing, error tracking) | `server/cron-task-store.ts` |
-| `chatbot_users` | 3 | Chatbot user state (current workspace, last active) | `server/chatbot/chatbot-store.ts` |
 | `chatbot_sessions` | 9 | Chatbot session mapping (chat_type, idle_reset, bot_label, multi-bot support) | `server/chatbot/chatbot-store.ts` |
-| `chatbot_workspaces` | 3 | Registered workspace paths for chatbot access | `server/chatbot/chatbot-store.ts` |
-| `knowledge_extraction_progress` | 4 | Incremental knowledge extraction tracking | `server/knowledge-extractor-store.ts` |
-| `hub_broadcasts` | 4 | Hub broadcast messages (title, body, created_at) | `server/broadcast-store.ts` |
-| `stardom_identity` | 5 | Local agent identity registration | `server/stardom/stardom-store.ts` |
 | `stardom_tasks` | 11 | Multi-agent task collaboration (direction, status, rating, deadline) | `server/stardom/stardom-store.ts` |
-| `stardom_chat_messages` | 4 | Chat messages for agent collaboration | `server/stardom/stardom-store.ts` |
-| `stardom_learned_routes` | 5 | Capability-to-agent routing cache with experience | `server/stardom/stardom-store.ts` |
+| `achievement_progress` | 4 | Achievement unlock status (current_value, unlocked_at, notified_at) | `server/achievement-store.ts` |
+| `achievement_stats` | 3 | Key-value metrics (total_sessions, total_tokens, etc.) | `server/achievement-store.ts` |
+| `achievement_streaks` | 4 | Activity streak tracking (singleton table, current/longest) | `server/achievement-store.ts` |
+| `achievement_board` | 7 | Leaderboard cache synced from hub (agent_id, total_points, tier_counts) | `server/achievement-store.ts` |
 
 ## Design Patterns
 
-Soft delete (sessions), CASCADE deletes (groups/batch/cron), composite PKs, JSON columns (workspace_ids), streaming support (is_partial), token tracking, retry logic, foreign keys, multi-bot support, hub broadcasts, group task hierarchy
+Soft delete (sessions), CASCADE deletes (groups/batch/cron), composite PKs, JSON columns (workspace_ids, tier_counts, dimension_scores), streaming support (is_partial), token tracking, retry logic, foreign keys, multi-bot support, hub broadcasts, group task hierarchy, singleton table (achievement_streaks), UPSERT patterns, event-driven metrics (achievement system)
 
 ## Index Strategy
 
-- `messages`: `idx_messages_session_id` on session_id
-- `sessions`: `idx_sessions_system_id`, `idx_sessions_deleted_at`
-- `groups`: `idx_groups_status` on status
-- `group_tasks`: `idx_group_tasks_group_id`, `idx_group_tasks_status`
-- `group_subtasks`: `idx_subtasks_task_id`, `idx_subtasks_session_id`
-- `batch_items`: `idx_batch_items_task`, `idx_batch_items_status` (composite)
-- `cron_runs`: `idx_cron_runs_task`, `idx_cron_runs_started` (DESC)
-- `stardom_chat_messages`: `idx_chat_task` on task_id
-- `stardom_learned_routes`: `idx_learned_capability` on capability
-- `stardom_tasks`: `idx_tasks_requester`, `idx_tasks_helper`, `idx_tasks_status` (agent collaboration)
+**Note**: Degraded scan - index details omitted for brevity. Key indexes exist on:
+- `messages`: session_id
+- `sessions`: system_id, deleted_at
+- `groups`: status
+- `group_tasks`: group_id, status
+- `group_subtasks`: task_id, session_id
+- `batch_items`: task_id, status (composite)
+- `cron_runs`: task_id, started_at (DESC)
+- `stardom_tasks`: requester_id, helper_id, status (agent collaboration)
+- Achievement tables: No additional indexes (PK-based lookups, singleton pattern, or full scans for leaderboard)
 
 ## Migration
 
-Runtime ALTER TABLE with try-catch, check before add, log success/fail. Examples: `chatbot_sessions.chat_type`, `chatbot_sessions.idle_reset`, `sessions.parent_task_id`, `group_tasks.status`
+Runtime ALTER TABLE with try-catch, check before add, log success/fail. Examples: `chatbot_sessions.chat_type`, `chatbot_sessions.idle_reset`, `sessions.parent_task_id`, `group_tasks.status`, `group_tasks.auto_dispatch`
 
-## Recent Changes (Since 1ddac60)
+## Recent Changes (Since c63e3fcf)
 
-**NEW TABLES**: `groups` (6 cols), `group_tasks` (8 cols), `group_subtasks` (8 cols)
+**NEW TABLES**: `achievement_progress` (4 cols), `achievement_stats` (3 cols), `achievement_streaks` (4 cols), `achievement_board` (7 cols)
 
-**MODIFIED TABLES**:
-- `chatbot_sessions`: Added `chat_type` (default 'single'), `idle_reset` (default 0)
-- `sessions`: Added `parent_task_id` (nullable), excludes group task sessions from listSessions()
-- `group_tasks`: Migrations for `auto_dispatch`, `status` columns
+**MODIFIED TABLES**: None (achievement system is additive)
 
-**DROPPED TABLES**: `workspace_tasks` (legacy, replaced by group_subtasks)
+**INTEGRATION**: Event-driven metrics emitted from session/cron/batch/smart-path engines via `achievement-events.ts`
 
-**MIGRATION**: All additions backward compatible. ⚠️ BEHAVIOR CHANGE: `listSessions()` now excludes group task workspaces (`~/.sman/group/%`)
-
-**RISK ASSESSMENT**: Low - new feature isolation, no breaking schema changes
+**RISK ASSESSMENT**: Low - new feature isolation, no breaking schema changes, UPSERT patterns safe
 
 ## Notable Exclusions
 

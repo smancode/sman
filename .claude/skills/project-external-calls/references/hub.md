@@ -27,6 +27,12 @@ Hub 是企业级 Sman 协作服务器，提供多 Agent 协作、任务分发、
 - **用途**: 拉取服务器广播消息（系统公告、更新通知等）
 - **频率**: 每 15 分钟，**超时**: 5 秒，**认证**: PSK 加密
 
+### 成就排行榜
+- **上传端点**: `POST {serverBaseUrl}/api/achievement-report`
+- **查询端点**: `GET {serverBaseUrl}/api/achievement-leaderboard?dimension={dimension}`
+- **用途**: 上传本地成就数据 + 查询全局排行榜（支持按维度排序）
+- **频率**: 每小时自动上传，用户手动查询，**超时**: 10 秒，**认证**: PSK 加密
+
 ## 配置来源
 | 配置项 | 环境变量 | Settings 路径 | 说明 |
 |--------|----------|---------------|------|
@@ -49,6 +55,11 @@ Hub 是企业级 Sman 协作服务器，提供多 Agent 协作、任务分发、
 ### 广播查询
 - `server/hub/client.ts` → `HubClient.fetchBroadcasts()`
 - 存储位置: `BroadcastStore` (内存 + SQLite 持久化)
+
+### 成就排行榜
+- `server/achievement-engine.ts` → `uploadToLeaderboard()` + `fetchLeaderboard()`
+- 上传内容: agentId, agentName, totalPoints, totalUnlocked, level, tierCounts, dimensionScores
+- 查询参数: dimension (可选，支持按维度排序：total_sessions, total_messages, total_tokens 等)
 
 ## 技能自动更新触发
 

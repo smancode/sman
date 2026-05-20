@@ -1,12 +1,12 @@
 ---
-_scanned.commitHash: "c63e3fcf76ba9e8b362d9d73ebccab934d1d998c"
-_scanned.scannedAt: "2026-05-20T00:00:00.000Z"
+_scanned.commitHash: "353989234d641c959d8c0aa37aea150735c4ccd8"
+_scanned.scannedAt: "2026-05-21T00:00:00.000Z"
 _scanned.branch: "master"
 ---
 
 # Development Conventions
 
-Top 8 conventions from incremental scan (commit c63e3fcf76ba9e8b362d9d73ebccab934d1d998c).
+Top 8 conventions from incremental scan (commit 353989234d641c959d8c0aa37aea150735c4ccd8).
 
 ## 1. Git 操作必须异步化
 
@@ -78,13 +78,82 @@ Git status 中展开未跟踪目录时，必须限制深度和文件数量：
 - 限制展开文件总数最多 500 个（`MAX_EXPAND_FILES=500`）
 - 达到限制时直接返回，不抛异常
 
-## 8. Group 会话隔离
+## 8. Zustand Store 与 WebSocket 集成模式
 
-> by nasakim | 验证: 2026-05 | ✅ [已验证] server/group-store.ts, src/stores/group.ts
+> by nasakim | 验证: 2026-05 | ✅ [已验证] src/stores/achievement.ts, src/stores/smart-path.ts
 
-Group 功能的会话必须与普通会话完全隔离，避免上下文串：
-- SQLite 表独立：`groups`, `group_tasks`, `group_subtasks`
-- 外键级联删除：删除 group → 删除 tasks → 删除 subtasks
-- Group 会话 ID 前缀：`chatbot-{botProfileId}-...`（复用 chatbot 会话管理）
-- Group workspace 目录：`~/.sman/group/{groupId}/CLAUDE.md`
-- 前端状态独立管理（Zustand），不影响普通会话树
+Zustand store 与 WebSocket 的标准集成模式：
+- 在 store 文件中定义 `useWsConnection` 辅助函数获取 WebSocket client
+- 使用 `ensureListeners()` 确保监听器只注册一次（通过 `listenersRegistered` 标志）
+- WebSocket 消息监听器中直接调用 `useAchievementStore.setState()` 更新状态
+- 返回 cleanup 函数：`client.off(event, handler)` 用于取消监听
+- 订阅 `useWsConnection` 的变化，client 断开重连时重新注册监听器
+- 所有异步操作（如 `fetchSummary()`）通过 WebSocket 发送消息，不用 fetch API
+
+**示例结构**：
+```typescript
+let listenersRegistered = false;
+let unregisterFn: (() => void) | null = null;
+
+function registerListeners() {
+  const client = useWsConnection.getState().client;
+  if (!client) return () => {};
+
+  const onMessage = (raw: unknown) => {
+    const msg = raw as Record<string, unknown>;
+    if (msg.type === 'achievement.data') {
+      useAchievementStore.setState({ summary: msg.summary, isLoading: false });
+    }
+  };
+
+  client.on('achievement.data', onMessage);
+  return () => client.off('achievement.data', onMessage);
+}
+
+function ensureListeners(): void {
+  if (listenersRegistered) return;
+  listenersRegistered = true;
+  const unsub = useWsConnection.subscribe((state, prev) => {
+    if (state.client && state.client !== prev.client) {
+      if (unregisterFn) unregisterFn();
+      unregisterFn = registerListeners();
+    }
+  });
+  if (useWsConnection.getState().client) {
+    unregisterFn = registerListeners();
+  }
+}
+```
+
+## 9. 类型常量集中定义与 i18n key 解耦
+
+> by nasakim | 验证: 2026-05 | ✅ [已验证] src/types/achievement.ts
+
+类型相关的常量（枚举值、图标、颜色、阈值等）必须集中定义在 `types/` 目录，与 i18n key 分离：
+- 在 `src/types/` 中定义类型常量（如 `TIER_COLORS`, `CATEGORY_LABELS`）
+- 常量对象使用 `Record<Type, T>` 类型，确保类型安全
+- 颜色定义包含完整的 light/dark 模式变体（如 `text`, `bg`, `border`, `glow`, `bar`）
+- **禁止在常量中硬编码中文文本**（如 `CATEGORY_LABELS` 的 value）
+- 所有用户可见文本必须通过 i18n key（如 `t('achievement.tier.gold')`）获取
+- 组件中通过 `t(labelKey)` 动态获取翻译，而不是直接使用常量中的文本
+
+**反例（不要这样）**：
+```typescript
+// ❌ 在常量中硬编码中文
+export const CATEGORY_LABELS: Record<Category, string> = {
+  conversation: '对话',
+  advanced: '进阶',
+};
+```
+
+**正例（正确做法）**：
+```typescript
+// ✅ 常量只用于类型安全，文本由 i18n 处理
+export const CATEGORY_LABELS: Record<Category, string> = {
+  conversation: 'conversation',  // 仅用于调试或日志
+  advanced: 'advanced',
+};
+
+// 组件中
+{t(`achievement.cat.${category}`)}
+```

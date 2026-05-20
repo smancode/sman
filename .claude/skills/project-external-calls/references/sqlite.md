@@ -17,6 +17,7 @@ better-sqlite3 — synchronous SQLite driver, ESM interop
 | server/chatbot/chatbot-store.ts | Chatbot user state storage |
 | server/stardom/stardom-store.ts | Stardom agent + task registry |
 | server/knowledge-extractor-store.ts | Knowledge extraction progress |
+| server/achievement-store.ts | Achievement progress + stats + streaks + leaderboard |
 | server/web-access/chrome-sites.ts | Chrome bookmark/history DB (read-only) |
 
 ## Purpose

@@ -25,6 +25,32 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 - **review**: AI 推荐能力
 ## Skill Auto-Updater History
 
+### 2026-05-21 — 增量更新
+**Commit**: 353989234d641c959d8c0aa37aea150735c4ccd8
+**Mode**: 增量更新（自上次扫描 c63e3fcf76ba9e8b362d9d73ebccab934d1d998d）
+**规模**: 大型项目（3923 源码文件），分 4 轮扫描，32 个 commits
+
+**Project Knowledge Skills 更新**：
+- ✅ project-structure — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ project-apis — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ project-external-calls — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ knowledge-conventions — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ knowledge-technical — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ knowledge-business — 已更新（commitHash: c63e3fc → 3539892）
+- ✅ database-schema — 已更新（commitHash: c63e3fc → 3539892）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ 无新条目需要处理（所有知识已在 2026-05-20 处理完毕）
+
+**关键发现**：
+- ⭐ MAJOR: 成就系统完整实现（96 个成就，10 个等级，12 种加权指标）
+- ⭐ NEW: Hub 多 Agent 协作平台与排行榜集成
+- ⭐ NEW: Smart Path AI 指南生成系统
+- ⭐ NEW: 悬停状态监听与侧边栏交互增强
+- ⚠️ MIGRATION: 无破坏性变更（纯新增功能）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）
+
 ### 2026-05-20 — 增量更新
 **Commit**: c63e3fcf76ba9e8b362d9d73ebccab934d1d998d
 **Mode**: 增量更新（自上次扫描 1ddac60bf3f5dbec4ced87ea1a0b7b680267f41c）
