@@ -45,7 +45,7 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
     if (!showTooltip || !ref.current) { setPos(null); return; }
 
     const rect = ref.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 6, left: rect.left });
+    setPos({ top: rect.bottom + 8, left: rect.left });
   }, [showTooltip, showLevelList]);
 
   return (
@@ -54,10 +54,10 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
         ref={ref}
         className={cn(
           'rounded-full flex items-center justify-center',
-          colors.bg, colors.border, 'border dark:border',
+          colors.bg, colors.border, 'border',
           s.container,
           showLevelList && 'cursor-pointer',
-          size === 'lg' && 'border-2 border-black dark:border shadow-[3px_3px_0_0_#1e293b] dark:shadow-none',
+          size === 'lg' && 'shadow-sm',
           className,
         )}
         onMouseEnter={() => showLevelList && setShowTooltip(true)}
@@ -68,12 +68,12 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
 
       {showTooltip && pos && (
         <div
-          className="fixed z-50 bg-white dark:bg-popover text-popover-foreground border-2 border-black dark:border dark:border-border shadow-[4px_4px_0_0_#1e293b] dark:shadow-lg px-3 py-2.5 text-[12px] min-w-[180px]"
+          className="fixed z-50 bg-card/80 backdrop-blur-xl text-popover-foreground border border-border/40 rounded-2xl shadow-xl px-3.5 py-3 text-[12px] min-w-[180px]"
           style={{ top: pos.top, left: pos.left }}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
-          <div className="text-[10px] font-bold text-foreground mb-1.5 dark:font-medium uppercase tracking-wide">Level</div>
+          <div className="text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-widest">Level</div>
           {TIER_ORDER.map((tr) => {
             const threshold = TIER_THRESHOLDS[tr];
             const isActive = tr === tier;
@@ -85,24 +85,17 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
                 key={tr}
                 className={cn(
                   'flex items-center justify-between py-0.5 gap-2',
-                  isActive && 'font-bold',
-                  !isUnlocked && 'opacity-40',
+                  isActive && 'font-semibold',
+                  !isUnlocked && 'opacity-35',
                 )}
               >
                 <div className="flex items-center gap-1.5">
                   <TrIcon className={cn('h-3.5 w-3.5 shrink-0', trColors.text)} />
-                  <span className={cn(trColors.text, isActive && 'font-bold')}>
+                  <span className={cn(trColors.text, isActive && 'font-semibold')}>
                     {t(`achievement.tier.${tr}`)}
                   </span>
                 </div>
-                <span className={cn(
-                  'text-[10px] px-1',
-                  isUnlocked
-                    ? 'font-bold bg-black text-white dark:bg-muted/50 dark:text-foreground dark:font-medium'
-                    : 'text-muted-foreground',
-                )}>
-                  {threshold}+
-                </span>
+                <span className="text-[10px] text-muted-foreground">{threshold}+</span>
               </div>
             );
           })}

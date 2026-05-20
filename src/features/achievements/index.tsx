@@ -23,8 +23,6 @@ const TABS: { key: FilterTab; labelKey: string }[] = [
   { key: 'leaderboard', labelKey: 'achievement.leaderboard' },
 ];
 
-const TAB_BREAKS = new Set(['conversation', 'leaderboard']);
-
 export function AchievementsPage() {
   useLocale();
   const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
@@ -82,28 +80,18 @@ export function AchievementsPage() {
           <div className="flex items-center gap-4 mb-4">
             <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" currentPoints={summary.totalPoints} />
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className={cn(
-                  'text-2xl font-bold',
-                  'dark:text-foreground',
-                )}>
-                  {t('achievement.title')}
-                </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl font-semibold tracking-tight">{t('achievement.title')}</h1>
                 <span className={cn(
-                  'text-sm font-semibold px-2 py-0.5 border-2 dark:border-0',
-                  levelColors.text, levelColors.bg, levelColors.border,
-                  'dark:rounded',
-                  'rounded dark:rounded',
+                  'text-[12px] font-medium px-2 py-0.5 rounded-full',
+                  levelColors.bg, levelColors.text, levelColors.border, 'border',
                 )}>
                   Lv.{TIER_ORDER.indexOf(levelTier) + 1} {t(`achievement.tier.${levelTier}`)}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                <span className={cn(
-                  'px-2 py-0.5 text-[12px] font-bold border-2 border-black dark:border-0 dark:font-medium dark:rounded bg-yellow-200 dark:bg-muted/50 dark:text-muted-foreground',
-                )}>
-                  {t('achievement.points', { count: String(summary.totalPoints) })}
-                </span>
+                <span>{t('achievement.points', { count: String(summary.totalPoints) })}</span>
+                <span className="text-muted-foreground/30">·</span>
                 <span>{t('achievement.unlockedCount', { count: String(summary.totalUnlocked), total: String(summary.totalAchievements) })}</span>
               </div>
             </div>
@@ -113,19 +101,12 @@ export function AchievementsPage() {
           {lp && lp.progress < 1 && (
             <div className="space-y-1.5 max-w-md">
               <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span className="font-bold dark:font-medium">{t(`achievement.tier.${levelTier}`)}</span>
+                <span>{t(`achievement.tier.${levelTier}`)}</span>
                 <span>{t('achievement.nextLevel', { points: String(Math.round(lp.nextMin - lp.currentMin - lp.progress * (lp.nextMin - lp.currentMin))) })}</span>
               </div>
-              <div className={cn(
-                'h-3 dark:h-2 border-2 border-black dark:border-0 dark:rounded-full bg-muted overflow-hidden',
-                'dark:bg-muted',
-              )}>
+              <div className="h-1.5 rounded-full bg-foreground/5 overflow-hidden">
                 <div
-                  className={cn(
-                    'h-full transition-all duration-700',
-                    levelColors.bar,
-                    'dark:rounded-full',
-                  )}
+                  className={cn('h-full rounded-full transition-all duration-700', levelColors.bar, 'opacity-80')}
                   style={{ width: `${lp.progress * 100}%` }}
                 />
               </div>
@@ -134,11 +115,7 @@ export function AchievementsPage() {
 
           {/* Streak */}
           {summary.streak.current > 0 && (
-            <div className={cn(
-              'mt-3 text-[12px] inline-block px-2 py-0.5 border-2 border-black dark:border-0 dark:rounded',
-              'font-bold dark:font-medium dark:text-muted-foreground',
-              'bg-orange-200 dark:bg-transparent',
-            )}>
+            <div className="mt-3 text-[12px] text-muted-foreground">
               {t('achievement.streak', { current: String(summary.streak.current), longest: String(summary.streak.longest) })}
             </div>
           )}
@@ -152,11 +129,10 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-150',
-                  'dark:rounded-lg',
+                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:shadow-none dark:bg-foreground/10 dark:text-foreground dark:border-0'
-                    : 'border-2 border-transparent dark:border-0 bg-white dark:bg-transparent text-foreground hover:border-black dark:hover:text-foreground dark:hover:bg-muted/50 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
                 )}
               >
                 {t(tab.labelKey)}
@@ -169,11 +145,10 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-150',
-                  'dark:rounded-lg',
+                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:shadow-none dark:bg-foreground/10 dark:text-foreground dark:border-0'
-                    : 'border-2 border-transparent dark:border-0 bg-white dark:bg-transparent text-foreground hover:border-black dark:hover:text-foreground dark:hover:bg-muted/50 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
                 )}
               >
                 {t(tab.labelKey)}
@@ -186,11 +161,10 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-150',
-                  'dark:rounded-lg',
+                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:shadow-none dark:bg-foreground/10 dark:text-foreground dark:border-0'
-                    : 'border-2 border-transparent dark:border-0 bg-white dark:bg-transparent text-foreground hover:border-black dark:hover:text-foreground dark:hover:bg-muted/50 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
                 )}
               >
                 {t(tab.labelKey)}
@@ -210,8 +184,8 @@ export function AchievementsPage() {
               ))}
             </div>
             {filtered.length === 0 && (
-              <div className="text-center py-16 border-2 border-black dark:border-0 dark:rounded-lg bg-white dark:bg-transparent">
-                <span className="text-muted-foreground text-sm font-bold dark:font-medium">{t('achievement.noResults')}</span>
+              <div className="text-center py-16 text-muted-foreground/60 text-sm">
+                {t('achievement.noResults')}
               </div>
             )}
           </>

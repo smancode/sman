@@ -33,17 +33,16 @@ export function AchievementToast({ unlock, onDismiss }: AchievementToastProps) {
       )}
     >
       <div className={cn(
-        'flex items-center gap-3 px-4 py-3 border-2 border-black dark:border dark:rounded-xl shadow-[4px_4px_0_0_#1e293b] dark:shadow-lg',
-        'bg-white dark:bg-card dark:backdrop-blur-sm',
-        colors.border,
+        'flex items-center gap-3 px-4 py-3 rounded-2xl border border-border/30 shadow-xl',
+        'bg-card/80 backdrop-blur-xl',
       )}>
         <span className="text-2xl">{achievement.icon}</span>
         <TierBadge tier={achievement.tier as Tier} icon={TIER_ICONS[achievement.tier as Tier]} size="sm" />
         <div className="flex flex-col">
-          <span className="text-sm font-bold dark:font-semibold">{t(achievement.nameKey)}</span>
+          <span className="text-sm font-medium">{t(achievement.nameKey)}</span>
           <div className="flex items-center gap-2">
-            <span className={cn('text-xs font-bold dark:font-medium', colors.text)}>+{achievement.points} 分</span>
-            <span className="text-[10px] text-muted-foreground">总计 {totalPoints} 分</span>
+            <span className={cn('text-xs font-medium', colors.text)}>+{achievement.points} 分</span>
+            <span className="text-[10px] text-muted-foreground/60">总计 {totalPoints} 分</span>
           </div>
         </div>
         <button

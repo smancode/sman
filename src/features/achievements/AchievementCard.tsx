@@ -23,11 +23,11 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
   return (
     <div
       className={cn(
-        'group relative border p-4 transition-all duration-200 min-w-0 overflow-hidden',
-        'rounded-lg dark:rounded-xl',
+        'group relative border p-4 transition-all duration-300 min-w-0 overflow-hidden',
+        'rounded-2xl',
         isUnlocked
-          ? cn(catColors.bg, catColors.border, 'border-2 dark:border', catColors.shadow, 'hover:translate-x-[2px] hover:-translate-y-[2px] dark:hover:-translate-y-1 dark:hover:shadow-lg dark:shadow-sm')
-          : 'border-2 border-black/20 dark:border-border/30 bg-white dark:bg-card/50 dark:opacity-85 hover:border-black hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-md dark:hover:-translate-y-0.5',
+          ? cn(catColors.bg, catColors.border, 'border', catColors.shadow, 'backdrop-blur-sm hover:-translate-y-1 hover:shadow-lg')
+          : 'border-border/40 bg-card/60 backdrop-blur-sm dark:bg-card/50 dark:opacity-85 hover:shadow-md hover:-translate-y-0.5',
         isHidden && 'opacity-50',
       )}
       onMouseEnter={() => isUnlocked && setShining(true)}
@@ -51,7 +51,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
       {isUnlocked && (
         <div
           className={cn(
-            'absolute inset-0 rounded-xl pointer-events-none z-0 achievement-glow transition-opacity duration-300',
+            'absolute inset-0 rounded-2xl pointer-events-none z-0 achievement-glow transition-opacity duration-300',
             shining ? 'opacity-100' : 'opacity-0',
           )}
         />
@@ -68,28 +68,28 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
             <TierBadge tier={tierKey} icon={TIER_ICONS[tierKey]} size="sm" />
           </div>
           <span className={cn(
-            'text-[11px] px-2 py-0.5 rounded',
+            'text-[11px] px-2.5 py-0.5 rounded-full font-medium',
             isUnlocked
-              ? 'font-bold bg-black text-white dark:font-medium dark:bg-muted/50 dark:text-muted-foreground dark:border dark:border-border'
-              : 'font-medium text-muted-foreground bg-muted/50 rounded-full',
+              ? 'bg-foreground/8 text-foreground/70 dark:bg-muted/50 dark:text-muted-foreground'
+              : 'text-muted-foreground bg-muted/40',
           )}>
             +{points}
           </span>
         </div>
 
         {/* Name */}
-        <h4 className={cn('text-sm font-semibold leading-tight mb-1', isUnlocked ? 'text-foreground' : 'text-muted-foreground')}>
+        <h4 className={cn('text-sm font-medium leading-tight mb-1', isUnlocked ? 'text-foreground' : 'text-muted-foreground')}>
           {isHidden ? t('achievement.hidden') : t(nameKey)}
         </h4>
-        <p className="text-[11px] text-muted-foreground mb-3">
+        <p className="text-[11px] text-muted-foreground/70 mb-3">
           {isHidden ? '???' : t(descKey)}
         </p>
 
         {/* Progress bar */}
         {!isUnlocked && !isHidden && (
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div className="h-1.5 rounded-full bg-foreground/5 overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', catColors.bar)}
+              className={cn('h-full rounded-full transition-all duration-500', catColors.bar, 'opacity-80')}
               style={{ width: `${progress * 100}%` }}
             />
           </div>
@@ -97,7 +97,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
 
         {/* Unlocked indicator */}
         {isUnlocked && (
-          <div className={cn('text-[10px] font-medium', catColors.text)}>
+          <div className={cn('text-[10px] font-medium opacity-60', catColors.text)}>
             {new Date(unlockedAt).toLocaleDateString()}
           </div>
         )}

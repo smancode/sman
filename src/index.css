@@ -631,19 +631,19 @@
   line-height: 1.5;
 }
 
-/* Achievement card shine sweep - light: warm gold, dark: cool silver */
+/* Achievement card shine sweep - soft frosted glass light sweep */
 .achievement-shine {
   background: linear-gradient(
     105deg,
     transparent 25%,
     rgba(255, 255, 255, 0.0) 35%,
-    rgba(255, 255, 255, 0.6) 44%,
-    rgba(255, 248, 230, 0.8) 48%,
-    rgba(255, 255, 255, 0.6) 52%,
+    rgba(255, 255, 255, 0.4) 44%,
+    rgba(255, 255, 255, 0.7) 48%,
+    rgba(255, 255, 255, 0.4) 52%,
     rgba(255, 255, 255, 0.0) 61%,
     transparent 71%
   );
-  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.3));
+  filter: blur(1px);
 }
 
 .dark .achievement-shine {
@@ -655,13 +655,14 @@
     rgba(192, 192, 210, 0.15) 56%,
     transparent 66%
   );
+  filter: none;
 }
 
-/* Achievement card glow - light: gold, dark: silver */
+/* Achievement card glow - soft ambient light */
 .achievement-glow {
   box-shadow:
-    inset 0 0 30px rgba(255, 255, 255, 0.4),
-    0 0 20px -3px rgba(245, 158, 11, 0.2);
+    inset 0 0 40px rgba(255, 255, 255, 0.3),
+    0 0 30px -5px rgba(255, 255, 255, 0.15);
 }
 
 .dark .achievement-glow {
