@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { AchievementView } from '@/stores/achievement';
-import { TIER_COLORS, TIER_SCORES, TIER_ICONS, CATEGORY_LABELS, type Tier, type Category } from '@/types/achievement';
+import { TIER_COLORS, TIER_SCORES, TIER_ICONS, type Tier } from '@/types/achievement';
 import { TierBadge } from './TierBadge';
 import { t } from '@/locales';
 
@@ -20,7 +20,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
   return (
     <div
       className={cn(
-        'group relative rounded-xl border p-4 transition-all duration-200 min-w-0',
+        'group relative rounded-xl border p-4 transition-all duration-200 min-w-0 overflow-hidden',
         'hover:shadow-md hover:-translate-y-0.5',
         isUnlocked
           ? cn(colors.bg, colors.border, 'shadow-sm')
@@ -28,6 +28,18 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
         isHidden && 'opacity-50',
       )}
     >
+      {/* Shine sweep effect for unlocked cards */}
+      {isUnlocked && (
+        <div
+          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100"
+          style={{
+            background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.2) 45%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.2) 55%, transparent 60%)',
+            transform: 'translateX(-100%)',
+            transition: 'opacity 0.2s',
+            animation: 'shine-sweep 0.6s ease-in-out 0.1s forwards',
+          }}
+        />
+      )}
       {/* Icon + Tier badge */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
@@ -44,7 +56,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
         </span>
       </div>
 
-      {/* Name + Category */}
+      {/* Name */}
       <h4 className={cn('text-sm font-semibold leading-tight mb-1', isUnlocked ? 'text-foreground' : 'text-muted-foreground')}>
         {isHidden ? t('achievement.hidden') : t(nameKey)}
       </h4>
@@ -57,7 +69,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
         <div className="space-y-1.5">
           <div className="h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', colors.text.replace('text-', 'bg-'))}
+              className={cn('h-full rounded-full transition-all duration-500', colors.bar)}
               style={{ width: `${progress * 100}%` }}
             />
           </div>
@@ -73,13 +85,6 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
           {new Date(unlockedAt).toLocaleDateString()}
         </div>
       )}
-
-      {/* Category tag */}
-      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-        <span className="text-[10px] text-muted-foreground">
-          {CATEGORY_LABELS[category as Category] || category}
-        </span>
-      </div>
     </div>
   );
 }

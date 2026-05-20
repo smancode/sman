@@ -121,14 +121,6 @@ const defs: AchievementDef[] = [
   { id: 'cron_500', category: 'advanced', tier: 'diamond', nameKey: 'achievement.cron_500', descKey: 'achievement.cron_500.desc', icon: '⏰', hidden: false, condition: { metric: 'total_cron_runs', threshold: 500 } },
   { id: 'cron_1k', category: 'advanced', tier: 'star', nameKey: 'achievement.cron_1k', descKey: 'achievement.cron_1k.desc', icon: '⏰', hidden: false, condition: { metric: 'total_cron_runs', threshold: 1000 } },
 
-  // ── Advanced: Batch ──
-  { id: 'batch_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.batch_1', descKey: 'achievement.batch_1.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 1 } },
-  { id: 'batch_50', category: 'advanced', tier: 'silver', nameKey: 'achievement.batch_50', descKey: 'achievement.batch_50.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 50 } },
-  { id: 'batch_200', category: 'advanced', tier: 'gold', nameKey: 'achievement.batch_200', descKey: 'achievement.batch_200.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 200 } },
-  { id: 'batch_1k', category: 'advanced', tier: 'platinum', nameKey: 'achievement.batch_1k', descKey: 'achievement.batch_1k.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 1000 } },
-  { id: 'batch_5k', category: 'advanced', tier: 'diamond', nameKey: 'achievement.batch_5k', descKey: 'achievement.batch_5k.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 5000 } },
-  { id: 'batch_20k', category: 'advanced', tier: 'star', nameKey: 'achievement.batch_20k', descKey: 'achievement.batch_20k.desc', icon: '📦', hidden: false, condition: { metric: 'total_batch_items', threshold: 20000 } },
-
   // ── Advanced: Smart Path ──
   { id: 'path_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.path_1', descKey: 'achievement.path_1.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 1 } },
   { id: 'path_10', category: 'advanced', tier: 'silver', nameKey: 'achievement.path_10', descKey: 'achievement.path_10.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 10 } },
@@ -154,14 +146,12 @@ const defs: AchievementDef[] = [
   { id: 'ws_100', category: 'exploration', tier: 'star', nameKey: 'achievement.ws_100', descKey: 'achievement.ws_100.desc', icon: '📁', hidden: false, condition: { metric: 'total_workspaces', threshold: 100 } },
 
   // ── Exploration: Tokens ──
-  { id: 'token_1w', category: 'exploration', tier: 'bronze', nameKey: 'achievement.token_1w', descKey: 'achievement.token_1w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 10000 } },
-  { id: 'token_10w', category: 'exploration', tier: 'silver', nameKey: 'achievement.token_10w', descKey: 'achievement.token_10w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 100000 } },
-  { id: 'token_50w', category: 'exploration', tier: 'gold', nameKey: 'achievement.token_50w', descKey: 'achievement.token_50w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 500000 } },
-  { id: 'token_100w', category: 'exploration', tier: 'platinum', nameKey: 'achievement.token_100w', descKey: 'achievement.token_100w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 1000000 } },
-  { id: 'token_500w', category: 'exploration', tier: 'diamond', nameKey: 'achievement.token_500w', descKey: 'achievement.token_500w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 5000000 } },
-  { id: 'token_1000w', category: 'exploration', tier: 'star', nameKey: 'achievement.token_1000w', descKey: 'achievement.token_1000w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 10000000 } },
-  { id: 'token_5000w', category: 'exploration', tier: 'king', nameKey: 'achievement.token_5000w', descKey: 'achievement.token_5000w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 50000000 } },
-  { id: 'token_1yi', category: 'exploration', tier: 'legend', nameKey: 'achievement.token_1yi', descKey: 'achievement.token_1yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 100000000 } },
+  { id: 'token_100w', category: 'exploration', tier: 'bronze', nameKey: 'achievement.token_100w', descKey: 'achievement.token_100w.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 1000000 } },
+  { id: 'token_1yi', category: 'exploration', tier: 'silver', nameKey: 'achievement.token_1yi', descKey: 'achievement.token_1yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 100000000 } },
+  { id: 'token_10yi', category: 'exploration', tier: 'gold', nameKey: 'achievement.token_10yi', descKey: 'achievement.token_10yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 1000000000 } },
+  { id: 'token_50yi', category: 'exploration', tier: 'platinum', nameKey: 'achievement.token_50yi', descKey: 'achievement.token_50yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 5000000000 } },
+  { id: 'token_100yi', category: 'exploration', tier: 'diamond', nameKey: 'achievement.token_100yi', descKey: 'achievement.token_100yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 10000000000 } },
+  { id: 'token_300yi', category: 'exploration', tier: 'star', nameKey: 'achievement.token_300yi', descKey: 'achievement.token_300yi.desc', icon: '🪙', hidden: false, condition: { metric: 'total_tokens', threshold: 30000000000 } },
 
   // ── Exploration: Code View & Git ──
   { id: 'codeview_10', category: 'exploration', tier: 'bronze', nameKey: 'achievement.codeview_10', descKey: 'achievement.codeview_10.desc', icon: '👁️', hidden: false, condition: { metric: 'total_code_views', threshold: 10 } },

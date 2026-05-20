@@ -55,6 +55,7 @@ interface AchievementState {
   recentUnlocks: AchievementUnlockEvent[];
   leaderboard: LeaderboardEntry[];
   leaderboardOnline: boolean;
+  leaderboardClientId: string;
   fetchSummary: () => void;
   fetchLeaderboard: () => void;
   clearRecentUnlocks: () => void;
@@ -102,6 +103,7 @@ function registerAchievementListeners(): () => void {
       useAchievementStore.setState({
         leaderboard: (msg.entries as LeaderboardEntry[]) || [],
         leaderboardOnline: (msg.isOnline as boolean) || false,
+        leaderboardClientId: (msg.clientId as string) || '',
       });
     }
   };
@@ -145,6 +147,7 @@ export const useAchievementStore = create<AchievementState>((set) => ({
   recentUnlocks: [],
   leaderboard: [],
   leaderboardOnline: false,
+  leaderboardClientId: '',
 
   fetchSummary: () => {
     ensureListeners();

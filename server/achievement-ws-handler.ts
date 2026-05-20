@@ -20,18 +20,22 @@ export function handleAchievementMessage(
       return true;
     }
     case 'achievement.leaderboard': {
-      engine.fetchLeaderboard().then(result => {
+      // Upload first, then fetch
+      const clientId = engine.getClientIdStr();
+      engine.uploadToLeaderboard().then(() => engine.fetchLeaderboard()).then(result => {
         if (result) {
           ws.send(JSON.stringify({
             type: 'achievement.leaderboard',
             entries: result.entries,
             isOnline: true,
+            clientId,
           }));
         } else {
           ws.send(JSON.stringify({
             type: 'achievement.leaderboard',
             entries: [],
             isOnline: false,
+            clientId,
           }));
         }
       });

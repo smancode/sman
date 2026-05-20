@@ -6,7 +6,7 @@ import { Medal } from 'lucide-react';
 
 export function LeaderboardTab() {
   useLocale();
-  const { leaderboard, leaderboardOnline } = useAchievementStore();
+  const { leaderboard, leaderboardOnline, leaderboardClientId } = useAchievementStore();
 
   if (!leaderboardOnline && leaderboard.length === 0) {
     return (
@@ -24,18 +24,51 @@ export function LeaderboardTab() {
     );
   }
 
+  // Find self — agentName ends with clientId.slice(-6)
+  const selfSuffix = leaderboardClientId ? leaderboardClientId.slice(-6) : '';
+  const selfIndex = selfSuffix
+    ? leaderboard.findIndex((e) => e.agentName.endsWith(`@${selfSuffix}`))
+    : -1;
+
+  // Build display list: top 5 + ... + self neighborhood
+  const displayEntries: (LeaderboardEntry | 'ellipsis')[] = [];
+
+  if (selfIndex <= 4) {
+    // Self is in top 5, just show top 10 or all
+    const show = leaderboard.slice(0, Math.min(10, leaderboard.length));
+    displayEntries.push(...show);
+  } else {
+    // Show top 5
+    displayEntries.push(...leaderboard.slice(0, 5));
+    displayEntries.push('ellipsis');
+    // Self + 2 before + 2 after
+    const start = Math.max(5, selfIndex - 2);
+    const end = Math.min(leaderboard.length, selfIndex + 3);
+    displayEntries.push(...leaderboard.slice(start, end));
+  }
+
   return (
     <div className="space-y-1.5">
-      {leaderboard.map((entry) => {
+      {displayEntries.map((entry, i) => {
+        if (entry === 'ellipsis') {
+          return (
+            <div key={`ellipsis-${i}`} className="flex items-center justify-center py-1">
+              <span className="text-muted-foreground text-[12px]">· · ·</span>
+            </div>
+          );
+        }
+
         const tier = entry.level as Tier;
         const tierColors = TIER_COLORS[tier];
         const isTop3 = entry.rank <= 3;
+        const isSelf = entry.agentName.endsWith(`@${selfSuffix}`);
         return (
           <div
             key={entry.rank}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
               isTop3 && 'bg-foreground/[0.03]',
+              isSelf && 'ring-1 ring-foreground/20 bg-foreground/[0.05]',
             )}
           >
             {/* Rank */}
@@ -61,7 +94,9 @@ export function LeaderboardTab() {
 
             {/* Name */}
             <div className="flex-1 min-w-0">
-              <span className="text-[13px] font-medium truncate block">{entry.agentName}</span>
+              <span className={cn('text-[13px] font-medium truncate block', isSelf && 'text-foreground')}>
+                {entry.agentName}
+              </span>
             </div>
 
             {/* Points */}
@@ -79,3 +114,11 @@ export function LeaderboardTab() {
     </div>
   );
 }
+
+type LeaderboardEntry = {
+  rank: number;
+  agentName: string;
+  totalPoints: number;
+  totalUnlocked: number;
+  level: string;
+};

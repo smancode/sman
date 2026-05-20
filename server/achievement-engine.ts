@@ -71,6 +71,9 @@ export class AchievementEngine {
       this.store.setStat('_initialized', 'true');
     }
 
+    // Clean up orphaned progress records for removed achievements
+    this.cleanOrphanedProgress();
+
     onAchievementEvent((event) => this.handleEvent(event));
 
     this.checkDayActive();
@@ -176,10 +179,6 @@ export class AchievementEngine {
 
         case 'cron_executed':
           this.incrementStat('total_cron_runs', metricsToUpdate);
-          break;
-
-        case 'batch_item_completed':
-          this.incrementStat('total_batch_items', metricsToUpdate);
           break;
 
         case 'smartpath_run':
@@ -341,9 +340,6 @@ export class AchievementEngine {
       const cronRuns = (db.prepare("SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'").get() as { c: number }).c;
       this.store.setStat('total_cron_runs', String(cronRuns));
 
-      // Batch items
-      const batchItems = (db.prepare("SELECT COUNT(*) as c FROM batch_items WHERE status IN ('completed', 'partial')").get() as { c: number }).c;
-      this.store.setStat('total_batch_items', String(batchItems));
 
       // Bot stats — extract platform from user_key prefix
       const botSessionRow = db.prepare("SELECT COUNT(DISTINCT session_id) as c FROM chatbot_sessions").get() as { c: number };
@@ -435,7 +431,6 @@ export class AchievementEngine {
         ['total_sessions', "SELECT COUNT(*) as c FROM sessions"],
         ['total_messages', "SELECT COUNT(*) as c FROM messages WHERE role = 'user'"],
         ['total_cron_runs', "SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'"],
-        ['total_batch_items', "SELECT COUNT(*) as c FROM batch_items WHERE status IN ('completed', 'partial')"],
       ];
 
       for (const [metric, sql] of reconciliations) {
@@ -552,7 +547,7 @@ export class AchievementEngine {
     return this.store.getStreak();
   }
 
-  private uploadToLeaderboard(): void {
+  async uploadToLeaderboard(): Promise<void> {
     if (!this.getHubUrl || !this.getClientId || !this.buildEncryptedRequest) return;
 
     const hubUrl = this.getHubUrl();
@@ -627,6 +622,24 @@ export class AchievementEngine {
     } catch {
       return null;
     }
+  }
+
+  private cleanOrphanedProgress(): void {
+    const validIds = new Set(ACHIEVEMENT_DEFINITIONS.map(d => d.id));
+    const db = this.store.getDatabase();
+    const rows = db.prepare('SELECT achievement_id FROM achievement_progress').all() as { achievement_id: string }[];
+    const orphans = rows.filter(r => !validIds.has(r.achievement_id));
+    if (orphans.length > 0) {
+      const del = db.prepare('DELETE FROM achievement_progress WHERE achievement_id = ?');
+      for (const o of orphans) {
+        del.run(o.achievement_id);
+        this.log.info(`Removed orphaned achievement: ${o.achievement_id}`);
+      }
+    }
+  }
+
+  getClientIdStr(): string {
+    return this.getClientId ? this.getClientId() : '';
   }
 
   close(): void {

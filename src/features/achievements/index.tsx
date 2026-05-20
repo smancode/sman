@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { useAchievementStore } from '@/stores/achievement';
 import { TIER_COLORS, TIER_ORDER, TIER_ICONS, CATEGORY_LABELS, type Category, type Tier } from '@/types/achievement';
+import { TIER_THRESHOLDS } from '@/types/achievement';
 import { TierBadge } from './TierBadge';
 import { AchievementCard } from './AchievementCard';
 import { AchievementToast } from './AchievementToast';
@@ -14,18 +15,20 @@ const TABS: { key: FilterTab; labelKey: string }[] = [
   { key: 'all', labelKey: 'achievement.tabAll' },
   { key: 'unlocked', labelKey: 'achievement.tabUnlocked' },
   { key: 'locked', labelKey: 'achievement.tabLocked' },
-  { key: 'leaderboard', labelKey: 'achievement.leaderboard' },
   { key: 'conversation', labelKey: 'achievement.catConversation' },
+  { key: 'bot', labelKey: 'achievement.catBot' },
   { key: 'advanced', labelKey: 'achievement.catAdvanced' },
   { key: 'exploration', labelKey: 'achievement.catExploration' },
   { key: 'collaboration', labelKey: 'achievement.catCollaboration' },
-  { key: 'bot', labelKey: 'achievement.catBot' },
+  { key: 'leaderboard', labelKey: 'achievement.leaderboard' },
 ];
+
+const TAB_BREAKS = new Set(['conversation', 'leaderboard']);
 
 export function AchievementsPage() {
   useLocale();
   const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [activeTab, setActiveTab] = useState<FilterTab>('unlocked');
 
   useEffect(() => {
     fetchSummary();
@@ -77,7 +80,7 @@ export function AchievementsPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" />
+            <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" currentPoints={summary.totalPoints} />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold">{t('achievement.title')}</h1>
@@ -102,7 +105,7 @@ export function AchievementsPage() {
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={cn('h-full rounded-full transition-all duration-700', levelColors.text.replace('text-', 'bg-'))}
+                  className={cn('h-full rounded-full transition-all duration-700', levelColors.bar)}
                   style={{ width: `${lp.progress * 100}%` }}
                 />
               </div>
@@ -118,21 +121,55 @@ export function AchievementsPage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex flex-wrap gap-1.5 mb-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => handleTabChange(tab.key)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
-                activeTab === tab.key
-                  ? 'bg-foreground/10 text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-              )}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
+        <div className="mb-6 space-y-1.5">
+          <div className="flex flex-wrap gap-1.5">
+            {TABS.filter((_, i) => i < 3).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabChange(tab.key)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
+                  activeTab === tab.key
+                    ? 'bg-foreground/10 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {TABS.filter((_, i) => i >= 3 && i < TABS.length - 1).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabChange(tab.key)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
+                  activeTab === tab.key
+                    ? 'bg-foreground/10 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {TABS.filter((_, i) => i === TABS.length - 1).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabChange(tab.key)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
+                  activeTab === tab.key
+                    ? 'bg-foreground/10 text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                )}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content */}

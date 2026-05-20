@@ -311,9 +311,6 @@ export class BatchEngine {
 
       if (!exec.cancelled) {
         const counts = this.store.getItemCounts(taskId);
-        for (let i = 0; i < (counts.success || 0); i++) {
-          emitAchievementEvent({ type: 'batch_item_completed', data: {} });
-        }
       }
     }
   }

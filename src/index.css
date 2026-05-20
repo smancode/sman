@@ -630,3 +630,9 @@
   font-size: 0.8125rem;
   line-height: 1.5;
 }
+
+/* Achievement card shine sweep */
+@keyframes shine-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
