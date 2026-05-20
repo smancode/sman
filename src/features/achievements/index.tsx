@@ -100,7 +100,7 @@ export function AchievementsPage() {
                 <h1 className="text-2xl font-bold dark:font-semibold tracking-tight">{t('achievement.title')}</h1>
                 <span className={cn(
                   'text-[12px] font-bold dark:font-medium px-2 py-0.5',
-                  'border-2 border-black dark:border-0 dark:rounded-full',
+                  'border-2 border-black dark:border-white/20 dark:rounded-full',
                   levelColors.bg, levelColors.text,
                 )}>
                   Lv.{TIER_ORDER.indexOf(levelTier) + 1} {t(`achievement.tier.${levelTier}`)}
@@ -157,7 +157,7 @@ export function AchievementsPage() {
 
           {/* Streak */}
           {summary.streak.current > 0 && (
-            <div className="mt-3 text-[12px] inline-block px-2 py-0.5 border-2 border-black dark:border-0 dark:rounded-full font-bold dark:font-medium bg-orange-200 dark:bg-transparent dark:text-muted-foreground">
+            <div className="mt-3 text-[12px] inline-block px-2 py-0.5 border-2 border-black dark:border-white/20 dark:rounded-full font-bold dark:font-medium bg-orange-200 dark:bg-transparent dark:text-muted-foreground">
               {t('achievement.streak', { current: String(summary.streak.current), longest: String(summary.streak.longest) })}
             </div>
           )}
@@ -170,7 +170,7 @@ export function AchievementsPage() {
               onClick={() => setActiveTab('all')}
               className={cn(
                 'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                'rounded-none dark:rounded-none',
+                'rounded-none dark:rounded-lg',
                 activeTab !== 'leaderboard'
                   ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
                   : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
@@ -182,10 +182,10 @@ export function AchievementsPage() {
               onClick={() => handleTabChange('leaderboard')}
               className={cn(
                 'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                'rounded-none dark:rounded-none',
+                'rounded-none dark:rounded-lg',
                 activeTab === 'leaderboard'
-                  ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
-                  : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+                  ? 'bg-yellow-300 text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
+                  : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-yellow-100 dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
               )}
             >
               {t('achievement.leaderboard')}
@@ -205,7 +205,7 @@ export function AchievementsPage() {
                   onClick={() => handleTabChange(tab.key)}
                   className={cn(
                     'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-                    'rounded-none dark:rounded-none',
+                    'rounded-none dark:rounded-lg',
                     activeTab === tab.key
                       ? 'bg-muted text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-cyan-300 dark:border-cyan-500/30 dark:shadow-none'
                       : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',

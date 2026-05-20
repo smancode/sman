@@ -39,10 +39,10 @@ export function LeaderboardDimensions() {
           onClick={() => fetchLeaderboard(opt.key === 'total' ? undefined : opt.key)}
           className={cn(
             'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-            'rounded-none dark:rounded-none',
+            'rounded-none dark:rounded-lg',
             activeDimension === opt.key
-              ? 'bg-muted text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-fuchsia-300 dark:border-fuchsia-500/30 dark:shadow-none'
-              : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+              ? 'bg-yellow-100 text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-fuchsia-300 dark:border-fuchsia-500/30 dark:shadow-none'
+              : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-yellow-50 dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
           )}
         >
           {t(opt.labelKey)}
