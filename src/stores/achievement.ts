@@ -21,12 +21,12 @@ export interface AchievementSummary {
   streak: { current: number; longest: number };
   totalPoints: number;
   level: string;
-  levelProgress: { current: number; next: number; percent: number };
+  levelProgress: { current: number; next: number; currentMin: number; nextMin: number; progress: number };
   totalUnlocked: number;
   totalAchievements: number;
 }
 
-interface AchievementUnlockEvent {
+export interface AchievementUnlockEvent {
   achievement: {
     id: string;
     nameKey: string;
@@ -72,7 +72,7 @@ function registerAchievementListeners(): () => void {
           streak: (msg.streak as { current: number; longest: number }) || { current: 0, longest: 0 },
           totalPoints: (msg.totalPoints as number) || 0,
           level: (msg.level as string) || 'bronze',
-          levelProgress: (msg.levelProgress as { current: number; next: number; percent: number }) || { current: 0, next: 20, percent: 0 },
+          levelProgress: (msg.levelProgress as { current: number; next: number; currentMin: number; nextMin: number; progress: number }) || { current: 0, next: 20, currentMin: 0, nextMin: 20, progress: 0 },
           totalUnlocked: (msg.totalUnlocked as number) || 0,
           totalAchievements: (msg.totalAchievements as number) || 0,
         },
