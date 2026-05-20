@@ -20,11 +20,21 @@ export function handleAchievementMessage(
       return true;
     }
     case 'achievement.leaderboard': {
-      ws.send(JSON.stringify({
-        type: 'achievement.leaderboard',
-        entries: [],
-        isOnline: false,
-      }));
+      engine.fetchLeaderboard().then(result => {
+        if (result) {
+          ws.send(JSON.stringify({
+            type: 'achievement.leaderboard',
+            entries: result.entries,
+            isOnline: true,
+          }));
+        } else {
+          ws.send(JSON.stringify({
+            type: 'achievement.leaderboard',
+            entries: [],
+            isOnline: false,
+          }));
+        }
+      });
       return true;
     }
     default:

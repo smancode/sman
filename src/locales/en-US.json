@@ -3856,5 +3856,18 @@
   "achievement.comeback": { "text": "The Return", "context": "Return after 7 days away" },
   "achievement.comeback.desc": { "text": "Return after being away for 7+ days", "context": "" },
   "achievement.new_year": { "text": "Happy New Year", "context": "Send message on Jan 1" },
-  "achievement.new_year.desc": { "text": "Send a message on New Year's Day", "context": "" }
+  "achievement.new_year.desc": { "text": "Send a message on New Year's Day", "context": "" },
+  "achievement.leaderboard": { "text": "Leaderboard", "context": "Leaderboard tab" },
+  "achievement.leaderboard.empty": { "text": "No leaderboard data", "context": "Leaderboard empty" },
+  "achievement.leaderboard.offline": { "text": "Unable to connect to leaderboard server", "context": "Leaderboard offline" },
+  "achievement.leaderboard.rank": { "text": "Rank #${rank}", "context": "Leaderboard rank" },
+  "achievement.leaderboard.points": { "text": "${points} pts", "context": "Leaderboard points" },
+  "achievement.tabAll": { "text": "All", "context": "Achievement filter - all" },
+  "achievement.tabUnlocked": { "text": "Unlocked", "context": "Achievement filter - unlocked" },
+  "achievement.tabLocked": { "text": "Locked", "context": "Achievement filter - locked" },
+  "achievement.catConversation": { "text": "Conversation", "context": "Achievement category - conversation" },
+  "achievement.catAdvanced": { "text": "Advanced", "context": "Achievement category - advanced" },
+  "achievement.catExploration": { "text": "Exploration", "context": "Achievement category - exploration" },
+  "achievement.catCollaboration": { "text": "Collaboration", "context": "Achievement category - collaboration" },
+  "achievement.catBot": { "text": "Bot", "context": "Achievement category - bot" }
 }

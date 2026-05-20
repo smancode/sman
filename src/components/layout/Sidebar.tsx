@@ -10,7 +10,6 @@ import {
   ChevronUp,
   Pin,
   Users,
-  Trophy,
   Scroll,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -74,8 +73,6 @@ export function Sidebar() {
       {/* Footer - 固定在底部，悬浮展开 */}
       <div
         className="p-2 shrink-0 space-y-0.5"
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
       >
         {/* 可折叠区域：协作星图、定时任务、地球路径 */}
         <div
@@ -189,52 +186,59 @@ export function Sidebar() {
 
         {/* 设置行（始终可见） */}
         <div className="flex items-center gap-1">
-          <ChevronUp
-            className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
-              expanded ? 'rotate-180' : '',
-            )}
-          />
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200 flex-1',
-                'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-              )
-            }
+          {/* hover 区域：只在 ChevronUp + 设置 + Pin 上触发展开 */}
+          <div
+            className="flex items-center gap-1 flex-1 min-w-0"
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
           >
-            {({ isActive }) => (
-              <>
-                <div
-                  className={cn(
-                    'flex shrink-0 items-center justify-center',
-                    isActive ? 'text-foreground' : 'text-muted-foreground',
-                  )}
-                >
-                  <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-                </div>
-                <span>{t('menu.settings')}</span>
-              </>
-            )}
-          </NavLink>
-
-          {/* Pin 按钮：悬浮时显示，点击固定展开 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'h-7 w-7 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-md transition-opacity duration-150',
-              hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
-            )}
-            onClick={() => setPinned((p) => { const next = !p; localStorage.setItem('sman-sidebar-pinned', String(next)); return next; })}
-            title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
-          >
-            <Pin
-              className={cn('h-3.5 w-3.5', pinned && 'text-foreground rotate-45')}
+            <ChevronUp
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
+                expanded ? 'rotate-180' : '',
+              )}
             />
-          </Button>
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200 flex-1 min-w-0',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>{t('menu.settings')}</span>
+                </>
+              )}
+            </NavLink>
+
+            {/* Pin 按钮：悬浮时显示，点击固定展开 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-7 w-7 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-md transition-opacity duration-150',
+                hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
+              )}
+              onClick={() => setPinned((p) => { const next = !p; localStorage.setItem('sman-sidebar-pinned', String(next)); return next; })}
+              title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
+            >
+              <Pin
+                className={cn('h-3.5 w-3.5', pinned && 'text-foreground rotate-45')}
+              />
+            </Button>
+          </div>
 
           {/* Connection status */}
           <div
@@ -255,6 +259,21 @@ export function Sidebar() {
             }
           />
 
+          {/* Achievement icon */}
+          <NavLink
+            to="/achievements"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center justify-center rounded-lg transition-all duration-150',
+                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+              )
+            }
+            title={t('menu.achievements')}
+          >
+            <Scroll className="h-[18px] w-[18px]" strokeWidth={2} />
+          </NavLink>
+
           {/* Theme toggle */}
           <Button
             variant="ghost"
@@ -270,23 +289,6 @@ export function Sidebar() {
             )}
           </Button>
         </div>
-      </div>
-
-      {/* Achievement icon — outside footer hover zone */}
-      <div className="absolute bottom-3 right-[52px]">
-        <NavLink
-          to="/achievements"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center justify-center rounded-lg transition-all duration-150',
-              'hover:bg-[hsl(var(--muted))] h-9 w-9',
-              isActive ? 'text-foreground' : 'text-muted-foreground',
-            )
-          }
-          title={t('menu.achievements')}
-        >
-          <Scroll className="h-[18px] w-[18px]" strokeWidth={2} />
-        </NavLink>
       </div>
     </aside>
   );

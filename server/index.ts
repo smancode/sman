@@ -415,6 +415,11 @@ const achievementStore = new AchievementStore(dbPath);
 const achievementEngine = new AchievementEngine(achievementStore);
 achievementEngine.setSessionStore(store);
 achievementEngine.setBroadcast((msg: string) => { broadcast(msg); });
+achievementEngine.setHubDeps(
+  () => getServerBaseUrl(settingsManager),
+  () => getClientId(),
+  (data: Record<string, unknown>) => buildEncryptedRequest(data),
+);
 achievementEngine.start();
 
 // Skills cache: 1-minute TTL to avoid frequent disk reads

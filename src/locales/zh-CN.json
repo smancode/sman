@@ -3856,5 +3856,18 @@
   "achievement.comeback": { "text": "王者归来", "context": "离开7天后回归" },
   "achievement.comeback.desc": { "text": "离开 7 天后再次使用", "context": "" },
   "achievement.new_year": { "text": "新年快乐", "context": "元旦发送消息" },
-  "achievement.new_year.desc": { "text": "在元旦当天发送消息", "context": "" }
+  "achievement.new_year.desc": { "text": "在元旦当天发送消息", "context": "" },
+  "achievement.leaderboard": { "text": "排行榜", "context": "排行榜标签" },
+  "achievement.leaderboard.empty": { "text": "暂无排行数据", "context": "排行榜为空" },
+  "achievement.leaderboard.offline": { "text": "无法连接排行服务器", "context": "排行榜离线" },
+  "achievement.leaderboard.rank": { "text": "第 ${rank} 名", "context": "排行名次" },
+  "achievement.leaderboard.points": { "text": "${points} 分", "context": "排行榜积分" },
+  "achievement.tabAll": { "text": "全部", "context": "成就筛选-全部" },
+  "achievement.tabUnlocked": { "text": "已解锁", "context": "成就筛选-已解锁" },
+  "achievement.tabLocked": { "text": "未解锁", "context": "成就筛选-未解锁" },
+  "achievement.catConversation": { "text": "对话", "context": "成就分类-对话" },
+  "achievement.catAdvanced": { "text": "进阶", "context": "成就分类-进阶" },
+  "achievement.catExploration": { "text": "探索", "context": "成就分类-探索" },
+  "achievement.catCollaboration": { "text": "协作", "context": "成就分类-协作" },
+  "achievement.catBot": { "text": "Bot", "context": "成就分类-Bot" }
 }

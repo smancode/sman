@@ -39,6 +39,10 @@ export class AchievementEngine {
   private sessionIdMessageCount: Map<string, number> = new Map();
   private sessionStore: any = null;
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+  private leaderboardTimer: ReturnType<typeof setInterval> | null = null;
+  private getHubUrl: (() => string | null) | null = null;
+  private getClientId: (() => string) | null = null;
+  private buildEncryptedRequest: ((data: Record<string, unknown>) => any) | null = null;
 
   constructor(store: AchievementStore) {
     this.store = store;
@@ -51,6 +55,12 @@ export class AchievementEngine {
 
   setSessionStore(store: any): void {
     this.sessionStore = store;
+  }
+
+  setHubDeps(getHubUrl: () => string | null, getClientId: () => string, buildEncryptedRequest: (data: Record<string, unknown>) => any): void {
+    this.getHubUrl = getHubUrl;
+    this.getClientId = getClientId;
+    this.buildEncryptedRequest = buildEncryptedRequest;
   }
 
   start(): void {
@@ -70,6 +80,11 @@ export class AchievementEngine {
       this.log.info('Running periodic DB reconciliation...');
       this.reconcileWithDB();
     }, 30 * 60 * 1000);
+
+    // Upload to leaderboard every hour
+    this.leaderboardTimer = setInterval(() => {
+      this.uploadToLeaderboard();
+    }, 60 * 60 * 1000);
 
     this.log.info(`Achievement engine started. Level: ${calculateLevel(this.getTotalPoints())}`);
   }
@@ -537,10 +552,91 @@ export class AchievementEngine {
     return this.store.getStreak();
   }
 
+  private uploadToLeaderboard(): void {
+    if (!this.getHubUrl || !this.getClientId || !this.buildEncryptedRequest) return;
+
+    const hubUrl = this.getHubUrl();
+    if (!hubUrl) return;
+
+    // Reconcile before upload
+    this.reconcileWithDB();
+
+    const totalPoints = this.getTotalPoints();
+    const level = calculateLevel(totalPoints);
+    const clientId = this.getClientId();
+
+    // Count tier distribution
+    const tierCounts: Record<string, number> = {};
+    for (const def of ACHIEVEMENT_DEFINITIONS) {
+      const progress = this.store.getProgress(def.id);
+      if (progress?.unlockedAt) {
+        tierCounts[def.tier] = (tierCounts[def.tier] || 0) + 1;
+      }
+    }
+
+    const summary = this.getSummary();
+
+    try {
+      const payload = {
+        agentId: clientId,
+        agentName: `${os.userInfo().username}@${clientId.slice(-6)}`,
+        totalPoints,
+        totalUnlocked: summary.totalUnlocked,
+        level,
+        tierCounts: JSON.stringify(tierCounts),
+      };
+      const encrypted = this.buildEncryptedRequest(payload);
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 10_000);
+
+      fetch(`${hubUrl}/api/achievement-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(encrypted),
+        signal: controller.signal,
+      }).then(res => {
+        clearTimeout(tid);
+        if (res.ok) {
+          this.log.info(`Leaderboard uploaded: ${totalPoints} pts, level ${level}`);
+        } else {
+          this.log.warn(`Leaderboard upload failed: ${res.status}`);
+        }
+      }).catch(err => {
+        clearTimeout(tid);
+        this.log.warn(`Leaderboard upload error: ${err}`);
+      });
+    } catch (err) {
+      this.log.error(`Leaderboard upload error: ${err}`);
+    }
+  }
+
+  async fetchLeaderboard(): Promise<{ entries: { rank: number; agentName: string; totalPoints: number; totalUnlocked: number; level: string }[] } | null> {
+    if (!this.getHubUrl) return null;
+    const hubUrl = this.getHubUrl();
+    if (!hubUrl) return null;
+
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 10_000);
+      const res = await fetch(`${hubUrl}/api/achievement-leaderboard`, {
+        signal: controller.signal,
+      });
+      clearTimeout(tid);
+      if (!res.ok) return null;
+      return await res.json() as any;
+    } catch {
+      return null;
+    }
+  }
+
   close(): void {
     if (this.reconcileTimer) {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = null;
+    }
+    if (this.leaderboardTimer) {
+      clearInterval(this.leaderboardTimer);
+      this.leaderboardTimer = null;
     }
     removeAllAchievementListeners();
   }

@@ -41,11 +41,22 @@ export interface AchievementUnlockEvent {
   level: string;
 }
 
+export interface LeaderboardEntry {
+  rank: number;
+  agentName: string;
+  totalPoints: number;
+  totalUnlocked: number;
+  level: string;
+}
+
 interface AchievementState {
   summary: AchievementSummary | null;
   isLoading: boolean;
   recentUnlocks: AchievementUnlockEvent[];
+  leaderboard: LeaderboardEntry[];
+  leaderboardOnline: boolean;
   fetchSummary: () => void;
+  fetchLeaderboard: () => void;
   clearRecentUnlocks: () => void;
 }
 
@@ -86,14 +97,23 @@ function registerAchievementListeners(): () => void {
         recentUnlocks: [unlock, ...state.recentUnlocks].slice(0, 5),
       }));
     }
+
+    if (msg.type === 'achievement.leaderboard') {
+      useAchievementStore.setState({
+        leaderboard: (msg.entries as LeaderboardEntry[]) || [],
+        leaderboardOnline: (msg.isOnline as boolean) || false,
+      });
+    }
   };
 
   client.on('achievement.data', onMessage);
   client.on('achievement.unlock', onMessage);
+  client.on('achievement.leaderboard', onMessage);
 
   return () => {
     client.off('achievement.data', onMessage);
     client.off('achievement.unlock', onMessage);
+    client.off('achievement.leaderboard', onMessage);
   };
 }
 
@@ -123,11 +143,18 @@ export const useAchievementStore = create<AchievementState>((set) => ({
   summary: null,
   isLoading: false,
   recentUnlocks: [],
+  leaderboard: [],
+  leaderboardOnline: false,
 
   fetchSummary: () => {
     ensureListeners();
     set({ isLoading: true });
     sendWsMessage({ type: 'achievement.list' });
+  },
+
+  fetchLeaderboard: () => {
+    ensureListeners();
+    sendWsMessage({ type: 'achievement.leaderboard' });
   },
 
   clearRecentUnlocks: () => {

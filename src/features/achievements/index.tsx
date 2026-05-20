@@ -5,29 +5,38 @@ import { TIER_COLORS, TIER_ORDER, TIER_ICONS, CATEGORY_LABELS, type Category, ty
 import { TierBadge } from './TierBadge';
 import { AchievementCard } from './AchievementCard';
 import { AchievementToast } from './AchievementToast';
+import { LeaderboardTab } from './LeaderboardTab';
 import { t, useLocale } from '@/locales';
 
-type FilterTab = 'all' | Category | 'unlocked' | 'locked';
+type FilterTab = 'all' | Category | 'unlocked' | 'locked' | 'leaderboard';
 
-const TABS: { key: FilterTab; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'unlocked', label: '已解锁' },
-  { key: 'locked', label: '未解锁' },
-  { key: 'conversation', label: '对话' },
-  { key: 'advanced', label: '进阶' },
-  { key: 'exploration', label: '探索' },
-  { key: 'collaboration', label: '协作' },
-  { key: 'bot', label: 'Bot' },
+const TABS: { key: FilterTab; labelKey: string }[] = [
+  { key: 'all', labelKey: 'achievement.tabAll' },
+  { key: 'unlocked', labelKey: 'achievement.tabUnlocked' },
+  { key: 'locked', labelKey: 'achievement.tabLocked' },
+  { key: 'leaderboard', labelKey: 'achievement.leaderboard' },
+  { key: 'conversation', labelKey: 'achievement.catConversation' },
+  { key: 'advanced', labelKey: 'achievement.catAdvanced' },
+  { key: 'exploration', labelKey: 'achievement.catExploration' },
+  { key: 'collaboration', labelKey: 'achievement.catCollaboration' },
+  { key: 'bot', labelKey: 'achievement.catBot' },
 ];
 
 export function AchievementsPage() {
   useLocale();
-  const { summary, fetchSummary, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
+  const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
+
+  const handleTabChange = (tab: FilterTab) => {
+    setActiveTab(tab);
+    if (tab === 'leaderboard') {
+      fetchLeaderboard();
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!summary) return [];
@@ -113,7 +122,7 @@ export function AchievementsPage() {
           {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150',
                 activeTab === tab.key
@@ -121,22 +130,27 @@ export function AchievementsPage() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
               )}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
 
-        {/* Achievement grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filtered.map((a) => (
-            <AchievementCard key={a.id} achievement={a} />
-          ))}
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground text-sm">
-            {t('achievement.noResults')}
-          </div>
+        {/* Content */}
+        {activeTab === 'leaderboard' ? (
+          <LeaderboardTab />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {filtered.map((a) => (
+                <AchievementCard key={a.id} achievement={a} />
+              ))}
+            </div>
+            {filtered.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground text-sm">
+                {t('achievement.noResults')}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
