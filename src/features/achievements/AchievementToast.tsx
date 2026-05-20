@@ -33,7 +33,7 @@ export function AchievementToast({ unlock, onDismiss }: AchievementToastProps) {
       )}
     >
       <div className={cn(
-        'flex items-center gap-3 px-4 py-3 border-2 border-black dark:border dark:border-border/30 rounded-none dark:rounded-2xl shadow-[4px_4px_0_0_#1e293b] dark:shadow-xl',
+        'flex items-center gap-3 px-4 py-3 border-2 border-black dark:border dark:border-border/30 rounded-none dark:rounded-none shadow-[4px_4px_0_0_#1e293b] dark:shadow-xl',
         'bg-white dark:bg-card/80 dark:backdrop-blur-xl',
       )}>
         <span className="text-2xl">{achievement.icon}</span>

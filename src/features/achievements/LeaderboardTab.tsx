@@ -39,7 +39,7 @@ export function LeaderboardDimensions() {
           onClick={() => fetchLeaderboard(opt.key === 'total' ? undefined : opt.key)}
           className={cn(
             'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
-            'rounded-none dark:rounded-lg',
+            'rounded-none dark:rounded-none',
             activeDimension === opt.key
               ? 'bg-yellow-100 text-foreground border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-white/10 dark:text-fuchsia-300 dark:border-fuchsia-500/30 dark:shadow-none'
               : 'border-2 border-transparent text-muted-foreground bg-white dark:bg-transparent dark:border-0 hover:border-black dark:hover:bg-yellow-50 dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
@@ -129,7 +129,7 @@ export function LeaderboardTab() {
               key={entry.rank}
               className={cn(
                 'flex items-center gap-3 px-4 py-2.5 transition-all duration-200',
-                'dark:rounded-xl',
+                'dark:rounded-none',
                 isTop3 && 'border-2 border-black dark:border-0 dark:bg-foreground/[0.02]',
                 isTop3 && entry.rank === 1 && 'bg-yellow-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
                 isTop3 && entry.rank === 2 && 'bg-slate-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
@@ -158,7 +158,7 @@ export function LeaderboardTab() {
               <div className="w-16 shrink-0">
                 <span className={cn(
                   'text-[11px] font-bold dark:font-medium px-1.5 py-0.5',
-                  'border border-black dark:border-0 dark:rounded-full',
+                  'border border-black dark:border-0 dark:rounded-none',
                   tierColors.bg, tierColors.text,
                 )}>
                   {t(`achievement.tier.${tier}`)}

@@ -24,7 +24,7 @@ export function AchievementCard({ achievement }: AchievementCardProps) {
     <div
       className={cn(
         'group relative border p-4 transition-all duration-300 min-w-0 overflow-hidden',
-        'rounded-none dark:rounded-xl',
+        'rounded-none dark:rounded-none',
         isUnlocked
           ? cn(catColors.bg, catColors.border, 'border-2 dark:border-2', catColors.shadow, 'hover:translate-x-[2px] hover:-translate-y-[2px] hover:shadow-none dark:hover:-translate-y-1 dark:hover:shadow-xl')
           : 'border-2 border-black/20 bg-[#f0f0f0] dark:bg-white/5 dark:border-white/10 dark:opacity-85 hover:border-black hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-md dark:hover:-translate-y-0.5',

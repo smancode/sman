@@ -68,7 +68,7 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
 
       {showTooltip && pos && (
         <div
-          className="fixed z-50 bg-white dark:bg-black/80 backdrop-blur-xl text-popover-foreground border-2 border-black dark:border-cyan-500/30 rounded-none dark:rounded-2xl shadow-[4px_4px_0_0_#1e293b] dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-3.5 py-3 text-[12px] min-w-[180px]"
+          className="fixed z-50 bg-white dark:bg-black/80 backdrop-blur-xl text-popover-foreground border-2 border-black dark:border-cyan-500/30 rounded-none dark:rounded-none shadow-[4px_4px_0_0_#1e293b] dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-3.5 py-3 text-[12px] min-w-[180px]"
           style={{ top: pos.top, left: pos.left }}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
