@@ -17,7 +17,7 @@ const SCORE_METRICS: { key: string; labelKey: string; unit: string; weight: numb
   { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages', unit: '条', weight: 0.5 },
   { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens', unit: '', weight: 0.000005 },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron', unit: '次', weight: 2 },
-  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path', unit: '次', weight: 3 },
+  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path', unit: '次', weight: 5 },
   { key: 'total_skills_used', labelKey: 'achievement.scoreDetail.skill', unit: '次', weight: 2 },
   { key: 'total_code_views', labelKey: 'achievement.scoreDetail.codeview', unit: '次', weight: 0.3 },
   { key: 'total_git_ops', labelKey: 'achievement.scoreDetail.git', unit: '次', weight: 0.5 },

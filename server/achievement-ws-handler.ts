@@ -22,11 +22,13 @@ export function handleAchievementMessage(
     case 'achievement.leaderboard': {
       // Upload first, then fetch
       const clientId = engine.getClientIdStr();
-      engine.uploadToLeaderboard().then(() => engine.fetchLeaderboard()).then(result => {
+      const dimension = msg.dimension as string | undefined;
+      engine.uploadToLeaderboard().then(() => engine.fetchLeaderboard(dimension)).then(result => {
         if (result) {
           ws.send(JSON.stringify({
             type: 'achievement.leaderboard',
             entries: result.entries,
+            dimension: result.dimension,
             isOnline: true,
             clientId,
           }));
@@ -34,6 +36,7 @@ export function handleAchievementMessage(
           ws.send(JSON.stringify({
             type: 'achievement.leaderboard',
             entries: [],
+            dimension: dimension || 'total',
             isOnline: false,
             clientId,
           }));

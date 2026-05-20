@@ -1047,6 +1047,7 @@ export function SmartPathPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const justCreatedRef = useRef(false);
 
   useEffect(() => {
     if (wsStatus !== 'connected') return;
@@ -1063,13 +1064,14 @@ export function SmartPathPage() {
     }
   }, [currentPath?.id]);
 
-  useEffect(() => { setEditing(false); }, [currentPath?.id]);
+  useEffect(() => { if (!justCreatedRef.current) setEditing(false); justCreatedRef.current = false; }, [currentPath?.id]);
 
   const workspaceOptions = useMemo(() => workspaces.map((ws) => ({ value: ws, label: ws.split(/[/\\]/).pop() || ws })), [workspaces]);
 
   const handleCreate = async (name: string, description: string, workspace: string) => {
     setCreateOpen(false);
     const p = await createPath({ name, description, workspace, steps: '[]' });
+    justCreatedRef.current = true;
     setCurrentPath(p);
     setEditing(true);
   };

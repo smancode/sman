@@ -3849,6 +3849,8 @@
   "achievement.leaderboard.nameCol": { "text": "Name", "context": "Leaderboard header - name" },
   "achievement.leaderboard.pointsCol": { "text": "Points", "context": "Leaderboard header - points" },
   "achievement.leaderboard.unlockedCol": { "text": "Unlocked", "context": "Leaderboard header - unlocked" },
+  "achievement.leaderboard.total": { "text": "Total", "context": "Leaderboard dimension - total score" },
+  "achievement.leaderboard.dimensionCol": { "text": "Value", "context": "Leaderboard header - dimension value" },
   "achievement.leaderboard.points": { "text": "${points} pts", "context": "Leaderboard points" },
   "achievement.tabAll": { "text": "All", "context": "Achievement filter - all" },
   "achievement.tabUnlocked": { "text": "Unlocked", "context": "Achievement filter - unlocked" },

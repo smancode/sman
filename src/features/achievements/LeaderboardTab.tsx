@@ -10,11 +10,28 @@ type LeaderboardEntry = {
   totalPoints: number;
   totalUnlocked: number;
   level: string;
+  dimensionValue?: number;
 };
+
+const DIMENSION_OPTIONS: { key: string; labelKey: string }[] = [
+  { key: 'total', labelKey: 'achievement.leaderboard.total' },
+  { key: 'total_sessions', labelKey: 'achievement.scoreDetail.sessions' },
+  { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages' },
+  { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens' },
+  { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron' },
+  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path' },
+  { key: 'total_skills_used', labelKey: 'achievement.scoreDetail.skill' },
+  { key: 'total_code_views', labelKey: 'achievement.scoreDetail.codeview' },
+  { key: 'total_git_ops', labelKey: 'achievement.scoreDetail.git' },
+  { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions' },
+  { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages' },
+  { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount' },
+  { key: 'current_streak', labelKey: 'achievement.scoreDetail.streak' },
+];
 
 export function LeaderboardTab() {
   useLocale();
-  const { leaderboard, leaderboardOnline, leaderboardClientId } = useAchievementStore();
+  const { leaderboard, leaderboardOnline, leaderboardClientId, leaderboardDimension, fetchLeaderboard } = useAchievementStore();
 
   if (!leaderboardOnline && leaderboard.length === 0) {
     return (
@@ -36,6 +53,7 @@ export function LeaderboardTab() {
   const selfIndex = selfSuffix
     ? leaderboard.findIndex((e) => e.agentName === selfSuffix)
     : -1;
+  const activeDimension = leaderboardDimension || 'total';
 
   // Build display list: top 5 + ... + self neighborhood
   const displayEntries: (LeaderboardEntry | 'ellipsis')[] = [];
@@ -53,6 +71,25 @@ export function LeaderboardTab() {
 
   return (
     <div>
+      {/* Dimension filter buttons */}
+      <div className="flex flex-wrap gap-1 mb-3">
+        {DIMENSION_OPTIONS.map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => fetchLeaderboard(opt.key === 'total' ? undefined : opt.key)}
+            className={cn(
+              'px-2.5 py-1 text-[11px] font-bold dark:font-medium transition-all duration-200',
+              'rounded-none dark:rounded-none',
+              activeDimension === opt.key
+                ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_8px_rgba(255,0,255,0.3)]'
+                : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
+            )}
+          >
+            {t(opt.labelKey)}
+          </button>
+        ))}
+      </div>
+
       {/* Header row */}
       <div className={cn(
         'flex items-center gap-3 px-4 py-2 text-[10px] font-bold dark:font-medium uppercase tracking-wider',
@@ -62,7 +99,9 @@ export function LeaderboardTab() {
         <div className="w-8 shrink-0 text-center">{t('achievement.leaderboard.rankCol')}</div>
         <div className="w-16 shrink-0">{t('achievement.leaderboard.tierCol')}</div>
         <div className="flex-1 min-w-0">{t('achievement.leaderboard.nameCol')}</div>
-        <div className="shrink-0 w-16 text-right">{t('achievement.leaderboard.pointsCol')}</div>
+        <div className="shrink-0 w-16 text-right">
+          {activeDimension === 'total' ? t('achievement.leaderboard.pointsCol') : t('achievement.leaderboard.dimensionCol')}
+        </div>
         <div className="shrink-0 w-16 text-right">{t('achievement.leaderboard.unlockedCol')}</div>
       </div>
 
@@ -132,9 +171,9 @@ export function LeaderboardTab() {
                 </span>
               </div>
 
-              {/* Points */}
+              {/* Points / Dimension Value */}
               <div className="text-[12px] text-muted-foreground shrink-0 w-16 text-right">
-                {entry.totalPoints}
+                {activeDimension === 'total' ? entry.totalPoints : (entry.dimensionValue ?? 0)}
               </div>
 
               {/* Unlocked count */}

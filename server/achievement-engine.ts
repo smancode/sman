@@ -8,7 +8,7 @@ const METRIC_WEIGHTS: Record<string, number> = {
   total_messages: 0.5,       // 0.5分/条
   total_tokens: 0.000005,    // 0.000005分/token (= 1分/20万token)
   total_cron_runs: 2,        // 2分/次
-  total_smartpath_runs: 3,   // 3分/次
+  total_smartpath_runs: 5,   // 5分/次
   total_skills_used: 2,      // 2分/次
   total_code_views: 0.3,     // 0.3分/次
   total_git_ops: 0.5,        // 0.5分/次
@@ -585,6 +585,12 @@ export class AchievementEngine {
 
     const summary = this.getSummary();
 
+    // Build dimension scores from raw metrics
+    const dimensionScores: Record<string, number> = {};
+    for (const metric of Object.keys(METRIC_WEIGHTS)) {
+      dimensionScores[metric] = parseInt(this.store.getStat(metric) || '0', 10);
+    }
+
     try {
       const payload = {
         agentId: clientId,
@@ -593,6 +599,7 @@ export class AchievementEngine {
         totalUnlocked: summary.totalUnlocked,
         level,
         tierCounts: JSON.stringify(tierCounts),
+        dimensionScores: JSON.stringify(dimensionScores),
       };
       const encrypted = this.buildEncryptedRequest(payload);
       const controller = new AbortController();
@@ -619,7 +626,7 @@ export class AchievementEngine {
     }
   }
 
-  async fetchLeaderboard(): Promise<{ entries: { rank: number; agentName: string; totalPoints: number; totalUnlocked: number; level: string }[] } | null> {
+  async fetchLeaderboard(dimension?: string): Promise<{ entries: { rank: number; agentName: string; totalPoints: number; totalUnlocked: number; level: string; dimensionValue?: number }[]; dimension: string } | null> {
     if (!this.getHubUrl) return null;
     const hubUrl = this.getHubUrl();
     if (!hubUrl) return null;
@@ -627,7 +634,10 @@ export class AchievementEngine {
     try {
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), 10_000);
-      const res = await fetch(`${hubUrl}/api/achievement-leaderboard`, {
+      const url = dimension && dimension !== 'total'
+        ? `${hubUrl}/api/achievement-leaderboard?dimension=${encodeURIComponent(dimension)}`
+        : `${hubUrl}/api/achievement-leaderboard`;
+      const res = await fetch(url, {
         signal: controller.signal,
       });
       clearTimeout(tid);

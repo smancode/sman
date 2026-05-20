@@ -47,6 +47,7 @@ export interface LeaderboardEntry {
   totalPoints: number;
   totalUnlocked: number;
   level: string;
+  dimensionValue?: number;
 }
 
 interface AchievementState {
@@ -56,8 +57,9 @@ interface AchievementState {
   leaderboard: LeaderboardEntry[];
   leaderboardOnline: boolean;
   leaderboardClientId: string;
+  leaderboardDimension: string;
   fetchSummary: () => void;
-  fetchLeaderboard: () => void;
+  fetchLeaderboard: (dimension?: string) => void;
   clearRecentUnlocks: () => void;
 }
 
@@ -104,6 +106,7 @@ function registerAchievementListeners(): () => void {
         leaderboard: (msg.entries as LeaderboardEntry[]) || [],
         leaderboardOnline: (msg.isOnline as boolean) || false,
         leaderboardClientId: (msg.clientId as string) || '',
+        leaderboardDimension: (msg.dimension as string) || 'total',
       });
     }
   };
@@ -148,6 +151,7 @@ export const useAchievementStore = create<AchievementState>((set) => ({
   leaderboard: [],
   leaderboardOnline: false,
   leaderboardClientId: '',
+  leaderboardDimension: 'total',
 
   fetchSummary: () => {
     ensureListeners();
@@ -155,9 +159,13 @@ export const useAchievementStore = create<AchievementState>((set) => ({
     sendWsMessage({ type: 'achievement.list' });
   },
 
-  fetchLeaderboard: () => {
+  fetchLeaderboard: (dimension?: string) => {
     ensureListeners();
-    sendWsMessage({ type: 'achievement.leaderboard' });
+    const msg: Record<string, unknown> = { type: 'achievement.leaderboard' };
+    if (dimension && dimension !== 'total') {
+      msg.dimension = dimension;
+    }
+    sendWsMessage(msg);
   },
 
   clearRecentUnlocks: () => {

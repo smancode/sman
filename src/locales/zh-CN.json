@@ -3849,6 +3849,8 @@
   "achievement.leaderboard.nameCol": { "text": "名称", "context": "排行榜表头-名称" },
   "achievement.leaderboard.pointsCol": { "text": "积分", "context": "排行榜表头-积分" },
   "achievement.leaderboard.unlockedCol": { "text": "已解锁", "context": "排行榜表头-已解锁" },
+  "achievement.leaderboard.total": { "text": "总分", "context": "排行榜维度-总分" },
+  "achievement.leaderboard.dimensionCol": { "text": "数值", "context": "排行榜表头-维度数值" },
   "achievement.leaderboard.points": { "text": "${points} 分", "context": "排行榜积分" },
   "achievement.tabAll": { "text": "全部", "context": "成就筛选-全部" },
   "achievement.tabUnlocked": { "text": "已解锁", "context": "成就筛选-已解锁" },
