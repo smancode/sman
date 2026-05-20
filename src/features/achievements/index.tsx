@@ -28,7 +28,7 @@ const TAB_BREAKS = new Set(['conversation', 'leaderboard']);
 export function AchievementsPage() {
   useLocale();
   const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
-  const [activeTab, setActiveTab] = useState<FilterTab>('unlocked');
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
   useEffect(() => {
     fetchSummary();
