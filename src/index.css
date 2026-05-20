@@ -658,7 +658,7 @@
   filter: none;
 }
 
-/* Achievement card glow - soft ambient light */
+/* Achievement card glow - soft ambient light (light) / neon glow (dark) */
 .achievement-glow {
   box-shadow:
     inset 0 0 40px rgba(255, 255, 255, 0.3),
@@ -667,6 +667,7 @@
 
 .dark .achievement-glow {
   box-shadow:
-    inset 0 0 25px rgba(192, 192, 220, 0.1),
-    0 0 25px -5px rgba(192, 192, 220, 0.18);
+    inset 0 0 30px rgba(0, 255, 255, 0.06),
+    0 0 25px -3px rgba(0, 255, 255, 0.12),
+    0 0 50px -10px rgba(255, 0, 255, 0.08);
 }

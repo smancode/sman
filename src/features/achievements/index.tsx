@@ -15,7 +15,7 @@ type FilterTab = 'all' | Category | 'unlocked' | 'locked' | 'leaderboard';
 const SCORE_METRICS: { key: string; labelKey: string; unit: string; weight: number }[] = [
   { key: 'total_sessions', labelKey: 'achievement.scoreDetail.sessions', unit: '个', weight: 3 },
   { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages', unit: '条', weight: 0.5 },
-  { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens', unit: '', weight: 0.00001 },
+  { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens', unit: '', weight: 0.000005 },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron', unit: '次', weight: 2 },
   { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path', unit: '次', weight: 3 },
   { key: 'total_skills_used', labelKey: 'achievement.scoreDetail.skill', unit: '次', weight: 2 },
@@ -171,10 +171,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
+                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
+                  'rounded-full dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+                    ? 'bg-foreground text-background shadow-sm dark:bg-cyan-400 dark:text-black dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-cyan-300',
                 )}
               >
                 {t(tab.labelKey)}
@@ -187,10 +188,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
+                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
+                  'rounded-full dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+                    ? 'bg-foreground text-background shadow-sm dark:bg-cyan-400 dark:text-black dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-cyan-300',
                 )}
               >
                 {t(tab.labelKey)}
@@ -203,10 +205,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200',
+                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
+                  'rounded-full dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+                    ? 'bg-foreground text-background shadow-sm dark:bg-fuchsia-400 dark:text-black dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-fuchsia-300',
                 )}
               >
                 {t(tab.labelKey)}

@@ -6,7 +6,7 @@ import { onAchievementEvent, removeAllAchievementListeners, type AchievementEven
 const METRIC_WEIGHTS: Record<string, number> = {
   total_sessions: 3,         // 有消息的会话，3分/个
   total_messages: 0.5,       // 0.5分/条
-  total_tokens: 0.00001,     // 0.00001分/token (= 1分/10万token)
+  total_tokens: 0.000005,    // 0.000005分/token (= 1分/20万token)
   total_cron_runs: 2,        // 2分/次
   total_smartpath_runs: 3,   // 3分/次
   total_skills_used: 2,      // 2分/次

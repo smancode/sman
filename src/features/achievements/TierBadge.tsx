@@ -54,10 +54,10 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
         ref={ref}
         className={cn(
           'rounded-full flex items-center justify-center',
-          colors.bg, colors.border, 'border',
+          colors.bg, colors.border, 'border dark:border-2',
           s.container,
           showLevelList && 'cursor-pointer',
-          size === 'lg' && 'shadow-sm',
+          size === 'lg' && 'shadow-sm dark:shadow-[0_0_14px_rgba(0,255,255,0.2)]',
           className,
         )}
         onMouseEnter={() => showLevelList && setShowTooltip(true)}
@@ -68,7 +68,7 @@ export function TierBadge({ tier, icon, size = 'md', currentPoints, className }:
 
       {showTooltip && pos && (
         <div
-          className="fixed z-50 bg-card/80 backdrop-blur-xl text-popover-foreground border border-border/40 rounded-2xl shadow-xl px-3.5 py-3 text-[12px] min-w-[180px]"
+          className="fixed z-50 bg-card/80 backdrop-blur-xl text-popover-foreground border border-border/40 rounded-2xl shadow-xl dark:bg-black/80 dark:border-cyan-500/30 dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-3.5 py-3 text-[12px] min-w-[180px]"
           style={{ top: pos.top, left: pos.left }}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}

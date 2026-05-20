@@ -56,7 +56,7 @@ export function LeaderboardTab() {
       {/* Header row */}
       <div className={cn(
         'flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground/60 font-medium uppercase tracking-wider',
-        'border-b border-border/30 mb-2',
+        'border-b border-border/30 dark:border-cyan-500/20 mb-2',
       )}>
         <div className="w-8 shrink-0 text-center">{t('achievement.leaderboard.rankCol')}</div>
         <div className="w-16 shrink-0">{t('achievement.leaderboard.tierCol')}</div>
@@ -86,8 +86,8 @@ export function LeaderboardTab() {
               className={cn(
                 'flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200',
                 isTop3 && 'bg-foreground/[0.02]',
-                isSelf && 'ring-1 ring-foreground/10 bg-foreground/[0.03]',
-                !isTop3 && !isSelf && 'hover:bg-foreground/[0.02]',
+                isSelf && 'ring-1 ring-foreground/10 bg-foreground/[0.03] dark:ring-cyan-400/40 dark:bg-cyan-400/5',
+                !isTop3 && !isSelf && 'hover:bg-foreground/[0.02] dark:hover:bg-white/[0.02]',
               )}
             >
               {/* Rank */}
