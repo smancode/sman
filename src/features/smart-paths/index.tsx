@@ -422,15 +422,14 @@ function GuideChatPanel({ stepIndex, pathId, workspace, stepResult }: {
 
 // ── Step view card ──
 
-function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDesc, stepDeliveryCheck, stepEdit, finalizing, onResultChange, onDescChange, onStepEditChange, onRedo, onContinue, onFinalize, pathId, workspace }: {
+function StepViewCard({ step, index, total, executionStream, executing, stepping, stepResult, stepDeliveryCheck, stepEdit, finalizing, onResultChange, onStepEditChange, onRedo, onContinue, onFinalize, pathId, workspace }: {
   step: SmartPathStep; index: number; total: number;
   executionStream?: string; executing?: boolean;
   stepping?: boolean; finalizing?: boolean;
-  stepResult?: string; stepDesc?: string;
+  stepResult?: string;
   stepDeliveryCheck?: { passed?: boolean; reason?: string; retried?: boolean };
   stepEdit?: Partial<SmartPathStep>;
   onResultChange?: (v: string) => void;
-  onDescChange?: (v: string) => void;
   onStepEditChange?: (field: keyof SmartPathStep, value: string | string[]) => void;
   onRedo?: () => void; onContinue?: () => void; onFinalize?: () => void;
   pathId?: string; workspace?: string;
@@ -539,14 +538,6 @@ function StepViewCard({ step, index, total, executionStream, executing, stepping
                 )}
               </div>
             )}
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">{t('smartpath.editDesc')}</Label>
-              <AutoResizeTextarea
-                value={stepDesc || step.userInput}
-                onChange={(v) => onDescChange?.(v)}
-                placeholder={t('smartpath.stepDescPlaceholder')}
-              />
-            </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">{t('smartpath.editResult')}</Label>
               <AutoResizeTextarea
@@ -772,13 +763,11 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const finalizing = useSmartPathStore((s) => s.finalizing);
   const stepResults = useSmartPathStore((s) => s.stepResults);
   const anyStepExecuting = Object.values(stepExecutionStatus).some((s) => s === 'running');
-  const stepDescriptions = useSmartPathStore((s) => s.stepDescriptions);
   const stepDeliveryChecks = useSmartPathStore((s) => s.stepDeliveryChecks);
   const startStepping = useSmartPathStore((s) => s.startStepping);
   const runStepContinue = useSmartPathStore((s) => s.runStepContinue);
   const runStepRedo = useSmartPathStore((s) => s.runStepRedo);
   const updateStepResult = useSmartPathStore((s) => s.updateStepResult);
-  const updateStepDescription = useSmartPathStore((s) => s.updateStepDescription);
   const updateStepEdit = useSmartPathStore((s) => s.updateStepEdit);
   const stepEdits = useSmartPathStore((s) => s.stepEdits);
   const finalizeStepping = useSmartPathStore((s) => s.finalizeStepping);
@@ -906,12 +895,10 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
                 executing={stepExecutionStatus[i] === 'running'}
                 stepping={stepping && (isStepCompleted || isCurrentStep)}
                 stepResult={stepping ? stepResults[i] : undefined}
-                stepDesc={stepping ? stepDescriptions[i] : undefined}
                 stepDeliveryCheck={stepping ? stepDeliveryChecks[i] : undefined}
                 stepEdit={stepping ? stepEdits[i] : undefined}
                 finalizing={stepping && finalizing}
                 onResultChange={stepping ? (v) => updateStepResult(i, v) : undefined}
-                onDescChange={stepping ? (v) => updateStepDescription(i, v) : undefined}
                 onStepEditChange={stepping ? (f, v) => updateStepEdit(i, f, v) : undefined}
                 onRedo={stepping ? () => runStepRedo(path.id, path.workspace, i, path.defaultArgs) : undefined}
                 onContinue={stepping ? () => runStepContinue(path.id, path.workspace, path.defaultArgs) : undefined}
