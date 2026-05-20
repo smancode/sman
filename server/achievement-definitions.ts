@@ -44,15 +44,15 @@ export const TIER_NAMES: Record<Tier, string> = {
 // Level thresholds: tier name → minimum points
 export const LEVEL_THRESHOLDS: { tier: Tier; minPoints: number }[] = [
   { tier: 'bronze', minPoints: 0 },
-  { tier: 'silver', minPoints: 20 },
-  { tier: 'gold', minPoints: 50 },
-  { tier: 'platinum', minPoints: 100 },
-  { tier: 'diamond', minPoints: 200 },
-  { tier: 'star', minPoints: 380 },
-  { tier: 'king', minPoints: 560 },
-  { tier: 'legend', minPoints: 760 },
-  { tier: 'epic', minPoints: 960 },
-  { tier: 'eternal', minPoints: 1200 },
+  { tier: 'silver', minPoints: 100 },
+  { tier: 'gold', minPoints: 300 },
+  { tier: 'platinum', minPoints: 600 },
+  { tier: 'diamond', minPoints: 1200 },
+  { tier: 'star', minPoints: 2000 },
+  { tier: 'king', minPoints: 3200 },
+  { tier: 'legend', minPoints: 4800 },
+  { tier: 'epic', minPoints: 7000 },
+  { tier: 'eternal', minPoints: 10000 },
 ];
 
 export function calculateLevel(points: number): Tier {
@@ -77,29 +77,24 @@ export function calculateLevelProgress(points: number): { current: Tier; next: T
 
 // Achievement definitions
 const defs: AchievementDef[] = [
-  // ── Conversation: Sessions ──
-  { id: 'session_1', category: 'conversation', tier: 'bronze', nameKey: 'achievement.session_1', descKey: 'achievement.session_1.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 1 } },
-  { id: 'session_10', category: 'conversation', tier: 'silver', nameKey: 'achievement.session_10', descKey: 'achievement.session_10.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 10 } },
-  { id: 'session_50', category: 'conversation', tier: 'gold', nameKey: 'achievement.session_50', descKey: 'achievement.session_50.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 50 } },
-  { id: 'session_200', category: 'conversation', tier: 'platinum', nameKey: 'achievement.session_200', descKey: 'achievement.session_200.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 200 } },
-  { id: 'session_500', category: 'conversation', tier: 'diamond', nameKey: 'achievement.session_500', descKey: 'achievement.session_500.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 500 } },
-  { id: 'session_1k', category: 'conversation', tier: 'star', nameKey: 'achievement.session_1k', descKey: 'achievement.session_1k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 1000 } },
-  { id: 'session_2k', category: 'conversation', tier: 'king', nameKey: 'achievement.session_2k', descKey: 'achievement.session_2k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 2000 } },
-  { id: 'session_5k', category: 'conversation', tier: 'legend', nameKey: 'achievement.session_5k', descKey: 'achievement.session_5k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 5000 } },
-  { id: 'session_10k', category: 'conversation', tier: 'epic', nameKey: 'achievement.session_10k', descKey: 'achievement.session_10k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 10000 } },
-  { id: 'session_99999', category: 'conversation', tier: 'eternal', nameKey: 'achievement.session_99999', descKey: 'achievement.session_99999.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 99999 } },
+  // ── Conversation: Sessions (核心行为，高分) ──
+  { id: 'session_1', category: 'conversation', tier: 'gold', nameKey: 'achievement.session_1', descKey: 'achievement.session_1.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 1 } },
+  { id: 'session_10', category: 'conversation', tier: 'platinum', nameKey: 'achievement.session_10', descKey: 'achievement.session_10.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 10 } },
+  { id: 'session_50', category: 'conversation', tier: 'diamond', nameKey: 'achievement.session_50', descKey: 'achievement.session_50.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 50 } },
+  { id: 'session_200', category: 'conversation', tier: 'star', nameKey: 'achievement.session_200', descKey: 'achievement.session_200.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 200 } },
+  { id: 'session_500', category: 'conversation', tier: 'king', nameKey: 'achievement.session_500', descKey: 'achievement.session_500.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 500 } },
+  { id: 'session_1k', category: 'conversation', tier: 'legend', nameKey: 'achievement.session_1k', descKey: 'achievement.session_1k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 1000 } },
+  { id: 'session_2k', category: 'conversation', tier: 'epic', nameKey: 'achievement.session_2k', descKey: 'achievement.session_2k.desc', icon: '💬', hidden: false, condition: { metric: 'total_sessions', threshold: 2000 } },
 
-  // ── Conversation: Messages ──
-  { id: 'msg_10', category: 'conversation', tier: 'bronze', nameKey: 'achievement.msg_10', descKey: 'achievement.msg_10.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 10 } },
-  { id: 'msg_100', category: 'conversation', tier: 'silver', nameKey: 'achievement.msg_100', descKey: 'achievement.msg_100.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 100 } },
-  { id: 'msg_500', category: 'conversation', tier: 'gold', nameKey: 'achievement.msg_500', descKey: 'achievement.msg_500.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 500 } },
-  { id: 'msg_2k', category: 'conversation', tier: 'platinum', nameKey: 'achievement.msg_2k', descKey: 'achievement.msg_2k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 2000 } },
-  { id: 'msg_5k', category: 'conversation', tier: 'diamond', nameKey: 'achievement.msg_5k', descKey: 'achievement.msg_5k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 5000 } },
-  { id: 'msg_10k', category: 'conversation', tier: 'star', nameKey: 'achievement.msg_10k', descKey: 'achievement.msg_10k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 10000 } },
-  { id: 'msg_50k', category: 'conversation', tier: 'king', nameKey: 'achievement.msg_50k', descKey: 'achievement.msg_50k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 50000 } },
-  { id: 'msg_100k', category: 'conversation', tier: 'legend', nameKey: 'achievement.msg_100k', descKey: 'achievement.msg_100k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 100000 } },
-  { id: 'msg_500k', category: 'conversation', tier: 'epic', nameKey: 'achievement.msg_500k', descKey: 'achievement.msg_500k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 500000 } },
-  { id: 'msg_1m', category: 'conversation', tier: 'eternal', nameKey: 'achievement.msg_1m', descKey: 'achievement.msg_1m.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 1000000 } },
+  // ── Conversation: Messages (核心行为，高分) ──
+  { id: 'msg_10', category: 'conversation', tier: 'gold', nameKey: 'achievement.msg_10', descKey: 'achievement.msg_10.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 10 } },
+  { id: 'msg_100', category: 'conversation', tier: 'platinum', nameKey: 'achievement.msg_100', descKey: 'achievement.msg_100.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 100 } },
+  { id: 'msg_500', category: 'conversation', tier: 'diamond', nameKey: 'achievement.msg_500', descKey: 'achievement.msg_500.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 500 } },
+  { id: 'msg_2k', category: 'conversation', tier: 'star', nameKey: 'achievement.msg_2k', descKey: 'achievement.msg_2k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 2000 } },
+  { id: 'msg_5k', category: 'conversation', tier: 'king', nameKey: 'achievement.msg_5k', descKey: 'achievement.msg_5k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 5000 } },
+  { id: 'msg_10k', category: 'conversation', tier: 'legend', nameKey: 'achievement.msg_10k', descKey: 'achievement.msg_10k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 10000 } },
+  { id: 'msg_50k', category: 'conversation', tier: 'epic', nameKey: 'achievement.msg_50k', descKey: 'achievement.msg_50k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 50000 } },
+  { id: 'msg_100k', category: 'conversation', tier: 'eternal', nameKey: 'achievement.msg_100k', descKey: 'achievement.msg_100k.desc', icon: '📝', hidden: false, condition: { metric: 'total_messages', threshold: 100000 } },
 
   // ── Conversation: Streaks ──
   { id: 'streak_3', category: 'conversation', tier: 'bronze', nameKey: 'achievement.streak_3', descKey: 'achievement.streak_3.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 3 } },
@@ -110,8 +105,6 @@ const defs: AchievementDef[] = [
   { id: 'streak_100', category: 'conversation', tier: 'star', nameKey: 'achievement.streak_100', descKey: 'achievement.streak_100.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 100 } },
   { id: 'streak_180', category: 'conversation', tier: 'king', nameKey: 'achievement.streak_180', descKey: 'achievement.streak_180.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 180 } },
   { id: 'streak_365', category: 'conversation', tier: 'legend', nameKey: 'achievement.streak_365', descKey: 'achievement.streak_365.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 365 } },
-  { id: 'streak_500', category: 'conversation', tier: 'epic', nameKey: 'achievement.streak_500', descKey: 'achievement.streak_500.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 500 } },
-  { id: 'streak_999', category: 'conversation', tier: 'eternal', nameKey: 'achievement.streak_999', descKey: 'achievement.streak_999.desc', icon: '🔥', hidden: false, condition: { metric: 'current_streak', threshold: 999 } },
 
   // ── Advanced: Cron ──
   { id: 'cron_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.cron_1', descKey: 'achievement.cron_1.desc', icon: '⏰', hidden: false, condition: { metric: 'total_cron_runs', threshold: 1 } },
@@ -166,46 +159,46 @@ const defs: AchievementDef[] = [
   { id: 'git_1k', category: 'exploration', tier: 'platinum', nameKey: 'achievement.git_1k', descKey: 'achievement.git_1k.desc', icon: '🔀', hidden: false, condition: { metric: 'total_git_ops', threshold: 1000 } },
   { id: 'git_5k', category: 'exploration', tier: 'diamond', nameKey: 'achievement.git_5k', descKey: 'achievement.git_5k.desc', icon: '🔀', hidden: false, condition: { metric: 'total_git_ops', threshold: 5000 } },
 
-  // ── Collaboration ──
-  { id: 'collab_1', category: 'collaboration', tier: 'bronze', nameKey: 'achievement.collab_1', descKey: 'achievement.collab_1.desc', icon: '✨', hidden: false, condition: { metric: 'total_collabs', threshold: 1 } },
-  { id: 'collab_10', category: 'collaboration', tier: 'silver', nameKey: 'achievement.collab_10', descKey: 'achievement.collab_10.desc', icon: '✨', hidden: false, condition: { metric: 'total_collabs', threshold: 10 } },
-  { id: 'collab_50', category: 'collaboration', tier: 'gold', nameKey: 'achievement.collab_50', descKey: 'achievement.collab_50.desc', icon: '✨', hidden: false, condition: { metric: 'total_collabs', threshold: 50 } },
-  { id: 'collab_200', category: 'collaboration', tier: 'platinum', nameKey: 'achievement.collab_200', descKey: 'achievement.collab_200.desc', icon: '✨', hidden: false, condition: { metric: 'total_collabs', threshold: 200 } },
-  { id: 'collab_1k', category: 'collaboration', tier: 'diamond', nameKey: 'achievement.collab_1k', descKey: 'achievement.collab_1k.desc', icon: '✨', hidden: false, condition: { metric: 'total_collabs', threshold: 1000 } },
+  // ── Collaboration (功能未上线，暂隐藏) ──
+  { id: 'collab_1', category: 'collaboration', tier: 'bronze', nameKey: 'achievement.collab_1', descKey: 'achievement.collab_1.desc', icon: '✨', hidden: true, condition: { metric: 'total_collabs', threshold: 1 } },
+  { id: 'collab_10', category: 'collaboration', tier: 'silver', nameKey: 'achievement.collab_10', descKey: 'achievement.collab_10.desc', icon: '✨', hidden: true, condition: { metric: 'total_collabs', threshold: 10 } },
+  { id: 'collab_50', category: 'collaboration', tier: 'gold', nameKey: 'achievement.collab_50', descKey: 'achievement.collab_50.desc', icon: '✨', hidden: true, condition: { metric: 'total_collabs', threshold: 50 } },
+  { id: 'collab_200', category: 'collaboration', tier: 'platinum', nameKey: 'achievement.collab_200', descKey: 'achievement.collab_200.desc', icon: '✨', hidden: true, condition: { metric: 'total_collabs', threshold: 200 } },
+  { id: 'collab_1k', category: 'collaboration', tier: 'diamond', nameKey: 'achievement.collab_1k', descKey: 'achievement.collab_1k.desc', icon: '✨', hidden: true, condition: { metric: 'total_collabs', threshold: 1000 } },
 
-  { id: 'reputation_5', category: 'collaboration', tier: 'bronze', nameKey: 'achievement.reputation_5', descKey: 'achievement.reputation_5.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 5 } },
-  { id: 'reputation_10', category: 'collaboration', tier: 'silver', nameKey: 'achievement.reputation_10', descKey: 'achievement.reputation_10.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 10 } },
-  { id: 'reputation_25', category: 'collaboration', tier: 'gold', nameKey: 'achievement.reputation_25', descKey: 'achievement.reputation_25.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 25 } },
-  { id: 'reputation_50', category: 'collaboration', tier: 'platinum', nameKey: 'achievement.reputation_50', descKey: 'achievement.reputation_50.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 50 } },
-  { id: 'reputation_100', category: 'collaboration', tier: 'diamond', nameKey: 'achievement.reputation_100', descKey: 'achievement.reputation_100.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 100 } },
-  { id: 'reputation_200', category: 'collaboration', tier: 'star', nameKey: 'achievement.reputation_200', descKey: 'achievement.reputation_200.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 200 } },
-  { id: 'reputation_500', category: 'collaboration', tier: 'king', nameKey: 'achievement.reputation_500', descKey: 'achievement.reputation_500.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 500 } },
-  { id: 'reputation_1k', category: 'collaboration', tier: 'legend', nameKey: 'achievement.reputation_1k', descKey: 'achievement.reputation_1k.desc', icon: '⭐', hidden: false, condition: { metric: 'total_reputation', threshold: 1000 } },
+  { id: 'reputation_5', category: 'collaboration', tier: 'bronze', nameKey: 'achievement.reputation_5', descKey: 'achievement.reputation_5.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 5 } },
+  { id: 'reputation_10', category: 'collaboration', tier: 'silver', nameKey: 'achievement.reputation_10', descKey: 'achievement.reputation_10.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 10 } },
+  { id: 'reputation_25', category: 'collaboration', tier: 'gold', nameKey: 'achievement.reputation_25', descKey: 'achievement.reputation_25.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 25 } },
+  { id: 'reputation_50', category: 'collaboration', tier: 'platinum', nameKey: 'achievement.reputation_50', descKey: 'achievement.reputation_50.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 50 } },
+  { id: 'reputation_100', category: 'collaboration', tier: 'diamond', nameKey: 'achievement.reputation_100', descKey: 'achievement.reputation_100.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 100 } },
+  { id: 'reputation_200', category: 'collaboration', tier: 'star', nameKey: 'achievement.reputation_200', descKey: 'achievement.reputation_200.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 200 } },
+  { id: 'reputation_500', category: 'collaboration', tier: 'king', nameKey: 'achievement.reputation_500', descKey: 'achievement.reputation_500.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 500 } },
+  { id: 'reputation_1k', category: 'collaboration', tier: 'legend', nameKey: 'achievement.reputation_1k', descKey: 'achievement.reputation_1k.desc', icon: '⭐', hidden: true, condition: { metric: 'total_reputation', threshold: 1000 } },
 
   // ── Bot: per-platform (wecom/feishu/weixin) + total ──
-  { id: 'bot_count_total_1', category: 'bot', tier: 'bronze', nameKey: 'achievement.bot_count_total_1', descKey: 'achievement.bot_count_total_1.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 1 } },
-  { id: 'bot_count_total_5', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_count_total_5', descKey: 'achievement.bot_count_total_5.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 5 } },
-  { id: 'bot_count_total_10', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_count_total_10', descKey: 'achievement.bot_count_total_10.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 10 } },
-  { id: 'bot_count_total_20', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_count_total_20', descKey: 'achievement.bot_count_total_20.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 20 } },
-  { id: 'bot_count_total_50', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_count_total_50', descKey: 'achievement.bot_count_total_50.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 50 } },
-  { id: 'bot_count_total_100', category: 'bot', tier: 'star', nameKey: 'achievement.bot_count_total_100', descKey: 'achievement.bot_count_total_100.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 100 } },
+  { id: 'bot_count_total_1', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_count_total_1', descKey: 'achievement.bot_count_total_1.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 1 } },
+  { id: 'bot_count_total_5', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_count_total_5', descKey: 'achievement.bot_count_total_5.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 5 } },
+  { id: 'bot_count_total_10', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_count_total_10', descKey: 'achievement.bot_count_total_10.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 10 } },
+  { id: 'bot_count_total_20', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_count_total_20', descKey: 'achievement.bot_count_total_20.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 20 } },
+  { id: 'bot_count_total_50', category: 'bot', tier: 'star', nameKey: 'achievement.bot_count_total_50', descKey: 'achievement.bot_count_total_50.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 50 } },
+  { id: 'bot_count_total_100', category: 'bot', tier: 'king', nameKey: 'achievement.bot_count_total_100', descKey: 'achievement.bot_count_total_100.desc', icon: '🤖', hidden: false, condition: { metric: 'bot_count_total', threshold: 100 } },
 
-  { id: 'bot_sessions_total_1', category: 'bot', tier: 'bronze', nameKey: 'achievement.bot_sessions_total_1', descKey: 'achievement.bot_sessions_total_1.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 1 } },
-  { id: 'bot_sessions_total_10', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_sessions_total_10', descKey: 'achievement.bot_sessions_total_10.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 10 } },
-  { id: 'bot_sessions_total_50', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_sessions_total_50', descKey: 'achievement.bot_sessions_total_50.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 50 } },
-  { id: 'bot_sessions_total_200', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_sessions_total_200', descKey: 'achievement.bot_sessions_total_200.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 200 } },
-  { id: 'bot_sessions_total_1k', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_sessions_total_1k', descKey: 'achievement.bot_sessions_total_1k.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 1000 } },
-  { id: 'bot_sessions_total_5k', category: 'bot', tier: 'king', nameKey: 'achievement.bot_sessions_total_5k', descKey: 'achievement.bot_sessions_total_5k.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 5000 } },
+  { id: 'bot_sessions_total_1', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_sessions_total_1', descKey: 'achievement.bot_sessions_total_1.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 1 } },
+  { id: 'bot_sessions_total_10', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_sessions_total_10', descKey: 'achievement.bot_sessions_total_10.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 10 } },
+  { id: 'bot_sessions_total_50', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_sessions_total_50', descKey: 'achievement.bot_sessions_total_50.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 50 } },
+  { id: 'bot_sessions_total_200', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_sessions_total_200', descKey: 'achievement.bot_sessions_total_200.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 200 } },
+  { id: 'bot_sessions_total_1k', category: 'bot', tier: 'star', nameKey: 'achievement.bot_sessions_total_1k', descKey: 'achievement.bot_sessions_total_1k.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 1000 } },
+  { id: 'bot_sessions_total_5k', category: 'bot', tier: 'legend', nameKey: 'achievement.bot_sessions_total_5k', descKey: 'achievement.bot_sessions_total_5k.desc', icon: '💬', hidden: false, condition: { metric: 'bot_sessions_total', threshold: 5000 } },
 
-  { id: 'bot_messages_total_10', category: 'bot', tier: 'bronze', nameKey: 'achievement.bot_messages_total_10', descKey: 'achievement.bot_messages_total_10.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 10 } },
-  { id: 'bot_messages_total_100', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_messages_total_100', descKey: 'achievement.bot_messages_total_100.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 100 } },
-  { id: 'bot_messages_total_500', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_messages_total_500', descKey: 'achievement.bot_messages_total_500.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 500 } },
-  { id: 'bot_messages_total_2k', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_messages_total_2k', descKey: 'achievement.bot_messages_total_2k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 2000 } },
-  { id: 'bot_messages_total_10k', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_messages_total_10k', descKey: 'achievement.bot_messages_total_10k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 10000 } },
-  { id: 'bot_messages_total_50k', category: 'bot', tier: 'king', nameKey: 'achievement.bot_messages_total_50k', descKey: 'achievement.bot_messages_total_50k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 50000 } },
+  { id: 'bot_messages_total_10', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_messages_total_10', descKey: 'achievement.bot_messages_total_10.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 10 } },
+  { id: 'bot_messages_total_100', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_messages_total_100', descKey: 'achievement.bot_messages_total_100.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 100 } },
+  { id: 'bot_messages_total_500', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_messages_total_500', descKey: 'achievement.bot_messages_total_500.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 500 } },
+  { id: 'bot_messages_total_2k', category: 'bot', tier: 'diamond', nameKey: 'achievement.bot_messages_total_2k', descKey: 'achievement.bot_messages_total_2k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 2000 } },
+  { id: 'bot_messages_total_10k', category: 'bot', tier: 'star', nameKey: 'achievement.bot_messages_total_10k', descKey: 'achievement.bot_messages_total_10k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 10000 } },
+  { id: 'bot_messages_total_50k', category: 'bot', tier: 'legend', nameKey: 'achievement.bot_messages_total_50k', descKey: 'achievement.bot_messages_total_50k.desc', icon: '📨', hidden: false, condition: { metric: 'bot_messages_total', threshold: 50000 } },
 
-  { id: 'bot_platform_2', category: 'bot', tier: 'silver', nameKey: 'achievement.bot_platform_2', descKey: 'achievement.bot_platform_2.desc', icon: '🌐', hidden: false, condition: { metric: 'bot_platforms_used', threshold: 2 } },
-  { id: 'bot_platform_3', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_platform_3', descKey: 'achievement.bot_platform_3.desc', icon: '🌐', hidden: false, condition: { metric: 'bot_platforms_used', threshold: 3 } },
+  { id: 'bot_platform_2', category: 'bot', tier: 'gold', nameKey: 'achievement.bot_platform_2', descKey: 'achievement.bot_platform_2.desc', icon: '🌐', hidden: false, condition: { metric: 'bot_platforms_used', threshold: 2 } },
+  { id: 'bot_platform_3', category: 'bot', tier: 'platinum', nameKey: 'achievement.bot_platform_3', descKey: 'achievement.bot_platform_3.desc', icon: '🌐', hidden: false, condition: { metric: 'bot_platforms_used', threshold: 3 } },
 
   // ── Hidden / Easter Eggs ──
   { id: 'midnight_warrior', category: 'hidden', tier: 'silver', nameKey: 'achievement.midnight_warrior', descKey: 'achievement.midnight_warrior.desc', icon: '🌙', hidden: true, condition: { metric: 'hour_sent', threshold: 1 } },

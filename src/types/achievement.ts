@@ -35,8 +35,8 @@ export const TIER_COLORS: Record<Tier, { text: string; bg: string; border: strin
 };
 
 export const TIER_THRESHOLDS: Record<Tier, number> = {
-  bronze: 0, silver: 20, gold: 50, platinum: 100, diamond: 200,
-  star: 380, king: 560, legend: 760, epic: 960, eternal: 1200,
+  bronze: 0, silver: 100, gold: 300, platinum: 600, diamond: 1200,
+  star: 2000, king: 3200, legend: 4800, epic: 7000, eternal: 10000,
 };
 
 export const CATEGORY_LABELS: Record<Category, string> = {

@@ -1,6 +1,22 @@
 import { AchievementStore, type AchievementProgress, type StreakData } from './achievement-store.js';
 import { ACHIEVEMENT_DEFINITIONS, TIER_SCORES, getDefinitionsByMetric, calculateLevel, calculateLevelProgress, type Tier, type AchievementDef } from './achievement-definitions.js';
 import { onAchievementEvent, removeAllAchievementListeners, type AchievementEvent } from './achievement-events.js';
+
+// Metric weights for weighted score calculation
+const METRIC_WEIGHTS: Record<string, number> = {
+  total_sessions: 3,         // 有消息的会话，3分/个
+  total_messages: 0.5,       // 0.5分/条
+  total_tokens: 0.00001,     // 0.00001分/token (= 1分/10万token)
+  total_cron_runs: 2,        // 2分/次
+  total_smartpath_runs: 3,   // 3分/次
+  total_skills_used: 2,      // 2分/次
+  total_code_views: 0.3,     // 0.3分/次
+  total_git_ops: 0.5,        // 0.5分/次
+  bot_sessions_total: 2,     // 2分/个
+  bot_messages_total: 1,     // 1分/条
+  bot_count_total: 5,        // 5分/个Bot
+  current_streak: 2,         // 2分/天(取当前连续天数)
+};
 import { createLogger, type Logger } from './utils/logger.js';
 import fs from 'fs';
 import os from 'os';
@@ -319,8 +335,8 @@ export class AchievementEngine {
   recalcStatsFromDB(): void {
     const db = this.store.getDatabase();
     try {
-      // Sessions (including soft-deleted)
-      const sessionCount = (db.prepare('SELECT COUNT(*) as c FROM sessions').get() as { c: number }).c;
+      // Sessions with at least one user message (including soft-deleted)
+      const sessionCount = (db.prepare("SELECT COUNT(*) as c FROM sessions s WHERE EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.role = 'user')").get() as { c: number }).c;
       this.store.setStat('total_sessions', String(sessionCount));
 
       // User messages
@@ -428,7 +444,7 @@ export class AchievementEngine {
     const metricsToUpdate: Set<string> = new Set();
     try {
       const reconciliations: [string, string][] = [
-        ['total_sessions', "SELECT COUNT(*) as c FROM sessions"],
+        ['total_sessions', "SELECT COUNT(*) as c FROM sessions s WHERE EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.role = 'user')"],
         ['total_messages', "SELECT COUNT(*) as c FROM messages WHERE role = 'user'"],
         ['total_cron_runs', "SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'"],
       ];
@@ -473,13 +489,11 @@ export class AchievementEngine {
 
   private getTotalPoints(): number {
     let total = 0;
-    for (const def of ACHIEVEMENT_DEFINITIONS) {
-      const progress = this.store.getProgress(def.id);
-      if (progress?.unlockedAt) {
-        total += TIER_SCORES[def.tier];
-      }
+    for (const [metric, weight] of Object.entries(METRIC_WEIGHTS)) {
+      const value = parseInt(this.store.getStat(metric) || '0', 10);
+      total += value * weight;
     }
-    return total;
+    return Math.round(total);
   }
 
   private getToday(): string {

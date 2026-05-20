@@ -11,6 +11,22 @@ import { t, useLocale } from '@/locales';
 
 type FilterTab = 'all' | Category | 'unlocked' | 'locked' | 'leaderboard';
 
+// Metric display config for score breakdown
+const SCORE_METRICS: { key: string; labelKey: string; unit: string; weight: number }[] = [
+  { key: 'total_sessions', labelKey: 'achievement.scoreDetail.sessions', unit: '个', weight: 3 },
+  { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages', unit: '条', weight: 0.5 },
+  { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens', unit: '', weight: 0.00001 },
+  { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron', unit: '次', weight: 2 },
+  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path', unit: '次', weight: 3 },
+  { key: 'total_skills_used', labelKey: 'achievement.scoreDetail.skill', unit: '次', weight: 2 },
+  { key: 'total_code_views', labelKey: 'achievement.scoreDetail.codeview', unit: '次', weight: 0.3 },
+  { key: 'total_git_ops', labelKey: 'achievement.scoreDetail.git', unit: '次', weight: 0.5 },
+  { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions', unit: '个', weight: 2 },
+  { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages', unit: '条', weight: 1 },
+  { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount', unit: '个', weight: 5 },
+  { key: 'current_streak', labelKey: 'achievement.scoreDetail.streak', unit: '天', weight: 2 },
+];
+
 const TABS: { key: FilterTab; labelKey: string }[] = [
   { key: 'all', labelKey: 'achievement.tabAll' },
   { key: 'unlocked', labelKey: 'achievement.tabUnlocked' },
@@ -27,6 +43,7 @@ export function AchievementsPage() {
   useLocale();
   const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [showScoreDetail, setShowScoreDetail] = useState(false);
 
   useEffect(() => {
     fetchSummary();
@@ -90,7 +107,32 @@ export function AchievementsPage() {
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                <span>{t('achievement.points', { count: String(summary.totalPoints) })}</span>
+                <span
+                  className="relative cursor-default"
+                  onMouseEnter={() => setShowScoreDetail(true)}
+                  onMouseLeave={() => setShowScoreDetail(false)}
+                >
+                  {t('achievement.points', { count: String(summary.totalPoints) })}
+                  {showScoreDetail && (
+                    <div className="absolute top-full left-0 mt-2 z-50 bg-card/90 backdrop-blur-xl border border-border/30 rounded-2xl shadow-xl px-4 py-3 text-[12px] min-w-[220px]">
+                      <div className="text-[10px] font-medium text-muted-foreground mb-2 uppercase tracking-widest">{t('achievement.scoreDetail.title')}</div>
+                      {SCORE_METRICS.map((m) => {
+                        const raw = parseInt(summary.stats[m.key] || '0', 10);
+                        if (raw === 0) return null;
+                        const score = Math.round(raw * m.weight * 100) / 100;
+                        const display = m.key === 'total_tokens'
+                          ? `${(raw / 10000).toFixed(1)}万`
+                          : raw;
+                        return (
+                          <div key={m.key} className="flex items-center justify-between py-0.5 gap-4">
+                            <span className="text-muted-foreground">{t(m.labelKey)}</span>
+                            <span className="text-foreground font-medium tabular-nums">{display}{m.unit} → <span className="text-foreground/70">{score}分</span></span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </span>
                 <span className="text-muted-foreground/30">·</span>
                 <span>{t('achievement.unlockedCount', { count: String(summary.totalUnlocked), total: String(summary.totalAchievements) })}</span>
               </div>
