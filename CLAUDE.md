@@ -32,6 +32,7 @@ Sman 是一个简化的智能业务平台，用户只需选择项目目录即可
 6. **设置** → LLM、Web 搜索、Chatbot、用户画像等配置
 7. **代码查看器** → 集成在聊天界面右侧，文件树浏览、代码读取、符号搜索
 8. **Git 面板** → 集成在聊天界面右侧，状态查看、Diff 对比、提交推送
+9. **成就系统** → 加权积分 + 成就解锁 + 多维度排行榜（总分 / 会话 / 消息 / Token 等）
 
 ## 快速开始
 
@@ -308,6 +309,42 @@ const MENU_ITEMS = [
 - **地球路径**: `smartpath.*`
 - **代码查看器**: `code.*`（listDir, readFile, searchSymbols, saveFile, searchFiles）
 - **Git 操作**: `git.*`（status, diff, commit, push, log, checkout, fetch 等）
+- **成就**: `achievement.list/stats/leaderboard`（支持 `?dimension=xxx` 按维度排名）
+
+### 成就系统
+
+#### 积分计算（加权指标求和，与成就解锁完全解耦）
+| 指标 | 权重 | 说明 |
+|------|------|------|
+| total_sessions | 3 | 有消息的会话，防刷 |
+| total_messages | 0.5 | 用户消息数 |
+| total_tokens | 0.000005 | 20万 Token = 1分 |
+| total_cron_runs | 2 | 定时任务成功执行 |
+| total_smartpath_runs | 5 | 地球路径完成 |
+| total_skills_used | 2 | 技能调用（事件未接入） |
+| total_code_views | 0.3 | 代码查看（事件未接入） |
+| total_git_ops | 0.5 | Git 操作（事件未接入） |
+| bot_sessions_total | 2 | Bot 会话数 |
+| bot_messages_total | 1 | Bot 消息数 |
+| bot_count_total | 5 | Bot 数量 |
+| current_streak | 2 | 连续活跃天数 |
+
+#### 等级阈值
+bronze(0) → silver(100) → gold(300) → platinum(600) → diamond(1200) → star(2000) → king(3200) → legend(4800) → epic(7000) → eternal(10000)
+
+#### 排行榜
+- 客户端上传 `dimensionScores`（各指标原始值 JSON）到 Hub
+- Hub `achievement_leaderboard` 表存储 `dimension_scores` 列
+- GET `/api/achievement-leaderboard?dimension=xxx` 支持按维度排序（`json_extract`）
+- 前端支持总分 + 各维度切换排名
+
+#### 关键文件
+- `server/achievement-engine.ts` — 积分计算、成就判定、排行榜上传/拉取
+- `server/achievement-definitions.ts` — 成就定义、等级阈值
+- `server/achievement-ws-handler.ts` — WebSocket 消息分发
+- `src/features/achievements/` — 前端页面（双层 tab：成就/排行榜）
+- `sman-server/src/db.ts` — Hub 数据库（含 `getLeaderboardByDimension`）
+- `sman-server/src/routes/report.ts` — Hub API（上传 + 排行榜查询）
 
 详细 API 文档 → 使用 `project-apis` skill
 

@@ -95,6 +95,7 @@ Your AI (Payment System) ←→ Teammate's AI (Inventory System)
 | Code Viewer | File tree, syntax highlighting, symbol search (CodeMirror 6) |
 | Git Panel | Status, diff, commit, push — AI auto-generates commit messages |
 | Smart Paths | Multi-step workflow automation with plain language |
+| Achievements | Weighted score system, unlock badges, dimension-based leaderboard |
 
 ---
 
@@ -216,6 +217,7 @@ pnpm test:watch    # Watch mode
 | Cron Scheduler | Time-based automation for inspections and reports |
 | Smart Paths | Multi-step workflows with plain-language descriptions |
 | Collaboration Stardom | Multi-agent networking with reputation system |
+| Achievements | Weighted scoring, badge unlocks, multi-dimension leaderboard |
 | Multi-Platform | Desktop + WeCom + Feishu + WeChat |
 | i18n | Chinese & English, auto-detection |
 | Private Deployment | Intranet models + local data, zero data egress |
