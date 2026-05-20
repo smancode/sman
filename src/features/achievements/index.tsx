@@ -98,24 +98,25 @@ export function AchievementsPage() {
             <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" currentPoints={summary.totalPoints} />
             <div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl font-semibold tracking-tight">{t('achievement.title')}</h1>
+                <h1 className="text-2xl font-bold dark:font-semibold tracking-tight">{t('achievement.title')}</h1>
                 <span className={cn(
-                  'text-[12px] font-medium px-2 py-0.5 rounded-full',
-                  levelColors.bg, levelColors.text, levelColors.border, 'border',
+                  'text-[12px] font-bold dark:font-medium px-2 py-0.5',
+                  'border-2 border-black dark:border-0 dark:rounded-full',
+                  levelColors.bg, levelColors.text,
                 )}>
                   Lv.{TIER_ORDER.indexOf(levelTier) + 1} {t(`achievement.tier.${levelTier}`)}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                 <span
-                  className="relative cursor-default"
+                  className="relative cursor-default font-bold dark:font-medium"
                   onMouseEnter={() => setShowScoreDetail(true)}
                   onMouseLeave={() => setShowScoreDetail(false)}
                 >
                   {t('achievement.points', { count: String(summary.totalPoints) })}
                   {showScoreDetail && (
-                    <div className="absolute top-full left-0 mt-2 z-50 bg-card/90 backdrop-blur-xl border border-border/30 rounded-2xl shadow-xl px-4 py-3 text-[12px] min-w-[220px]">
-                      <div className="text-[10px] font-medium text-muted-foreground mb-2 uppercase tracking-widest">{t('achievement.scoreDetail.title')}</div>
+                    <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-black/80 backdrop-blur-xl border-2 border-black dark:border-cyan-500/30 rounded-none dark:rounded-2xl shadow-[4px_4px_0_0_#1e293b] dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-4 py-3 text-[12px] min-w-[240px]">
+                      <div className="text-[10px] font-bold text-foreground dark:text-muted-foreground mb-2 uppercase tracking-widest">{t('achievement.scoreDetail.title')}</div>
                       {SCORE_METRICS.map((m) => {
                         const raw = parseInt(summary.stats[m.key] || '0', 10);
                         if (raw === 0) return null;
@@ -146,9 +147,9 @@ export function AchievementsPage() {
                 <span>{t(`achievement.tier.${levelTier}`)}</span>
                 <span>{t('achievement.nextLevel', { points: String(Math.round(lp.nextMin - lp.currentMin - lp.progress * (lp.nextMin - lp.currentMin))) })}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-foreground/5 overflow-hidden">
+              <div className="h-3 dark:h-1.5 border-2 border-black dark:border-0 dark:rounded-full bg-foreground/5 overflow-hidden">
                 <div
-                  className={cn('h-full rounded-full transition-all duration-700', levelColors.bar, 'opacity-80')}
+                  className={cn('h-full transition-all duration-700', levelColors.bar, 'dark:rounded-full dark:opacity-80')}
                   style={{ width: `${lp.progress * 100}%` }}
                 />
               </div>
@@ -157,7 +158,7 @@ export function AchievementsPage() {
 
           {/* Streak */}
           {summary.streak.current > 0 && (
-            <div className="mt-3 text-[12px] text-muted-foreground">
+            <div className="mt-3 text-[12px] inline-block px-2 py-0.5 border-2 border-black dark:border-0 dark:rounded-full font-bold dark:font-medium bg-orange-200 dark:bg-transparent dark:text-muted-foreground">
               {t('achievement.streak', { current: String(summary.streak.current), longest: String(summary.streak.longest) })}
             </div>
           )}
@@ -171,11 +172,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
-                  'rounded-full dark:rounded-none',
+                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                  'rounded-none dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm dark:bg-cyan-400 dark:text-black dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-cyan-300',
+                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
+                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
                 )}
               >
                 {t(tab.labelKey)}
@@ -188,11 +189,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
-                  'rounded-full dark:rounded-none',
+                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                  'rounded-none dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm dark:bg-cyan-400 dark:text-black dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-cyan-300',
+                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-cyan-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(0,255,255,0.3)]'
+                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-cyan-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
                 )}
               >
                 {t(tab.labelKey)}
@@ -205,11 +206,11 @@ export function AchievementsPage() {
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
                 className={cn(
-                  'px-3.5 py-1.5 text-[12px] font-medium transition-all duration-200',
-                  'rounded-full dark:rounded-none',
+                  'px-3.5 py-1.5 text-[12px] font-bold dark:font-medium transition-all duration-200',
+                  'rounded-none dark:rounded-none',
                   activeTab === tab.key
-                    ? 'bg-foreground text-background shadow-sm dark:bg-fuchsia-400 dark:text-black dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5 dark:hover:bg-white/5 dark:hover:text-fuchsia-300',
+                    ? 'bg-foreground text-background border-2 border-black shadow-[2px_2px_0_0_#1e293b] dark:bg-fuchsia-400 dark:text-black dark:border-0 dark:shadow-[0_0_12px_rgba(255,0,255,0.3)]'
+                    : 'border-2 border-transparent text-foreground bg-white dark:bg-transparent dark:border-0 dark:text-muted-foreground hover:border-black dark:hover:bg-white/5 dark:hover:text-fuchsia-300 hover:shadow-[2px_2px_0_0_#1e293b] dark:hover:shadow-none',
                 )}
               >
                 {t(tab.labelKey)}

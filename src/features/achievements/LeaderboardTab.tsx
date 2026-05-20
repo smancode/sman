@@ -55,8 +55,9 @@ export function LeaderboardTab() {
     <div>
       {/* Header row */}
       <div className={cn(
-        'flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground/60 font-medium uppercase tracking-wider',
-        'border-b border-border/30 dark:border-cyan-500/20 mb-2',
+        'flex items-center gap-3 px-4 py-2 text-[10px] font-bold dark:font-medium uppercase tracking-wider',
+        'border-b-2 border-black dark:border-cyan-500/20 mb-2',
+        'bg-foreground text-background dark:bg-transparent dark:text-muted-foreground/60',
       )}>
         <div className="w-8 shrink-0 text-center">{t('achievement.leaderboard.rankCol')}</div>
         <div className="w-16 shrink-0">{t('achievement.leaderboard.tierCol')}</div>
@@ -84,10 +85,14 @@ export function LeaderboardTab() {
             <div
               key={entry.rank}
               className={cn(
-                'flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200',
-                isTop3 && 'bg-foreground/[0.02]',
-                isSelf && 'ring-1 ring-foreground/10 bg-foreground/[0.03] dark:ring-cyan-400/40 dark:bg-cyan-400/5',
-                !isTop3 && !isSelf && 'hover:bg-foreground/[0.02] dark:hover:bg-white/[0.02]',
+                'flex items-center gap-3 px-4 py-2.5 transition-all duration-200',
+                'dark:rounded-xl',
+                isTop3 && 'border-2 border-black dark:border-0 dark:bg-foreground/[0.02]',
+                isTop3 && entry.rank === 1 && 'bg-yellow-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                isTop3 && entry.rank === 2 && 'bg-slate-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                isTop3 && entry.rank === 3 && 'bg-amber-50 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                isSelf && !isTop3 && 'border-2 border-black dark:border-0 dark:ring-cyan-400/40 dark:bg-cyan-400/5 bg-white shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                !isTop3 && !isSelf && 'hover:bg-muted/30 dark:hover:bg-white/[0.02]',
               )}
             >
               {/* Rank */}
@@ -109,7 +114,8 @@ export function LeaderboardTab() {
               {/* Level */}
               <div className="w-16 shrink-0">
                 <span className={cn(
-                  'text-[11px] font-medium px-2 py-0.5 rounded-full',
+                  'text-[11px] font-bold dark:font-medium px-1.5 py-0.5',
+                  'border border-black dark:border-0 dark:rounded-full',
                   tierColors.bg, tierColors.text,
                 )}>
                   {t(`achievement.tier.${tier}`)}
