@@ -11,6 +11,7 @@ import {
   Pin,
   Users,
   Trophy,
+  Scroll,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col backdrop-blur-sm transition-all duration-300 w-64 h-full',
+        'flex flex-col backdrop-blur-sm transition-all duration-300 w-64 h-full relative',
       )}
       style={{ background: 'hsl(var(--sidebar-bg))' }}
     >
@@ -219,21 +220,6 @@ export function Sidebar() {
             )}
           </NavLink>
 
-          {/* Achievement icon */}
-          <NavLink
-            to="/achievements"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center justify-center rounded-lg transition-all duration-150',
-                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-              )
-            }
-            title={t('menu.achievements')}
-          >
-            <Trophy className="h-[18px] w-[18px]" strokeWidth={2} />
-          </NavLink>
-
           {/* Pin 按钮：悬浮时显示，点击固定展开 */}
           <Button
             variant="ghost"
@@ -284,6 +270,23 @@ export function Sidebar() {
             )}
           </Button>
         </div>
+      </div>
+
+      {/* Achievement icon — outside footer hover zone */}
+      <div className="absolute bottom-3 right-[52px]">
+        <NavLink
+          to="/achievements"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center rounded-lg transition-all duration-150',
+              'hover:bg-[hsl(var(--muted))] h-9 w-9',
+              isActive ? 'text-foreground' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.achievements')}
+        >
+          <Scroll className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
       </div>
     </aside>
   );
