@@ -574,7 +574,7 @@ export class AchievementEngine {
     try {
       const payload = {
         agentId: clientId,
-        agentName: `${os.userInfo().username}@${clientId.slice(-6)}`,
+        agentName: clientId,
         totalPoints,
         totalUnlocked: summary.totalUnlocked,
         level,

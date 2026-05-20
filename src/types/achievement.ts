@@ -49,10 +49,10 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export const CATEGORY_COLORS: Record<Category, { text: string; bg: string; border: string; bar: string }> = {
-  conversation:  { text: 'text-blue-600 dark:text-blue-400',     bg: 'bg-blue-50 dark:bg-blue-950/20',     border: 'border-blue-200 dark:border-blue-800/30',     bar: 'bg-blue-500' },
-  advanced:      { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/20', border: 'border-violet-200 dark:border-violet-800/30', bar: 'bg-violet-500' },
-  exploration:   { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800/30', bar: 'bg-emerald-500' },
-  collaboration: { text: 'text-amber-600 dark:text-amber-400',   bg: 'bg-amber-50 dark:bg-amber-950/20',   border: 'border-amber-200 dark:border-amber-800/30',   bar: 'bg-amber-500' },
-  bot:           { text: 'text-pink-600 dark:text-pink-400',     bg: 'bg-pink-50 dark:bg-pink-950/20',     border: 'border-pink-200 dark:border-pink-800/30',     bar: 'bg-pink-500' },
-  hidden:        { text: 'text-slate-600 dark:text-slate-400',   bg: 'bg-slate-50 dark:bg-slate-800/20',   border: 'border-slate-200 dark:border-slate-700/30',   bar: 'bg-slate-400' },
+  conversation:  { text: 'text-blue-600 dark:text-blue-400',     bg: 'bg-blue-50 dark:bg-blue-950/20',     border: 'border-blue-300 dark:border-blue-600/40',     bar: 'bg-blue-500' },
+  advanced:      { text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/20', border: 'border-violet-300 dark:border-violet-600/40', bar: 'bg-violet-500' },
+  exploration:   { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-300 dark:border-emerald-600/40', bar: 'bg-emerald-500' },
+  collaboration: { text: 'text-amber-600 dark:text-amber-400',   bg: 'bg-amber-50 dark:bg-amber-950/20',   border: 'border-amber-300 dark:border-amber-600/40',   bar: 'bg-amber-500' },
+  bot:           { text: 'text-pink-600 dark:text-pink-400',     bg: 'bg-pink-50 dark:bg-pink-950/20',     border: 'border-pink-300 dark:border-pink-600/40',     bar: 'bg-pink-500' },
+  hidden:        { text: 'text-slate-600 dark:text-slate-400',   bg: 'bg-slate-50 dark:bg-slate-800/20',   border: 'border-slate-300 dark:border-slate-600/40',   bar: 'bg-slate-400' },
 };
