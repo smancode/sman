@@ -9,11 +9,6 @@ import { ChatInput } from './ChatInput';
 // IMEntry — same structure as Chat (src/features/chat/index.tsx)
 // ---------------------------------------------------------------------------
 
-function getClientId(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('sman-client-id') || '';
-}
-
 export default function IMEntry() {
   useLocale();
 
@@ -23,7 +18,6 @@ export default function IMEntry() {
   const storeReplyQuote = useIMStore((s) => s.replyQuote);
   const setReplyQuote = useIMStore((s) => s.setReplyQuote);
   const { data: fetchedMessages = [] } = useRoomMessages(selectedRoomId ?? undefined);
-  const clientId = useMemo(() => getClientId(), []);
 
   const [prefillContent, setPrefillContent] = useState('');
   const [prefillConsumed, setPrefillConsumed] = useState(false);
@@ -74,7 +68,7 @@ export default function IMEntry() {
             </div>
           </div>
         ) : (
-          <MessageList messages={messages} clientId={clientId} />
+          <MessageList messages={messages} />
         )}
       </div>
 
@@ -83,7 +77,6 @@ export default function IMEntry() {
         <div className="mt-auto w-full mx-auto max-w-4xl px-2">
           <ChatInput
             roomId={selectedRoomId!}
-            clientId={clientId}
             initialContent={prefillContent}
             onContentConsumed={handleContentConsumed}
           />

@@ -78,7 +78,7 @@ export function ChatWindow({ roomId, roomName, onToggleMembers }: ChatWindowProp
             <p className="text-muted-foreground text-sm">{t('im.empty.noMessages')}</p>
           </div>
         ) : (
-          <MessageList messages={messages} clientId={clientId} />
+          <MessageList messages={messages} />
         )}
       </div>
 
@@ -86,7 +86,6 @@ export function ChatWindow({ roomId, roomName, onToggleMembers }: ChatWindowProp
       <div className="mt-auto w-full mx-auto max-w-4xl px-2">
         <ChatInput
           roomId={roomId}
-          clientId={clientId}
           initialContent={prefillContent}
           onContentConsumed={handleContentConsumed}
         />

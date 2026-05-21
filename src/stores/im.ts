@@ -51,6 +51,9 @@ interface IMStore {
   onlineUsers: Set<string>;
   typingUsers: Map<string, string>; // roomId -> userId
 
+  // My client ID (set from first im.sent ack)
+  mySenderId: string | null;
+
   // Reply quote for pre-filling ChatInput
   replyQuote: { roomId: string; messageId: string; content: string } | null;
 
@@ -74,6 +77,9 @@ interface IMStore {
 
   // Actions — reply quote
   setReplyQuote: (quote: { roomId: string; messageId: string; content: string } | null) => void;
+
+  // Actions — identity
+  setMySenderId: (id: string) => void;
 }
 
 export const useIMStore = create<IMStore>((set, get) => ({
@@ -85,6 +91,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
   onlineUsers: new Set(),
   typingUsers: new Map(),
   replyQuote: null,
+  mySenderId: null,
 
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -168,6 +175,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
   }),
 
   setReplyQuote: (quote) => set({ replyQuote: quote }),
+  setMySenderId: (id: string) => set({ mySenderId: id }),
 }));
 
 // ---------------------------------------------------------------------------

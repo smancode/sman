@@ -154,14 +154,12 @@ function MentionPopup({ agents, filter, onSelect, onClose }: {
 
 interface ChatInputProps {
   roomId: string;
-  clientId: string;
   initialContent?: string;
   onContentConsumed?: () => void;
 }
 
 export const ChatInput = memo(function ChatInput({
   roomId,
-  clientId,
   initialContent,
   onContentConsumed,
 }: ChatInputProps) {
@@ -179,7 +177,6 @@ export const ChatInput = memo(function ChatInput({
   // IM data
   const sessions = useChatStore((s) => s.sessions);
   const agents = getWorkspaceAgents(sessions);
-  const addMessage = useIMStore((s) => s.addMessage);
   const touchRoom = useIMStore((s) => s.touchRoom);
   const sendMessage = useSendMessage();
 
@@ -373,15 +370,6 @@ export const ChatInput = memo(function ChatInput({
       finalText += ` [用户文件路径:[${paths.join(',')}]]`;
     }
 
-    addMessage({
-      id: `${clientId}-${Date.now()}`,
-      roomId,
-      sender: clientId,
-      content: finalText,
-      mentionedAgents,
-      type: 'text',
-      timestamp: Date.now(),
-    });
     touchRoom(roomId);
 
     setInput('');
@@ -392,7 +380,7 @@ export const ChatInput = memo(function ChatInput({
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     sendMessage.mutate({ roomId, content: finalText, mentionedAgents });
-  }, [canSend, input, stagedMedia, roomId, clientId, addMessage, sendMessage]);
+  }, [canSend, input, stagedMedia, roomId, sendMessage]);
 
   // --- Keyboard ---
 

@@ -11,7 +11,6 @@ import type { IMMessage } from '@/schemas/im';
 
 interface MessageListProps {
   messages: IMMessage[];
-  clientId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,10 +68,11 @@ function useTopObserver(onReachTop: () => void, enabled: boolean) {
 // Component
 // ---------------------------------------------------------------------------
 
-export function MessageList({ messages, clientId }: MessageListProps) {
+export function MessageList({ messages }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const agentStreams = useIMStore((s) => s.agentStreams);
+  const mySenderId = useIMStore((s) => s.mySenderId);
   const typingUsers = useIMStore((s) => s.typingUsers);
   const prevMsgCountRef = useRef(0);
 
@@ -120,7 +120,7 @@ export function MessageList({ messages, clientId }: MessageListProps) {
       {sorted.map((msg, idx) => {
         const prevMsg = idx > 0 ? sorted[idx - 1] : null;
         const showDivider = !prevMsg || getDateKey(msg.timestamp) !== getDateKey(prevMsg.timestamp);
-        const isSelf = msg.sender === clientId;
+        const isSelf = !msg.sender || msg.sender === mySenderId;
 
         return (
           <div key={msg.id}>

@@ -5,6 +5,7 @@ import {
   EMPTY_ROOMS,
   EMPTY_MESSAGES,
 } from '@/schemas/im';
+import { useIMStore } from '@/stores/im';
 import type { IMRoom, IMMessage } from '@/schemas/im';
 import { useWsConnection } from '@/stores/ws-connection';
 
@@ -196,6 +197,10 @@ export function useSendMessage() {
           if (String(payload.roomId) !== params.roomId) return;
           clearTimeout(timeout);
           unsubAck();
+          // Remember my sender ID from server
+          if (payload.sender) {
+            useIMStore.getState().setMySenderId(String(payload.sender));
+          }
           resolve();
         });
 
