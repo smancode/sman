@@ -3914,5 +3914,7 @@
   "im.agentCard.collapse": { "text": "收起 ▲", "context": "IM Agent 卡片收起按钮" },
   "im.agentCard.replyPlaceholder": { "text": "继续对话...", "context": "IM Agent 卡片回复输入框占位符" },
   "im.agentCard.dm": { "text": "私聊", "context": "IM Agent 卡片私聊按钮" },
-  "im.agentCard.groupReply": { "text": "群聊回复", "context": "IM Agent 卡片群聊回复按钮" }
+  "im.agentCard.groupReply": { "text": "群聊回复", "context": "IM Agent 卡片群聊回复按钮" },
+  "im.dateToday": { "text": "今天", "context": "IM 消息日期分隔-今天" },
+  "im.dateYesterday": { "text": "昨天", "context": "IM 消息日期分隔-昨天" }
 }

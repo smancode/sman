@@ -3914,5 +3914,7 @@
   "im.agentCard.collapse": { "text": "Collapse ▲", "context": "IM Agent card collapse button" },
   "im.agentCard.replyPlaceholder": { "text": "Continue conversation...", "context": "IM Agent card reply input placeholder" },
   "im.agentCard.dm": { "text": "DM", "context": "IM Agent card DM button" },
-  "im.agentCard.groupReply": { "text": "Reply in Group", "context": "IM Agent card group reply button" }
+  "im.agentCard.groupReply": { "text": "Reply in Group", "context": "IM Agent card group reply button" },
+  "im.dateToday": { "text": "Today", "context": "IM message date divider - today" },
+  "im.dateYesterday": { "text": "Yesterday", "context": "IM message date divider - yesterday" }
 }

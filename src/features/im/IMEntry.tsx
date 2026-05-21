@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useLocale, t } from '@/locales';
 import { useIMStore } from '@/stores/im';
 import { GroupChatList } from './GroupChatList';
 import { SessionList } from './SessionList';
+import { ChatWindow } from './ChatWindow';
 
 // ---------------------------------------------------------------------------
 // Tab type
@@ -17,6 +19,7 @@ export default function IMEntry() {
   useLocale();
 
   const { activeTab, selectedRoomId, selectRoom, setActiveTab } = useIMStore();
+  const [showMembers, setShowMembers] = useState(false);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -62,23 +65,11 @@ export default function IMEntry() {
         </div>
       </div>
 
-      {/* ===== CENTER: Chat Window placeholder ===== */}
-      <div className="flex-1 flex flex-col bg-[#0a0a0f] min-w-0">
-        {!selectedRoomId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-[#555568] text-sm">
-              {t('im.empty.selectHint')}
-            </p>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            {/* ChatWindow will be rendered here in Task 9 */}
-            <p className="text-[#555568] text-sm">
-              ChatWindow placeholder — room: {selectedRoomId}
-            </p>
-          </div>
-        )}
-      </div>
+      {/* ===== CENTER: Chat Window ===== */}
+      <ChatWindow
+        roomId={selectedRoomId}
+        onToggleMembers={() => setShowMembers((v) => !v)}
+      />
 
       {/* ===== RIGHT: Member Panel placeholder ===== */}
       {/* MemberPanel will be conditionally rendered here in Task 12 */}
