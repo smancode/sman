@@ -11,6 +11,10 @@
     "text": "会话",
     "context": "顶部导航菜单项，显示会话列表"
   },
+  "menu.chat": {
+    "text": "聊天",
+    "context": "左侧图标导航栏，打开当前会话聊天"
+  },
   "menu.settings": {
     "text": "设置",
     "context": "顶部导航菜单项，打开设置页面"
@@ -2096,11 +2100,11 @@
     "context": "活动 Feed 提示"
   },
   "stardom.entry.comingSoon": {
-    "text": "星际航道内测中，敬请期待",
+    "text": "「协作星图」内测中，敬请期待",
     "context": "星图入口动画提示文字"
   },
   "hub.entry.comingSoon": {
-    "text": "组队内测中，敬请期待",
+    "text": "「组队」内测中，敬请期待",
     "context": "组队入口动画提示文字"
   },
   "batch.status.draft": {
@@ -3887,7 +3891,7 @@
   "im.online": { "text": "在线", "context": "IM 在线状态" },
   "im.offline": { "text": "离线", "context": "IM 离线状态" },
   "im.typing": { "text": "正在输入", "context": "IM 正在输入提示" },
-  "im.newGroup": { "text": "新建群聊", "context": "IM 新建群聊按钮" },
+  "im.newGroup": { "text": "新建对话", "context": "IM 新建对话按钮" },
   "im.workspace": { "text": "工作台", "context": "IM 工作台入口" },
   "im.agentStatus.running": { "text": "执行中", "context": "IM Agent 执行中状态" },
   "im.agentStatus.completed": { "text": "已完成", "context": "IM Agent 已完成状态" },

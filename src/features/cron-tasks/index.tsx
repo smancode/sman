@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, FolderOpen } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CronTaskSettings } from '@/features/settings/CronTaskSettings';
 import { useCronStore } from '@/stores/cron';
@@ -10,7 +9,6 @@ import { PageLayout } from '@/components/common/PageLayout';
 import { t } from '@/locales';
 
 export function CronTasksPage() {
-  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
 
@@ -57,13 +55,6 @@ export function CronTasksPage() {
       scrollRef={scrollRef}
       sidebar={
         <>
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            {t('cron.back')}
-          </button>
           {groups.length === 0 && (
             <div className="text-xs text-muted-foreground px-3 py-2">{t('cron.noSystems')}</div>
           )}

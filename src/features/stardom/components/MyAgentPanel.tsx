@@ -4,12 +4,11 @@
 
 import { useStardomStore } from '@/stores/stardom';
 import { useChatStore } from '@/stores/chat';
-import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, Trophy, Users, ArrowLeft, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Trophy, Users, Loader2 } from 'lucide-react';
 import { getReputationLevel, getReputationProgress, getNextLevel } from './ReputationUtils';
 import { t } from '@/locales';
 
@@ -25,7 +24,6 @@ function deriveAgentStatus(
 }
 
 export function MyAgentPanel() {
-  const navigate = useNavigate();
   const { connection, setMode, leaderboard } = useStardomStore();
   const sending = useChatStore((s) => s.sending);
   const { connected, agentName, reputation, agentStatus } = connection;
@@ -43,9 +41,6 @@ export function MyAgentPanel() {
       {/* Header */}
       <div className="p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <button className="h-7 w-7 p-0 flex-shrink-0 rounded hover:bg-white/10" onClick={() => navigate('/chat')} style={{ color: 'var(--bz-text-dim)' }}>
-            <ArrowLeft className="h-4 w-4" />
-          </button>
           <img src="/favicon.svg" alt="Agent" className="h-7 w-7 object-contain rounded dark:brightness-0 dark:invert dark:opacity-80" />
           <div className="min-w-0 flex-1">
             <div className="font-medium text-sm truncate" style={{ color: 'var(--bz-text)' }}>{agentName ?? t('stardom.myAgent.localAgent')}</div>

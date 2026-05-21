@@ -32,7 +32,8 @@ export function MainLayout() {
   const inChat = location.pathname === '/chat';
   const isStardom = location.pathname === '/stardom';
   const isWelcome = inChat && !hasMessages;
-  const hideSidebar = ['/settings', '/cron-tasks', '/batch-tasks', '/smart-paths', '/stardom', '/hub'].includes(location.pathname);
+  // Routes that show right panel (SessionTree or IM list)
+  const showRightPanel = ['/chat', '/im'].includes(location.pathname);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -65,17 +66,15 @@ export function MainLayout() {
 
       {/* 内容层 - 半透明以透出背景 */}
       <div className="relative z-10 flex flex-col h-full">
-        {/* Sidebar 全通：从顶部到底部，绝对定位 */}
-        {!hideSidebar && (
-          <div className="absolute inset-y-0 left-0 z-20 w-64">
-            <Sidebar />
-          </div>
-        )}
+        {/* Sidebar：icon nav 始终显示，右侧面板根据路由显示 */}
+        <div className={cn('absolute inset-y-0 left-0 z-20 flex', showRightPanel ? 'w-72' : 'w-12')}>
+          <Sidebar showRightPanel={showRightPanel} />
+        </div>
         {/* 右侧区域：Titlebar + 主内容 */}
-        <div className={cn('flex flex-col flex-1 overflow-hidden', !hideSidebar && 'ml-64')}>
+        <div className={cn('flex flex-col flex-1 min-h-0 overflow-hidden transition-all duration-200', showRightPanel ? 'ml-72' : 'ml-12')}>
           <Titlebar />
           <UpdateBanner />
-          <main className="flex-1 overflow-y-auto bg-transparent" style={{ scrollbarGutter: 'stable' }}>
+          <main className="relative flex-1 min-h-0 overflow-y-auto bg-transparent" style={{ scrollbarGutter: 'stable' }}>
             <Outlet />
           </main>
         </div>

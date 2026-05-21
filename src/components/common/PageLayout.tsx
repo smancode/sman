@@ -11,7 +11,7 @@ interface PageLayoutProps {
 export function PageLayout({ sidebar, children, sidebarFooter, scrollRef, contentClassName }: PageLayoutProps) {
   return (
     <div className="flex h-full">
-      <nav className="w-64 shrink-0 p-4 space-y-1 flex flex-col h-full">
+      <nav className="w-52 shrink-0 p-4 space-y-1 flex flex-col h-full">
         <div className="flex-1 space-y-1">
           {sidebar}
         </div>

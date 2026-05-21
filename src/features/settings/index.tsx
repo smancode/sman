@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info, MessageSquare } from 'lucide-react';
+import { Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -199,7 +198,6 @@ function FeedbackForm() {
 export function Settings() {
   useLocale();
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
-  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -220,13 +218,6 @@ export function Settings() {
       scrollRef={scrollRef}
       sidebar={
         <>
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            {t('settings.back')}
-          </button>
           {SECTIONS.map(({ id, icon: Icon }) => (
             <button
               key={id}

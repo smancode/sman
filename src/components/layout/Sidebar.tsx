@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Settings as SettingsIcon,
   Sun,
@@ -7,11 +7,10 @@ import {
   Clock,
   Sparkles,
   Route,
-  ChevronUp,
-  Pin,
   Users,
   Scroll,
   MessageCircle,
+  MessagesSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,21 @@ import { useWsConnection } from '@/stores/ws-connection';
 import { useTheme } from '@/hooks/useTheme';
 import { t, useLocale } from '@/locales';
 
-export function Sidebar() {
+const IMListPanel = lazy(() => import('@/features/im/IMListPanel'));
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+interface SidebarProps {
+  showRightPanel: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar — icon nav (48px) + optional right panel (SessionTree or IM list)
+// ---------------------------------------------------------------------------
+
+export function Sidebar({ showRightPanel }: SidebarProps) {
   useLocale();
   const { theme, toggleTheme } = useTheme();
   const connectionStatus = useWsConnection((s) => s.status);
@@ -28,301 +41,210 @@ export function Sidebar() {
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
   const shouldBlur = !['/chat', '/stardom', '/hub', '/achievements', '/im'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
-  const [pinned, setPinned] = useState(() => localStorage.getItem('sman-sidebar-pinned') === 'true');
-  const [hovering, setHovering] = useState(false);
-  const expanded = pinned || hovering;
-  const blurSession = shouldBlur && !dismissed;
 
-  // 切换页面时重置 dismissed 状态
   useEffect(() => { setDismissed(false); }, [location.pathname]);
 
+  const isIMActive = location.pathname === '/im';
+  const isChatActive = location.pathname === '/chat';
+  const showIMList = location.pathname === '/im';
+
   return (
-    <aside
-      className={cn(
-        'flex flex-col backdrop-blur-sm transition-all duration-300 w-64 h-full relative',
-      )}
-      style={{ background: 'hsl(var(--sidebar-bg))' }}
-    >
-      {/* macOS traffic lights 占位 / Windows 标题栏对齐 */}
-      {isMac ? (
-        <div className="shrink-0 h-[28px]" />
-      ) : window.sman ? (
-        <div className="shrink-0 h-3" />
-      ) : null}
+    <>
+      {/* ===== 左侧 48px 竖向图标导航栏 ===== */}
+      <div className="w-12 flex-shrink-0 flex flex-col items-center border-r border-[hsl(var(--border))]/40" style={{ background: 'hsl(var(--sidebar-bg))' }}>
+        {isMac ? (
+          <div className="shrink-0 h-[28px]" />
+        ) : window.sman ? (
+          <div className="shrink-0 h-3" />
+        ) : null}
 
-      {/* Session Tree */}
-      <div className="flex-1 overflow-hidden min-h-0 relative">
-        <SessionTree />
-        {blurSession && (
-          <div
-            className="absolute inset-0 backdrop-blur-[2px] bg-background/10 z-10 transition-all duration-300 cursor-pointer"
-            onClick={() => setDismissed(true)}
-          />
-        )}
-        {/* 展开菜单时底部的渐隐遮罩 */}
-        <div
-          className={cn(
-            'absolute bottom-0 left-0 right-0 h-24 z-20 pointer-events-none transition-opacity duration-200',
-            expanded ? 'opacity-100' : 'opacity-0',
-          )}
-          style={{
-            background: `linear-gradient(to top, hsl(var(--sidebar-bg)) 0%, transparent 100%)`,
-          }}
-        />
-      </div>
-
-      {/* Footer - 固定在底部，悬浮展开 */}
-      <div
-        className="p-2 shrink-0 space-y-0.5"
-      >
-        {/* 可折叠区域：协作星图、定时任务、地球路径 */}
-        <div
-          className={cn(
-            'overflow-hidden transition-all duration-200',
-            expanded ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0',
-          )}
-          onMouseEnter={() => setHovering(true)}
-          onMouseLeave={() => setHovering(false)}
+        {/* 聊天 */}
+        <NavLink
+          to="/chat"
+          className={() =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isChatActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.chat')}
         >
-          <div className="space-y-0.5 mb-0.5">
-            <NavLink
-              to="/stardom"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.stardom')}</span>
-                </>
-              )}
-            </NavLink>
+          <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-            <NavLink
-              to="/hub"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Users className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.hub')}</span>
-                </>
-              )}
-            </NavLink>
+        {/* IM */}
+        <NavLink
+          to="/im"
+          className={() =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isIMActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('im.title')}
+        >
+          <MessagesSquare className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-            <NavLink
-              to="/cron-tasks"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.cron')}</span>
-                </>
-              )}
-            </NavLink>
+        {/* 分隔线 */}
+        <div className="w-5 h-px bg-[hsl(var(--border))]/40 my-1" />
 
-            <NavLink
-              to="/smart-paths"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Route className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.smartpath')}</span>
-                </>
-              )}
-            </NavLink>
-          </div>
-        </div>
+        {/* 定时任务 */}
+        <NavLink
+          to="/cron-tasks"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.cron')}
+        >
+          <Clock className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-        {/* 设置行（始终可见） */}
-        <div className="flex items-center gap-1">
-          {/* hover 区域：只在 ChevronUp + 设置 + Pin 上触发展开 */}
-          <div
-            className="flex items-center gap-1 flex-1 min-w-0"
-            onMouseEnter={() => setHovering(true)}
-            onMouseLeave={() => setHovering(false)}
-          >
-            <ChevronUp
-              className={cn(
-                'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
-                expanded ? 'rotate-180' : '',
-              )}
-            />
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200 flex-1 min-w-0',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('menu.settings')}</span>
-                </>
-              )}
-            </NavLink>
+        {/* 地球路径 */}
+        <NavLink
+          to="/smart-paths"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.smartpath')}
+        >
+          <Route className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-            {/* Pin 按钮：悬浮时显示，点击固定展开 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                'h-7 w-7 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-md transition-opacity duration-150',
-                hovering ? 'opacity-100' : 'opacity-0 pointer-events-none',
-              )}
-              onClick={() => setPinned((p) => { const next = !p; localStorage.setItem('sman-sidebar-pinned', String(next)); return next; })}
-              title={pinned ? t('sidebar.unpin') : t('sidebar.pin')}
-            >
-              <Pin
-                className={cn('h-3.5 w-3.5', pinned && 'text-foreground rotate-45')}
-              />
-            </Button>
-          </div>
+        {/* 组队 */}
+        <NavLink
+          to="/hub"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.hub')}
+        >
+          <Users className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-          {/* Connection status */}
-          <div
-            className={cn(
-              'h-2 w-2 rounded-full shrink-0',
-              connectionStatus === 'connected'
-                ? 'bg-green-500'
-                : connectionStatus === 'connecting'
-                  ? 'bg-yellow-500 animate-pulse'
-                  : 'bg-red-500',
-            )}
-            title={
-              connectionStatus === 'connected'
-                ? t('sidebar.connected')
-                : connectionStatus === 'connecting'
-                  ? t('sidebar.connecting')
-                  : t('sidebar.disconnected')
-            }
-          />
+        {/* 协作星图 */}
+        <NavLink
+          to="/stardom"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.stardom')}
+        >
+          <Sparkles className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-          {/* IM session icon */}
-          <NavLink
-            to="/im?tab=sessions"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center justify-center rounded-lg transition-all duration-150',
-                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-              )
-            }
-            title={t('im.sessions')}
-          >
-            <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
-          </NavLink>
+        {/* 弹性空间 */}
+        <div className="flex-1" />
 
-          {/* IM groups icon */}
-          <NavLink
-            to="/im?tab=groups"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center justify-center rounded-lg transition-all duration-150',
-                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-              )
-            }
-            title={t('im.groups')}
-          >
-            <Users className="h-[18px] w-[18px]" strokeWidth={2} />
-          </NavLink>
+        {/* 成就 */}
+        <NavLink
+          to="/achievements"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.achievements')}
+        >
+          <Scroll className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-          {/* Achievement icon */}
-          <NavLink
-            to="/achievements"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center justify-center rounded-lg transition-all duration-150',
-                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
-              )
-            }
-            title={t('menu.achievements')}
-          >
-            <Scroll className="h-[18px] w-[18px]" strokeWidth={2} />
-          </NavLink>
+        {/* 设置 */}
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center justify-center w-9 h-9 rounded-lg my-0.5 transition-all duration-150',
+              'hover:bg-[hsl(var(--sidebar-border))]',
+              isActive ? 'text-foreground bg-[hsl(var(--sidebar-border))]' : 'text-muted-foreground',
+            )
+          }
+          title={t('menu.settings')}
+        >
+          <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+        </NavLink>
 
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-[hsl(var(--muted))] rounded-lg"
-            onClick={toggleTheme}
-            title={theme === 'light' ? t('sidebar.darkMode') : t('sidebar.lightMode')}
-          >
-            {theme === 'light' ? (
-              <Moon className="h-[18px] w-[18px]" />
-            ) : (
-              <Sun className="h-[18px] w-[18px]" />
-            )}
-          </Button>
-        </div>
+        {/* Connection status */}
+        <div
+          className={cn(
+            'h-2 w-2 rounded-full my-1.5',
+            connectionStatus === 'connected'
+              ? 'bg-green-500'
+              : connectionStatus === 'connecting'
+                ? 'bg-yellow-500 animate-pulse'
+                : 'bg-red-500',
+          )}
+          title={
+            connectionStatus === 'connected'
+              ? t('sidebar.connected')
+              : connectionStatus === 'connecting'
+                ? t('sidebar.connecting')
+                : t('sidebar.disconnected')
+          }
+        />
+
+        {/* Theme toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-[hsl(var(--sidebar-border))] rounded-lg mb-2"
+          onClick={toggleTheme}
+          title={theme === 'light' ? t('sidebar.darkMode') : t('sidebar.lightMode')}
+        >
+          {theme === 'light' ? (
+            <Moon className="h-[18px] w-[18px]" />
+          ) : (
+            <Sun className="h-[18px] w-[18px]" />
+          )}
+        </Button>
       </div>
-    </aside>
+
+      {/* ===== 右侧面板：SessionTree 或 IM 列表 ===== */}
+      {showRightPanel && (
+        <div className="flex-1 flex flex-col min-w-0" style={{ background: 'hsl(var(--sidebar-bg))' }}>
+          {isMac ? (
+            <div className="shrink-0 h-[28px]" />
+          ) : window.sman ? (
+            <div className="shrink-0 h-3" />
+          ) : null}
+
+          {showIMList ? (
+            <Suspense fallback={<div className="flex-1" />}>
+              <IMListPanel />
+            </Suspense>
+          ) : (
+            <div className="flex-1 overflow-hidden min-h-0 relative">
+              <SessionTree />
+              {shouldBlur && !dismissed && (
+                <div
+                  className="absolute inset-0 backdrop-blur-[2px] bg-background/10 z-10 transition-all duration-300 cursor-pointer"
+                  onClick={() => setDismissed(true)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }

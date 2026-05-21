@@ -11,6 +11,10 @@
     "text": "Sessions",
     "context": "Top navigation menu item, shows session list"
   },
+  "menu.chat": {
+    "text": "Chat",
+    "context": "Left icon nav bar, open current session chat"
+  },
   "menu.settings": {
     "text": "Settings",
     "context": "Top navigation menu item, opens settings page"
@@ -2096,11 +2100,11 @@
     "context": "Activity feed hint"
   },
   "stardom.entry.comingSoon": {
-    "text": "Exploring new starlanes... Stay tuned",
+    "text": "「Stardom」 Closed beta, stay tuned",
     "context": "Stardom entry animation hint text"
   },
   "hub.entry.comingSoon": {
-    "text": "Team is in closed beta... Stay tuned",
+    "text": "「Team」 Closed beta, stay tuned",
     "context": "Hub entry animation hint text"
   },
   "batch.status.draft": {
@@ -3887,7 +3891,7 @@
   "im.online": { "text": "Online", "context": "IM online status" },
   "im.offline": { "text": "Offline", "context": "IM offline status" },
   "im.typing": { "text": "typing", "context": "IM typing indicator" },
-  "im.newGroup": { "text": "New Group", "context": "IM new group button" },
+  "im.newGroup": { "text": "New Chat", "context": "IM new chat button" },
   "im.workspace": { "text": "Workspace", "context": "IM workspace entry" },
   "im.agentStatus.running": { "text": "Running", "context": "IM agent running status" },
   "im.agentStatus.completed": { "text": "Completed", "context": "IM agent completed status" },

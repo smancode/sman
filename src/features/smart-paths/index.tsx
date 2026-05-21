@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, ChevronDown, ChevronRight, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
+  ChevronDown, ChevronRight, Plus, Trash2, Play, Loader2, CheckCircle, XCircle,
   FolderOpen, Save, GripVertical, Route, Pencil, Square,
   Clock, FileText, FileCode, BookOpen, Ban, Send, MessageSquare,
 } from 'lucide-react';
@@ -42,12 +41,11 @@ function getStepCount(p: SmartPath): number {
 
 // ── Left sidebar ──
 
-function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
+function PathList({ paths, currentPath, onSelect, onNew }: {
   paths: SmartPath[];
   currentPath: SmartPath | null;
   onSelect: (p: SmartPath) => void;
   onNew: () => void;
-  onBack: () => void;
 }) {
   const groups = useMemo(() => {
     const map = new Map<string, SmartPath[]>();
@@ -62,9 +60,6 @@ function PathList({ paths, currentPath, onSelect, onNew, onBack }: {
   return (
     <div className="w-64 shrink-0 flex flex-col h-full">
       <div className="p-3 space-y-2">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronLeft className="h-4 w-4" /> {t('smartpath.back')}
-        </button>
         <Button variant="outline" size="sm" className="w-full" onClick={onNew}>
           <Plus className="h-4 w-4 mr-1" /> {t('smartpath.newPath')}
         </Button>
@@ -1036,7 +1031,6 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 // ── Main page ──
 
 export function SmartPathPage() {
-  const navigate = useNavigate();
   const { status: wsStatus } = useWsConnection();
   const paths = useSmartPathStore((s) => s.paths);
   const currentPath = useSmartPathStore((s) => s.currentPath);
@@ -1093,9 +1087,9 @@ export function SmartPathPage() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="absolute inset-0 flex">
       <PathList paths={paths} currentPath={currentPath}
-        onSelect={(p) => setCurrentPath(p)} onNew={() => setCreateOpen(true)} onBack={() => navigate(-1)} />
+        onSelect={(p) => setCurrentPath(p)} onNew={() => setCreateOpen(true)} />
       <div className="flex-1 overflow-y-auto">
         {error && (
           <div className="mx-6 mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center justify-between max-w-2xl lg:mx-auto">

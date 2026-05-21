@@ -1,6 +1,4 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { StarfieldCanvas } from './StarfieldCanvas';
 import { StardomDashboard } from './StardomDashboard';
 import { useStardomDevMode } from '@/queries/use-hub';
@@ -13,7 +11,6 @@ const CHECK_DELAY_MS = 3000;
 const FADE_DURATION_MS = 2000;
 
 export function StardomEntry() {
-  const navigate = useNavigate();
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const settings = useSettingsStore((s) => s.settings);
   const { data: remoteEnabled, isError, isFetched } = useStardomDevMode();
@@ -71,12 +68,7 @@ export function StardomEntry() {
 
   return (
     <div
-      style={{
-        position: 'relative',
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-      }}
+      className="stardom-theme absolute inset-0 overflow-hidden"
     >
       {/* Dashboard layer (behind animation, fades in) */}
       {showDashboard && (
@@ -104,31 +96,6 @@ export function StardomEntry() {
           }}
         >
           <StarfieldCanvas />
-          <button
-            onClick={() => navigate('/chat')}
-            style={{
-              position: 'absolute',
-              top: 20,
-              left: 20,
-              background: 'rgba(77, 150, 255, 0.08)',
-              border: '1px solid rgba(255, 107, 157, 0.3)',
-              borderRadius: 8,
-              color: '#4D96FF',
-              padding: '8px 14px',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              zIndex: 10,
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(77, 150, 255, 0.18)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(77, 150, 255, 0.08)'; }}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            {t('common.back')}
-          </button>
           {showMessage && (
             <div
               style={{

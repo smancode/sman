@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Star {
   x: number;
@@ -11,7 +11,6 @@ interface Star {
 
 const STAR_COUNT = 90;
 const SPEED = 0.015;
-const BG_COLOR = '#ffffff';
 const TRAIL_ALPHA = 0.12;
 const CHARS = '★☆✦✧✶✷✸✹✺✻✼✽✾❋❊❇❈❅❆♠♣♥♦✿❀❁❂❃';
 const CHAR_COUNT = CHARS.length;
@@ -19,18 +18,8 @@ const ATLAS_FONT_SIZE = 36;
 const ATLAS_CELL = 40;
 
 const CANDY_COLORS = [
-  '#FF6B9D', // 粉红
-  '#FF8A5C', // 珊瑚橙
-  '#FFD93D', // 柠檬黄
-  '#6BCB77', // 薄荷绿
-  '#4D96FF', // 天蓝
-  '#9B59B6', // 薰衣草紫
-  '#FF6EC7', // 亮粉
-  '#00D2FF', // 冰蓝
-  '#FF4757', // 草莓红
-  '#7BED9F', // 青苹果绿
-  '#ECCC68', // 奶黄
-  '#A29BFE', // 丁香紫
+  '#FF6B9D', '#FF8A5C', '#FFD93D', '#6BCB77', '#4D96FF', '#9B59B6',
+  '#FF6EC7', '#00D2FF', '#FF4757', '#7BED9F', '#ECCC68', '#A29BFE',
 ];
 
 function buildAtlases(): HTMLCanvasElement[] {
@@ -64,6 +53,20 @@ function createStar(width: number, height: number, resetZ = false): Star {
 export function StarfieldCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const bgColor = isDark ? '#0a0a0f' : '#ffffff';
+  const trailRgb = isDark ? '10, 10, 15' : '255, 255, 255';
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -72,8 +75,8 @@ export function StarfieldCanvas() {
     const atlases = buildAtlases();
 
     const dpr = window.devicePixelRatio || 1;
-    let width = window.innerWidth;
-    let height = window.innerHeight;
+    let width = canvas.parentElement?.clientWidth || window.innerWidth;
+    let height = canvas.parentElement?.clientHeight || window.innerHeight;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
@@ -82,8 +85,8 @@ export function StarfieldCanvas() {
     let frame = 0;
 
     const resize = () => {
-      width = window.innerWidth;
-      height = window.innerHeight;
+      width = canvas.parentElement?.clientWidth || window.innerWidth;
+      height = canvas.parentElement?.clientHeight || window.innerHeight;
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       ctx.scale(dpr, dpr);
@@ -92,7 +95,7 @@ export function StarfieldCanvas() {
 
     const draw = () => {
       frame++;
-      ctx.fillStyle = `rgba(255, 255, 255, ${TRAIL_ALPHA})`;
+      ctx.fillStyle = `rgba(${trailRgb}, ${TRAIL_ALPHA})`;
       ctx.fillRect(0, 0, width, height);
 
       const cx = width / 2;
@@ -120,7 +123,6 @@ export function StarfieldCanvas() {
         const twinkle = 0.6 + 0.4 * Math.sin(frame * 0.008 + star.twinkleOffset);
         const alpha = baseAlpha * twinkle;
 
-        // 发光层：先画一个更大、更透明的副本作为光晕
         const glowSize = size * 2.2;
         ctx.globalAlpha = alpha * 0.25;
         const atlas = atlases[star.colorIdx];
@@ -130,7 +132,6 @@ export function StarfieldCanvas() {
           sx - glowSize / 2, sy - glowSize / 2, glowSize, glowSize,
         );
 
-        // 实体层
         ctx.globalAlpha = alpha;
         ctx.drawImage(
           atlas,
@@ -143,7 +144,7 @@ export function StarfieldCanvas() {
       animRef.current = requestAnimationFrame(draw);
     };
 
-    ctx.fillStyle = BG_COLOR;
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
     animRef.current = requestAnimationFrame(draw);
 
@@ -151,18 +152,17 @@ export function StarfieldCanvas() {
       window.removeEventListener('resize', resize);
       cancelAnimationFrame(animRef.current);
     };
-  }, []);
+  }, [bgColor, trailRgb]);
 
   return (
     <canvas
       ref={canvasRef}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        background: BG_COLOR,
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        background: bgColor,
       }}
     />
   );

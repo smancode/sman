@@ -15,13 +15,11 @@ import { TaskBoard } from './TaskBoard';
 import { TaskDetail } from './TaskDetail';
 import { AgentList } from './AgentList';
 import {
-  ChevronLeft, Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2, KeyRound, Shield, Eye, EyeOff,
+  Plus, LogIn, LogOut, ListTodo, Bot, Search, Globe, Lock, Trash2, KeyRound, Shield, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useNavigate } from 'react-router-dom';
 
 export function HubDashboard() {
-  const navigate = useNavigate();
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>();
   const [rightTab, setRightTab] = useState<'tasks' | 'agents'>('tasks');
   const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
@@ -111,13 +109,6 @@ export function HubDashboard() {
 
   const sidebar = (
     <TooltipProvider delayDuration={300}>
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 px-2"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        {t('cron.back')}
-      </button>
       {hubUnreachable && (hub?.serverBaseUrl || hub?.serverUrl) && (
         <div className="mb-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] text-yellow-600 dark:text-yellow-400">
           {t('hub.status.serverUnreachable')}
