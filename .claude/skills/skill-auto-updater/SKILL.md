@@ -1,5 +1,6 @@
 ---
 name: skill-auto-updater
+version: 2
 description: |
   每2小时自动检查并更新项目 skills。包括首次全量扫描、增量更新和团队知识辩证聚合。
   默认关闭，需要在 Sman 设置中启用。
@@ -100,6 +101,41 @@ git log --after="2026-05-11" --oneline -- . ':!.claude' ':!.sman' | head -5
 - 扫描中断 → 保留 `scan-plan.json`，下次自动续扫
 - `scan-plan.json` 超过 7 天未完成 → 删除并重新开始（避免永久残留）
 
+## 前置步骤：Skill 自更新
+
+**在所有其他前置步骤之前执行。** 检查模板版本并更新自身。
+
+### 版本比较逻辑
+
+```
+读取本文件 frontmatter 中的 version 字段 → 项目版本
+读取 server/init/templates/skill-auto-updater/SKILL.md 的 version 字段 → 模板版本
+
+项目版本 < 模板版本 → 用模板文件覆盖项目文件（包括 references/），输出更新日志
+项目版本 >= 模板版本 → 跳过，继续后续步骤
+项目文件无 version 字段 → 视为 version 0，需要更新
+模板文件不存在 → 跳过（非 Sman 项目或开发环境）
+```
+
+**操作步骤**：
+
+1. 读取 `{project}/.claude/skills/skill-auto-updater/SKILL.md` 的 `version`（如无则视为 0）
+2. 读取 `{project}/server/init/templates/skill-auto-updater/SKILL.md` 的 `version`（如不存在则跳过）
+3. 如果模板版本更高：
+   ```bash
+   # 覆盖 SKILL.md
+   cp server/init/templates/skill-auto-updater/SKILL.md .claude/skills/skill-auto-updater/SKILL.md
+   # 覆盖其他模板文件（如 crontab.md 等）
+   cp server/init/templates/skill-auto-updater/*.md .claude/skills/skill-auto-updater/
+   ```
+4. 输出：`🔄 skill-auto-updater 已从 v{old} 更新到 v{new}`
+
+**原则**：
+- 只更新 `skill-auto-updater` 自身，不影响其他 skill
+- 模板文件不存在时静默跳过（非 Sman 开发环境）
+- 更新后**继续执行后续步骤**（不自中断），因为新版本可能引入了新的前置逻辑
+- 如果项目文件的 frontmatter 中有用户自定义字段（非 version/name/description），更新时保留这些字段
+
 ## 前置步骤：Git 同步
 
 执行任何扫描之前，先尝试同步 git 仓库。**只在项目有 git 时执行，无 git 则跳过。**
@@ -118,6 +154,43 @@ git stash pop 2>/dev/null || true  # stash pop 冲突也不影响，用当前状
 - stash 时**排除 `.claude/` 和 `.sman/`**，避免用户的 skill 编辑和扫描结果互相覆盖
 - git 操作失败**不阻塞**扫描执行。pull 失败就用本地代码扫描，下次再同步
 - 不强制 push，只在扫描完成后的"后置步骤"中尝试
+
+## 前置步骤：.gitignore 维护
+
+**只在项目有 git 时执行。** 确保 `.sman/paths/` 下的运行产物不被提交到 git。
+
+```bash
+# 1. 检查是否有 git（如果前面已检测过可跳过）
+git rev-parse --is-inside-work-tree 2>/dev/null || echo "NOT_GIT"
+
+# 2. 检查 .gitignore 是否存在
+test -f .gitignore || echo "NO_GITIGNORE"
+
+# 3. 检查以下条目是否已在 .gitignore 中
+# .sman/paths/*/runs/
+# .sman/paths/*/reports/
+# .sman/paths/*/tmp/
+```
+
+**操作逻辑**：
+
+1. 有 git 且 `.gitignore` 存在 → 检查三个条目是否都存在，缺失则追加
+2. 有 git但 `.gitignore` 不存在 → 创建 `.gitignore` 并写入三个条目
+3. 无 git → 跳过
+
+**追加时格式**（追加到文件末尾，前面加一个空行和注释）：
+
+```
+# Sman path artifacts
+.sman/paths/*/runs/
+.sman/paths/*/reports/
+.sman/paths/*/tmp/
+```
+
+**原则**：
+- 只检查和追加，不修改 `.gitignore` 中的其他内容
+- 如果三个条目都已存在，不做任何操作
+- 不创建 `.gitignore` 以外的文件
 
 ## 后置步骤：Git 提交与推送
 

@@ -13,6 +13,9 @@ const METRIC_WEIGHTS: Record<string, number> = {
   bot_count_total: 5,        // 5分/个Bot
   current_streak: 2,         // 2分/天(取当前连续天数)
 };
+
+// Smart path scoring: completed=2, failed=0.5, other statuses ignored
+const SMARTPATH_WEIGHTS: Record<string, number> = { completed: 2, failed: 0.5 };
 import { createLogger, type Logger } from './utils/logger.js';
 
 export interface AchievementView {
@@ -190,6 +193,11 @@ export class AchievementEngine {
           this.incrementStat('total_cron_runs', metricsToUpdate);
           break;
 
+        case 'smartpath_run':
+          this.incrementStat('total_smartpath_runs', metricsToUpdate);
+          this.store.setStat('smartpath_score', String(this.getSmartPathPoints()));
+          break;
+
         case 'token_used':
           if (data.tokens && data.tokens > 0) {
             const current = parseInt(this.store.getStat('total_tokens') || '0', 10);
@@ -333,6 +341,11 @@ export class AchievementEngine {
       const cronRuns = (db.prepare("SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'").get() as { c: number }).c;
       this.store.setStat('total_cron_runs', String(cronRuns));
 
+      // Smart path runs (completed + failed) + score
+      const spRuns = (db.prepare("SELECT COUNT(*) as c FROM smartpath_run_log WHERE status IN ('completed', 'failed')").get() as { c: number }).c;
+      this.store.setStat('total_smartpath_runs', String(spRuns));
+      this.store.setStat('smartpath_score', String(this.getSmartPathPoints()));
+
       // Bot stats — extract platform from user_key prefix
       const botSessionRow = db.prepare("SELECT COUNT(DISTINCT session_id) as c FROM chatbot_sessions").get() as { c: number };
       this.store.setStat('bot_sessions_total', String(botSessionRow.c));
@@ -385,6 +398,7 @@ export class AchievementEngine {
         ['total_sessions', "SELECT COUNT(*) as c FROM sessions s WHERE EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.role = 'user')"],
         ['total_messages', "SELECT COUNT(*) as c FROM messages WHERE role = 'user'"],
         ['total_cron_runs', "SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'"],
+        ['total_smartpath_runs', "SELECT COUNT(*) as c FROM smartpath_run_log WHERE status IN ('completed', 'failed')"],
       ];
 
       for (const [metric, sql] of reconciliations) {
@@ -416,6 +430,10 @@ export class AchievementEngine {
         metricsToUpdate.add('total_workspaces');
       }
 
+      // Smart path score (always refresh from DB)
+      const spScore = this.getSmartPathPoints();
+      this.store.setStat('smartpath_score', String(spScore));
+
       if (metricsToUpdate.size > 0) {
         this.checkMetrics([...metricsToUpdate]);
         this.log.info(`Reconciliation complete, updated ${metricsToUpdate.size} metrics`);
@@ -431,7 +449,21 @@ export class AchievementEngine {
       const value = parseInt(this.store.getStat(metric) || '0', 10);
       total += value * weight;
     }
+    // Smart path: use separate per-status weights
+    total += this.getSmartPathPoints();
     return Math.round(total);
+  }
+
+  private getSmartPathPoints(): number {
+    const db = this.store.getDatabase();
+    try {
+      const row = db.prepare(
+        "SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN ? WHEN status = 'failed' THEN ? ELSE 0 END), 0) as pts FROM smartpath_run_log"
+      ).get(SMARTPATH_WEIGHTS.completed, SMARTPATH_WEIGHTS.failed) as { pts: number };
+      return row.pts;
+    } catch {
+      return 0;
+    }
   }
 
   private getToday(): string {
@@ -528,6 +560,8 @@ export class AchievementEngine {
     for (const metric of Object.keys(METRIC_WEIGHTS)) {
       dimensionScores[metric] = parseInt(this.store.getStat(metric) || '0', 10);
     }
+    // Smart path dimension: push total runs count; hub doesn't need per-status breakdown
+    dimensionScores['total_smartpath_runs'] = parseInt(this.store.getStat('total_smartpath_runs') || '0', 10);
 
     try {
       const payload = {

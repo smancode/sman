@@ -1399,6 +1399,22 @@
     "text": "Failed",
     "context": "Path status: failed"
   },
+  "smartpath.status.cancelled": {
+    "text": "Cancelled",
+    "context": "Path status: cancelled"
+  },
+  "smartpath.modeStepping": {
+    "text": "Step-by-step",
+    "context": "Execution mode: step-by-step"
+  },
+  "smartpath.modeFull": {
+    "text": "Full",
+    "context": "Execution mode: full run"
+  },
+  "smartpath.stepUnit": {
+    "text": "steps",
+    "context": "Step count unit"
+  },
   "smartpath.weekday": {
     "text": "Weekdays ${hour}:00",
     "context": "Weekday cron description"

@@ -156,7 +156,7 @@ export interface BatchItem {
 // === Smart Path Types ===
 
 export type SmartPathStatus = 'draft' | 'ready' | 'running' | 'completed' | 'failed';
-export type SmartPathRunStatus = 'running' | 'completed' | 'failed';
+export type SmartPathRunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface SmartPathStep {
   name?: string;
@@ -188,6 +188,9 @@ export interface SmartPathRun {
   id: string;
   pathId: string;
   status: SmartPathRunStatus;
+  mode: 'full' | 'stepping';
+  stepCount: number;
+  args?: string;
   stepResults: string;
   startedAt: string;
   finishedAt?: string;

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useAchievementStore } from '@/stores/achievement';
 import { TIER_COLORS, TIER_ORDER, TIER_ICONS, CATEGORY_LABELS, type Category, type Tier } from '@/types/achievement';
@@ -17,6 +17,7 @@ const SCORE_METRICS: { key: string; labelKey: string; unit: string; weight: numb
   { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages', unit: '条', weight: 0.5 },
   { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens', unit: '', weight: 0.000005 },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron', unit: '次', weight: 2 },
+  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path', unit: '次', weight: -1 },
   { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions', unit: '个', weight: 2 },
   { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages', unit: '条', weight: 1 },
   { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount', unit: '个', weight: 5 },
@@ -39,6 +40,19 @@ export function AchievementsPage() {
   const { summary, fetchSummary, fetchLeaderboard, isLoading, recentUnlocks, clearRecentUnlocks } = useAchievementStore();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [showScoreDetail, setShowScoreDetail] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHeaderEnter = useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => setShowScoreDetail(true), 300);
+  }, []);
+
+  const handleHeaderLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setShowScoreDetail(false);
+  }, []);
 
   useEffect(() => {
     fetchSummary();
@@ -89,9 +103,9 @@ export function AchievementsPage() {
         ))}
 
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 relative" onMouseEnter={handleHeaderEnter} onMouseLeave={handleHeaderLeave}>
           <div className="flex items-center gap-4 mb-4">
-            <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" currentPoints={summary.totalPoints} />
+            <TierBadge tier={levelTier} icon={TIER_ICONS[levelTier]} size="lg" />
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-2xl font-bold dark:font-semibold tracking-tight">{t('achievement.title')}</h1>
@@ -104,37 +118,73 @@ export function AchievementsPage() {
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                <span
-                  className="relative cursor-default font-bold dark:font-medium"
-                  onMouseEnter={() => setShowScoreDetail(true)}
-                  onMouseLeave={() => setShowScoreDetail(false)}
-                >
+                <span className="font-bold dark:font-medium">
                   {t('achievement.points', { count: String(summary.totalPoints) })}
-                  {showScoreDetail && (
-                    <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-black/80 backdrop-blur-xl border-2 border-black dark:border-cyan-500/30 rounded-none dark:rounded-none shadow-[4px_4px_0_0_#1e293b] dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-4 py-3 text-[12px] min-w-[240px]">
-                      <div className="text-[10px] font-bold text-foreground dark:text-muted-foreground mb-2 uppercase tracking-widest">{t('achievement.scoreDetail.title')}</div>
-                      {SCORE_METRICS.map((m) => {
-                        const raw = parseInt(summary.stats[m.key] || '0', 10);
-                        if (raw === 0) return null;
-                        const score = Math.round(raw * m.weight * 100) / 100;
-                        const display = m.key === 'total_tokens'
-                          ? `${(raw / 10000).toFixed(1)}万`
-                          : raw;
-                        return (
-                          <div key={m.key} className="flex items-center justify-between py-0.5 gap-4">
-                            <span className="text-muted-foreground">{t(m.labelKey)}</span>
-                            <span className="text-foreground font-medium tabular-nums">{display}{m.unit} → <span className="text-foreground/70">{score}分</span></span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </span>
                 <span className="text-muted-foreground/30">·</span>
                 <span>{t('achievement.unlockedCount', { count: String(summary.totalUnlocked), total: String(summary.totalAchievements) })}</span>
               </div>
             </div>
           </div>
+
+          {/* Score detail popup — triggered by hovering anywhere in header */}
+          {showScoreDetail && (
+            <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-black/80 backdrop-blur-xl border-2 border-black dark:border-cyan-500/30 rounded-none dark:rounded-none shadow-[4px_4px_0_0_#1e293b] dark:shadow-[0_0_20px_rgba(0,255,255,0.1)] px-4 py-3 text-[12px]">
+              {/* Current level + progress */}
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-black/10 dark:border-white/10">
+                <span className={cn('text-[13px] font-bold px-2 py-0.5 border-2 border-black dark:border-0', levelColors.bg, levelColors.text)}>
+                  Lv.{TIER_ORDER.indexOf(levelTier) + 1} {t(`achievement.tier.${levelTier}`)}
+                </span>
+                <span className="text-foreground font-bold tabular-nums">{summary.totalPoints}分</span>
+                {lp && lp.progress < 1 && (
+                  <span className="text-muted-foreground text-[11px]">
+                    / {t('achievement.nextLevel', { points: String(Math.round(lp.nextMin - summary.totalPoints)) })}
+                  </span>
+                )}
+              </div>
+
+              {/* Level list */}
+              <div className="mb-2 pb-2 border-b border-black/10 dark:border-white/10">
+                <div className="text-[10px] font-bold text-foreground dark:text-muted-foreground mb-1 uppercase tracking-widest">Level</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+                  {TIER_ORDER.map((tr) => {
+                    const threshold = TIER_THRESHOLDS[tr];
+                    const isActive = tr === levelTier;
+                    const isUnlocked = summary.totalPoints >= threshold;
+                    const trColors = TIER_COLORS[tr];
+                    return (
+                      <div key={tr} className={cn('flex items-center justify-between py-0.5', isActive && 'font-semibold', !isUnlocked && 'opacity-35')}>
+                        <span className={cn('flex items-center gap-1', trColors.text)}>
+                          <TierBadge tier={tr} icon={TIER_ICONS[tr]} size="sm" />
+                          {t(`achievement.tier.${tr}`)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{threshold}+</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Score breakdown */}
+              <div className="text-[10px] font-bold text-foreground dark:text-muted-foreground mb-1.5 uppercase tracking-widest">{t('achievement.scoreDetail.title')}</div>
+              {SCORE_METRICS.map((m) => {
+                const raw = parseInt(summary.stats[m.key] || '0', 10);
+                if (raw === 0) return null;
+                const score = m.weight === -1
+                  ? parseFloat(summary.stats['smartpath_score'] || '0')
+                  : Math.round(raw * m.weight * 100) / 100;
+                const display = m.key === 'total_tokens'
+                  ? `${(raw / 10000).toFixed(1)}万`
+                  : raw;
+                return (
+                  <div key={m.key} className="flex items-center justify-between py-0.5 gap-4">
+                    <span className="text-muted-foreground">{t(m.labelKey)}</span>
+                    <span className="text-foreground font-medium tabular-nums">{display}{m.unit} → <span className="text-foreground/70">{score}分</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Level progress bar */}
           {lp && lp.progress < 1 && (

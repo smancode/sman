@@ -16,16 +16,16 @@ export const TIER_ICONS: Record<Tier, string> = {
   king: 'crown',
   legend: 'sparkles',
   epic: 'flame',
-  eternal: 'droplet',
+  eternal: 'infinity',
 };
 
 export const TIER_ORDER: Tier[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'star', 'king', 'legend', 'epic', 'eternal'];
 
 export const TIER_COLORS: Record<Tier, { text: string; bg: string; border: string; glow: string; bar: string }> = {
-  bronze:   { text: 'text-amber-600 dark:text-amber-400',   bg: 'bg-amber-50 dark:bg-amber-950/20',   border: 'border-amber-200 dark:border-amber-800/30',   glow: 'shadow-amber-200/50 dark:shadow-amber-800/30',   bar: 'bg-amber-500' },
-  silver:   { text: 'text-slate-500 dark:text-slate-300',   bg: 'bg-slate-50 dark:bg-slate-800/20',   border: 'border-slate-200 dark:border-slate-700/30',   glow: 'shadow-slate-200/50 dark:shadow-slate-700/30',   bar: 'bg-slate-400' },
+  bronze:   { text: 'text-orange-800 dark:text-orange-400',   bg: 'bg-orange-100 dark:bg-orange-950/20',   border: 'border-orange-300 dark:border-orange-800/30',   glow: 'shadow-orange-200/50 dark:shadow-orange-800/30',   bar: 'bg-orange-700' },
+  silver:   { text: 'text-zinc-400 dark:text-zinc-200',   bg: 'bg-zinc-50 dark:bg-zinc-800/20',   border: 'border-zinc-200 dark:border-zinc-500/30',   glow: 'shadow-zinc-200/50 dark:shadow-zinc-500/30',   bar: 'bg-zinc-300' },
   gold:     { text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-950/20', border: 'border-yellow-200 dark:border-yellow-800/30', glow: 'shadow-yellow-200/50 dark:shadow-yellow-800/30', bar: 'bg-yellow-500' },
-  platinum: { text: 'text-cyan-600 dark:text-cyan-400',     bg: 'bg-cyan-50 dark:bg-cyan-950/20',     border: 'border-cyan-200 dark:border-cyan-800/30',     glow: 'shadow-cyan-200/50 dark:shadow-cyan-800/30',     bar: 'bg-cyan-500' },
+  platinum: { text: 'text-amber-700 dark:text-amber-300',     bg: 'bg-amber-100 dark:bg-amber-900/20',     border: 'border-amber-300 dark:border-amber-700/30',     glow: 'shadow-amber-200/50 dark:shadow-amber-700/30',     bar: 'bg-amber-400' },
   diamond:  { text: 'text-teal-600 dark:text-teal-400',     bg: 'bg-teal-50 dark:bg-teal-950/20',     border: 'border-teal-200 dark:border-teal-800/30',     glow: 'shadow-teal-200/50 dark:shadow-teal-800/30',     bar: 'bg-teal-500' },
   star:     { text: 'text-pink-600 dark:text-pink-400',     bg: 'bg-pink-50 dark:bg-pink-950/20',     border: 'border-pink-200 dark:border-pink-800/30',     glow: 'shadow-pink-200/50 dark:shadow-pink-800/30',     bar: 'bg-pink-500' },
   king:     { text: 'text-red-600 dark:text-red-400',       bg: 'bg-red-50 dark:bg-red-950/20',       border: 'border-red-200 dark:border-red-800/30',       glow: 'shadow-red-200/50 dark:shadow-red-800/30',       bar: 'bg-red-500' },
@@ -36,7 +36,7 @@ export const TIER_COLORS: Record<Tier, { text: string; bg: string; border: strin
 
 export const TIER_THRESHOLDS: Record<Tier, number> = {
   bronze: 0, silver: 100, gold: 300, platinum: 600, diamond: 1200,
-  star: 2000, king: 3200, legend: 4800, epic: 7000, eternal: 10000,
+  star: 2500, king: 4000, legend: 6000, epic: 9000, eternal: 15000,
 };
 
 export const CATEGORY_LABELS: Record<Category, string> = {

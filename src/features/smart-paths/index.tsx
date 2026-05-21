@@ -33,6 +33,7 @@ const STATUS_CONFIG: Record<string, { labelKey: string; variant: 'default' | 'su
   running: { labelKey: 'smartpath.executing', variant: 'default' },
   completed: { labelKey: 'smartpath.status.completed', variant: 'success' },
   failed: { labelKey: 'smartpath.status.failed', variant: 'destructive' },
+  cancelled: { labelKey: 'smartpath.status.cancelled', variant: 'warning' },
 };
 
 function getStepCount(p: SmartPath): number {
@@ -749,9 +750,8 @@ function PathEditor({ path, onSave, onCancel }: {
 
 // ── View mode ──
 
-function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
-  path: SmartPath; runs: SmartPathRun[];
-  reports: Array<{ fileName: string; createdAt: string }>;
+function PathDetail({ path, onEdit, onRun, onAbort, onDelete }: {
+  path: SmartPath;
   onEdit: () => void; onRun: (useRefs: boolean) => void; onAbort: () => void; onDelete: () => void;
 }) {
   const steps = useMemo<SmartPathStep[]>(() => { try { return JSON.parse(path.steps); } catch { return []; } }, [path.steps]);
@@ -774,12 +774,17 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
   const cancelStepping = useSmartPathStore((s) => s.cancelStepping);
   const fetchReport = useSmartPathStore((s) => s.fetchReport);
   const currentReport = useSmartPathStore((s) => s.currentReport);
+  const reports = useSmartPathStore((s) => s.reports);
   const references = useSmartPathStore((s) => s.references);
   const currentReference = useSmartPathStore((s) => s.currentReference);
   const fetchReference = useSmartPathStore((s) => s.fetchReference);
+  const runLogs = useSmartPathStore((s) => s.runLogs);
+  const fetchRunLogs = useSmartPathStore((s) => s.fetchRunLogs);
   const [viewingReport, setViewingReport] = useState<string | null>(null);
   const [viewingRef, setViewingRef] = useState<string | null>(null);
   const [useRefs, setUseRefs] = useState(false);
+
+  useEffect(() => { fetchRunLogs(path.id, path.workspace); }, [path.id]);
 
   const handleViewReport = async (fileName: string) => {
     if (viewingReport === fileName) {
@@ -985,19 +990,25 @@ function PathDetail({ path, runs, reports, onEdit, onRun, onAbort, onDelete }: {
       )}
 
       {/* Execution history (legacy) */}
-      {runs.length > 0 && reports.length === 0 && (
+      {runLogs.length > 0 && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("smartpath.executionHistory")}</Label>
           <div className="space-y-1.5">
-            {runs.map((r) => { const rs = STATUS_CONFIG[r.status]; return (
+            {runLogs.map((r) => { const rs = STATUS_CONFIG[r.status]; return (
               <div key={r.id} className="flex items-center justify-between rounded-md px-3 py-2 border text-sm">
                 <div className="flex items-center gap-2">
                   {r.status === 'completed' ? <CheckCircle className="h-4 w-4 text-green-500" />
                     : r.status === 'failed' ? <XCircle className="h-4 w-4 text-red-500" />
+                    : r.status === 'cancelled' ? <Ban className="h-4 w-4 text-yellow-500" />
                     : <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
                   <span className="text-muted-foreground">{new Date(r.startedAt).toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground/70">{r.mode === 'stepping' ? t('smartpath.modeStepping') : t('smartpath.modeFull')}</span>
+                  {r.stepCount > 0 && <span className="text-xs text-muted-foreground/70">{r.stepCount} {t('smartpath.stepUnit')}</span>}
                 </div>
-                <Badge variant={rs?.variant || 'outline'} className="text-[10px]">{rs ? t(rs.labelKey) : r.status}</Badge>
+                <div className="flex items-center gap-2">
+                  {r.errorMessage && <span className="text-xs text-destructive/80 truncate max-w-32" title={r.errorMessage}>{r.errorMessage}</span>}
+                  <Badge variant={rs?.variant || 'outline'} className="text-[10px]">{rs ? t(rs.labelKey) : r.status}</Badge>
+                </div>
               </div>); })}
           </div>
         </div>
@@ -1026,8 +1037,6 @@ export function SmartPathPage() {
   const navigate = useNavigate();
   const { status: wsStatus } = useWsConnection();
   const paths = useSmartPathStore((s) => s.paths);
-  const runs = useSmartPathStore((s) => s.runs);
-  const reports = useSmartPathStore((s) => s.reports);
   const currentPath = useSmartPathStore((s) => s.currentPath);
   const loading = useSmartPathStore((s) => s.loading);
   const error = useSmartPathStore((s) => s.error);
@@ -1097,7 +1106,7 @@ export function SmartPathPage() {
           {editing && currentPath ? (
             <PathEditor path={currentPath} onSave={handleSave} onCancel={() => { clearStepExecutionState(); setEditing(false); }} />
           ) : currentPath ? (
-            <PathDetail path={currentPath} runs={runs} reports={reports}
+            <PathDetail path={currentPath}
               onEdit={() => setEditing(true)}
               onRun={(useRefs) => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs, useRefs)}
               onAbort={() => abortPath(currentPath.id)}

@@ -19,6 +19,7 @@ const DIMENSION_OPTIONS: { key: string; labelKey: string }[] = [
   { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages' },
   { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens' },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron' },
+  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path' },
   { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions' },
   { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages' },
   { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount' },
@@ -129,12 +130,14 @@ export function LeaderboardTab() {
               className={cn(
                 'flex items-center gap-3 px-4 py-2.5 transition-all duration-200',
                 'dark:rounded-none',
-                isTop3 && 'border-2 border-black dark:border-0 dark:bg-foreground/[0.02]',
-                isTop3 && entry.rank === 1 && 'bg-yellow-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
-                isTop3 && entry.rank === 2 && 'bg-slate-100 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
-                isTop3 && entry.rank === 3 && 'bg-amber-50 dark:bg-foreground/[0.02] shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
-                isSelf && !isTop3 && 'border-2 border-black dark:border-0 dark:ring-cyan-400/40 dark:bg-cyan-400/5 bg-white shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
-                !isTop3 && !isSelf && 'hover:bg-muted/30 dark:hover:bg-white/[0.02]',
+                isTop3 && 'border-2 border-black dark:border-0',
+                'shadow-[2px_2px_0_0_#1e293b] dark:shadow-none',
+                entry.rank === 1 && 'bg-yellow-100 dark:bg-foreground/[0.02]',
+                entry.rank === 2 && 'bg-slate-100 dark:bg-foreground/[0.02]',
+                entry.rank === 3 && 'bg-amber-50 dark:bg-foreground/[0.02]',
+                !isTop3 && 'border-2 border-black dark:border-0',
+                !isTop3 && isSelf && 'bg-white dark:bg-cyan-400/5 dark:ring-cyan-400/40',
+                !isTop3 && !isSelf && 'bg-white dark:bg-foreground/[0.02] hover:bg-muted/40 dark:hover:bg-white/[0.04]',
               )}
             >
               {/* Rank */}

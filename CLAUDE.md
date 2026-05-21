@@ -330,7 +330,7 @@ const MENU_ITEMS = [
 | current_streak | 2 | 连续活跃天数 |
 
 #### 等级阈值
-bronze(0) → silver(100) → gold(300) → platinum(600) → diamond(1200) → star(2000) → king(3200) → legend(4800) → epic(7000) → eternal(10000)
+bronze(0) → silver(100) → gold(300) → platinum(600) → diamond(1200) → star(2500) → king(4000) → legend(6000) → epic(9000) → eternal(15000)
 
 #### 排行榜
 - 客户端上传 `dimensionScores`（各指标原始值 JSON）到 Hub

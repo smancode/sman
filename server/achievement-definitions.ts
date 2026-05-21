@@ -48,11 +48,11 @@ export const LEVEL_THRESHOLDS: { tier: Tier; minPoints: number }[] = [
   { tier: 'gold', minPoints: 300 },
   { tier: 'platinum', minPoints: 600 },
   { tier: 'diamond', minPoints: 1200 },
-  { tier: 'star', minPoints: 2000 },
-  { tier: 'king', minPoints: 3200 },
-  { tier: 'legend', minPoints: 4800 },
-  { tier: 'epic', minPoints: 7000 },
-  { tier: 'eternal', minPoints: 10000 },
+  { tier: 'star', minPoints: 2500 },
+  { tier: 'king', minPoints: 4000 },
+  { tier: 'legend', minPoints: 6000 },
+  { tier: 'epic', minPoints: 9000 },
+  { tier: 'eternal', minPoints: 15000 },
 ];
 
 export function calculateLevel(points: number): Tier {
@@ -115,12 +115,12 @@ const defs: AchievementDef[] = [
   { id: 'cron_1k', category: 'advanced', tier: 'star', nameKey: 'achievement.cron_1k', descKey: 'achievement.cron_1k.desc', icon: '⏰', hidden: false, condition: { metric: 'total_cron_runs', threshold: 1000 } },
 
   // ── Advanced: Smart Path ──
-  { id: 'path_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.path_1', descKey: 'achievement.path_1.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 1 } },
-  { id: 'path_10', category: 'advanced', tier: 'silver', nameKey: 'achievement.path_10', descKey: 'achievement.path_10.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 10 } },
-  { id: 'path_50', category: 'advanced', tier: 'gold', nameKey: 'achievement.path_50', descKey: 'achievement.path_50.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 50 } },
-  { id: 'path_100', category: 'advanced', tier: 'platinum', nameKey: 'achievement.path_100', descKey: 'achievement.path_100.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 100 } },
-  { id: 'path_500', category: 'advanced', tier: 'diamond', nameKey: 'achievement.path_500', descKey: 'achievement.path_500.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 500 } },
-  { id: 'path_1k', category: 'advanced', tier: 'star', nameKey: 'achievement.path_1k', descKey: 'achievement.path_1k.desc', icon: '🧭', hidden: true, condition: { metric: 'total_smartpath_runs', threshold: 1000 } },
+  { id: 'path_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.path_1', descKey: 'achievement.path_1.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 1 } },
+  { id: 'path_10', category: 'advanced', tier: 'silver', nameKey: 'achievement.path_10', descKey: 'achievement.path_10.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 10 } },
+  { id: 'path_50', category: 'advanced', tier: 'gold', nameKey: 'achievement.path_50', descKey: 'achievement.path_50.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 50 } },
+  { id: 'path_100', category: 'advanced', tier: 'platinum', nameKey: 'achievement.path_100', descKey: 'achievement.path_100.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 100 } },
+  { id: 'path_500', category: 'advanced', tier: 'diamond', nameKey: 'achievement.path_500', descKey: 'achievement.path_500.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 500 } },
+  { id: 'path_1k', category: 'advanced', tier: 'star', nameKey: 'achievement.path_1k', descKey: 'achievement.path_1k.desc', icon: '🧭', hidden: false, condition: { metric: 'total_smartpath_runs', threshold: 1000 } },
 
   // ── Advanced: Skills ──
   { id: 'skill_1', category: 'advanced', tier: 'bronze', nameKey: 'achievement.skill_1', descKey: 'achievement.skill_1.desc', icon: '🛠️', hidden: true, condition: { metric: 'total_skills_used', threshold: 1 } },

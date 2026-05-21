@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import { useWsConnection } from '@/stores/ws-connection';
-import type { SmartPath, SmartPathRun, SmartPathStatus, SmartPathStep, SmartPathReference, PathBlueprint } from '@/types/settings';
+import type { SmartPath, SmartPathRun, SmartPathRunLog, SmartPathStatus, SmartPathStep, SmartPathReference, PathBlueprint } from '@/types/settings';
 
 type MsgHandler = (msg: Record<string, unknown>) => void;
 
@@ -42,6 +42,7 @@ interface SmartPathState {
   runs: SmartPathRun[];
   reports: Array<{ fileName: string; createdAt: string }>;
   currentReport: string | null;
+  runLogs: SmartPathRunLog[];
   currentPath: SmartPath | null;
   loading: boolean;
   running: boolean;
@@ -70,6 +71,7 @@ interface SmartPathState {
   clearError: () => void;
   fetchReferences: (pathId: string, workspace: string) => Promise<void>;
   fetchReference: (pathId: string, workspace: string, fileName: string) => Promise<void>;
+  fetchRunLogs: (pathId: string, workspace: string) => Promise<void>;
 
   // 逐步执行模式
   stepping: boolean;
@@ -120,6 +122,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   references: [],
   currentReference: null,
+  runLogs: [],
 
   guideChatOpen: {},
   guideChatMessages: {},
@@ -301,6 +304,19 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
         resolve();
       });
       client.send({ type: 'smartpath.report', pathId, workspace, fileName });
+    });
+  },
+
+  fetchRunLogs: async (pathId, workspace) => {
+    const client = getWsClient();
+    if (!client) return;
+    return new Promise<void>((resolve) => {
+      const unsub = wrapHandler(client, 'smartpath.runLogs', (data) => {
+        unsub();
+        set({ runLogs: (data.runLogs as SmartPathRunLog[]) || [] });
+        resolve();
+      });
+      client.send({ type: 'smartpath.runLogs', pathId, workspace });
     });
   },
 

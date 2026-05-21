@@ -8,6 +8,10 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import matter from 'gray-matter';
+import betterSqlite3 from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
+// @ts-expect-error - better-sqlite3 ESM interop
+const DatabaseConstructor = betterSqlite3 as unknown as typeof betterSqlite3.default;
 import { createLogger, type Logger } from './utils/logger.js';
 import type { SmartPath, SmartPathStep, SmartPathRun, SmartPathReference } from './types.js';
 
@@ -21,10 +25,76 @@ function generateId(): string {
 }
 
 export class SmartPathStore {
+  private db: Database;
   private log: Logger;
 
-  constructor() {
+  constructor(dbPath: string) {
+    this.db = new DatabaseConstructor(dbPath);
     this.log = createLogger('SmartPathStore');
+    this.initRunLogTable();
+  }
+
+  private initRunLogTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS smartpath_run_log (
+        id TEXT PRIMARY KEY,
+        path_id TEXT NOT NULL,
+        path_name TEXT NOT NULL,
+        workspace TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        step_count INTEGER NOT NULL DEFAULT 0,
+        args TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        error_message TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+    `);
+  }
+
+  insertRunLog(log: {
+    id: string; pathId: string; pathName: string; workspace: string;
+    mode: 'full' | 'stepping'; stepCount: number; args?: string;
+  }): void {
+    this.db.prepare(`
+      INSERT INTO smartpath_run_log (id, path_id, path_name, workspace, mode, step_count, args, status, started_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'running', datetime('now', 'localtime'))
+    `).run(log.id, log.pathId, log.pathName, log.workspace, log.mode, log.stepCount, log.args ?? null);
+  }
+
+  updateRunLogStatus(id: string, status: string, errorMessage?: string): void {
+    if (errorMessage) {
+      this.db.prepare(`
+        UPDATE smartpath_run_log SET status = ?, error_message = ?, finished_at = datetime('now', 'localtime') WHERE id = ?
+      `).run(status, errorMessage, id);
+    } else {
+      this.db.prepare(`
+        UPDATE smartpath_run_log SET status = ?, finished_at = datetime('now', 'localtime') WHERE id = ?
+      `).run(status, id);
+    }
+  }
+
+  getRunLogs(pathId: string, workspace: string): Array<{
+    id: string; pathId: string; pathName: string; workspace: string;
+    mode: string; stepCount: number; args: string | null;
+    status: string; errorMessage: string | null;
+    startedAt: string; finishedAt: string | null;
+  }> {
+    return this.db.prepare(`
+      SELECT id, path_id as pathId, path_name as pathName, workspace,
+             mode, step_count as stepCount, args,
+             status, error_message as errorMessage,
+             started_at as startedAt, finished_at as finishedAt
+      FROM smartpath_run_log
+      WHERE path_id = ? AND workspace = ?
+      ORDER BY started_at DESC
+      LIMIT 50
+    `).all(pathId, workspace) as Array<{
+      id: string; pathId: string; pathName: string; workspace: string;
+      mode: string; stepCount: number; args: string | null;
+      status: string; errorMessage: string | null;
+      startedAt: string; finishedAt: string | null;
+    }>;
   }
 
   // ── 路径工具 ──
@@ -333,11 +403,14 @@ export class SmartPathStore {
 
   // ── Runs ──
 
-  createRun(pathId: string, ws: string): SmartPathRun {
+  createRun(pathId: string, ws: string, mode: 'full' | 'stepping', stepCount: number, args?: string): SmartPathRun {
     const run: SmartPathRun = {
       id: crypto.randomUUID(),
       pathId,
       status: 'running',
+      mode,
+      stepCount,
+      args,
       stepResults: '{}',
       startedAt: new Date().toISOString(),
     };

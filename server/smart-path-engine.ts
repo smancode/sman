@@ -237,6 +237,9 @@ function parseBlueprintFromLLM(raw: string, steps: SmartPathStep[]): PathBluepri
 interface ActiveRun {
   abortController: AbortController;
   sessionIds: string[];
+  runId: string;
+  workspace: string;
+  pathId: string;
 }
 
 export class SmartPathEngine {
@@ -257,6 +260,12 @@ export class SmartPathEngine {
     for (const sid of run.sessionIds) {
       try { this.sessionManager.abort(sid, '用户中止路径执行'); } catch { /* ignore */ }
     }
+    this.store.updateRun(run.runId, run.workspace, run.pathId, {
+      status: 'cancelled',
+      finishedAt: new Date().toISOString(),
+    });
+    this.store.updateRunLogStatus(run.runId, 'cancelled');
+    this.store.update(pathId, run.workspace, { status: 'ready' });
     this.activeRuns.delete(pathId);
     this.log.info(`Path ${pathId} aborted by user`);
   }
@@ -308,13 +317,14 @@ export class SmartPathEngine {
     try { steps = JSON.parse(smartPath.steps); } catch { throw new Error('Invalid steps JSON'); }
     if (!Array.isArray(steps) || steps.length === 0) throw new Error('Path has no steps');
 
-    const run = this.store.createRun(pathId, workspace);
+    const run = this.store.createRun(pathId, workspace, 'stepping', steps.length, args);
     this.store.update(pathId, workspace, { status: 'running' });
     this.store.clearTmpDir(workspace, pathId);
+    this.store.insertRunLog({ id: run.id, pathId, pathName: smartPath.name, workspace, mode: 'stepping', stepCount: steps.length, args });
 
     const abortController = new AbortController();
     const sessionIds: string[] = [];
-    this.activeRuns.set(pathId, { abortController, sessionIds });
+    this.activeRuns.set(pathId, { abortController, sessionIds, runId: run.id, workspace, pathId });
 
     const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
 
@@ -470,6 +480,7 @@ export class SmartPathEngine {
       finishedAt: isoNow(),
       reportFileName: path.basename(reportFileName),
     });
+    this.store.updateRunLogStatus(runId, 'completed');
 
     emitAchievementEvent({ type: 'smartpath_run', data: {} });
 
@@ -563,12 +574,13 @@ export class SmartPathEngine {
     try { steps = JSON.parse(smartPath.steps); } catch { throw new Error('Invalid steps JSON'); }
     if (!Array.isArray(steps) || steps.length === 0) throw new Error('Path has no steps');
 
-    const run = this.store.createRun(pathId, workspace);
+    const run = this.store.createRun(pathId, workspace, 'full', steps.length, args);
     this.store.update(pathId, workspace, { status: 'running' });
+    this.store.insertRunLog({ id: run.id, pathId, pathName: smartPath.name, workspace, mode: 'full', stepCount: steps.length, args });
 
     const abortController = new AbortController();
     const sessionIds: string[] = [];
-    this.activeRuns.set(pathId, { abortController, sessionIds });
+    this.activeRuns.set(pathId, { abortController, sessionIds, runId: run.id, workspace, pathId });
 
     const referencesContext = useRefs ? this.buildReferencesContext(workspace, smartPath.id) : '';
 
@@ -677,6 +689,7 @@ export class SmartPathEngine {
         finishedAt: isoNow(),
         reportFileName: path.basename(reportFileName),
       });
+      this.store.updateRunLogStatus(run.id, 'completed');
       emitAchievementEvent({ type: 'smartpath_run', data: {} });
       await this.updateRunGuide(workspace, pathId, steps, stepResults, blueprint);
 
@@ -689,6 +702,7 @@ export class SmartPathEngine {
         stepResults: JSON.stringify({ error: msg }),
         finishedAt: isoNow(),
       });
+      this.store.updateRunLogStatus(run.id, 'failed', msg);
       this.store.update(pathId, workspace, { status: 'failed' });
       throw err;
     } finally {

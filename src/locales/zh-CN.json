@@ -1399,6 +1399,22 @@
     "text": "失败",
     "context": "路径状态：失败"
   },
+  "smartpath.status.cancelled": {
+    "text": "已取消",
+    "context": "路径状态：已取消"
+  },
+  "smartpath.modeStepping": {
+    "text": "逐步",
+    "context": "执行模式：逐步执行"
+  },
+  "smartpath.modeFull": {
+    "text": "全量",
+    "context": "执行模式：全量执行"
+  },
+  "smartpath.stepUnit": {
+    "text": "步",
+    "context": "步骤计数单位"
+  },
   "smartpath.weekday": {
     "text": "工作日 ${hour}:00",
     "context": "工作日 Cron 描述"

@@ -318,7 +318,7 @@ batchEngine.setOnProgress((taskId, data) => {
 batchEngine.start();
 
 // SmartPath
-const smartPathStore = new SmartPathStore();
+const smartPathStore = new SmartPathStore(dbPath);
 const smartPathEngine = new SmartPathEngine(smartPathStore, sessionManager);
 // 服务启动时重置上次异常退出的 running 状态
 const allWorkspaces = [...new Set(store.listSessions().map(s => s.workspace))];
@@ -2058,6 +2058,16 @@ wss.on('connection', (ws: WebSocket) => {
           const runs = smartPathStore.listRuns(msg.pathId as string, runsActualWs);
           const reports = smartPathStore.listReports(msg.pathId as string, runsActualWs);
           ws.send(JSON.stringify({ type: 'smartpath.runs', pathId: msg.pathId, runs, reports }));
+          break;
+        }
+
+        case 'smartpath.runLogs': {
+          if (!msg.pathId || !msg.workspace) throw new Error('Missing pathId or workspace');
+          const rlWs = [...new Set(store.listSessions().map(s => s.workspace))];
+          const rlPath = smartPathStore.get(msg.pathId as string, msg.workspace as string, rlWs);
+          const rlActualWs = rlPath?.workspace || (msg.workspace as string);
+          const runLogs = smartPathStore.getRunLogs(msg.pathId as string, rlActualWs);
+          ws.send(JSON.stringify({ type: 'smartpath.runLogs', pathId: msg.pathId, runLogs }));
           break;
         }
 
