@@ -1,13 +1,21 @@
 import { WebSocket } from 'ws';
 import { IMStore, IMMessage } from './im-store.js';
+import { IMAgentBridge } from './im-agent-bridge.js';
 import { getHubWsClient } from '../hub/index.js';
 
 export class IMWsHandler {
+  private agentBridge?: IMAgentBridge;
+
   constructor(
     private imStore: IMStore,
     private broadcastToRoom: (roomId: string, msg: any, excludeWs?: WebSocket) => void,
     private sendToWs: (ws: WebSocket, msg: any) => void,
   ) {}
+
+  /** Inject the Agent Bridge (called after initialization when deps are ready) */
+  setAgentBridge(bridge: IMAgentBridge): void {
+    this.agentBridge = bridge;
+  }
 
   handleLocalMessage(msg: any, ws: WebSocket, clientInfo: { clientId: string }): void {
     switch (msg.type) {
@@ -56,6 +64,13 @@ export class IMWsHandler {
 
     // Forward to Hub WS so other connected devices receive it
     this.sendToHub({ type: 'im.message', data: imMsg });
+
+    // Fire-and-forget: activate mentioned agents (if any)
+    if (imMsg.mentionedAgents.length > 0 && this.agentBridge) {
+      this.agentBridge.handleMention(imMsg).catch(() => {
+        // Errors are already handled per-agent inside handleMention
+      });
+    }
   }
 
   private handleHistory(msg: any, ws: WebSocket): void {

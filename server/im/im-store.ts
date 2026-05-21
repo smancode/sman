@@ -133,6 +133,12 @@ export class IMStore {
     ).run(status, id);
   }
 
+  updateMessageContent(id: string, content: string): void {
+    this.db.prepare(
+      "UPDATE im_messages SET content = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+    ).run(content, id);
+  }
+
   createRoom(room: IMRoom): void {
     this.db.prepare(`
       INSERT OR IGNORE INTO im_rooms (id, name, type, members, last_message, last_message_time)
