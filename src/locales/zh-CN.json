@@ -3900,5 +3900,11 @@
   "im.empty.noSessions": { "text": "暂无会话", "context": "IM 会话列表为空" },
   "im.empty.noMessages": { "text": "暂无消息", "context": "IM 消息列表为空" },
   "im.menu.sessions": { "text": "会话", "context": "IM 菜单-会话" },
-  "im.menu.groups": { "text": "群聊", "context": "IM 菜单-群聊" }
+  "im.menu.groups": { "text": "群聊", "context": "IM 菜单-群聊" },
+  "im.empty.selectHint": { "text": "选择一个群聊开始对话", "context": "IM 未选中房间时的提示" },
+  "im.workspace.selfHint": { "text": "自言自语给分身派活", "context": "IM 工作台类型群聊描述" },
+  "im.session.autoCreateHint": { "text": "群聊中 @Agent 会自动创建会话", "context": "IM 会话列表底部提示" },
+  "im.session.dmFromCard": { "text": "群聊折叠的 Agent 卡片内点击「私聊」也会跳到这里", "context": "IM 会话列表底部说明" },
+  "im.createRoom.namePlaceholder": { "text": "群聊名称", "context": "IM 创建群聊输入框占位符" },
+  "im.createRoom.confirm": { "text": "创建", "context": "IM 创建群聊确认按钮" }
 }

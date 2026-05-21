@@ -3900,5 +3900,11 @@
   "im.empty.noSessions": { "text": "No sessions yet", "context": "IM session list empty" },
   "im.empty.noMessages": { "text": "No messages yet", "context": "IM message list empty" },
   "im.menu.sessions": { "text": "Sessions", "context": "IM menu - sessions" },
-  "im.menu.groups": { "text": "Groups", "context": "IM menu - groups" }
+  "im.menu.groups": { "text": "Groups", "context": "IM menu - groups" },
+  "im.empty.selectHint": { "text": "Select a group to start chatting", "context": "IM hint when no room selected" },
+  "im.workspace.selfHint": { "text": "Talk to yourself, assign tasks to agents", "context": "IM workspace type room description" },
+  "im.session.autoCreateHint": { "text": "@Agent in group chat auto-creates a session", "context": "IM session list bottom hint" },
+  "im.session.dmFromCard": { "text": "Clicking DM in a collapsed Agent card also links here", "context": "IM session list bottom explanation" },
+  "im.createRoom.namePlaceholder": { "text": "Group name", "context": "IM create room input placeholder" },
+  "im.createRoom.confirm": { "text": "Create", "context": "IM create room confirm button" }
 }
