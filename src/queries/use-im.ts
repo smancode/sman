@@ -90,9 +90,9 @@ export function useRoomList() {
   return useQuery({
     queryKey: ['im', 'rooms'] as const,
     queryFn: async () => {
-      const { data: raw, unreachable } = await imFetch<unknown[]>('/rooms');
+      const { data: raw, unreachable } = await imFetch<Record<string, unknown>>('/rooms');
       if (unreachable) return EMPTY_ROOMS;
-      const items = Array.isArray(raw) ? raw : [];
+      const items = Array.isArray(raw?.rooms) ? raw.rooms : Array.isArray(raw) ? raw : [];
       return items.map(parseIMRoom);
     },
     staleTime: 10_000,
@@ -124,11 +124,12 @@ export function useRoomMessages(roomId: string | undefined, options?: RoomMessag
           resolve(EMPTY_MESSAGES);
         }, 8000);
 
-        const unsub = wrapWsHandler(client, 'im.history', (data) => {
-          if (String(data.roomId) !== roomId) return;
+        const unsub = wrapWsHandler(client, 'im.history', (msg) => {
+          const payload = (msg as Record<string, unknown>).data as Record<string, unknown> ?? msg;
+          if (String(payload.roomId) !== roomId) return;
           clearTimeout(timeout);
           unsub();
-          const messages = Array.isArray(data.messages) ? data.messages : [];
+          const messages = Array.isArray(payload.messages) ? payload.messages : [];
           resolve(messages.map(parseIMMessage));
         });
 
@@ -163,7 +164,8 @@ export function useCreateRoom() {
         method: 'POST',
         body: JSON.stringify(params),
       });
-      return parseIMRoom(raw);
+      const roomData = (raw as Record<string, unknown>).room ?? raw;
+      return parseIMRoom(roomData as Record<string, unknown>);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['im', 'rooms'] }),
   });
@@ -177,7 +179,6 @@ export interface SendMessageParams {
 }
 
 export function useSendMessage() {
-  const qc = useQueryClient();
   return useMutation<void, Error, SendMessageParams>({
     mutationFn: async (params) => {
       const client = getWsClient();
@@ -190,8 +191,9 @@ export function useSendMessage() {
           reject(new Error('Send message timeout'));
         }, 10_000);
 
-        const unsubAck = wrapWsHandler(client, 'im.sent', (data) => {
-          if (String(data.roomId) !== params.roomId) return;
+        const unsubAck = wrapWsHandler(client, 'im.sent', (msg) => {
+          const payload = (msg as Record<string, unknown>).data as Record<string, unknown> ?? msg;
+          if (String(payload.roomId) !== params.roomId) return;
           clearTimeout(timeout);
           unsubAck();
           resolve();
@@ -205,9 +207,6 @@ export function useSendMessage() {
           quoteId: params.quoteId,
         });
       });
-    },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['im', 'rooms', vars.roomId, 'messages'] });
     },
   });
 }

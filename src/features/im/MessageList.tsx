@@ -110,16 +110,10 @@ export function MessageList({ messages, clientId }: MessageListProps) {
     // TODO: load more messages (cursor pagination)
   }, false);
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">{t('im.empty.noMessages')}</p>
-      </div>
-    );
-  }
+  if (messages.length === 0) return null;
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-0.5">
+    <div ref={scrollRef} className="px-4 pt-3 pb-4 flex flex-col gap-0.5">
       {/* Sentinel for top pagination */}
       <div ref={sentinelRef} className="h-0" />
 

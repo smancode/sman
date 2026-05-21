@@ -757,11 +757,11 @@
   },
   "common.cancel": {
     "text": "取消",
-    "context": "通用取消按钮文字"
+    "context": "取消按钮"
   },
   "common.confirm": {
     "text": "确认",
-    "context": "通用确认按钮文字"
+    "context": "确认按钮"
   },
   "common.delete": {
     "text": "删除",
@@ -789,7 +789,7 @@
   },
   "common.back": {
     "text": "返回",
-    "context": "返回上一页按钮"
+    "context": "返回按钮"
   },
   "git.fetch": {
     "text": "拉取远端",
@@ -2655,18 +2655,6 @@
     "text": "创建中...",
     "context": "创建中状态"
   },
-  "common.confirm": {
-    "text": "确认",
-    "context": "确认按钮"
-  },
-  "common.cancel": {
-    "text": "取消",
-    "context": "取消按钮"
-  },
-  "common.back": {
-    "text": "返回",
-    "context": "返回按钮"
-  },
   "task.notFound": {
     "text": "任务不存在",
     "context": "任务未找到"
@@ -3563,365 +3551,1448 @@
     "text": "项目类型",
     "context": "Agent 项目类型标签"
   },
-  "hub.room.description": { "text": "功能描述", "context": "项目组功能描述标签" },
-  "hub.room.descriptionPlaceholder": { "text": "描述项目组用途...", "context": "项目组描述输入框占位符" },
-  "hub.room.maxAgents": { "text": "Agent 上限", "context": "项目组 Agent 上限标签" },
-  "hub.room.password": { "text": "访问密码", "context": "项目组密码标签" },
-  "hub.room.passwordPlaceholder": { "text": "4位数字", "context": "项目组密码输入框占位符" },
-  "hub.room.wrongPassword": { "text": "密码错误", "context": "加入加密项目组密码错误提示" },
-  "hub.room.inputPassword": { "text": "请输入密码", "context": "加入加密项目组密码输入提示" },
-  "hub.room.hasPassword": { "text": "已加密", "context": "项目组有密码标记" },
-  "hub.settings.title": { "text": "连接配置" },
-  "hub.settings.serverUrl": { "text": "服务器地址" },
-  "hub.settings.serverUrlHint": { "text": "sman-server 的地址（如 http://192.168.1.100:5882）" },
-  "hub.settings.fallbackUrl": { "text": "内网服务器地址" },
-  "hub.settings.fallbackUrlHint": { "text": "外网 smancode.com 自动探测，内网不通时尝试此地址（如 http://10.0.0.1:5882）" },
-  "hub.settings.adminToken": { "text": "Admin Token" },
-  "hub.settings.adminTokenPlaceholder": { "text": "sman-server 的 ADMIN_TOKEN" },
-  "hub.settings.save": { "text": "保存 Hub 配置" },
-  "smartpath.stepExec": { "text": "逐步执行", "context": "逐步执行按钮" },
-  "smartpath.redoStep": { "text": "重新执行", "context": "重新执行当前步骤按钮" },
-  "smartpath.continueStep": { "text": "下一步", "context": "下一步按钮" },
-  "smartpath.editResult": { "text": "编辑结果", "context": "编辑步骤结果按钮" },
-  "smartpath.editDesc": { "text": "编辑描述", "context": "编辑步骤描述按钮" },
-  "smartpath.stepResultPlaceholder": { "text": "步骤执行结果（可编辑）...", "context": "步骤结果编辑区占位符" },
-  "smartpath.stepDescPlaceholder": { "text": "步骤描述（可编辑）...", "context": "步骤描述编辑区占位符" },
-  "smartpath.finalizeStep": { "text": "完成", "context": "完成最后一步按钮" },
-  "smartpath.cancelStepExec": { "text": "取消", "context": "取消逐步执行按钮" },
-  "smartpath.stepCompleted": { "text": "已完成", "context": "步骤已完成状态" },
-  "smartpath.orchestrating": { "text": "主编分析中...", "context": "主编分析阶段提示" },
-  "smartpath.deliveryCheck": { "text": "交付检查", "context": "步骤交付检查标签" },
-  "smartpath.deliveryCheckPlaceholder": { "text": "描述交付物检查目标（如：必须生成完整可运行的代码）...", "context": "交付检查输入占位符" },
-  "smartpath.deliveryCheckFailed": { "text": "交付检查不通过，需要人工干预", "context": "交付检查失败告警" },
-  "smartpath.deliveryChecking": { "text": "交付检查中...", "context": "交付检查进行中" },
-  "smartpath.deliveryCheckPassed": { "text": "交付检查通过", "context": "交付检查通过" },
-  "smartpath.deliveryCheckRetry": { "text": "交付检查未通过，自动重试中...", "context": "交付检查重试" },
-  "smartpath.deliveryCheckReason": { "text": "原因：{reason}", "context": "交付检查失败原因" },
-  "smartpath.useReferences": { "text": "复用经验", "context": "复用经验开关按钮" },
-  "smartpath.useReferencesHint": { "text": "开启后执行时注入已有的 references 和 run.md", "context": "复用经验开关提示" },
-  "smartpath.noWorkspaceSkills": { "text": "默认不使用项目 Skills，需在步骤指令中显式引用", "context": "编辑界面说明" },
-  "smartpath.stepSkills": { "text": "可用 Skills", "context": "步骤编辑中的Skill选择器标题" },
-  "smartpath.stepSkillsHint": { "text": "选中的 Skill 会注入到步骤执行上下文中", "context": "步骤Skill选择器提示" },
-  "smartpath.loadingSkills": { "text": "加载中...", "context": "Skill加载中提示" },
-  "smartpath.noSkillsAvailable": { "text": "该项目下暂无 Skills", "context": "无可用Skills提示" },
-  "smartpath.selectedSkills": { "text": "已选 {count} 个 Skill", "context": "已选Skill数量" },
-  "smartpath.generateGuide": { "text": "生成指南", "context": "生成步骤操作指南按钮" },
-  "smartpath.generateGuideHint": { "text": "点击后可多轮对话调整步骤结果", "context": "生成指南按钮旁提示" },
-  "smartpath.guideChatPlaceholder": { "text": "输入你的调整意见...", "context": "指南对话输入框占位符" },
-  "smartpath.guideChatConfirm": { "text": "确认生成指南", "context": "确认保存指南按钮" },
-  "smartpath.guideSaving": { "text": "保存中...", "context": "指南保存中" },
-  "smartpath.guideChatCancel": { "text": "取消", "context": "取消指南对话按钮" },
-  "smartpath.guideChatIntro": { "text": "正在确认步骤结果并生成操作指南...", "context": "指南对话初始提示" },
-  "smartpath.guideSaved": { "text": "指南已保存", "context": "指南保存成功提示" },
-  "smartpath.guideLabel": { "text": "操作指南", "context": "操作指南标签" },
-  "smartpath.guideChatSend": { "text": "发送", "context": "发送对话消息按钮" },
-  "achievement.title": { "text": "成就", "context": "成就页面标题" },
-  "achievement.loading": { "text": "加载中...", "context": "成就加载中" },
-  "achievement.hidden": { "text": "隐藏成就", "context": "未解锁的隐藏成就" },
-  "achievement.remaining": { "text": "还需 ${count} 次", "context": "距离解锁还需多少次操作" },
-  "achievement.ready": { "text": "即将解锁!", "context": "进度已满即将解锁" },
-  "achievement.points": { "text": "${count} 积分", "context": "总积分数" },
-  "achievement.scoreDetail.title": { "text": "积分明细", "context": "积分来源明细" },
-  "achievement.scoreDetail.sessions": { "text": "会话", "context": "" },
-  "achievement.scoreDetail.messages": { "text": "消息", "context": "" },
-  "achievement.scoreDetail.tokens": { "text": "Token", "context": "" },
-  "achievement.scoreDetail.cron": { "text": "定时任务", "context": "" },
-  "achievement.scoreDetail.path": { "text": "地球路径", "context": "" },
-  "achievement.scoreDetail.skill": { "text": "技能", "context": "" },
-  "achievement.scoreDetail.codeview": { "text": "代码查看", "context": "" },
-  "achievement.scoreDetail.git": { "text": "Git 操作", "context": "" },
-  "achievement.scoreDetail.botSessions": { "text": "Bot 会话", "context": "" },
-  "achievement.scoreDetail.botMessages": { "text": "Bot 消息", "context": "" },
-  "achievement.scoreDetail.botCount": { "text": "Bot 数量", "context": "" },
-  "achievement.scoreDetail.streak": { "text": "连续活跃", "context": "" },
-  "achievement.unlockedCount": { "text": "已解锁 ${count}/${total}", "context": "解锁进度" },
-  "achievement.nextLevel": { "text": "距下一等级还需 ${points} 分", "context": "距离下一等级的积分" },
-  "achievement.streak": { "text": "连续活跃 ${current} 天 · 最长 ${longest} 天", "context": "活跃天数统计" },
-  "achievement.noResults": { "text": "暂无匹配的成就", "context": "筛选无结果" },
-  "achievement.tier.bronze": { "text": "青铜", "context": "青铜等级" },
-  "achievement.tier.silver": { "text": "白银", "context": "白银等级" },
-  "achievement.tier.gold": { "text": "黄金", "context": "黄金等级" },
-  "achievement.tier.platinum": { "text": "铂金", "context": "铂金等级" },
-  "achievement.tier.diamond": { "text": "钻石", "context": "钻石等级" },
-  "achievement.tier.star": { "text": "星耀", "context": "星耀等级" },
-  "achievement.tier.king": { "text": "王者", "context": "王者等级" },
-  "achievement.tier.legend": { "text": "传说", "context": "传说等级" },
-  "achievement.tier.epic": { "text": "史诗", "context": "史诗等级" },
-  "achievement.tier.eternal": { "text": "永恒", "context": "永恒等级" },
-  "achievement.session_1": { "text": "初来乍到", "context": "创建第1个会话" },
-  "achievement.session_1.desc": { "text": "创建你的第一个会话", "context": "" },
-  "achievement.session_10": { "text": "对话新手", "context": "创建10个会话" },
-  "achievement.session_10.desc": { "text": "累计创建 10 个会话", "context": "" },
-  "achievement.session_50": { "text": "对话常客", "context": "创建50个会话" },
-  "achievement.session_50.desc": { "text": "累计创建 50 个会话", "context": "" },
-  "achievement.session_200": { "text": "对话达人", "context": "创建200个会话" },
-  "achievement.session_200.desc": { "text": "累计创建 200 个会话", "context": "" },
-  "achievement.session_500": { "text": "对话专家", "context": "创建500个会话" },
-  "achievement.session_500.desc": { "text": "累计创建 500 个会话", "context": "" },
-  "achievement.session_1k": { "text": "对话大师", "context": "创建1000个会话" },
-  "achievement.session_1k.desc": { "text": "累计创建 1000 个会话", "context": "" },
-  "achievement.session_2k": { "text": "对话宗师", "context": "创建2000个会话" },
-  "achievement.session_2k.desc": { "text": "累计创建 2000 个会话", "context": "" },
-  "achievement.msg_10": { "text": "试水者", "context": "发送10条消息" },
-  "achievement.msg_10.desc": { "text": "累计发送 10 条消息", "context": "" },
-  "achievement.msg_100": { "text": "健谈者", "context": "发送100条消息" },
-  "achievement.msg_100.desc": { "text": "累计发送 100 条消息", "context": "" },
-  "achievement.msg_500": { "text": "话痨", "context": "发送500条消息" },
-  "achievement.msg_500.desc": { "text": "累计发送 500 条消息", "context": "" },
-  "achievement.msg_2k": { "text": "滔滔不绝", "context": "发送2000条消息" },
-  "achievement.msg_2k.desc": { "text": "累计发送 2000 条消息", "context": "" },
-  "achievement.msg_5k": { "text": "千言万语", "context": "发送5000条消息" },
-  "achievement.msg_5k.desc": { "text": "累计发送 5000 条消息", "context": "" },
-  "achievement.msg_10k": { "text": "文字海洋", "context": "发送10000条消息" },
-  "achievement.msg_10k.desc": { "text": "累计发送 10000 条消息", "context": "" },
-  "achievement.msg_50k": { "text": "笔墨生花", "context": "发送50000条消息" },
-  "achievement.msg_50k.desc": { "text": "累计发送 50000 条消息", "context": "" },
-  "achievement.msg_100k": { "text": "著作等身", "context": "发送100000条消息" },
-  "achievement.msg_100k.desc": { "text": "累计发送 100000 条消息", "context": "" },
-  "achievement.streak_3": { "text": "三日之约", "context": "连续活跃3天" },
-  "achievement.streak_3.desc": { "text": "连续活跃 3 天", "context": "" },
-  "achievement.streak_7": { "text": "一周不断", "context": "连续活跃7天" },
-  "achievement.streak_7.desc": { "text": "连续活跃 7 天", "context": "" },
-  "achievement.streak_14": { "text": "双周坚持", "context": "连续活跃14天" },
-  "achievement.streak_14.desc": { "text": "连续活跃 14 天", "context": "" },
-  "achievement.streak_30": { "text": "月度之星", "context": "连续活跃30天" },
-  "achievement.streak_30.desc": { "text": "连续活跃 30 天", "context": "" },
-  "achievement.streak_60": { "text": "两月坚守", "context": "连续活跃60天" },
-  "achievement.streak_60.desc": { "text": "连续活跃 60 天", "context": "" },
-  "achievement.streak_100": { "text": "百日筑基", "context": "连续活跃100天" },
-  "achievement.streak_100.desc": { "text": "连续活跃 100 天", "context": "" },
-  "achievement.streak_180": { "text": "半载不辍", "context": "连续活跃180天" },
-  "achievement.streak_180.desc": { "text": "连续活跃 180 天", "context": "" },
-  "achievement.streak_365": { "text": "全年无休", "context": "连续活跃365天" },
-  "achievement.streak_365.desc": { "text": "连续活跃 365 天", "context": "" },
-  "achievement.cron_1": { "text": "自动化新手", "context": "执行1次定时任务" },
-  "achievement.cron_1.desc": { "text": "成功执行 1 次定时任务", "context": "" },
-  "achievement.cron_10": { "text": "定时达人", "context": "执行10次定时任务" },
-  "achievement.cron_10.desc": { "text": "累计成功执行 10 次定时任务", "context": "" },
-  "achievement.cron_50": { "text": "自动化专家", "context": "执行50次定时任务" },
-  "achievement.cron_50.desc": { "text": "累计成功执行 50 次定时任务", "context": "" },
-  "achievement.cron_200": { "text": "时间管理者", "context": "执行200次定时任务" },
-  "achievement.cron_200.desc": { "text": "累计成功执行 200 次定时任务", "context": "" },
-  "achievement.cron_500": { "text": "自动化大师", "context": "执行500次定时任务" },
-  "achievement.cron_500.desc": { "text": "累计成功执行 500 次定时任务", "context": "" },
-  "achievement.cron_1k": { "text": "时间领主", "context": "执行1000次定时任务" },
-  "achievement.cron_1k.desc": { "text": "累计成功执行 1000 次定时任务", "context": "" },
-  "achievement.path_1": { "text": "路径探索者", "context": "完成1次地球路径" },
-  "achievement.path_1.desc": { "text": "完成 1 次地球路径执行", "context": "" },
-  "achievement.path_10": { "text": "路径达人", "context": "完成10次地球路径" },
-  "achievement.path_10.desc": { "text": "累计完成 10 次地球路径", "context": "" },
-  "achievement.path_50": { "text": "路径专家", "context": "完成50次地球路径" },
-  "achievement.path_50.desc": { "text": "累计完成 50 次地球路径", "context": "" },
-  "achievement.path_100": { "text": "路径大师", "context": "完成100次地球路径" },
-  "achievement.path_100.desc": { "text": "累计完成 100 次地球路径", "context": "" },
-  "achievement.path_500": { "text": "路径宗师", "context": "完成500次地球路径" },
-  "achievement.path_500.desc": { "text": "累计完成 500 次地球路径", "context": "" },
-  "achievement.path_1k": { "text": "路径传奇", "context": "完成1000次地球路径" },
-  "achievement.path_1k.desc": { "text": "累计完成 1000 次地球路径", "context": "" },
-  "achievement.skill_1": { "text": "技能新手", "context": "使用1次技能" },
-  "achievement.skill_1.desc": { "text": "使用 1 次 Skill", "context": "" },
-  "achievement.skill_5": { "text": "技能达人", "context": "使用5次技能" },
-  "achievement.skill_5.desc": { "text": "累计使用 5 次 Skill", "context": "" },
-  "achievement.skill_20": { "text": "技能专家", "context": "使用20次技能" },
-  "achievement.skill_20.desc": { "text": "累计使用 20 次 Skill", "context": "" },
-  "achievement.skill_50": { "text": "技能大师", "context": "使用50次技能" },
-  "achievement.skill_50.desc": { "text": "累计使用 50 次 Skill", "context": "" },
-  "achievement.skill_100": { "text": "技能宗师", "context": "使用100次技能" },
-  "achievement.skill_100.desc": { "text": "累计使用 100 次 Skill", "context": "" },
-  "achievement.skill_500": { "text": "技能传奇", "context": "使用500次技能" },
-  "achievement.skill_500.desc": { "text": "累计使用 500 次 Skill", "context": "" },
-  "achievement.ws_2": { "text": "双项目", "context": "使用2个工作区" },
-  "achievement.ws_2.desc": { "text": "使用 2 个不同的工作区", "context": "" },
-  "achievement.ws_5": { "text": "多面手", "context": "使用5个工作区" },
-  "achievement.ws_5.desc": { "text": "使用 5 个不同的工作区", "context": "" },
-  "achievement.ws_10": { "text": "项目管理员", "context": "使用10个工作区" },
-  "achievement.ws_10.desc": { "text": "使用 10 个不同的工作区", "context": "" },
-  "achievement.ws_20": { "text": "项目大亨", "context": "使用20个工作区" },
-  "achievement.ws_20.desc": { "text": "使用 20 个不同的工作区", "context": "" },
-  "achievement.ws_50": { "text": "项目帝国", "context": "使用50个工作区" },
-  "achievement.ws_50.desc": { "text": "使用 50 个不同的工作区", "context": "" },
-  "achievement.ws_100": { "text": "项目宇宙", "context": "使用100个工作区" },
-  "achievement.ws_100.desc": { "text": "使用 100 个不同的工作区", "context": "" },
-  "achievement.token_100w": { "text": "Token 新手", "context": "消耗100万Token" },
-  "achievement.token_100w.desc": { "text": "累计消耗 100 万 Token", "context": "" },
-  "achievement.token_1yi": { "text": "Token 达人", "context": "消耗1亿Token" },
-  "achievement.token_1yi.desc": { "text": "累计消耗 1 亿 Token", "context": "" },
-  "achievement.token_10yi": { "text": "Token 专家", "context": "消耗10亿Token" },
-  "achievement.token_10yi.desc": { "text": "累计消耗 10 亿 Token", "context": "" },
-  "achievement.token_50yi": { "text": "Token 大师", "context": "消耗50亿Token" },
-  "achievement.token_50yi.desc": { "text": "累计消耗 50 亿 Token", "context": "" },
-  "achievement.token_100yi": { "text": "Token 宗师", "context": "消耗100亿Token" },
-  "achievement.token_100yi.desc": { "text": "累计消耗 100 亿 Token", "context": "" },
-  "achievement.token_300yi": { "text": "Token 传奇", "context": "消耗300亿Token" },
-  "achievement.token_300yi.desc": { "text": "累计消耗 300 亿 Token", "context": "" },
-  "achievement.codeview_10": { "text": "代码浏览", "context": "查看10次代码" },
-  "achievement.codeview_10.desc": { "text": "使用代码查看器 10 次", "context": "" },
-  "achievement.codeview_50": { "text": "代码审视", "context": "查看50次代码" },
-  "achievement.codeview_50.desc": { "text": "使用代码查看器 50 次", "context": "" },
-  "achievement.codeview_200": { "text": "代码鉴赏家", "context": "查看200次代码" },
-  "achievement.codeview_200.desc": { "text": "使用代码查看器 200 次", "context": "" },
-  "achievement.codeview_1k": { "text": "代码考古", "context": "查看1000次代码" },
-  "achievement.codeview_1k.desc": { "text": "使用代码查看器 1000 次", "context": "" },
-  "achievement.codeview_5k": { "text": "代码学者", "context": "查看5000次代码" },
-  "achievement.codeview_5k.desc": { "text": "使用代码查看器 5000 次", "context": "" },
-  "achievement.git_10": { "text": "版本管理", "context": "执行10次Git操作" },
-  "achievement.git_10.desc": { "text": "执行 10 次 Git 操作", "context": "" },
-  "achievement.git_50": { "text": "Git 达人", "context": "执行50次Git操作" },
-  "achievement.git_50.desc": { "text": "执行 50 次 Git 操作", "context": "" },
-  "achievement.git_200": { "text": "Git 专家", "context": "执行200次Git操作" },
-  "achievement.git_200.desc": { "text": "执行 200 次 Git 操作", "context": "" },
-  "achievement.git_1k": { "text": "Git 大师", "context": "执行1000次Git操作" },
-  "achievement.git_1k.desc": { "text": "执行 1000 次 Git 操作", "context": "" },
-  "achievement.git_5k": { "text": "Git 宗师", "context": "执行5000次Git操作" },
-  "achievement.git_5k.desc": { "text": "执行 5000 次 Git 操作", "context": "" },
-  "achievement.collab_1": { "text": "协作新星", "context": "参与1次协作" },
-  "achievement.collab_1.desc": { "text": "参与 1 次星域协作", "context": "" },
-  "achievement.collab_10": { "text": "协作者", "context": "参与10次协作" },
-  "achievement.collab_10.desc": { "text": "参与 10 次星域协作", "context": "" },
-  "achievement.collab_50": { "text": "协作达人", "context": "参与50次协作" },
-  "achievement.collab_50.desc": { "text": "参与 50 次星域协作", "context": "" },
-  "achievement.collab_200": { "text": "协作专家", "context": "参与200次协作" },
-  "achievement.collab_200.desc": { "text": "参与 200 次星域协作", "context": "" },
-  "achievement.collab_1k": { "text": "协作大师", "context": "参与1000次协作" },
-  "achievement.collab_1k.desc": { "text": "参与 1000 次星域协作", "context": "" },
-  "achievement.reputation_5": { "text": "声望初显", "context": "获得5点声望" },
-  "achievement.reputation_5.desc": { "text": "累计获得 5 点声望", "context": "" },
-  "achievement.reputation_10": { "text": "小有名气", "context": "获得10点声望" },
-  "achievement.reputation_10.desc": { "text": "累计获得 10 点声望", "context": "" },
-  "achievement.reputation_25": { "text": "名声在外", "context": "获得25点声望" },
-  "achievement.reputation_25.desc": { "text": "累计获得 25 点声望", "context": "" },
-  "achievement.reputation_50": { "text": "声望卓著", "context": "获得50点声望" },
-  "achievement.reputation_50.desc": { "text": "累计获得 50 点声望", "context": "" },
-  "achievement.reputation_100": { "text": "声名远扬", "context": "获得100点声望" },
-  "achievement.reputation_100.desc": { "text": "累计获得 100 点声望", "context": "" },
-  "achievement.reputation_200": { "text": "声威赫赫", "context": "获得200点声望" },
-  "achievement.reputation_200.desc": { "text": "累计获得 200 点声望", "context": "" },
-  "achievement.reputation_500": { "text": "威名震天", "context": "获得500点声望" },
-  "achievement.reputation_500.desc": { "text": "累计获得 500 点声望", "context": "" },
-  "achievement.reputation_1k": { "text": "一代宗师", "context": "获得1000点声望" },
-  "achievement.reputation_1k.desc": { "text": "累计获得 1000 点声望", "context": "" },
-  "achievement.bot_count_total_1": { "text": "Bot 主人", "context": "接入1个Bot用户" },
-  "achievement.bot_count_total_1.desc": { "text": "累计接入 1 个 Bot 用户", "context": "" },
-  "achievement.bot_count_total_5": { "text": "Bot 管理员", "context": "接入5个Bot用户" },
-  "achievement.bot_count_total_5.desc": { "text": "累计接入 5 个 Bot 用户", "context": "" },
-  "achievement.bot_count_total_10": { "text": "Bot 达人", "context": "接入10个Bot用户" },
-  "achievement.bot_count_total_10.desc": { "text": "累计接入 10 个 Bot 用户", "context": "" },
-  "achievement.bot_count_total_20": { "text": "Bot 专家", "context": "接入20个Bot用户" },
-  "achievement.bot_count_total_20.desc": { "text": "累计接入 20 个 Bot 用户", "context": "" },
-  "achievement.bot_count_total_50": { "text": "Bot 大师", "context": "接入50个Bot用户" },
-  "achievement.bot_count_total_50.desc": { "text": "累计接入 50 个 Bot 用户", "context": "" },
-  "achievement.bot_count_total_100": { "text": "Bot 帝国", "context": "接入100个Bot用户" },
-  "achievement.bot_count_total_100.desc": { "text": "累计接入 100 个 Bot 用户", "context": "" },
-  "achievement.bot_sessions_total_1": { "text": "Bot 对话", "context": "创建1个Bot会话" },
-  "achievement.bot_sessions_total_1.desc": { "text": "累计创建 1 个 Bot 会话", "context": "" },
-  "achievement.bot_sessions_total_10": { "text": "Bot 对话达人", "context": "创建10个Bot会话" },
-  "achievement.bot_sessions_total_10.desc": { "text": "累计创建 10 个 Bot 会话", "context": "" },
-  "achievement.bot_sessions_total_50": { "text": "Bot 对话专家", "context": "创建50个Bot会话" },
-  "achievement.bot_sessions_total_50.desc": { "text": "累计创建 50 个 Bot 会话", "context": "" },
-  "achievement.bot_sessions_total_200": { "text": "Bot 对话大师", "context": "创建200个Bot会话" },
-  "achievement.bot_sessions_total_200.desc": { "text": "累计创建 200 个 Bot 会话", "context": "" },
-  "achievement.bot_sessions_total_1k": { "text": "Bot 对话宗师", "context": "创建1000个Bot会话" },
-  "achievement.bot_sessions_total_1k.desc": { "text": "累计创建 1000 个 Bot 会话", "context": "" },
-  "achievement.bot_sessions_total_5k": { "text": "Bot 对话传奇", "context": "创建5000个Bot会话" },
-  "achievement.bot_sessions_total_5k.desc": { "text": "累计创建 5000 个 Bot 会话", "context": "" },
-  "achievement.bot_messages_total_10": { "text": "Bot 回复", "context": "Bot处理10条消息" },
-  "achievement.bot_messages_total_10.desc": { "text": "Bot 累计处理 10 条消息", "context": "" },
-  "achievement.bot_messages_total_100": { "text": "Bot 消息达人", "context": "Bot处理100条消息" },
-  "achievement.bot_messages_total_100.desc": { "text": "Bot 累计处理 100 条消息", "context": "" },
-  "achievement.bot_messages_total_500": { "text": "Bot 消息专家", "context": "Bot处理500条消息" },
-  "achievement.bot_messages_total_500.desc": { "text": "Bot 累计处理 500 条消息", "context": "" },
-  "achievement.bot_messages_total_2k": { "text": "Bot 消息大师", "context": "Bot处理2000条消息" },
-  "achievement.bot_messages_total_2k.desc": { "text": "Bot 累计处理 2000 条消息", "context": "" },
-  "achievement.bot_messages_total_10k": { "text": "Bot 消息宗师", "context": "Bot处理10000条消息" },
-  "achievement.bot_messages_total_10k.desc": { "text": "Bot 累计处理 10000 条消息", "context": "" },
-  "achievement.bot_messages_total_50k": { "text": "Bot 消息传奇", "context": "Bot处理50000条消息" },
-  "achievement.bot_messages_total_50k.desc": { "text": "Bot 累计处理 50000 条消息", "context": "" },
-  "achievement.bot_platform_2": { "text": "双平台", "context": "接入2个Bot平台" },
-  "achievement.bot_platform_2.desc": { "text": "在 2 个不同平台接入 Bot", "context": "" },
-  "achievement.bot_platform_3": { "text": "三平台", "context": "接入3个Bot平台" },
-  "achievement.bot_platform_3.desc": { "text": "在 3 个不同平台接入 Bot", "context": "" },
-  "achievement.midnight_warrior": { "text": "午夜战士", "context": "凌晨0-5点发送消息" },
-  "achievement.midnight_warrior.desc": { "text": "在凌晨 0-5 点发送消息", "context": "" },
-  "achievement.early_bird": { "text": "早起鸟儿", "context": "凌晨5-7点发送消息" },
-  "achievement.early_bird.desc": { "text": "在凌晨 5-7 点发送消息", "context": "" },
-  "achievement.marathon_50": { "text": "马拉松选手", "context": "单会话50条消息" },
-  "achievement.marathon_50.desc": { "text": "单个会话中发送 50 条消息", "context": "" },
-  "achievement.marathon_200": { "text": "超长马拉松", "context": "单会话200条消息" },
-  "achievement.marathon_200.desc": { "text": "单个会话中发送 200 条消息", "context": "" },
-  "achievement.speed_demon": { "text": "速度恶魔", "context": "1分钟内发送5条消息" },
-  "achievement.speed_demon.desc": { "text": "1 分钟内发送 5 条消息", "context": "" },
-  "achievement.weekend_warrior": { "text": "周末战士", "context": "周末发送4条消息" },
-  "achievement.weekend_warrior.desc": { "text": "在周末累计发送 4 条消息", "context": "" },
-  "achievement.first_error": { "text": "初遇 Bug", "context": "遇到1次错误" },
-  "achievement.first_error.desc": { "text": "第一次遇到错误", "context": "" },
-  "achievement.error_100": { "text": "Bug 猎人", "context": "遇到100次错误" },
-  "achievement.error_100.desc": { "text": "累计遇到 100 次错误", "context": "" },
-  "achievement.comeback": { "text": "王者归来", "context": "离开7天后回归" },
-  "achievement.comeback.desc": { "text": "离开 7 天后再次使用", "context": "" },
-  "achievement.new_year": { "text": "新年快乐", "context": "元旦发送消息" },
-  "achievement.new_year.desc": { "text": "在元旦当天发送消息", "context": "" },
-  "achievement.leaderboard": { "text": "排行榜", "context": "排行榜标签" },
-  "achievement.leaderboard.empty": { "text": "暂无排行数据", "context": "排行榜为空" },
-  "achievement.leaderboard.offline": { "text": "无法连接排行服务器", "context": "排行榜离线" },
-  "achievement.leaderboard.rank": { "text": "第 ${rank} 名", "context": "排行名次" },
-  "achievement.leaderboard.rankCol": { "text": "排位", "context": "排行榜表头-排位" },
-  "achievement.leaderboard.tierCol": { "text": "等级", "context": "排行榜表头-等级" },
-  "achievement.leaderboard.nameCol": { "text": "名称", "context": "排行榜表头-名称" },
-  "achievement.leaderboard.pointsCol": { "text": "积分", "context": "排行榜表头-积分" },
-  "achievement.leaderboard.unlockedCol": { "text": "已解锁", "context": "排行榜表头-已解锁" },
-  "achievement.leaderboard.total": { "text": "总分", "context": "排行榜维度-总分" },
-  "achievement.leaderboard.dimensionCol": { "text": "数值", "context": "排行榜表头-维度数值" },
-  "achievement.leaderboard.points": { "text": "${points} 分", "context": "排行榜积分" },
-  "achievement.tabAll": { "text": "全部", "context": "成就筛选-全部" },
-  "achievement.tabAchievements": { "text": "成就", "context": "一级标签-成就" },
-  "achievement.tabUnlocked": { "text": "已解锁", "context": "成就筛选-已解锁" },
-  "achievement.tabLocked": { "text": "未解锁", "context": "成就筛选-未解锁" },
-  "achievement.catConversation": { "text": "对话", "context": "成就分类-对话" },
-  "achievement.catAdvanced": { "text": "进阶", "context": "成就分类-进阶" },
-  "achievement.catExploration": { "text": "探索", "context": "成就分类-探索" },
-  "achievement.catCollaboration": { "text": "协作", "context": "成就分类-协作" },
-  "achievement.catBot": { "text": "Bot", "context": "成就分类-Bot" },
-  "im.title": { "text": "即时通讯", "context": "IM 功能标题" },
-  "im.sessions": { "text": "会话", "context": "IM 会话列表" },
-  "im.groups": { "text": "群聊", "context": "IM 群聊列表" },
-  "im.send": { "text": "发送", "context": "IM 发送按钮" },
-  "im.cancel": { "text": "取消", "context": "IM 取消按钮" },
-  "im.members": { "text": "成员", "context": "IM 群成员" },
-  "im.agents": { "text": "分身", "context": "IM Agent 分身" },
-  "im.online": { "text": "在线", "context": "IM 在线状态" },
-  "im.offline": { "text": "离线", "context": "IM 离线状态" },
-  "im.typing": { "text": "正在输入", "context": "IM 正在输入提示" },
-  "im.newGroup": { "text": "新建对话", "context": "IM 新建对话按钮" },
-  "im.workspace": { "text": "工作台", "context": "IM 工作台入口" },
-  "im.agentStatus.running": { "text": "执行中", "context": "IM Agent 执行中状态" },
-  "im.agentStatus.completed": { "text": "已完成", "context": "IM Agent 已完成状态" },
-  "im.agentStatus.failed": { "text": "执行失败", "context": "IM Agent 执行失败状态" },
-  "im.chatInput.placeholder": { "text": "输入消息... (@ 选择分身)", "context": "IM 聊天输入框占位符" },
-  "im.chatInput.replyPlaceholder": { "text": "继续对话...", "context": "IM 回复输入框占位符" },
-  "im.chatInput.replyGroup": { "text": "群聊回复", "context": "IM 群聊回复模式" },
-  "im.chatInput.replyDM": { "text": "私聊", "context": "IM 私聊模式" },
-  "im.empty.noRooms": { "text": "暂无群聊", "context": "IM 群聊列表为空" },
-  "im.empty.noSessions": { "text": "暂无会话", "context": "IM 会话列表为空" },
-  "im.empty.noMessages": { "text": "暂无消息", "context": "IM 消息列表为空" },
-  "im.menu.sessions": { "text": "会话", "context": "IM 菜单-会话" },
-  "im.menu.groups": { "text": "群聊", "context": "IM 菜单-群聊" },
-  "im.empty.selectHint": { "text": "选择一个群聊开始对话", "context": "IM 未选中房间时的提示" },
-  "im.workspace.selfHint": { "text": "自言自语给分身派活", "context": "IM 工作台类型群聊描述" },
-  "im.session.autoCreateHint": { "text": "群聊中 @Agent 会自动创建会话", "context": "IM 会话列表底部提示" },
-  "im.session.dmFromCard": { "text": "群聊折叠的 Agent 卡片内点击「私聊」也会跳到这里", "context": "IM 会话列表底部说明" },
-  "im.createRoom.namePlaceholder": { "text": "群聊名称", "context": "IM 创建群聊输入框占位符" },
-  "im.createRoom.confirm": { "text": "创建", "context": "IM 创建群聊确认按钮" },
-  "im.agentCard.executing": { "text": "执行中", "context": "IM Agent 卡片执行中状态" },
-  "im.agentCard.completed": { "text": "已完成", "context": "IM Agent 卡片已完成状态" },
-  "im.agentCard.failed": { "text": "执行失败", "context": "IM Agent 卡片执行失败状态" },
-  "im.agentCard.expand": { "text": "点击展开 ▼", "context": "IM Agent 卡片展开按钮" },
-  "im.agentCard.collapse": { "text": "收起 ▲", "context": "IM Agent 卡片收起按钮" },
-  "im.agentCard.replyPlaceholder": { "text": "继续对话...", "context": "IM Agent 卡片回复输入框占位符" },
-  "im.agentCard.dm": { "text": "私聊", "context": "IM Agent 卡片私聊按钮" },
-  "im.agentCard.groupReply": { "text": "群聊回复", "context": "IM Agent 卡片群聊回复按钮" },
-  "im.dateToday": { "text": "今天", "context": "IM 消息日期分隔-今天" },
-  "im.dateYesterday": { "text": "昨天", "context": "IM 消息日期分隔-昨天" },
-  "im.memberPanel.title": { "text": "成员 & 分身", "context": "IM 成员面板标题" },
-  "im.memberPanel.people": { "text": "人员", "context": "IM 成员面板人员分组" },
-  "im.memberPanel.agentsOf": { "text": "${name} 的分身", "context": "IM 成员面板某人的分身分组" }
+  "hub.room.description": {
+    "text": "功能描述",
+    "context": "项目组功能描述标签"
+  },
+  "hub.room.descriptionPlaceholder": {
+    "text": "描述项目组用途...",
+    "context": "项目组描述输入框占位符"
+  },
+  "hub.room.maxAgents": {
+    "text": "Agent 上限",
+    "context": "项目组 Agent 上限标签"
+  },
+  "hub.room.password": {
+    "text": "访问密码",
+    "context": "项目组密码标签"
+  },
+  "hub.room.passwordPlaceholder": {
+    "text": "4位数字",
+    "context": "项目组密码输入框占位符"
+  },
+  "hub.room.wrongPassword": {
+    "text": "密码错误",
+    "context": "加入加密项目组密码错误提示"
+  },
+  "hub.room.inputPassword": {
+    "text": "请输入密码",
+    "context": "加入加密项目组密码输入提示"
+  },
+  "hub.room.hasPassword": {
+    "text": "已加密",
+    "context": "项目组有密码标记"
+  },
+  "hub.settings.title": {
+    "text": "连接配置"
+  },
+  "hub.settings.serverUrl": {
+    "text": "服务器地址"
+  },
+  "hub.settings.serverUrlHint": {
+    "text": "sman-server 的地址（如 http://192.168.1.100:5882）"
+  },
+  "hub.settings.fallbackUrl": {
+    "text": "内网服务器地址"
+  },
+  "hub.settings.fallbackUrlHint": {
+    "text": "外网 smancode.com 自动探测，内网不通时尝试此地址（如 http://10.0.0.1:5882）"
+  },
+  "hub.settings.adminToken": {
+    "text": "Admin Token"
+  },
+  "hub.settings.adminTokenPlaceholder": {
+    "text": "sman-server 的 ADMIN_TOKEN"
+  },
+  "hub.settings.save": {
+    "text": "保存 Hub 配置"
+  },
+  "smartpath.stepExec": {
+    "text": "逐步执行",
+    "context": "逐步执行按钮"
+  },
+  "smartpath.redoStep": {
+    "text": "重新执行",
+    "context": "重新执行当前步骤按钮"
+  },
+  "smartpath.continueStep": {
+    "text": "下一步",
+    "context": "下一步按钮"
+  },
+  "smartpath.editResult": {
+    "text": "编辑结果",
+    "context": "编辑步骤结果按钮"
+  },
+  "smartpath.editDesc": {
+    "text": "编辑描述",
+    "context": "编辑步骤描述按钮"
+  },
+  "smartpath.stepResultPlaceholder": {
+    "text": "步骤执行结果（可编辑）...",
+    "context": "步骤结果编辑区占位符"
+  },
+  "smartpath.stepDescPlaceholder": {
+    "text": "步骤描述（可编辑）...",
+    "context": "步骤描述编辑区占位符"
+  },
+  "smartpath.finalizeStep": {
+    "text": "完成",
+    "context": "完成最后一步按钮"
+  },
+  "smartpath.cancelStepExec": {
+    "text": "取消",
+    "context": "取消逐步执行按钮"
+  },
+  "smartpath.stepCompleted": {
+    "text": "已完成",
+    "context": "步骤已完成状态"
+  },
+  "smartpath.orchestrating": {
+    "text": "主编分析中...",
+    "context": "主编分析阶段提示"
+  },
+  "smartpath.deliveryCheck": {
+    "text": "交付检查",
+    "context": "步骤交付检查标签"
+  },
+  "smartpath.deliveryCheckPlaceholder": {
+    "text": "描述交付物检查目标（如：必须生成完整可运行的代码）...",
+    "context": "交付检查输入占位符"
+  },
+  "smartpath.deliveryCheckFailed": {
+    "text": "交付检查不通过，需要人工干预",
+    "context": "交付检查失败告警"
+  },
+  "smartpath.deliveryChecking": {
+    "text": "交付检查中...",
+    "context": "交付检查进行中"
+  },
+  "smartpath.deliveryCheckPassed": {
+    "text": "交付检查通过",
+    "context": "交付检查通过"
+  },
+  "smartpath.deliveryCheckRetry": {
+    "text": "交付检查未通过，自动重试中...",
+    "context": "交付检查重试"
+  },
+  "smartpath.deliveryCheckReason": {
+    "text": "原因：{reason}",
+    "context": "交付检查失败原因"
+  },
+  "smartpath.useReferences": {
+    "text": "复用经验",
+    "context": "复用经验开关按钮"
+  },
+  "smartpath.useReferencesHint": {
+    "text": "开启后执行时注入已有的 references 和 run.md",
+    "context": "复用经验开关提示"
+  },
+  "smartpath.noWorkspaceSkills": {
+    "text": "默认不使用项目 Skills，需在步骤指令中显式引用",
+    "context": "编辑界面说明"
+  },
+  "smartpath.stepSkills": {
+    "text": "可用 Skills",
+    "context": "步骤编辑中的Skill选择器标题"
+  },
+  "smartpath.stepSkillsHint": {
+    "text": "选中的 Skill 会注入到步骤执行上下文中",
+    "context": "步骤Skill选择器提示"
+  },
+  "smartpath.loadingSkills": {
+    "text": "加载中...",
+    "context": "Skill加载中提示"
+  },
+  "smartpath.noSkillsAvailable": {
+    "text": "该项目下暂无 Skills",
+    "context": "无可用Skills提示"
+  },
+  "smartpath.selectedSkills": {
+    "text": "已选 {count} 个 Skill",
+    "context": "已选Skill数量"
+  },
+  "smartpath.generateGuide": {
+    "text": "生成指南",
+    "context": "生成步骤操作指南按钮"
+  },
+  "smartpath.generateGuideHint": {
+    "text": "点击后可多轮对话调整步骤结果",
+    "context": "生成指南按钮旁提示"
+  },
+  "smartpath.guideChatPlaceholder": {
+    "text": "输入你的调整意见...",
+    "context": "指南对话输入框占位符"
+  },
+  "smartpath.guideChatConfirm": {
+    "text": "确认生成指南",
+    "context": "确认保存指南按钮"
+  },
+  "smartpath.guideSaving": {
+    "text": "保存中...",
+    "context": "指南保存中"
+  },
+  "smartpath.guideChatCancel": {
+    "text": "取消",
+    "context": "取消指南对话按钮"
+  },
+  "smartpath.guideChatIntro": {
+    "text": "正在确认步骤结果并生成操作指南...",
+    "context": "指南对话初始提示"
+  },
+  "smartpath.guideSaved": {
+    "text": "指南已保存",
+    "context": "指南保存成功提示"
+  },
+  "smartpath.guideLabel": {
+    "text": "操作指南",
+    "context": "操作指南标签"
+  },
+  "smartpath.guideChatSend": {
+    "text": "发送",
+    "context": "发送对话消息按钮"
+  },
+  "achievement.title": {
+    "text": "成就",
+    "context": "成就页面标题"
+  },
+  "achievement.loading": {
+    "text": "加载中...",
+    "context": "成就加载中"
+  },
+  "achievement.hidden": {
+    "text": "隐藏成就",
+    "context": "未解锁的隐藏成就"
+  },
+  "achievement.remaining": {
+    "text": "还需 ${count} 次",
+    "context": "距离解锁还需多少次操作"
+  },
+  "achievement.ready": {
+    "text": "即将解锁!",
+    "context": "进度已满即将解锁"
+  },
+  "achievement.points": {
+    "text": "${count} 积分",
+    "context": "总积分数"
+  },
+  "achievement.scoreDetail.title": {
+    "text": "积分明细",
+    "context": "积分来源明细"
+  },
+  "achievement.scoreDetail.sessions": {
+    "text": "会话",
+    "context": ""
+  },
+  "achievement.scoreDetail.messages": {
+    "text": "消息",
+    "context": ""
+  },
+  "achievement.scoreDetail.tokens": {
+    "text": "Token",
+    "context": ""
+  },
+  "achievement.scoreDetail.cron": {
+    "text": "定时任务",
+    "context": ""
+  },
+  "achievement.scoreDetail.path": {
+    "text": "地球路径",
+    "context": ""
+  },
+  "achievement.scoreDetail.skill": {
+    "text": "技能",
+    "context": ""
+  },
+  "achievement.scoreDetail.codeview": {
+    "text": "代码查看",
+    "context": ""
+  },
+  "achievement.scoreDetail.git": {
+    "text": "Git 操作",
+    "context": ""
+  },
+  "achievement.scoreDetail.botSessions": {
+    "text": "Bot 会话",
+    "context": ""
+  },
+  "achievement.scoreDetail.botMessages": {
+    "text": "Bot 消息",
+    "context": ""
+  },
+  "achievement.scoreDetail.botCount": {
+    "text": "Bot 数量",
+    "context": ""
+  },
+  "achievement.scoreDetail.streak": {
+    "text": "连续活跃",
+    "context": ""
+  },
+  "achievement.unlockedCount": {
+    "text": "已解锁 ${count}/${total}",
+    "context": "解锁进度"
+  },
+  "achievement.nextLevel": {
+    "text": "距下一等级还需 ${points} 分",
+    "context": "距离下一等级的积分"
+  },
+  "achievement.streak": {
+    "text": "连续活跃 ${current} 天 · 最长 ${longest} 天",
+    "context": "活跃天数统计"
+  },
+  "achievement.noResults": {
+    "text": "暂无匹配的成就",
+    "context": "筛选无结果"
+  },
+  "achievement.tier.bronze": {
+    "text": "青铜",
+    "context": "青铜等级"
+  },
+  "achievement.tier.silver": {
+    "text": "白银",
+    "context": "白银等级"
+  },
+  "achievement.tier.gold": {
+    "text": "黄金",
+    "context": "黄金等级"
+  },
+  "achievement.tier.platinum": {
+    "text": "铂金",
+    "context": "铂金等级"
+  },
+  "achievement.tier.diamond": {
+    "text": "钻石",
+    "context": "钻石等级"
+  },
+  "achievement.tier.star": {
+    "text": "星耀",
+    "context": "星耀等级"
+  },
+  "achievement.tier.king": {
+    "text": "王者",
+    "context": "王者等级"
+  },
+  "achievement.tier.legend": {
+    "text": "传说",
+    "context": "传说等级"
+  },
+  "achievement.tier.epic": {
+    "text": "史诗",
+    "context": "史诗等级"
+  },
+  "achievement.tier.eternal": {
+    "text": "永恒",
+    "context": "永恒等级"
+  },
+  "achievement.session_1": {
+    "text": "初来乍到",
+    "context": "创建第1个会话"
+  },
+  "achievement.session_1.desc": {
+    "text": "创建你的第一个会话",
+    "context": ""
+  },
+  "achievement.session_10": {
+    "text": "对话新手",
+    "context": "创建10个会话"
+  },
+  "achievement.session_10.desc": {
+    "text": "累计创建 10 个会话",
+    "context": ""
+  },
+  "achievement.session_50": {
+    "text": "对话常客",
+    "context": "创建50个会话"
+  },
+  "achievement.session_50.desc": {
+    "text": "累计创建 50 个会话",
+    "context": ""
+  },
+  "achievement.session_200": {
+    "text": "对话达人",
+    "context": "创建200个会话"
+  },
+  "achievement.session_200.desc": {
+    "text": "累计创建 200 个会话",
+    "context": ""
+  },
+  "achievement.session_500": {
+    "text": "对话专家",
+    "context": "创建500个会话"
+  },
+  "achievement.session_500.desc": {
+    "text": "累计创建 500 个会话",
+    "context": ""
+  },
+  "achievement.session_1k": {
+    "text": "对话大师",
+    "context": "创建1000个会话"
+  },
+  "achievement.session_1k.desc": {
+    "text": "累计创建 1000 个会话",
+    "context": ""
+  },
+  "achievement.session_2k": {
+    "text": "对话宗师",
+    "context": "创建2000个会话"
+  },
+  "achievement.session_2k.desc": {
+    "text": "累计创建 2000 个会话",
+    "context": ""
+  },
+  "achievement.msg_10": {
+    "text": "试水者",
+    "context": "发送10条消息"
+  },
+  "achievement.msg_10.desc": {
+    "text": "累计发送 10 条消息",
+    "context": ""
+  },
+  "achievement.msg_100": {
+    "text": "健谈者",
+    "context": "发送100条消息"
+  },
+  "achievement.msg_100.desc": {
+    "text": "累计发送 100 条消息",
+    "context": ""
+  },
+  "achievement.msg_500": {
+    "text": "话痨",
+    "context": "发送500条消息"
+  },
+  "achievement.msg_500.desc": {
+    "text": "累计发送 500 条消息",
+    "context": ""
+  },
+  "achievement.msg_2k": {
+    "text": "滔滔不绝",
+    "context": "发送2000条消息"
+  },
+  "achievement.msg_2k.desc": {
+    "text": "累计发送 2000 条消息",
+    "context": ""
+  },
+  "achievement.msg_5k": {
+    "text": "千言万语",
+    "context": "发送5000条消息"
+  },
+  "achievement.msg_5k.desc": {
+    "text": "累计发送 5000 条消息",
+    "context": ""
+  },
+  "achievement.msg_10k": {
+    "text": "文字海洋",
+    "context": "发送10000条消息"
+  },
+  "achievement.msg_10k.desc": {
+    "text": "累计发送 10000 条消息",
+    "context": ""
+  },
+  "achievement.msg_50k": {
+    "text": "笔墨生花",
+    "context": "发送50000条消息"
+  },
+  "achievement.msg_50k.desc": {
+    "text": "累计发送 50000 条消息",
+    "context": ""
+  },
+  "achievement.msg_100k": {
+    "text": "著作等身",
+    "context": "发送100000条消息"
+  },
+  "achievement.msg_100k.desc": {
+    "text": "累计发送 100000 条消息",
+    "context": ""
+  },
+  "achievement.streak_3": {
+    "text": "三日之约",
+    "context": "连续活跃3天"
+  },
+  "achievement.streak_3.desc": {
+    "text": "连续活跃 3 天",
+    "context": ""
+  },
+  "achievement.streak_7": {
+    "text": "一周不断",
+    "context": "连续活跃7天"
+  },
+  "achievement.streak_7.desc": {
+    "text": "连续活跃 7 天",
+    "context": ""
+  },
+  "achievement.streak_14": {
+    "text": "双周坚持",
+    "context": "连续活跃14天"
+  },
+  "achievement.streak_14.desc": {
+    "text": "连续活跃 14 天",
+    "context": ""
+  },
+  "achievement.streak_30": {
+    "text": "月度之星",
+    "context": "连续活跃30天"
+  },
+  "achievement.streak_30.desc": {
+    "text": "连续活跃 30 天",
+    "context": ""
+  },
+  "achievement.streak_60": {
+    "text": "两月坚守",
+    "context": "连续活跃60天"
+  },
+  "achievement.streak_60.desc": {
+    "text": "连续活跃 60 天",
+    "context": ""
+  },
+  "achievement.streak_100": {
+    "text": "百日筑基",
+    "context": "连续活跃100天"
+  },
+  "achievement.streak_100.desc": {
+    "text": "连续活跃 100 天",
+    "context": ""
+  },
+  "achievement.streak_180": {
+    "text": "半载不辍",
+    "context": "连续活跃180天"
+  },
+  "achievement.streak_180.desc": {
+    "text": "连续活跃 180 天",
+    "context": ""
+  },
+  "achievement.streak_365": {
+    "text": "全年无休",
+    "context": "连续活跃365天"
+  },
+  "achievement.streak_365.desc": {
+    "text": "连续活跃 365 天",
+    "context": ""
+  },
+  "achievement.cron_1": {
+    "text": "自动化新手",
+    "context": "执行1次定时任务"
+  },
+  "achievement.cron_1.desc": {
+    "text": "成功执行 1 次定时任务",
+    "context": ""
+  },
+  "achievement.cron_10": {
+    "text": "定时达人",
+    "context": "执行10次定时任务"
+  },
+  "achievement.cron_10.desc": {
+    "text": "累计成功执行 10 次定时任务",
+    "context": ""
+  },
+  "achievement.cron_50": {
+    "text": "自动化专家",
+    "context": "执行50次定时任务"
+  },
+  "achievement.cron_50.desc": {
+    "text": "累计成功执行 50 次定时任务",
+    "context": ""
+  },
+  "achievement.cron_200": {
+    "text": "时间管理者",
+    "context": "执行200次定时任务"
+  },
+  "achievement.cron_200.desc": {
+    "text": "累计成功执行 200 次定时任务",
+    "context": ""
+  },
+  "achievement.cron_500": {
+    "text": "自动化大师",
+    "context": "执行500次定时任务"
+  },
+  "achievement.cron_500.desc": {
+    "text": "累计成功执行 500 次定时任务",
+    "context": ""
+  },
+  "achievement.cron_1k": {
+    "text": "时间领主",
+    "context": "执行1000次定时任务"
+  },
+  "achievement.cron_1k.desc": {
+    "text": "累计成功执行 1000 次定时任务",
+    "context": ""
+  },
+  "achievement.path_1": {
+    "text": "路径探索者",
+    "context": "完成1次地球路径"
+  },
+  "achievement.path_1.desc": {
+    "text": "完成 1 次地球路径执行",
+    "context": ""
+  },
+  "achievement.path_10": {
+    "text": "路径达人",
+    "context": "完成10次地球路径"
+  },
+  "achievement.path_10.desc": {
+    "text": "累计完成 10 次地球路径",
+    "context": ""
+  },
+  "achievement.path_50": {
+    "text": "路径专家",
+    "context": "完成50次地球路径"
+  },
+  "achievement.path_50.desc": {
+    "text": "累计完成 50 次地球路径",
+    "context": ""
+  },
+  "achievement.path_100": {
+    "text": "路径大师",
+    "context": "完成100次地球路径"
+  },
+  "achievement.path_100.desc": {
+    "text": "累计完成 100 次地球路径",
+    "context": ""
+  },
+  "achievement.path_500": {
+    "text": "路径宗师",
+    "context": "完成500次地球路径"
+  },
+  "achievement.path_500.desc": {
+    "text": "累计完成 500 次地球路径",
+    "context": ""
+  },
+  "achievement.path_1k": {
+    "text": "路径传奇",
+    "context": "完成1000次地球路径"
+  },
+  "achievement.path_1k.desc": {
+    "text": "累计完成 1000 次地球路径",
+    "context": ""
+  },
+  "achievement.skill_1": {
+    "text": "技能新手",
+    "context": "使用1次技能"
+  },
+  "achievement.skill_1.desc": {
+    "text": "使用 1 次 Skill",
+    "context": ""
+  },
+  "achievement.skill_5": {
+    "text": "技能达人",
+    "context": "使用5次技能"
+  },
+  "achievement.skill_5.desc": {
+    "text": "累计使用 5 次 Skill",
+    "context": ""
+  },
+  "achievement.skill_20": {
+    "text": "技能专家",
+    "context": "使用20次技能"
+  },
+  "achievement.skill_20.desc": {
+    "text": "累计使用 20 次 Skill",
+    "context": ""
+  },
+  "achievement.skill_50": {
+    "text": "技能大师",
+    "context": "使用50次技能"
+  },
+  "achievement.skill_50.desc": {
+    "text": "累计使用 50 次 Skill",
+    "context": ""
+  },
+  "achievement.skill_100": {
+    "text": "技能宗师",
+    "context": "使用100次技能"
+  },
+  "achievement.skill_100.desc": {
+    "text": "累计使用 100 次 Skill",
+    "context": ""
+  },
+  "achievement.skill_500": {
+    "text": "技能传奇",
+    "context": "使用500次技能"
+  },
+  "achievement.skill_500.desc": {
+    "text": "累计使用 500 次 Skill",
+    "context": ""
+  },
+  "achievement.ws_2": {
+    "text": "双项目",
+    "context": "使用2个工作区"
+  },
+  "achievement.ws_2.desc": {
+    "text": "使用 2 个不同的工作区",
+    "context": ""
+  },
+  "achievement.ws_5": {
+    "text": "多面手",
+    "context": "使用5个工作区"
+  },
+  "achievement.ws_5.desc": {
+    "text": "使用 5 个不同的工作区",
+    "context": ""
+  },
+  "achievement.ws_10": {
+    "text": "项目管理员",
+    "context": "使用10个工作区"
+  },
+  "achievement.ws_10.desc": {
+    "text": "使用 10 个不同的工作区",
+    "context": ""
+  },
+  "achievement.ws_20": {
+    "text": "项目大亨",
+    "context": "使用20个工作区"
+  },
+  "achievement.ws_20.desc": {
+    "text": "使用 20 个不同的工作区",
+    "context": ""
+  },
+  "achievement.ws_50": {
+    "text": "项目帝国",
+    "context": "使用50个工作区"
+  },
+  "achievement.ws_50.desc": {
+    "text": "使用 50 个不同的工作区",
+    "context": ""
+  },
+  "achievement.ws_100": {
+    "text": "项目宇宙",
+    "context": "使用100个工作区"
+  },
+  "achievement.ws_100.desc": {
+    "text": "使用 100 个不同的工作区",
+    "context": ""
+  },
+  "achievement.token_100w": {
+    "text": "Token 新手",
+    "context": "消耗100万Token"
+  },
+  "achievement.token_100w.desc": {
+    "text": "累计消耗 100 万 Token",
+    "context": ""
+  },
+  "achievement.token_1yi": {
+    "text": "Token 达人",
+    "context": "消耗1亿Token"
+  },
+  "achievement.token_1yi.desc": {
+    "text": "累计消耗 1 亿 Token",
+    "context": ""
+  },
+  "achievement.token_10yi": {
+    "text": "Token 专家",
+    "context": "消耗10亿Token"
+  },
+  "achievement.token_10yi.desc": {
+    "text": "累计消耗 10 亿 Token",
+    "context": ""
+  },
+  "achievement.token_50yi": {
+    "text": "Token 大师",
+    "context": "消耗50亿Token"
+  },
+  "achievement.token_50yi.desc": {
+    "text": "累计消耗 50 亿 Token",
+    "context": ""
+  },
+  "achievement.token_100yi": {
+    "text": "Token 宗师",
+    "context": "消耗100亿Token"
+  },
+  "achievement.token_100yi.desc": {
+    "text": "累计消耗 100 亿 Token",
+    "context": ""
+  },
+  "achievement.token_300yi": {
+    "text": "Token 传奇",
+    "context": "消耗300亿Token"
+  },
+  "achievement.token_300yi.desc": {
+    "text": "累计消耗 300 亿 Token",
+    "context": ""
+  },
+  "achievement.codeview_10": {
+    "text": "代码浏览",
+    "context": "查看10次代码"
+  },
+  "achievement.codeview_10.desc": {
+    "text": "使用代码查看器 10 次",
+    "context": ""
+  },
+  "achievement.codeview_50": {
+    "text": "代码审视",
+    "context": "查看50次代码"
+  },
+  "achievement.codeview_50.desc": {
+    "text": "使用代码查看器 50 次",
+    "context": ""
+  },
+  "achievement.codeview_200": {
+    "text": "代码鉴赏家",
+    "context": "查看200次代码"
+  },
+  "achievement.codeview_200.desc": {
+    "text": "使用代码查看器 200 次",
+    "context": ""
+  },
+  "achievement.codeview_1k": {
+    "text": "代码考古",
+    "context": "查看1000次代码"
+  },
+  "achievement.codeview_1k.desc": {
+    "text": "使用代码查看器 1000 次",
+    "context": ""
+  },
+  "achievement.codeview_5k": {
+    "text": "代码学者",
+    "context": "查看5000次代码"
+  },
+  "achievement.codeview_5k.desc": {
+    "text": "使用代码查看器 5000 次",
+    "context": ""
+  },
+  "achievement.git_10": {
+    "text": "版本管理",
+    "context": "执行10次Git操作"
+  },
+  "achievement.git_10.desc": {
+    "text": "执行 10 次 Git 操作",
+    "context": ""
+  },
+  "achievement.git_50": {
+    "text": "Git 达人",
+    "context": "执行50次Git操作"
+  },
+  "achievement.git_50.desc": {
+    "text": "执行 50 次 Git 操作",
+    "context": ""
+  },
+  "achievement.git_200": {
+    "text": "Git 专家",
+    "context": "执行200次Git操作"
+  },
+  "achievement.git_200.desc": {
+    "text": "执行 200 次 Git 操作",
+    "context": ""
+  },
+  "achievement.git_1k": {
+    "text": "Git 大师",
+    "context": "执行1000次Git操作"
+  },
+  "achievement.git_1k.desc": {
+    "text": "执行 1000 次 Git 操作",
+    "context": ""
+  },
+  "achievement.git_5k": {
+    "text": "Git 宗师",
+    "context": "执行5000次Git操作"
+  },
+  "achievement.git_5k.desc": {
+    "text": "执行 5000 次 Git 操作",
+    "context": ""
+  },
+  "achievement.collab_1": {
+    "text": "协作新星",
+    "context": "参与1次协作"
+  },
+  "achievement.collab_1.desc": {
+    "text": "参与 1 次星域协作",
+    "context": ""
+  },
+  "achievement.collab_10": {
+    "text": "协作者",
+    "context": "参与10次协作"
+  },
+  "achievement.collab_10.desc": {
+    "text": "参与 10 次星域协作",
+    "context": ""
+  },
+  "achievement.collab_50": {
+    "text": "协作达人",
+    "context": "参与50次协作"
+  },
+  "achievement.collab_50.desc": {
+    "text": "参与 50 次星域协作",
+    "context": ""
+  },
+  "achievement.collab_200": {
+    "text": "协作专家",
+    "context": "参与200次协作"
+  },
+  "achievement.collab_200.desc": {
+    "text": "参与 200 次星域协作",
+    "context": ""
+  },
+  "achievement.collab_1k": {
+    "text": "协作大师",
+    "context": "参与1000次协作"
+  },
+  "achievement.collab_1k.desc": {
+    "text": "参与 1000 次星域协作",
+    "context": ""
+  },
+  "achievement.reputation_5": {
+    "text": "声望初显",
+    "context": "获得5点声望"
+  },
+  "achievement.reputation_5.desc": {
+    "text": "累计获得 5 点声望",
+    "context": ""
+  },
+  "achievement.reputation_10": {
+    "text": "小有名气",
+    "context": "获得10点声望"
+  },
+  "achievement.reputation_10.desc": {
+    "text": "累计获得 10 点声望",
+    "context": ""
+  },
+  "achievement.reputation_25": {
+    "text": "名声在外",
+    "context": "获得25点声望"
+  },
+  "achievement.reputation_25.desc": {
+    "text": "累计获得 25 点声望",
+    "context": ""
+  },
+  "achievement.reputation_50": {
+    "text": "声望卓著",
+    "context": "获得50点声望"
+  },
+  "achievement.reputation_50.desc": {
+    "text": "累计获得 50 点声望",
+    "context": ""
+  },
+  "achievement.reputation_100": {
+    "text": "声名远扬",
+    "context": "获得100点声望"
+  },
+  "achievement.reputation_100.desc": {
+    "text": "累计获得 100 点声望",
+    "context": ""
+  },
+  "achievement.reputation_200": {
+    "text": "声威赫赫",
+    "context": "获得200点声望"
+  },
+  "achievement.reputation_200.desc": {
+    "text": "累计获得 200 点声望",
+    "context": ""
+  },
+  "achievement.reputation_500": {
+    "text": "威名震天",
+    "context": "获得500点声望"
+  },
+  "achievement.reputation_500.desc": {
+    "text": "累计获得 500 点声望",
+    "context": ""
+  },
+  "achievement.reputation_1k": {
+    "text": "一代宗师",
+    "context": "获得1000点声望"
+  },
+  "achievement.reputation_1k.desc": {
+    "text": "累计获得 1000 点声望",
+    "context": ""
+  },
+  "achievement.bot_count_total_1": {
+    "text": "Bot 主人",
+    "context": "接入1个Bot用户"
+  },
+  "achievement.bot_count_total_1.desc": {
+    "text": "累计接入 1 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_count_total_5": {
+    "text": "Bot 管理员",
+    "context": "接入5个Bot用户"
+  },
+  "achievement.bot_count_total_5.desc": {
+    "text": "累计接入 5 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_count_total_10": {
+    "text": "Bot 达人",
+    "context": "接入10个Bot用户"
+  },
+  "achievement.bot_count_total_10.desc": {
+    "text": "累计接入 10 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_count_total_20": {
+    "text": "Bot 专家",
+    "context": "接入20个Bot用户"
+  },
+  "achievement.bot_count_total_20.desc": {
+    "text": "累计接入 20 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_count_total_50": {
+    "text": "Bot 大师",
+    "context": "接入50个Bot用户"
+  },
+  "achievement.bot_count_total_50.desc": {
+    "text": "累计接入 50 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_count_total_100": {
+    "text": "Bot 帝国",
+    "context": "接入100个Bot用户"
+  },
+  "achievement.bot_count_total_100.desc": {
+    "text": "累计接入 100 个 Bot 用户",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_1": {
+    "text": "Bot 对话",
+    "context": "创建1个Bot会话"
+  },
+  "achievement.bot_sessions_total_1.desc": {
+    "text": "累计创建 1 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_10": {
+    "text": "Bot 对话达人",
+    "context": "创建10个Bot会话"
+  },
+  "achievement.bot_sessions_total_10.desc": {
+    "text": "累计创建 10 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_50": {
+    "text": "Bot 对话专家",
+    "context": "创建50个Bot会话"
+  },
+  "achievement.bot_sessions_total_50.desc": {
+    "text": "累计创建 50 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_200": {
+    "text": "Bot 对话大师",
+    "context": "创建200个Bot会话"
+  },
+  "achievement.bot_sessions_total_200.desc": {
+    "text": "累计创建 200 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_1k": {
+    "text": "Bot 对话宗师",
+    "context": "创建1000个Bot会话"
+  },
+  "achievement.bot_sessions_total_1k.desc": {
+    "text": "累计创建 1000 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_sessions_total_5k": {
+    "text": "Bot 对话传奇",
+    "context": "创建5000个Bot会话"
+  },
+  "achievement.bot_sessions_total_5k.desc": {
+    "text": "累计创建 5000 个 Bot 会话",
+    "context": ""
+  },
+  "achievement.bot_messages_total_10": {
+    "text": "Bot 回复",
+    "context": "Bot处理10条消息"
+  },
+  "achievement.bot_messages_total_10.desc": {
+    "text": "Bot 累计处理 10 条消息",
+    "context": ""
+  },
+  "achievement.bot_messages_total_100": {
+    "text": "Bot 消息达人",
+    "context": "Bot处理100条消息"
+  },
+  "achievement.bot_messages_total_100.desc": {
+    "text": "Bot 累计处理 100 条消息",
+    "context": ""
+  },
+  "achievement.bot_messages_total_500": {
+    "text": "Bot 消息专家",
+    "context": "Bot处理500条消息"
+  },
+  "achievement.bot_messages_total_500.desc": {
+    "text": "Bot 累计处理 500 条消息",
+    "context": ""
+  },
+  "achievement.bot_messages_total_2k": {
+    "text": "Bot 消息大师",
+    "context": "Bot处理2000条消息"
+  },
+  "achievement.bot_messages_total_2k.desc": {
+    "text": "Bot 累计处理 2000 条消息",
+    "context": ""
+  },
+  "achievement.bot_messages_total_10k": {
+    "text": "Bot 消息宗师",
+    "context": "Bot处理10000条消息"
+  },
+  "achievement.bot_messages_total_10k.desc": {
+    "text": "Bot 累计处理 10000 条消息",
+    "context": ""
+  },
+  "achievement.bot_messages_total_50k": {
+    "text": "Bot 消息传奇",
+    "context": "Bot处理50000条消息"
+  },
+  "achievement.bot_messages_total_50k.desc": {
+    "text": "Bot 累计处理 50000 条消息",
+    "context": ""
+  },
+  "achievement.bot_platform_2": {
+    "text": "双平台",
+    "context": "接入2个Bot平台"
+  },
+  "achievement.bot_platform_2.desc": {
+    "text": "在 2 个不同平台接入 Bot",
+    "context": ""
+  },
+  "achievement.bot_platform_3": {
+    "text": "三平台",
+    "context": "接入3个Bot平台"
+  },
+  "achievement.bot_platform_3.desc": {
+    "text": "在 3 个不同平台接入 Bot",
+    "context": ""
+  },
+  "achievement.midnight_warrior": {
+    "text": "午夜战士",
+    "context": "凌晨0-5点发送消息"
+  },
+  "achievement.midnight_warrior.desc": {
+    "text": "在凌晨 0-5 点发送消息",
+    "context": ""
+  },
+  "achievement.early_bird": {
+    "text": "早起鸟儿",
+    "context": "凌晨5-7点发送消息"
+  },
+  "achievement.early_bird.desc": {
+    "text": "在凌晨 5-7 点发送消息",
+    "context": ""
+  },
+  "achievement.marathon_50": {
+    "text": "马拉松选手",
+    "context": "单会话50条消息"
+  },
+  "achievement.marathon_50.desc": {
+    "text": "单个会话中发送 50 条消息",
+    "context": ""
+  },
+  "achievement.marathon_200": {
+    "text": "超长马拉松",
+    "context": "单会话200条消息"
+  },
+  "achievement.marathon_200.desc": {
+    "text": "单个会话中发送 200 条消息",
+    "context": ""
+  },
+  "achievement.speed_demon": {
+    "text": "速度恶魔",
+    "context": "1分钟内发送5条消息"
+  },
+  "achievement.speed_demon.desc": {
+    "text": "1 分钟内发送 5 条消息",
+    "context": ""
+  },
+  "achievement.weekend_warrior": {
+    "text": "周末战士",
+    "context": "周末发送4条消息"
+  },
+  "achievement.weekend_warrior.desc": {
+    "text": "在周末累计发送 4 条消息",
+    "context": ""
+  },
+  "achievement.first_error": {
+    "text": "初遇 Bug",
+    "context": "遇到1次错误"
+  },
+  "achievement.first_error.desc": {
+    "text": "第一次遇到错误",
+    "context": ""
+  },
+  "achievement.error_100": {
+    "text": "Bug 猎人",
+    "context": "遇到100次错误"
+  },
+  "achievement.error_100.desc": {
+    "text": "累计遇到 100 次错误",
+    "context": ""
+  },
+  "achievement.comeback": {
+    "text": "王者归来",
+    "context": "离开7天后回归"
+  },
+  "achievement.comeback.desc": {
+    "text": "离开 7 天后再次使用",
+    "context": ""
+  },
+  "achievement.new_year": {
+    "text": "新年快乐",
+    "context": "元旦发送消息"
+  },
+  "achievement.new_year.desc": {
+    "text": "在元旦当天发送消息",
+    "context": ""
+  },
+  "achievement.leaderboard": {
+    "text": "排行榜",
+    "context": "排行榜标签"
+  },
+  "achievement.leaderboard.empty": {
+    "text": "暂无排行数据",
+    "context": "排行榜为空"
+  },
+  "achievement.leaderboard.offline": {
+    "text": "无法连接排行服务器",
+    "context": "排行榜离线"
+  },
+  "achievement.leaderboard.rank": {
+    "text": "第 ${rank} 名",
+    "context": "排行名次"
+  },
+  "achievement.leaderboard.rankCol": {
+    "text": "排位",
+    "context": "排行榜表头-排位"
+  },
+  "achievement.leaderboard.tierCol": {
+    "text": "等级",
+    "context": "排行榜表头-等级"
+  },
+  "achievement.leaderboard.nameCol": {
+    "text": "名称",
+    "context": "排行榜表头-名称"
+  },
+  "achievement.leaderboard.pointsCol": {
+    "text": "积分",
+    "context": "排行榜表头-积分"
+  },
+  "achievement.leaderboard.unlockedCol": {
+    "text": "已解锁",
+    "context": "排行榜表头-已解锁"
+  },
+  "achievement.leaderboard.total": {
+    "text": "总分",
+    "context": "排行榜维度-总分"
+  },
+  "achievement.leaderboard.dimensionCol": {
+    "text": "数值",
+    "context": "排行榜表头-维度数值"
+  },
+  "achievement.leaderboard.points": {
+    "text": "${points} 分",
+    "context": "排行榜积分"
+  },
+  "achievement.tabAll": {
+    "text": "全部",
+    "context": "成就筛选-全部"
+  },
+  "achievement.tabAchievements": {
+    "text": "成就",
+    "context": "一级标签-成就"
+  },
+  "achievement.tabUnlocked": {
+    "text": "已解锁",
+    "context": "成就筛选-已解锁"
+  },
+  "achievement.tabLocked": {
+    "text": "未解锁",
+    "context": "成就筛选-未解锁"
+  },
+  "achievement.catConversation": {
+    "text": "对话",
+    "context": "成就分类-对话"
+  },
+  "achievement.catAdvanced": {
+    "text": "进阶",
+    "context": "成就分类-进阶"
+  },
+  "achievement.catExploration": {
+    "text": "探索",
+    "context": "成就分类-探索"
+  },
+  "achievement.catCollaboration": {
+    "text": "协作",
+    "context": "成就分类-协作"
+  },
+  "achievement.catBot": {
+    "text": "Bot",
+    "context": "成就分类-Bot"
+  },
+  "im.title": {
+    "text": "即时通讯",
+    "context": "IM 功能标题"
+  },
+  "im.sessions": {
+    "text": "会话",
+    "context": "IM 会话列表"
+  },
+  "im.groups": {
+    "text": "群聊",
+    "context": "IM 群聊列表"
+  },
+  "im.send": {
+    "text": "发送",
+    "context": "IM 发送按钮"
+  },
+  "im.cancel": {
+    "text": "取消",
+    "context": "IM 取消按钮"
+  },
+  "im.members": {
+    "text": "成员",
+    "context": "IM 群成员"
+  },
+  "im.agents": {
+    "text": "分身",
+    "context": "IM Agent 分身"
+  },
+  "im.online": {
+    "text": "在线",
+    "context": "IM 在线状态"
+  },
+  "im.offline": {
+    "text": "离线",
+    "context": "IM 离线状态"
+  },
+  "im.typing": {
+    "text": "正在输入",
+    "context": "IM 正在输入提示"
+  },
+  "im.newGroup": {
+    "text": "新建对话",
+    "context": "IM 新建对话按钮"
+  },
+  "im.workspace": {
+    "text": "工作台",
+    "context": "IM 工作台入口"
+  },
+  "im.agentStatus.running": {
+    "text": "执行中",
+    "context": "IM Agent 执行中状态"
+  },
+  "im.agentStatus.completed": {
+    "text": "已完成",
+    "context": "IM Agent 已完成状态"
+  },
+  "im.agentStatus.failed": {
+    "text": "执行失败",
+    "context": "IM Agent 执行失败状态"
+  },
+  "im.chatInput.placeholder": {
+    "text": "输入消息... (@ 选择分身)",
+    "context": "IM 聊天输入框占位符"
+  },
+  "im.chatInput.replyPlaceholder": {
+    "text": "继续对话...",
+    "context": "IM 回复输入框占位符"
+  },
+  "im.chatInput.replyGroup": {
+    "text": "群聊回复",
+    "context": "IM 群聊回复模式"
+  },
+  "im.chatInput.replyDM": {
+    "text": "私聊",
+    "context": "IM 私聊模式"
+  },
+  "im.empty.noRooms": {
+    "text": "暂无群聊",
+    "context": "IM 群聊列表为空"
+  },
+  "im.empty.noSessions": {
+    "text": "暂无会话",
+    "context": "IM 会话列表为空"
+  },
+  "im.empty.noMessages": {
+    "text": "暂无消息",
+    "context": "IM 消息列表为空"
+  },
+  "im.menu.sessions": {
+    "text": "会话",
+    "context": "IM 菜单-会话"
+  },
+  "im.menu.groups": {
+    "text": "群聊",
+    "context": "IM 菜单-群聊"
+  },
+  "im.empty.selectHint": {
+    "text": "选择一个群聊开始对话",
+    "context": "IM 未选中房间时的提示"
+  },
+  "im.workspace.selfHint": {
+    "text": "自言自语给分身派活",
+    "context": "IM 工作台类型群聊描述"
+  },
+  "im.session.autoCreateHint": {
+    "text": "群聊中 @Agent 会自动创建会话",
+    "context": "IM 会话列表底部提示"
+  },
+  "im.session.dmFromCard": {
+    "text": "群聊折叠的 Agent 卡片内点击「私聊」也会跳到这里",
+    "context": "IM 会话列表底部说明"
+  },
+  "im.createRoom.namePlaceholder": {
+    "text": "群聊名称",
+    "context": "IM 创建群聊输入框占位符"
+  },
+  "im.createRoom.confirm": {
+    "text": "创建",
+    "context": "IM 创建群聊确认按钮"
+  },
+  "im.agentCard.executing": {
+    "text": "执行中",
+    "context": "IM Agent 卡片执行中状态"
+  },
+  "im.agentCard.completed": {
+    "text": "已完成",
+    "context": "IM Agent 卡片已完成状态"
+  },
+  "im.agentCard.failed": {
+    "text": "执行失败",
+    "context": "IM Agent 卡片执行失败状态"
+  },
+  "im.agentCard.expand": {
+    "text": "点击展开 ▼",
+    "context": "IM Agent 卡片展开按钮"
+  },
+  "im.agentCard.collapse": {
+    "text": "收起 ▲",
+    "context": "IM Agent 卡片收起按钮"
+  },
+  "im.agentCard.replyPlaceholder": {
+    "text": "继续对话...",
+    "context": "IM Agent 卡片回复输入框占位符"
+  },
+  "im.agentCard.dm": {
+    "text": "私聊",
+    "context": "IM Agent 卡片私聊按钮"
+  },
+  "im.agentCard.groupReply": {
+    "text": "群聊回复",
+    "context": "IM Agent 卡片群聊回复按钮"
+  },
+  "im.dateToday": {
+    "text": "今天",
+    "context": "IM 消息日期分隔-今天"
+  },
+  "im.dateYesterday": {
+    "text": "昨天",
+    "context": "IM 消息日期分隔-昨天"
+  },
+  "im.memberPanel.title": {
+    "text": "成员 & 分身",
+    "context": "IM 成员面板标题"
+  },
+  "im.memberPanel.people": {
+    "text": "人员",
+    "context": "IM 成员面板人员分组"
+  },
+  "im.memberPanel.agentsOf": {
+    "text": "${name} 的分身",
+    "context": "IM 成员面板某人的分身分组"
+  },
+  "im.noAgents": {
+    "text": "暂无可用分身，请先创建会话",
+    "context": "IM @Agent 无可用 agent"
+  },
+  "im.input.placeholder": {
+    "text": "输入 @ 选择 Agent 发送指令",
+    "context": "IM 输入框占位符"
+  }
 }

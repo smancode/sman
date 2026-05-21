@@ -41,6 +41,9 @@ interface IMStore {
   // Real-time message cache (per room)
   roomMessages: Map<string, IMMessage[]>;
 
+  // Real-time last activity (updated on every addMessage for sidebar preview/sort)
+  roomLastActivity: Map<string, { lastMessage: string; lastMessageTime: number }>;
+
   // Agent streaming state
   agentStreams: Map<string, string>; // messageId -> accumulated content
 
@@ -58,6 +61,7 @@ interface IMStore {
   // Actions — messages
   addMessage: (msg: IMMessage) => void;
   setRoomMessages: (roomId: string, messages: IMMessage[]) => void;
+  touchRoom: (roomId: string) => void;
 
   // Actions — agent streams
   appendAgentStream: (messageId: string, delta: string) => void;
@@ -76,6 +80,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
   selectedRoomId: null,
   activeTab: 'groups',
   roomMessages: new Map(),
+  roomLastActivity: new Map(),
   agentStreams: new Map(),
   onlineUsers: new Set(),
   typingUsers: new Map(),
@@ -90,7 +95,31 @@ export const useIMStore = create<IMStore>((set, get) => ({
     // Dedup by id
     if (existing.some(m => m.id === msg.id)) return state;
     newMap.set(msg.roomId, [...existing, msg]);
-    return { roomMessages: newMap };
+
+    // Update sidebar preview only (not sort time)
+    const newActivity = new Map(state.roomLastActivity);
+    const prev = newActivity.get(msg.roomId);
+    const preview = msg.type === 'text'
+      ? (msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content)
+      : msg.type === 'agent_output' ? '[Agent 执行结果]'
+      : msg.type === 'system' ? '[系统消息]'
+      : '';
+    newActivity.set(msg.roomId, {
+      lastMessage: preview,
+      lastMessageTime: prev?.lastMessageTime ?? 0,
+    });
+
+    return { roomMessages: newMap, roomLastActivity: newActivity };
+  }),
+
+  touchRoom: (roomId) => set((state) => {
+    const newActivity = new Map(state.roomLastActivity);
+    const prev = newActivity.get(roomId);
+    newActivity.set(roomId, {
+      lastMessage: prev?.lastMessage ?? '',
+      lastMessageTime: Date.now(),
+    });
+    return { roomLastActivity: newActivity };
   }),
 
   setRoomMessages: (roomId, messages) => set((state) => {
@@ -159,45 +188,54 @@ export function registerIMListeners() {
   const unsubs: (() => void)[] = [];
 
   // im.message → add to roomMessages
-  unsubs.push(wrapHandler(client, 'im.message', (data) => {
-    const msg = parseIMMessage(data);
-    if (!msg.id) return;
-    useIMStore.getState().addMessage(msg);
+  unsubs.push(wrapHandler(client, 'im.message', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const imMsg = parseIMMessage(payload);
+    if (!imMsg.id) return;
+    useIMStore.getState().addMessage(imMsg);
   }));
 
   // im.agent_delta → append streaming content
-  unsubs.push(wrapHandler(client, 'im.agent_delta', (data) => {
-    const messageId = String(data.messageId || '');
-    const content = String(data.content || '');
+  unsubs.push(wrapHandler(client, 'im.agent_delta', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const messageId = String(payload.messageId || '');
+    const content = String(payload.content || '');
     if (!messageId) return;
     useIMStore.getState().appendAgentStream(messageId, content);
   }));
 
   // im.agent_done → clear streaming, add final message
-  unsubs.push(wrapHandler(client, 'im.agent_done', (data) => {
-    const messageId = String(data.messageId || '');
+  unsubs.push(wrapHandler(client, 'im.agent_done', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const messageId = String(payload.messageId || '');
     if (messageId) {
       useIMStore.getState().clearAgentStream(messageId);
     }
-    // If the server sends a final message, add it
-    if (data.message) {
-      const msg = parseIMMessage(data.message);
-      if (msg.id) useIMStore.getState().addMessage(msg);
+    if (payload.message) {
+      const finalMsg = parseIMMessage(payload.message);
+      if (finalMsg.id) useIMStore.getState().addMessage(finalMsg);
     }
   }));
 
   // im.presence → update online users
-  unsubs.push(wrapHandler(client, 'im.presence', (data) => {
-    const users = Array.isArray(data.users)
-      ? data.users.map((u: unknown) => String(u))
+  unsubs.push(wrapHandler(client, 'im.presence', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const users = Array.isArray(payload.users)
+      ? payload.users.map((u: unknown) => String(u))
       : [];
     useIMStore.getState().setOnlineUsers(users);
   }));
 
   // im.typing → show typing indicator (auto-clears after 3s)
-  unsubs.push(wrapHandler(client, 'im.typing', (data) => {
-    const roomId = String(data.roomId || '');
-    const sender = String(data.sender || '');
+  unsubs.push(wrapHandler(client, 'im.typing', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const roomId = String(payload.roomId || '');
+    const sender = String(payload.sender || '');
     if (!roomId || !sender) return;
     useIMStore.getState().setTyping(roomId, sender);
   }));

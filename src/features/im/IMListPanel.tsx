@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, MessageSquare, Bot } from 'lucide-react';
 import { t } from '@/locales';
 import { useRoomList, useCreateRoom } from '@/queries/use-im';
 import { useIMStore } from '@/stores/im';
-import { getAgentColor } from './utils';
 import type { IMRoom } from '@/schemas/im';
 
 // ---------------------------------------------------------------------------
@@ -42,14 +41,26 @@ export default function IMListPanel() {
   const { data: rooms = [], isLoading } = useRoomList();
   const selectedRoomId = useIMStore((s) => s.selectedRoomId);
   const selectRoom = useIMStore((s) => s.selectRoom);
+  const roomLastActivity = useIMStore((s) => s.roomLastActivity);
   const createRoom = useCreateRoom();
   const [showCreate, setShowCreate] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
 
-  // 混合显示 dm + group + workspace，按 lastMessageTime 降序
-  const sortedRooms = [...rooms]
-    .filter((r: IMRoom) => r.type === 'dm' || r.type === 'group' || r.type === 'workspace')
-    .sort((a: IMRoom, b: IMRoom) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
+  // Merge realtime activity into room list, then sort by lastMessageTime desc
+  const sortedRooms = useMemo(() => {
+    return [...rooms]
+      .filter((r: IMRoom) => r.type === 'dm' || r.type === 'group' || r.type === 'workspace')
+      .map((r: IMRoom) => {
+        const activity = roomLastActivity.get(r.id);
+        if (!activity) return r;
+        return {
+          ...r,
+          lastMessage: activity.lastMessage || r.lastMessage,
+          lastMessageTime: activity.lastMessageTime || r.lastMessageTime,
+        };
+      })
+      .sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
+  }, [rooms, roomLastActivity]);
 
   const handleCreate = () => {
     const name = newRoomName.trim();
@@ -68,7 +79,7 @@ export default function IMListPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 新建群聊 */}
+      {/* 新建对话 */}
       <div className="px-3 py-2">
         {showCreate ? (
           <div className="flex items-center gap-2">
@@ -114,50 +125,40 @@ export default function IMListPanel() {
           </div>
         )}
 
-        {sortedRooms.map((room: IMRoom) => {
+        {sortedRooms.map((room) => {
           const isActive = selectedRoomId === room.id;
           const isDM = room.type === 'dm';
-          const isWorkspace = room.type === 'workspace';
-
-          // 私聊：用 agent 颜色头像；群聊：用 emoji
-          const color = isDM ? getAgentColor(room.members[0] || room.id) : '';
 
           return (
             <div
               key={room.id}
               onClick={() => selectRoom(room.id)}
-              className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors ${
-                isActive ? 'bg-[hsl(var(--muted))]' : 'hover:bg-[hsl(var(--muted))]'
+              className={`flex items-center gap-2 mx-2 pl-3 pr-1 py-2 rounded-lg cursor-pointer text-[13px] transition-colors ${
+                isActive
+                  ? 'bg-[hsl(var(--muted))] text-foreground font-semibold'
+                  : 'hover:bg-[hsl(var(--muted))] text-foreground/60 hover:text-foreground'
               }`}
             >
-              {/* 头像 */}
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 ${
-                  isDM ? 'border-2' : ''
-                }`}
-                style={isDM ? {
-                  borderColor: color,
-                  backgroundColor: `${color}1a`,
-                } : {
-                  backgroundColor: 'hsl(var(--muted))',
-                }}
-              >
-                {isDM ? '🤖' : getRoomEmoji(room.name)}
-              </div>
+              {isDM ? (
+                <Bot className="h-3.5 w-3.5 shrink-0 text-primary" />
+              ) : (
+                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+              )}
 
-              {/* 信息 */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-sm font-medium truncate" style={isDM ? { color } : undefined}>
-                    {isWorkspace ? t('im.workspace.selfHint') : room.name}
+                <div className="flex items-center justify-between">
+                  <span className="truncate">
+                    {room.type === 'workspace' ? t('im.workspace.selfHint') : room.name}
                   </span>
                   <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">
                     {formatRelativeTime(room.lastMessageTime)}
                   </span>
                 </div>
-                <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">
-                  {room.lastMessage || ''}
-                </div>
+                {room.lastMessage && (
+                  <div className="text-xs text-muted-foreground truncate mt-0.5">
+                    {room.lastMessage}
+                  </div>
+                )}
               </div>
             </div>
           );
