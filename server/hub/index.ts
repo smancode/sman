@@ -58,11 +58,16 @@ function buildAgentId(clientId: string, workspace: string): string {
   return `${hostname}:${hash}`;
 }
 
+interface ImModuleLike {
+  getHandler: () => { handleHubMessage: (msg: any) => void } | null;
+}
+
 export async function initHub(
   settingsManager: SettingsManager,
   sessionStore: SessionStore,
   broadcastStore: BroadcastStore,
   sessionManager?: ClaudeSessionManager,
+  imModule?: ImModuleLike,
 ): Promise<void> {
   // Resolve serverBaseUrl: read config → probe if missing
   const serverUrl = await resolveServerBaseUrl(settingsManager);
@@ -129,6 +134,15 @@ export async function initHub(
       // On auth success, register agents if we already have a room
       if (msg.type === 'auth.ok' && joinedRoomId) {
         registerAgentsForWorkspaces(sessionStore, hubWsClient!, joinedRoomId, getClientId());
+      }
+
+      // IM messages from Hub (broadcasted from other clients)
+      if (msg.type?.startsWith('im.')) {
+        const handler = imModule?.getHandler();
+        if (handler) {
+          handler.handleHubMessage(msg);
+        }
+        return;
       }
 
       evaluationHandler?.handleMessage(msg);

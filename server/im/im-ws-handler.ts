@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
 import { IMStore, IMMessage } from './im-store.js';
+import { getHubWsClient } from '../hub/index.js';
 
 export class IMWsHandler {
   constructor(
@@ -49,8 +50,12 @@ export class IMWsHandler {
     this.imStore.insertMessage(imMsg);
     this.imStore.updateRoomLastMessage(roomId, content.slice(0, 100), imMsg.timestamp);
 
+    // Broadcast to local WS clients
     this.broadcastToRoom(roomId, { type: 'im.message', data: imMsg });
     this.sendToWs(ws, { type: 'im.sent', data: imMsg });
+
+    // Forward to Hub WS so other connected devices receive it
+    this.sendToHub({ type: 'im.message', data: imMsg });
   }
 
   private handleHistory(msg: any, ws: WebSocket): void {
@@ -80,5 +85,12 @@ export class IMWsHandler {
     const { roomId } = msg;
     if (!roomId) return;
     this.broadcastToRoom(roomId, { type: 'im.typing', data: { roomId, sender: clientInfo.clientId } }, ws);
+  }
+
+  private sendToHub(msg: Record<string, unknown>): void {
+    const hubWs = getHubWsClient();
+    if (hubWs?.isConnected()) {
+      hubWs.send(msg);
+    }
   }
 }

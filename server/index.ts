@@ -3360,7 +3360,7 @@ export function setActualPort(port: number): void {
  *  server/index.ts only calls initHub() inside the isMainModule block,
  *  which is false when loaded via dynamic import(). */
 export async function startHub(): Promise<void> {
-  await initHub(settingsManager, store, broadcastStore, sessionManager);
+  await initHub(settingsManager, store, broadcastStore, sessionManager, imModule);
 }
 
 // Stardom Bridge（独立模块，未配置时无副作用）
@@ -3519,7 +3519,7 @@ if (isMainModule) {
       log.info(`WebSocket endpoint: ws://${HOST}:${resolved}/ws`);
       log.info(`Health check: http://${HOST}:${resolved}/api/health`);
 
-      initHub(settingsManager, store, broadcastStore, sessionManager).then(() => {
+      initHub(settingsManager, store, broadcastStore, sessionManager, imModule).then(() => {
         log.info('Hub initialized');
       });
     });
