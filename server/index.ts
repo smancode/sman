@@ -2348,12 +2348,13 @@ wss.on('connection', (ws: WebSocket) => {
             const fRunId = msg.runId as string;
             const fBlueprint = msg.blueprint as import('./types.js').PathBlueprint;
             const fStepResults = msg.stepResults as string[];
+            const fStepEdits = msg.stepEdits as Record<number, Partial<import('./types.js').SmartPathStep>> | undefined;
 
             const fAllWs = [...new Set(store.listSessions().map(s => s.workspace))];
             const fPath = smartPathStore.get(fPathId, fWorkspace, fAllWs);
             const fActualWs = fPath?.workspace || fWorkspace;
 
-            await smartPathEngine.finalize(fPathId, fActualWs, fRunId, fBlueprint, fStepResults);
+            await smartPathEngine.finalize(fPathId, fActualWs, fRunId, fBlueprint, fStepResults, fStepEdits);
 
             const p = smartPathStore.get(fPathId, fActualWs);
             const refs = smartPathStore.listReferences(fActualWs, fPathId);

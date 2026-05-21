@@ -629,7 +629,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   finalizeStepping: async (pathId, workspace) => {
     const client = getWsClient();
     if (!client) throw new Error('Not connected');
-    const { stepBlueprint, stepRunId, stepResults } = useSmartPathStore.getState();
+    const { stepBlueprint, stepRunId, stepResults, stepEdits } = useSmartPathStore.getState();
     if (!stepBlueprint || !stepRunId) throw new Error('No active stepping session');
 
     set({ finalizing: true });
@@ -645,6 +645,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
             stepBlueprint: null,
             stepRunId: null,
             running: false,
+            stepEdits: {},
             paths: s.paths.map((x) => x.id === pathId ? { ...x, ...p } : x),
             references: refs,
           }));
@@ -659,7 +660,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
       client.send({
         type: 'smartpath.finalize', pathId, workspace, runId: stepRunId,
-        blueprint: stepBlueprint, stepResults,
+        blueprint: stepBlueprint, stepResults, stepEdits,
       });
     });
   },

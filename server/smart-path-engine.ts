@@ -462,12 +462,38 @@ export class SmartPathEngine {
     runId: string,
     blueprint: PathBlueprint,
     stepResults: string[],
+    stepEdits?: Record<number, Partial<SmartPathStep>>,
   ): Promise<void> {
     const smartPath = this.store.get(pathId, workspace);
     if (!smartPath) throw new Error(`Path not found: ${pathId}`);
 
     let steps: SmartPathStep[];
     try { steps = JSON.parse(smartPath.steps); } catch { throw new Error('Invalid steps JSON'); }
+
+    // 将逐步执行中的编辑回写到 path.md
+    if (stepEdits && Object.keys(stepEdits).length > 0) {
+      let changed = false;
+      for (const [idxStr, edits] of Object.entries(stepEdits)) {
+        const idx = Number(idxStr);
+        if (idx >= 0 && idx < steps.length) {
+          if (edits.userInput !== undefined && edits.userInput !== steps[idx].userInput) {
+            steps[idx] = { ...steps[idx], userInput: edits.userInput };
+            changed = true;
+          }
+          if (edits.name !== undefined && edits.name !== steps[idx].name) {
+            steps[idx] = { ...steps[idx], name: edits.name };
+            changed = true;
+          }
+          if (edits.deliveryCheck !== undefined && edits.deliveryCheck !== steps[idx].deliveryCheck) {
+            steps[idx] = { ...steps[idx], deliveryCheck: edits.deliveryCheck };
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        this.store.update(pathId, workspace, { steps: JSON.stringify(steps) });
+      }
+    }
 
     this.store.update(pathId, workspace, { status: 'completed' });
     const reportFileName = this.store.createReport(
