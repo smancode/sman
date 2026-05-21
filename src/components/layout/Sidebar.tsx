@@ -11,6 +11,7 @@ import {
   Pin,
   Users,
   Scroll,
+  MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,7 @@ export function Sidebar() {
   const connectionStatus = useWsConnection((s) => s.status);
   const location = useLocation();
   const isMac = window.sman?.platform === 'darwin' || (!window.sman && navigator.platform?.includes('Mac'));
-  const shouldBlur = !['/chat', '/stardom', '/hub', '/achievements'].includes(location.pathname);
+  const shouldBlur = !['/chat', '/stardom', '/hub', '/achievements', '/im'].includes(location.pathname);
   const [dismissed, setDismissed] = useState(false);
   const [pinned, setPinned] = useState(() => localStorage.getItem('sman-sidebar-pinned') === 'true');
   const [hovering, setHovering] = useState(false);
@@ -84,6 +85,56 @@ export function Sidebar() {
           onMouseLeave={() => setHovering(false)}
         >
           <div className="space-y-0.5 mb-0.5">
+            <NavLink
+              to="/im?tab=sessions"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>{t('im.sessions')}</span>
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/im?tab=groups"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
+                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
+                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center justify-center',
+                      isActive ? 'text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    <Users className="h-[18px] w-[18px]" strokeWidth={2} />
+                  </div>
+                  <span>{t('im.groups')}</span>
+                </>
+              )}
+            </NavLink>
+
             <NavLink
               to="/stardom"
               className={({ isActive }) =>

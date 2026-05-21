@@ -8,6 +8,9 @@ import { StardomEntry } from '@/features/stardom/StardomEntry';
 import { SmartPathPage } from '@/features/smart-paths';
 import { HubEntry } from '@/features/hub/HubEntry';
 import { AchievementsPage } from '@/features/achievements';
+import { lazy, Suspense } from 'react';
+
+const IMEntry = lazy(() => import('@/features/im/IMEntry'));
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +25,7 @@ export const router = createBrowserRouter([
       { path: 'stardom', element: <StardomEntry /> },
       { path: 'hub', element: <HubEntry /> },
       { path: 'achievements', element: <AchievementsPage /> },
+      { path: 'im', element: <Suspense><IMEntry /></Suspense> },
       { path: 'settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/chat" replace /> },
     ],
