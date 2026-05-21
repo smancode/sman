@@ -93,15 +93,15 @@ function MentionPopup({ agents, filter, onSelect, onClose }: MentionPopupProps) 
   return (
     <div
       ref={popupRef}
-      className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1a24] border border-[#2a2a38] rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50"
+      className="absolute bottom-full left-0 right-0 mb-1 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl shadow-2xl max-h-60 overflow-y-auto z-50"
     >
-      <div className="px-3 py-2 text-xs text-[#555568] border-b border-[#2a2a38]">
+      <div className="px-3 py-2 text-xs text-muted-foreground border-b border-[hsl(var(--border))]">
         {t('im.agents')}
       </div>
       {filtered.map((agent) => (
         <button
           key={agent.id}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer transition-colors hover:bg-[#22222e]"
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer transition-colors hover:bg-[hsl(var(--muted))]"
           onMouseDown={(e) => {
             e.preventDefault();
             onSelect(agent);
@@ -114,8 +114,8 @@ function MentionPopup({ agents, filter, onSelect, onClose }: MentionPopupProps) 
             {agent.name.charAt(0).toUpperCase()}
           </span>
           <div className="min-w-0">
-            <div className="text-sm text-[#e8e8ed] truncate">{agent.name}</div>
-            <div className="text-xs text-[#555568] truncate">{agent.workspace}</div>
+            <div className="text-sm text-foreground truncate">{agent.name}</div>
+            <div className="text-xs text-muted-foreground truncate">{agent.workspace}</div>
           </div>
         </button>
       ))}
@@ -323,17 +323,17 @@ export function ChatInput({
   }, [content, showMention]);
 
   return (
-    <div className="px-5 py-3 border-t border-[#2a2a38] bg-[#111118]">
+    <div className="px-5 py-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))]">
       {/* Toolbar */}
       <div className="flex items-center gap-1 mb-2">
         <button
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#555568] cursor-pointer transition-colors hover:bg-[#22222e] hover:text-[#e8e8ed] text-sm"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground cursor-pointer transition-colors hover:bg-[hsl(var(--muted))] hover:text-foreground text-sm"
           title="Attach file"
         >
           📎
         </button>
         <button
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[#555568] cursor-pointer transition-colors hover:bg-[#22222e] hover:text-[#e8e8ed] text-sm"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground cursor-pointer transition-colors hover:bg-[hsl(var(--muted))] hover:text-foreground text-sm"
           title="Attach image"
         >
           🖼️
@@ -341,8 +341,8 @@ export function ChatInput({
         <button
           className={`w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer transition-colors text-sm ${
             showMention
-              ? 'bg-[#6c5ce7]/20 text-[#6c5ce7]'
-              : 'text-[#555568] hover:bg-[#22222e] hover:text-[#e8e8ed]'
+              ? 'bg-[hsl(var(--primary))]/20 text-[hsl(var(--primary))]'
+              : 'text-muted-foreground hover:bg-[hsl(var(--muted))] hover:text-foreground'
           }`}
           onClick={handleMentionButton}
           title="@ Agent"
@@ -375,13 +375,13 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={t('im.chatInput.placeholder')}
             rows={1}
-            className="flex-1 bg-[#1a1a24] border border-[#2a2a38] rounded-xl px-3.5 py-2.5 text-sm text-[#e8e8ed] outline-none focus:border-[#6c5ce7] placeholder:text-[#555568] resize-none overflow-y-auto leading-5"
+            className="flex-1 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-xl px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[hsl(var(--primary))] placeholder:text-muted-foreground resize-none overflow-y-auto leading-5"
             style={{ maxHeight: '120px' }}
           />
           <button
             onClick={handleSend}
             disabled={!content.trim()}
-            className="w-10 h-10 bg-[#6c5ce7] border-none rounded-xl text-white cursor-pointer text-base flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-50 hover:opacity-90"
+            className="w-10 h-10 bg-[hsl(var(--primary))] border-none rounded-xl text-primary-foreground cursor-pointer text-base flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-50 hover:opacity-90"
           >
             ➤
           </button>

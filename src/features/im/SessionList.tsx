@@ -54,11 +54,11 @@ export function SessionList({ selectedRoomId, onSelect }: SessionListProps) {
       {/* Session list */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
-          <div className="px-4 py-8 text-center text-xs text-[#555568]">Loading...</div>
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">Loading...</div>
         )}
 
         {!isLoading && sessions.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-[#555568]">
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">
             {t('im.empty.noSessions')}
           </div>
         )}
@@ -73,7 +73,7 @@ export function SessionList({ selectedRoomId, onSelect }: SessionListProps) {
               key={session.id}
               onClick={() => onSelect(session.id)}
               className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors ${
-                isActive ? 'bg-[rgba(108,92,231,0.12)]' : 'hover:bg-[#22222e]'
+                isActive ? 'bg-[hsl(var(--muted))]' : 'hover:bg-[hsl(var(--muted))]'
               }`}
             >
               {/* Agent avatar with colored border */}
@@ -93,11 +93,11 @@ export function SessionList({ selectedRoomId, onSelect }: SessionListProps) {
                   <span className="text-sm font-medium truncate" style={{ color }}>
                     {agentName}
                   </span>
-                  <span className="text-[11px] text-[#555568] flex-shrink-0 ml-2">
+                  <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">
                     {formatRelativeTime(session.lastMessageTime)}
                   </span>
                 </div>
-                <div className="text-xs text-[#8888a0] truncate">
+                <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">
                   {session.lastMessage || ''}
                 </div>
               </div>
@@ -108,10 +108,10 @@ export function SessionList({ selectedRoomId, onSelect }: SessionListProps) {
         {/* Bottom hint */}
         {!isLoading && sessions.length > 0 && (
           <div className="px-4 py-4 text-center">
-            <div className="text-xs text-[#555568] mb-2">
+            <div className="text-xs text-muted-foreground mb-2">
               {t('im.session.autoCreateHint')}
             </div>
-            <div className="text-[11px] text-[#555568] leading-relaxed">
+            <div className="text-[11px] text-muted-foreground leading-relaxed">
               {t('im.session.dmFromCard')}
             </div>
           </div>

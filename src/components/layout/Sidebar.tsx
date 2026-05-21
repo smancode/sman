@@ -86,56 +86,6 @@ export function Sidebar() {
         >
           <div className="space-y-0.5 mb-0.5">
             <NavLink
-              to="/im?tab=sessions"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('im.sessions')}</span>
-                </>
-              )}
-            </NavLink>
-
-            <NavLink
-              to="/im?tab=groups"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-all duration-200',
-                  'hover:bg-[hsl(var(--sidebar-border))] text-foreground/70',
-                  isActive && 'bg-[hsl(var(--sidebar-bg))] text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div
-                    className={cn(
-                      'flex shrink-0 items-center justify-center',
-                      isActive ? 'text-foreground' : 'text-muted-foreground',
-                    )}
-                  >
-                    <Users className="h-[18px] w-[18px]" strokeWidth={2} />
-                  </div>
-                  <span>{t('im.groups')}</span>
-                </>
-              )}
-            </NavLink>
-
-            <NavLink
               to="/stardom"
               className={({ isActive }) =>
                 cn(
@@ -311,6 +261,36 @@ export function Sidebar() {
                   : t('sidebar.disconnected')
             }
           />
+
+          {/* IM session icon */}
+          <NavLink
+            to="/im?tab=sessions"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center justify-center rounded-lg transition-all duration-150',
+                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+              )
+            }
+            title={t('im.sessions')}
+          >
+            <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
+          </NavLink>
+
+          {/* IM groups icon */}
+          <NavLink
+            to="/im?tab=groups"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center justify-center rounded-lg transition-all duration-150',
+                'hover:bg-[hsl(var(--muted))] h-9 w-9 shrink-0',
+                isActive ? 'text-foreground' : 'text-muted-foreground',
+              )
+            }
+            title={t('im.groups')}
+          >
+            <Users className="h-[18px] w-[18px]" strokeWidth={2} />
+          </NavLink>
 
           {/* Achievement icon */}
           <NavLink

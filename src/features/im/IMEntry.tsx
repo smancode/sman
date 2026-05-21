@@ -39,15 +39,15 @@ export default function IMEntry() {
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* ===== LEFT PANEL: 280px ===== */}
-      <div className="w-[280px] flex-shrink-0 bg-[#111118] border-r border-[#2a2a38] flex flex-col">
+      <div className="w-[280px] flex-shrink-0 bg-[hsl(var(--card))] border-r border-[hsl(var(--border))] flex flex-col">
         {/* Tab switcher */}
-        <div className="flex border-b border-[#2a2a38]">
+        <div className="flex border-b border-[hsl(var(--border))]">
           <button
             onClick={() => setActiveTab('sessions')}
             className={`flex-1 py-2.5 text-center text-[13px] cursor-pointer border-b-2 transition-colors ${
               activeTab === 'sessions'
-                ? 'text-[#a29bfe] border-b-[#6c5ce7]'
-                : 'text-[#555568] border-b-transparent hover:text-[#8888a0]'
+                ? 'text-[hsl(var(--primary))] border-b-[hsl(var(--primary))]'
+                : 'text-muted-foreground border-b-transparent hover:text-[hsl(var(--muted-foreground))]'
             }`}
           >
             {t('im.sessions')}
@@ -56,8 +56,8 @@ export default function IMEntry() {
             onClick={() => setActiveTab('groups')}
             className={`flex-1 py-2.5 text-center text-[13px] cursor-pointer border-b-2 transition-colors ${
               activeTab === 'groups'
-                ? 'text-[#a29bfe] border-b-[#6c5ce7]'
-                : 'text-[#555568] border-b-transparent hover:text-[#8888a0]'
+                ? 'text-[hsl(var(--primary))] border-b-[hsl(var(--primary))]'
+                : 'text-muted-foreground border-b-transparent hover:text-[hsl(var(--muted-foreground))]'
             }`}
           >
             {t('im.groups')}

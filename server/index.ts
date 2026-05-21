@@ -1162,16 +1162,16 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const { name, type, members } = JSON.parse(body);
-        if (!name || !members?.length) {
+        if (!name) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing name or members' }));
+          res.end(JSON.stringify({ error: 'Missing name' }));
           return;
         }
         const room = {
           id: crypto.randomUUID(),
           name,
           type: type || 'group',
-          members,
+          members: members || [],
         };
         imModule.imStore.createRoom(room);
         res.writeHead(200, { 'Content-Type': 'application/json' });

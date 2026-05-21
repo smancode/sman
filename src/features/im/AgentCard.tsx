@@ -121,14 +121,14 @@ export function AgentCard({
 
         {/* Summary (collapsed only) */}
         {!expanded && (
-          <div className="text-[13px] text-[#8888a0] truncate flex-shrink-0 max-w-[40%]">
+          <div className="text-[13px] text-[hsl(var(--muted-foreground))] truncate flex-shrink-0 max-w-[40%]">
             {summary}
           </div>
         )}
 
         {/* Expand/collapse toggle */}
         <div
-          className="text-[10px] text-[#555568] bg-[#1a1a24] px-2 py-0.5 rounded flex-shrink-0"
+          className="text-[10px] text-muted-foreground bg-[hsl(var(--card))] px-2 py-0.5 rounded flex-shrink-0"
         >
           {expanded ? t('im.agentCard.collapse') : t('im.agentCard.expand')}
         </div>
@@ -138,27 +138,26 @@ export function AgentCard({
       {expanded && (
         <div className="px-3.5 pb-3.5">
           {/* Content area — monospace, scrollable */}
-          <div className="bg-[#0a0a0f] rounded-lg p-3 text-[13px] leading-relaxed text-[#8888a0] max-h-[300px] overflow-y-auto font-mono whitespace-pre-wrap">
+          <div className="bg-[hsl(var(--background))] rounded-lg p-3 text-[13px] leading-relaxed text-[hsl(var(--muted-foreground))] max-h-[300px] overflow-y-auto font-mono whitespace-pre-wrap">
             {displayContent}
           </div>
 
           {/* Reply box */}
-          <div className="mt-2.5 rounded-[10px] border border-solid border-[#2a2a38] overflow-hidden">
+          <div className="mt-2.5 rounded-[10px] border border-solid border-[hsl(var(--border))] overflow-hidden">
             <textarea
-              className="w-full bg-[#1a1a24] border-none px-3 py-2.5 text-[#e8e8ed] text-[13px] font-inherit resize-none outline-none min-h-[60px] leading-snug placeholder:text-[#555568]"
+              className="w-full bg-[hsl(var(--card))] border-none px-3 py-2.5 text-foreground text-[13px] font-inherit resize-none outline-none min-h-[60px] leading-snug placeholder:text-muted-foreground"
               placeholder={t('im.agentCard.replyPlaceholder')}
               onClick={(e) => e.stopPropagation()}
             />
-            <div className="flex justify-end gap-2 px-3 py-2 bg-[#111118] border-t border-solid border-[#2a2a38]">
+            <div className="flex justify-end gap-2 px-3 py-2 bg-[hsl(var(--card))] border-t border-solid border-[hsl(var(--border))]">
               <button
-                className="px-4 py-1.5 rounded-lg cursor-pointer text-[12px] font-medium border-none transition-colors bg-[#1a1a24] text-[#e8e8ed] border border-solid border-[#2a2a38] hover:bg-[#22222e]"
+                className="px-4 py-1.5 rounded-lg cursor-pointer text-[12px] font-medium border-none transition-colors bg-[hsl(var(--muted))] text-foreground border border-solid border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]"
                 onClick={handleGoDM}
               >
                 {t('im.agentCard.dm')}
               </button>
               <button
-                className="px-4 py-1.5 rounded-lg cursor-pointer text-[12px] font-medium border-none transition-colors hover:opacity-85 text-white"
-                style={{ backgroundColor: '#6c5ce7' }}
+                className="px-4 py-1.5 rounded-lg cursor-pointer text-[12px] font-medium border-none transition-colors hover:opacity-85 text-primary-foreground bg-[hsl(var(--primary))]"
                 onClick={handleReplyInGroup}
               >
                 {t('im.agentCard.groupReply')}

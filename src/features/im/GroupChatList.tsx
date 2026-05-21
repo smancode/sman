@@ -83,7 +83,7 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
               placeholder={t('im.createRoom.namePlaceholder')}
-              className="flex-1 bg-[#1a1a24] border border-[#2a2a38] rounded-lg px-3 py-1.5 text-sm text-[#e8e8ed] outline-none focus:border-[#6c5ce7] placeholder:text-[#555568]"
+              className="flex-1 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg px-3 py-1.5 text-sm text-foreground outline-none focus:border-[hsl(var(--primary))] placeholder:text-muted-foreground"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreate();
                 if (e.key === 'Escape') { setShowCreate(false); setNewRoomName(''); }
@@ -93,7 +93,7 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
             <button
               onClick={handleCreate}
               disabled={!newRoomName.trim() || createRoom.isPending}
-              className="bg-[#6c5ce7] text-white text-xs px-3 py-1.5 rounded-lg hover:opacity-85 disabled:opacity-50"
+              className="bg-[hsl(var(--primary))] text-primary-foreground text-xs px-3 py-1.5 rounded-lg hover:opacity-85 disabled:opacity-50"
             >
               {t('im.createRoom.confirm')}
             </button>
@@ -101,7 +101,7 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
         ) : (
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#a29bfe] hover:bg-[#22222e] rounded-lg transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[hsl(var(--primary))] hover:bg-[hsl(var(--muted))] rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             {t('im.newGroup')}
@@ -112,11 +112,11 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
       {/* Room list */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
-          <div className="px-4 py-8 text-center text-xs text-[#555568]">Loading...</div>
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">Loading...</div>
         )}
 
         {!isLoading && groupRooms.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-[#555568]">
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">
             {t('im.empty.noRooms')}
           </div>
         )}
@@ -131,12 +131,12 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
               key={room.id}
               onClick={() => onSelect(room.id)}
               className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors ${
-                isActive ? 'bg-[rgba(108,92,231,0.12)]' : 'hover:bg-[#22222e]'
+                isActive ? 'bg-[hsl(var(--muted))]' : 'hover:bg-[hsl(var(--muted))]'
               }`}
             >
               {/* Avatar */}
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold flex-shrink-0 ${
-                isWorkspace ? 'bg-[rgba(108,92,231,0.12)]' : 'bg-[#2a2a38]'
+                isWorkspace ? 'bg-[hsl(var(--muted))]' : 'bg-[hsl(var(--muted))]'
               }`}>
                 {emoji}
               </div>
@@ -145,16 +145,16 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-sm font-medium truncate">{room.name}</span>
-                  <span className="text-[11px] text-[#555568] flex-shrink-0 ml-2">
+                  <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">
                     {formatRelativeTime(room.lastMessageTime)}
                   </span>
                 </div>
                 {isWorkspace ? (
-                  <div className="text-xs text-[#555568] italic truncate">
+                  <div className="text-xs text-muted-foreground italic truncate">
                     {t('im.workspace.selfHint')}
                   </div>
                 ) : (
-                  <div className="text-xs text-[#8888a0] truncate">
+                  <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">
                     {room.lastMessage || ''}
                   </div>
                 )}

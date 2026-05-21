@@ -69,16 +69,16 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
   const currentUsername = clientId ? extractUsername(clientId) : '';
 
   return (
-    <div className="w-[240px] bg-[#111118] border-l border-[#2a2a38] flex flex-col flex-shrink-0">
+    <div className="w-[240px] bg-[hsl(var(--card))] border-l border-[hsl(var(--border))] flex flex-col flex-shrink-0">
       {/* Header */}
-      <div className="px-4 py-3.5 border-b border-[#2a2a38] text-[13px] font-semibold text-[#8888a0]">
+      <div className="px-4 py-3.5 border-b border-[hsl(var(--border))] text-[13px] font-semibold text-[hsl(var(--muted-foreground))]">
         {t('im.memberPanel.title')}
       </div>
 
       {/* Scrollable list */}
       <div className="flex-1 overflow-y-auto py-2">
         {/* ---- People section ---- */}
-        <div className="px-4 pt-2 pb-1 text-[11px] text-[#555568]">
+        <div className="px-4 pt-2 pb-1 text-[11px] text-muted-foreground">
           {t('im.memberPanel.people')}
         </div>
         {people.map((member) => {
@@ -87,24 +87,24 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
           return (
             <div
               key={member}
-              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[#22222e] transition-colors cursor-default"
+              className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-[hsl(var(--muted))] transition-colors cursor-default"
             >
               <div className="relative flex-shrink-0">
-                <div className="w-8 h-8 rounded-lg bg-[#2a2a38] flex items-center justify-center text-[11px] font-bold">
+                <div className="w-8 h-8 rounded-lg bg-[hsl(var(--muted))] flex items-center justify-center text-[11px] font-bold">
                   {username.charAt(0).toUpperCase()}
                 </div>
                 {/* Online/offline dot */}
                 <div
-                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#111118] ${
+                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[hsl(var(--card))] ${
                     isOnline ? 'bg-[#00b894]' : 'bg-[#636e72]'
                   }`}
                 />
               </div>
               <div className="min-w-0">
-                <div className={`text-[13px] font-medium truncate ${isOnline ? 'text-[#00b894]' : 'text-[#e8e8ed]'}`}>
+                <div className={`text-[13px] font-medium truncate ${isOnline ? 'text-[#00b894]' : 'text-foreground'}`}>
                   {username}
                 </div>
-                <div className="text-[11px] text-[#555568] font-mono truncate">
+                <div className="text-[11px] text-muted-foreground font-mono truncate">
                   {member}
                 </div>
               </div>
@@ -116,7 +116,7 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
         {[...agentsByOwner.entries()].map(([owner, agents]) => (
           <div key={owner}>
             {/* Group label */}
-            <div className="px-4 pt-3 pb-1 text-[11px] text-[#555568]">
+            <div className="px-4 pt-3 pb-1 text-[11px] text-muted-foreground">
               {t('im.memberPanel.agentsOf', { name: owner })}
             </div>
             {agents.map((agentId) => {
@@ -128,7 +128,7 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
                   onClick={isOwn && onSelectDM ? () => onSelectDM(agentId) : undefined}
                   className={`flex items-center gap-2.5 px-4 py-1.5 transition-colors ${
                     isOwn
-                      ? 'cursor-pointer hover:bg-[#22222e]'
+                      ? 'cursor-pointer hover:bg-[hsl(var(--muted))]'
                       : 'cursor-default opacity-60'
                   }`}
                 >
@@ -136,7 +136,7 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
                     style={{
                       backgroundColor: `${color}1f`,
-                      border: `1.5px dashed ${isOwn ? color : '#555568'}`,
+                      border: `1.5px dashed ${isOwn ? color : 'hsl(var(--muted-foreground))'}`,
                     }}
                   >
                     🤖
@@ -144,12 +144,12 @@ export function MemberPanel({ room, onlineUsers, clientId, onSelectDM }: MemberP
                   <div className="min-w-0">
                     <div
                       className="text-[13px] font-medium truncate font-mono"
-                      style={{ color: isOwn ? color : '#8888a0' }}
+                      style={{ color: isOwn ? color : 'hsl(var(--muted-foreground))' }}
                     >
                       {agentId}
                     </div>
                     {!isOwn && (
-                      <div className="text-[11px] text-[#555568]">
+                      <div className="text-[11px] text-muted-foreground">
                         {t('im.offline')}
                       </div>
                     )}

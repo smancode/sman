@@ -72,9 +72,9 @@ export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
   // Empty state
   if (!roomId) {
     return (
-      <div className="flex-1 flex flex-col bg-[#0a0a0f] min-w-0">
+      <div className="flex-1 flex flex-col bg-[hsl(var(--background))] min-w-0">
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-[#555568] text-sm">{t('im.empty.selectHint')}</p>
+          <p className="text-muted-foreground text-sm">{t('im.empty.selectHint')}</p>
         </div>
       </div>
     );
@@ -87,19 +87,19 @@ export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
   }, [messages]);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0f] min-w-0">
+    <div className="flex-1 flex flex-col bg-[hsl(var(--background))] min-w-0">
       {/* Header */}
-      <div className="px-5 py-3 border-b border-[#2a2a38] flex items-center justify-between bg-[#111118]">
+      <div className="px-5 py-3 border-b border-[hsl(var(--border))] flex items-center justify-between bg-[hsl(var(--card))]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-[10px] bg-[#2a2a38] flex items-center justify-center text-base">
+          <div className="w-9 h-9 rounded-[10px] bg-[hsl(var(--muted))] flex items-center justify-center text-base">
             💬
           </div>
           <div>
-            <h3 className="text-[15px] font-semibold text-[#e8e8ed]">
+            <h3 className="text-[15px] font-semibold text-foreground">
               {/* Room name will come from room data in Task 13 */}
               {roomId ? t('im.groups') : ''}
             </h3>
-            <span className="text-xs text-[#8888a0]">
+            <span className="text-xs text-[hsl(var(--muted-foreground))]">
               {memberCount > 0
                 ? `${memberCount} ${t('im.members')}`
                 : ''}
@@ -109,7 +109,7 @@ export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
         <div className="flex gap-2">
           <button
             onClick={onToggleMembers}
-            className="bg-[#1a1a24] border border-[#2a2a38] text-[#8888a0] px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors hover:bg-[#22222e] hover:text-[#e8e8ed]"
+            className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors hover:bg-[hsl(var(--muted))] hover:text-foreground"
           >
             👥 {t('im.members')}
           </button>

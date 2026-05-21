@@ -113,7 +113,7 @@ export function MessageList({ messages, clientId }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-[#555568] text-sm">{t('im.empty.noMessages')}</p>
+        <p className="text-muted-foreground text-sm">{t('im.empty.noMessages')}</p>
       </div>
     );
   }
@@ -132,10 +132,10 @@ export function MessageList({ messages, clientId }: MessageListProps) {
           <div key={msg.id}>
             {showDivider && (
               <div className="text-center py-3 relative">
-                <span className="bg-[#0a0a0f] px-3 text-[11px] text-[#555568] relative z-[1]">
+                <span className="bg-[hsl(var(--background))] px-3 text-[11px] text-muted-foreground relative z-[1]">
                   {formatDateDivider(msg.timestamp)}
                 </span>
-                <div className="absolute top-1/2 left-0 right-0 h-px bg-[#2a2a38]" />
+                <div className="absolute top-1/2 left-0 right-0 h-px bg-[hsl(var(--border))]" />
               </div>
             )}
             {msg.type === 'agent_output' ? (
@@ -172,11 +172,11 @@ export function MessageList({ messages, clientId }: MessageListProps) {
       {typingUser && (
         <div className="flex items-center gap-2 py-1.5 px-1">
           <div className="flex gap-1">
-            <span className="w-1.5 h-1.5 bg-[#6c5ce7] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1.5 h-1.5 bg-[#6c5ce7] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1.5 h-1.5 bg-[#6c5ce7] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span className="w-1.5 h-1.5 bg-[hsl(var(--primary))] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 bg-[hsl(var(--primary))] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 bg-[hsl(var(--primary))] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span className="text-xs text-[#555568]">
+          <span className="text-xs text-muted-foreground">
             {typingUser.split('@')[0]} {t('im.typing')}
           </span>
         </div>

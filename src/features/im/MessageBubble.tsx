@@ -86,7 +86,7 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
   // System messages
   if (type === 'system') {
     return (
-      <div className="text-center py-1.5 text-xs text-[#555568] italic">
+      <div className="text-center py-1.5 text-xs text-muted-foreground italic">
         {content}
       </div>
     );
@@ -115,11 +115,11 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
               {getDisplayName(sender, allSenders)}
             </div>
           </div>
-          <span className="text-[10px] text-[#555568]">
+          <span className="text-[10px] text-muted-foreground">
             {formatTime(timestamp)}
           </span>
         </div>
-        <div className="px-3.5 pb-3 text-[13px] text-[#8888a0] whitespace-pre-wrap leading-relaxed">
+        <div className="px-3.5 pb-3 text-[13px] text-[hsl(var(--muted-foreground))] whitespace-pre-wrap leading-relaxed">
           {content}
         </div>
       </div>
@@ -149,14 +149,14 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
           <span className="text-xs font-semibold" style={{ color: avatarColor }}>
             {displayName}
           </span>
-          <span className="text-[10px] text-[#555568]">
+          <span className="text-[10px] text-muted-foreground">
             {formatTime(timestamp)}
           </span>
         </div>
 
         {/* Quote reference */}
         {quoteId && (
-          <div className="bg-[#0a0a0f] border-l-2 border-[#555568] px-2 py-1 rounded mb-1 text-xs text-[#555568] cursor-pointer hover:border-[#6c5ce7]">
+          <div className="bg-[hsl(var(--background))] border-l-2 border-muted-foreground px-2 py-1 rounded mb-1 text-xs text-muted-foreground cursor-pointer hover:border-[hsl(var(--primary))]">
             <span className="font-semibold">{t('im.chatInput.replyGroup')}</span>
           </div>
         )}
@@ -165,8 +165,8 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
         <div
           className={`px-3 py-2 rounded-xl text-sm leading-relaxed break-words ${
             isSelf
-              ? 'bg-[#6c5ce7] text-white rounded-tr-sm'
-              : 'bg-[#1a1a24] text-[#e8e8ed] rounded-tl-sm'
+              ? 'bg-[hsl(var(--user-bubble-bg))] border border-[hsl(var(--user-bubble-fg))]/20 text-[hsl(var(--user-bubble-fg))] rounded-tr-sm'
+              : 'bg-[hsl(var(--card))] text-foreground rounded-tl-sm'
           }`}
         >
           {parsedContent.map((part, i) =>
@@ -175,7 +175,7 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
                 key={i}
                 className={`px-0.5 py-px rounded font-medium cursor-pointer ${
                   isSelf
-                    ? 'bg-white/20 text-white'
+                    ? 'bg-[hsl(var(--user-bubble-fg))]/15'
                     : ''
                 }`}
                 style={!isSelf ? { backgroundColor: `${part.color}26`, color: part.color } : undefined}
@@ -194,10 +194,10 @@ export function MessageBubble({ message, isSelf, allSenders }: MessageBubbleProp
             {attachments.map((file: { name?: string }, i: number) => (
               <div
                 key={i}
-                className="flex items-center gap-2 bg-[#0a0a0f] px-2.5 py-2 rounded-lg text-[13px] cursor-pointer hover:bg-[#22222e]"
+                className="flex items-center gap-2 bg-[hsl(var(--background))] px-2.5 py-2 rounded-lg text-[13px] cursor-pointer hover:bg-[hsl(var(--muted))]"
               >
-                <span className="text-[#555568]">📎</span>
-                <span className="text-[#8888a0] truncate">{file.name || 'file'}</span>
+                <span className="text-muted-foreground">📎</span>
+                <span className="text-[hsl(var(--muted-foreground))] truncate">{file.name || 'file'}</span>
               </div>
             ))}
           </div>
