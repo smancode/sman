@@ -156,6 +156,38 @@ export class SessionStore {
       this.log.info('Migrated: added parent_task_id column to sessions table');
     }
 
+    // IM tables
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS im_messages (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        content TEXT NOT NULL,
+        mentioned_agents TEXT,
+        quote_id TEXT,
+        type TEXT NOT NULL DEFAULT 'text',
+        status TEXT DEFAULT NULL,
+        attachments TEXT,
+        session_id TEXT,
+        timestamp INTEGER NOT NULL,
+        created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+        updated_at DATETIME DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_im_messages_room_ts ON im_messages(room_id, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_im_messages_sender ON im_messages(sender);
+      CREATE INDEX IF NOT EXISTS idx_im_messages_session ON im_messages(session_id);
+
+      CREATE TABLE IF NOT EXISTS im_rooms (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'group',
+        members TEXT NOT NULL,
+        last_message TEXT,
+        last_message_time INTEGER,
+        created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+      );
+    `);
+
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.log.info('Database initialized');
