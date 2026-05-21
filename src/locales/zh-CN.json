@@ -3906,5 +3906,13 @@
   "im.session.autoCreateHint": { "text": "群聊中 @Agent 会自动创建会话", "context": "IM 会话列表底部提示" },
   "im.session.dmFromCard": { "text": "群聊折叠的 Agent 卡片内点击「私聊」也会跳到这里", "context": "IM 会话列表底部说明" },
   "im.createRoom.namePlaceholder": { "text": "群聊名称", "context": "IM 创建群聊输入框占位符" },
-  "im.createRoom.confirm": { "text": "创建", "context": "IM 创建群聊确认按钮" }
+  "im.createRoom.confirm": { "text": "创建", "context": "IM 创建群聊确认按钮" },
+  "im.agentCard.executing": { "text": "执行中", "context": "IM Agent 卡片执行中状态" },
+  "im.agentCard.completed": { "text": "已完成", "context": "IM Agent 卡片已完成状态" },
+  "im.agentCard.failed": { "text": "执行失败", "context": "IM Agent 卡片执行失败状态" },
+  "im.agentCard.expand": { "text": "点击展开 ▼", "context": "IM Agent 卡片展开按钮" },
+  "im.agentCard.collapse": { "text": "收起 ▲", "context": "IM Agent 卡片收起按钮" },
+  "im.agentCard.replyPlaceholder": { "text": "继续对话...", "context": "IM Agent 卡片回复输入框占位符" },
+  "im.agentCard.dm": { "text": "私聊", "context": "IM Agent 卡片私聊按钮" },
+  "im.agentCard.groupReply": { "text": "群聊回复", "context": "IM Agent 卡片群聊回复按钮" }
 }

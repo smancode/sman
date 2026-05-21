@@ -3906,5 +3906,13 @@
   "im.session.autoCreateHint": { "text": "@Agent in group chat auto-creates a session", "context": "IM session list bottom hint" },
   "im.session.dmFromCard": { "text": "Clicking DM in a collapsed Agent card also links here", "context": "IM session list bottom explanation" },
   "im.createRoom.namePlaceholder": { "text": "Group name", "context": "IM create room input placeholder" },
-  "im.createRoom.confirm": { "text": "Create", "context": "IM create room confirm button" }
+  "im.createRoom.confirm": { "text": "Create", "context": "IM create room confirm button" },
+  "im.agentCard.executing": { "text": "Running", "context": "IM Agent card running status" },
+  "im.agentCard.completed": { "text": "Completed", "context": "IM Agent card completed status" },
+  "im.agentCard.failed": { "text": "Failed", "context": "IM Agent card failed status" },
+  "im.agentCard.expand": { "text": "Expand ▼", "context": "IM Agent card expand button" },
+  "im.agentCard.collapse": { "text": "Collapse ▲", "context": "IM Agent card collapse button" },
+  "im.agentCard.replyPlaceholder": { "text": "Continue conversation...", "context": "IM Agent card reply input placeholder" },
+  "im.agentCard.dm": { "text": "DM", "context": "IM Agent card DM button" },
+  "im.agentCard.groupReply": { "text": "Reply in Group", "context": "IM Agent card group reply button" }
 }
