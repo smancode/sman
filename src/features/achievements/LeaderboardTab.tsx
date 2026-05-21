@@ -19,7 +19,6 @@ const DIMENSION_OPTIONS: { key: string; labelKey: string }[] = [
   { key: 'total_messages', labelKey: 'achievement.scoreDetail.messages' },
   { key: 'total_tokens', labelKey: 'achievement.scoreDetail.tokens' },
   { key: 'total_cron_runs', labelKey: 'achievement.scoreDetail.cron' },
-  { key: 'total_smartpath_runs', labelKey: 'achievement.scoreDetail.path' },
   { key: 'bot_sessions_total', labelKey: 'achievement.scoreDetail.botSessions' },
   { key: 'bot_messages_total', labelKey: 'achievement.scoreDetail.botMessages' },
   { key: 'bot_count_total', labelKey: 'achievement.scoreDetail.botCount' },

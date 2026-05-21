@@ -8,19 +8,12 @@ const METRIC_WEIGHTS: Record<string, number> = {
   total_messages: 0.5,       // 0.5分/条
   total_tokens: 0.000005,    // 0.000005分/token (= 1分/20万token)
   total_cron_runs: 2,        // 2分/次
-  total_smartpath_runs: 5,   // 5分/次
-  total_skills_used: 2,      // 2分/次
-  total_code_views: 0.3,     // 0.3分/次
-  total_git_ops: 0.5,        // 0.5分/次
   bot_sessions_total: 2,     // 2分/个
   bot_messages_total: 1,     // 1分/条
   bot_count_total: 5,        // 5分/个Bot
   current_streak: 2,         // 2分/天(取当前连续天数)
 };
 import { createLogger, type Logger } from './utils/logger.js';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 
 export interface AchievementView {
   id: string;
@@ -197,10 +190,6 @@ export class AchievementEngine {
           this.incrementStat('total_cron_runs', metricsToUpdate);
           break;
 
-        case 'smartpath_run':
-          this.incrementStat('total_smartpath_runs', metricsToUpdate);
-          break;
-
         case 'token_used':
           if (data.tokens && data.tokens > 0) {
             const current = parseInt(this.store.getStat('total_tokens') || '0', 10);
@@ -213,18 +202,6 @@ export class AchievementEngine {
           if (data.workspace) {
             this.trackWorkspace(data.workspace, metricsToUpdate);
           }
-          break;
-
-        case 'skill_used':
-          this.incrementStat('total_skills_used', metricsToUpdate);
-          break;
-
-        case 'code_viewed':
-          this.incrementStat('total_code_views', metricsToUpdate);
-          break;
-
-        case 'git_operation':
-          this.incrementStat('total_git_ops', metricsToUpdate);
           break;
 
         case 'stardom_collab':
@@ -356,7 +333,6 @@ export class AchievementEngine {
       const cronRuns = (db.prepare("SELECT COUNT(*) as c FROM cron_runs WHERE status = 'success'").get() as { c: number }).c;
       this.store.setStat('total_cron_runs', String(cronRuns));
 
-
       // Bot stats — extract platform from user_key prefix
       const botSessionRow = db.prepare("SELECT COUNT(DISTINCT session_id) as c FROM chatbot_sessions").get() as { c: number };
       this.store.setStat('bot_sessions_total', String(botSessionRow.c));
@@ -388,9 +364,6 @@ export class AchievementEngine {
       const platformCount = (db.prepare("SELECT COUNT(DISTINCT SUBSTR(user_key, 1, INSTR(user_key, ':') - 1)) as c FROM chatbot_sessions").get() as { c: number }).c;
       this.store.setStat('bot_platforms_used', String(platformCount));
 
-      // Smart Path — filesystem scan
-      this.backfillSmartPathRuns();
-
       // Check and unlock all eligible achievements
       const allMetrics = new Set<string>();
       for (const def of ACHIEVEMENT_DEFINITIONS) {
@@ -401,41 +374,6 @@ export class AchievementEngine {
       this.log.info(`Backfill complete. Sessions: ${sessionCount}, Messages: ${msgCount}, Workspaces: ${wsCount}, Tokens: ${inputTokens + outputTokens}`);
     } catch (err) {
       this.log.error('Error during stats backfill:', { error: String(err) });
-    }
-  }
-
-  private backfillSmartPathRuns(): void {
-    try {
-      const seen = this.store.getStat('_seen_workspaces');
-      const workspaces: string[] = seen ? JSON.parse(seen) : [];
-      let totalRuns = 0;
-
-      for (const ws of workspaces) {
-        try {
-          const pathsDir = path.join(ws, '.sman', 'paths');
-          if (!fs.existsSync(pathsDir)) continue;
-          const pathDirs = fs.readdirSync(pathsDir, { withFileTypes: true });
-          for (const pd of pathDirs) {
-            if (!pd.isDirectory()) continue;
-            const runsDir = path.join(pathsDir, pd.name, 'runs');
-            if (!fs.existsSync(runsDir)) continue;
-            const runFiles = fs.readdirSync(runsDir);
-            for (const rf of runFiles) {
-              if (!rf.endsWith('.json')) continue;
-              try {
-                const content = JSON.parse(fs.readFileSync(path.join(runsDir, rf), 'utf-8')) as Record<string, unknown>;
-                if (content.status === 'completed') {
-                  totalRuns++;
-                }
-              } catch { /* skip invalid files */ }
-            }
-          }
-        } catch { /* skip inaccessible workspaces */ }
-      }
-
-      this.store.setStat('total_smartpath_runs', String(totalRuns));
-    } catch (err) {
-      this.log.error('Error backfilling smart path runs:', { error: String(err) });
     }
   }
 
