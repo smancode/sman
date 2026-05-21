@@ -54,6 +54,7 @@ export class InitManager {
   private pluginsDir: string;
   private capabilityRegistry: CapabilityRegistry | null;
   private llmConfig: () => SemanticSearchLlmConfig | null;
+  private _onFirstInit: ((workspace: string) => void) | null = null;
 
   constructor(deps: {
     pluginsDir: string;
@@ -64,6 +65,11 @@ export class InitManager {
     this.pluginsDir = deps.pluginsDir;
     this.capabilityRegistry = deps.capabilityRegistry;
     this.llmConfig = deps.llmConfig;
+  }
+
+  /** Set callback for first-time init completion */
+  onFirstInit(callback: (workspace: string) => void): void {
+    this._onFirstInit = callback;
   }
 
   isInitialized(workspace: string): boolean {
@@ -167,6 +173,11 @@ export class InitManager {
             return { id, name: cap?.name || id };
           }),
         });
+
+        // First init done — trigger skill-auto-updater to populate project skills
+        if (this._onFirstInit) {
+          this._onFirstInit(workspace);
+        }
       } finally {
         this.releaseLock(workspace);
       }

@@ -22,9 +22,37 @@ import { EMPTY_SUBTASKS } from '@/schemas/group';
 import { t, useLocale } from '@/locales';
 
 
-// ── Module-level: 记住每个会话的滚动比例 ──
-// key: sessionId, value: { ratio: scrollTop/scrollHeight (0~1), atBottom: boolean }
-const scrollMemory = new Map<string, { ratio: number; atBottom: boolean }>();
+// ── Module-level: 记住每个会话的滚动位置 ──
+// key: sessionId, value: first visible index + offset + atBottom flag
+const scrollMemory = new Map<string, { firstVisibleIndex: number; offsetY: number; atBottom: boolean }>();
+
+/** Save scroll position for a session using virtualizer's visible range */
+function saveScrollPosition(
+  container: HTMLDivElement | null,
+  virtualizer: { getVirtualItems: () => Array<{ index: number; start: number }> } | null,
+  sessionId: string,
+): void {
+  if (!container) return;
+  const hasContent = container.scrollHeight > container.clientHeight;
+  const atBottom = hasContent
+    ? container.scrollHeight - container.scrollTop - container.clientHeight < 150
+    : true; // no content scrolled = conceptually "at bottom"
+  if (!virtualizer) {
+    scrollMemory.set(sessionId, { firstVisibleIndex: 0, offsetY: 0, atBottom });
+    return;
+  }
+  const items = virtualizer.getVirtualItems();
+  if (items.length === 0) {
+    scrollMemory.set(sessionId, { firstVisibleIndex: 0, offsetY: 0, atBottom });
+    return;
+  }
+  const first = items[0];
+  scrollMemory.set(sessionId, {
+    firstVisibleIndex: first.index,
+    offsetY: Math.max(0, container.scrollTop - first.start),
+    atBottom,
+  });
+}
 
 export function Chat() {
   useLocale();
@@ -50,20 +78,26 @@ export function Chat() {
   const prevSessionIdRef = useRef(currentSessionId);
   const restoredRef = useRef(false);
 
-  // 离开会话时保存滚动位置，切回来时恢复
-  if (currentSessionId !== prevSessionIdRef.current) {
-    const container = scrollRef.current;
-    // 存旧会话的滚动位置
-    if (prevSessionIdRef.current && container) {
-      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-      scrollMemory.set(prevSessionIdRef.current, {
-        ratio: container.scrollHeight > 0 ? container.scrollTop / container.scrollHeight : 0,
-        atBottom,
-      });
-    }
+  // Save scroll position when switching sessions
+  useEffect(() => {
     restoredRef.current = false;
-    prevSessionIdRef.current = currentSessionId;
-  }
+    return () => {
+      if (prevSessionIdRef.current) {
+        saveScrollPosition(scrollRef.current, virtualizerRef.current, prevSessionIdRef.current);
+      }
+      prevSessionIdRef.current = currentSessionId;
+    };
+  }, [currentSessionId]);
+
+  // Save scroll position on unmount (e.g. navigating to /settings)
+  useEffect(() => {
+    return () => {
+      const sid = prevSessionIdRef.current;
+      if (sid) {
+        saveScrollPosition(scrollRef.current, virtualizerRef.current, sid);
+      }
+    };
+  }, []);
 
   // Track whether user is near bottom (within 150px) for smart auto-scroll
   useEffect(() => {
@@ -121,6 +155,8 @@ export function Chat() {
   const isEmpty = messages.length === 0 && !sending;
 
   // Virtual scroll: only render visible messages
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const virtualizerRef = useRef<any>(null);
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => scrollRef.current,
@@ -132,6 +168,7 @@ export function Chat() {
     overscan: 5,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
+  virtualizerRef.current = virtualizer;
 
   // 恢复滚动位置
   useEffect(() => {
@@ -140,20 +177,24 @@ export function Chat() {
 
     const saved = scrollMemory.get(currentSessionId);
     if (!saved) {
-      // 首次进入：用虚拟列表 API 滚到最后一条消息底部
+      // 首次进入：滚到底部
       virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
       restoredRef.current = true;
       return;
     }
 
-    if (saved.atBottom) {
-      virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
-    } else {
-      const container = scrollRef.current;
-      if (container) {
-        container.scrollTop = Math.round(saved.ratio * virtualizer.getTotalSize());
+    // Defer one frame to let virtualizer measure real element sizes first
+    requestAnimationFrame(() => {
+      if (saved.atBottom) {
+        virtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+      } else {
+        const idx = Math.min(saved.firstVisibleIndex, messages.length - 1);
+        virtualizer.scrollToIndex(idx, { align: 'start' });
+        if (saved.offsetY > 0 && scrollRef.current) {
+          scrollRef.current.scrollTop += saved.offsetY;
+        }
       }
-    }
+    });
     restoredRef.current = true;
   }, [messages, currentSessionId, virtualizer]);
 

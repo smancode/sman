@@ -227,8 +227,11 @@ export class CronExecutor {
    * 执行定时任务
    */
   async execute(task: CronTask): Promise<void> {
+    const isInitTrigger = task.id.startsWith('init-');
+
     // skill-auto-updater: check 5-min idle window and serial execution
-    if (task.skillName === SKILL_AUTO_UPDATER) {
+    // Skip these checks for init-triggered runs (first workspace init)
+    if (task.skillName === SKILL_AUTO_UPDATER && !isInitTrigger) {
       const lastActivity = this.sessionManager.getLastStreamActivityAt();
       const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
       if (lastActivity > 0 && Date.now() - lastActivity < IDLE_THRESHOLD_MS) {

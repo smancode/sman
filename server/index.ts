@@ -46,7 +46,7 @@ import { WeComBotConnection } from './chatbot/wecom-bot-connection.js';
 import { FeishuBotConnection } from './chatbot/feishu-bot-connection.js';
 import { WeixinBotConnection } from './chatbot/weixin-bot-connection.js';
 import { testAnthropicCompat, detectCapabilities, listModels } from './model-capabilities.js';
-import { InitManager } from './init/init-manager.js';
+import { InitManager, SKILL_AUTO_UPDATER } from './init/init-manager.js';
 import { initStardomBridge, getStardomBridge } from './stardom/index.js';
 import { initHub, stopHub, getHubStatus, getHubWsClient, getEvaluationHandler, setActualPort as _setActualPort } from './hub/index.js';
 import { buildEncryptedRequest, decrypt } from './hub/crypto.js';
@@ -474,6 +474,23 @@ const initManager = new InitManager({
       baseUrl: config.llm.baseUrl,
     };
   },
+});
+
+// On first workspace init, trigger skill-auto-updater to populate project skills
+initManager.onFirstInit((workspace: string) => {
+  const task: import('./types.js').CronTask = {
+    id: `init-${SKILL_AUTO_UPDATER}-${Date.now()}`,
+    workspace,
+    skillName: SKILL_AUTO_UPDATER,
+    cronExpression: '',
+    source: 'manual',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  cronScheduler.getExecutor().execute(task).catch((err: any) => {
+    log.warn(`Post-init skill-auto-updater failed for ${workspace}: ${err.message}`);
+  });
 });
 
 // Set up cron scheduler with session manager
