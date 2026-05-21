@@ -3,7 +3,7 @@ import { t } from '@/locales';
 import { useIMStore } from '@/stores/im';
 import { useRoomMessages } from '@/queries/use-im';
 import { MessageList } from './MessageList';
-
+import { ChatInput } from './ChatInput';
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -97,22 +97,8 @@ export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
       {/* Message list */}
       <MessageList messages={messages} clientId={clientId} />
 
-      {/* ChatInput placeholder — Task 11 replaces this */}
-      <div className="px-5 py-3 border-t border-[#2a2a38] bg-[#111118]">
-        <div className="flex gap-2 items-end">
-          <input
-            disabled
-            placeholder={t('im.chatInput.placeholder')}
-            className="flex-1 bg-[#1a1a24] border border-[#2a2a38] rounded-xl px-3.5 py-2.5 text-sm text-[#e8e8ed] outline-none focus:border-[#6c5ce7] placeholder:text-[#555568] disabled:opacity-50"
-          />
-          <button
-            disabled
-            className="w-10 h-10 bg-[#6c5ce7] border-none rounded-xl text-white cursor-pointer text-base flex items-center justify-center flex-shrink-0 disabled:opacity-50"
-          >
-            ➤
-          </button>
-        </div>
-      </div>
+      {/* Chat input with @mention */}
+      <ChatInput roomId={roomId} clientId={clientId} />
     </div>
   );
 }
