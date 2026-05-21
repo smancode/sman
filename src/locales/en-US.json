@@ -3916,5 +3916,8 @@
   "im.agentCard.dm": { "text": "DM", "context": "IM Agent card DM button" },
   "im.agentCard.groupReply": { "text": "Reply in Group", "context": "IM Agent card group reply button" },
   "im.dateToday": { "text": "Today", "context": "IM message date divider - today" },
-  "im.dateYesterday": { "text": "Yesterday", "context": "IM message date divider - yesterday" }
+  "im.dateYesterday": { "text": "Yesterday", "context": "IM message date divider - yesterday" },
+  "im.memberPanel.title": { "text": "Members & Agents", "context": "IM member panel title" },
+  "im.memberPanel.people": { "text": "People", "context": "IM member panel people group" },
+  "im.memberPanel.agentsOf": { "text": "${name}'s Agents", "context": "IM member panel agent group for a person" }
 }

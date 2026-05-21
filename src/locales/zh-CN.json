@@ -3916,5 +3916,8 @@
   "im.agentCard.dm": { "text": "私聊", "context": "IM Agent 卡片私聊按钮" },
   "im.agentCard.groupReply": { "text": "群聊回复", "context": "IM Agent 卡片群聊回复按钮" },
   "im.dateToday": { "text": "今天", "context": "IM 消息日期分隔-今天" },
-  "im.dateYesterday": { "text": "昨天", "context": "IM 消息日期分隔-昨天" }
+  "im.dateYesterday": { "text": "昨天", "context": "IM 消息日期分隔-昨天" },
+  "im.memberPanel.title": { "text": "成员 & 分身", "context": "IM 成员面板标题" },
+  "im.memberPanel.people": { "text": "人员", "context": "IM 成员面板人员分组" },
+  "im.memberPanel.agentsOf": { "text": "${name} 的分身", "context": "IM 成员面板某人的分身分组" }
 }

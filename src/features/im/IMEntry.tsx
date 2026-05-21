@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLocale, t } from '@/locales';
 import { useIMStore } from '@/stores/im';
+import { useRoomList } from '@/queries/use-im';
 import { GroupChatList } from './GroupChatList';
 import { SessionList } from './SessionList';
 import { ChatWindow } from './ChatWindow';
+import { MemberPanel } from './MemberPanel';
 
 // ---------------------------------------------------------------------------
 // Tab type
@@ -19,7 +21,20 @@ export default function IMEntry() {
   useLocale();
 
   const { activeTab, selectedRoomId, selectRoom, setActiveTab } = useIMStore();
+  const { data: rooms = [] } = useRoomList();
   const [showMembers, setShowMembers] = useState(false);
+
+  const selectedRoom = useMemo(
+    () => rooms.find((r) => r.id === selectedRoomId) ?? null,
+    [rooms, selectedRoomId],
+  );
+  const onlineUsers = useIMStore((s) => s.onlineUsers);
+
+  // Client identity: "username@host"
+  const clientId = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('sman-client-id') || '';
+  }, []);
 
   return (
     <div className="flex h-full w-full overflow-hidden">
@@ -71,8 +86,14 @@ export default function IMEntry() {
         onToggleMembers={() => setShowMembers((v) => !v)}
       />
 
-      {/* ===== RIGHT: Member Panel placeholder ===== */}
-      {/* MemberPanel will be conditionally rendered here in Task 12 */}
+      {/* ===== RIGHT: Member Panel ===== */}
+      {showMembers && (
+        <MemberPanel
+          room={selectedRoom}
+          onlineUsers={onlineUsers}
+          clientId={clientId}
+        />
+      )}
     </div>
   );
 }
