@@ -56,6 +56,7 @@ import { BroadcastStore } from './broadcast-store.js';
 import { AchievementStore } from './achievement-store.js';
 import { AchievementEngine } from './achievement-engine.js';
 import { handleAchievementMessage } from './achievement-ws-handler.js';
+import { initIM } from './im/index.js';
 
 const PORT = parseInt(process.env.PORT || '5880', 10);
 const log = createLogger('Server');
@@ -143,6 +144,9 @@ const sessionManager = new ClaudeSessionManager(store);
 setSessionManagerForPush(sessionManager);
 const settingsManager = new SettingsManager(homeDir);
 const groupStore = new GroupStore(store.getDatabase());
+
+// IM module
+const imModule = initIM(store.getDatabase());
 
 // User profile manager
 const userProfileManager = new UserProfileManager(homeDir, settingsManager.getConfig());
@@ -1143,6 +1147,43 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // IM REST API: list rooms
+  if (req.url === '/api/im/rooms' && req.method === 'GET') {
+    const rooms = imModule.imStore.listRooms();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ rooms }));
+    return;
+  }
+
+  // IM REST API: create room
+  if (req.url === '/api/im/rooms' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        const { name, type, members } = JSON.parse(body);
+        if (!name || !members?.length) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing name or members' }));
+          return;
+        }
+        const room = {
+          id: crypto.randomUUID(),
+          name,
+          type: type || 'group',
+          members,
+        };
+        imModule.imStore.createRoom(room);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ room }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
   // WebSocket upgrade path — let WSS handle it
   if (req.url?.startsWith('/ws')) {
     res.writeHead(426);
@@ -1200,6 +1241,21 @@ const wss = new WebSocketServer({
     callback(true);
   },
 });
+
+// Initialize IM broadcast functions (needs wss/clients which are now available)
+imModule.setBroadcastFn(
+  (roomId: string, msg: any, excludeWs?: any) => {
+    // Broadcast to all authenticated WS clients (IM rooms are per-client for now)
+    const data = JSON.stringify(msg);
+    for (const client of authenticatedClients) {
+      if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  },
+  (ws: any, msg: any) => ws.send(JSON.stringify(msg)),
+);
+
 interface WsMessage {
   type: string;
   sessionId?: string;
@@ -3148,6 +3204,20 @@ wss.on('connection', (ws: WebSocket) => {
           }
           const subtasks = groupStore.listSubtasks(String(msg.taskId));
           ws.send(JSON.stringify({ type: 'group-subtask.list', taskId: String(msg.taskId), subtasks }));
+          break;
+        }
+
+        // IM operations
+        case 'im.send':
+        case 'im.history':
+        case 'im.sync':
+        case 'im.typing': {
+          const imHandler = imModule.getHandler();
+          if (imHandler) {
+            imHandler.handleLocalMessage(msg, ws, { clientId: getClientId() });
+          } else {
+            ws.send(JSON.stringify({ type: 'im.error', error: 'IM not initialized' }));
+          }
           break;
         }
 
