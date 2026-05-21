@@ -9,7 +9,7 @@ import { ChatbotStore } from './chatbot-store.js';
 import { parseChatCommand } from './chat-command-parser.js';
 import type { IncomingMessage, ChatResponseSender, WeComBotProfile } from './types.js';
 
-const QUERY_TIMEOUT_MS = 5 * 60 * 1000;
+const QUERY_TIMEOUT_MS = 10 * 60 * 1000;
 const IDLE_TIMEOUT_MINUTES = 15;
 const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
 
