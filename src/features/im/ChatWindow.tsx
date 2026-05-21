@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { t } from '@/locales';
 import { useIMStore } from '@/stores/im';
 import { useRoomMessages } from '@/queries/use-im';
@@ -31,8 +31,30 @@ function getClientId(): string {
 
 export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
   const roomMessages = useIMStore((s) => s.roomMessages);
+  const storeReplyQuote = useIMStore((s) => s.replyQuote);
+  const setReplyQuote = useIMStore((s) => s.setReplyQuote);
   const { data: fetchedMessages = [] } = useRoomMessages(roomId ?? undefined);
   const clientId = useMemo(() => getClientId(), []);
+
+  // Pre-fill content from replyQuote when it matches current room
+  const [prefillContent, setPrefillContent] = useState('');
+  const [prefillConsumed, setPrefillConsumed] = useState(false);
+
+  // When storeReplyQuote changes and matches current room, generate prefill text
+  useMemo(() => {
+    if (storeReplyQuote && storeReplyQuote.roomId === roomId && !prefillConsumed) {
+      const quotePreview = storeReplyQuote.content.length > 50
+        ? storeReplyQuote.content.slice(0, 50) + '...'
+        : storeReplyQuote.content;
+      setPrefillContent(`> ${quotePreview}\n\n`);
+      setPrefillConsumed(false);
+    }
+  }, [storeReplyQuote, roomId, prefillConsumed]);
+
+  const handleContentConsumed = useCallback(() => {
+    setPrefillConsumed(true);
+    setReplyQuote(null);
+  }, [setReplyQuote]);
 
   // Merge: fetched messages from WS history + real-time messages from store
   const messages = useMemo(() => {
@@ -98,7 +120,12 @@ export function ChatWindow({ roomId, onToggleMembers }: ChatWindowProps) {
       <MessageList messages={messages} clientId={clientId} />
 
       {/* Chat input with @mention */}
-      <ChatInput roomId={roomId} clientId={clientId} />
+      <ChatInput
+        roomId={roomId}
+        clientId={clientId}
+        initialContent={prefillContent}
+        onContentConsumed={handleContentConsumed}
+      />
     </div>
   );
 }

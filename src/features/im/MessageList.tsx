@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo } from 'react';
 import { t } from '@/locales';
 import { useIMStore } from '@/stores/im';
 import { MessageBubble } from './MessageBubble';
+import { AgentCard } from './AgentCard';
 import type { IMMessage } from '@/schemas/im';
 
 // ---------------------------------------------------------------------------
@@ -137,11 +138,32 @@ export function MessageList({ messages, clientId }: MessageListProps) {
                 <div className="absolute top-1/2 left-0 right-0 h-px bg-[#2a2a38]" />
               </div>
             )}
-            <MessageBubble
-              message={msg}
-              isSelf={isSelf}
-              allSenders={allSenders}
-            />
+            {msg.type === 'agent_output' ? (
+              <AgentCard
+                message={msg}
+                onReplyInGroup={(messageId, agentId) => {
+                  // Quote agent content and pre-fill ChatInput in this room
+                  const quotePreview = msg.content.length > 50
+                    ? msg.content.slice(0, 50) + '...'
+                    : msg.content;
+                  useIMStore.getState().setReplyQuote({
+                    roomId: msg.roomId,
+                    messageId,
+                    content: quotePreview,
+                  });
+                }}
+                onGoDM={(agentId) => {
+                  // Switch to sessions tab for DM
+                  useIMStore.getState().setActiveTab('sessions');
+                }}
+              />
+            ) : (
+              <MessageBubble
+                message={msg}
+                isSelf={isSelf}
+                allSenders={allSenders}
+              />
+            )}
           </div>
         );
       })}

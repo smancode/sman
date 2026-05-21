@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { WsClient } from '@/lib/ws-client';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from './chat';
+import { registerIMListeners } from './im';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
 
@@ -47,6 +48,9 @@ function registerListeners(client: WsClient) {
   client.on('session.chatbotCreated', () => {
     useChatStore.getState().loadSessions();
   });
+
+  // Register IM WS event listeners (im.message, im.agent_delta, im.presence, im.typing)
+  registerIMListeners();
 }
 
 /** Create or recreate WsClient — reads URL + token from localStorage */
