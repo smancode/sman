@@ -25,6 +25,32 @@ initializedAt: "2026-04-15T08:04:23.680Z"
 - **review**: AI 推荐能力
 ## Skill Auto-Updater History
 
+### 2026-05-22 — 增量更新
+**Commit**: 70d53baa472e0b2f87d9b0080e3239118c1f1ec7
+**Mode**: 增量更新（自上次扫描 353989234d641c959d8c0aa37aea150735c4ccd8）
+**规模**: 大型项目（3923 源码文件），分 4 轮扫描，27 个 commits
+
+**Project Knowledge Skills 更新**：
+- ✅ project-structure — 已更新（commitHash: c63e3fc → 70d53ba，新增 IM 模块）
+- ✅ knowledge-conventions — 已更新（commitHash: 3539892 → 70d53ba，新增 5 条规范）
+- ✅ project-apis — 已更新（commitHash: c63e3fc → 70d53ba，新增 11 个 IM 端点 + 1 个 cron 手动触发端点）
+- ✅ project-external-calls — 已更新（commitHash: 3539892 → 70d53ba，新增 IM 系统依赖）
+- ✅ knowledge-technical — 已更新（commitHash: 3539892 → 70d53ba，新增 IM/Cron 技术细节）
+- ✅ knowledge-business — 已更新（commitHash: 3539892 → 70d53ba，新增 IM/Smart Path 业务逻辑）
+- ✅ database-schema — 已更新（commitHash: 3539892 → 70d53ba，新增 3 张表：im_messages/im_rooms/smartpath_run_log）
+
+**Team Knowledge Skills 辩证聚合**：
+- ✅ 无新条目需要处理（所有知识已在 2026-05-20 处理完毕）
+
+**关键发现**：
+- ⭐ MAJOR: IM 即时通讯系统完整实现（11 个 API 端点，2 张 SQLite 表，Hub 多端同步）
+- ⭐ NEW: Smart Path 步骤持久化（用户编辑可写回 path.md）
+- ⭐ NEW: Cron 手动触发功能（绕过 5 分钟空闲窗口检查）
+- ⚠️ MIGRATION: 无破坏性变更（纯新增功能）
+- 📊 ORPHAN: IM REST API 创建房间时未验证 type 字段（建议添加枚举校验）
+
+**下次扫描**：增量更新模式（检查 commit hash 变更）
+
 ### 2026-05-21 — 增量更新
 **Commit**: 353989234d641c959d8c0aa37aea150735c4ccd8
 **Mode**: 增量更新（自上次扫描 c63e3fcf76ba9e8b362d9d73ebccab934d1d998d）

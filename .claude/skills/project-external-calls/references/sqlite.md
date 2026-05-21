@@ -11,15 +11,17 @@ better-sqlite3 — synchronous SQLite driver, ESM interop
 ## Call Locations
 | File | Purpose |
 |------|---------|
-| server/session-store.ts | Session + message storage |
+| server/session-store.ts | Session + message + IM (im_messages/im_rooms) storage |
 | server/cron-task-store.ts | Cron task + run storage |
 | server/batch-store.ts | Batch task + item storage |
 | server/chatbot/chatbot-store.ts | Chatbot user state storage |
 | server/stardom/stardom-store.ts | Stardom agent + task registry |
 | server/knowledge-extractor-store.ts | Knowledge extraction progress |
 | server/achievement-store.ts | Achievement progress + stats + streaks + leaderboard |
+| server/smart-path-store.ts | Smart Path run log (smartpath_run_log) |
 | server/web-access/chrome-sites.ts | Chrome bookmark/history DB (read-only) |
 
 ## Purpose
 Local SQLite DB for all persistent state: sessions, messages, cron/batch tasks,
-chatbot sessions, Stardom registry, knowledge extraction progress, and Chrome browser data (bookmarks/history read-only).
+chatbot sessions, Stardom registry, knowledge extraction progress, IM (messages/rooms),
+Smart Path run logs, and Chrome browser data (bookmarks/history read-only).

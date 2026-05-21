@@ -35,3 +35,8 @@ crontab.lock
 .sman/paths/*/runs/
 .sman/paths/*/reports/node_modules
 .sman/paths/*/tmp/
+
+# Sman path artifacts
+.sman/paths/*/runs/
+.sman/paths/*/reports/
+.sman/paths/*/tmp/

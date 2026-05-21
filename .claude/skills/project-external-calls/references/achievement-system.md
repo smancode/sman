@@ -59,7 +59,13 @@ CREATE TABLE achievement_board (
 ```
 
 ## Purpose
-Local SQLite DB for achievement system: progress tracking, stats aggregation, streak calculation, and leaderboard caching.
+Local SQLite DB for achievement system: progress tracking, stats aggregation, streak calculation, leaderboard caching, and Smart Path scoring.
+
+## Smart Path Integration
+- **Event Tracking**: `smartpath_run` event (triggered on path completion)
+- **Score Calculation**: completed=2 points, failed=0.5 points (other statuses ignored)
+- **Data Source**: `smartpath_run_log` table (DB-based, removed filesystem scanning)
+- **Reconciliation**: Query DB directly on startup (no backfill needed)
 
 ## External Integration
 - **Hub Upload**: `POST /api/achievement-report` (hourly, PSK encrypted)

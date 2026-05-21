@@ -33,6 +33,12 @@ Hub 是企业级 Sman 协作服务器，提供多 Agent 协作、任务分发、
 - **用途**: 上传本地成就数据 + 查询全局排行榜（支持按维度排序）
 - **频率**: 每小时自动上传，用户手动查询，**超时**: 10 秒，**认证**: PSK 加密
 
+### IM 消息同步
+- **消息类型**: `im.message`, `im.agent_delta`
+- **用途**: 跨设备同步 IM 消息（群聊、DM、Agent 输出）
+- **频率**: 实时转发，**超时**: 无（fire-and-forget）
+- **认证**: Hub WS 隧道已认证
+
 ## 配置来源
 | 配置项 | 环境变量 | Settings 路径 | 说明 |
 |--------|----------|---------------|------|
@@ -60,6 +66,12 @@ Hub 是企业级 Sman 协作服务器，提供多 Agent 协作、任务分发、
 - `server/achievement-engine.ts` → `uploadToLeaderboard()` + `fetchLeaderboard()`
 - 上传内容: agentId, agentName, totalPoints, totalUnlocked, level, tierCounts, dimensionScores
 - 查询参数: dimension (可选，支持按维度排序：total_sessions, total_messages, total_tokens 等)
+
+### IM 消息转发
+- `server/im/im-ws-handler.ts` → `sendToHub()`
+- 转发消息类型: `im.message` (文本消息), `im.agent_delta` (Agent 流式输出)
+- 调用时机: 用户发送消息、Agent 输出增量
+- Hub 广播: 所有连接的客户端收到 `im.*` 消息，实现跨设备同步
 
 ## 技能自动更新触发
 

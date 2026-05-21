@@ -4,8 +4,8 @@ name: Sman 外部依赖扫描
 description: Sman 外部依赖扫描 - HTTP 服务、数据库、消息队列、CDP 协议等外部服务调用
 category: integration
 _scanned:
-  commitHash: "353989234d641c959d8c0aa37aea150735c4ccd8"
-  scannedAt: "2026-05-21T00:00:00.000Z"
+  commitHash: "70d53baa472e0b2f87d9b0080e3239118c1f1ec7"
+  scannedAt: "2026-05-22T00:00:00.000Z"
   branch: "master"
 ---
 
@@ -18,15 +18,15 @@ _scanned:
 | 服务 | 类型 | 用途 | 参考文档 |
 |------|------|------|---------|
 | **Anthropic Claude API** | LLM REST API | AI 对话、工具调用、流式响应 | [references/llm.md](references/llm.md) |
-| **SQLite (better-sqlite3)** | 嵌入式数据库 | 会话/消息/Cron/Batch/Chatbot/Stardom/Hub/Group/Achievement 持久化 | [references/sqlite.md](references/sqlite.md) |
+| **SQLite (better-sqlite3)** | 嵌入式数据库 | 会话/消息/Cron/Batch/Chatbot/Stardom/Hub/Group/Achievement/IM 持久化 | [references/sqlite.md](references/sqlite.md) |
 | **Git CLI** | Shell 命令 | 版本控制操作（status, diff, commit, push, log） | [references/git.md](references/git.md) |
 | **企业微信 Bot** | WebSocket (wss://) | 企业微信消息推送、流式回复、媒体文件 | [references/wecom-bot.md](references/wecom-bot.md) |
 | **飞书 Bot** | SDK (@larksuiteoapi/node-sdk) | 飞书事件监听、消息发送、文件下载 | [references/feishu-bot.md](references/feishu-bot.md) |
 | **微信 Bot** | HTTPS API (ilinkai.weixin.qq.com) | 微信 QR 登录、长轮询监听、消息发送 | [references/weixin-bot.md](references/weixin-bot.md) |
 | **星域服务器** | WebSocket (ws://) | 多 Agent 协作、任务分发、声望系统 | [references/stardom-server.md](references/stardom-server.md) |
-| **Hub 协作服务器** | HTTP + WebSocket | 企业级协作、任务分发、技能自动更新、广播消息、成就排行榜 | [references/hub.md](references/hub.md) |
+| **Hub 协作服务器** | HTTP + WebSocket | 企业级协作、任务分发、技能自动更新、广播消息、成就排行榜、IM 消息同步 | [references/hub.md](references/hub.md) |
 | **Hub 反馈/错误上报** | HTTPS POST | 用户反馈提交、错误日志上报（PSK 加密） | [references/hub-feedback-api.md](references/hub-feedback-api.md) |
-| **成就系统 (SQLite)** | Embedded DB | 成就进度、统计、连续天数、排行榜缓存 | [references/achievement-system.md](references/achievement-system.md) |
+| **成就系统 (SQLite)** | Embedded DB | 成就进度、统计、连续天数、排行榜缓存、Smart Path 积分 | [references/achievement-system.md](references/achievement-system.md) |
 | **Brave Search API** | MCP Server (stdio) | Web 搜索（需 Brave API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
 | **Tavily Search API** | MCP Server (stdio) | AI 原生搜索引擎（需 Tavily API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
 | **Baidu Search API** | MCP Server (stdio) | 中文搜索引擎（需 Baidu API Key） | [references/web-search-mcp.md](references/web-search-mcp.md) |
@@ -41,11 +41,12 @@ _scanned:
 5. **WAL 模式**: SQLite 启用 WAL 模式和外键约束，保证数据一致性
 6. **PSK 加密**: Hub 通信使用预共享密钥加密，支持时间戳防重放
 7. **异步优先**: Git 操作使用 `execFile` + Promise，支持并发调用和超时控制
+8. **IM 解耦**: IM 系统通过 Hub 广播消息实现跨设备同步，本地存储通过 SQLite 持久化
 
-## Recent Changes (since c63e3fcf)
+## Recent Changes (since 3539892)
 
-- **🆕 Achievement System**: 4 表（achievement_progress/achievement_stats/achievement_streaks/achievement_board）+ Hub 排行榜 API
-- **🔄 Hub**: 新增成就排行榜端点（`POST /api/achievement-report` + `GET /api/achievement-leaderboard?dimension=xxx`）
-- **🔄 Git**: 参数格式改为数组（防注入，`['status', '--porcelain']`），参考文件更新
-- **🔄 SmartPath**: AI 指南生成（`smartpath.guideChat/guideSave`），ephemeral sessions
-- **🔄 SmartPath**: 触发成就事件（`smartpath_run`）
+- **🆕 IM System**: 2 表（im_messages/im_rooms）+ Hub 消息同步 + Agent @mention 激活
+- **🔄 SmartPath**: 新增 smartpath_run_log 表追踪执行状态，成就计分改为 completed=2/failed=0.5
+- **🔄 Achievement**: 移除 filesystem backfill，改为从 DB 直接统计 smartpath_run_log
+- **🔄 Cron**: 支持手动触发（跳过空闲窗口检查），init 触发任务不写入 cron_runs 表
+- **🔄 Hub**: 新增 IM 消息转发（`im.*` 类型消息通过 Hub 广播）
