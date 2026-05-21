@@ -106,7 +106,7 @@ export function LeaderboardTab() {
         <div className="shrink-0 w-16 text-right">
           {activeDimension === 'total' ? t('achievement.leaderboard.pointsCol') : t('achievement.leaderboard.dimensionCol')}
         </div>
-        <div className="shrink-0 w-16 text-right">{t('achievement.leaderboard.unlockedCol')}</div>
+        {activeDimension === 'total' && <div className="shrink-0 w-16 text-right">{t('achievement.leaderboard.unlockedCol')}</div>}
       </div>
 
       {/* Entries */}
@@ -182,10 +182,12 @@ export function LeaderboardTab() {
                 {activeDimension === 'total' ? entry.totalPoints : (entry.dimensionValue ?? 0)}
               </div>
 
-              {/* Unlocked count */}
-              <div className="text-[12px] text-muted-foreground shrink-0 w-16 text-right">
-                {entry.totalUnlocked}
-              </div>
+              {/* Unlocked count — only in total dimension */}
+              {activeDimension === 'total' && (
+                <div className="text-[12px] text-muted-foreground shrink-0 w-16 text-right">
+                  {entry.totalUnlocked}
+                </div>
+              )}
             </div>
           );
         })}

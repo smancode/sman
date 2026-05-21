@@ -106,10 +106,12 @@ export class CronExecutor {
       this.log.error(`Failed to abort task ${sessionId}`, { error: err });
     }
 
-    this.taskStore.updateRun(run.runId, {
-      status: 'failed',
-      errorMessage: reason,
-    });
+    if (run.runId > 0) {
+      this.taskStore.updateRun(run.runId, {
+        status: 'failed',
+        errorMessage: reason,
+      });
+    }
 
     this.activeRuns.delete(sessionId);
     this.log.info(`Task killed: ${sessionId}, reason: ${reason}`);
@@ -194,14 +196,16 @@ export class CronExecutor {
       return null;
     }
 
-    // 不在 activeRuns 中，检查数据库状态
-    const latestRun = this.taskStore.getLatestRun(task.id);
-    if (latestRun && latestRun.status === 'running') {
-      // 数据库显示 running 但 activeRuns 没有，说明异常终止
-      this.taskStore.updateRun(latestRun.id, {
-        status: 'failed',
-        errorMessage: '进程异常终止',
-      });
+    // 不在 activeRuns 中，检查数据库状态（init 触发的 task.id 不在数据库中，跳过）
+    if (!task.id.startsWith('init-')) {
+      const latestRun = this.taskStore.getLatestRun(task.id);
+      if (latestRun && latestRun.status === 'running') {
+        // 数据库显示 running 但 activeRuns 没有，说明异常终止
+        this.taskStore.updateRun(latestRun.id, {
+          status: 'failed',
+          errorMessage: '进程异常终止',
+        });
+      }
     }
 
     // 可以执行
@@ -225,13 +229,14 @@ export class CronExecutor {
 
   /**
    * 执行定时任务
+   * @param manual 是否为手动触发（前端点击执行），手动触发跳过空闲窗口检查
    */
-  async execute(task: CronTask): Promise<void> {
+  async execute(task: CronTask, manual = false): Promise<void> {
     const isInitTrigger = task.id.startsWith('init-');
 
     // skill-auto-updater: check 5-min idle window and serial execution
-    // Skip these checks for init-triggered runs (first workspace init)
-    if (task.skillName === SKILL_AUTO_UPDATER && !isInitTrigger) {
+    // Skip for init-triggered and manual-triggered runs
+    if (task.skillName === SKILL_AUTO_UPDATER && !isInitTrigger && !manual) {
       const lastActivity = this.sessionManager.getLastStreamActivityAt();
       const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
       if (lastActivity > 0 && Date.now() - lastActivity < IDLE_THRESHOLD_MS) {
@@ -263,19 +268,23 @@ export class CronExecutor {
     // 解析 crontab.md：第一行可能是 cron 表达式，需要跳过
     const parsed = parseCrontabMd(crontabContent);
 
-    // 写入 lock
+    // 创建执行记录（init 触发的 task.id 不在 cron_tasks 表中，跳过 createRun 避免 FK 约束失败）
+    let runId = -1;
+    if (!isInitTrigger) {
+      const run = this.taskStore.createRun(task.id, sessionId);
+      runId = run.id;
+    }
+
+    // 写入 lock（在 createRun 成功之后，避免 FK 失败时留下幽灵 lock）
     const lockPath = this.getLockFilePath(task.workspace, task.skillName);
     this.appendLockFile(lockPath, sessionId);
-
-    // 创建执行记录
-    const run = this.taskStore.createRun(task.id, sessionId);
 
     // 创建 AbortController
     const abortController = new AbortController();
 
     // 记录 activeRun
     const activeRun: ActiveRun = {
-      runId: run.id,
+      runId,
       taskId: task.id,
       sessionId,
       workspace: task.workspace,
@@ -301,7 +310,9 @@ export class CronExecutor {
         const ar = this.activeRuns.get(sessionId);
         if (ar) {
           ar.lastActivityAt = new Date();
-          this.taskStore.updateRun(ar.runId, { lastActivityAt: new Date().toISOString() });
+          if (ar.runId > 0) {
+            this.taskStore.updateRun(ar.runId, { lastActivityAt: new Date().toISOString() });
+          }
         }
       };
 
@@ -314,7 +325,9 @@ export class CronExecutor {
       );
 
       // 成功
-      this.taskStore.updateRun(run.id, { status: 'success' });
+      if (runId > 0) {
+        this.taskStore.updateRun(runId, { status: 'success' });
+      }
       this.log.info(`Task ${task.id} completed successfully`);
       this._onRunStatusChange?.(task.id, 'success');
       emitAchievementEvent({ type: 'cron_executed', data: {} });
@@ -324,7 +337,9 @@ export class CronExecutor {
         // 已被 kill，状态已在 killTask 中更新
         this.log.info(`Task ${task.id} was aborted`);
       } else {
-        this.taskStore.updateRun(run.id, { status: 'failed', errorMessage });
+        if (runId > 0) {
+          this.taskStore.updateRun(runId, { status: 'failed', errorMessage });
+        }
         this.log.error(`Task ${task.id} failed`, { error: errorMessage });
         this._onRunStatusChange?.(task.id, 'failed');
       }

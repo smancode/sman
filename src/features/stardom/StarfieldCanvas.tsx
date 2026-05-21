@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface Star {
   x: number;
@@ -53,20 +53,6 @@ function createStar(width: number, height: number, resetZ = false): Star {
 export function StarfieldCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
-  );
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  const bgColor = isDark ? '#0a0a0f' : '#ffffff';
-  const trailRgb = isDark ? '10, 10, 15' : '255, 255, 255';
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -95,8 +81,7 @@ export function StarfieldCanvas() {
 
     const draw = () => {
       frame++;
-      ctx.fillStyle = `rgba(${trailRgb}, ${TRAIL_ALPHA})`;
-      ctx.fillRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height);
 
       const cx = width / 2;
       const cy = height / 2;
@@ -144,15 +129,14 @@ export function StarfieldCanvas() {
       animRef.current = requestAnimationFrame(draw);
     };
 
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, width, height);
+    ctx.clearRect(0, 0, width, height);
     animRef.current = requestAnimationFrame(draw);
 
     return () => {
       window.removeEventListener('resize', resize);
       cancelAnimationFrame(animRef.current);
     };
-  }, [bgColor, trailRgb]);
+  }, []);
 
   return (
     <canvas
@@ -162,7 +146,7 @@ export function StarfieldCanvas() {
         inset: 0,
         width: '100%',
         height: '100%',
-        background: bgColor,
+        pointerEvents: 'none',
       }}
     />
   );

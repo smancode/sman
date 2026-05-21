@@ -131,7 +131,7 @@ export class CronScheduler {
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
-    await this.executor.execute(task);
+    await this.executor.execute(task, true);
   }
 
   getNextRunAt(taskId: string): string | null {
