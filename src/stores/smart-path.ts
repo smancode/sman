@@ -84,6 +84,7 @@ interface SmartPathState {
   stepEdits: Record<number, Partial<SmartPathStep>>;
   currentStepIndex: number;
   stepUseRefs: boolean;
+  pathUseRefsMap: Record<string, boolean>;
 
   startStepping: (pathId: string, workspace: string, args?: string, useRefs?: boolean) => Promise<void>;
   runStepContinue: (pathId: string, workspace: string, args?: string, useRefs?: boolean) => Promise<void>;
@@ -93,6 +94,7 @@ interface SmartPathState {
   updateStepEdit: (index: number, field: keyof SmartPathStep, value: string | string[]) => void;
   finalizeStepping: (pathId: string, workspace: string) => Promise<void>;
   cancelStepping: (pathId: string) => void;
+  setPathUseRefs: (pathId: string, value: boolean) => void;
 
   // 指南对话
   guideChatOpen: Record<number, boolean>;
@@ -140,6 +142,7 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
   stepEdits: {},
   currentStepIndex: -1,
   stepUseRefs: false,
+  pathUseRefsMap: {},
 
   fetchPaths: async (workspaces) => {
     const client = getWsClient();
@@ -392,7 +395,14 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
 
   clearStepExecutionState: () => set({ stepExecutionStream: {}, stepExecutionStatus: {} }),
 
-  setCurrentPath: (path) => set({ currentPath: path, runs: [], reports: [], currentReport: null, stepExecutionStream: {}, stepExecutionStatus: {}, references: [], currentReference: null }),
+  setCurrentPath: (path) => set({
+    currentPath: path, runs: [], reports: [], currentReport: null,
+    stepExecutionStream: {}, stepExecutionStatus: {},
+    references: [], currentReference: null, runLogs: [],
+    stepping: false, finalizing: false, stepBlueprint: null, stepRunId: null,
+    stepResults: [], stepDescriptions: [], stepDeliveryChecks: [], stepEdits: {},
+    currentStepIndex: -1,
+  }),
   clearError: () => set({ error: null }),
 
   fetchReferences: async (pathId, workspace) => {
@@ -667,6 +677,10 @@ export const useSmartPathStore = create<SmartPathState>((set) => ({
       stepDeliveryChecks: [],
       currentStepIndex: -1,
     });
+  },
+
+  setPathUseRefs: (pathId, value) => {
+    set((s) => ({ pathUseRefsMap: { ...s.pathUseRefsMap, [pathId]: value } }));
   },
 
   // ── 指南对话 ──

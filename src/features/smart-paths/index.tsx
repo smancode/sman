@@ -780,9 +780,11 @@ function PathDetail({ path, onEdit, onRun, onAbort, onDelete }: {
   const fetchReference = useSmartPathStore((s) => s.fetchReference);
   const runLogs = useSmartPathStore((s) => s.runLogs);
   const fetchRunLogs = useSmartPathStore((s) => s.fetchRunLogs);
+  const pathUseRefsMap = useSmartPathStore((s) => s.pathUseRefsMap);
+  const setPathUseRefs = useSmartPathStore((s) => s.setPathUseRefs);
+  const useRefs = pathUseRefsMap[path.id] ?? false;
   const [viewingReport, setViewingReport] = useState<string | null>(null);
   const [viewingRef, setViewingRef] = useState<string | null>(null);
-  const [useRefs, setUseRefs] = useState(false);
 
   useEffect(() => { fetchRunLogs(path.id, path.workspace); }, [path.id]);
 
@@ -822,7 +824,7 @@ function PathDetail({ path, onEdit, onRun, onAbort, onDelete }: {
               variant="outline"
               size="sm"
               className={useRefs ? '' : 'text-muted-foreground/50'}
-              onClick={() => setUseRefs(!useRefs)}
+              onClick={() => setPathUseRefs(path.id, !useRefs)}
               title={t('smartpath.useReferencesHint')}
             >
               {useRefs ? <CheckCircle className="h-3.5 w-3.5 mr-1" /> : <Ban className="h-3.5 w-3.5 mr-1" />}
@@ -1106,7 +1108,7 @@ export function SmartPathPage() {
           {editing && currentPath ? (
             <PathEditor path={currentPath} onSave={handleSave} onCancel={() => { clearStepExecutionState(); setEditing(false); }} />
           ) : currentPath ? (
-            <PathDetail path={currentPath}
+            <PathDetail key={currentPath.id} path={currentPath}
               onEdit={() => setEditing(true)}
               onRun={(useRefs) => runPath(currentPath.id, currentPath.workspace, currentPath.defaultArgs, useRefs)}
               onAbort={() => abortPath(currentPath.id)}
