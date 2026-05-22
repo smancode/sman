@@ -372,6 +372,21 @@ export const ChatInput = memo(function ChatInput({
 
     touchRoom(roomId);
 
+    // Optimistic insert — show message immediately
+    const tempId = `temp-${Date.now()}`;
+    const mySenderId = useIMStore.getState().mySenderId;
+    if (mySenderId) {
+      useIMStore.getState().addOptimisticMessage({
+        id: tempId,
+        roomId,
+        sender: mySenderId,
+        content: finalText,
+        type: 'text',
+        timestamp: Date.now(),
+        mentionedAgents,
+      });
+    }
+
     setInput('');
     setStagedMedia([]);
     setShowMention(false);

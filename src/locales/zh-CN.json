@@ -4994,5 +4994,9 @@
   "im.input.placeholder": {
     "text": "输入 @ 选择 Agent 发送指令",
     "context": "IM 输入框占位符"
+  },
+  "im.sendTimeout": {
+    "text": "消息发送超时",
+    "context": "IM 乐观消息发送超时提示"
   }
 }

@@ -130,6 +130,10 @@ export function useRoomMessages(roomId: string | undefined, options?: RoomMessag
           if (String(payload.roomId) !== roomId) return;
           clearTimeout(timeout);
           unsub();
+          // Extract clientId from history response so isSelf works immediately
+          if (payload.clientId && !useIMStore.getState().mySenderId) {
+            useIMStore.getState().setMySenderId(String(payload.clientId));
+          }
           const messages = Array.isArray(payload.messages) ? payload.messages : [];
           resolve(messages.map(parseIMMessage));
         });
@@ -186,31 +190,14 @@ export function useSendMessage() {
       if (!client) throw new Error('Not connected');
       if (!client.connected) throw new Error('WebSocket not connected');
 
-      return new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          unsubAck();
-          reject(new Error('Send message timeout'));
-        }, 10_000);
-
-        const unsubAck = wrapWsHandler(client, 'im.sent', (msg) => {
-          const payload = (msg as Record<string, unknown>).data as Record<string, unknown> ?? msg;
-          if (String(payload.roomId) !== params.roomId) return;
-          clearTimeout(timeout);
-          unsubAck();
-          // Remember my sender ID from server
-          if (payload.sender) {
-            useIMStore.getState().setMySenderId(String(payload.sender));
-          }
-          resolve();
-        });
-
-        client.send({
-          type: 'im.send',
-          roomId: params.roomId,
-          content: params.content,
-          mentionedAgents: params.mentionedAgents,
-          quoteId: params.quoteId,
-        });
+      // Fire-and-forget: optimistic insert already happened in ChatInput,
+      // server will broadcast im.message back which addMessage handles.
+      client.send({
+        type: 'im.send',
+        roomId: params.roomId,
+        content: params.content,
+        mentionedAgents: params.mentionedAgents,
+        quoteId: params.quoteId,
       });
     },
   });

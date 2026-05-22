@@ -170,6 +170,20 @@ cronScheduler.setSessionStore(store);
 // WebSocket client tracking (declared early for use by broadcast)
 const clients = new Set<WebSocket>();
 const authenticatedClients = new Set<WebSocket>();
+// Map ws → clientId for IM room-scoped broadcasting
+const wsClientIdMap = new Map<WebSocket, string>();
+// IM room subscriptions: ws → Set<roomId> (like TailChat Socket.IO rooms)
+const wsRoomSubs = new Map<WebSocket, Set<string>>();
+
+function imJoinRoom(ws: WebSocket, roomId: string) {
+  let rooms = wsRoomSubs.get(ws);
+  if (!rooms) { rooms = new Set(); wsRoomSubs.set(ws, rooms); }
+  rooms.add(roomId);
+}
+
+function imLeaveRoom(ws: WebSocket, roomId: string) {
+  wsRoomSubs.get(ws)?.delete(roomId);
+}
 
 // ── Client ↔ Session bidirectional mapping ──
 // Tracks which sessions each client has subscribed to (for multi-tab support)
@@ -1243,14 +1257,15 @@ const wss = new WebSocketServer({
 });
 
 // Initialize IM broadcast functions (needs wss/clients which are now available)
+// Like TailChat: broadcast only to WS connections that have joined the room
 imModule.setBroadcastFn(
   (roomId: string, msg: any, excludeWs?: any) => {
-    // Broadcast to all authenticated WS clients (IM rooms are per-client for now)
     const data = JSON.stringify(msg);
-    for (const client of authenticatedClients) {
-      if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
-        client.send(data);
-      }
+    for (const [client, rooms] of wsRoomSubs) {
+      if (client === excludeWs) continue;
+      if (client.readyState !== WebSocket.OPEN) continue;
+      if (!rooms.has(roomId)) continue;
+      client.send(data);
     }
   },
   (ws: any, msg: any) => ws.send(JSON.stringify(msg)),
@@ -3208,14 +3223,39 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         }
 
-        // IM operations
+        // IM operations — all room-scoped, like TailChat Socket.IO rooms
         case 'im.send':
         case 'im.history':
         case 'im.sync':
-        case 'im.typing': {
+        case 'im.typing':
+        case 'im.whoami':
+        case 'im.room.join':
+        case 'im.room.leave': {
           const imHandler = imModule.getHandler();
           if (imHandler) {
-            imHandler.handleLocalMessage(msg, ws, { clientId: getClientId() });
+            const cid = getClientId();
+            wsClientIdMap.set(ws, cid);
+
+            // Auto-join room on send/history (like TailChat findAndJoinRoom)
+            if (msg.roomId) {
+              imJoinRoom(ws, String(msg.roomId));
+              // Also ensure sender is in room members
+              const room = imModule.imStore.getRoom(String(msg.roomId));
+              if (room && !room.members.includes(cid)) {
+                room.members.push(cid);
+                imModule.imStore.updateRoomMembers(String(msg.roomId), room.members);
+              }
+            }
+
+            if (msg.type === 'im.room.join') {
+              // Explicit join — just subscribe, no handler needed
+              ws.send(JSON.stringify({ type: 'im.room.joined', roomId: msg.roomId }));
+            } else if (msg.type === 'im.room.leave') {
+              imLeaveRoom(ws, String(msg.roomId));
+              ws.send(JSON.stringify({ type: 'im.room.left', roomId: msg.roomId }));
+            } else {
+              imHandler.handleLocalMessage(msg, ws, { clientId: cid });
+            }
           } else {
             ws.send(JSON.stringify({ type: 'im.error', error: 'IM not initialized' }));
           }
@@ -3254,6 +3294,8 @@ wss.on('connection', (ws: WebSocket) => {
     clearTimeout(authTimeout);
     clients.delete(ws);
     authenticatedClients.delete(ws);
+    wsClientIdMap.delete(ws);
+    wsRoomSubs.delete(ws);
     // Clean up session subscriptions for this client
     unsubscribeClientFromAllSessions(ws);
     log.info('WebSocket client disconnected');

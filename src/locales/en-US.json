@@ -4994,5 +4994,9 @@
   "im.input.placeholder": {
     "text": "Type @ to select an Agent and send commands",
     "context": "IM input placeholder"
+  },
+  "im.sendTimeout": {
+    "text": "Message send timeout",
+    "context": "IM optimistic message send timeout tooltip"
   }
 }

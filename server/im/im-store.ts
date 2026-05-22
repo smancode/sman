@@ -172,4 +172,10 @@ export class IMStore {
       'UPDATE im_rooms SET last_message = ?, last_message_time = ? WHERE id = ?',
     ).run(preview, time, roomId);
   }
+
+  updateRoomMembers(roomId: string, members: string[]): void {
+    this.db.prepare(
+      'UPDATE im_rooms SET members = ? WHERE id = ?',
+    ).run(JSON.stringify(members), roomId);
+  }
 }

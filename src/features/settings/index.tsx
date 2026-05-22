@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Wifi, Bot, Cpu, Search, Sparkles, Users, Star, Languages, Download, Info, MessageSquare } from 'lucide-react';
+import { Wifi, Bot, Brain, Search, Sparkles, Users, Star, Languages, Download, Info, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { LLMSettings } from './LLMSettings';
@@ -97,7 +97,7 @@ function WechatGroupQR() {
 }
 
 const SECTIONS = [
-  { id: 'llm', icon: Cpu },
+  { id: 'llm', icon: Brain },
   { id: 'backend', icon: Wifi },
   { id: 'chatbot', icon: Bot },
   { id: 'websearch', icon: Search },

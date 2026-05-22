@@ -20,9 +20,10 @@ export class IMWsHandler {
   handleLocalMessage(msg: any, ws: WebSocket, clientInfo: { clientId: string }): void {
     switch (msg.type) {
       case 'im.send':      return this.handleSend(msg, ws, clientInfo);
-      case 'im.history':   return this.handleHistory(msg, ws);
+      case 'im.history':   return this.handleHistory(msg, ws, clientInfo);
       case 'im.sync':      return this.handleSync(msg, ws);
       case 'im.typing':    return this.handleTyping(msg, ws, clientInfo);
+      case 'im.whoami':    return this.sendToWs(ws, { type: 'im.whoami', data: { clientId: clientInfo.clientId } });
       default: break;
     }
   }
@@ -73,7 +74,7 @@ export class IMWsHandler {
     }
   }
 
-  private handleHistory(msg: any, ws: WebSocket): void {
+  private handleHistory(msg: any, ws: WebSocket, clientInfo: { clientId: string }): void {
     const { roomId, before, limit = 50 } = msg;
     if (!roomId) {
       this.sendToWs(ws, { type: 'im.error', error: 'Missing roomId' });
@@ -82,7 +83,7 @@ export class IMWsHandler {
     const messages = before
       ? this.imStore.getMessagesBefore(roomId, before, limit)
       : this.imStore.getMessagesByRoom(roomId, { limit });
-    this.sendToWs(ws, { type: 'im.history', data: { roomId, messages } });
+    this.sendToWs(ws, { type: 'im.history', data: { roomId, messages, clientId: clientInfo.clientId } });
   }
 
   private handleSync(msg: any, ws: WebSocket): void {

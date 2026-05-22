@@ -63,6 +63,7 @@ interface IMStore {
 
   // Actions — messages
   addMessage: (msg: IMMessage) => void;
+  addOptimisticMessage: (msg: IMMessage) => void;
   setRoomMessages: (roomId: string, messages: IMMessage[]) => void;
   touchRoom: (roomId: string) => void;
 
@@ -93,15 +94,28 @@ export const useIMStore = create<IMStore>((set, get) => ({
   replyQuote: null,
   mySenderId: null,
 
-  selectRoom: (roomId) => set({ selectedRoomId: roomId }),
+  selectRoom: (roomId) => {
+    const prev = get().selectedRoomId;
+    set({ selectedRoomId: roomId });
+    // Notify server of room join/leave (like TailChat findAndJoinRoom)
+    const client = getWsClient();
+    if (client?.connected) {
+      if (prev && prev !== roomId) {
+        client.send({ type: 'im.room.leave', roomId: prev });
+      }
+      if (roomId) {
+        client.send({ type: 'im.room.join', roomId });
+      }
+    }
+  },
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   addMessage: (msg) => set((state) => {
     const newMap = new Map(state.roomMessages);
     const existing = newMap.get(msg.roomId) || [];
-    // Dedup by id
-    if (existing.some(m => m.id === msg.id)) return state;
-    newMap.set(msg.roomId, [...existing, msg]);
+    // Dedup by id — also replace any optimistic message with matching temp id
+    const filtered = existing.filter(m => m.id !== msg.id && m.id !== `temp-${msg.id}`);
+    newMap.set(msg.roomId, [...filtered, msg]);
 
     // Update sidebar preview only (not sort time)
     const newActivity = new Map(state.roomLastActivity);
@@ -111,6 +125,22 @@ export const useIMStore = create<IMStore>((set, get) => ({
       : msg.type === 'agent_output' ? '[Agent 执行结果]'
       : msg.type === 'system' ? '[系统消息]'
       : '';
+    newActivity.set(msg.roomId, {
+      lastMessage: preview,
+      lastMessageTime: prev?.lastMessageTime ?? 0,
+    });
+
+    return { roomMessages: newMap, roomLastActivity: newActivity };
+  }),
+
+  addOptimisticMessage: (msg) => set((state) => {
+    const newMap = new Map(state.roomMessages);
+    const existing = newMap.get(msg.roomId) || [];
+    newMap.set(msg.roomId, [...existing, msg]);
+
+    const newActivity = new Map(state.roomLastActivity);
+    const prev = newActivity.get(msg.roomId);
+    const preview = msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content;
     newActivity.set(msg.roomId, {
       lastMessage: preview,
       lastMessageTime: prev?.lastMessageTime ?? 0,
@@ -247,6 +277,29 @@ export function registerIMListeners() {
     if (!roomId || !sender) return;
     useIMStore.getState().setTyping(roomId, sender);
   }));
+
+  // im.whoami → receive our clientId from server
+  unsubs.push(wrapHandler(client, 'im.whoami', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    if (payload.clientId) {
+      useIMStore.getState().setMySenderId(String(payload.clientId));
+    }
+  }));
+
+  // im.sent → update mySenderId from server ack
+  unsubs.push(wrapHandler(client, 'im.sent', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    if (payload.sender && !useIMStore.getState().mySenderId) {
+      useIMStore.getState().setMySenderId(String(payload.sender));
+    }
+  }));
+
+  // Request clientId immediately so isSelf works for history messages
+  if (!useIMStore.getState().mySenderId) {
+    client.send({ type: 'im.whoami' });
+  }
 
   imListenersCleanup = () => {
     for (const unsub of unsubs) unsub();
