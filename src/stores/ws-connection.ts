@@ -67,7 +67,7 @@ export function recreateClient(): WsClient {
   const token = getStoredToken();
 
   singletonClient = new WsClient({
-    port: parseInt(window.location.port) || 5880,
+    port: 5880,
     url,
     token,
   });
@@ -75,8 +75,8 @@ export function recreateClient(): WsClient {
   // Sync HTTP base URL so authFetch hits the right backend
   setHttpBaseUrl(url || '');
 
-  registerListeners(singletonClient);
   useWsConnection.setState({ client: singletonClient });
+  registerListeners(singletonClient);
   return singletonClient;
 }
 

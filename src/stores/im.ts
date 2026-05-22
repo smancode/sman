@@ -132,8 +132,6 @@ export const useIMStore = create<IMStore>((set, get) => ({
     const isOptimistic = msg.id.startsWith('temp-');
     const filtered = existing.filter(m => {
       if (m.id === msg.id) return false;
-      // When server message arrives, remove any temp message from same sender
-      // (server messages replace optimistic inserts)
       if (!isOptimistic && m.id.startsWith('temp-') && m.sender === msg.sender && m.content === msg.content) {
         return false;
       }

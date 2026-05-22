@@ -150,8 +150,8 @@ export class WsClient {
     this.handlers.get(event)?.forEach((handler) => {
       try {
         handler(...args);
-      } catch {
-        // Swallow handler errors
+      } catch (err) {
+        console.error(`[WsClient] handler error for event "${event}":`, err);
       }
     });
   }
