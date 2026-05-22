@@ -156,7 +156,7 @@ export class SessionStore {
       this.log.info('Migrated: added parent_task_id column to sessions table');
     }
 
-    // IM tables
+    // IM tables — create tables first, then migrate columns, then create indexes
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS im_messages (
         id TEXT PRIMARY KEY,
@@ -173,10 +173,6 @@ export class SessionStore {
         created_at DATETIME DEFAULT (datetime('now', 'localtime')),
         updated_at DATETIME DEFAULT (datetime('now', 'localtime'))
       );
-      CREATE INDEX IF NOT EXISTS idx_im_messages_room_ts ON im_messages(room_id, timestamp);
-      CREATE INDEX IF NOT EXISTS idx_im_messages_sender ON im_messages(sender);
-      CREATE INDEX IF NOT EXISTS idx_im_messages_session ON im_messages(session_id);
-
 
       CREATE TABLE IF NOT EXISTS im_rooms (
         id TEXT PRIMARY KEY,
@@ -187,6 +183,30 @@ export class SessionStore {
         last_message_time INTEGER,
         created_at DATETIME DEFAULT (datetime('now', 'localtime'))
       );
+    `);
+
+    // IM messages seq migration — must happen before index creation
+    try {
+      this.db.exec('ALTER TABLE im_messages ADD COLUMN seq INTEGER DEFAULT 0');
+      this.log.info('Migrated: added seq column to im_messages table');
+    } catch {
+      // Column already exists — ignore
+    }
+
+    // IM read receipts migration
+    try {
+      this.db.exec('ALTER TABLE im_rooms ADD COLUMN last_read TEXT DEFAULT "{}"');
+      this.log.info('Migrated: added last_read column to im_rooms table');
+    } catch {
+      // column already exists
+    }
+
+    // Create indexes after migrations
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_im_messages_room_ts ON im_messages(room_id, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_im_messages_sender ON im_messages(sender);
+      CREATE INDEX IF NOT EXISTS idx_im_messages_session ON im_messages(session_id);
+      CREATE INDEX IF NOT EXISTS idx_im_messages_room_seq ON im_messages(room_id, seq);
     `);
 
     this.db.pragma('journal_mode = WAL');

@@ -1,7 +1,7 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useLocale } from '@/locales';
 import { useIMStore } from '@/stores/im';
-import { useRoomList, useRoomMessages } from '@/queries/use-im';
+import { useRoomList, useRoomMessagesInfinite, fetchOlderMessages } from '@/queries/use-im';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
@@ -17,10 +17,14 @@ export default function IMEntry() {
   const roomMessages = useIMStore((s) => s.roomMessages);
   const storeReplyQuote = useIMStore((s) => s.replyQuote);
   const setReplyQuote = useIMStore((s) => s.setReplyQuote);
-  const { data: fetchedMessages = [] } = useRoomMessages(selectedRoomId ?? undefined);
+  const { data: fetchedMessages = [] } = useRoomMessagesInfinite(selectedRoomId ?? undefined);
 
   const [prefillContent, setPrefillContent] = useState('');
   const [prefillConsumed, setPrefillConsumed] = useState(false);
+
+  const [olderMessages, setOlderMessages] = useState<import('@/schemas/im').IMMessage[]>([]);
+  const [isLoadingOlder, setLoadingOlder] = useState(false);
+  const isLoadingOlderRef = useRef(false);
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
@@ -42,13 +46,32 @@ export default function IMEntry() {
     setReplyQuote(null);
   }, [setReplyQuote]);
 
+  useEffect(() => {
+    setOlderMessages([]);
+  }, [selectedRoomId]);
+
   const messages = useMemo(() => {
     if (!selectedRoomId) return [];
     const map = new Map<string, typeof fetchedMessages[0]>();
+    for (const m of olderMessages) map.set(m.id, m);
     for (const m of fetchedMessages) map.set(m.id, m);
     for (const m of roomMessages.get(selectedRoomId) || []) map.set(m.id, m);
     return [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
-  }, [selectedRoomId, fetchedMessages, roomMessages]);
+  }, [selectedRoomId, fetchedMessages, roomMessages, olderMessages]);
+
+  const handleLoadOlder = useCallback(() => {
+    if (!selectedRoomId || isLoadingOlderRef.current) return;
+    const allMsgs = messages;
+    if (allMsgs.length === 0) return;
+    const oldestTs = allMsgs[0].timestamp;
+    isLoadingOlderRef.current = true;
+    setLoadingOlder(true);
+    fetchOlderMessages(selectedRoomId, oldestTs).then((older) => {
+      setOlderMessages((prev) => [...older, ...prev]);
+      isLoadingOlderRef.current = false;
+      setLoadingOlder(false);
+    });
+  }, [selectedRoomId, messages]);
 
   const hasActiveRoom = !!selectedRoomId;
   const isEmpty = messages.length === 0;
@@ -66,7 +89,7 @@ export default function IMEntry() {
             </div>
           </div>
         ) : (
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onLoadOlder={handleLoadOlder} isLoadingOlder={isLoadingOlder} />
         )}
       </div>
 

@@ -24,6 +24,8 @@ export class IMWsHandler {
       case 'im.sync':      return this.handleSync(msg, ws);
       case 'im.typing':    return this.handleTyping(msg, ws, clientInfo);
       case 'im.whoami':    return this.sendToWs(ws, { type: 'im.whoami', data: { clientId: clientInfo.clientId } });
+      case 'im.read':      return this.handleRead(msg, clientInfo);
+      case 'im.unread':    return this.handleUnread(msg, ws, clientInfo);
       default: break;
     }
   }
@@ -45,6 +47,7 @@ export class IMWsHandler {
       return;
     }
 
+    const seq = this.imStore.getNextSeq(roomId);
     const imMsg: IMMessage = {
       id: crypto.randomUUID(),
       roomId,
@@ -54,6 +57,7 @@ export class IMWsHandler {
       quoteId,
       type: 'text',
       timestamp: Date.now(),
+      seq,
     };
 
     this.imStore.insertMessage(imMsg);
@@ -101,6 +105,19 @@ export class IMWsHandler {
     const { roomId } = msg;
     if (!roomId) return;
     this.broadcastToRoom(roomId, { type: 'im.typing', data: { roomId, sender: clientInfo.clientId } }, ws);
+  }
+
+  private handleRead(msg: any, clientInfo: { clientId: string }): void {
+    const { roomId, timestamp } = msg;
+    if (!roomId || !timestamp) return;
+    this.imStore.updateLastRead(roomId, clientInfo.clientId, timestamp);
+  }
+
+  private handleUnread(msg: any, ws: WebSocket, clientInfo: { clientId: string }): void {
+    const unreadCounts: Record<string, number> = {};
+    const counts = this.imStore.getAllUnreadCounts(clientInfo.clientId);
+    counts.forEach((count, roomId) => { unreadCounts[roomId] = count; });
+    this.sendToWs(ws, { type: 'im.unread', data: { counts: unreadCounts } });
   }
 
   private sendToHub(msg: Record<string, unknown>): void {

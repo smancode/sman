@@ -12,6 +12,7 @@ export interface IMMessage {
   attachments?: any[];
   sessionId?: string;
   timestamp: number;
+  seq: number;
 }
 
 export interface IMRoom {
@@ -35,6 +36,7 @@ interface IMMessageRow {
   attachments: string | null;
   session_id: string | null;
   timestamp: number;
+  seq: number;
 }
 
 interface IMRoomRow {
@@ -59,6 +61,7 @@ function parseMessageRow(row: IMMessageRow): IMMessage {
     attachments: row.attachments ? JSON.parse(row.attachments) : undefined,
     sessionId: row.session_id ?? undefined,
     timestamp: row.timestamp,
+    seq: row.seq ?? 0,
   };
 }
 
@@ -73,14 +76,30 @@ function parseRoomRow(row: IMRoomRow): IMRoom {
   };
 }
 
+const SELECT_MESSAGE_COLS = 'SELECT id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp, seq FROM im_messages';
+
 export class IMStore {
+  private roomSeqCounters = new Map<string, number>();
+
   constructor(private db: Database.Database) {}
+
+  getNextSeq(roomId: string): number {
+    if (!this.roomSeqCounters.has(roomId)) {
+      const row = this.db.prepare(
+        'SELECT MAX(seq) as maxSeq FROM im_messages WHERE room_id = ?',
+      ).get(roomId) as { maxSeq: number | null } | undefined;
+      this.roomSeqCounters.set(roomId, (row?.maxSeq ?? 0) + 1);
+    }
+    const seq = this.roomSeqCounters.get(roomId)!;
+    this.roomSeqCounters.set(roomId, seq + 1);
+    return seq;
+  }
 
   insertMessage(msg: IMMessage): void {
     this.db.prepare(`
       INSERT OR IGNORE INTO im_messages
-        (id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp, seq)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       msg.id,
       msg.roomId,
@@ -93,18 +112,19 @@ export class IMStore {
       msg.attachments ? JSON.stringify(msg.attachments) : null,
       msg.sessionId ?? null,
       msg.timestamp,
+      msg.seq ?? 0,
     );
   }
 
   getMessage(id: string): IMMessage | undefined {
     const row = this.db.prepare(
-      'SELECT id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp FROM im_messages WHERE id = ?',
+      `${SELECT_MESSAGE_COLS} WHERE id = ?`,
     ).get(id) as IMMessageRow | undefined;
     return row ? parseMessageRow(row) : undefined;
   }
 
   getMessagesByRoom(roomId: string, options: { before?: number; limit: number }): IMMessage[] {
-    let sql = 'SELECT id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp FROM im_messages WHERE room_id = ?';
+    let sql = `${SELECT_MESSAGE_COLS} WHERE room_id = ?`;
     const params: (string | number)[] = [roomId];
 
     if (options.before !== undefined) {
@@ -121,7 +141,7 @@ export class IMStore {
 
   getMessagesBefore(roomId: string, beforeTimestamp: number, limit: number): IMMessage[] {
     const rows = this.db.prepare(
-      'SELECT id, room_id, sender, content, mentioned_agents, quote_id, type, status, attachments, session_id, timestamp FROM im_messages WHERE room_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?',
+      `${SELECT_MESSAGE_COLS} WHERE room_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?`,
     ).all(roomId, beforeTimestamp, limit) as IMMessageRow[];
     // Return in ASC order (reversed from DESC query)
     return rows.reverse().map(parseMessageRow);
@@ -177,5 +197,41 @@ export class IMStore {
     this.db.prepare(
       'UPDATE im_rooms SET members = ? WHERE id = ?',
     ).run(JSON.stringify(members), roomId);
+  }
+
+  updateLastRead(roomId: string, clientId: string, timestamp: number): void {
+    const row = this.db.prepare('SELECT last_read FROM im_rooms WHERE id = ?').get(roomId) as { last_read: string } | undefined;
+    const reads = row ? JSON.parse(row.last_read || '{}') : {};
+    reads[clientId] = timestamp;
+    this.db.prepare('UPDATE im_rooms SET last_read = ? WHERE id = ?').run(JSON.stringify(reads), roomId);
+  }
+
+  getLastRead(roomId: string, clientId: string): number {
+    const row = this.db.prepare('SELECT last_read FROM im_rooms WHERE id = ?').get(roomId) as { last_read: string } | undefined;
+    if (!row) return 0;
+    const reads = JSON.parse(row.last_read || '{}');
+    return reads[clientId] || 0;
+  }
+
+  getUnreadCount(roomId: string, clientId: string): number {
+    const lastRead = this.getLastRead(roomId, clientId);
+    if (!lastRead) {
+      const row = this.db.prepare('SELECT COUNT(*) as count FROM im_messages WHERE room_id = ? AND type != ?').get(roomId, 'system') as { count: number };
+      return row.count;
+    }
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM im_messages WHERE room_id = ? AND timestamp > ? AND type != ?').get(roomId, lastRead, 'system') as { count: number };
+    return row.count;
+  }
+
+  getAllUnreadCounts(clientId: string): Map<string, number> {
+    const rooms = this.listRooms();
+    const result = new Map<string, number>();
+    for (const room of rooms) {
+      const count = this.getUnreadCount(room.id, clientId);
+      if (count > 0) {
+        result.set(room.id, count);
+      }
+    }
+    return result;
   }
 }

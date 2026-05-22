@@ -115,6 +115,11 @@ export function MessageList({ messages, onLoadOlder, isLoadingOlder }: MessageLi
     <div ref={scrollRef} className="px-4 pt-3 pb-4 flex flex-col gap-0.5">
       {/* Sentinel for top pagination */}
       <div ref={sentinelRef} className="h-0" />
+      {isLoadingOlder && (
+        <div className="flex justify-center py-2">
+          <span className="text-xs text-muted-foreground">加载中...</span>
+        </div>
+      )}
 
       {sorted.map((msg, idx) => {
         const prevMsg = idx > 0 ? sorted[idx - 1] : null;

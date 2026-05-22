@@ -384,6 +384,7 @@ export const ChatInput = memo(function ChatInput({
         type: 'text',
         timestamp: Date.now(),
         mentionedAgents,
+        seq: 0,
       });
     }
 

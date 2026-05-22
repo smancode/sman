@@ -27,6 +27,7 @@ export const IMMessageSchema = z.object({
   attachments: z.array(z.any()).optional(),
   sessionId: z.string().optional(),
   timestamp: z.number(),
+  seq: z.number().default(0),
 }).passthrough();
 
 export const IMRoomSchema = z.object({
@@ -56,6 +57,7 @@ export function parseIMMessage(data: unknown): IMMessage {
     timestamp: 0,
     mentionedAgents: [],
     type: 'text',
+    seq: 0,
   };
 }
 

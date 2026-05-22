@@ -69,6 +69,7 @@ export class IMAgentBridge {
 
     // 1. Create agent_output message with status=running
     const agentMsgId = crypto.randomUUID();
+    const seq = this.imStore.getNextSeq(message.roomId);
     const agentMsg: IMMessage = {
       id: agentMsgId,
       roomId: message.roomId,
@@ -78,6 +79,7 @@ export class IMAgentBridge {
       type: 'agent_output',
       status: 'running',
       timestamp: Date.now(),
+      seq,
     };
     this.imStore.insertMessage(agentMsg);
     this.broadcastToRoom(message.roomId, { type: 'im.message', data: agentMsg });

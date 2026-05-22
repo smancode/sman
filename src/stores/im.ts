@@ -47,6 +47,9 @@ interface IMStore {
   // Per-room last message timestamp for reconnection sync
   roomLastMsgTimestamp: Map<string, number>;
 
+  // Unread counts (server-authoritative, updated locally for responsiveness)
+  roomUnreadCounts: Map<string, number>;
+
   // Agent streaming state
   agentStreams: Map<string, string>; // messageId -> accumulated content
 
@@ -87,6 +90,10 @@ interface IMStore {
 
   // Actions — reconnection sync
   syncAfterReconnect: () => void;
+
+  // Actions — read receipts
+  markRoomRead: (roomId: string) => void;
+  setUnreadCounts: (counts: Map<string, number>) => void;
 }
 
 export const useIMStore = create<IMStore>((set, get) => ({
@@ -95,6 +102,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
   roomMessages: new Map(),
   roomLastActivity: new Map(),
   roomLastMsgTimestamp: new Map(),
+  roomUnreadCounts: new Map(),
   agentStreams: new Map(),
   onlineUsers: new Set(),
   typingUsers: new Map(),
@@ -104,7 +112,6 @@ export const useIMStore = create<IMStore>((set, get) => ({
   selectRoom: (roomId) => {
     const prev = get().selectedRoomId;
     set({ selectedRoomId: roomId });
-    // Notify server of room join/leave (like TailChat findAndJoinRoom)
     const client = getWsClient();
     if (client?.connected) {
       if (prev && prev !== roomId) {
@@ -112,6 +119,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
       }
       if (roomId) {
         client.send({ type: 'im.room.join', roomId });
+        get().markRoomRead(roomId);
       }
     }
   },
@@ -120,11 +128,41 @@ export const useIMStore = create<IMStore>((set, get) => ({
   addMessage: (msg) => set((state) => {
     const newMap = new Map(state.roomMessages);
     const existing = newMap.get(msg.roomId) || [];
-    // Dedup by id — also replace any optimistic message with matching temp id
-    const filtered = existing.filter(m => m.id !== msg.id && m.id !== `temp-${msg.id}`);
-    newMap.set(msg.roomId, [...filtered, msg]);
+    // Remove exact duplicates and optimistic temp messages for same sender
+    const isOptimistic = msg.id.startsWith('temp-');
+    const filtered = existing.filter(m => {
+      if (m.id === msg.id) return false;
+      // When server message arrives, remove any temp message from same sender
+      // (server messages replace optimistic inserts)
+      if (!isOptimistic && m.id.startsWith('temp-') && m.sender === msg.sender && m.content === msg.content) {
+        return false;
+      }
+      return true;
+    });
+    const merged = [...filtered, msg];
 
-    // Update sidebar preview only (not sort time)
+    // Gap detection: if server message has seq, check for missing seqs
+    if (msg.seq && msg.seq > 1) {
+      const maxExistingSeq = Math.max(...filtered.map(m => m.seq || 0), 0);
+      if (msg.seq > maxExistingSeq + 1) {
+        // Gap detected — request missing messages via im.sync
+        const client = getWsClient();
+        if (client?.connected) {
+          const lastBeforeGap = filtered.filter(m => (m.seq || 0) < msg.seq)
+            .sort((a, b) => (b.seq || 0) - (a.seq || 0))[0];
+          if (lastBeforeGap) {
+            client.send({
+              type: 'im.sync',
+              roomId: msg.roomId,
+              afterTimestamp: lastBeforeGap.timestamp,
+            });
+          }
+        }
+      }
+    }
+
+    newMap.set(msg.roomId, merged);
+
     const newActivity = new Map(state.roomLastActivity);
     const prev = newActivity.get(msg.roomId);
     const preview = msg.type === 'text'
@@ -143,7 +181,12 @@ export const useIMStore = create<IMStore>((set, get) => ({
       newTimestamps.set(msg.roomId, msg.timestamp);
     }
 
-    return { roomMessages: newMap, roomLastActivity: newActivity, roomLastMsgTimestamp: newTimestamps };
+    const newUnread = new Map(state.roomUnreadCounts);
+    if (msg.roomId !== state.selectedRoomId && msg.type !== 'system') {
+      newUnread.set(msg.roomId, (newUnread.get(msg.roomId) || 0) + 1);
+    }
+
+    return { roomMessages: newMap, roomLastActivity: newActivity, roomLastMsgTimestamp: newTimestamps, roomUnreadCounts: newUnread };
   }),
 
   addOptimisticMessage: (msg) => set((state) => {
@@ -228,8 +271,26 @@ export const useIMStore = create<IMStore>((set, get) => ({
       client.send({ type: 'im.room.join', roomId: state.selectedRoomId });
       const lastTs = state.roomLastMsgTimestamp.get(state.selectedRoomId) || 0;
       client.send({ type: 'im.sync', roomId: state.selectedRoomId, afterTimestamp: lastTs });
+      get().markRoomRead(state.selectedRoomId);
     }
+    client.send({ type: 'im.unread' });
   },
+
+  markRoomRead: (roomId) => {
+    const client = getWsClient();
+    const messages = get().roomMessages.get(roomId) || [];
+    const lastMsg = messages[messages.length - 1];
+    if (client?.connected && lastMsg?.timestamp) {
+      client.send({ type: 'im.read', roomId, timestamp: lastMsg.timestamp });
+    }
+    set((state) => {
+      const newUnread = new Map(state.roomUnreadCounts);
+      newUnread.set(roomId, 0);
+      return { roomUnreadCounts: newUnread };
+    });
+  },
+
+  setUnreadCounts: (counts) => set({ roomUnreadCounts: counts }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -331,10 +392,26 @@ export function registerIMListeners() {
     }
   }));
 
+  // im.unread → server-authoritative unread counts
+  unsubs.push(wrapHandler(client, 'im.unread', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const counts = new Map<string, number>();
+    if (payload.counts && typeof payload.counts === 'object') {
+      for (const [roomId, count] of Object.entries(payload.counts)) {
+        counts.set(roomId, Number(count) || 0);
+      }
+    }
+    useIMStore.getState().setUnreadCounts(counts);
+  }));
+
   // Request clientId immediately so isSelf works for history messages
   if (!useIMStore.getState().mySenderId) {
     client.send({ type: 'im.whoami' });
   }
+
+  // Request server-authoritative unread counts
+  client.send({ type: 'im.unread' });
 
   imListenersCleanup = () => {
     for (const unsub of unsubs) unsub();

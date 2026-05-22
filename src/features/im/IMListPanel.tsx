@@ -42,6 +42,7 @@ export default function IMListPanel() {
   const selectedRoomId = useIMStore((s) => s.selectedRoomId);
   const selectRoom = useIMStore((s) => s.selectRoom);
   const roomLastActivity = useIMStore((s) => s.roomLastActivity);
+  const roomUnreadCounts = useIMStore((s) => s.roomUnreadCounts);
   const createRoom = useCreateRoom();
   const [showCreate, setShowCreate] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
@@ -128,6 +129,7 @@ export default function IMListPanel() {
         {sortedRooms.map((room) => {
           const isActive = selectedRoomId === room.id;
           const isDM = room.type === 'dm';
+          const unreadCount = roomUnreadCounts.get(room.id) || 0;
 
           return (
             <div
@@ -160,6 +162,12 @@ export default function IMListPanel() {
                   </div>
                 )}
               </div>
+
+              {unreadCount > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-[10px] font-bold flex items-center justify-center px-1 flex-shrink-0">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </div>
           );
         })}

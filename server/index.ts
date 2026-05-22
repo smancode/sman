@@ -3247,7 +3247,9 @@ wss.on('connection', (ws: WebSocket) => {
         case 'im.typing':
         case 'im.whoami':
         case 'im.room.join':
-        case 'im.room.leave': {
+        case 'im.room.leave':
+        case 'im.read':
+        case 'im.unread': {
           const imHandler = imModule.getHandler();
           if (imHandler) {
             const cid = getClientId();
