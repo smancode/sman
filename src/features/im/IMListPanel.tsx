@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Plus, MessageSquare, Bot } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Plus, MessageSquare, Bot, Check, Search } from 'lucide-react';
 import { t } from '@/locales';
 import { useRoomList, useCreateRoom } from '@/queries/use-im';
 import { useIMStore } from '@/stores/im';
-import type { IMRoom } from '@/schemas/im';
+import { useWsConnection } from '@/stores/ws-connection';
+import { parseIMMessage } from '@/schemas/im';
+import type { IMRoom, IMMessage } from '@/schemas/im';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,6 +49,44 @@ export default function IMListPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
 
+  // Search with debounce — server-side DB query
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResult, setSearchResult] = useState<{ rooms: IMRoom[]; messages: IMMessage[] } | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchSeqRef = useRef(0);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    clearTimeout(searchTimerRef.current);
+    if (!value.trim()) {
+      setSearchResult(null);
+      return;
+    }
+    searchTimerRef.current = setTimeout(() => {
+      const client = useWsConnection.getState().client;
+      if (!client?.connected) return;
+      const seq = ++searchSeqRef.current;
+      const handler = (msg: Record<string, unknown>) => {
+        const payload = (msg as Record<string, unknown>).data as Record<string, unknown>;
+        if (seq !== searchSeqRef.current) return;
+        const rooms = Array.isArray(payload.rooms) ? payload.rooms.map((r: unknown) => {
+          const row = r as Record<string, unknown>;
+          return {
+            id: row.id as string,
+            name: row.name as string,
+            type: (row.type as 'group' | 'dm' | 'workspace') || 'group' as const,
+            members: JSON.parse((row.members as string) || '[]'),
+          };
+        }) : [];
+        const messages = Array.isArray(payload.messages) ? payload.messages.map((m: unknown) => parseIMMessage(m)).filter((m: IMMessage) => m.id) : [];
+        setSearchResult({ rooms, messages });
+        client.off('im.search', handler as (...a: unknown[]) => void);
+      };
+      client.on('im.search', handler as (...a: unknown[]) => void);
+      client.send({ type: 'im.search', query: value.trim() });
+    }, 200);
+  }, []);
+
   // Merge realtime activity into room list, then sort by lastMessageTime desc
   const sortedRooms = useMemo(() => {
     return [...rooms]
@@ -62,6 +102,24 @@ export default function IMListPanel() {
       })
       .sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0));
   }, [rooms, roomLastActivity]);
+
+  // Display rooms: search results or full sorted list
+  const displayedRooms = useMemo(() => {
+    if (!searchResult) return sortedRooms;
+    // Use search result room IDs to filter, preserving sort order
+    const resultIds = new Set(searchResult.rooms.map(r => r.id));
+    // Also include rooms that had matching messages
+    const msgRoomIds = new Set(searchResult.messages.map(m => m.roomId));
+    const allMatched = new Set([...resultIds, ...msgRoomIds]);
+    return sortedRooms.filter(r => allMatched.has(r.id));
+  }, [sortedRooms, searchResult]);
+
+  // Auto-select first room when entering IM page
+  useEffect(() => {
+    if (!selectedRoomId && sortedRooms.length > 0) {
+      selectRoom(sortedRooms[0].id);
+    }
+  }, [selectedRoomId, sortedRooms, selectRoom]);
 
   const handleCreate = () => {
     const name = newRoomName.trim();
@@ -93,14 +151,17 @@ export default function IMListPanel() {
                 if (e.key === 'Enter') handleCreate();
                 if (e.key === 'Escape') { setShowCreate(false); setNewRoomName(''); }
               }}
+              onBlur={() => {
+                if (!newRoomName.trim()) { setShowCreate(false); }
+              }}
               autoFocus
             />
             <button
               onClick={handleCreate}
               disabled={!newRoomName.trim() || createRoom.isPending}
-              className="bg-[hsl(var(--primary))] text-primary-foreground text-xs px-3 py-1.5 rounded-lg hover:opacity-85 disabled:opacity-50"
+              className="p-1.5 rounded-lg transition-colors text-primary hover:bg-[hsl(var(--muted))] disabled:opacity-30 disabled:text-muted-foreground"
             >
-              {t('im.createRoom.confirm')}
+              <Check className="h-4 w-4" />
             </button>
           </div>
         ) : (
@@ -114,19 +175,32 @@ export default function IMListPanel() {
         )}
       </div>
 
+      {/* 搜索框 */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <input
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder={t('im.searchPlaceholder')}
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+
       {/* 列表 */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
           <div className="px-4 py-8 text-center text-xs text-muted-foreground">Loading...</div>
         )}
 
-        {!isLoading && sortedRooms.length === 0 && (
+        {!isLoading && displayedRooms.length === 0 && (
           <div className="px-4 py-8 text-center text-xs text-muted-foreground">
             {t('im.empty.noRooms')}
           </div>
         )}
 
-        {sortedRooms.map((room) => {
+        {displayedRooms.map((room) => {
           const isActive = selectedRoomId === room.id;
           const isDM = room.type === 'dm';
           const unreadCount = roomUnreadCounts.get(room.id) || 0;

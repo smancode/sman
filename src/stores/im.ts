@@ -278,8 +278,10 @@ export const useIMStore = create<IMStore>((set, get) => ({
     const client = getWsClient();
     const messages = get().roomMessages.get(roomId) || [];
     const lastMsg = messages[messages.length - 1];
-    if (client?.connected && lastMsg?.timestamp) {
-      client.send({ type: 'im.read', roomId, timestamp: lastMsg.timestamp });
+    // Use last message timestamp, or current time if no messages loaded yet
+    const timestamp = lastMsg?.timestamp || Date.now();
+    if (client?.connected) {
+      client.send({ type: 'im.read', roomId, timestamp });
     }
     set((state) => {
       const newUnread = new Map(state.roomUnreadCounts);

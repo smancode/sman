@@ -11,8 +11,6 @@ const AUTH_TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
 const PSK_VERSION = 1;
 
-const DEFAULT_PSK = 'sman-hub-aes256-key!!2026-32b!!!';
-
 let cachedKey: string | null = null;
 
 function getBundledKeyPath(): string {
@@ -30,23 +28,40 @@ function readKeyFile(filePath: string): string | null {
   return null;
 }
 
+function generateRandomKey(): string {
+  return crypto.randomBytes(KEY_LENGTH).toString('base64').slice(0, KEY_LENGTH);
+}
+
+function getOrCreateUserKey(): string {
+  const keyPath = path.join(os.homedir(), '.sman', 'hub.key');
+  const existing = readKeyFile(keyPath);
+  if (existing) return existing;
+
+  // First launch — generate a unique random key
+  const key = generateRandomKey();
+  fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+  fs.writeFileSync(keyPath, key, 'utf-8');
+  return key;
+}
+
 export function loadPsk(): string {
   if (cachedKey) return cachedKey;
 
-  // Priority: SMAN_PSK env > ~/.sman/hub.key (user override) > bundled hub.key > default
+  // Priority: SMAN_PSK env > ~/.sman/hub.key (auto-generated on first launch) > bundled hub.key
   if (process.env.SMAN_PSK && process.env.SMAN_PSK.length === KEY_LENGTH) {
     cachedKey = process.env.SMAN_PSK;
     return cachedKey;
   }
 
-  const userKey = readKeyFile(path.join(os.homedir(), '.sman', 'hub.key'));
+  const userKey = getOrCreateUserKey();
   if (userKey) { cachedKey = userKey; return userKey; }
 
   const bundledKey = readKeyFile(getBundledKeyPath());
   if (bundledKey) { cachedKey = bundledKey; return bundledKey; }
 
-  cachedKey = DEFAULT_PSK;
-  return DEFAULT_PSK;
+  // Fallback: generate in-memory only (won't persist across restarts)
+  cachedKey = generateRandomKey();
+  return cachedKey;
 }
 
 export function encrypt(data: unknown): string {

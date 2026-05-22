@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Check } from 'lucide-react';
 import { t } from '@/locales';
 import { useRoomList, useCreateRoom } from '@/queries/use-im';
 import type { IMRoom } from '@/schemas/im';
@@ -88,14 +88,17 @@ export function GroupChatList({ selectedRoomId, onSelect }: GroupChatListProps) 
                 if (e.key === 'Enter') handleCreate();
                 if (e.key === 'Escape') { setShowCreate(false); setNewRoomName(''); }
               }}
+              onBlur={() => {
+                if (!newRoomName.trim()) { setShowCreate(false); }
+              }}
               autoFocus
             />
             <button
               onClick={handleCreate}
               disabled={!newRoomName.trim() || createRoom.isPending}
-              className="bg-[hsl(var(--primary))] text-primary-foreground text-xs px-3 py-1.5 rounded-lg hover:opacity-85 disabled:opacity-50"
+              className="p-1.5 rounded-lg transition-colors text-primary hover:bg-[hsl(var(--muted))] disabled:opacity-30 disabled:text-muted-foreground"
             >
-              {t('im.createRoom.confirm')}
+              <Check className="h-4 w-4" />
             </button>
           </div>
         ) : (

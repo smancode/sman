@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { IMStore, IMMessage } from './im-store.js';
 import { IMAgentBridge } from './im-agent-bridge.js';
 import { getHubWsClient } from '../hub/index.js';
+import { encryptIMMessage, decryptIMMessage } from './im-crypto.js';
 
 export class IMWsHandler {
   private agentBridge?: IMAgentBridge;
@@ -26,6 +27,7 @@ export class IMWsHandler {
       case 'im.whoami':    return this.sendToWs(ws, { type: 'im.whoami', data: { clientId: clientInfo.clientId } });
       case 'im.read':      return this.handleRead(msg, clientInfo);
       case 'im.unread':    return this.handleUnread(msg, ws, clientInfo);
+      case 'im.search':    return this.handleSearch(msg, ws);
       default: break;
     }
   }
@@ -34,7 +36,8 @@ export class IMWsHandler {
     switch (msg.type) {
       case 'im.message':
         if (msg.data) {
-          this.imStore.insertMessage(msg.data);
+          const decrypted = decryptIMMessage(msg.data);
+          this.imStore.insertMessage(decrypted as any);
         }
         break;
     }
@@ -67,8 +70,8 @@ export class IMWsHandler {
     this.broadcastToRoom(roomId, { type: 'im.message', data: imMsg });
     this.sendToWs(ws, { type: 'im.sent', data: imMsg });
 
-    // Forward to Hub WS so other connected devices receive it
-    this.sendToHub({ type: 'im.message', data: imMsg });
+    // Forward to Hub WS so other connected devices receive it (encrypted)
+    this.sendToHub({ type: 'im.message', data: encryptIMMessage(imMsg as unknown as Record<string, unknown>) });
 
     // Fire-and-forget: activate mentioned agents (if any)
     if (imMsg.mentionedAgents.length > 0 && this.agentBridge) {
@@ -118,6 +121,17 @@ export class IMWsHandler {
     const counts = this.imStore.getAllUnreadCounts(clientInfo.clientId);
     counts.forEach((count, roomId) => { unreadCounts[roomId] = count; });
     this.sendToWs(ws, { type: 'im.unread', data: { counts: unreadCounts } });
+  }
+
+  private handleSearch(msg: any, ws: WebSocket): void {
+    const { query } = msg;
+    if (!query || typeof query !== 'string') {
+      this.sendToWs(ws, { type: 'im.search', data: { rooms: [], messages: [] } });
+      return;
+    }
+    const rooms = this.imStore.searchRooms(query);
+    const messages = this.imStore.searchMessages(query);
+    this.sendToWs(ws, { type: 'im.search', data: { rooms, messages } });
   }
 
   private sendToHub(msg: Record<string, unknown>): void {

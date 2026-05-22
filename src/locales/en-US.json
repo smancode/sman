@@ -4998,5 +4998,9 @@
   "im.sendTimeout": {
     "text": "Message send timeout",
     "context": "IM optimistic message send timeout tooltip"
+  },
+  "im.searchPlaceholder": {
+    "text": "Search conversations",
+    "context": "IM conversation list search box placeholder"
   }
 }

@@ -4998,5 +4998,9 @@
   "im.sendTimeout": {
     "text": "消息发送超时",
     "context": "IM 乐观消息发送超时提示"
+  },
+  "im.searchPlaceholder": {
+    "text": "搜索对话",
+    "context": "IM 对话列表搜索框占位符"
   }
 }

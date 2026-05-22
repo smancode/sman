@@ -234,4 +234,18 @@ export class IMStore {
     }
     return result;
   }
+
+  searchMessages(query: string, limit = 50): IMMessage[] {
+    const rows = this.db.prepare(
+      `${SELECT_MESSAGE_COLS} WHERE content LIKE ? ORDER BY timestamp DESC LIMIT ?`,
+    ).all(`%${query}%`, limit) as IMMessageRow[];
+    return rows.map(parseMessageRow);
+  }
+
+  searchRooms(query: string): IMRoom[] {
+    const rows = this.db.prepare(
+      'SELECT id, name, type, members, last_message, last_message_time FROM im_rooms WHERE name LIKE ? OR members LIKE ? ORDER BY last_message_time DESC',
+    ).all(`%${query}%`, `%${query}%`) as IMRoomRow[];
+    return rows.map(parseRoomRow);
+  }
 }
