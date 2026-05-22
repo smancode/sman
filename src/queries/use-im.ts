@@ -130,7 +130,6 @@ export function useRoomMessages(roomId: string | undefined, options?: RoomMessag
           if (String(payload.roomId) !== roomId) return;
           clearTimeout(timeout);
           unsub();
-          // Extract clientId from history response so isSelf works immediately
           if (payload.clientId && !useIMStore.getState().mySenderId) {
             useIMStore.getState().setMySenderId(String(payload.clientId));
           }
@@ -148,6 +147,63 @@ export function useRoomMessages(roomId: string | undefined, options?: RoomMessag
     },
     enabled: !!roomId,
     staleTime: 30_000,
+  });
+}
+
+export function useRoomMessagesInfinite(roomId: string | undefined) {
+  return useQuery({
+    queryKey: ['im', 'rooms', roomId, 'messages'] as const,
+    queryFn: async () => {
+      if (!roomId) return EMPTY_MESSAGES;
+      const client = getWsClient();
+      if (!client || !client.connected) return EMPTY_MESSAGES;
+
+      return new Promise<IMMessage[]>((resolve) => {
+        const timeout = setTimeout(() => {
+          unsub();
+          resolve(EMPTY_MESSAGES);
+        }, 8000);
+
+        const unsub = wrapWsHandler(client, 'im.history', (msg) => {
+          const payload = (msg as Record<string, unknown>).data as Record<string, unknown> ?? msg;
+          if (String(payload.roomId) !== roomId) return;
+          clearTimeout(timeout);
+          unsub();
+          if (payload.clientId && !useIMStore.getState().mySenderId) {
+            useIMStore.getState().setMySenderId(String(payload.clientId));
+          }
+          const messages = Array.isArray(payload.messages) ? payload.messages : [];
+          resolve(messages.map(parseIMMessage));
+        });
+
+        client.send({ type: 'im.history', roomId, limit: 50 });
+      });
+    },
+    enabled: !!roomId,
+    staleTime: 30_000,
+  });
+}
+
+export async function fetchOlderMessages(roomId: string, beforeTimestamp: number): Promise<IMMessage[]> {
+  const client = getWsClient();
+  if (!client || !client.connected) return EMPTY_MESSAGES;
+
+  return new Promise<IMMessage[]>((resolve) => {
+    const timeout = setTimeout(() => {
+      unsub();
+      resolve(EMPTY_MESSAGES);
+    }, 8000);
+
+    const unsub = wrapWsHandler(client, 'im.history', (msg) => {
+      const payload = (msg as Record<string, unknown>).data as Record<string, unknown> ?? msg;
+      if (String(payload.roomId) !== roomId) return;
+      clearTimeout(timeout);
+      unsub();
+      const messages = Array.isArray(payload.messages) ? payload.messages : [];
+      resolve(messages.map(parseIMMessage));
+    });
+
+    client.send({ type: 'im.history', roomId, limit: 50, before: beforeTimestamp });
   });
 }
 

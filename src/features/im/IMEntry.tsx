@@ -44,12 +44,10 @@ export default function IMEntry() {
 
   const messages = useMemo(() => {
     if (!selectedRoomId) return [];
-    const realtime = roomMessages.get(selectedRoomId) || [];
-    if (realtime.length === 0) return fetchedMessages;
     const map = new Map<string, typeof fetchedMessages[0]>();
     for (const m of fetchedMessages) map.set(m.id, m);
-    for (const m of realtime) map.set(m.id, m);
-    return [...map.values()];
+    for (const m of roomMessages.get(selectedRoomId) || []) map.set(m.id, m);
+    return [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
   }, [selectedRoomId, fetchedMessages, roomMessages]);
 
   const hasActiveRoom = !!selectedRoomId;

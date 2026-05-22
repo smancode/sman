@@ -1256,6 +1256,19 @@ const wss = new WebSocketServer({
   },
 });
 
+// Heartbeat: detect and terminate dead WS connections every 30s
+setInterval(() => {
+  for (const client of authenticatedClients) {
+    const ws = client as any;
+    if (!ws.isAlive) {
+      client.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    client.ping();
+  }
+}, 30_000);
+
 // Initialize IM broadcast functions (needs wss/clients which are now available)
 // Like TailChat: broadcast only to WS connections that have joined the room
 imModule.setBroadcastFn(
@@ -1284,6 +1297,9 @@ wss.on('connection', (ws: WebSocket) => {
   log.info('WebSocket client connected, awaiting authentication');
 
   // Authentication timeout: disconnect after 5 seconds if not authenticated
+  (ws as any).isAlive = true;
+  ws.on('pong', () => { (ws as any).isAlive = true; });
+
   const authTimeout = setTimeout(() => {
     if (!authenticatedClients.has(ws)) {
       log.warn('WebSocket client disconnected: auth timeout');
@@ -1306,6 +1322,7 @@ wss.on('connection', (ws: WebSocket) => {
         clearTimeout(authTimeout);
         clients.add(ws);
         authenticatedClients.add(ws);
+        (ws as any).isAlive = true;
         ws.send(JSON.stringify({ type: 'auth.verified' }));
         log.info('WebSocket client authenticated');
       } else {

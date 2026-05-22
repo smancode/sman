@@ -26,6 +26,7 @@ export class WsClient {
   private currentDelay: number;
   private _closed = false;
   private _token: string;
+  private outbox: string[] = [];
 
   private readonly port: number;
   private readonly urlOverride: string;
@@ -84,6 +85,7 @@ export class WsClient {
       try {
         const msg = JSON.parse(String(event.data));
         if (msg.type === 'auth.verified') {
+          this.flushOutbox();
           this.emit('connected');
           return;
         }
@@ -120,14 +122,17 @@ export class WsClient {
     if (this.ws) {
       this.ws.close();
       this.ws = null;
+      this.outbox = [];
     }
   }
 
   send(data: object): void {
+    const json = JSON.stringify(data);
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket is not connected');
+      this.outbox.push(json);
+      return;
     }
-    this.ws.send(JSON.stringify(data));
+    this.ws.send(json);
   }
 
   on(event: string, handler: EventHandler): void {
@@ -157,6 +162,15 @@ export class WsClient {
       this.connect();
     }, this.currentDelay);
     this.currentDelay = Math.min(this.currentDelay * 2, this.maxReconnectDelay);
+  }
+
+  private flushOutbox(): void {
+    while (this.outbox.length > 0) {
+      const msg = this.outbox.shift()!;
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(msg);
+      }
+    }
   }
 
   private clearReconnectTimer(): void {

@@ -11,6 +11,8 @@ import type { IMMessage } from '@/schemas/im';
 
 interface MessageListProps {
   messages: IMMessage[];
+  onLoadOlder?: () => void;
+  isLoadingOlder?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +70,7 @@ function useTopObserver(onReachTop: () => void, enabled: boolean) {
 // Component
 // ---------------------------------------------------------------------------
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, onLoadOlder, isLoadingOlder }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const agentStreams = useIMStore((s) => s.agentStreams);
@@ -105,10 +107,7 @@ export function MessageList({ messages }: MessageListProps) {
   const firstRoomId = messages[0]?.roomId;
   const typingUser = firstRoomId ? typingUsers.get(firstRoomId) : undefined;
 
-  // Placeholder for cursor pagination — will be wired in Task 13
-  const sentinelRef = useTopObserver(() => {
-    // TODO: load more messages (cursor pagination)
-  }, false);
+  const sentinelRef = useTopObserver(() => onLoadOlder?.(), !!onLoadOlder);
 
   if (messages.length === 0) return null;
 

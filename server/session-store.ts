@@ -177,6 +177,7 @@ export class SessionStore {
       CREATE INDEX IF NOT EXISTS idx_im_messages_sender ON im_messages(sender);
       CREATE INDEX IF NOT EXISTS idx_im_messages_session ON im_messages(session_id);
 
+
       CREATE TABLE IF NOT EXISTS im_rooms (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,

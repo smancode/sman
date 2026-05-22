@@ -44,6 +44,9 @@ interface IMStore {
   // Real-time last activity (updated on every addMessage for sidebar preview/sort)
   roomLastActivity: Map<string, { lastMessage: string; lastMessageTime: number }>;
 
+  // Per-room last message timestamp for reconnection sync
+  roomLastMsgTimestamp: Map<string, number>;
+
   // Agent streaming state
   agentStreams: Map<string, string>; // messageId -> accumulated content
 
@@ -81,6 +84,9 @@ interface IMStore {
 
   // Actions — identity
   setMySenderId: (id: string) => void;
+
+  // Actions — reconnection sync
+  syncAfterReconnect: () => void;
 }
 
 export const useIMStore = create<IMStore>((set, get) => ({
@@ -88,6 +94,7 @@ export const useIMStore = create<IMStore>((set, get) => ({
   activeTab: 'groups',
   roomMessages: new Map(),
   roomLastActivity: new Map(),
+  roomLastMsgTimestamp: new Map(),
   agentStreams: new Map(),
   onlineUsers: new Set(),
   typingUsers: new Map(),
@@ -130,7 +137,13 @@ export const useIMStore = create<IMStore>((set, get) => ({
       lastMessageTime: prev?.lastMessageTime ?? 0,
     });
 
-    return { roomMessages: newMap, roomLastActivity: newActivity };
+    const newTimestamps = new Map(state.roomLastMsgTimestamp);
+    const prevTs = newTimestamps.get(msg.roomId) || 0;
+    if (msg.timestamp > prevTs) {
+      newTimestamps.set(msg.roomId, msg.timestamp);
+    }
+
+    return { roomMessages: newMap, roomLastActivity: newActivity, roomLastMsgTimestamp: newTimestamps };
   }),
 
   addOptimisticMessage: (msg) => set((state) => {
@@ -206,6 +219,17 @@ export const useIMStore = create<IMStore>((set, get) => ({
 
   setReplyQuote: (quote) => set({ replyQuote: quote }),
   setMySenderId: (id: string) => set({ mySenderId: id }),
+
+  syncAfterReconnect: () => {
+    const client = getWsClient();
+    if (!client?.connected) return;
+    const state = get();
+    if (state.selectedRoomId) {
+      client.send({ type: 'im.room.join', roomId: state.selectedRoomId });
+      const lastTs = state.roomLastMsgTimestamp.get(state.selectedRoomId) || 0;
+      client.send({ type: 'im.sync', roomId: state.selectedRoomId, afterTimestamp: lastTs });
+    }
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -276,6 +300,17 @@ export function registerIMListeners() {
     const sender = String(payload.sender || '');
     if (!roomId || !sender) return;
     useIMStore.getState().setTyping(roomId, sender);
+  }));
+
+  // im.sync → merge synced messages
+  unsubs.push(wrapHandler(client, 'im.sync', (msg) => {
+    const raw = msg as Record<string, unknown>;
+    const payload = (raw.data ?? raw) as Record<string, unknown>;
+    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+    for (const m of messages) {
+      const imMsg = parseIMMessage(m);
+      if (imMsg.id) useIMStore.getState().addMessage(imMsg);
+    }
   }));
 
   // im.whoami → receive our clientId from server

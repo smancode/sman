@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { WsClient } from '@/lib/ws-client';
 import { setAuthToken, setHttpBaseUrl } from '@/lib/auth';
 import { useChatStore } from './chat';
-import { registerIMListeners } from './im';
+import { registerIMListeners, useIMStore } from './im';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'auth_failed';
 
@@ -32,7 +32,10 @@ function getStoredToken(): string {
 }
 
 function registerListeners(client: WsClient) {
-  client.on('connected', () => useWsConnection.setState({ status: 'connected' }));
+  client.on('connected', () => {
+    useWsConnection.setState({ status: 'connected' });
+    useIMStore.getState().syncAfterReconnect();
+  });
   client.on('disconnected', () => useWsConnection.setState({ status: 'disconnected' }));
   client.on('authFailed', () => useWsConnection.setState({ status: 'auth_failed' }));
 
